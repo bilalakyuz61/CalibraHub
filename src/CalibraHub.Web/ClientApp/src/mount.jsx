@@ -38,6 +38,7 @@ import IntegrationsList from './components/IntegrationWizard/IntegrationsList'
 import IntegrationWizard from './components/IntegrationWizard/IntegrationWizard'
 import IntegrationEndpointsList from './components/IntegrationWizard/IntegrationEndpointsList'
 import IntegrationsHub from './components/IntegrationWizard/IntegrationsHub'
+import DataImport from './components/DataImport/DataImport'
 import IntegrationQueue from './components/IntegrationWizard/IntegrationQueue'
 import './components/IntegrationWizard/IntegrationWizard.css'
 import RoutingTree from './components/RoutingTree/RoutingTree'
@@ -1508,6 +1509,29 @@ function mountIntegrationsHub(element, config) {
   return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountIntegrationsHub = mountIntegrationsHub
+
+/**
+ * DataImport mount — Şablon-tabanlı içe aktarım (AI'sız). Cari pilotu.
+ * @param {HTMLElement} element
+ */
+function mountDataImport(element) {
+  if (!element || !(element instanceof Element) || !element.isConnected) {
+    return { unmount: function() {} }
+  }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(DataImport, null)
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountDataImport = mountDataImport
 
 /**
  * IntegrationQueue mount — Aktarım Kuyruğu sayfası.

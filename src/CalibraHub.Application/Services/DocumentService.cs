@@ -13,6 +13,7 @@ public sealed class DocumentService : IDocumentService
     private readonly IDocumentTypeRepository _documentTypeRepo;
     private readonly IDocumentSourceRepository _docSourceRepo;
     private readonly IDocumentNumberService? _docNumberService;
+    private readonly IApprovalFlowService? _approvalFlowService;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
 
@@ -21,13 +22,15 @@ public sealed class DocumentService : IDocumentService
         IFinanceService financeService,
         IDocumentTypeRepository documentTypeRepo,
         IDocumentSourceRepository docSourceRepo,
-        IDocumentNumberService? docNumberService = null)
+        IDocumentNumberService? docNumberService = null,
+        IApprovalFlowService? approvalFlowService = null)
     {
         _repo = repo;
         _financeService = financeService;
         _documentTypeRepo = documentTypeRepo;
         _docSourceRepo = docSourceRepo;
         _docNumberService = docNumberService;
+        _approvalFlowService = approvalFlowService;
     }
 
     /// <summary>
@@ -178,8 +181,8 @@ public sealed class DocumentService : IDocumentService
         return result;
     }
 
-    public async Task<(bool Success, string? Error, DocumentDto? Quote)> SaveQuoteAsync(
-        SaveDocumentRequest request, int? createdById, CancellationToken ct)
+    public async Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(
+        SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct)
     {
         // ── Cari cozumleme ─────────────────────────────────────
         // contact_id otorite kaynaktir; client ContactName gondermiyor (label),
@@ -217,21 +220,21 @@ public sealed class DocumentService : IDocumentService
             isPurchaseRequest = string.Equals(dt?.Code, "alis_talebi", StringComparison.OrdinalIgnoreCase);
         }
         if (!isPurchaseRequest && !resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
-            return (false, "Cari (musteri) zorunludur. Kalem eklemeden once cari seciniz.", null);
+            return (false, "Cari (musteri) zorunludur. Kalem eklemeden once cari seciniz.", null, false);
         // 2026-06-01: İhtiyaç Kaydı (alis_talebi) için Talep Eden personel zorunlu —
         // onay akışı + raporlama bu personel üzerinden ilerler. Frontend de aynı
         // kontrolü uyguluyor ama API'ye direkt POST atılırsa burada yakalanır.
         if (isPurchaseRequest && (!request.RequesterPersonnelId.HasValue || request.RequesterPersonnelId.Value <= 0))
-            return (false, "İhtiyaç Kaydı için 'Talep Eden' personel seçilmelidir.", null);
+            return (false, "İhtiyaç Kaydı için 'Talep Eden' personel seçilmelidir.", null, false);
         if (request.Lines.Count == 0)
-            return (false, "En az bir satir eklenmeli.", null);
+            return (false, "En az bir satir eklenmeli.", null, false);
 
         // Kombinasyon takibi acik olan stok icin kombinasyon ID zorunlu
         foreach (var ln in request.Lines)
         {
             if (ln.TrackCombinations && (!ln.CombinationId.HasValue || ln.CombinationId.Value <= 0))
             {
-                return (false, $"Secili satir (Item #{ln.ItemId}) stokunda kombinasyon takibi acik; kombinasyon secilmelidir.", null);
+                return (false, $"Secili satir (Item #{ln.ItemId}) stokunda kombinasyon takibi acik; kombinasyon secilmelidir.", null, false);
             }
         }
 
@@ -324,7 +327,7 @@ public sealed class DocumentService : IDocumentService
 
             // GetByIdAsync zaten line_count'u tek sorguda getiriyor — tekrar lines cekmeye gerek yok.
             if (existing.LineCount > 0 && existing.ContactId != request.ContactId)
-                return (false, "Kalem girilmis belgenin cari kodu degistirilemez.", null);
+                return (false, "Kalem girilmis belgenin cari kodu degistirilemez.", null, false);
 
             existing.DocumentTypeId = request.DocumentTypeId ?? existing.DocumentTypeId ?? effectiveDocumentTypeId;
             existing.DocumentDate = request.DocumentDate;
@@ -454,7 +457,34 @@ public sealed class DocumentService : IDocumentService
             }
         }
 
-        return (true, null, MapDto(quote));
+        // Yeni belgede aktif bir onay akışı varsa otomatik başlat.
+        // Hata akışı durdurmaz — belge zaten kaydedildi, akış başlatılamazsa sessizce geçer.
+        var approvalStarted = false;
+        if (isNew && _approvalFlowService is not null)
+        {
+            try
+            {
+                var flow = await _approvalFlowService.MatchFlowAsync(
+                    "Document", quote.GrandTotal, null, null, ct);
+                if (flow is not null)
+                {
+                    await _approvalFlowService.StartAsync(
+                        new StartApprovalRequest(
+                            DocumentId:      quote.Id,
+                            FlowId:          flow.Id,
+                            StartedBy:       startedByUser ?? "system",
+                            StartedByUserId: createdById),
+                        ct);
+                    approvalStarted = true;
+                }
+            }
+            catch
+            {
+                // Akış başlatma hatası belge kaydını iptal etmez
+            }
+        }
+
+        return (true, null, MapDto(quote), approvalStarted);
     }
 
     public async Task DeleteQuoteAsync(int id, CancellationToken ct)

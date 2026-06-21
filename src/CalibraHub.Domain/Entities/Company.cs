@@ -16,6 +16,7 @@ public sealed class Company
     public required string TaxNumber { get; init; }
     public bool IsEDocumentApprovalEnabled { get; init; }
     public string? DatabaseConnectionString { get; init; }
+    public string? PublicBaseUrl { get; init; }
     public bool IsActive { get; private set; } = true;
 
     public void Deactivate() => IsActive = false;

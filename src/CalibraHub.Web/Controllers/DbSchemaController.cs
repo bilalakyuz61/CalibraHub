@@ -43,6 +43,13 @@ public sealed class DbSchemaController : Controller
         return Json(detail, JsonOptions);
     }
 
+    [HttpGet("api/views")]
+    public async Task<IActionResult> GetViews(CancellationToken ct)
+    {
+        var views = await _service.GetViewsAsync(ct);
+        return Json(views, JsonOptions);
+    }
+
     [HttpGet("export")]
     public async Task<IActionResult> Export([FromQuery] string format, CancellationToken ct)
     {

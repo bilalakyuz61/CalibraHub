@@ -32,7 +32,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { Map as MapIcon, Undo2, Redo2 } from 'lucide-react'
+import { Undo2, Redo2 } from 'lucide-react'
 
 import { nodeTypes } from './nodeTypes.jsx'
 import NodePalette from './NodePalette.jsx'
@@ -386,6 +386,22 @@ function DesignerInner(props) {
     }
   }, [buildPayload, onSave])
 
+  /* Toolbar harici butonlar için imperative handle'lar */
+  useEffect(function () {
+    window._afdToggleMinimap = function () {
+      setShowMinimap(function (v) {
+        var next = !v
+        try { localStorage.setItem(AFD_MINIMAP_KEY, next ? '1' : '0') } catch (_) {}
+        return next
+      })
+    }
+    window._afdOpenVariables = function () { setVariablesOpen(true) }
+    return function () {
+      delete window._afdToggleMinimap
+      delete window._afdOpenVariables
+    }
+  }, [])
+
   /* ── React Flow change handlers ──
      Delete/Backspace tuşu doğrudan React Flow native remove change'i dispatch eder
      (bizim handleDelete'i bypass eder). Burada 'remove' tipini yakalayıp snapshot
@@ -614,35 +630,6 @@ function DesignerInner(props) {
                 fontSize: 11, fontWeight: 600, boxShadow: '0 2px 6px rgba(0,0,0,.08)',
               }}>
               <Redo2 size={13} /> İleri Al
-            </button>
-            <button
-              type="button"
-              title={showMinimap ? 'Minimap\'i gizle' : 'Minimap\'i goster'}
-              onClick={function () {
-                var next = !showMinimap
-                setShowMinimap(next)
-                try { localStorage.setItem(AFD_MINIMAP_KEY, next ? '1' : '0') } catch (_) {}
-              }}
-              style={{
-                padding: '6px 9px', borderRadius: 7,
-                background: showMinimap ? 'var(--afd-accent, #6366f1)' : 'var(--afd-surface, #fff)',
-                border: '1px solid ' + (showMinimap ? 'var(--afd-accent, #6366f1)' : 'var(--afd-border, #cbd5e1)'),
-                color: showMinimap ? '#fff' : 'var(--afd-text, #0f172a)',
-                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
-                fontSize: 11, fontWeight: 600, boxShadow: '0 2px 6px rgba(0,0,0,.08)',
-              }}>
-              <MapIcon size={13} /> {showMinimap ? 'Minimap acik' : 'Minimap'}
-            </button>
-            <button
-              type="button"
-              className="afd-vars-trigger"
-              title="Süreç değişkenlerini tanımla"
-              onClick={function () { setVariablesOpen(true) }}>
-              <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: 800 }}>𝑥</span>
-              Değişkenler
-              {variables.length > 0 && (
-                <span className="afd-vars-badge">{variables.length}</span>
-              )}
             </button>
           </Panel>
           {showMinimap && <MiniMap pannable zoomable />}

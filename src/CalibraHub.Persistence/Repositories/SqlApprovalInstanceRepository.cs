@@ -31,13 +31,14 @@ public sealed class SqlApprovalInstanceRepository : IApprovalInstanceRepository
             await using var ins = con.CreateCommand();
             ins.Transaction = tx;
             ins.CommandText = $"""
-                INSERT INTO [{_s}].[DocumentApprovalInstance]
-                    ([DocumentId],[FlowId],[Status],[CurrentStep],[StartedBy],[StartedAt],[IsActive],[CreatedById],[Created])
+                INSERT INTO [{_s}].[ApprovalInstance]
+                    ([DocumentId],[EntityKind],[FlowId],[Status],[CurrentStep],[StartedBy],[StartedAt],[IsActive],[CreatedById],[Created])
                 VALUES
-                    (@DocId,@FlowId,N'Pending',1,@By,SYSUTCDATETIME(),1,@CreatedById,SYSUTCDATETIME());
+                    (@DocId,@EntityKind,@FlowId,N'Pending',1,@By,SYSUTCDATETIME(),1,@CreatedById,SYSUTCDATETIME());
                 SELECT SCOPE_IDENTITY();
                 """;
-            ins.Parameters.Add(new SqlParameter("@DocId", request.DocumentId));
+            ins.Parameters.Add(new SqlParameter { ParameterName = "@DocId", Value = (object?)request.DocumentId ?? DBNull.Value, SqlDbType = System.Data.SqlDbType.Int });
+            ins.Parameters.Add(new SqlParameter("@EntityKind", request.EntityKind ?? "Document"));
             ins.Parameters.Add(new SqlParameter("@FlowId", request.FlowId));
             ins.Parameters.Add(new SqlParameter("@By", (object?)request.StartedBy ?? DBNull.Value));
             ins.Parameters.Add(new SqlParameter { ParameterName = "@CreatedById", Value = DBNull.Value, SqlDbType = System.Data.SqlDbType.Int });
@@ -57,7 +58,7 @@ public sealed class SqlApprovalInstanceRepository : IApprovalInstanceRepository
                 var intendedApproverName = storeApprover ? step.ApproverLabel : null;
 
                 sCmd.CommandText = $"""
-                    INSERT INTO [{_s}].[DocumentApprovalStepRecord]
+                    INSERT INTO [{_s}].[ApprovalStepRecord]
                         ([InstanceId],[StepOrder],[StepName],[Status],[ApproverId],[ApproverName],[DueDate],[CreatedById],[Created])
                     VALUES
                         (@Iid,@Ord,@Name,N'Pending',@AppId,@AppName,@Due,@CreatedById,SYSUTCDATETIME());
@@ -81,9 +82,9 @@ public sealed class SqlApprovalInstanceRepository : IApprovalInstanceRepository
             {
                 alignCmd.Transaction = tx;
                 alignCmd.CommandText = $"""
-                    UPDATE [{_s}].[DocumentApprovalInstance]
+                    UPDATE [{_s}].[ApprovalInstance]
                     SET [CurrentStep] = ISNULL((
-                        SELECT MIN([StepOrder]) FROM [{_s}].[DocumentApprovalStepRecord]
+                        SELECT MIN([StepOrder]) FROM [{_s}].[ApprovalStepRecord]
                         WHERE [InstanceId] = @Iid AND [Status] = N'Pending'
                     ), 1)
                     WHERE [Id] = @Iid;
@@ -102,7 +103,7 @@ public sealed class SqlApprovalInstanceRepository : IApprovalInstanceRepository
         }
     }
 
-    public async Task<ApprovalInstanceDto?> GetByDocumentIdAsync(Guid documentId, CancellationToken ct)
+    public async Task<ApprovalInstanceDto?> GetByDocumentIdAsync(int documentId, CancellationToken ct)
     {
         await using var con = await _connectionFactory.OpenConnectionAsync(ct);
         var id = await GetInstanceIdByDocumentAsync(con, documentId, ct);
@@ -120,7 +121,7 @@ public sealed class SqlApprovalInstanceRepository : IApprovalInstanceRepository
         await using var con = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id] FROM [{_s}].[DocumentApprovalInstance]
+            SELECT [Id] FROM [{_s}].[ApprovalInstance]
             WHERE [Status] = N'Pending' AND [IsActive] = 1
             ORDER BY [StartedAt] DESC;
             """;
@@ -163,12 +164,12 @@ SELECT
     sr.[DueDate]           AS DueDate,
     inst.[Id]              AS InstanceIdAlias,
     inst.[DocumentId]      AS DocumentId,
+    inst.[EntityKind]      AS EntityKind,
     inst.[StartedAt]       AS InstanceStarted,
     inst.[FlowId]          AS FlowId,
     flow.[Name]            AS FlowName,
-    flow.[ExtraColumnsView] AS ExtraColumnsView,
-    (SELECT COUNT(*) FROM [{s}].[DocumentApprovalStepRecord] WHERE [InstanceId] = inst.[Id]) AS TotalSteps,
-    (SELECT COUNT(*) FROM [{s}].[DocumentApprovalStepRecord] WHERE [InstanceId] = inst.[Id] AND [StepOrder] <= sr.[StepOrder]) AS StepPosition,
+    (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id]) AS TotalSteps,
+    (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id] AND [StepOrder] <= sr.[StepOrder]) AS StepPosition,
     doc.[id]               AS DocumentInternalId,
     doc.[DocumentNumber]   AS DocumentNumber,
     doc.[DocumentDate]     AS DocumentDate,
@@ -178,10 +179,10 @@ SELECT
     c.[AccountTitle]       AS ContactName,
     doc.[GrandTotal]       AS GrandTotal,
     cur.[code]             AS CurrencyCode
-FROM [{s}].[DocumentApprovalStepRecord] sr
-INNER JOIN [{s}].[DocumentApprovalInstance] inst ON inst.[Id] = sr.[InstanceId]
+FROM [{s}].[ApprovalStepRecord] sr
+INNER JOIN [{s}].[ApprovalInstance] inst ON inst.[Id] = sr.[InstanceId]
 INNER JOIN [{s}].[ApprovalFlow] flow              ON flow.[Id] = inst.[FlowId]
-LEFT  JOIN [{s}].[Document] doc                   ON CAST(doc.[id] AS UNIQUEIDENTIFIER) = NULL  -- placeholder, asagida dogru join
+LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[id] = inst.[DocumentId]
 LEFT  JOIN [{s}].[document_types] dt              ON dt.[id] = doc.[DocumentTypeId]
 LEFT  JOIN [{s}].[Contact] c                      ON c.[Id]  = doc.[ContactId]
 LEFT  JOIN [{s}].[currencies] cur                 ON cur.[id] = doc.[CurrencyId]
@@ -189,24 +190,11 @@ WHERE sr.[Status] = N'Pending'
   AND inst.[Status] = N'Pending'
   AND inst.[IsActive] = 1
   AND sr.[StepOrder] = inst.[CurrentStep]
-  AND doc.[id] IS NOT NULL
-  AND doc.[IsActive] = 1
+  AND inst.[DocumentId] IS NOT NULL
+  AND (inst.[EntityKind] <> N'Document' OR doc.[IsActive] = 1)
 ");
 
-        // DocumentApprovalInstance.DocumentId UNIQUEIDENTIFIER, Document.id INT.
-        // ApprovalFlowController.DocumentIntToGuid deterministik packing yapar:
-        //   - Bytes[0..3] = int (BitConverter little-endian: int 123 -> 7B 00 00 00)
-        //   - Bytes[4..15] = sabit magic 'DOCINT2GUID!' = 0x44 4F 43 49 4E 54 32 47 55 49 44 21
-        // SQL CAST(guid AS BINARY(16)) Microsoft sequential order verir:
-        //   - Data1 (4 byte) BIG-endian: 00 00 00 7B
-        //   - Data2-3-4 sirayla
-        // Yani ilk 4 byte'i big-endian int olarak okumak yeterli; magic suffix ile filtre garantiler.
-        var sql = sb.ToString().Replace(
-            $"LEFT  JOIN [{s}].[Document] doc                   ON CAST(doc.[id] AS UNIQUEIDENTIFIER) = NULL  -- placeholder, asagida dogru join",
-            $@"LEFT  JOIN [{s}].[Document] doc                   ON
-        SUBSTRING(CAST(inst.[DocumentId] AS BINARY(16)), 5, 12) = 0x444F43494E54324755494421
-        AND doc.[id] = CONVERT(INT, SUBSTRING(CAST(inst.[DocumentId] AS BINARY(16)), 1, 4))"
-        );
+        var sql = sb.ToString();
 
         // Scope filtresi
         if (string.Equals(scope, PendingApprovalScope.Mine, StringComparison.OrdinalIgnoreCase))
@@ -260,8 +248,8 @@ WHERE sr.[Status] = N'Pending'
                 StepName:            rdr.GetString(rdr.GetOrdinal("StepName")),
                 FlowName:            rdr.GetString(rdr.GetOrdinal("FlowName")),
                 FlowId:              rdr.GetInt32(rdr.GetOrdinal("FlowId")),
-                ExtraColumnsViewName: rdr.IsDBNull(rdr.GetOrdinal("ExtraColumnsView")) ? null : rdr.GetString(rdr.GetOrdinal("ExtraColumnsView")),
-                DocumentId:          rdr.GetGuid(rdr.GetOrdinal("DocumentId")),
+                EntityKind:          rdr.IsDBNull(rdr.GetOrdinal("EntityKind")) ? "Document" : rdr.GetString(rdr.GetOrdinal("EntityKind")),
+                DocumentId:          rdr.IsDBNull(rdr.GetOrdinal("DocumentId")) ? (int?)null : rdr.GetInt32(rdr.GetOrdinal("DocumentId")),
                 DocumentInternalId:  rdr.IsDBNull(rdr.GetOrdinal("DocumentInternalId")) ? null : rdr.GetInt32(rdr.GetOrdinal("DocumentInternalId")),
                 DocumentNumber:      rdr.IsDBNull(rdr.GetOrdinal("DocumentNumber")) ? "(belge yok)" : rdr.GetString(rdr.GetOrdinal("DocumentNumber")),
                 DocumentDate:        rdr.IsDBNull(rdr.GetOrdinal("DocumentDate")) ? DateTime.MinValue : rdr.GetDateTime(rdr.GetOrdinal("DocumentDate")),
@@ -308,7 +296,7 @@ WHERE sr.[Status] = N'Pending'
             StepName:            currentStep?.StepName ?? string.Empty,
             FlowName:            instance.FlowName,
             FlowId:              instance.FlowId,
-            ExtraColumnsViewName: null,  // detail modali icin gerekli degil
+            EntityKind:          instance.EntityKind ?? "Document",
             DocumentId:         instance.DocumentId,
             DocumentInternalId: null,
             DocumentNumber:     "—",
@@ -342,7 +330,7 @@ WHERE sr.[Status] = N'Pending'
             await using var updStep = con.CreateCommand();
             updStep.Transaction = tx;
             updStep.CommandText = $"""
-                UPDATE [{_s}].[DocumentApprovalStepRecord]
+                UPDATE [{_s}].[ApprovalStepRecord]
                 SET [Status]=N'Approved',[ApproverId]=@Aid,[ApproverName]=@AName,[Note]=@Note,[ActionDate]=SYSUTCDATETIME(),
                     [UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
                 WHERE [InstanceId]=@Iid AND [StepOrder]=@Ord;
@@ -359,7 +347,7 @@ WHERE sr.[Status] = N'Pending'
             await using var nextCmd = con.CreateCommand();
             nextCmd.Transaction = tx;
             nextCmd.CommandText = $"""
-                SELECT MIN([StepOrder]) FROM [{_s}].[DocumentApprovalStepRecord]
+                SELECT MIN([StepOrder]) FROM [{_s}].[ApprovalStepRecord]
                 WHERE [InstanceId]=@Iid AND [StepOrder] > @Ord AND [Status]=N'Pending';
                 """;
             nextCmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
@@ -372,7 +360,7 @@ WHERE sr.[Status] = N'Pending'
             if (nextStep.HasValue)
             {
                 updInst.CommandText = $"""
-                    UPDATE [{_s}].[DocumentApprovalInstance]
+                    UPDATE [{_s}].[ApprovalInstance]
                     SET [CurrentStep]=@Next,[UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
                     WHERE [Id]=@Iid;
                     """;
@@ -381,7 +369,7 @@ WHERE sr.[Status] = N'Pending'
             else
             {
                 updInst.CommandText = $"""
-                    UPDATE [{_s}].[DocumentApprovalInstance]
+                    UPDATE [{_s}].[ApprovalInstance]
                     SET [Status]=N'Approved',[CompletedAt]=SYSUTCDATETIME(),[UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
                     WHERE [Id]=@Iid;
                     """;
@@ -420,7 +408,7 @@ WHERE sr.[Status] = N'Pending'
             await using var updStep = con.CreateCommand();
             updStep.Transaction = tx;
             updStep.CommandText = $"""
-                UPDATE [{_s}].[DocumentApprovalStepRecord]
+                UPDATE [{_s}].[ApprovalStepRecord]
                 SET [Status]=N'Rejected',[ApproverId]=@Aid,[ApproverName]=@AName,[Note]=@Note,[ActionDate]=SYSUTCDATETIME(),
                     [UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
                 WHERE [InstanceId]=@Iid AND [StepOrder]=@Ord;
@@ -436,7 +424,7 @@ WHERE sr.[Status] = N'Pending'
             await using var updInst = con.CreateCommand();
             updInst.Transaction = tx;
             updInst.CommandText = $"""
-                UPDATE [{_s}].[DocumentApprovalInstance]
+                UPDATE [{_s}].[ApprovalInstance]
                 SET [Status]=N'Rejected',[CompletedAt]=SYSUTCDATETIME(),[RejectNote]=@Note,
                     [UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
                 WHERE [Id]=@Iid;
@@ -461,7 +449,7 @@ WHERE sr.[Status] = N'Pending'
         await using var con = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE [{_s}].[DocumentApprovalInstance]
+            UPDATE [{_s}].[ApprovalInstance]
             SET [Status]=N'Cancelled',[CompletedAt]=SYSUTCDATETIME(),[IsActive]=0,
                 [UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
             WHERE [Id]=@Iid;
@@ -478,12 +466,26 @@ WHERE sr.[Status] = N'Pending'
         await using var cmd = con.CreateCommand();
         // WHERE Status='Pending' → normal approve/reject sonrası no-op (idempotent).
         cmd.CommandText = $"""
-            UPDATE [{_s}].[DocumentApprovalInstance]
+            UPDATE [{_s}].[ApprovalInstance]
             SET [Status]=N'Approved',[CompletedAt]=SYSUTCDATETIME(),[IsActive]=0,
                 [Updated]=SYSUTCDATETIME()
             WHERE [Id]=@Iid AND [Status]=N'Pending';
             """;
         cmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task UpdateRevisionIdAsync(int instanceId, int revisionId, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE [{_s}].[ApprovalInstance]
+            SET [RevisionId] = @RevId, [Updated] = SYSUTCDATETIME()
+            WHERE [Id] = @Iid;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@RevId", revisionId));
+        cmd.Parameters.Add(new SqlParameter("@Iid",   instanceId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -497,8 +499,8 @@ WHERE sr.[Status] = N'Pending'
                    sr.[ApproverId], sr.[ApproverName],
                    i.[DocumentId], f.[Name] AS FlowName,
                    s.[NodeData]
-            FROM [{_s}].[DocumentApprovalStepRecord] sr
-            JOIN [{_s}].[DocumentApprovalInstance]  i  ON i.[Id] = sr.[InstanceId]
+            FROM [{_s}].[ApprovalStepRecord] sr
+            JOIN [{_s}].[ApprovalInstance]  i  ON i.[Id] = sr.[InstanceId]
             JOIN [{_s}].[ApprovalFlow]              f  ON f.[Id] = i.[FlowId]
             LEFT JOIN [{_s}].[ApprovalFlowStep]     s  ON s.[FlowId] = i.[FlowId] AND s.[StepOrder] = sr.[StepOrder]
             WHERE sr.[Status] = N'Pending'
@@ -522,8 +524,8 @@ WHERE sr.[Status] = N'Pending'
                    sr.[ApproverId], sr.[ApproverName],
                    i.[DocumentId], f.[Name] AS FlowName,
                    s.[NodeData]
-            FROM [{_s}].[DocumentApprovalStepRecord] sr
-            JOIN [{_s}].[DocumentApprovalInstance]  i  ON i.[Id] = sr.[InstanceId]
+            FROM [{_s}].[ApprovalStepRecord] sr
+            JOIN [{_s}].[ApprovalInstance]  i  ON i.[Id] = sr.[InstanceId]
             JOIN [{_s}].[ApprovalFlow]              f  ON f.[Id] = i.[FlowId]
             LEFT JOIN [{_s}].[ApprovalFlowStep]     s  ON s.[FlowId] = i.[FlowId] AND s.[StepOrder] = sr.[StepOrder]
             WHERE sr.[Status] = N'Pending'
@@ -554,7 +556,7 @@ WHERE sr.[Status] = N'Pending'
         await using var con = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE [{_s}].[DocumentApprovalStepRecord]
+            UPDATE [{_s}].[ApprovalStepRecord]
             SET [SlaActionAt]=SYSUTCDATETIME(),[SlaActionType]=@Type,
                 [Updated]=SYSUTCDATETIME()
             WHERE [Id]=@Id;
@@ -571,7 +573,7 @@ WHERE sr.[Status] = N'Pending'
         await using var cmd = con.CreateCommand();
         // DueDate: SLA tanımlıysa yeni süreye set, değilse NULL yap (artık geçerli deadline yok).
         cmd.CommandText = $"""
-            UPDATE [{_s}].[DocumentApprovalStepRecord]
+            UPDATE [{_s}].[ApprovalStepRecord]
             SET [SlaActionAt]   = NULL,
                 [SlaActionType] = NULL,
                 [SlaWarnedAt]   = NULL,
@@ -592,7 +594,7 @@ WHERE sr.[Status] = N'Pending'
         await using var con = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE [{_s}].[DocumentApprovalStepRecord]
+            UPDATE [{_s}].[ApprovalStepRecord]
             SET [SlaWarnedAt]=SYSUTCDATETIME(),[Updated]=SYSUTCDATETIME()
             WHERE [Id]=@Id;
             """;
@@ -613,7 +615,7 @@ WHERE sr.[Status] = N'Pending'
                 read.Transaction = tx;
                 read.CommandText = $"""
                     SELECT [InstanceId],[StepOrder],[StepName],[DueDate]
-                    FROM [{_s}].[DocumentApprovalStepRecord]
+                    FROM [{_s}].[ApprovalStepRecord]
                     WHERE [Id]=@Id;
                     """;
                 read.Parameters.Add(new SqlParameter("@Id", sourceRecordId));
@@ -631,7 +633,7 @@ WHERE sr.[Status] = N'Pending'
             {
                 upd.Transaction = tx;
                 upd.CommandText = $"""
-                    UPDATE [{_s}].[DocumentApprovalStepRecord]
+                    UPDATE [{_s}].[ApprovalStepRecord]
                     SET [Status]=N'Escalated',[ActionDate]=SYSUTCDATETIME(),
                         [Updated]=SYSUTCDATETIME()
                     WHERE [Id]=@Id;
@@ -647,7 +649,7 @@ WHERE sr.[Status] = N'Pending'
             {
                 ins.Transaction = tx;
                 ins.CommandText = $"""
-                    INSERT INTO [{_s}].[DocumentApprovalStepRecord]
+                    INSERT INTO [{_s}].[ApprovalStepRecord]
                         ([InstanceId],[StepOrder],[StepName],[Status],[ApproverId],[ApproverName],
                          [DueDate],[SlaEscalatedFromRecordId],[CreatedById],[Created])
                     VALUES
@@ -677,11 +679,11 @@ WHERE sr.[Status] = N'Pending'
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private async Task<int?> GetInstanceIdByDocumentAsync(SqlConnection con, Guid documentId, CancellationToken ct)
+    private async Task<int?> GetInstanceIdByDocumentAsync(SqlConnection con, int documentId, CancellationToken ct)
     {
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
-            SELECT TOP 1 [Id] FROM [{_s}].[DocumentApprovalInstance]
+            SELECT TOP 1 [Id] FROM [{_s}].[ApprovalInstance]
             WHERE [DocumentId]=@DocId AND [IsActive]=1
             ORDER BY [StartedAt] DESC;
             """;
@@ -698,30 +700,31 @@ WHERE sr.[Status] = N'Pending'
         await using (var cmd = con.CreateCommand())
         {
             cmd.CommandText = $"""
-                SELECT i.[Id],i.[DocumentId],i.[FlowId],f.[Name],i.[Status],i.[CurrentStep],
+                SELECT i.[Id],i.[DocumentId],i.[EntityKind],i.[FlowId],f.[Name],i.[Status],i.[CurrentStep],
                        i.[StartedBy],i.[StartedAt],i.[CompletedAt],i.[RejectNote],
-                       (SELECT COUNT(1) FROM [{_s}].[DocumentApprovalStepRecord] sr WHERE sr.[InstanceId]=i.[Id]) AS TotalSteps
-                FROM [{_s}].[DocumentApprovalInstance] i
+                       (SELECT COUNT(1) FROM [{_s}].[ApprovalStepRecord] sr WHERE sr.[InstanceId]=i.[Id]) AS TotalSteps
+                FROM [{_s}].[ApprovalInstance] i
                 JOIN [{_s}].[ApprovalFlow] f ON f.[Id]=i.[FlowId]
                 WHERE i.[Id]=@Iid;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (!await r.ReadAsync(ct)) return null;
-            flowName = r.GetString(3);
+            flowName = r.GetString(4);
             inst = new ApprovalInstanceDto(
-                r.GetInt32(0),
-                r.GetGuid(1),
-                r.GetInt32(2),
-                flowName,
-                r.GetString(4),
-                r.GetInt32(5),
-                r.GetInt32(10),
-                r.IsDBNull(6) ? null : r.GetString(6),
-                r.GetDateTime(7),
-                r.IsDBNull(8) ? null : r.GetDateTime(8),
-                r.IsDBNull(9) ? null : r.GetString(9),
-                Array.Empty<ApprovalStepRecordDto>());
+                Id:          r.GetInt32(0),
+                DocumentId:  r.IsDBNull(1) ? (int?)null : r.GetInt32(1),
+                EntityKind:  r.IsDBNull(2) ? "Document" : r.GetString(2),
+                FlowId:      r.GetInt32(3),
+                FlowName:    flowName,
+                Status:      r.GetString(5),
+                CurrentStep: r.GetInt32(6),
+                TotalSteps:  r.GetInt32(11),
+                StartedBy:   r.IsDBNull(7) ? null : r.GetString(7),
+                StartedAt:   r.GetDateTime(8),
+                CompletedAt: r.IsDBNull(9) ? null : r.GetDateTime(9),
+                RejectNote:  r.IsDBNull(10) ? null : r.GetString(10),
+                StepRecords: Array.Empty<ApprovalStepRecordDto>());
         }
 
         if (inst is null) return null;
@@ -732,7 +735,7 @@ WHERE sr.[Status] = N'Pending'
             sCmd.CommandText = $"""
                 SELECT [Id],[InstanceId],[StepOrder],[StepName],[Status],[ApproverId],[ApproverName],[Note],[ActionDate],
                        [DueDate],[SlaWarnedAt],[SlaActionAt],[SlaActionType]
-                FROM [{_s}].[DocumentApprovalStepRecord]
+                FROM [{_s}].[ApprovalStepRecord]
                 WHERE [InstanceId]=@Iid
                 ORDER BY [StepOrder];
                 """;
@@ -774,7 +777,7 @@ WHERE sr.[Status] = N'Pending'
             var dueDate      = r.IsDBNull(4) ? (DateTime?)null : r.GetDateTime(4);
             var approverId   = r.IsDBNull(5) ? null : r.GetString(5);
             var approverName = r.IsDBNull(6) ? null : r.GetString(6);
-            var documentId   = r.GetGuid(7);
+            var documentId   = r.IsDBNull(7) ? (int?)null : (int?)r.GetInt32(7);
             var flowName     = r.GetString(8);
             var nodeData     = r.IsDBNull(9) ? null : r.GetString(9);
 
@@ -800,8 +803,8 @@ WHERE sr.[Status] = N'Pending'
         check.Transaction = tx;
         check.CommandText = $"""
             SELECT sr.[DueDate], s.[NodeData]
-            FROM [{_s}].[DocumentApprovalStepRecord] sr
-            JOIN [{_s}].[DocumentApprovalInstance] i ON i.[Id] = sr.[InstanceId]
+            FROM [{_s}].[ApprovalStepRecord] sr
+            JOIN [{_s}].[ApprovalInstance] i ON i.[Id] = sr.[InstanceId]
             LEFT JOIN [{_s}].[ApprovalFlowStep] s ON s.[FlowId] = i.[FlowId] AND s.[StepOrder] = sr.[StepOrder]
             WHERE sr.[InstanceId]=@Iid AND sr.[StepOrder]=@Ord;
             """;
@@ -822,7 +825,7 @@ WHERE sr.[Status] = N'Pending'
         await using var upd = con.CreateCommand();
         upd.Transaction = tx;
         upd.CommandText = $"""
-            UPDATE [{_s}].[DocumentApprovalStepRecord]
+            UPDATE [{_s}].[ApprovalStepRecord]
             SET [DueDate]=@Due, [Updated]=SYSUTCDATETIME()
             WHERE [InstanceId]=@Iid AND [StepOrder]=@Ord;
             """;

@@ -1,0 +1,145 @@
+@model object
+@using System.Text.Json
+@{
+    var entityType = (string)(ViewBag.EntityType ?? "Contact");
+    var entityLabel = (string)(ViewBag.EntityLabel ?? "Cari Kodu");
+    ViewData["Title"] = $"{entityLabel} Kuralları";
+    ViewData["BodyClass"] = "page-doc-layout-rule";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model != null ? JsonSerializer.Serialize(Model, jsonOpts) : "null";
+
+    var activeContact = entityType == "Contact";
+    var activeItem    = entityType == "Item";
+}
+
+@section Styles {
+<style>
+    .page-doc-layout-rule .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-doc-layout-rule .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-doc-layout-rule .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-doc-layout-rule .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+    .dlr-tabs {
+        display: flex; gap: 0; padding: 0 16px;
+        background: transparent;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        flex-shrink: 0;
+    }
+    .dlr-tab {
+        padding: 10px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        color: rgba(148, 163, 184, 0.85);
+        text-decoration: none;
+        display: inline-flex; align-items: center; gap: 7px;
+        transition: color .12s, border-color .12s;
+    }
+    .dlr-tab:hover { color: #6366f1; }
+    .dlr-tab.active {
+        color: #6366f1;
+        border-bottom-color: #6366f1;
+        font-weight: 600;
+    }
+    body.app-theme-dark .dlr-tab.active { color: #a5b4fc; border-bottom-color: #a5b4fc; }
+    body.app-theme-dark .dlr-tab:hover  { color: #a5b4fc; }
+    .dlr-tab svg { opacity: 0.85; }
+</style>
+}
+
+<div class="dlr-tabs">
+    <a href="/DocLayoutRule" class="dlr-tab">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Belge Tasarımı
+    </a>
+    <a href="/DocumentNumberRule" class="dlr-tab">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+        Belge Numarası
+    </a>
+    <a href="/CodeRule?entity=contact" class="dlr-tab @(activeContact ? "active" : "")">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Cari Kodu
+    </a>
+    <a href="/CodeRule?entity=item" class="dlr-tab @(activeItem ? "active" : "")">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        Stok Kodu
+    </a>
+</div>
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@section Scripts {
+<script>
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[CodeRule] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:#f87171;font-size:14px;gap:12px;">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayı Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard mount fonksiyonu bulunamadı'); return; }
+        try { window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG); }
+        catch (ex) { showError('Mount hatası: ' + (ex.message || ex)); }
+    }
+
+    function loadCss() {
+        var prev = document.querySelector('link[data-cr-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-cr-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-cr-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-cr-sb', '1');
+        script.onload  = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
+    else loadScript(doMount);
+
+    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
+})();
+</script>
+}

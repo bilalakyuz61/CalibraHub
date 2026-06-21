@@ -13,9 +13,7 @@
         name             = Model?.Name ?? "",
         description      = Model?.Description ?? "",
         documentKind     = Model?.DocumentKind ?? "Document",
-        priority         = Model?.Priority ?? 0,
         isActive         = Model?.IsActive ?? true,
-        extraColumnsView = Model?.ExtraColumnsView ?? "",
         rules       = (Model?.Rules ?? Array.Empty<ApprovalFlowRuleDto>()).Select(r => new {
             id        = r.Id,
             ruleType  = r.RuleType.ToString(),
@@ -78,11 +76,34 @@ body.app-theme-dark .afe-wrapper {
 
 /* ── Sticky header bar ─────────────────────────────────────── */
 .afe-headerbar {
+    position: relative;
     display: flex; align-items: center; gap: 10px;
     padding: 10px 16px; flex-shrink: 0;
     background: var(--afe-surface);
     border-bottom: 1px solid var(--afe-border);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+}
+/* Headerbar butonları — Bootstrap secondary/primary değişkenlerini ezip
+   CSS değişkenleriyle tutarlı çerçeve ve renk sağlar (light + dark). */
+.afe-headerbar .btn {
+    border-color: var(--afe-border);
+    color: var(--afe-muted);
+    background: transparent;
+    transition: border-color .15s, color .15s, background .15s;
+}
+.afe-headerbar .btn:hover {
+    border-color: var(--afe-text);
+    color: var(--afe-text);
+    background: transparent;
+}
+.afe-headerbar .btn-save {
+    border-color: var(--afe-accent);
+    color: var(--afe-accent);
+}
+.afe-headerbar .btn-save:hover {
+    border-color: var(--afe-accent);
+    color: var(--afe-surface);
+    background: var(--afe-accent);
 }
 .afe-headerbar .afe-hb-input,
 .afe-headerbar .afe-hb-select {
@@ -97,9 +118,110 @@ body.app-theme-dark .afe-wrapper {
     outline: none; border-color: var(--afe-accent);
     box-shadow: 0 0 0 3px var(--afe-accent-s);
 }
-.afe-hb-name      { width: 240px; font-weight: 600; }
-.afe-hb-kind      { width: 220px; }
-.afe-hb-prio      { width: 72px; text-align: center; }
+.afe-hb-display {
+    font-size: .88rem; font-weight: 600; color: var(--afe-text);
+    max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Ortalanmış ad + durum noktası ─────────────────────────── */
+.afe-hb-center {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px;
+    pointer-events: none; max-width: 420px;
+}
+.afe-status-dot {
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+    background: #10b981;
+    box-shadow: 0 0 0 2px rgba(16,185,129,.2);
+    transition: background .2s, box-shadow .2s;
+}
+.afe-status-dot.passive {
+    background: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239,68,68,.2);
+}
+
+/* ── Genel Bilgiler sağ panel ──────────────────────────────── */
+.afp-overlay {
+    position: fixed; inset: 0; z-index: 9890;
+    background: rgba(0,0,0,.3); backdrop-filter: blur(2px);
+    display: none;
+}
+.afp-overlay.show { display: block; }
+.afp-panel {
+    position: fixed; top: 0; right: -380px; width: 360px; height: 100vh;
+    z-index: 9900;
+    background: #ffffff;
+    border-left: 1px solid #e2e8f0;
+    color: #1e293b;
+    box-shadow: -12px 0 40px rgba(0,0,0,.22);
+    display: flex; flex-direction: column;
+    transition: right .25s cubic-bezier(.4,0,.2,1);
+    overflow: hidden;
+}
+body.app-theme-dark .afp-panel {
+    background: #0d1323;
+    border-left-color: rgba(255,255,255,.09);
+    color: #e2e8f0;
+    box-shadow: -12px 0 40px rgba(0,0,0,.55);
+}
+.afp-panel.open { right: 0; }
+.afp-panel-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px 14px;
+    border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+}
+body.app-theme-dark .afp-panel-header { border-bottom-color: rgba(255,255,255,.09); }
+.afp-panel-title { font-size: .95rem; font-weight: 700; margin: 0; flex: 1; }
+.afp-panel-close {
+    background: none; border: none; cursor: pointer; padding: 4px;
+    color: #64748b; border-radius: 6px; line-height: 1; flex-shrink: 0;
+}
+.afp-panel-close:hover { background: rgba(99,102,241,.1); color: #6366f1; }
+body.app-theme-dark .afp-panel-close { color: #94a3b8; }
+body.app-theme-dark .afp-panel-close:hover { background: rgba(129,140,248,.15); color: #818cf8; }
+.afp-panel-body { flex: 1; overflow-y: auto; padding: 20px; }
+.afp-field { margin-bottom: 18px; }
+.afp-field-row { display: flex; gap: 12px; margin-bottom: 18px; }
+.afp-field-row .afp-field { flex: 1; margin-bottom: 0; }
+.afp-label {
+    display: block; font-size: .75rem; font-weight: 600;
+    color: #64748b; margin-bottom: 5px; letter-spacing: .02em;
+}
+body.app-theme-dark .afp-label { color: #94a3b8; }
+.afp-input,
+.afp-select {
+    width: 100%; padding: 8px 12px;
+    border: 1px solid #e2e8f0; border-radius: 7px;
+    background: #f8fafc; color: #1e293b;
+    font-size: .875rem; font-family: inherit;
+    transition: border-color .15s, box-shadow .15s;
+    box-sizing: border-box;
+}
+body.app-theme-dark .afp-input,
+body.app-theme-dark .afp-select {
+    background: #080c17; color: #e2e8f0;
+    border-color: rgba(255,255,255,.09);
+}
+.afp-input:focus,
+.afp-select:focus {
+    outline: none; border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+body.app-theme-dark .afp-input:focus,
+body.app-theme-dark .afp-select:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 3px rgba(129,140,248,.15);
+}
+.afp-input--name { font-weight: 600; }
+.afp-meta {
+    margin-top: 24px; padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+    font-size: .78rem; color: #64748b;
+    display: flex; flex-direction: column; gap: 4px;
+}
+body.app-theme-dark .afp-meta { border-top-color: rgba(255,255,255,.09); color: #94a3b8; }
+.afp-meta strong { color: #1e293b; }
+body.app-theme-dark .afp-meta strong { color: #e2e8f0; }
 
 /* ── Center confirm modal (silme onay standardı muadili) ────
    .afe-wrapper'in DIŞINDA mount edildiği için kendi self-contained
@@ -172,10 +294,10 @@ body.app-theme-dark .afe-confirm-btn-ok:hover { background: #6366f1; border-colo
 .afe-switch input[type=checkbox] { display: none; }
 .afe-switch__track {
     width: 36px; height: 20px; border-radius: 10px;
-    background: var(--afe-border); transition: background .2s;
+    background: #ef4444; transition: background .2s;
     position: relative; flex-shrink: 0;
 }
-.afe-switch input:checked + .afe-switch__track { background: var(--afe-accent); }
+.afe-switch input:checked + .afe-switch__track { background: #10b981; }
 .afe-switch__track::after {
     content: ''; position: absolute; top: 3px; left: 3px;
     width: 14px; height: 14px; border-radius: 50%; background: #fff;
@@ -206,6 +328,113 @@ body.app-theme-dark .afe-confirm-btn-ok:hover { background: #6366f1; border-colo
 .afe-toast--err { background: #fee2e2; color: #991b1b; }
 body.app-theme-dark .afe-toast--ok  { background: rgba(34,197,94,.2);  color: #4ade80; }
 body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f87171; }
+
+/* ── Revizyon geçmişi modal ─────────────────────────────────── */
+.afh-backdrop {
+    position: fixed; inset: 0; z-index: 10500;
+    background: rgba(2,6,23,.72); backdrop-filter: blur(6px);
+    display: none; align-items: flex-start; justify-content: center;
+    padding-top: 48px;
+}
+.afh-backdrop.show { display: flex; }
+.afh-card {
+    background: #ffffff; color: #1e293b;
+    border: 1px solid #e2e8f0; border-radius: 14px;
+    box-shadow: 0 32px 96px rgba(0,0,0,.38);
+    width: min(880px, calc(100vw - 32px));
+    max-height: calc(100vh - 80px);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+}
+body.app-theme-dark .afh-card {
+    background: #0f172a; color: #e2e8f0;
+    border-color: rgba(255,255,255,.1);
+    box-shadow: 0 32px 96px rgba(0,0,0,.7);
+}
+.afh-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px 14px;
+    border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+}
+body.app-theme-dark .afh-header { border-color: rgba(255,255,255,.09); }
+.afh-title { font-size: 1rem; font-weight: 700; margin: 0; flex: 1; }
+.afh-close {
+    background: none; border: none; cursor: pointer; padding: 4px;
+    color: #64748b; border-radius: 6px; line-height: 1;
+}
+.afh-close:hover { background: #f1f5f9; color: #1e293b; }
+body.app-theme-dark .afh-close:hover { background: rgba(255,255,255,.08); color: #e2e8f0; }
+.afh-body {
+    display: flex; flex: 1; min-height: 0; overflow: hidden;
+}
+.afh-left {
+    width: 300px; flex-shrink: 0; border-right: 1px solid #e2e8f0;
+    overflow-y: auto; padding: 12px 0;
+}
+body.app-theme-dark .afh-left { border-color: rgba(255,255,255,.09); }
+.afh-right {
+    flex: 1; min-width: 0; overflow-y: auto; padding: 16px 20px;
+}
+.afh-rev-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; cursor: pointer; transition: background .12s;
+    border-left: 3px solid transparent;
+}
+.afh-rev-item:hover { background: #f8fafc; }
+.afh-rev-item.active { border-left-color: #6366f1; background: #f0f1ff; }
+body.app-theme-dark .afh-rev-item:hover { background: rgba(255,255,255,.04); }
+body.app-theme-dark .afh-rev-item.active { background: rgba(99,102,241,.14); }
+.afh-rev-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 32px; height: 24px; padding: 0 8px;
+    border-radius: 12px; font-size: .75rem; font-weight: 700;
+    background: #e0e7ff; color: #3730a3;
+}
+body.app-theme-dark .afh-rev-badge { background: rgba(99,102,241,.25); color: #a5b4fc; }
+.afh-rev-info { flex: 1; min-width: 0; }
+.afh-rev-date { font-size: .78rem; color: #64748b; }
+body.app-theme-dark .afh-rev-date { color: #94a3b8; }
+.afh-pending-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 10px; font-size: .72rem; font-weight: 600;
+    background: #fef3c7; color: #92400e;
+}
+body.app-theme-dark .afh-pending-badge { background: rgba(245,158,11,.2); color: #fcd34d; }
+.afh-section-title {
+    font-size: .78rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #64748b; margin: 0 0 10px;
+}
+body.app-theme-dark .afh-section-title { color: #94a3b8; }
+.afh-empty { font-size: .85rem; color: #94a3b8; text-align: center; padding: 24px 0; }
+.afh-steps-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.afh-step {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px; border-radius: 8px;
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    font-size: .84rem;
+}
+body.app-theme-dark .afh-step { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.09); }
+.afh-step-num {
+    min-width: 22px; height: 22px; border-radius: 50%;
+    background: #e0e7ff; color: #3730a3;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .72rem; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+}
+body.app-theme-dark .afh-step-num { background: rgba(99,102,241,.25); color: #a5b4fc; }
+.afh-step-name { font-weight: 600; }
+.afh-step-who  { font-size: .78rem; color: #64748b; }
+body.app-theme-dark .afh-step-who { color: #94a3b8; }
+.afh-pending-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+.afh-pending-table th {
+    text-align: left; padding: 6px 10px; font-size: .73rem; font-weight: 700;
+    color: #64748b; border-bottom: 2px solid #e2e8f0;
+}
+body.app-theme-dark .afh-pending-table th { color: #94a3b8; border-color: rgba(255,255,255,.09); }
+.afh-pending-table td {
+    padding: 8px 10px; border-bottom: 1px solid #f1f5f9;
+}
+body.app-theme-dark .afh-pending-table td { border-color: rgba(255,255,255,.06); }
+.afh-loading { text-align: center; color: #94a3b8; padding: 32px 0; font-size: .88rem; }
 </style>
 }
 
@@ -213,27 +442,48 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
 
     <!-- Sticky header bar -->
     <div class="afe-headerbar">
-        <a href="/ApprovalFlow" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            Listeye Dön
+        <!-- Sol: Listeye Dön -->
+        <a href="/ApprovalFlow" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" title="Listeye Dön" style="flex-shrink:0;padding:6px 9px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </a>
-        <input type="text" id="fName" class="afe-hb-input afe-hb-name" placeholder="Akış Adı *" />
-        <select id="fKind" class="afe-hb-select afe-hb-kind" title="Entity Tipi">
-            @* Dinamik seçenekler script tarafından doldurulur (ENTITY_TYPES). *@
-        </select>
-        <input type="number" id="fPriority" class="afe-hb-input afe-hb-prio" placeholder="Öncelik" value="0" min="0" max="999" title="Öncelik (düşük sayı önce çalışır)" />
-        <label class="afe-switch">
-            <input type="checkbox" id="fActive" checked />
-            <span class="afe-switch__track"></span>
-            <span>Aktif</span>
-        </label>
-        <input type="text" id="fExtraView" class="afe-hb-input" style="width:220px;font-size:.78rem;"
-               placeholder="Ek sütun view adı (opsiyonel)"
-               title="Onayda Bekleyenler listesinde ek sütun göstermek için DB view adı (ör: cbv_SatinAlmaTalepCols)" />
+
+        <!-- Orta: Süreç adı + durum noktası (absolute) -->
+        <div class="afe-hb-center">
+            <span id="hbStatusDot" class="afe-status-dot@(Model?.IsActive == false ? " passive" : "")"></span>
+            <span id="hbFlowName" class="afe-hb-display">@(isNew ? "Yeni Akış" : Model?.Name)</span>
+        </div>
+
+        <!-- Sağ: araç butonları -->
         <div style="flex:1"></div>
-        <button id="btnSave" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-            Kaydet
+        <button id="btnVars" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
+                title="Değişkenler" style="padding:6px 9px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/>
+                <path d="M16 3h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 1-2 2v5a2 2 0 0 1-2 2h-1"/>
+            </svg>
+        </button>
+        <button id="btnMiniMap" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
+                title="Mini Harita" style="padding:6px 9px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m3 6 6-3 6 3 6-3v14l-6 3-6-3-6 3V6z"/>
+                <path d="M9 3v14M15 6v14"/>
+            </svg>
+        </button>
+        <button id="btnInfo" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
+                title="Genel Bilgiler" style="padding:6px 9px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+        </button>
+        @if (!isNew)
+        {
+            <button id="btnHistory" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
+                    title="Revizyon Geçmişi" style="padding:6px 9px">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
+            </button>
+        }
+        <button id="btnSave" class="btn btn-sm btn-save d-inline-flex align-items-center" title="Kaydet" style="padding:6px 9px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
         </button>
     </div>
 
@@ -245,6 +495,68 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
 </div>
 
 <div class="afe-toast" id="toast"></div>
+
+<!-- Revizyon geçmişi modal -->
+<div class="afh-backdrop" id="afh-backdrop" role="dialog" aria-modal="true">
+    <div class="afh-card">
+        <div class="afh-header">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#6366f1;flex-shrink:0">
+                <path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/>
+            </svg>
+            <p class="afh-title">Revizyon Geçmişi</p>
+            <button type="button" class="afh-close" id="afh-close" aria-label="Kapat">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="afh-body">
+            <div class="afh-left" id="afh-rev-list">
+                <div class="afh-loading">Yükleniyor…</div>
+            </div>
+            <div class="afh-right" id="afh-detail">
+                <div class="afh-empty">Listedeki bir revizyonu seçin.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Genel Bilgiler sağ panel -->
+<div class="afp-overlay" id="afpOverlay"></div>
+<div class="afp-panel" id="afpPanel" role="dialog" aria-modal="true" aria-labelledby="afpPanelTitle">
+    <div class="afp-panel-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#6366f1;flex-shrink:0">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <p class="afp-panel-title" id="afpPanelTitle">Genel Bilgiler</p>
+        <button type="button" class="afp-panel-close" id="afpClose" aria-label="Kapat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="afp-panel-body">
+        <div class="afp-field">
+            <label class="afp-label" for="fName">Akış Adı</label>
+            <input type="text" id="fName" class="afp-input afp-input--name" placeholder="Akış Adı *" autocomplete="off" />
+        </div>
+        <div class="afp-field">
+            <label class="afp-label" for="fKind">Belge / Entity Türü</label>
+            <select id="fKind" class="afp-select" title="Entity Tipi">
+                @* Dinamik seçenekler script tarafından doldurulur (ENTITY_TYPES). *@
+            </select>
+        </div>
+        <div class="afp-field" style="display:flex;align-items:center;padding-top:4px">
+            <label class="afe-switch">
+                <input type="checkbox" id="fActive" checked />
+                <span class="afe-switch__track"></span>
+                <span>Aktif</span>
+            </label>
+        </div>
+        @if (!isNew)
+        {
+            <div class="afp-meta">
+                <span>Akış ID: <strong>@flowId</strong></span>
+            </div>
+        }
+    </div>
+</div>
 
 <!-- Center confirm modal (entity tipi değişimi gibi onay-gerektiren akışlar için) -->
 <div class="afe-confirm-backdrop" id="afeConfirmBackdrop" role="dialog" aria-modal="true" aria-labelledby="afeConfirmTitle">
@@ -292,9 +604,9 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
     // ── DOM bağlantıları ──────────────────────────────────────────────────────
     var fName      = document.getElementById('fName');
     var fKind      = document.getElementById('fKind');
-    var fPriority  = document.getElementById('fPriority');
     var fActive    = document.getElementById('fActive');
-    var fExtraView = document.getElementById('fExtraView');
+    var hbName     = document.getElementById('hbFlowName');
+    var hbDot      = document.getElementById('hbStatusDot');
 
     // ── Center confirm modal helper (Promise tabanlı) ──────────────────────────
     function afeConfirm(message, opts) {
@@ -363,9 +675,10 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
         });
     }
 
-    fName.value      = INIT.name || '';
-    fExtraView.value = INIT.extraColumnsView || '';
-    var initKind     = INIT.documentKind || '';
+    fName.value = INIT.name || '';
+    hbName.textContent = INIT.name || 'Yeni Akış';
+    fActive.checked = INIT.isActive !== false;
+    var initKind = INIT.documentKind || '';
     // Geriye uyumluluk: "All" enum değeri yeni sistemde "Document" (wildcard) ile eş anlamlı.
     if (initKind === 'All') initKind = 'Document';
 
@@ -382,8 +695,6 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
 
     fKind.value = initKind;
     if (!fKind.value && fKind.options.length > 0) fKind.value = fKind.options[0].value;
-    fPriority.value = INIT.priority != null ? INIT.priority : 0;
-    fActive.checked = INIT.isActive !== false;
 
     // Entity tipi değişti mi? — Save sonrası designer'ı yeni field setiyle yeniden
     // mount edebilmek için sayfayı reload ederiz. (Reload-before-save eski davranıştı
@@ -528,13 +839,11 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
         }).filter(Boolean);
 
         var payload = {
-            id:               INIT.id,
-            name:             name,
-            description:      INIT.description || null,
-            documentKind:     fKind.value,
-            priority:         parseInt(fPriority.value) || 0,
-            isActive:         fActive.checked,
-            extraColumnsView: fExtraView.value.trim() || null,
+            id:           INIT.id,
+            name:         name,
+            description:  INIT.description || null,
+            documentKind: fKind.value,
+            isActive:     fActive.checked,
             rules: dpRules.map(function(r) {
                 return {
                     id: r.id || 0,
@@ -591,6 +900,210 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
     }
 
     document.getElementById('btnSave').addEventListener('click', doSave);
+
+    // ── Toolbar: ad + durum noktası senkronizasyonu ──────────────────────────
+    fName.addEventListener('input', function () {
+        hbName.textContent = fName.value.trim() || 'Yeni Akış';
+    });
+
+    function updateStatusDot() {
+        if (!hbDot) return;
+        hbDot.classList.toggle('passive', !fActive.checked);
+    }
+    fActive.addEventListener('change', updateStatusDot);
+    updateStatusDot();
+
+    // ── Değişkenler butonu ───────────────────────────────────────────────────
+    document.getElementById('btnVars').addEventListener('click', function () {
+        if (typeof window._afdOpenVariables === 'function') window._afdOpenVariables();
+    });
+
+    // ── Mini Harita butonu ───────────────────────────────────────────────────
+    (function () {
+        var btn = document.getElementById('btnMiniMap');
+        var MMKEY = 'cb-afd-minimap-on';
+        function syncBtn() {
+            var on = localStorage.getItem(MMKEY) === '1';
+            btn.classList.toggle('active', on);
+            btn.style.background = on ? 'var(--bs-primary, #6366f1)' : '';
+            btn.style.color      = on ? '#fff' : '';
+            btn.style.borderColor = on ? 'var(--bs-primary, #6366f1)' : '';
+        }
+        syncBtn();
+        btn.addEventListener('click', function () {
+            if (typeof window._afdToggleMinimap === 'function') {
+                window._afdToggleMinimap();
+                setTimeout(syncBtn, 50);
+            }
+        });
+    })();
+
+    // ── Genel Bilgiler sağ panel ──────────────────────────────────────────────
+    (function () {
+        var panel   = document.getElementById('afpPanel');
+        var overlay = document.getElementById('afpOverlay');
+        var btnInfo = document.getElementById('btnInfo');
+        var closeBtn = document.getElementById('afpClose');
+
+        function openPanel() {
+            panel.classList.add('open');
+            overlay.classList.add('show');
+            document.addEventListener('keydown', onEscPanel);
+            setTimeout(function () { fName.focus(); fName.select(); }, 60);
+        }
+
+        function closePanel() {
+            panel.classList.remove('open');
+            overlay.classList.remove('show');
+            document.removeEventListener('keydown', onEscPanel);
+        }
+
+        function onEscPanel(e) { if (e.key === 'Escape') closePanel(); }
+
+        btnInfo.addEventListener('click', openPanel);
+        closeBtn.addEventListener('click', closePanel);
+        overlay.addEventListener('click', closePanel);
+
+        // Yeni akışta paneli otomatik aç
+        if (@(isNew ? "true" : "false")) {
+            setTimeout(openPanel, 120);
+        }
+    })();
+
+    // ── Revizyon geçmişi modal ────────────────────────────────────────────────
+    (function () {
+        var FLOW_ID = @(isNew ? "0" : flowId.ToString());
+        if (!FLOW_ID) return; // yeni akış — geçmiş yok
+
+        var backdrop  = document.getElementById('afh-backdrop');
+        var closeBtn  = document.getElementById('afh-close');
+        var revList   = document.getElementById('afh-rev-list');
+        var detailEl  = document.getElementById('afh-detail');
+        var histBtn   = document.getElementById('btnHistory');
+        if (!histBtn) return;
+
+        function fmtDate(s) {
+            if (!s) return '-';
+            var d = new Date(s);
+            return d.toLocaleDateString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric' })
+                 + ' ' + d.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
+        }
+
+        function openModal() {
+            backdrop.classList.add('show');
+            document.addEventListener('keydown', onEsc);
+            revList.innerHTML = '<div class="afh-loading">Yükleniyor…</div>';
+            detailEl.innerHTML = '<div class="afh-empty">Listedeki bir revizyonu seçin.</div>';
+
+            fetch('/ApprovalFlow/Revisions?flowId=' + FLOW_ID)
+                .then(function (r) { return r.json(); })
+                .then(renderList)
+                .catch(function () { revList.innerHTML = '<div class="afh-empty">Yüklenemedi.</div>'; });
+        }
+
+        function closeModal() {
+            backdrop.classList.remove('show');
+            document.removeEventListener('keydown', onEsc);
+        }
+
+        function onEsc(e) { if (e.key === 'Escape') closeModal(); }
+
+        function renderList(revs) {
+            if (!revs || !revs.length) {
+                revList.innerHTML = '<div class="afh-empty">Henüz revizyon kaydı yok.</div>';
+                return;
+            }
+            var html = '';
+            revs.forEach(function (r) {
+                var pendHtml = r.pendingCount > 0
+                    ? '<span class="afh-pending-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>' + r.pendingCount + ' bekleyen</span>'
+                    : '';
+                html += '<div class="afh-rev-item" data-id="' + r.id + '" tabindex="0" role="button">'
+                      +   '<span class="afh-rev-badge">Rev ' + r.revisionNo + '</span>'
+                      +   '<div class="afh-rev-info">'
+                      +     '<div style="font-size:.82rem;font-weight:600">' + fmtDate(r.createdAt) + '</div>'
+                      +     '<div class="afh-rev-date">' + (r.createdBy || '-') + '</div>'
+                      +     pendHtml
+                      +   '</div>'
+                      + '</div>';
+            });
+            revList.innerHTML = html;
+            revList.querySelectorAll('.afh-rev-item').forEach(function (el) {
+                el.addEventListener('click', function () {
+                    revList.querySelectorAll('.afh-rev-item').forEach(function (x) { x.classList.remove('active'); });
+                    el.classList.add('active');
+                    loadDetail(el.dataset.id);
+                });
+                el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') el.click(); });
+            });
+            // İlk revizyonu otomatik seç
+            var first = revList.querySelector('.afh-rev-item');
+            if (first) first.click();
+        }
+
+        function loadDetail(revId) {
+            detailEl.innerHTML = '<div class="afh-loading">Yükleniyor…</div>';
+            fetch('/ApprovalFlow/RevisionDetail?id=' + revId)
+                .then(function (r) { return r.json(); })
+                .then(renderDetail)
+                .catch(function () { detailEl.innerHTML = '<div class="afh-empty">Yüklenemedi.</div>'; });
+        }
+
+        function renderDetail(d) {
+            var snap = {};
+            try { snap = JSON.parse(d.snapshot); } catch (e) {}
+
+            var steps = (snap.steps || []).filter(function (s) {
+                var nt = (s.nodeType || 'step').toLowerCase();
+                return nt === 'step';
+            });
+
+            // Adımlar
+            var stepsHtml = '<p class="afh-section-title">Onay Adımları</p>';
+            if (!steps.length) {
+                stepsHtml += '<div class="afh-empty" style="padding:8px 0">Adım bilgisi bulunamadı.</div>';
+            } else {
+                stepsHtml += '<ul class="afh-steps-list">';
+                steps.forEach(function (s, i) {
+                    stepsHtml += '<li class="afh-step">'
+                               + '<span class="afh-step-num">' + (i + 1) + '</span>'
+                               + '<div><div class="afh-step-name">' + esc(s.stepName || 'Adım') + '</div>'
+                               + '<div class="afh-step-who">' + esc(s.approverLabel || s.approverId || '') + '</div></div>'
+                               + '</li>';
+                });
+                stepsHtml += '</ul>';
+            }
+
+            // Bekleyen belgeler
+            var pendHtml = '<p class="afh-section-title" style="margin-top:16px">Bekleyen Belgeler</p>';
+            if (!d.pendingInstances || !d.pendingInstances.length) {
+                pendHtml += '<div class="afh-empty" style="padding:8px 0">Bu revizyona ait bekleyen belge yok.</div>';
+            } else {
+                pendHtml += '<table class="afh-pending-table"><thead><tr>'
+                          + '<th>Belge No</th><th>Adım</th><th>Onaylayıcı</th><th>Başlangıç</th>'
+                          + '</tr></thead><tbody>';
+                d.pendingInstances.forEach(function (p) {
+                    pendHtml += '<tr>'
+                              + '<td>' + esc(p.documentNumber || '#' + p.instanceId) + '</td>'
+                              + '<td>' + esc(p.currentStepName || '-') + '</td>'
+                              + '<td>' + esc(p.approverName || '-') + '</td>'
+                              + '<td>' + fmtDate(p.startedAt) + '</td>'
+                              + '</tr>';
+                });
+                pendHtml += '</tbody></table>';
+            }
+
+            detailEl.innerHTML = stepsHtml + pendHtml;
+        }
+
+        function esc(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        histBtn.addEventListener('click', openModal);
+        closeBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeModal(); });
+    })();
 })();
 </script>
 @Html.AntiForgeryToken()

@@ -3,7 +3,7 @@
     ViewData["AdminMenu"] = "db-schema";
     ViewData["FormCode"] = "ADMIN_DB_SCHEMA";
     ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sys.tables + sys.columns + sys.indexes + sys.foreign_keys</td>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sys.tables + sys.views + sys.columns + sys.indexes + sys.foreign_keys</td>"
         + "<td style='padding:6px 8px;'>Aktif sirket DB'sinin sistem katalogu — fiziksel metadata okuma (PII olmayan)</td></tr>"
         + "</table>";
 }
@@ -15,7 +15,11 @@
 <div class="sch-layout">
     <div class="sch-list-panel">
         <div class="sch-toolbar">
-            <input type="search" id="sch-search" placeholder="Tablo ara..." autocomplete="off" />
+            <div class="sch-segment-bar">
+                <button type="button" class="sch-segment active" data-segment="tables">Tablolar</button>
+                <button type="button" class="sch-segment" data-segment="views">View'lar</button>
+            </div>
+            <input type="search" id="sch-search" placeholder="Ara..." autocomplete="off" />
             <span class="sch-count" id="sch-count">0</span>
         </div>
         <div class="sch-list" id="sch-list">
@@ -25,7 +29,7 @@
     <div class="sch-detail-panel">
         <div class="sch-detail-header">
             <div>
-                <div class="sch-detail-title" id="sch-detail-title">Tablo secin</div>
+                <div class="sch-detail-title" id="sch-detail-title">Tablo veya view secin</div>
                 <div class="sch-detail-meta" id="sch-detail-meta"></div>
             </div>
             <div class="sch-export-dropdown">
@@ -44,11 +48,11 @@
             <div class="sch-tab" data-tab="fks">🔗 FK'ler <span id="sch-fk-count"></span></div>
         </div>
         <div class="sch-tab-body" id="sch-tab-body">
-            <div class="sch-empty">Sol panelden bir tablo secin — fiziksel sema metadata'si burada goruntulenir.</div>
+            <div class="sch-empty">Sol panelden bir tablo veya view secin — metadata burada goruntulenir.</div>
         </div>
     </div>
 </div>
 
 @section Scripts {
-<script src="~/js/dbSchema.js?v=1" asp-append-version="true"></script>
+<script src="~/js/dbSchema.js?v=2" asp-append-version="true"></script>
 }

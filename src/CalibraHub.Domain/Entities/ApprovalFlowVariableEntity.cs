@@ -1,10 +1,8 @@
+using System.ComponentModel;
+
 namespace CalibraHub.Domain.Entities;
 
-/// <summary>
-/// Surec-scoped degisken tanimi (per-flow). Designer'da SetVariable node + Decision
-/// kosul satirlarinda referans edilir. Per-instance state ApprovalInstanceVariable'da
-/// tutulur — runtime executor okur/yazar.
-/// </summary>
+[Description("Onay akışı değişken şablonu — Designer'daki SetVariable ve Decision node'larında kullanılan akış-scoped değişken tanımı. Çalışma zamanı değerleri ApprovalInstanceVariable tablosunda tutulur.")]
 public sealed class ApprovalFlowVariableEntity
 {
     public int Id { get; init; }

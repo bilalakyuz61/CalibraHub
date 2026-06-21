@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Onay akışı tetikleme kuralı — akışın hangi belge tipi / koşul kapsamında devreye gireceğini tanımlar.")]
 public sealed class ApprovalFlowRuleEntity
 {
     public int Id { get; init; }

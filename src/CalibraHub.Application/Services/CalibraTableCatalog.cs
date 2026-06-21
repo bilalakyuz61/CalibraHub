@@ -7,6 +7,17 @@ namespace CalibraHub.Application.Services;
 ///
 /// YENİ BİR TABLO EKLEDIGINDE: Bu kumeye tablo ismini ekle. (Case-insensitive
 /// esleme yapilir.) Eksik tablo sadece "projede yok" gibi gozukur — hata vermez.
+///
+/// Kaldirilanlarin nedeni:
+///   material_card_field_options  → CREATE TABLE yok, terk edilmis
+///   screen_layout_definitions    → CREATE TABLE yok, terk edilmis
+///   ui_label_translations        → CREATE TABLE yok, terk edilmis
+///   stock_card_property_mappings → ItemFeatureMappings olarak yeniden adi
+///   ProductConfiguration         → ItemConfiguration olarak yeniden adi
+///   org_chart_nodes / org_charts → OrgChartNode / OrgChart olarak yeniden adi
+///   integrator_settings          → IntegratorSetting olarak yeniden adi
+///   smtp_profiles                → SmtpProfile olarak yeniden adi
+///   incoming_documents           → IncomingDocument olarak yeniden adi
 /// </summary>
 public static class CalibraTableCatalog
 {
@@ -26,8 +37,7 @@ public static class CalibraTableCatalog
 
         // Urun Ozellik / Konfigurasyon
         "Feature", "FeatureValue", "FieldGroup", "Field",
-        "material_card_field_options", "ProductConfiguration",
-        "screen_layout_definitions", "stock_card_property_mappings",
+        "ItemFeatureMappings", "ItemConfiguration",
 
         // Malzeme Gruplari & Urun Agaci
         "BOM", "BOMLine", "MaterialGroupMappings", "MaterialGroups",
@@ -39,8 +49,8 @@ public static class CalibraTableCatalog
         // Fiyat Listesi & Doviz
         "PriceGroup", "PriceList", "currencies", "Exchange",
 
-        // Belge / Rapor / Tasarim
-        "design_templates", "document_types", "report_templates",
+        // Belge / Ek / Tasarim
+        "design_templates", "document_types", "report_templates", "Attachment",
 
         // Not (Notes)
         "card_group_mappings", "card_groups",
@@ -53,22 +63,25 @@ public static class CalibraTableCatalog
         "GuideMas",
 
         // Organizasyon
-        "org_chart_nodes", "org_charts",
+        "OrgChart", "OrgChartNode",
 
         // Entegrasyon
-        "ErpConnectionSetting", "incoming_documents",
+        "ErpConnectionSetting", "IncomingDocument",
         "integration_api_profiles",
-        "integrator_settings", "smtp_profiles",
+        "IntegratorSetting", "SmtpProfile",
         "CBT_EBELGEMAS", // Legacy ERP e-belge tablosu — IncomingDocumentRepository kullaniyor
 
-        // Sistem / Log / UI
-        "PLT_SISTEM_LOG", "ui_label_translations",
+        // Sistem / Log
+        "PLT_SISTEM_LOG",
 
         // Dinamik Raporlama
         "RptDef", "RptDefRole", "RptRunLog", "RptView", "RptViewCol", "RptViewRole",
 
         // Sirket Parametre / Numerator / Stok Hareketi (Faz 0)
         "CompanyParameter", "Numerator", "StockMovement",
+
+        // Takvim
+        "CalendarEvent",
 
         // Uretim Is Emri (Faz 1)
         "WorkOrder", "WorkOrderSource",
@@ -84,6 +97,15 @@ public static class CalibraTableCatalog
 
         // Varlik Yonetimi (Asset Management)
         "Asset", "AssetEvent", "AssetAssignment",
+
+        // Onay Akisi
+        "ApprovalFlow", "ApprovalFlowStep", "ApprovalFlowRule", "ApprovalFlowEdge",
+        "ApprovalFlowVariable", "ApprovalFlowRevision", "ApprovalFlowRunLog",
+        "ApprovalInstance", "ApprovalInstanceVariable", "ApprovalStepRecord",
+        "ApprovalActionToken",
+
+        // Rapor Tasarimcisi
+        "ReportSource", "ReportDesign", "ReportSnapshot",
     };
 
     public static bool IsOwned(string tableName)

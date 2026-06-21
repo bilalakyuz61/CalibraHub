@@ -53,22 +53,6 @@ public sealed class ApprovalFlowController : Controller
         _documentTypeRepo = documentTypeRepo;
     }
 
-    // ── Document.Id (int) → deterministic Guid ────────────────────────────────
-    // DocumentApprovalInstance.DocumentId UNIQUEIDENTIFIER kolonu kullaniyor (eski
-    // IncomingDocument tabanli tasarim). Outbound Document INT PK; deterministic bir
-    // packing ile ayni int her zaman ayni Guid'e map'lenir (CRUD'lar arasinda tutarli).
-    private static Guid DocumentIntToGuid(int documentId)
-    {
-        // İlk 4 byte = int (little-endian), kalan 12 byte sabit imza ("CalibraDoc!!" benzeri).
-        var bytes = new byte[16];
-        BitConverter.GetBytes(documentId).CopyTo(bytes, 0);
-        // Sabit "DOCx" magic suffix — collision'i imkansiz hale getirir (yalnizca DocumentIntToGuid
-        // ile uretilen Guid'ler bu pattern'a sahip; herhangi bir random Guid ile cakismaz).
-        var magic = new byte[] { 0x44, 0x4F, 0x43, 0x49, 0x4E, 0x54, 0x32, 0x47, 0x55, 0x49, 0x44, 0x21 };
-        magic.CopyTo(bytes, 4);
-        return new Guid(bytes);
-    }
-
     // ── Liste ─────────────────────────────────────────────────────────────────
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken ct)
@@ -478,8 +462,7 @@ public sealed class ApprovalFlowController : Controller
             var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
             var userIdRaw = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var startedByUserId = int.TryParse(userIdRaw, out var uid) ? (int?)uid : null;
-            var docGuid = DocumentIntToGuid(documentId);
-            var startReq = new StartApprovalRequest(docGuid, flow.Id, userName, startedByUserId);
+            var startReq = new StartApprovalRequest(documentId, flow.Id, userName, startedByUserId);
             var instance = await _service.StartAsync(startReq, ct);
 
             // Belge durumunu "Sent" (onayda) yap — board yenilenince "Onaya Gönder" butonu kaybolur.
@@ -499,14 +482,11 @@ public sealed class ApprovalFlowController : Controller
         }
     }
 
-    // ── Belge GUID üzerinden instance al (frontend yardımcı) ──────────────────
-    // _WorkflowPanel.cshtml documentId'yi int olarak gonderir; bu wrapper int → Guid
-    // conversion yapar, sonra mevcut GetInstance mantigini calistirir.
+    // ── Belge ID'si üzerinden instance al (frontend yardımcı) ────────────────
     [HttpGet]
     public async Task<IActionResult> GetInstanceByDocument(int documentId, CancellationToken ct)
     {
-        var docGuid = DocumentIntToGuid(documentId);
-        var instance = await _service.GetInstanceByDocumentIdAsync(docGuid, ct);
+        var instance = await _service.GetInstanceByDocumentIdAsync(documentId, ct);
         if (instance is null) return Json(new { found = false });
 
         // Akış tanımını yükle — hem beklenen onaylayıcı etiketi hem de adım sırası için
@@ -690,7 +670,7 @@ public sealed class ApprovalFlowController : Controller
 
     // ── Belgenin aktif onay örneğini getir ────────────────────────────────────
     [HttpGet]
-    public async Task<IActionResult> GetInstance(Guid documentId, CancellationToken ct)
+    public async Task<IActionResult> GetInstance(int documentId, CancellationToken ct)
     {
         var instance = await _service.GetInstanceByDocumentIdAsync(documentId, ct);
         if (instance is null) return Json(new { found = false });
@@ -717,6 +697,22 @@ public sealed class ApprovalFlowController : Controller
         });
     }
 
+    // ── Revizyon geçmişi ─────────────────────────────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> Revisions(int flowId, CancellationToken ct)
+    {
+        var revisions = await _service.GetRevisionsAsync(flowId, ct);
+        return Json(revisions, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> RevisionDetail(int id, CancellationToken ct)
+    {
+        var detail = await _service.GetRevisionDetailAsync(id, ct);
+        if (detail is null) return NotFound();
+        return Json(detail, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    }
+
     // ── Board config ─────────────────────────────────────────────────────────
     private static object BuildBoardConfig(IReadOnlyList<ApprovalFlowSummaryDto> flows)
     {
@@ -732,10 +728,9 @@ public sealed class ApprovalFlowController : Controller
                 : (object?)new { label = "Pasif", color = "slate" },
             widgets = new object[]
             {
-                new { id="w_steps",    type="data", dataType="numeric", label="Adım Sayısı",   value=f.StepCount.ToString(), color="indigo" },
-                new { id="w_rules",    type="data", dataType="numeric", label="Koşul Sayısı",  value=f.RuleCount.ToString(), color="blue"   },
-                new { id="w_priority", type="data", dataType="numeric", label="Öncelik",       value=f.Priority.ToString(),  color="amber"  },
-                new { id="w_kind",     type="data", dataType="options", label="Belge Türü",    value=KindLabel(f.DocumentKind), color="slate" },
+                new { id="w_steps", type="data", dataType="numeric", label="Adım Sayısı",  value=f.StepCount.ToString(), color="indigo" },
+                new { id="w_rules", type="data", dataType="numeric", label="Koşul Sayısı", value=f.RuleCount.ToString(), color="blue"   },
+                new { id="w_kind",  type="data", dataType="options", label="Belge Türü",   value=KindLabel(f.DocumentKind), color="slate" },
             },
             primaryAction = new
             {

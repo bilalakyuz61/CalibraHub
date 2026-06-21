@@ -85,3 +85,17 @@ public sealed record RdViewInfo(string Name, IReadOnlyList<RdColumnInfo> Columns
 
 /// <summary>View kolonu — Report Designer metrik/grup sınıflandırması için.</summary>
 public sealed record RdColumnInfo(string Name, string SqlType, bool IsNumeric, bool IsTime);
+
+// ── DB Schema haritası — view kataloğu ────────────────────────────────────
+
+/// <summary>
+/// DB Schema haritasında gösterilen CalibraHub view bilgisi.
+/// Statik açıklamalar CalibraViewCatalog'dan, fiziksel kolon listesi sys.columns'dan gelir.
+/// </summary>
+public sealed record DbViewInfoDto(
+    string Name,
+    string Description,
+    string UsedIn,
+    bool IsCustomizable,
+    bool ExistsInDb,
+    IReadOnlyList<string> Columns);

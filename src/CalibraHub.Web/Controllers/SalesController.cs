@@ -1200,7 +1200,7 @@ public sealed class SalesController : Controller
 
         try
         {
-            var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, CurrentUserId(), ct);
+            var (success, error, quote, approvalTriggered) = await _quoteService.SaveQuoteAsync(request, CurrentUserId(), User?.Identity?.Name, ct);
             if (!success) return Json(new { success = false, message = error });
 
             // SALES_QUOTE_LINES formunda IsRequired=true widget'lar varsa, her satirin
@@ -1248,35 +1248,6 @@ public sealed class SalesController : Controller
                     new[] { "SALES_QUOTE_NEW", "SALES_QUOTE_EDIT", "SALES_ORDER_NEW", "SALES_ORDER_EDIT" },
                     quote.Id.ToString(),
                     User?.Identity?.Name);
-            }
-
-            // İhtiyaç Kaydı (alis_talebi) — yeni kayıt ise onay akışı kontrolü.
-            // Mevcut kayıt güncellemesinde akış yeniden başlatılmaz (isNew kontrolü DocumentTypeId üzerinden).
-            var approvalTriggered = false;
-            if (quote != null && quote.Id > 0 && request.DocumentTypeId.HasValue)
-            {
-                var docType = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
-                var isRequest = string.Equals(docType?.Code, "alis_talebi", StringComparison.OrdinalIgnoreCase);
-                var isNewDoc  = !request.Id.HasValue || request.Id.Value == 0;
-                if (isRequest && isNewDoc)
-                {
-                    try
-                    {
-                        var flow = await _approvalFlowService.MatchFlowAsync(
-                            "Document", quote.GrandTotal, null, null, ct);
-                        if (flow != null)
-                        {
-                            var docGuid = Guid.Parse($"00000000-0000-0000-0000-{quote.Id:D12}");
-                            await _approvalFlowService.StartAsync(
-                                new CalibraHub.Application.Contracts.StartApprovalRequest(docGuid, flow.Id, User?.Identity?.Name ?? "system"), ct);
-                            approvalTriggered = true;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "İhtiyaç kaydı onay akışı başlatılamadı (docId={DocId})", quote.Id);
-                    }
-                }
             }
 
             return Json(new { success = true, quote, approvalTriggered });

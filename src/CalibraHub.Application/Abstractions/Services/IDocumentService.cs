@@ -23,7 +23,7 @@ public interface IDocumentService
     Task<IReadOnlyCollection<DocumentListItemDto>> GetMovementsByContactAsync(int contactId, int? documentTypeId, DateTime? fromDate, DateTime? toDate, CancellationToken ct);
     Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct);
-    Task<(bool Success, string? Error, DocumentDto? Quote)> SaveQuoteAsync(SaveDocumentRequest request, int? createdById, CancellationToken ct);
+    Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct);
     Task DeleteQuoteAsync(int id, CancellationToken ct);
     Task<(bool Success, string? Error)> ChangeStatusAsync(int id, string newStatus, CancellationToken ct);
     Task<string> GetNextDocumentNumberAsync(CancellationToken ct);

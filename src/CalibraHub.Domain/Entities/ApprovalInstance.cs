@@ -1,11 +1,13 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
 
-public sealed class DocumentApprovalInstanceEntity
+[Description("Çalışan onay süreci örneği — bir belgeye başlatılan onay akışının durumu (Pending/Approved/Rejected), aktif adım ve tamamlanma tarihi.")]
+public sealed class ApprovalInstanceEntity
 {
     public int Id { get; init; }
-    public Guid DocumentId { get; init; }
+    public int? DocumentId { get; init; }
     public int FlowId { get; init; }
     public ApprovalInstanceStatus Status { get; init; } = ApprovalInstanceStatus.Pending;
     public int CurrentStep { get; init; } = 1;

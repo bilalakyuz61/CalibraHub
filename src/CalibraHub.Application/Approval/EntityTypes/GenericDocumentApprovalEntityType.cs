@@ -51,12 +51,12 @@ public sealed class GenericDocumentApprovalEntityType : IApprovalEntityType
 
     public async Task<ApprovalEntityContext> BuildContextAsync(string entityId, CancellationToken ct)
     {
-        if (!Guid.TryParse(entityId, out var documentId))
+        if (!int.TryParse(entityId, out var documentIntId) || documentIntId <= 0)
         {
             return new ApprovalEntityContext { EntityTypeCode = Code, EntityId = entityId ?? "" };
         }
 
-        var doc = await _ctxProvider.BuildAsync(documentId, ct);
+        var doc = await _ctxProvider.BuildAsync(documentIntId, ct);
         return DocumentApprovalEntityType.MapToEntityContext(doc, Code);
     }
 }

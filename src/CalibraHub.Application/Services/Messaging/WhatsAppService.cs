@@ -24,19 +24,22 @@ public sealed class WhatsAppService : IWhatsAppService
     private readonly ILogger<WhatsAppService> _logger;
     private readonly WhatsAppSafetyChecker _safety;
     private readonly IWhatsAppSendLogRepository _logRepo;
+    private readonly IWaInboxRepository _inbox;
 
     public WhatsAppService(
         IWhatsAppConfigRepository repo,
         IHttpClientFactory httpClientFactory,
         ILogger<WhatsAppService> logger,
         WhatsAppSafetyChecker safety,
-        IWhatsAppSendLogRepository logRepo)
+        IWhatsAppSendLogRepository logRepo,
+        IWaInboxRepository inbox)
     {
         _repo               = repo;
         _httpClientFactory  = httpClientFactory;
         _logger             = logger;
         _safety             = safety;
         _logRepo            = logRepo;
+        _inbox              = inbox;
     }
 
     public Task<WhatsAppConfig?> GetConfigAsync(CancellationToken cancellationToken)
@@ -267,6 +270,27 @@ public sealed class WhatsAppService : IWhatsAppService
                 Success     = true,
             }, cancellationToken);
 
+            // wa_inbox insert (Cloud API: webhook echo gelmez, servis katmanı ekler)
+            var now = DateTime.UtcNow;
+            try
+            {
+                await _inbox.InsertIfNotExistsAsync(new Domain.Entities.WaInboxMessage
+                {
+                    BridgeMsgId  = messageId ?? $"cloud-{now.Ticks}",
+                    Direction    = 1,
+                    ContactPhone = to,
+                    Body         = message,
+                    MediaType    = "chat",
+                    HasMedia     = false,
+                    ReceivedAt   = now,
+                    CreatedAt    = now,
+                }, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[WaService] wa_inbox insert basarisiz (cloud send): {id}", messageId);
+            }
+
             return new(true, $"Mesaj gonderildi. ID: {messageId}", messageId);
         }
         catch (Exception ex)
@@ -345,6 +369,28 @@ public sealed class WhatsAppService : IWhatsAppService
                 SentAt = DateTime.UtcNow, ToPhone = to, MessageHash = messageHash,
                 MessageId = msgId, Success = true,
             }, ct);
+
+            // wa_inbox insert (Bridge: echo polling ile dedup sağlanır — InsertIfNotExistsAsync)
+            var bridgeNow = DateTime.UtcNow;
+            try
+            {
+                await _inbox.InsertIfNotExistsAsync(new Domain.Entities.WaInboxMessage
+                {
+                    BridgeMsgId  = msgId ?? $"bridge-{bridgeNow.Ticks}",
+                    Direction    = 1,
+                    ContactPhone = to,
+                    Body         = message,
+                    MediaType    = "chat",
+                    HasMedia     = false,
+                    ReceivedAt   = bridgeNow,
+                    CreatedAt    = bridgeNow,
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[WaService] wa_inbox insert basarisiz (bridge send): {id}", msgId);
+            }
+
             return new(true, $"Bridge ile gonderildi. ID: {msgId}", msgId);
         }
         catch (TaskCanceledException)

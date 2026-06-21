@@ -46,4 +46,7 @@ public sealed class CompanyInput
 
     [MaxLength(500, ErrorMessage = "Veritabani baglantisi en fazla 500 karakter olabilir.")]
     public string? DatabaseConnectionString { get; set; }
+
+    [MaxLength(300)]
+    public string? PublicBaseUrl { get; set; }
 }

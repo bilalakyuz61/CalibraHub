@@ -66,7 +66,8 @@ public sealed class CompanySettingsController : Controller
                 TaxNumber = myCompany.TaxNumber,
                 IsEDocumentApprovalEnabled = myCompany.IsEDocumentApprovalEnabled,
                 IsActive = myCompany.IsActive,
-                DatabaseConnectionString = myCompany.DatabaseConnectionString
+                DatabaseConnectionString = myCompany.DatabaseConnectionString,
+                PublicBaseUrl = myCompany.PublicBaseUrl
             };
 
         // SMTP profili yukle
@@ -130,7 +131,8 @@ public sealed class CompanySettingsController : Controller
                     input.TaxNumber,
                     input.IsEDocumentApprovalEnabled,
                     input.IsActive,
-                    input.DatabaseConnectionString),
+                    input.DatabaseConnectionString,
+                    input.PublicBaseUrl),
                 cancellationToken);
 
             // SMTP kaydet (host doluysa)

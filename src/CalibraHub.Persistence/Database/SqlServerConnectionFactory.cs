@@ -89,6 +89,15 @@ public sealed class SqlServerConnectionFactory : IDbConnectionFactory
     private string ResolveConnectionString()
     {
         var httpContext = _httpContextAccessor.HttpContext;
+
+        // Kimliksiz endpoint'ler (QuickApproval vb.) için controller Items'a override koyar.
+        if (httpContext?.Items.TryGetValue("__override_company_id", out var overrideVal) == true
+            && overrideVal is int overrideId
+            && _registry.TryGet(overrideId, out var overrideConn))
+        {
+            return overrideConn;
+        }
+
         if (httpContext?.User.Identity?.IsAuthenticated == true)
         {
             var companyIdClaim = httpContext.User.FindFirst("company_id")?.Value;

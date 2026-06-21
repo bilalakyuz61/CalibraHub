@@ -657,7 +657,11 @@ public sealed class ApprovalController : Controller
         var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
         if (document is null) return Content("<div class='p-3 text-danger'>Belge bulunamadı.</div>", "text/html");
 
-        var instance = await _approvalFlowService.GetInstanceByDocumentIdAsync(id, cancellationToken);
+        // IncomingDocument (e-fatura/e-arşiv) artık ApprovalInstance.DocumentId (INT) ile doğrudan
+        // ilişkilendirilemiyor — Guid PK uyumsuzluğu. IncomingDocument tabanlı onay akışları ileride
+        // IncomingDocument'a özel bir FK sütunu (IncomingDocumentId UNIQUEIDENTIFIER) eklenerek desteklenecek.
+        // Şimdilik instance bulunamadı (null) olarak devam edilir.
+        ApprovalInstanceDto? instance = null;
         var allFlows = await _approvalFlowService.GetAllAsync(cancellationToken);
         // 'Document' = "Tüm Belgeler" wildcard (yeni standart), 'All' = legacy. Spesifik tip
         // (EInvoice/EArchive/SalesQuote/...) ile birebir eşleşme + wildcard'lar dahil edilir.
@@ -687,7 +691,9 @@ public sealed class ApprovalController : Controller
     {
         try
         {
-            var instance = await _approvalFlowService.GetInstanceByDocumentIdAsync(id, cancellationToken);
+            // IncomingDocument (Guid PK) üzerinden ApprovalInstance araması artık desteklenmiyor —
+            // DocumentId kolonu INT FK'ya dönüştürüldü. Bu endpoint geçici olarak boş döner.
+            ApprovalInstanceDto? instance = null;
             if (instance is null) return Json(new { found = false });
             return Json(new
             {
@@ -768,7 +774,7 @@ public sealed class ApprovalController : Controller
     // ── İşleme Al — onay sürecini başlat ──────────────────────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> StartApproval(Guid documentId, int flowId, CancellationToken cancellationToken)
+    public async Task<IActionResult> StartApproval(int documentId, int flowId, CancellationToken cancellationToken)
     {
         try
         {
@@ -799,9 +805,8 @@ public sealed class ApprovalController : Controller
             // Onay tamamlandıysa Document.Status = Approved yap (alis_talebi için)
             if (string.Equals(instance.Status, "Approved", StringComparison.OrdinalIgnoreCase))
             {
-                var docIdLong = TryDecodeDocumentId(instance.DocumentId);
-                if (docIdLong.HasValue)
-                    await _documentService.ChangeStatusAsync(docIdLong.Value, "Approved", cancellationToken);
+                if (instance.DocumentId.HasValue)
+                    await _documentService.ChangeStatusAsync(instance.DocumentId.Value, "Approved", cancellationToken);
             }
 
             return Json(new { ok = true, status = instance.Status,
@@ -813,18 +818,7 @@ public sealed class ApprovalController : Controller
         }
     }
 
-    // Guid'i Document.Id INT'e decode et: "00000000-0000-0000-0000-{docId:D12}" → docId
-    private static int? TryDecodeDocumentId(Guid documentId)
-    {
-        var hex = documentId.ToString("N");  // 32 hex karakter, suffix 12
-        if (hex.Length == 32 && hex.StartsWith("00000000000000000000", StringComparison.Ordinal))
-        {
-            var suffix = hex[20..];
-            if (int.TryParse(suffix, out var id) && id > 0)
-                return id;
-        }
-        return null;
-    }
+
 
     // ── Reddet ────────────────────────────────────────────────────────────────
     [HttpPost]

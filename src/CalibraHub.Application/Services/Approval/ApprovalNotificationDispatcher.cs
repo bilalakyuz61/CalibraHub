@@ -36,6 +36,9 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
     private readonly IWhatsAppService? _whatsApp;
     private readonly IDocDesignerService? _designer;
     private readonly IDocLayoutRuleService? _layoutRules;
+    private readonly IApprovalTokenRepository? _tokenRepo;
+    private readonly ICurrentCompanyProvider? _companyProvider;
+    private readonly ICompanyRepository? _companyRepo;
 
     public ApprovalNotificationDispatcher(
         IEmailSender email,
@@ -44,15 +47,21 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
         ILogger<ApprovalNotificationDispatcher> logger,
         IWhatsAppService? whatsApp = null,
         IDocDesignerService? designer = null,
-        IDocLayoutRuleService? layoutRules = null)
+        IDocLayoutRuleService? layoutRules = null,
+        IApprovalTokenRepository? tokenRepo = null,
+        ICurrentCompanyProvider? companyProvider = null,
+        ICompanyRepository? companyRepo = null)
     {
-        _email       = email;
-        _userRepo    = userRepo;
-        _instRepo    = instRepo;
-        _logger      = logger;
-        _whatsApp    = whatsApp;
-        _designer    = designer;
-        _layoutRules = layoutRules;
+        _email           = email;
+        _userRepo        = userRepo;
+        _instRepo        = instRepo;
+        _logger          = logger;
+        _whatsApp        = whatsApp;
+        _designer        = designer;
+        _layoutRules     = layoutRules;
+        _tokenRepo       = tokenRepo;
+        _companyProvider = companyProvider;
+        _companyRepo     = companyRepo;
     }
 
     public async Task SendReminderAsync(OverdueStepRecord rec, string kind, CancellationToken ct)
@@ -81,7 +90,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
 
         var docLabel = !string.IsNullOrWhiteSpace(rec.DocumentNumber)
             ? rec.DocumentNumber!
-            : rec.DocumentId.ToString();
+            : rec.DocumentId?.ToString() ?? "—";
 
         var subject = kind == "warn"
             ? $"[Hatirlatma] Onay suresi yaklasiyor — {docLabel}"
@@ -121,8 +130,8 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
         var dueLocal = rec.DueDate?.ToLocalTime();
         return template
             .Replace("{approverName}", approverName ?? "")
-            .Replace("{documentNumber}", string.IsNullOrWhiteSpace(rec.DocumentNumber) ? rec.DocumentId.ToString() : rec.DocumentNumber!)
-            .Replace("{documentId}", rec.DocumentId.ToString())
+            .Replace("{documentNumber}", string.IsNullOrWhiteSpace(rec.DocumentNumber) ? rec.DocumentId?.ToString() ?? "—" : rec.DocumentNumber!)
+            .Replace("{documentId}", rec.DocumentId?.ToString() ?? "—")
             .Replace("{dueDate}", dueLocal?.ToString("dd.MM.yyyy HH:mm") ?? "—")
             .Replace("{stepName}", rec.StepName ?? "")
             .Replace("{flowName}", rec.FlowName ?? "");
@@ -156,11 +165,110 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
             return;
         }
 
+        // Hızlı onay/red link tokenları — {approveLink} / {rejectLink} şablon içinde varsa
+        // her alıcı için ayrı token üret; link yoksa boş string (şablondan kaldırılır).
+        var rawSubject = string.IsNullOrWhiteSpace(cfg.Subject) ? "Onay Bildirimi" : cfg.Subject;
+        var rawBody    = cfg.Body ?? "";
+        bool hasLinkToken = rawSubject.Contains("{approveLink}") || rawSubject.Contains("{rejectLink}")
+                         || rawBody.Contains("{approveLink}")    || rawBody.Contains("{rejectLink}");
+        var needLinks  = _tokenRepo is not null
+            && ctx.ApprovalInstanceId.HasValue
+            && hasLinkToken;
+
+        _logger.LogWarning("[LINK-DBG] SendFromNodeAsync — tokenRepo={Repo} instanceId={Inst} hasLinkToken={Tok} needLinks={Need} ctxBaseUrl={CtxUrl} recipients={Rcp}",
+            _tokenRepo != null, ctx.ApprovalInstanceId, hasLinkToken, needLinks,
+            ctx.BaseUrl ?? "(null)",
+            string.Join(", ", recipients.Select(r => $"{r.Name}[cid={r.CompanyId}]")));
+
+        // Şirkete ait dış erişim URL'i (PublicBaseUrl öncelikli, yoksa request URL).
+        var baseUrl = (string?)null;
+        if (needLinks)
+        {
+            var companyId = recipients.FirstOrDefault(r => r.CompanyId > 0)?.CompanyId ?? 0;
+            if (companyId > 0 && _companyRepo is not null)
+            {
+                var co = await _companyRepo.GetByIdAsync(companyId, ct);
+                baseUrl = co?.PublicBaseUrl;
+            }
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                baseUrl = _companyProvider?.GetBaseUrl();
+            // HTTP context yok (Task.Run fire-and-forget): ApprovalFlowService context'i açıkken yakaladığı URL'i kullan.
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                baseUrl = ctx.BaseUrl;
+
+            _logger.LogInformation(
+                "QuickLink check — tokenRepo={HasRepo} instanceId={InstId} hasToken={HasTok} baseUrl={Url} companyId={Co}",
+                _tokenRepo is not null, ctx.ApprovalInstanceId, hasLinkToken, baseUrl ?? "(null)",
+                recipients.FirstOrDefault(r => r.CompanyId > 0)?.CompanyId ?? 0);
+        }
+
+        // Per-recipient token üretimi + dispatch
+        if (needLinks && !string.IsNullOrWhiteSpace(baseUrl))
+        {
+            var lnkCompanyId = recipients.FirstOrDefault(r => r.CompanyId > 0)?.CompanyId ?? 0;
+            var lnkType      = (cfg.NotificationType ?? "mail").Trim().ToLowerInvariant();
+            var lnkSendMail  = lnkType is "mail" or "both" or "email";
+            var lnkSendWa    = lnkType is "whatsapp" or "both";
+
+            List<EmailAttachment>? lnkAttachments = null;
+            if (cfg.AttachPdf)
+            {
+                var pdf = await TryBuildPdfAttachmentAsync(ctx, ct);
+                if (pdf is not null) lnkAttachments = new List<EmailAttachment> { pdf };
+            }
+
+            foreach (var rec in recipients)
+            {
+                var approverId = rec.UserId ?? "";
+                string approveLink = "", rejectLink = "";
+                if (!string.IsNullOrWhiteSpace(approverId) && ctx.ApprovalInstanceId.HasValue)
+                {
+                    try
+                    {
+                        var approveToken = await _tokenRepo!.CreateAsync(ctx.ApprovalInstanceId.Value, null, approverId, ct);
+                        var rejectToken  = await _tokenRepo!.CreateAsync(ctx.ApprovalInstanceId.Value, null, approverId, ct);
+                        approveLink = $"{baseUrl}/Approval/Quick?c={lnkCompanyId}&t={approveToken}&a=approve";
+                        rejectLink  = $"{baseUrl}/Approval/Quick?c={lnkCompanyId}&t={rejectToken}&a=reject";
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Hızlı onay token üretilemedi (instanceId={Id}, approverId={Ap}).",
+                            ctx.ApprovalInstanceId, approverId);
+                    }
+                }
+
+                var subj    = ApplyContextTokens(rawSubject, ctx, rec.Name, approveLink, rejectLink);
+                var lnkBody = ApplyContextTokens(rawBody,    ctx, rec.Name, approveLink, rejectLink);
+
+                if (lnkSendMail && !string.IsNullOrWhiteSpace(rec.Email))
+                {
+                    try
+                    {
+                        var result = await _email.SendAsync(rec.CompanyId, new[] { rec.Email! }, subj, lnkBody, lnkAttachments, ct);
+                        _logger.LogInformation("Notification (link) email: {Status} → {Email}.", result.Status, rec.Email);
+                    }
+                    catch (Exception ex) { _logger.LogError(ex, "Notification (link) email hatası ({Email}).", rec.Email); }
+                }
+
+                if (lnkSendWa && _whatsApp is not null && !string.IsNullOrWhiteSpace(rec.Phone))
+                {
+                    try
+                    {
+                        var msg = string.IsNullOrWhiteSpace(lnkBody) ? subj
+                            : (string.IsNullOrWhiteSpace(subj) ? lnkBody : subj + "\n\n" + lnkBody);
+                        var r = await _whatsApp.SendTextMessageAsync(rec.Phone!, msg, ct, interactive: true);
+                        if (!r.Success) _logger.LogWarning("Notification (link) WhatsApp başarısız: {Msg}", r.Message);
+                    }
+                    catch (Exception ex) { _logger.LogError(ex, "Notification (link) WhatsApp hatası ({Phone}).", rec.Phone); }
+                }
+            }
+            return;
+        }
+
+        // ── Standart yol (link token yok) ─────────────────────────────────────
         // Token replace — boş string null değil, ?? çalışmaz; IsNullOrWhiteSpace kullan.
-        var subject = ApplyContextTokens(
-            string.IsNullOrWhiteSpace(cfg.Subject) ? "Onay Bildirimi" : cfg.Subject,
-            ctx, recipients[0].Name);
-        var body    = ApplyContextTokens(cfg.Body ?? "", ctx, recipients[0].Name);
+        var subject = ApplyContextTokens(rawSubject, ctx, recipients[0].Name);
+        var body    = ApplyContextTokens(rawBody, ctx, recipients[0].Name);
 
         // PDF ek (opsiyonel)
         List<EmailAttachment>? attachments = null;
@@ -330,7 +438,12 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
         return list;
     }
 
-    private static string ApplyContextTokens(string template, ApprovalEntityContext ctx, string recipientName)
+    private static string ApplyContextTokens(
+        string template,
+        ApprovalEntityContext ctx,
+        string recipientName,
+        string approveLink = "",
+        string rejectLink  = "")
     {
         // Header dict'inden field değerlerini token olarak çek; eksik alanlar boş.
         string Get(string code, string format = "")
@@ -377,6 +490,11 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
                 result = result.Replace(token, strVal);
             }
         }
+
+        // Hızlı onay/red linkleri — parametre olarak gelir; boşsa token silinir.
+        result = result
+            .Replace("{approveLink}", approveLink)
+            .Replace("{rejectLink}",  rejectLink);
 
         return result;
     }
@@ -448,6 +566,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
         public string? Email { get; init; }
         public string? Phone { get; init; }
         public int CompanyId { get; init; }
+        public string? UserId { get; init; }
 
         public static NotifyRecipient From(CalibraHub.Domain.Entities.UserProfile u) => new()
         {
@@ -455,6 +574,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
             Email = u.Email,
             Phone = u.PhoneNumber,
             CompanyId = u.CompanyId,
+            UserId = u.Id.ToString(),
         };
     }
 }

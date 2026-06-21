@@ -124,7 +124,7 @@ export default function ReportDesigner({ sourcesUrl, saveUrl, listUrl, loadId })
   const [colMeta,        setColMeta]        = useState({})   // panelId → keşfedilen kolon adları
   const [colNumeric,     setColNumeric]     = useState({})   // panelId → { kolonAdı: sayısal mı }
   const [panelData,      setPanelData]      = useState({})   // panelId → { columns, rows } (filtre değerleri için)
-  const [paletteOpen,    setPaletteOpen]    = useState(true) // sol grafik türü paleti
+  const [paletteOpen,    setPaletteOpen]    = useState(false) // Görseller dropdown'ı (topbar)
   const [desFiltersOpen, setDesFiltersOpen] = useState(false) // sol kaymalı filtre drawer'ı (designer)
   const [filtersByPage,  setFiltersByPage]  = useState({})   // sayfa-bazlı filtreler: { [pageId]: { key: { source, field, values } } }
   const [undoStack,      setUndoStack]      = useState([])   // geri al geçmişi (pages anlık görüntüleri)
@@ -503,31 +503,7 @@ export default function ReportDesigner({ sourcesUrl, saveUrl, listUrl, loadId })
         </span>
 
         <div className="rd-topbar__center">
-          {editTitle ? (
-            <input
-              autoFocus
-              className="rd-topbar__title-input"
-              value={title}
-              onChange={e => handleTitleChange(e.target.value)}
-              onBlur={() => setEditTitle(false)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditTitle(false) }}
-            />
-          ) : (
-            <span
-              className="rd-topbar__title"
-              role="button"
-              tabIndex={0}
-              onClick={() => setEditTitle(true)}
-              onKeyDown={e => { if (e.key === 'Enter') setEditTitle(true) }}
-              title="Adı düzenlemek için tıklayın"
-            >
-              {title}
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: 11, height: 11, marginLeft: 5, opacity: 0.45 }}>
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </span>
-          )}
+          <span className="rd-topbar__title rd-topbar__title--static">{title}</span>
         </div>
 
         <div className="rd-topbar__gap" />
@@ -541,6 +517,13 @@ export default function ReportDesigner({ sourcesUrl, saveUrl, listUrl, loadId })
               {desActiveFilterCount > 0 && <span className="rd-topbar__badge">{desActiveFilterCount}</span>}
             </button>
           )}
+          <LeftPalette
+            open={paletteOpen}
+            activeType={settings?.type}
+            hasSelection={!!selectedId}
+            onPick={pickType}
+            onToggle={() => setPaletteOpen(o => !o)}
+          />
           <button type="button" className="rd-topbar__tool rd-topbar__tool--icon" onClick={() => setShowSrc(true)} title="Veri Kaynakları">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5" /><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3" />
@@ -601,24 +584,15 @@ export default function ReportDesigner({ sourcesUrl, saveUrl, listUrl, loadId })
             )}
           </div>
         ))}
-        <button type="button" className="rd-page-add" onClick={addPage}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ width: 11, height: 11 }}>
+        <button type="button" className="rd-page-add rd-page-add--icon" onClick={addPage} title="Sayfa Ekle" aria-label="Sayfa Ekle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ width: 14, height: 14 }}>
             <path d="M12 5v14M5 12h14" />
           </svg>
-          Sayfa Ekle
         </button>
       </div>
 
       {/* ── Workspace ── */}
       <div className="rd-workspace">
-        <LeftPalette
-          open={paletteOpen}
-          activeType={settings?.type}
-          hasSelection={!!selectedId}
-          onPick={pickType}
-          onToggle={() => setPaletteOpen(o => !o)}
-        />
-
         {(filterPanels.length > 0 || filterFields.length > 0) && (
           <>
             <div className={`rv-fdrawer__backdrop${desFiltersOpen ? ' is-open' : ''}`} onClick={() => setDesFiltersOpen(false)} />

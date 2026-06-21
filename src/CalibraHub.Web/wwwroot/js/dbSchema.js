@@ -22,17 +22,20 @@
 
     const state = {
         tables: [],
-        filteredTables: [],
+        views: [],
+        filteredItems: [],
         selected: null,
+        selectedType: null, // 'table' | 'view'
         detail: null,
         activeTab: 'columns',
+        segment: 'tables', // 'tables' | 'views'
     };
 
     init();
 
     async function init() {
         bindEvents();
-        await loadTables();
+        await Promise.all([loadTables(), loadViews()]);
     }
 
     function bindEvents() {
@@ -46,6 +49,26 @@
         document.querySelectorAll('.sch-tab').forEach(tab => {
             tab.addEventListener('click', () => switchTab(tab.dataset.tab));
         });
+
+        document.querySelectorAll('.sch-segment').forEach(btn => {
+            btn.addEventListener('click', () => switchSegment(btn.dataset.segment));
+        });
+    }
+
+    function switchSegment(seg) {
+        state.segment = seg;
+        state.selected = null;
+        state.selectedType = null;
+        state.detail = null;
+
+        document.querySelectorAll('.sch-segment').forEach(b => {
+            b.classList.toggle('active', b.dataset.segment === seg);
+        });
+
+        ELS.search.value = '';
+        ELS.search.placeholder = seg === 'tables' ? 'Tablo ara...' : 'View ara...';
+        applyFilter();
+        resetDetailPanel();
     }
 
     async function loadTables() {
@@ -53,59 +76,97 @@
             const res = await fetch(`${API_BASE}/tables`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             state.tables = await res.json();
-            state.filteredTables = state.tables.slice();
-            renderList();
+            if (state.segment === 'tables') applyFilter();
         } catch (err) {
-            ELS.list.innerHTML = `<div style="padding:12px;color:var(--sch-warn-fg);font-size:0.82rem;">Tablolar yuklenemedi: ${escapeHtml(err.message)}</div>`;
+            if (state.segment === 'tables') {
+                ELS.list.innerHTML = `<div style="padding:12px;color:var(--sch-warn-fg);font-size:0.82rem;">Tablolar yuklenemedi: ${escapeHtml(err.message)}</div>`;
+            }
         }
     }
 
-    function renderList() {
-        ELS.count.textContent = `${state.filteredTables.length} / ${state.tables.length}`;
-        if (state.filteredTables.length === 0) {
-            ELS.list.innerHTML = '<div style="padding:12px;color:var(--sch-empty-fg);font-size:0.82rem;">Eslesen tablo bulunamadi.</div>';
-            return;
+    async function loadViews() {
+        try {
+            const res = await fetch(`${API_BASE}/views`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            state.views = await res.json();
+            if (state.segment === 'views') applyFilter();
+        } catch (err) {
+            if (state.segment === 'views') {
+                ELS.list.innerHTML = `<div style="padding:12px;color:var(--sch-warn-fg);font-size:0.82rem;">View'lar yuklenemedi: ${escapeHtml(err.message)}</div>`;
+            }
         }
-
-        const html = state.filteredTables.map(t => {
-            const key = `${t.schema}.${t.name}`;
-            const active = state.selected === key ? ' active' : '';
-            const tooltip = t.description ? escapeAttr(t.description) : '';
-            const hasDesc = t.description ? ' has-desc' : '';
-            return `
-                <div class="sch-table-row${active}${hasDesc}" data-schema="${escapeAttr(t.schema)}" data-name="${escapeAttr(t.name)}" title="${tooltip}">
-                    <span class="sch-table-name">${escapeHtml(t.name)}</span>
-                    <span class="sch-row-count">${formatNumber(t.rowCount)}</span>
-                </div>`;
-        }).join('');
-        ELS.list.innerHTML = html;
-
-        ELS.list.querySelectorAll('.sch-table-row').forEach(row => {
-            row.addEventListener('click', () => {
-                const schema = row.dataset.schema;
-                const name = row.dataset.name;
-                selectTable(schema, name);
-            });
-        });
     }
 
-    function onSearch() {
+    function applyFilter() {
         const q = ELS.search.value.trim().toLowerCase();
+        const source = state.segment === 'tables' ? state.tables : state.views;
         if (!q) {
-            state.filteredTables = state.tables.slice();
+            state.filteredItems = source.slice();
         } else {
-            // Token arama (ornegin "doc ln" -> DocumentLine)
             const tokens = q.split(/\s+/).filter(Boolean);
-            state.filteredTables = state.tables.filter(t => {
-                const hay = (t.schema + '.' + t.name).toLowerCase();
+            state.filteredItems = source.filter(item => {
+                const hay = item.name.toLowerCase();
                 return tokens.every(tok => hay.includes(tok));
             });
         }
         renderList();
     }
 
+    function onSearch() {
+        applyFilter();
+    }
+
+    function renderList() {
+        const total = state.segment === 'tables' ? state.tables.length : state.views.length;
+        ELS.count.textContent = `${state.filteredItems.length} / ${total}`;
+
+        if (state.filteredItems.length === 0) {
+            ELS.list.innerHTML = `<div style="padding:12px;color:var(--sch-empty-fg);font-size:0.82rem;">Eslesen ${state.segment === 'tables' ? 'tablo' : 'view'} bulunamadi.</div>`;
+            return;
+        }
+
+        if (state.segment === 'tables') {
+            ELS.list.innerHTML = state.filteredItems.map(t => {
+                const key = `table:${t.schema}.${t.name}`;
+                const active = state.selected === key ? ' active' : '';
+                const tooltip = t.description ? escapeAttr(t.description) : '';
+                const hasDesc = t.description ? ' has-desc' : '';
+                return `
+                    <div class="sch-table-row${active}${hasDesc}" data-type="table" data-schema="${escapeAttr(t.schema)}" data-name="${escapeAttr(t.name)}" title="${tooltip}">
+                        <span class="sch-table-name">${escapeHtml(t.name)}</span>
+                        <span class="sch-row-count">${formatNumber(t.rowCount)}</span>
+                    </div>`;
+            }).join('');
+        } else {
+            ELS.list.innerHTML = state.filteredItems.map(v => {
+                const key = `view:${v.name}`;
+                const active = state.selected === key ? ' active' : '';
+                const customBadge = v.isCustomizable ? '<span class="sch-view-custom-badge">özelleştirilebilir</span>' : '';
+                const absentBadge = !v.existsInDb ? '<span class="sch-view-absent">yok</span>' : '';
+                return `
+                    <div class="sch-table-row${active}" data-type="view" data-name="${escapeAttr(v.name)}" title="${escapeAttr(v.usedIn)}">
+                        <span class="sch-table-name">${escapeHtml(v.name)}</span>
+                        <span>${customBadge}${absentBadge}</span>
+                    </div>`;
+            }).join('');
+        }
+
+        ELS.list.querySelectorAll('.sch-table-row').forEach(row => {
+            row.addEventListener('click', () => {
+                if (row.dataset.type === 'table') {
+                    selectTable(row.dataset.schema, row.dataset.name);
+                } else {
+                    selectView(row.dataset.name);
+                }
+            });
+        });
+    }
+
+    // ── Table detail ────────────────────────────────────────────────────────
+
     async function selectTable(schema, name) {
-        state.selected = `${schema}.${name}`;
+        state.selected = `table:${schema}.${name}`;
+        state.selectedType = 'table';
         renderList();
         ELS.detailTitle.textContent = `${schema}.${name}`;
         ELS.detailMeta.textContent = 'Yukleniyor...';
@@ -115,13 +176,13 @@
             const res = await fetch(`${API_BASE}/tables/${encodeURIComponent(schema)}/${encodeURIComponent(name)}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             state.detail = await res.json();
-            renderDetail();
+            renderTableDetail();
         } catch (err) {
             ELS.tabBody.innerHTML = `<div class="sch-empty" style="color:var(--sch-warn-fg);">Detay yuklenemedi: ${escapeHtml(err.message)}</div>`;
         }
     }
 
-    function renderDetail() {
+    function renderTableDetail() {
         const d = state.detail;
         if (!d) return;
         const metaLine = `Satir: ${formatNumber(d.rowCount)} • Kolon: ${d.columns.length} • Indeks: ${d.indexes.length} • FK (giden): ${d.outgoingForeignKeys.length} • FK (gelen): ${d.incomingForeignKeys.length}`;
@@ -133,6 +194,66 @@
         ELS.fkCount.textContent = `(${d.outgoingForeignKeys.length + d.incomingForeignKeys.length})`;
         ELS.tabs.style.display = 'flex';
         renderTabBody();
+    }
+
+    // ── View detail ─────────────────────────────────────────────────────────
+
+    function selectView(name) {
+        const v = state.views.find(x => x.name === name);
+        if (!v) return;
+        state.selected = `view:${name}`;
+        state.selectedType = 'view';
+        state.detail = null;
+        renderList();
+        ELS.tabs.style.display = 'none';
+
+        const customLabel = v.isCustomizable
+            ? ' <span class="sch-view-custom-badge" style="font-size:0.65rem;vertical-align:middle;">özelleştirilebilir</span>'
+            : '';
+        ELS.detailTitle.innerHTML = `${escapeHtml(v.name)}${customLabel}`;
+
+        ELS.detailMeta.innerHTML = v.existsInDb
+            ? `<div class="sch-meta-line">Kolon: ${v.columns.length} &nbsp;•&nbsp; <span style="color:var(--sch-badge-ix-fg,#166534);">Veritabanında mevcut</span></div>`
+            : `<div class="sch-meta-line" style="color:var(--sch-warn-fg);">⚠ Veritabanında mevcut değil — kurulum tamamlanmamış olabilir</div>`;
+
+        ELS.tabBody.innerHTML = renderViewDetail(v);
+    }
+
+    function renderViewDetail(v) {
+        const descBlock = `<div class="sch-table-summary" style="margin-bottom:14px;">${escapeHtml(v.description)}</div>`;
+
+        const usedInBlock = `
+            <div style="margin-bottom:16px;">
+                <div style="font-size:0.7rem;font-weight:600;color:var(--app-text-muted,#64748b);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Kullanıldığı Yer</div>
+                <div style="font-size:0.82rem;">${escapeHtml(v.usedIn)}</div>
+            </div>`;
+
+        let colBlock = '';
+        if (!v.existsInDb) {
+            colBlock = `<div style="color:var(--sch-warn-fg);font-size:0.82rem;font-style:italic;">Bu view veritabanında bulunamadı — CalibraHub başlatılırken otomatik oluşturulur.</div>`;
+        } else if (v.columns.length === 0) {
+            colBlock = `<div style="color:var(--sch-empty-fg);font-size:0.82rem;font-style:italic;">Kolon bilgisi alınamadı.</div>`;
+        } else {
+            const colRows = v.columns.map(c =>
+                `<div class="sch-view-col-item"><code>${escapeHtml(c)}</code></div>`
+            ).join('');
+            colBlock = `
+                <div>
+                    <div style="font-size:0.7rem;font-weight:600;color:var(--app-text-muted,#64748b);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Kolonlar (${v.columns.length})</div>
+                    <div class="sch-view-col-list">${colRows}</div>
+                </div>`;
+        }
+
+        return `<div style="padding:4px 0;">${descBlock}${usedInBlock}${colBlock}</div>`;
+    }
+
+    // ── Shared ──────────────────────────────────────────────────────────────
+
+    function resetDetailPanel() {
+        ELS.detailTitle.textContent = 'Tablo veya view secin';
+        ELS.detailMeta.innerHTML = '';
+        ELS.tabs.style.display = 'none';
+        ELS.tabBody.innerHTML = '<div class="sch-empty">Sol panelden bir tablo veya view secin — metadata burada goruntulenir.</div>';
     }
 
     function switchTab(tab) {

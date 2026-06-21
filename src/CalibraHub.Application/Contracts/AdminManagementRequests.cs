@@ -14,7 +14,8 @@ public sealed record SaveCompanyRequest(
     string TaxNumber,
     bool IsEDocumentApprovalEnabled,
     bool IsActive,
-    string? DatabaseConnectionString);
+    string? DatabaseConnectionString,
+    string? PublicBaseUrl = null);
 
 public sealed record SaveIntegratorSettingsRequest(
     int? Id,

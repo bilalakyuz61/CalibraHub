@@ -119,6 +119,8 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWaConta
                            CalibraHub.Application.Services.Messaging.WaContactResolver>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IWhatsAppRealTimeNotifier,
                               CalibraHub.Web.Infrastructure.WhatsApp.SignalRWhatsAppNotifier>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Messaging.IMessageBus,
+                              CalibraHub.Infrastructure.Messaging.InMemoryMessageBus>();
 builder.Services.AddHostedService<CalibraHub.Application.Services.Messaging.WhatsAppInboxPollingService>();
 builder.Services.AddHostedService<CalibraHub.Application.Workflow.WorkflowTimeoutEscalationJob>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IMachineIdProvider,
@@ -189,6 +191,10 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprova
                            CalibraHub.Application.Services.ApprovalFlowService>();
 builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IApprovalNotificationDispatcher,
                            CalibraHub.Application.Services.Approval.ApprovalNotificationDispatcher>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalTokenRepository,
+                           CalibraHub.Persistence.Repositories.SqlApprovalTokenRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ICurrentCompanyProvider,
+                           CalibraHub.Web.Services.HttpCurrentCompanyProvider>();
 // Faz 4 — Runtime executor + Decision evaluator + Document context provider
 builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IApprovalDocumentContextProvider,
                            CalibraHub.Application.Services.Approval.ApprovalDocumentContextProvider>();
@@ -303,6 +309,15 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiUserK
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiChatService,
                            CalibraHub.Application.Services.Ai.AiChatService>();
 
+// 2026-06-20 Şablon-tabanlı içe aktarım (AI'sız) — Cari pilotu.
+// Repo + Service scoped (per-company DB + IFinanceService bağımlılığı); ExcelReader stateless singleton.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IImportTemplateRepository,
+                           CalibraHub.Persistence.Repositories.SqlImportTemplateRepository>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IExcelReader,
+                           CalibraHub.Infrastructure.Import.ExcelReader>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportService,
+                           CalibraHub.Application.Services.ImportService>();
+
 // 2026-06-06 Yetkilendirme (F1) — PermissionDef + UserPermission repository + service.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionDefRepository,
                            CalibraHub.Persistence.Repositories.SqlPermissionDefRepository>();
@@ -342,6 +357,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IDocumentNumberService, SqlDocumentNumberService>();
 builder.Services.AddScoped<IArgeProjectService, ArgeProjectService>();
 builder.Services.AddScoped<IDocumentNumberRuleRepository, SqlDocumentNumberRuleRepository>();
+// CodeRule — Cari/Stok kod türetme kuralları (Tasarım Kuralları altında 2 yeni tab)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ICodeRuleRepository,
+                           CalibraHub.Persistence.Repositories.SqlCodeRuleRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ICodeGeneratorService,
+                           CalibraHub.Persistence.Services.CodeRule.CodeGeneratorService>();
 builder.Services.AddScoped<IFormMetadataService, FormMetadataService>();
 builder.Services.AddScoped<IMappingEngine, MappingEngine>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IIntegrationLookupFunctionDefinitionRepository,
@@ -927,6 +947,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
+app.MapControllers();   // attribute routing ([Route], [HttpGet] vb.) için gerekli
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");

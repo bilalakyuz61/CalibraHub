@@ -8,20 +8,17 @@ public sealed record ApprovalFlowDto(
     string Name,
     string? Description,
     string DocumentKind,
-    int Priority,
     bool IsActive,
     IReadOnlyList<ApprovalFlowRuleDto> Rules,
     IReadOnlyList<ApprovalFlowStepDto> Steps,
     IReadOnlyList<ApprovalFlowEdgeDto> Edges,
-    IReadOnlyList<ApprovalFlowVariableDto> Variables,
-    string? ExtraColumnsView = null);
+    IReadOnlyList<ApprovalFlowVariableDto> Variables);
 
 public sealed record ApprovalFlowSummaryDto(
     int Id,
     string Name,
     string? Description,
     string DocumentKind,
-    int Priority,
     bool IsActive,
     int StepCount,
     int RuleCount);
@@ -76,13 +73,11 @@ public sealed record SaveApprovalFlowRequest(
     string Name,
     string? Description,
     string DocumentKind,
-    int Priority,
     bool IsActive,
     IReadOnlyList<SaveApprovalFlowRuleRequest> Rules,
     IReadOnlyList<SaveApprovalFlowStepRequest> Steps,
     IReadOnlyList<SaveApprovalFlowEdgeRequest>? Edges = null,
-    IReadOnlyList<SaveApprovalFlowVariableRequest>? Variables = null,
-    string? ExtraColumnsView = null);
+    IReadOnlyList<SaveApprovalFlowVariableRequest>? Variables = null);
 
 public sealed record SaveApprovalFlowRuleRequest(
     int Id,
@@ -127,7 +122,8 @@ public sealed record SaveApprovalFlowVariableRequest(
 // ── Onay örneği (Instance) ────────────────────────────────────────────────────
 public sealed record ApprovalInstanceDto(
     int Id,
-    Guid DocumentId,
+    int? DocumentId,
+    string EntityKind,
     int FlowId,
     string FlowName,
     string Status,
@@ -165,7 +161,7 @@ public sealed record OverdueStepRecord(
     DateTime? DueDate,
     string? ApproverId,
     string? ApproverName,
-    Guid DocumentId,
+    int? DocumentId,
     string? DocumentNumber,
     string FlowName,
     bool SlaEnabled,
@@ -181,10 +177,11 @@ public sealed record OverdueStepRecord(
 
 // ── Onay/Red isteği ───────────────────────────────────────────────────────────
 public sealed record StartApprovalRequest(
-    Guid DocumentId,
+    int? DocumentId,
     int FlowId,
     string StartedBy,
-    int? StartedByUserId = null);
+    int? StartedByUserId = null,
+    string EntityKind = "Document");
 
 public sealed record ApproveStepRequest(
     int InstanceId,
@@ -197,3 +194,29 @@ public sealed record RejectStepRequest(
     string ApproverId,
     string ApproverName,
     string Note);
+
+// ── Akış revizyon geçmişi ─────────────────────────────────────────────────────
+public sealed record ApprovalFlowRevisionSummaryDto(
+    int Id,
+    int FlowId,
+    string FlowName,
+    int RevisionNo,
+    string? CreatedBy,
+    DateTime CreatedAt,
+    int PendingCount);
+
+public sealed record ApprovalFlowRevisionDetailDto(
+    int Id,
+    int RevisionNo,
+    string? CreatedBy,
+    DateTime CreatedAt,
+    string Snapshot,
+    IReadOnlyList<RevisionPendingInstanceDto> PendingInstances);
+
+public sealed record RevisionPendingInstanceDto(
+    int InstanceId,
+    int? DocumentId,
+    string? DocumentNumber,
+    string? CurrentStepName,
+    string? ApproverName,
+    DateTime StartedAt);

@@ -230,6 +230,8 @@ public sealed class DbSchemaService : IDbSchemaService
     {
         // Domain assembly'sinden CalibraHub.Domain.Entities namespace'indeki tum public class'lari index'le.
         // Tablo ismi cesitlemeleri: 'Contact', 'contact', 'Contacts', 'ContactAccounts' (legacy).
+        // 'Entity' suffix'i olan siniflar hem tam isimleriyle hem de suffix soyulmus haliyle eklenir:
+        //   ApprovalFlowEntity → hem "ApprovalFlowEntity" hem "ApprovalFlow" olarak aranabilir.
         var dict = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
         try
         {
@@ -239,6 +241,11 @@ public sealed class DbSchemaService : IDbSchemaService
                 if (t.Namespace != "CalibraHub.Domain.Entities") continue;
                 if (!t.IsClass || t.IsAbstract) continue;
                 dict[t.Name] = t;
+                if (t.Name.EndsWith("Entity", StringComparison.OrdinalIgnoreCase))
+                {
+                    var stripped = t.Name[..^"Entity".Length];
+                    if (stripped.Length > 0) dict.TryAdd(stripped, t);
+                }
             }
         }
         catch
@@ -295,6 +302,30 @@ public sealed class DbSchemaService : IDbSchemaService
             if (part.Length > 1) sb.Append(part[1..]);
         }
         return sb.ToString();
+    }
+
+    public async Task<IReadOnlyList<DbViewInfoDto>> GetViewsAsync(CancellationToken cancellationToken)
+    {
+        var dbViews = await _repository.GetDesignerViewsAsync(cancellationToken);
+        var dbByName = dbViews.ToDictionary(v => v.Name, StringComparer.OrdinalIgnoreCase);
+
+        var result = new List<DbViewInfoDto>(CalibraViewCatalog.Entries.Count);
+        foreach (var entry in CalibraViewCatalog.Entries)
+        {
+            var exists = dbByName.TryGetValue(entry.Name, out var dbView);
+            var columns = exists
+                ? (IReadOnlyList<string>)dbView!.Columns.Select(c => c.Name).ToList()
+                : Array.Empty<string>();
+
+            result.Add(new DbViewInfoDto(
+                Name: entry.Name,
+                Description: entry.Description,
+                UsedIn: entry.UsedIn,
+                IsCustomizable: entry.IsCustomizable,
+                ExistsInDb: exists,
+                Columns: columns));
+        }
+        return result;
     }
 
     private static IReadOnlyList<DbEnumValueDto> GetEnumValues(Type enumType)

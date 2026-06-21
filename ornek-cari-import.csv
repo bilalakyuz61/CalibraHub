@@ -1,0 +1,6 @@
+Cari Unvanı,Vergi No,Telefon,E-posta,İl,Cari Tipi
+Acme Yazılım A.Ş.,1234567890,0212 555 1122,info@acme.com,İstanbul,Müşteri
+Beta Tedarik Ltd.,9876543210,0312 444 3322,satis@beta.com.tr,Ankara,Satıcı
+Gamma Mühendislik San.,5556667781,0232 333 1100,bilgi@gamma.com,İzmir,Müşteri
+Delta Lojistik,4445556660,0224 222 7788,destek@delta.com,Bursa,Her İkisi
+Hatalı Kayıt Örneği,123,0000,bozuk-eposta,Test,Müşteri

@@ -101,3 +101,19 @@ body.app-theme-dark .sch-table-summary { color: rgba(255,255,255,0.88); }
 .sch-enum-list { list-style: none; margin: 4px 0 4px 0; padding: 4px 8px; background: var(--sch-enum-bg); border-left: 2px solid var(--sch-accent); border-radius: 3px; font-size: 0.72rem; line-height: 1.5; }
 .sch-enum-list li { padding: 1px 0; }
 .sch-enum-list code { background: var(--sch-badge-bg); color: var(--sch-badge-fg); padding: 0 5px; border-radius: 3px; font-size: 0.7rem; margin-right: 2px; }
+
+/* ── Segment bar (Tablolar / View'lar) ── */
+.sch-segment-bar { display: flex; gap: 2px; background: var(--sch-divider); border-radius: 6px; padding: 2px; }
+.sch-segment { padding: 3px 10px; font-size: 0.76rem; border: none; border-radius: 4px; background: transparent; color: var(--app-text-muted, #64748b); cursor: pointer; white-space: nowrap; }
+.sch-segment:hover { background: var(--sch-hover-bg); }
+.sch-segment.active { background: var(--sch-panel-bg); color: var(--sch-accent); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+/* ── View listesi badgeleri ── */
+.sch-view-custom-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.66rem; font-weight: 600; background: rgba(124, 58, 237, 0.12); color: #7c3aed; margin-left: 4px; }
+body.app-theme-dark .sch-view-custom-badge { background: rgba(167, 139, 250, 0.2); color: #c4b5fd; }
+.sch-view-absent { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.66rem; font-weight: 600; background: rgba(220, 38, 38, 0.1); color: #dc2626; margin-left: 4px; }
+body.app-theme-dark .sch-view-absent { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+
+/* ── View detay — kolon listesi ── */
+.sch-view-col-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.sch-view-col-item code { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.74rem; background: var(--sch-badge-bg); color: var(--sch-badge-fg); font-family: ui-monospace, Menlo, Consolas, monospace; }

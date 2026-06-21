@@ -1,0 +1,341 @@
+@model CalibraHub.Domain.Entities.CodeRule
+@using System.Text.Json
+@{
+    var entityType  = (string)(ViewBag.EntityType ?? Model.EntityType);
+    var entityLabel = (string)(ViewBag.EntityLabel ?? (entityType == "Item" ? "Stok Kodu" : "Cari Kodu"));
+    ViewData["Title"] = (Model.Id == 0 ? "Yeni" : "Düzenle") + " — " + entityLabel + " Kuralı";
+
+    var resetPeriods = ViewBag.ResetPeriods as System.Collections.IEnumerable;
+    var sampleFields = (ViewBag.SampleFields as string[]) ?? Array.Empty<string>();
+    var operators    = ViewBag.Operators as System.Collections.IEnumerable;
+
+    var initialJson = JsonSerializer.Serialize(new
+    {
+        id            = Model.Id,
+        entityType    = entityType,
+        name          = Model.Name,
+        template      = Model.Template,
+        priority      = Model.Priority,
+        resetPeriod   = (int)Model.ResetPeriod,
+        isActive      = Model.IsActive,
+        conditions    = Model.Conditions.Select(c => new {
+            fieldType = c.FieldType, fieldName = c.FieldName,
+            @operator = c.Operator, value = c.Value
+        }).ToArray(),
+    }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+}
+
+@section Styles {
+<style>
+    .cr-page { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+    .cr-header {
+        position: sticky; top: 0; z-index: 5;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 16px; margin: -20px -24px 16px;
+        background: var(--app-surface, #fff);
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+    }
+    body.app-theme-dark .cr-header { background: #0b1220; border-color: #1e293b; }
+    .cr-header__title { font-weight: 600; font-size: 14px; }
+    .cr-actions { display: flex; gap: 8px; }
+    .cr-btn {
+        padding: 7px 14px; font-size: 13px; font-weight: 500; border-radius: 6px;
+        border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .cr-btn--primary { background: #6366f1; color: #fff; }
+    .cr-btn--primary:hover { background: #4f46e5; }
+    .cr-btn--ghost { background: transparent; border-color: var(--app-border, #cbd5e1); color: var(--bs-body-color, #0f172a); }
+    body.app-theme-dark .cr-btn--ghost { color: #e2e8f0; border-color: #334155; }
+    .cr-btn--ghost:hover { background: rgba(99,102,241,0.08); }
+
+    .cr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; }
+    .cr-field { display: flex; flex-direction: column; gap: 4px; }
+    .cr-field label { font-size: 12px; font-weight: 500; color: var(--bs-body-color, #475569); }
+    body.app-theme-dark .cr-field label { color: #94a3b8; }
+    .cr-input, .cr-textarea, .cr-select {
+        padding: 7px 10px; font-size: 13px; border-radius: 5px;
+        border: 1px solid var(--app-border, #cbd5e1);
+        background: var(--app-surface, #fff); color: var(--bs-body-color, #0f172a);
+        color-scheme: light;
+    }
+    body.app-theme-dark .cr-input,
+    body.app-theme-dark .cr-textarea,
+    body.app-theme-dark .cr-select {
+        background: #0f172a; border-color: #334155; color: #e2e8f0; color-scheme: dark;
+    }
+    .cr-textarea { font-family: ui-monospace, Menlo, Consolas, monospace; resize: vertical; min-height: 60px; }
+    .cr-full { grid-column: 1 / -1; }
+    .cr-section {
+        margin: 24px 0; padding: 16px; border-radius: 8px;
+        background: var(--app-surface, #f8fafc);
+        border: 1px solid var(--app-border, #e2e8f0);
+    }
+    body.app-theme-dark .cr-section { background: #0b1220; border-color: #1e293b; }
+    .cr-section__title { font-size: 13px; font-weight: 600; margin: 0 0 12px; }
+
+    .cr-tokens { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+    .cr-token {
+        padding: 3px 9px; border-radius: 4px; font-size: 11px; cursor: pointer;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        background: rgba(99,102,241,0.1); color: #6366f1; border: 1px solid rgba(99,102,241,0.3);
+    }
+    .cr-token:hover { background: rgba(99,102,241,0.2); }
+
+    .cr-conds { display: flex; flex-direction: column; gap: 8px; }
+    .cr-cond {
+        display: grid; grid-template-columns: 110px 1fr 130px 1fr 40px; gap: 8px; align-items: end;
+    }
+    .cr-cond__del {
+        padding: 6px 10px; background: rgba(239,68,68,0.1); color: #ef4444;
+        border: 1px solid rgba(239,68,68,0.3); border-radius: 5px; cursor: pointer; font-size: 12px;
+    }
+    .cr-cond__del:hover { background: rgba(239,68,68,0.2); }
+
+    .cr-preview {
+        margin-top: 12px; padding: 12px; border-radius: 6px;
+        background: rgba(99,102,241,0.06); border: 1px dashed rgba(99,102,241,0.4);
+        font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
+    }
+    .cr-preview__label { font-size: 11px; color: #6366f1; margin-bottom: 4px; font-weight: 600; }
+    .cr-preview__value { font-size: 16px; font-weight: 600; }
+    .cr-preview__error { color: #ef4444; }
+
+    .cr-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+    .cr-switch__track {
+        width: 36px; height: 20px; border-radius: 10px;
+        background: #cbd5e1; position: relative; transition: background .15s;
+    }
+    .cr-switch__thumb {
+        position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+        background: #fff; border-radius: 50%; transition: left .15s;
+    }
+    .cr-switch.is-on .cr-switch__track { background: #6366f1; }
+    .cr-switch.is-on .cr-switch__thumb { left: 18px; }
+</style>
+}
+
+<div class="cr-page">
+    <div class="cr-header">
+        <div class="cr-header__title">@ViewData["Title"]</div>
+        <div class="cr-actions">
+            <button type="button" class="cr-btn cr-btn--ghost" onclick="window.history.back()">← Geri</button>
+            <button type="button" class="cr-btn cr-btn--primary" id="crSaveBtn">💾 Kaydet</button>
+        </div>
+    </div>
+
+    <div class="cr-grid">
+        <div class="cr-field">
+            <label>Kural Adı *</label>
+            <input type="text" class="cr-input" id="crName" placeholder="Örn. Standart Müşteri 2026" />
+        </div>
+        <div class="cr-field">
+            <label>Öncelik (büyük → önce kontrol)</label>
+            <input type="number" class="cr-input" id="crPriority" value="0" />
+        </div>
+
+        <div class="cr-field">
+            <label>Sayaç Sıfırlama</label>
+            <select class="cr-select" id="crResetPeriod">
+                @if (resetPeriods != null)
+                {
+                    foreach (dynamic rp in resetPeriods)
+                    {
+                        <option value="@rp.value">@rp.label</option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="cr-field">
+            <label>Durum</label>
+            <div class="cr-switch is-on" id="crIsActive" onclick="this.classList.toggle('is-on')">
+                <div class="cr-switch__track"><div class="cr-switch__thumb"></div></div>
+                <span style="font-size: 12px;">Aktif</span>
+            </div>
+        </div>
+
+        <div class="cr-field cr-full">
+            <label>Template *</label>
+            <textarea class="cr-textarea" id="crTemplate" rows="2"
+                      placeholder="MS-{Field:City}-{Widget:MUSTERI_TIPI}-{Counter:4}"></textarea>
+            <div class="cr-tokens" id="crTokenChips">
+                <span class="cr-token" data-token="{Counter:4}">{Counter:4}</span>
+                <span class="cr-token" data-token="{Year:yyyy}">{Year:yyyy}</span>
+                <span class="cr-token" data-token="{Year:yy}">{Year:yy}</span>
+                <span class="cr-token" data-token="{Month:MM}">{Month:MM}</span>
+                <span class="cr-token" data-token="{Day:dd}">{Day:dd}</span>
+                @foreach (var field in sampleFields)
+                {
+                    <span class="cr-token" data-token="@($"{{Field:{field}}}")">{Field:@field}</span>
+                }
+                <span class="cr-token" data-token="{Widget:WIDGET_KEY}">{Widget:WIDGET_KEY}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="cr-section">
+        <div class="cr-section__title">Şartlar (boş = varsayılan / fallback kural)</div>
+        <div class="cr-conds" id="crConds"></div>
+        <button type="button" class="cr-btn cr-btn--ghost" style="margin-top: 8px;" id="crAddCondBtn">+ Şart Ekle</button>
+    </div>
+
+    <div class="cr-section">
+        <div class="cr-section__title">Canlı Önizleme — Test</div>
+        <div class="cr-field" style="margin-bottom: 8px;">
+            <label>Örnek FieldValues (JSON, örn. {"City":"IST","ContactGroupId":"5"})</label>
+            <textarea class="cr-textarea" id="crSampleFields" rows="2">{}</textarea>
+        </div>
+        <div class="cr-field" style="margin-bottom: 8px;">
+            <label>Örnek WidgetValues (JSON, örn. {"MUSTERI_TIPI":"VIP"})</label>
+            <textarea class="cr-textarea" id="crSampleWidgets" rows="2">{}</textarea>
+        </div>
+        <button type="button" class="cr-btn cr-btn--ghost" id="crTestBtn">⚡ Test Et (sayaç ARTAR)</button>
+        <div class="cr-preview" id="crPreviewBox" style="display:none;">
+            <div class="cr-preview__label">Üretilen Kod</div>
+            <div class="cr-preview__value" id="crPreviewValue">—</div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var INITIAL = @Html.Raw(initialJson);
+    var FIELDS = @Html.Raw(JsonSerializer.Serialize(sampleFields));
+    var OPS = @Html.Raw(JsonSerializer.Serialize(((operators as System.Collections.IEnumerable) ?? Array.Empty<object>())));
+
+    var nameEl  = document.getElementById('crName');
+    var tmplEl  = document.getElementById('crTemplate');
+    var prioEl  = document.getElementById('crPriority');
+    var resetEl = document.getElementById('crResetPeriod');
+    var activeEl= document.getElementById('crIsActive');
+    var condsEl = document.getElementById('crConds');
+    var fieldsEl= document.getElementById('crSampleFields');
+    var widgetsEl=document.getElementById('crSampleWidgets');
+    var prevBox = document.getElementById('crPreviewBox');
+    var prevVal = document.getElementById('crPreviewValue');
+
+    // Init from server
+    nameEl.value  = INITIAL.name || '';
+    tmplEl.value  = INITIAL.template || '';
+    prioEl.value  = INITIAL.priority || 0;
+    resetEl.value = INITIAL.resetPeriod || 0;
+    if (!INITIAL.isActive) activeEl.classList.remove('is-on');
+    (INITIAL.conditions || []).forEach(addConditionRow);
+
+    // Token chip click → append to template
+    document.querySelectorAll('.cr-token').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            var tok = chip.getAttribute('data-token');
+            var pos = tmplEl.selectionStart || tmplEl.value.length;
+            tmplEl.value = tmplEl.value.substring(0, pos) + tok + tmplEl.value.substring(pos);
+            tmplEl.focus();
+        });
+    });
+
+    function addConditionRow(c) {
+        c = c || { fieldType: 'Field', fieldName: '', operator: '=', value: '' };
+        var row = document.createElement('div');
+        row.className = 'cr-cond';
+        var opOptions = OPS.map(function(o) { return '<option value="' + o.value + '"' + (o.value === c.operator ? ' selected' : '') + '>' + o.label + '</option>'; }).join('');
+        row.innerHTML =
+            '<select class="cr-select cr-cond__type">'
+              + '<option value="Field"' + (c.fieldType === 'Field' ? ' selected' : '') + '>DB Alanı</option>'
+              + '<option value="Widget"' + (c.fieldType === 'Widget' ? ' selected' : '') + '>Widget</option>'
+            + '</select>'
+            + '<input type="text" class="cr-input cr-cond__name" placeholder="Alan adı (City, GroupId, MUSTERI_TIPI)" value="' + escapeHtml(c.fieldName) + '" />'
+            + '<select class="cr-select cr-cond__op">' + opOptions + '</select>'
+            + '<input type="text" class="cr-input cr-cond__val" placeholder="Değer (in/notin için JSON array)" value="' + escapeHtml(c.value || '') + '" />'
+            + '<button type="button" class="cr-cond__del">×</button>';
+        row.querySelector('.cr-cond__del').addEventListener('click', function() { row.remove(); });
+        condsEl.appendChild(row);
+    }
+
+    document.getElementById('crAddCondBtn').addEventListener('click', function() { addConditionRow(); });
+
+    function collectPayload() {
+        var conds = [];
+        condsEl.querySelectorAll('.cr-cond').forEach(function(row) {
+            var name = row.querySelector('.cr-cond__name').value.trim();
+            if (!name) return;
+            conds.push({
+                fieldType: row.querySelector('.cr-cond__type').value,
+                fieldName: name,
+                operator:  row.querySelector('.cr-cond__op').value,
+                value:     row.querySelector('.cr-cond__val').value || null,
+            });
+        });
+        return {
+            id: INITIAL.id || 0,
+            entityType: INITIAL.entityType,
+            name: nameEl.value.trim(),
+            template: tmplEl.value.trim(),
+            priority: parseInt(prioEl.value || '0', 10),
+            resetPeriod: parseInt(resetEl.value || '0', 10),
+            isActive: activeEl.classList.contains('is-on'),
+            conditions: conds,
+        };
+    }
+
+    function getCsrf() {
+        var t = document.querySelector('input[name="__RequestVerificationToken"]');
+        return t ? t.value : '';
+    }
+
+    document.getElementById('crSaveBtn').addEventListener('click', function() {
+        var payload = collectPayload();
+        if (!payload.name) { alert('Kural adı zorunludur'); return; }
+        if (!payload.template) { alert('Template zorunludur'); return; }
+        fetch('/CodeRule/SaveJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getCsrf() },
+            body: JSON.stringify(payload),
+        })
+        .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+        .then(function(res) {
+            if (res.ok && res.body.ok) {
+                alert('Kaydedildi');
+                window.location.href = '/CodeRule?entity=' + INITIAL.entityType.toLowerCase();
+            } else {
+                alert('Hata: ' + (res.body.error || 'bilinmiyor'));
+            }
+        })
+        .catch(function(e) { alert('Hata: ' + e.message); });
+    });
+
+    document.getElementById('crTestBtn').addEventListener('click', function() {
+        var payload = collectPayload();
+        var fieldVals, widgetVals;
+        try { fieldVals  = JSON.parse(fieldsEl.value || '{}'); } catch(e) { alert('FieldValues JSON geçersiz'); return; }
+        try { widgetVals = JSON.parse(widgetsEl.value || '{}'); } catch(e) { alert('WidgetValues JSON geçersiz'); return; }
+
+        // İlk önce kuralı save et (yoksa test edilemez)
+        if (!payload.name || !payload.template) { alert('Önce ad + template gir, sonra "Kaydet" et'); return; }
+
+        fetch('/CodeRule/Preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getCsrf() },
+            body: JSON.stringify({
+                entityType: INITIAL.entityType,
+                fieldValues: fieldVals,
+                widgetValues: widgetVals,
+            }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+            prevBox.style.display = 'block';
+            if (j.success) {
+                prevVal.classList.remove('cr-preview__error');
+                prevVal.textContent = j.code + (j.suffixAttempts > 0 ? ' (suffix ' + j.suffixAttempts + ' deneme)' : '');
+            } else {
+                prevVal.classList.add('cr-preview__error');
+                prevVal.textContent = (j.error || 'Hata') + (j.appliedRuleName ? ' [' + j.appliedRuleName + ']' : '');
+            }
+        })
+        .catch(function(e) { alert('Test hatası: ' + e.message); });
+    });
+
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+})();
+</script>
+@Html.AntiForgeryToken()
+}

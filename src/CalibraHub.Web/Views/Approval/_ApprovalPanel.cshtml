@@ -133,6 +133,9 @@ body.app-theme-dark .ap-step { border-color: rgba(255,255,255,.07); }
     else if (isPending)
     {
         var currentRecord = inst!.StepRecords.FirstOrDefault(s => s.StepOrder == inst.CurrentStep);
+        var pendingOrderedSteps = inst.StepRecords.OrderBy(s => s.StepOrder).ToList();
+        var currentSeqStep = pendingOrderedSteps.Select((s, i) => new { s, i })
+            .FirstOrDefault(x => x.s.StepOrder == inst.CurrentStep)?.i + 1 ?? 1;
         <!-- Bekleyen onay -->
         <div class="ap-status-bar ap-status-bar--pending">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -140,15 +143,17 @@ body.app-theme-dark .ap-step { border-color: rgba(255,255,255,.07); }
         </div>
 
         <ul class="ap-step-list mb-3">
-            @foreach (var step in inst.StepRecords.OrderBy(s => s.StepOrder))
+            @for (int psi = 0; psi < pendingOrderedSteps.Count; psi++)
             {
+                var step = pendingOrderedSteps[psi];
+                var seqNo = psi + 1;
                 var isCurrent = step.StepOrder == inst.CurrentStep;
                 var stepClass = step.Status == "Approved" ? "ap-step__badge--approved"
                               : step.Status == "Rejected" ? "ap-step__badge--rejected"
                               : "ap-step__badge--pending";
                 var stepIcon = step.Status == "Approved" ? "✓"
                              : step.Status == "Rejected" ? "✕"
-                             : step.StepOrder.ToString();
+                             : seqNo.ToString();
                 <li class="ap-step" style="@(isCurrent ? "border-color:#6366f1;" : "")">
                     <span class="ap-step__badge @stepClass">@stepIcon</span>
                     <div class="ap-step__info">
@@ -171,7 +176,7 @@ body.app-theme-dark .ap-step { border-color: rgba(255,255,255,.07); }
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
                 <button class="ap-btn ap-btn--approve" onclick="apApprove('@Model.DocumentId.ToString("N")', @inst.Id)">
-                    ✓ Onayla (@inst.CurrentStep/@inst.TotalSteps. Adım)
+                    ✓ Onayla (@currentSeqStep/@inst.TotalSteps. Adım)
                 </button>
                 <button class="ap-btn ap-btn--reject" onclick="apReject('@Model.DocumentId.ToString("N")', @inst.Id)">
                     ✕ Reddet
@@ -215,12 +220,14 @@ body.app-theme-dark .ap-step { border-color: rgba(255,255,255,.07); }
             </p>
         }
         <ul class="ap-step-list">
-            @foreach (var step in inst.StepRecords.OrderBy(s => s.StepOrder))
+            @{ var rejectedOrderedSteps = inst.StepRecords.OrderBy(s => s.StepOrder).ToList(); }
+            @for (int rsi = 0; rsi < rejectedOrderedSteps.Count; rsi++)
             {
+                var step = rejectedOrderedSteps[rsi];
                 var cls = step.Status == "Approved" ? "ap-step__badge--approved"
                         : step.Status == "Rejected" ? "ap-step__badge--rejected"
                         : "ap-step__badge--pending";
-                var ico = step.Status == "Approved" ? "✓" : step.Status == "Rejected" ? "✕" : step.StepOrder.ToString();
+                var ico = step.Status == "Approved" ? "✓" : step.Status == "Rejected" ? "✕" : (rsi + 1).ToString();
                 <li class="ap-step">
                     <span class="ap-step__badge @cls">@ico</span>
                     <div class="ap-step__info">

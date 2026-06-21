@@ -29,7 +29,8 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.CommandText = $"""
             SELECT [id], [name], [title], [address], [city], [district], [postal_code],
                    [tax_office], [tax_number],
-                   [is_e_document_approval_enabled], [IsActive], [connection_string]
+                   [is_e_document_approval_enabled], [IsActive], [connection_string],
+                   [public_url]
             FROM {_tableName}
             ORDER BY [name];
             """;
@@ -50,7 +51,8 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.CommandText = $"""
             SELECT [id], [name], [title], [address], [city], [district], [postal_code],
                    [tax_office], [tax_number],
-                   [is_e_document_approval_enabled], [IsActive], [connection_string]
+                   [is_e_document_approval_enabled], [IsActive], [connection_string],
+                   [public_url]
             FROM {_tableName}
             WHERE [id] = @Id;
             """;
@@ -72,13 +74,13 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             INSERT INTO {_tableName}
                 ([name], [title], [address], [city], [district], [postal_code],
                  [tax_office], [tax_number],
-                 [is_e_document_approval_enabled], [IsActive], [connection_string],
+                 [is_e_document_approval_enabled], [IsActive], [connection_string], [public_url],
                  [Created], [Updated])
             OUTPUT INSERTED.[id]
             VALUES
                 (@Name, @Title, @Address, @City, @District, @PostalCode,
                  @TaxOffice, @TaxNumber,
-                 @IsEDocumentApprovalEnabled, @IsActive, @ConnectionString,
+                 @IsEDocumentApprovalEnabled, @IsActive, @ConnectionString, @PublicBaseUrl,
                  @CreatedAt, @UpdatedAt);
             """;
         AddInsertParameters(command, company);
@@ -106,6 +108,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
                 [is_e_document_approval_enabled] = @IsEDocumentApprovalEnabled,
                 [IsActive] = @IsActive,
                 [connection_string] = @ConnectionString,
+                [public_url] = @PublicBaseUrl,
                 [Updated] = @UpdatedAt
             WHERE [id] = @Id;
             """;
@@ -129,6 +132,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.Parameters.Add(new SqlParameter("@IsEDocumentApprovalEnabled", company.IsEDocumentApprovalEnabled));
         command.Parameters.Add(new SqlParameter("@IsActive", company.IsActive));
         command.Parameters.Add(new SqlParameter("@ConnectionString", (object?)company.DatabaseConnectionString ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@PublicBaseUrl", (object?)company.PublicBaseUrl ?? DBNull.Value));
     }
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken)
@@ -154,7 +158,8 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             TaxOffice = r.GetString(r.GetOrdinal("tax_office")),
             TaxNumber = r.GetString(r.GetOrdinal("tax_number")),
             IsEDocumentApprovalEnabled = r.GetBoolean(r.GetOrdinal("is_e_document_approval_enabled")),
-            DatabaseConnectionString = r.IsDBNull(r.GetOrdinal("connection_string")) ? null : r.GetString(r.GetOrdinal("connection_string"))
+            DatabaseConnectionString = r.IsDBNull(r.GetOrdinal("connection_string")) ? null : r.GetString(r.GetOrdinal("connection_string")),
+            PublicBaseUrl = r.IsDBNull(r.GetOrdinal("public_url")) ? null : r.GetString(r.GetOrdinal("public_url"))
         };
 
         if (!r.GetBoolean(r.GetOrdinal("IsActive")))

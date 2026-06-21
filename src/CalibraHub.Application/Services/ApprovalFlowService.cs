@@ -18,6 +18,7 @@ public sealed class ApprovalFlowService : IApprovalFlowService
     private readonly ILogger<ApprovalFlowService>? _logger;
     private readonly IServiceScopeFactory? _scopeFactory;
     private readonly IApprovalNodeLogger? _nodeLogger;
+    private readonly ICurrentCompanyProvider? _companyProvider;
 
     public ApprovalFlowService(
         IApprovalFlowRepository flowRepo,
@@ -26,15 +27,17 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         IApprovalFlowExecutor? executor = null,
         ILogger<ApprovalFlowService>? logger = null,
         IServiceScopeFactory? scopeFactory = null,
-        IApprovalNodeLogger? nodeLogger = null)
+        IApprovalNodeLogger? nodeLogger = null,
+        ICurrentCompanyProvider? companyProvider = null)
     {
-        _flowRepo     = flowRepo;
-        _instanceRepo = instanceRepo;
-        _userRepo     = userRepo;
-        _executor     = executor;
-        _logger       = logger;
-        _scopeFactory = scopeFactory;
-        _nodeLogger   = nodeLogger;
+        _flowRepo        = flowRepo;
+        _instanceRepo    = instanceRepo;
+        _userRepo        = userRepo;
+        _executor        = executor;
+        _logger          = logger;
+        _scopeFactory    = scopeFactory;
+        _nodeLogger      = nodeLogger;
+        _companyProvider = companyProvider;
     }
 
     private async Task TryLogAsync(int instanceId, int flowId, string? nodeType, string? nodeName,
@@ -112,7 +115,6 @@ public sealed class ApprovalFlowService : IApprovalFlowService
             Name:         src.Name + " (Kopya)",
             Description:  src.Description,
             DocumentKind: src.DocumentKind,
-            Priority:     src.Priority,
             IsActive:     false, // Kopya pasif başlasın — kullanıcı aktive etmeden devreye girmesin
             Rules:        rules,
             Steps:        steps,
@@ -131,8 +133,7 @@ public sealed class ApprovalFlowService : IApprovalFlowService
     {
         var flows = await _flowRepo.GetByDocumentKindAsync(documentKind, ct);
 
-        // Öncelik sırasına göre (büyükten küçüğe) değerlendir; ilk eşleşen kazanır
-        foreach (var flow in flows.OrderByDescending(f => f.Priority))
+        foreach (var flow in flows)
         {
             if (FlowMatchesRules(flow, totalAmount, senderTaxNo, departmentId))
                 return flow;
@@ -178,6 +179,11 @@ public sealed class ApprovalFlowService : IApprovalFlowService
 
         var instanceId = await _instanceRepo.CreateAsync(request, activeSteps, ct);
 
+        // Hangi revizyonla başlatıldığını kaydet — revizyon ID ile instance'ı bağla.
+        var latestRevisionId = await _flowRepo.GetLatestRevisionIdAsync(request.FlowId, ct);
+        if (latestRevisionId.HasValue)
+            await _instanceRepo.UpdateRevisionIdAsync(instanceId, latestRevisionId.Value, ct);
+
         // Execution log: akış başlatıldı
         await TryLogAsync(instanceId, request.FlowId, "start", flow.Name,
             "FlowStarted", $"Başlatan: {request.StartedBy}", ct);
@@ -189,7 +195,8 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         // IServiceScopeFactory ile bağımsız yeni bir scope açılır.
         if (_executor is not null)
         {
-            var capturedId = instanceId;
+            var capturedId      = instanceId;
+            var capturedBaseUrl = _companyProvider?.GetBaseUrl(); // HTTP context canlıyken yakala
             if (_scopeFactory is not null)
             {
                 var factory = _scopeFactory;
@@ -198,13 +205,13 @@ public sealed class ApprovalFlowService : IApprovalFlowService
                 {
                     await using var scope = factory.CreateAsyncScope();
                     var exec = scope.ServiceProvider.GetRequiredService<IApprovalFlowExecutor>();
-                    try { await exec.AfterStartAsync(capturedId, CancellationToken.None); }
+                    try { await exec.AfterStartAsync(capturedId, CancellationToken.None, capturedBaseUrl); }
                     catch (Exception ex) { log?.LogWarning(ex, "Executor AfterStartAsync hatası (instance={Iid}).", capturedId); }
                 });
             }
             else
             {
-                try { await _executor.AfterStartAsync(instanceId, ct); }
+                try { await _executor.AfterStartAsync(instanceId, ct, capturedBaseUrl); }
                 catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStartAsync hatası (instance={Iid}).", instanceId); }
             }
         }
@@ -251,7 +258,8 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         // Faz 4 — Graph executor: sonraki yolda decision/notification node'larını işle.
         if (_executor is not null)
         {
-            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: true, ct); }
+            var capturedBaseUrl = _companyProvider?.GetBaseUrl();
+            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: true, ct, capturedBaseUrl); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync hatası (instance={Iid}, step={St}).", request.InstanceId, stepBefore); }
         }
 
@@ -285,7 +293,8 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         // (Reject sonrası instance zaten Rejected; sadece notification side-effect.)
         if (_executor is not null)
         {
-            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: false, ct); }
+            var capturedBaseUrl = _companyProvider?.GetBaseUrl();
+            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: false, ct, capturedBaseUrl); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync (reject) hatası (instance={Iid}, step={St}).", request.InstanceId, stepBefore); }
         }
 
@@ -310,8 +319,14 @@ public sealed class ApprovalFlowService : IApprovalFlowService
            ? _nodeLogger.GetLogsAsync(instanceId, ct)
            : Task.FromResult<IReadOnlyList<ApprovalNodeLogDto>>(Array.Empty<ApprovalNodeLogDto>());
 
-    public Task<ApprovalInstanceDto?> GetInstanceByDocumentIdAsync(Guid documentId, CancellationToken ct)
+    public Task<ApprovalInstanceDto?> GetInstanceByDocumentIdAsync(int documentId, CancellationToken ct)
         => _instanceRepo.GetByDocumentIdAsync(documentId, ct);
+
+    public Task<IReadOnlyList<ApprovalFlowRevisionSummaryDto>> GetRevisionsAsync(int flowId, CancellationToken ct)
+        => _flowRepo.GetRevisionsAsync(flowId, ct);
+
+    public Task<ApprovalFlowRevisionDetailDto?> GetRevisionDetailAsync(int revisionId, CancellationToken ct)
+        => _flowRepo.GetRevisionDetailAsync(revisionId, ct);
 
     // ── Kural motoru ─────────────────────────────────────────────────────────
     private static bool FlowMatchesRules(ApprovalFlowDto flow, decimal? totalAmount, string? senderTaxNo, int? departmentId)

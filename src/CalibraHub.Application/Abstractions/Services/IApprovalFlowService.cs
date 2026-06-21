@@ -25,8 +25,12 @@ public interface IApprovalFlowService
     Task<ApprovalInstanceDto> RejectAsync(RejectStepRequest request, CancellationToken ct);
     Task<ApprovalInstanceDto> CancelAsync(int instanceId, string byUser, CancellationToken ct);
 
-    Task<ApprovalInstanceDto?> GetInstanceByDocumentIdAsync(Guid documentId, CancellationToken ct);
+    Task<ApprovalInstanceDto?> GetInstanceByDocumentIdAsync(int documentId, CancellationToken ct);
 
     // Execution log — her node traversal + onay/red/iptal olayları
     Task<IReadOnlyList<ApprovalNodeLogDto>> GetInstanceLogsAsync(int instanceId, CancellationToken ct);
+
+    // Akış revizyon geçmişi
+    Task<IReadOnlyList<ApprovalFlowRevisionSummaryDto>> GetRevisionsAsync(int flowId, CancellationToken ct);
+    Task<ApprovalFlowRevisionDetailDto?> GetRevisionDetailAsync(int revisionId, CancellationToken ct);
 }

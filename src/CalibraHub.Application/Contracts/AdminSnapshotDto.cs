@@ -20,7 +20,8 @@ public sealed record CompanyDto(
     string TaxNumber,
     bool IsEDocumentApprovalEnabled,
     bool IsActive,
-    string? DatabaseConnectionString);
+    string? DatabaseConnectionString,
+    string? PublicBaseUrl);
 
 public sealed record IntegratorSettingsDto(
     int Id,

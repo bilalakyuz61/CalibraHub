@@ -1,0 +1,66 @@
+@{
+    ViewData["Title"] = "Veri Aktarımı";
+    ViewData["FormCode"] = "DATA_IMPORT";
+    ViewData["BodyClass"] = "page-data-import";
+    ViewData["DbInfo"] =
+        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>ImportTemplate</td><td style='padding:6px 8px;'>İçe aktarım şablonları: kaynak dosya kolonu → hedef alan eşleme tanımı (MappingJson)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>Contact</td><td style='padding:6px 8px;'>Hedef tablo (Cari) — kayıtlar IFinanceService.UpsertContactAsync ile yazılır</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .workspace-frame-body.page-data-import .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    #dataImportRoot {
+        flex: 1 1 auto; min-height: 0; display: flex;
+        flex-direction: column; height: 100%;
+    }
+</style>
+}
+
+<div id="dataImportRoot"></div>
+
+@section Scripts {
+<script>
+(function () {
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var el = document.getElementById('dataImportRoot');
+
+    function showError(msg) {
+        if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>';
+    }
+    function loadCss() {
+        if (document.querySelector('link[data-data-import]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-data-import', '1');
+        document.head.appendChild(link);
+    }
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-data-import]');
+        if (prev) { prev.addEventListener('load', cb); return; }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-data-import', '1');
+        script.onload = function () { setTimeout(cb, 0); };
+        script.onerror = function () { showError('React bundle yüklenemedi.'); };
+        document.head.appendChild(script);
+    }
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDataImport) {
+            showError('mountDataImport fonksiyonu bulunamadı.'); return;
+        }
+        window.CalibraHub.mountDataImport(el);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountDataImport) doMount();
+    else loadScript(doMount);
+})();
+</script>
+}

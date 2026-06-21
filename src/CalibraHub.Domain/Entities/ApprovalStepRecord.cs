@@ -1,8 +1,10 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
 
-public sealed class DocumentApprovalStepRecordEntity
+[Description("Onay adımı kaydı — hangi onaylayıcının hangi adımda ne zaman Onayla/Reddet/Ertele kararı verdiği ve notu.")]
+public sealed class ApprovalStepRecordEntity
 {
     public int Id { get; init; }
     public int InstanceId { get; init; }

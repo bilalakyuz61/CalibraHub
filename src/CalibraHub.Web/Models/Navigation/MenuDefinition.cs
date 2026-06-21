@@ -233,6 +233,15 @@ public static class MenuDefinition
                     PermissionFormCode: FormCodes.PriceList),
             }),
 
+            // ────────────── Veri Aktarımı / Data Import ──────────────
+            // Şablon-tabanlı içe aktarım (AI'sız), Cari pilotu. Pilot aşamasında yetki
+            // kısıtı yok (tüm kullanıcılar görür); ileride PermissionFormCode/AdminOnly eklenebilir.
+            new("dataimport", isEn ? "Data Import" : "Veri Aktarımı", "Upload", null, new List<MenuNode>
+            {
+                new("dataimport.run", isEn ? "Import / Templates" : "İçe Aktarım", "FileUp", "/Import", null,
+                    MatchPath: "/Import"),
+            }),
+
             // ────────────── 8. Tasarım / Design ──────────────
             // Grup: @if (isMenuAdmin)  →  tüm içerik admin-only
             new("design", isEn ? "Design" : "Tasarım", "LayoutGrid", null, new List<MenuNode>

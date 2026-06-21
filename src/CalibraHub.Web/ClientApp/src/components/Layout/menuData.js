@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ClipboardCheck, Warehouse, ShoppingCart,
   TrendingUp, Factory, Landmark, Settings2, Package,
-  Puzzle, TreePine, Users, Layers, FlaskConical,
+  Puzzle, TreePine, Users, Layers, FlaskConical, Upload,
 } from 'lucide-react'
 
 const menuData = [

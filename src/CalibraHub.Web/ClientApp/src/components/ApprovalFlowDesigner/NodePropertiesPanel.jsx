@@ -511,6 +511,8 @@ var NOTIF_SYSTEM_TOKENS = [
   { key: 'flowName',        label: 'Akış Adı' },
   { key: 'currentStepName', label: 'Güncel Adım' },
   { key: 'requesterName',   label: 'Oluşturan' },
+  { key: 'approveLink',     label: 'Onay Linki' },
+  { key: 'rejectLink',      label: 'Red Linki' },
 ]
 function buildNotifTokens(entityTypeFields) {
   var entityTokens = (Array.isArray(entityTypeFields) ? entityTypeFields : [])

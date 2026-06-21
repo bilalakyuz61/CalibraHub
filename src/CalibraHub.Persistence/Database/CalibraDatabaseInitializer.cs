@@ -669,6 +669,7 @@ END;";
             await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
             await EnsureDocumentTypesTableAsync(connection, cancellationToken);
             await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
+            await EnsureCodeRuleTablesAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
@@ -3169,6 +3170,13 @@ END;";
                 ALTER TABLE [{schemaForSql}].[Company] ADD [city] NVARCHAR(100) NULL;
                 ALTER TABLE [{schemaForSql}].[Company] ADD [district] NVARCHAR(100) NULL;
                 ALTER TABLE [{schemaForSql}].[Company] ADD [postal_code] NVARCHAR(10) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'public_url') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Company]
+                ADD [public_url] NVARCHAR(300) NULL;
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[User]', N'U') IS NOT NULL
@@ -8192,6 +8200,88 @@ END;";
                 );
                 CREATE UNIQUE INDEX [UX_DocumentNumberCounter_Rule_Reset]
                     ON [{s}].[DocumentNumberCounter]([RuleId], [ResetKey]);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 2026-06-21 — Cari/Stok kod türetme kuralları. Tasarım > Tasarım Kuralları altında
+    /// 2 yeni tab (Cari Kodu / Stok Kodu) ile yönetilir. Boş gelen Code alanı kural ile
+    /// üretilir (Contact.AccountCode, Items.Code). Excel import'ta da geçerlidir.
+    ///
+    /// Template: free-form string, token'lar:
+    ///   {Field:KolonAdi}        → DB kolonu (Contact.City, Item.Category vb.)
+    ///   {Widget:WidgetKey}      → WidgetTra değeri (form widget'larından)
+    ///   {Counter:N}             → kural-bazlı sayaç (N hane zero-pad), ResetPeriod ile yıllık/aylık reset
+    ///   {Year:yyyy|yy}          → current year (4 veya 2 hane)
+    ///   {Month:MM}              → current month (2 hane)
+    /// Örnek: 'MS-{Field:City}-{Widget:MUSTERI_TIPI}-{Counter:4}' → 'MS-IST-VIP-0001'
+    ///
+    /// Şart-bazlı kurallar: CodeRuleCondition tablosu ile (örn. Contact.GroupId=5 → 'MS-...',
+    /// GroupId=10 → 'TD-...'). Priority en yüksek olan kural önce kontrol edilir.
+    /// Çakışma olursa otomatik suffix (-A, -B, ...) eklenir (max 26 deneme).
+    /// </summary>
+    private async Task EnsureCodeRuleTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            -- ── CodeRule: Cari/Stok kod türetme kural tanımı ────────────────────
+            IF OBJECT_ID(N'[{s}].[CodeRule]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[CodeRule]
+                (
+                    [Id]            INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_CodeRule] PRIMARY KEY,
+                    [EntityType]    NVARCHAR(20)  NOT NULL,  -- 'Contact' | 'Item'
+                    [Name]          NVARCHAR(200) NOT NULL,
+                    [Template]      NVARCHAR(500) NOT NULL,  -- ornek: MS-Field:City-Counter:4
+                    [Priority]      INT           NOT NULL CONSTRAINT [DF_CodeRule_Priority] DEFAULT(0),
+                    [ResetPeriod]   INT           NOT NULL CONSTRAINT [DF_CodeRule_ResetPeriod] DEFAULT(0),  -- 0=None, 1=Yearly, 2=Monthly, 3=Daily (DocumentNumberResetPeriod enum reuse)
+                    [IsActive]      BIT           NOT NULL CONSTRAINT [DF_CodeRule_IsActive] DEFAULT(1),
+                    [CreatedById]   INT           NULL,
+                    [Created]       DATETIME      NOT NULL CONSTRAINT [DF_CodeRule_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]   INT           NULL,
+                    [Updated]       DATETIME      NULL
+                );
+                CREATE INDEX [IX_CodeRule_Entity_Priority]
+                    ON [{s}].[CodeRule]([EntityType], [IsActive], [Priority] DESC);
+            END;
+
+            -- ── CodeRuleCondition: kural uygulanma şartları (Contact.GroupId=5 gibi) ──
+            IF OBJECT_ID(N'[{s}].[CodeRuleCondition]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[CodeRuleCondition]
+                (
+                    [Id]         INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_CodeRuleCondition] PRIMARY KEY,
+                    [RuleId]     INT           NOT NULL,
+                    [FieldType]  NVARCHAR(20)  NOT NULL,  -- 'Field' (DB kolonu) | 'Widget' (WidgetTra)
+                    [FieldName]  NVARCHAR(120) NOT NULL,  -- 'GroupId' | 'MUSTERI_TIPI'
+                    [Operator]   NVARCHAR(20)  NOT NULL,  -- '=' | '!=' | 'in' | 'notin' | 'startsWith' | 'isNull' | 'isNotNull'
+                    [Value]      NVARCHAR(500) NULL,      -- tek deger veya JSON array (in/notin icin)
+                    CONSTRAINT [FK_CodeRuleCondition_Rule] FOREIGN KEY ([RuleId])
+                        REFERENCES [{s}].[CodeRule]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_CodeRuleCondition_Rule]
+                    ON [{s}].[CodeRuleCondition]([RuleId]);
+            END;
+
+            -- ── CodeRuleCounter: kural başına anlık sayaç state (DocumentNumberCounter pattern) ──
+            IF OBJECT_ID(N'[{s}].[CodeRuleCounter]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[CodeRuleCounter]
+                (
+                    [Id]           INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_CodeRuleCounter] PRIMARY KEY,
+                    [RuleId]       INT           NOT NULL,
+                    [ResetKey]     NVARCHAR(20)  NOT NULL CONSTRAINT [DF_CodeRuleCounter_ResetKey] DEFAULT(N''),  -- '' = global, '2026' = yearly, '202606' = monthly, '20260621' = daily
+                    [CurrentValue] BIGINT        NOT NULL CONSTRAINT [DF_CodeRuleCounter_CurrentValue] DEFAULT(0),
+                    [LastUpdated]  DATETIME      NOT NULL CONSTRAINT [DF_CodeRuleCounter_LastUpdated] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_CodeRuleCounter_Rule] FOREIGN KEY ([RuleId])
+                        REFERENCES [{s}].[CodeRule]([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [UX_CodeRuleCounter_Rule_Reset]
+                    ON [{s}].[CodeRuleCounter]([RuleId], [ResetKey]);
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -14426,11 +14516,11 @@ END;";
 
     // ──────────────────────────────────────────────────────────────────────────
     // E-Belge Onay Akış Motoru tabloları (idempotent)
-    //   ApprovalFlow          — akış şablonları
-    //   ApprovalFlowRule      — koşullar (AmountRange, Always, SenderTaxNo…)
-    //   ApprovalFlowStep      — adımlar (StepOrder, onaylayıcı tipi/id)
-    //   DocumentApprovalInstance  — belge × akış çalışma örneği
-    //   DocumentApprovalStepRecord — adım bazlı onay/red geçmişi
+    //   ApprovalFlow      — akış şablonları
+    //   ApprovalFlowRule  — koşullar (AmountRange, Always, SenderTaxNo…)
+    //   ApprovalFlowStep  — adımlar (StepOrder, onaylayıcı tipi/id)
+    //   ApprovalInstance  — belge × akış çalışma örneği (eski: DocumentApprovalInstance)
+    //   ApprovalStepRecord — adım bazlı onay/red geçmişi (eski: DocumentApprovalStepRecord)
     // ──────────────────────────────────────────────────────────────────────────
     private async Task EnsureApprovalFlowTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
@@ -14445,14 +14535,13 @@ END;";
                     [Name]         NVARCHAR(200) NOT NULL,
                     [Description]  NVARCHAR(1000) NULL,
                     [DocumentKind] NVARCHAR(50)  NOT NULL DEFAULT N'EInvoice',
-                    [Priority]     INT           NOT NULL CONSTRAINT [DF_ApprovalFlow_Priority] DEFAULT 0,
                     [IsActive]     BIT           NOT NULL CONSTRAINT [DF_ApprovalFlow_IsActive] DEFAULT 1,
                     [CreatedById]    INT NULL,
                     [Created]      DATETIME     NOT NULL CONSTRAINT [DF_ApprovalFlow_Created] DEFAULT SYSUTCDATETIME(),
                     [UpdatedById]    INT NULL,
                     [Updated]      DATETIME     NULL
                 );
-                CREATE INDEX [IX_ApprovalFlow_Kind_Priority] ON [{s}].[ApprovalFlow]([DocumentKind],[Priority]) WHERE [IsActive] = 1;
+                CREATE INDEX [IX_ApprovalFlow_Kind] ON [{s}].[ApprovalFlow]([DocumentKind]) WHERE [IsActive] = 1;
             END;
 
             -- Migration: [CreatedBy]/[UpdatedBy] NVARCHAR -> [CreatedById]/[UpdatedById] INT
@@ -14474,9 +14563,21 @@ END;";
                     ALTER TABLE [{s}].[ApprovalFlow] ADD [UpdatedById] INT NULL;
             END
 
-            -- Migration: ExtraColumnsView — onay bekleyenler listesinde ek sütun view adı
-            IF COL_LENGTH(N'[{s}].[ApprovalFlow]', N'ExtraColumnsView') IS NULL
-                ALTER TABLE [{s}].[ApprovalFlow] ADD [ExtraColumnsView] NVARCHAR(200) NULL;
+            -- ExtraColumnsView kaldırıldı (2026-06-21): ek sütun view özelliği kullanılmıyor
+            IF COL_LENGTH(N'[{s}].[ApprovalFlow]', N'ExtraColumnsView') IS NOT NULL
+                ALTER TABLE [{s}].[ApprovalFlow] DROP COLUMN [ExtraColumnsView];
+
+            -- Priority kaldırıldı (2026-06-21): her belge türü için tek akış tanımlanır
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ApprovalFlow_Kind_Priority' AND object_id = OBJECT_ID(N'[{s}].[ApprovalFlow]'))
+                DROP INDEX [IX_ApprovalFlow_Kind_Priority] ON [{s}].[ApprovalFlow];
+            IF COL_LENGTH(N'[{s}].[ApprovalFlow]', N'Priority') IS NOT NULL
+            BEGIN
+                IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_ApprovalFlow_Priority' AND parent_object_id = OBJECT_ID(N'[{s}].[ApprovalFlow]'))
+                    ALTER TABLE [{s}].[ApprovalFlow] DROP CONSTRAINT [DF_ApprovalFlow_Priority];
+                ALTER TABLE [{s}].[ApprovalFlow] DROP COLUMN [Priority];
+            END
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ApprovalFlow_Kind' AND object_id = OBJECT_ID(N'[{s}].[ApprovalFlow]'))
+                CREATE INDEX [IX_ApprovalFlow_Kind] ON [{s}].[ApprovalFlow]([DocumentKind]) WHERE [IsActive] = 1;
 
             -- ── Entity-agnostic plugin migration (no-op) ────────────────────────────
             -- 2026-05-25: DocumentKind artık spesifik belge türü kodu da taşır (EInvoice,
@@ -14641,59 +14742,62 @@ END;";
                     ALTER TABLE [{s}].[ApprovalFlowVariable] ADD [SqlQuery] NVARCHAR(MAX) NULL;
             END;
 
-            -- ── DocumentApprovalInstance ─────────────────────────────────────────────
+            -- ── ApprovalInstance ──────────────────────────────────────────────────────
             -- ÖNCE bu tablo: ApprovalInstanceVariable FK'sı buraya referans veriyor.
-            IF OBJECT_ID(N'[{s}].[DocumentApprovalInstance]', N'U') IS NULL
+            -- Migration: eski adı DocumentApprovalInstance → ApprovalInstance
+            IF OBJECT_ID(N'[{s}].[DocumentApprovalInstance]', N'U') IS NOT NULL
+                AND OBJECT_ID(N'[{s}].[ApprovalInstance]', N'U') IS NULL
+                EXEC sp_rename N'[{s}].[DocumentApprovalInstance]', N'ApprovalInstance';
+
+            IF OBJECT_ID(N'[{s}].[ApprovalInstance]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[DocumentApprovalInstance]
+                CREATE TABLE [{s}].[ApprovalInstance]
                 (
-                    [Id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentApprovalInstance] PRIMARY KEY,
-                    [DocumentId]   UNIQUEIDENTIFIER NOT NULL,
-                    [FlowId]       INT              NOT NULL CONSTRAINT [FK_DocApprovalInst_Flow] REFERENCES [{s}].[ApprovalFlow]([Id]),
-                    [Status]       NVARCHAR(50)     NOT NULL CONSTRAINT [DF_DocApprovalInst_Status] DEFAULT N'Pending',
-                    [CurrentStep]  INT              NOT NULL CONSTRAINT [DF_DocApprovalInst_Step] DEFAULT 1,
-                    [StartedBy]    NVARCHAR(120)    NULL,
-                    [StartedAt]    DATETIME        NOT NULL CONSTRAINT [DF_DocApprovalInst_Started] DEFAULT SYSUTCDATETIME(),
-                    [CompletedAt]  DATETIME        NULL,
-                    [RejectNote]   NVARCHAR(1000)   NULL,
-                    [IsActive]     BIT              NOT NULL CONSTRAINT [DF_DocApprovalInst_IsActive] DEFAULT 1,
-                    [CreatedById]    INT    NULL,
-                    [Created]      DATETIME        NOT NULL CONSTRAINT [DF_DocApprovalInst_Created] DEFAULT SYSUTCDATETIME(),
-                    [UpdatedById]    INT    NULL,
-                    [Updated]      DATETIME        NULL
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalInstance] PRIMARY KEY,
+                    [DocumentId]  INT              NULL CONSTRAINT [FK_ApprovalInstance_Document] REFERENCES [{s}].[Document]([id]) ON DELETE CASCADE,
+                    [FlowId]      INT              NOT NULL CONSTRAINT [FK_ApprovalInstance_Flow] REFERENCES [{s}].[ApprovalFlow]([Id]),
+                    [Status]      NVARCHAR(50)     NOT NULL CONSTRAINT [DF_ApprovalInstance_Status] DEFAULT N'Pending',
+                    [CurrentStep] INT              NOT NULL CONSTRAINT [DF_ApprovalInstance_Step] DEFAULT 1,
+                    [StartedBy]   NVARCHAR(120)    NULL,
+                    [StartedAt]   DATETIME         NOT NULL CONSTRAINT [DF_ApprovalInstance_Started] DEFAULT SYSUTCDATETIME(),
+                    [CompletedAt] DATETIME         NULL,
+                    [RejectNote]  NVARCHAR(1000)   NULL,
+                    [IsActive]    BIT              NOT NULL CONSTRAINT [DF_ApprovalInstance_IsActive] DEFAULT 1,
+                    [CreatedById] INT              NULL,
+                    [Created]     DATETIME         NOT NULL CONSTRAINT [DF_ApprovalInstance_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT              NULL,
+                    [Updated]     DATETIME         NULL
                 );
-                CREATE INDEX [IX_DocApprovalInst_Document] ON [{s}].[DocumentApprovalInstance]([DocumentId]) WHERE [IsActive] = 1;
-                CREATE INDEX [IX_DocApprovalInst_Status]   ON [{s}].[DocumentApprovalInstance]([Status]) WHERE [IsActive] = 1;
+                EXEC(N'CREATE INDEX [IX_ApprovalInstance_Document] ON [{s}].[ApprovalInstance]([DocumentId]) WHERE [DocumentId] IS NOT NULL');
+                CREATE INDEX [IX_ApprovalInstance_Status]   ON [{s}].[ApprovalInstance]([Status])     WHERE [IsActive] = 1;
             END;
 
-            -- Migration: [CreatedBy]/[UpdatedBy] NVARCHAR -> [CreatedById]/[UpdatedById] INT
-            IF OBJECT_ID(N'[{s}].[DocumentApprovalInstance]', N'U') IS NOT NULL
+            -- Migration: CreatedBy/UpdatedBy NVARCHAR → Id INT
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]') AND name = N'CreatedBy')
             BEGIN
-                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalInstance]') AND name = N'CreatedBy')
-                BEGIN
-                    ALTER TABLE [{s}].[DocumentApprovalInstance] DROP COLUMN [CreatedBy];
-                    ALTER TABLE [{s}].[DocumentApprovalInstance] ADD [CreatedById] INT NULL;
-                END
-                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalInstance]') AND name = N'CreatedById')
-                    ALTER TABLE [{s}].[DocumentApprovalInstance] ADD [CreatedById] INT NULL;
-                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalInstance]') AND name = N'UpdatedBy')
-                BEGIN
-                    ALTER TABLE [{s}].[DocumentApprovalInstance] DROP COLUMN [UpdatedBy];
-                    ALTER TABLE [{s}].[DocumentApprovalInstance] ADD [UpdatedById] INT NULL;
-                END
-                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalInstance]') AND name = N'UpdatedById')
-                    ALTER TABLE [{s}].[DocumentApprovalInstance] ADD [UpdatedById] INT NULL;
+                ALTER TABLE [{s}].[ApprovalInstance] DROP COLUMN [CreatedBy];
+                ALTER TABLE [{s}].[ApprovalInstance] ADD [CreatedById] INT NULL;
             END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]') AND name = N'CreatedById')
+                ALTER TABLE [{s}].[ApprovalInstance] ADD [CreatedById] INT NULL;
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]') AND name = N'UpdatedBy')
+            BEGIN
+                ALTER TABLE [{s}].[ApprovalInstance] DROP COLUMN [UpdatedBy];
+                ALTER TABLE [{s}].[ApprovalInstance] ADD [UpdatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]') AND name = N'UpdatedById')
+                ALTER TABLE [{s}].[ApprovalInstance] ADD [UpdatedById] INT NULL;
+            -- NOTE: DocumentId migration (UNIQUEIDENTIFIER→INT) is in a SEPARATE batch below
+            -- to avoid sp_rename triggering a batch-level recompile of filtered index definitions.
 
             -- ── ApprovalInstanceVariable ─────────────────────────────────────────────
             -- Per-instance degisken state. Workflow runtime okur/yazar.
-            -- DocumentApprovalInstance YUKARDA olusturuldu — FK gecerli.
             IF OBJECT_ID(N'[{s}].[ApprovalInstanceVariable]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[ApprovalInstanceVariable]
                 (
                     [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalInstanceVariable] PRIMARY KEY,
-                    [InstanceId]  INT          NOT NULL CONSTRAINT [FK_ApprovalInstanceVariable_Instance] REFERENCES [{s}].[DocumentApprovalInstance]([Id]) ON DELETE CASCADE,
+                    [InstanceId]  INT          NOT NULL CONSTRAINT [FK_ApprovalInstanceVariable_Instance] REFERENCES [{s}].[ApprovalInstance]([Id]) ON DELETE CASCADE,
                     [Name]        NVARCHAR(60) NOT NULL,
                     [Value]       NVARCHAR(MAX) NULL,
                     [TypeCode]    NVARCHAR(20) NOT NULL CONSTRAINT [DF_ApprovalInstanceVariable_Type] DEFAULT N'int',
@@ -14703,46 +14807,48 @@ END;";
                     ON [{s}].[ApprovalInstanceVariable]([InstanceId],[Name]);
             END;
 
-            -- ── DocumentApprovalStepRecord ───────────────────────────────────────────
-            IF OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]', N'U') IS NULL
+            -- ── ApprovalStepRecord ────────────────────────────────────────────────────
+            -- Migration: eski adı DocumentApprovalStepRecord → ApprovalStepRecord
+            IF OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]', N'U') IS NOT NULL
+                AND OBJECT_ID(N'[{s}].[ApprovalStepRecord]', N'U') IS NULL
+                EXEC sp_rename N'[{s}].[DocumentApprovalStepRecord]', N'ApprovalStepRecord';
+
+            IF OBJECT_ID(N'[{s}].[ApprovalStepRecord]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[DocumentApprovalStepRecord]
+                CREATE TABLE [{s}].[ApprovalStepRecord]
                 (
-                    [Id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocApprovalStep] PRIMARY KEY,
-                    [InstanceId]   INT           NOT NULL CONSTRAINT [FK_DocApprovalStep_Instance] REFERENCES [{s}].[DocumentApprovalInstance]([Id]) ON DELETE CASCADE,
+                    [Id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalStepRecord] PRIMARY KEY,
+                    [InstanceId]   INT           NOT NULL CONSTRAINT [FK_ApprovalStepRecord_Instance] REFERENCES [{s}].[ApprovalInstance]([Id]) ON DELETE CASCADE,
                     [StepOrder]    INT           NOT NULL,
                     [StepName]     NVARCHAR(200) NOT NULL,
-                    [Status]       NVARCHAR(50)  NOT NULL CONSTRAINT [DF_DocApprovalStep_Status] DEFAULT N'Pending',
+                    [Status]       NVARCHAR(50)  NOT NULL CONSTRAINT [DF_ApprovalStepRecord_Status] DEFAULT N'Pending',
                     [ApproverId]   NVARCHAR(200) NULL,
                     [ApproverName] NVARCHAR(200) NULL,
                     [Note]         NVARCHAR(1000) NULL,
-                    [ActionDate]   DATETIME     NULL,
-                    [CreatedById]    INT NULL,
-                    [Created]      DATETIME     NOT NULL CONSTRAINT [DF_DocApprovalStep_Created] DEFAULT SYSUTCDATETIME(),
-                    [UpdatedById]    INT NULL,
-                    [Updated]      DATETIME     NULL
+                    [ActionDate]   DATETIME      NULL,
+                    [CreatedById]  INT           NULL,
+                    [Created]      DATETIME      NOT NULL CONSTRAINT [DF_ApprovalStepRecord_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]  INT           NULL,
+                    [Updated]      DATETIME      NULL
                 );
-                CREATE INDEX [IX_DocApprovalStep_Instance] ON [{s}].[DocumentApprovalStepRecord]([InstanceId],[StepOrder]);
+                CREATE INDEX [IX_ApprovalStepRecord_Instance] ON [{s}].[ApprovalStepRecord]([InstanceId],[StepOrder]);
             END;
 
-            -- Migration: [CreatedBy]/[UpdatedBy] NVARCHAR -> [CreatedById]/[UpdatedById] INT
-            IF OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]', N'U') IS NOT NULL
+            -- Migration: CreatedBy/UpdatedBy NVARCHAR → Id INT
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalStepRecord]') AND name = N'CreatedBy')
             BEGIN
-                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]') AND name = N'CreatedBy')
-                BEGIN
-                    ALTER TABLE [{s}].[DocumentApprovalStepRecord] DROP COLUMN [CreatedBy];
-                    ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [CreatedById] INT NULL;
-                END
-                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]') AND name = N'CreatedById')
-                    ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [CreatedById] INT NULL;
-                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]') AND name = N'UpdatedBy')
-                BEGIN
-                    ALTER TABLE [{s}].[DocumentApprovalStepRecord] DROP COLUMN [UpdatedBy];
-                    ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [UpdatedById] INT NULL;
-                END
-                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]') AND name = N'UpdatedById')
-                    ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [UpdatedById] INT NULL;
+                ALTER TABLE [{s}].[ApprovalStepRecord] DROP COLUMN [CreatedBy];
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [CreatedById] INT NULL;
             END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalStepRecord]') AND name = N'CreatedById')
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [CreatedById] INT NULL;
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalStepRecord]') AND name = N'UpdatedBy')
+            BEGIN
+                ALTER TABLE [{s}].[ApprovalStepRecord] DROP COLUMN [UpdatedBy];
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [UpdatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalStepRecord]') AND name = N'UpdatedById')
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [UpdatedById] INT NULL;
 
             -- ── SLA kolonlari (idempotent ALTER) ────────────────────────────────────
             -- Step kayitlarinin son tarihi + SLA tetikleyici izleme alanlari.
@@ -14750,29 +14856,83 @@ END;";
             -- SlaWarnedAt = pre-warning gonderildi
             -- SlaActionAt + SlaActionType = SLA aksiyonu uygulandi
             -- SlaEscalatedFromRecordId = eskale ile yaratilan kayit eski kayda referans verir
-            IF COL_LENGTH(N'[{s}].[DocumentApprovalStepRecord]', N'DueDate') IS NULL
-                ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [DueDate] DATETIME NULL;
-            IF COL_LENGTH(N'[{s}].[DocumentApprovalStepRecord]', N'SlaWarnedAt') IS NULL
-                ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [SlaWarnedAt] DATETIME NULL;
-            IF COL_LENGTH(N'[{s}].[DocumentApprovalStepRecord]', N'SlaActionAt') IS NULL
-                ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [SlaActionAt] DATETIME NULL;
-            IF COL_LENGTH(N'[{s}].[DocumentApprovalStepRecord]', N'SlaActionType') IS NULL
-                ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [SlaActionType] NVARCHAR(20) NULL;
-            IF COL_LENGTH(N'[{s}].[DocumentApprovalStepRecord]', N'SlaEscalatedFromRecordId') IS NULL
-                ALTER TABLE [{s}].[DocumentApprovalStepRecord] ADD [SlaEscalatedFromRecordId] INT NULL;
+            IF COL_LENGTH(N'[{s}].[ApprovalStepRecord]', N'DueDate') IS NULL
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [DueDate] DATETIME NULL;
+            IF COL_LENGTH(N'[{s}].[ApprovalStepRecord]', N'SlaWarnedAt') IS NULL
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [SlaWarnedAt] DATETIME NULL;
+            IF COL_LENGTH(N'[{s}].[ApprovalStepRecord]', N'SlaActionAt') IS NULL
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [SlaActionAt] DATETIME NULL;
+            IF COL_LENGTH(N'[{s}].[ApprovalStepRecord]', N'SlaActionType') IS NULL
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [SlaActionType] NVARCHAR(20) NULL;
+            IF COL_LENGTH(N'[{s}].[ApprovalStepRecord]', N'SlaEscalatedFromRecordId') IS NULL
+                ALTER TABLE [{s}].[ApprovalStepRecord] ADD [SlaEscalatedFromRecordId] INT NULL;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 
+        // ApprovalInstance.DocumentId şeması: UNIQUEIDENTIFIER → INT FK migration.
+        // RunOnceAsync: bir kez çalışır, __SchemaVersion'a kayıt atar, sonraki boot'larda atlanır.
+        // sp_rename ayrı batch'te — aynı batch'teki filtered index tanımlarını tekrar derlemeye
+        // (SQL Server 207) sebep olmaması için adımlar birbirinden bağımsız tutulur.
+        var aiTracker = new MigrationVersionTracker(s);
+        await aiTracker.RunOnceAsync(connection, "ApprovalInstance-DocumentId-INT-2026-06", async (conn, ct) =>
+        {
+
+            // Adım 1: eski FK constraint + DocumentIntId drop
+            await using var step1 = conn.CreateCommand();
+            step1.CommandText = $"""
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys
+                           WHERE name = N'FK_ApprovalInstance_Document'
+                             AND parent_object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]'))
+                    ALTER TABLE [{s}].[ApprovalInstance] DROP CONSTRAINT [FK_ApprovalInstance_Document];
+                IF EXISTS (SELECT 1 FROM sys.columns
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]')
+                             AND name = N'DocumentIntId')
+                    ALTER TABLE [{s}].[ApprovalInstance] DROP COLUMN [DocumentIntId];
+                IF EXISTS (SELECT 1 FROM sys.columns
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]')
+                             AND name = N'DocumentId'
+                             AND system_type_id = 36)
+                    EXEC sp_rename N'[{s}].[ApprovalInstance].[DocumentId]', N'DocumentGuid', N'COLUMN';
+                """;
+            await step1.ExecuteNonQueryAsync(ct);
+
+            // Adım 2: DocumentId INT NULL FK ekle (ayrı batch — sp_rename sonrası deferred compile)
+            await using var step2 = conn.CreateCommand();
+            step2.CommandText = $"""
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]')
+                                 AND name = N'DocumentId')
+                    ALTER TABLE [{s}].[ApprovalInstance] ADD [DocumentId] INT NULL
+                        CONSTRAINT [FK_ApprovalInstance_Document]
+                        REFERENCES [{s}].[Document]([id]) ON DELETE CASCADE;
+                """;
+            await step2.ExecuteNonQueryAsync(ct);
+
+            // Adım 3: DocumentGuid + eski index'leri kaldır
+            await using var step3 = conn.CreateCommand();
+            step3.CommandText = $"""
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DocApprovalInst_Document'  AND object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]'))
+                    DROP INDEX [IX_DocApprovalInst_Document] ON [{s}].[ApprovalInstance];
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ApprovalInstance_Document' AND object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]'))
+                    DROP INDEX [IX_ApprovalInstance_Document] ON [{s}].[ApprovalInstance];
+                IF EXISTS (SELECT 1 FROM sys.columns
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]')
+                             AND name = N'DocumentGuid')
+                    ALTER TABLE [{s}].[ApprovalInstance] DROP COLUMN [DocumentGuid];
+                """;
+            await step3.ExecuteNonQueryAsync(ct);
+        }, appliedBy: "system", cancellationToken);
+
         // Index creation must be in a separate batch — the ALTER ADD columns
         // above are not visible to schema validation in the same batch parser pass.
         // EXEC sp_executesql defers binding to runtime, so wrap the CREATE INDEX.
         var indexSql = $"""
-            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DocApprovalStep_SlaScan' AND object_id = OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]'))
-              AND COL_LENGTH(N'[{s}].[DocumentApprovalStepRecord]', N'DueDate') IS NOT NULL
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DocApprovalStep_SlaScan' AND object_id = OBJECT_ID(N'[{s}].[ApprovalStepRecord]'))
+              AND COL_LENGTH(N'[{s}].[ApprovalStepRecord]', N'DueDate') IS NOT NULL
             BEGIN
-                EXEC sp_executesql N'CREATE INDEX [IX_DocApprovalStep_SlaScan] ON [{s}].[DocumentApprovalStepRecord]([Status],[DueDate]) WHERE [DueDate] IS NOT NULL';
+                EXEC sp_executesql N'CREATE INDEX [IX_DocApprovalStep_SlaScan] ON [{s}].[ApprovalStepRecord]([Status],[DueDate]) WHERE [DueDate] IS NOT NULL';
             END;
             """;
         await using var idxCmd = connection.CreateCommand();
@@ -14785,8 +14945,8 @@ END;";
             UPDATE sr
             SET sr.[ApproverId]   = fs.[ApproverId],
                 sr.[ApproverName] = fs.[ApproverLabel]
-            FROM [{s}].[DocumentApprovalStepRecord] sr
-            INNER JOIN [{s}].[DocumentApprovalInstance] inst ON inst.[Id]  = sr.[InstanceId]
+            FROM [{s}].[ApprovalStepRecord] sr
+            INNER JOIN [{s}].[ApprovalInstance] inst ON inst.[Id]  = sr.[InstanceId]
             INNER JOIN [{s}].[ApprovalFlow]             af   ON af.[Id]   = inst.[FlowId]
             INNER JOIN [{s}].[ApprovalFlowStep]         fs   ON fs.[FlowId]  = af.[Id]
                                                              AND fs.[StepOrder] = sr.[StepOrder]
@@ -14823,6 +14983,79 @@ END;";
         await using var rlCmd = connection.CreateCommand();
         rlCmd.CommandText = runLogSql;
         await rlCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // ApprovalActionToken — mail/WA linki üzerinden tek tıkla onay/red tokenleri
+        var tokenSql = $"""
+            IF OBJECT_ID(N'[{s}].[ApprovalActionToken]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ApprovalActionToken]
+                (
+                    [Id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalActionToken] PRIMARY KEY,
+                    [Token]        NVARCHAR(64)  NOT NULL,
+                    [InstanceId]   INT           NOT NULL,
+                    [StepRecordId] INT           NULL,
+                    [ApproverId]   NVARCHAR(200) NOT NULL,
+                    [ExpiresAt]    DATETIME      NOT NULL,
+                    [UsedAt]       DATETIME      NULL,
+                    [UsedAction]   NVARCHAR(10)  NULL,
+                    [Created]      DATETIME      NOT NULL CONSTRAINT [DF_ApprovalActionToken_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [UX_ApprovalActionToken_Token] UNIQUE ([Token])
+                );
+                CREATE INDEX [IX_ApprovalActionToken_InstanceId] ON [{s}].[ApprovalActionToken]([InstanceId]);
+            END;
+            """;
+        await using var tkCmd = connection.CreateCommand();
+        tkCmd.CommandText = tokenSql;
+        await tkCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // ApprovalInstance.EntityKind — hangi entity türü onaylanıyor (Document, WorkOrder, StockCard…)
+        // FK_ApprovalInstance_Document kaldırılır: çok tablolu referans FK ile ifade edilemez.
+        var entityKindSql = $"""
+            IF COL_LENGTH(N'[{s}].[ApprovalInstance]', N'EntityKind') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[ApprovalInstance]
+                    ADD [EntityKind] NVARCHAR(50) NOT NULL
+                        CONSTRAINT [DF_ApprovalInstance_EntityKind] DEFAULT N'Document';
+                CREATE INDEX [IX_ApprovalInstance_Entity]
+                    ON [{s}].[ApprovalInstance]([EntityKind],[DocumentId])
+                    WHERE [DocumentId] IS NOT NULL;
+            END;
+            IF EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_ApprovalInstance_Document'
+                  AND parent_object_id = OBJECT_ID(N'[{s}].[ApprovalInstance]')
+            )
+                ALTER TABLE [{s}].[ApprovalInstance]
+                    DROP CONSTRAINT [FK_ApprovalInstance_Document];
+            """;
+        await using var ekCmd = connection.CreateCommand();
+        ekCmd.CommandText = entityKindSql;
+        await ekCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // ApprovalFlowRevision — akış revizyonu snapshot tablosu + ApprovalInstance.RevisionId
+        var revisionSql = $"""
+            IF OBJECT_ID(N'[{s}].[ApprovalFlowRevision]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ApprovalFlowRevision] (
+                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalFlowRevision] PRIMARY KEY,
+                    [FlowId]     INT NOT NULL CONSTRAINT [FK_ApprovalFlowRevision_Flow]
+                                     REFERENCES [{s}].[ApprovalFlow]([Id]) ON DELETE CASCADE,
+                    [RevisionNo] INT NOT NULL,
+                    [Snapshot]   NVARCHAR(MAX) NOT NULL,
+                    [CreatedBy]  NVARCHAR(120) NULL,
+                    [Created]    DATETIME NOT NULL CONSTRAINT [DF_ApprovalFlowRevision_Created] DEFAULT SYSUTCDATETIME()
+                );
+                CREATE INDEX [IX_ApprovalFlowRevision_FlowId]
+                    ON [{s}].[ApprovalFlowRevision]([FlowId],[RevisionNo] DESC);
+            END;
+            IF COL_LENGTH(N'[{s}].[ApprovalInstance]', N'RevisionId') IS NULL
+                ALTER TABLE [{s}].[ApprovalInstance] ADD [RevisionId] INT NULL
+                    CONSTRAINT [FK_ApprovalInstance_FlowRevision]
+                    REFERENCES [{s}].[ApprovalFlowRevision]([Id]);
+            """;
+        await using var revSqlCmd = connection.CreateCommand();
+        revSqlCmd.CommandText = revisionSql;
+        await revSqlCmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -16291,20 +16524,15 @@ END;";
                 );
                 CREATE INDEX IX_CalendarEvent_UserId ON dbo.CalendarEvent (UserId, StartDate);
             END
-            -- Migration: CreatedBy/UpdatedBy NVARCHAR → CreatedById/UpdatedById INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'CreatedBy')
-            BEGIN
-                ALTER TABLE dbo.CalendarEvent DROP COLUMN [CreatedBy];
+            -- Takvim reposu string audit kullanır (CreatedBy/UpdatedBy yazar) → DROP YOK; eksikse geri eklenir.
+            -- CreatedById/UpdatedById (INT, ileriye dönük) NULL olarak birlikte tutulur.
+            IF COL_LENGTH('dbo.CalendarEvent', 'CreatedBy') IS NULL
+                ALTER TABLE dbo.CalendarEvent ADD [CreatedBy] NVARCHAR(120) NULL;
+            IF COL_LENGTH('dbo.CalendarEvent', 'UpdatedBy') IS NULL
+                ALTER TABLE dbo.CalendarEvent ADD [UpdatedBy] NVARCHAR(120) NULL;
+            IF COL_LENGTH('dbo.CalendarEvent', 'CreatedById') IS NULL
                 ALTER TABLE dbo.CalendarEvent ADD [CreatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'CreatedById')
-                ALTER TABLE dbo.CalendarEvent ADD [CreatedById] INT NULL;
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'UpdatedBy')
-            BEGIN
-                ALTER TABLE dbo.CalendarEvent DROP COLUMN [UpdatedBy];
-                ALTER TABLE dbo.CalendarEvent ADD [UpdatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'UpdatedById')
+            IF COL_LENGTH('dbo.CalendarEvent', 'UpdatedById') IS NULL
                 ALTER TABLE dbo.CalendarEvent ADD [UpdatedById] INT NULL;
             """;
         await using var cmd = connection.CreateCommand();
@@ -16345,20 +16573,15 @@ END;";
                 ALTER TABLE dbo.ReportSource ADD MaterializedRows INT NULL;
             IF COL_LENGTH('dbo.ReportSource', 'RefreshScheduleJson') IS NULL
                 ALTER TABLE dbo.ReportSource ADD RefreshScheduleJson NVARCHAR(200) NULL;
-            -- Migration: CreatedBy/UpdatedBy NVARCHAR → CreatedById/UpdatedById INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'CreatedBy')
-            BEGIN
-                ALTER TABLE dbo.ReportSource DROP COLUMN [CreatedBy];
+            -- Rapor modülü string audit kullanır (repo CreatedBy/UpdatedBy yazıp okur) → DROP YOK; eksikse geri eklenir.
+            -- CreatedById/UpdatedById (INT, ileriye dönük) NULL olarak birlikte tutulur.
+            IF COL_LENGTH('dbo.ReportSource', 'CreatedBy') IS NULL
+                ALTER TABLE dbo.ReportSource ADD [CreatedBy] NVARCHAR(120) NULL;
+            IF COL_LENGTH('dbo.ReportSource', 'UpdatedBy') IS NULL
+                ALTER TABLE dbo.ReportSource ADD [UpdatedBy] NVARCHAR(120) NULL;
+            IF COL_LENGTH('dbo.ReportSource', 'CreatedById') IS NULL
                 ALTER TABLE dbo.ReportSource ADD [CreatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'CreatedById')
-                ALTER TABLE dbo.ReportSource ADD [CreatedById] INT NULL;
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'UpdatedBy')
-            BEGIN
-                ALTER TABLE dbo.ReportSource DROP COLUMN [UpdatedBy];
-                ALTER TABLE dbo.ReportSource ADD [UpdatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'UpdatedById')
+            IF COL_LENGTH('dbo.ReportSource', 'UpdatedById') IS NULL
                 ALTER TABLE dbo.ReportSource ADD [UpdatedById] INT NULL;
             """;
         await using var cmd = connection.CreateCommand();
@@ -16392,20 +16615,15 @@ END;";
             BEGIN
                 ALTER TABLE dbo.ReportDesign ADD Description NVARCHAR(1000) NULL;
             END
-            -- Migration: CreatedBy/UpdatedBy NVARCHAR → CreatedById/UpdatedById INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'CreatedBy')
-            BEGIN
-                ALTER TABLE dbo.ReportDesign DROP COLUMN [CreatedBy];
+            -- Rapor modülü string audit kullanır (repo CreatedBy/UpdatedBy yazıp okur) → DROP YOK; eksikse geri eklenir.
+            -- CreatedById/UpdatedById (INT, ileriye dönük) NULL olarak birlikte tutulur.
+            IF COL_LENGTH('dbo.ReportDesign', 'CreatedBy') IS NULL
+                ALTER TABLE dbo.ReportDesign ADD [CreatedBy] NVARCHAR(120) NULL;
+            IF COL_LENGTH('dbo.ReportDesign', 'UpdatedBy') IS NULL
+                ALTER TABLE dbo.ReportDesign ADD [UpdatedBy] NVARCHAR(120) NULL;
+            IF COL_LENGTH('dbo.ReportDesign', 'CreatedById') IS NULL
                 ALTER TABLE dbo.ReportDesign ADD [CreatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'CreatedById')
-                ALTER TABLE dbo.ReportDesign ADD [CreatedById] INT NULL;
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'UpdatedBy')
-            BEGIN
-                ALTER TABLE dbo.ReportDesign DROP COLUMN [UpdatedBy];
-                ALTER TABLE dbo.ReportDesign ADD [UpdatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'UpdatedById')
+            IF COL_LENGTH('dbo.ReportDesign', 'UpdatedById') IS NULL
                 ALTER TABLE dbo.ReportDesign ADD [UpdatedById] INT NULL;
             """;
         await using var cmd2 = connection.CreateCommand();

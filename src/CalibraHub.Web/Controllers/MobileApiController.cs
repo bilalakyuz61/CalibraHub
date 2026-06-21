@@ -2,10 +2,12 @@ using System.Linq;
 using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CalibraHub.Web.Controllers;
@@ -191,6 +193,8 @@ public sealed class MobileApiController : ControllerBase
     [HttpPost("whatsapp/send")]
     public async Task<IActionResult> SendText(
         [FromServices] IWhatsAppService whatsApp,
+        [FromServices] IWaInboxRepository inbox,
+        [FromServices] IWhatsAppRealTimeNotifier notifier,
         [FromBody] MobileSendTextRequest req,
         CancellationToken ct)
     {
@@ -200,6 +204,32 @@ public sealed class MobileApiController : ControllerBase
         // interactive=true: mobile composer'dan elle yazilan mesaj — anti-spam
         // human-delay atlanir (web /Whatsapp/Send ile ayni semantik).
         var result = await whatsApp.SendTextMessageAsync(req.Phone, req.Text, ct, interactive: true);
+
+        if (result.Success)
+        {
+            var normalized = NormalizePhone(req.Phone);
+            var msgId = result.MessageId ?? $"local-{DateTime.UtcNow.Ticks}";
+            var now = DateTime.UtcNow;
+            try
+            {
+                await inbox.InsertIfNotExistsAsync(new WaInboxMessage
+                {
+                    BridgeMsgId  = msgId,
+                    Direction    = 1,
+                    ContactPhone = normalized,
+                    Body         = req.Text,
+                    MediaType    = "chat",
+                    HasMedia     = false,
+                    ReceivedAt   = now,
+                    CreatedAt    = now,
+                }, ct);
+                await notifier.MessageReceivedAsync(normalized, msgId, 1, req.Text, "chat", false,
+                    null, null, null, null, now, ct);
+                await notifier.ConversationUpdatedAsync(normalized, ct);
+            }
+            catch { /* SignalR/insert hataları gönderimi engellememeli */ }
+        }
+
         return Ok(new MobileSendResponse(result.Success, result.MessageId, result.Success ? null : result.Message));
     }
 
@@ -209,6 +239,9 @@ public sealed class MobileApiController : ControllerBase
     public async Task<IActionResult> SendMedia(
         [FromServices] IWhatsAppConfigRepository configRepo,
         [FromServices] IHttpClientFactory httpClientFactory,
+        [FromServices] IWaInboxRepository inbox,
+        [FromServices] IWhatsAppRealTimeNotifier notifier,
+        [FromServices] IWebHostEnvironment env,
         [FromForm] string phone,
         [FromForm] string? caption,
         IFormFile file,
@@ -230,26 +263,75 @@ public sealed class MobileApiController : ControllerBase
             await file.CopyToAsync(ms, ct);
             var bytes = ms.ToArray();
 
-            var req = new HttpRequestMessage(HttpMethod.Post,
+            var httpReq = new HttpRequestMessage(HttpMethod.Post,
                 cfg.WebQrBridgeUrl.TrimEnd('/') + "/send-media");
-            req.Headers.TryAddWithoutValidation("X-To", NormalizePhone(phone));
+            var normalized = NormalizePhone(phone);
+            httpReq.Headers.TryAddWithoutValidation("X-To", normalized);
             if (!string.IsNullOrWhiteSpace(caption))
-                req.Headers.TryAddWithoutValidation("X-Caption", Uri.EscapeDataString(caption));
+                httpReq.Headers.TryAddWithoutValidation("X-Caption", Uri.EscapeDataString(caption));
             if (!string.IsNullOrWhiteSpace(file.FileName))
-                req.Headers.TryAddWithoutValidation("X-Filename", Uri.EscapeDataString(file.FileName));
+                httpReq.Headers.TryAddWithoutValidation("X-Filename", Uri.EscapeDataString(file.FileName));
 
             var content = new ByteArrayContent(bytes);
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
                 file.ContentType ?? "application/octet-stream");
-            req.Content = content;
+            httpReq.Content = content;
 
-            using var resp = await client.SendAsync(req, ct);
+            using var resp = await client.SendAsync(httpReq, ct);
             var body = await resp.Content.ReadAsStringAsync(ct);
             using var doc = System.Text.Json.JsonDocument.Parse(body);
             var root = doc.RootElement;
             var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.True;
             var error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
             var msgId = root.TryGetProperty("messageId", out var mid) ? mid.GetString() : null;
+
+            if (ok)
+            {
+                var now = DateTime.UtcNow;
+                msgId ??= $"local-{now.Ticks}";
+                var mime = file.ContentType ?? "application/octet-stream";
+                var mediaType = mime.StartsWith("image/")  ? "image"
+                              : mime.StartsWith("video/")  ? "video"
+                              : mime.StartsWith("audio/")  ? "audio"
+                              : "document";
+                var ext = Path.GetExtension(file.FileName);
+                var yyyy = now.Year.ToString("D4");
+                var mm   = now.Month.ToString("D2");
+                string? urlPath = null;
+                try
+                {
+                    var uploadsDir = Path.Combine(env.WebRootPath, "uploads", "whatsapp", yyyy, mm);
+                    Directory.CreateDirectory(uploadsDir);
+                    var diskPath = Path.Combine(uploadsDir, $"{msgId}{ext}");
+                    await System.IO.File.WriteAllBytesAsync(diskPath, bytes, ct);
+                    urlPath = $"/uploads/whatsapp/{yyyy}/{mm}/{msgId}{ext}";
+                }
+                catch { /* dosya kaydetme başarısız olursa mediaUrl olmadan devam */ }
+
+                try
+                {
+                    await inbox.InsertIfNotExistsAsync(new WaInboxMessage
+                    {
+                        BridgeMsgId   = msgId,
+                        Direction     = 1,
+                        ContactPhone  = normalized,
+                        Body          = caption,
+                        MediaType     = mediaType,
+                        HasMedia      = true,
+                        MediaPath     = urlPath,
+                        MediaMime     = mime,
+                        MediaFileName = file.FileName,
+                        MediaSize     = bytes.Length,
+                        ReceivedAt    = now,
+                        CreatedAt     = now,
+                    }, ct);
+                    await notifier.MessageReceivedAsync(normalized, msgId, 1, caption, mediaType, true,
+                        urlPath, mime, file.FileName, bytes.Length, now, ct);
+                    await notifier.ConversationUpdatedAsync(normalized, ct);
+                }
+                catch { /* SignalR/insert hataları gönderimi engellememeli */ }
+            }
+
             return Ok(new MobileSendResponse(ok, msgId, error));
         }
         catch (Exception ex)

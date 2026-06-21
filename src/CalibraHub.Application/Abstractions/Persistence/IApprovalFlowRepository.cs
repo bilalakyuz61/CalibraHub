@@ -10,4 +10,9 @@ public interface IApprovalFlowRepository
     Task<int> SaveAsync(SaveApprovalFlowRequest request, int? byUserId, CancellationToken ct);
     Task DeleteAsync(int id, CancellationToken ct);
     Task<IReadOnlyList<ApprovalFlowEdgeDto>> GetEdgesByFlowIdAsync(int flowId, CancellationToken ct);
+
+    // Revizyon geçmişi
+    Task<int?> GetLatestRevisionIdAsync(int flowId, CancellationToken ct);
+    Task<IReadOnlyList<ApprovalFlowRevisionSummaryDto>> GetRevisionsAsync(int flowId, CancellationToken ct);
+    Task<ApprovalFlowRevisionDetailDto?> GetRevisionDetailAsync(int revisionId, CancellationToken ct);
 }

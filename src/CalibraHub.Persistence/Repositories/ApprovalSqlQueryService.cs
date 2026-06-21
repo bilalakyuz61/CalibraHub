@@ -34,7 +34,7 @@ public sealed class ApprovalSqlQueryService : IApprovalSqlQueryService
     {
         "Document", "DocumentLine", "Contact", "Items", "Personnel", "Department",
         "UserProfile", "MaterialGroups", "MaterialGroupMappings", "card_groups",
-        "card_group_mappings", "ApprovalFlow", "DocumentApprovalInstance",
+        "card_group_mappings", "ApprovalFlow", "ApprovalInstance",
     };
 
     public ApprovalSqlQueryService(

@@ -3,15 +3,10 @@
   "configurations": [
     {
       "name": "calibrahub",
-      "runtimeExecutable": "C:/Program Files/dotnet/dotnet",
-      "runtimeArgs": ["run", "--project", "src/CalibraHub.Web/CalibraHub.Web.csproj", "--launch-profile", "http"],
-      "port": 61001
-    },
-    {
-      "name": "landing",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "docs", "-p", "3333", "--no-clipboard"],
-      "port": 3333
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--launch-profile", "http", "--project", "src/CalibraHub.Web/CalibraHub.Web.csproj"],
+      "port": 61001,
+      "autoPort": false
     }
   ]
 }

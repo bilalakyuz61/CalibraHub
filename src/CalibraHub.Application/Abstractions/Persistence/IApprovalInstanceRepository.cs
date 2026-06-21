@@ -4,7 +4,7 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 
 public interface IApprovalInstanceRepository
 {
-    Task<ApprovalInstanceDto?> GetByDocumentIdAsync(Guid documentId, CancellationToken ct);
+    Task<ApprovalInstanceDto?> GetByDocumentIdAsync(int documentId, CancellationToken ct);
     Task<ApprovalInstanceDto?> GetByIdAsync(int instanceId, CancellationToken ct);
     Task<IReadOnlyList<ApprovalInstanceDto>> GetPendingAsync(CancellationToken ct);
 
@@ -24,6 +24,7 @@ public interface IApprovalInstanceRepository
     /// <summary>Tek bir instance icin tum step kayitlarini doner (detail modal).</summary>
     Task<PendingApprovalDetailDto?> GetPendingDetailAsync(int instanceId, CancellationToken ct);
     Task<int> CreateAsync(StartApprovalRequest request, IReadOnlyList<ApprovalFlowStepDto> steps, CancellationToken ct);
+    Task UpdateRevisionIdAsync(int instanceId, int revisionId, CancellationToken ct);
     Task ApproveStepAsync(int instanceId, int stepOrder, string approverId, string approverName, string? note, CancellationToken ct);
     Task RejectAsync(int instanceId, int stepOrder, string approverId, string approverName, string note, CancellationToken ct);
     Task CancelAsync(int instanceId, string byUser, CancellationToken ct);
@@ -60,12 +61,6 @@ public interface IApprovalInstanceRepository
     /// </summary>
     Task<int> CreateEscalatedStepAsync(int sourceRecordId, string newApproverId, string newApproverName, CancellationToken ct);
 
-    /// <summary>
-    /// Verilen view adindaki kolonlari INFORMATION_SCHEMA uzerinden doner.
-    /// ExtraColumnsView'in hangi kolunlari icerdigi frontend tarafindan ogrenilebilir.
-    /// viewName whitelist'e gore dogrulanmalidir (controller sorumlu).
-    /// InstanceId kolonu otomatik cikarilir (join anahtari, kullaniciya gosterilmez).
-    /// </summary>
     Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct);
 
     /// <summary>

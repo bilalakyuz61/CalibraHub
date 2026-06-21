@@ -86,54 +86,49 @@ const CHART_TYPES = [
       </svg>
     ),
   },
-  {
-    k: 'filter', label: 'Filtre paneli',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-      </svg>
-    ),
-  },
 ]
 
+// Topbar'da "Görseller" dropdown'ı (panel türü seçici) — Filtre butonunun sağında.
 export default function LeftPalette({ open, activeType, hasSelection, onPick, onToggle }) {
   return (
-    <aside className={`rd-palette${open ? ' rd-palette--open' : ''}`}>
-      <div className="rd-palette__head">
-        {open && <span className="rd-palette__title">Görseller</span>}
-        <button
-          type="button"
-          className="rd-palette__toggle"
-          onClick={onToggle}
-          title={open ? 'Menüyü kapat' : 'Menüyü aç'}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points={open ? '15 18 9 12 15 6' : '9 18 15 12 9 6'} />
-          </svg>
-        </button>
-      </div>
+    <div className="rd-palette-dd">
+      <button
+        type="button"
+        className={`rd-topbar__tool rd-topbar__tool--icon${open ? ' rd-topbar__tool--active' : ''}`}
+        onClick={onToggle}
+        title="Görseller — panel türü"
+        aria-label="Görseller"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+      </button>
 
       {open && (
         <>
-          <div className="rd-palette__hint">
-            {hasSelection ? 'Seçili panelin türünü değiştir' : 'Panel eklemek için bir tür seçin'}
-          </div>
-          <div className="rd-palette__list">
-            {CHART_TYPES.map(ct => (
-              <button
-                key={ct.k}
-                type="button"
-                className={`rd-palette__item${hasSelection && activeType === ct.k ? ' rd-palette__item--on' : ''}`}
-                onClick={() => onPick(ct.k)}
-                title={ct.label}
-              >
-                <span className="rd-palette__icon">{ct.icon}</span>
-                <span className="rd-palette__label">{ct.label}</span>
-              </button>
-            ))}
+          <div className="rd-palette-dd__backdrop" onClick={onToggle} />
+          <div className="rd-palette-dd__pop" role="menu">
+            <div className="rd-palette-dd__hint">
+              {hasSelection ? 'Seçili panelin türünü değiştir' : 'Panel eklemek için bir tür seçin'}
+            </div>
+            <div className="rd-palette-dd__grid">
+              {CHART_TYPES.map(ct => (
+                <button
+                  key={ct.k}
+                  type="button"
+                  className={`rd-palette-dd__item${hasSelection && activeType === ct.k ? ' rd-palette-dd__item--on' : ''}`}
+                  onClick={() => onPick(ct.k)}
+                  title={ct.label}
+                >
+                  <span className="rd-palette-dd__icon">{ct.icon}</span>
+                  <span className="rd-palette-dd__label">{ct.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </>
       )}
-    </aside>
+    </div>
   )
 }

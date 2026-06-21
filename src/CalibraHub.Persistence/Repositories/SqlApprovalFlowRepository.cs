@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Enums;
@@ -24,11 +25,11 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
             SELECT
-                f.[Id], f.[Name], f.[Description], f.[DocumentKind], f.[Priority], f.[IsActive],
+                f.[Id], f.[Name], f.[Description], f.[DocumentKind], f.[IsActive],
                 (SELECT COUNT(1) FROM [{_s}].[ApprovalFlowStep]  s WHERE s.[FlowId] = f.[Id] AND s.[IsActive] = 1) AS StepCount,
                 (SELECT COUNT(1) FROM [{_s}].[ApprovalFlowRule]  r WHERE r.[FlowId] = f.[Id] AND r.[IsActive] = 1) AS RuleCount
             FROM [{_s}].[ApprovalFlow] f
-            ORDER BY f.[Priority] DESC, f.[Name];
+            ORDER BY f.[Name];
             """;
         var list = new List<ApprovalFlowSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -39,10 +40,9 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2),
                 reader.GetString(3),
-                reader.GetInt32(4),
-                reader.GetBoolean(5),
-                reader.GetInt32(6),
-                reader.GetInt32(7)));
+                reader.GetBoolean(4),
+                reader.GetInt32(5),
+                reader.GetInt32(6)));
         }
         return list;
     }
@@ -64,7 +64,7 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
             SELECT [Id] FROM [{_s}].[ApprovalFlow]
             WHERE [IsActive] = 1
               AND ([DocumentKind] = @Kind OR [DocumentKind] = N'Document' OR [DocumentKind] = N'All')
-            ORDER BY [Priority] DESC;
+            ORDER BY [Name];
             """;
         cmd.Parameters.Add(new SqlParameter("@Kind", documentKind));
 
@@ -97,17 +97,15 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 ins.Transaction = tx;
                 ins.CommandText = $"""
                     INSERT INTO [{_s}].[ApprovalFlow]
-                        ([Name],[Description],[DocumentKind],[Priority],[IsActive],[ExtraColumnsView],[CreatedById],[Created],[UpdatedById],[Updated])
+                        ([Name],[Description],[DocumentKind],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated])
                     VALUES
-                        (@Name,@Desc,@Kind,@Pri,@Active,@ExtraView,@ById,SYSUTCDATETIME(),@ById,SYSUTCDATETIME());
+                        (@Name,@Desc,@Kind,@Active,@ById,SYSUTCDATETIME(),@ById,SYSUTCDATETIME());
                     SELECT SCOPE_IDENTITY();
                     """;
                 ins.Parameters.Add(new SqlParameter("@Name", (object?)req.Name ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@Desc", (object?)req.Description ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@Kind", (object?)req.DocumentKind ?? DBNull.Value));
-                ins.Parameters.Add(new SqlParameter("@Pri", req.Priority));
                 ins.Parameters.Add(new SqlParameter("@Active", req.IsActive));
-                ins.Parameters.Add(new SqlParameter("@ExtraView", (object?)req.ExtraColumnsView ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@ById", (object?)byUserId ?? DBNull.Value));
                 flowId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
@@ -118,17 +116,15 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 upd.Transaction = tx;
                 upd.CommandText = $"""
                     UPDATE [{_s}].[ApprovalFlow]
-                    SET [Name]=@Name,[Description]=@Desc,[DocumentKind]=@Kind,[Priority]=@Pri,
-                        [IsActive]=@Active,[ExtraColumnsView]=@ExtraView,
+                    SET [Name]=@Name,[Description]=@Desc,[DocumentKind]=@Kind,
+                        [IsActive]=@Active,
                         [UpdatedById]=@ById,[Updated]=SYSUTCDATETIME()
                     WHERE [Id]=@Id;
                     """;
                 upd.Parameters.Add(new SqlParameter("@Name", req.Name));
                 upd.Parameters.Add(new SqlParameter("@Desc", (object?)req.Description ?? DBNull.Value));
                 upd.Parameters.Add(new SqlParameter("@Kind", req.DocumentKind));
-                upd.Parameters.Add(new SqlParameter("@Pri", req.Priority));
                 upd.Parameters.Add(new SqlParameter("@Active", req.IsActive));
-                upd.Parameters.Add(new SqlParameter("@ExtraView", (object?)req.ExtraColumnsView ?? DBNull.Value));
                 upd.Parameters.Add(new SqlParameter("@ById", (object?)byUserId ?? DBNull.Value));
                 upd.Parameters.Add(new SqlParameter("@Id", flowId));
                 await upd.ExecuteNonQueryAsync(ct);
@@ -253,6 +249,52 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 }
             }
 
+            // Revizyon snapshot — yalnızca semantik olarak farklıysa yeni revizyon oluştur.
+            // DELETE+REINSERT nedeniyle step/edge ID'leri her kayıtta değişir; bu yüzden
+            // ID ve pozisyon alanlarını dışarıda bırakan semantik fingerprint karşılaştırması yapılır.
+            var newSnapshotJson   = JsonSerializer.Serialize(req,
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            var newFingerprint = ComputeSemanticFingerprint(req);
+
+            bool shouldCreateRevision = true;
+            await using var prevCmd = con.CreateCommand();
+            prevCmd.Transaction = tx;
+            prevCmd.CommandText = $"SELECT TOP 1 [Snapshot] FROM [{_s}].[ApprovalFlowRevision] WHERE [FlowId]=@F ORDER BY [RevisionNo] DESC;";
+            prevCmd.Parameters.Add(new SqlParameter("@F", flowId));
+            var prevResult = await prevCmd.ExecuteScalarAsync(ct);
+            if (prevResult is string prevSnap)
+            {
+                try
+                {
+                    var prevReq = JsonSerializer.Deserialize<SaveApprovalFlowRequest>(prevSnap,
+                        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                    if (prevReq is not null && ComputeSemanticFingerprint(prevReq) == newFingerprint)
+                        shouldCreateRevision = false;
+                }
+                catch { /* hata durumunda revizyon oluştur */ }
+            }
+
+            if (shouldCreateRevision)
+            {
+                await using var revNoCmd = con.CreateCommand();
+                revNoCmd.Transaction = tx;
+                revNoCmd.CommandText = $"SELECT ISNULL(MAX([RevisionNo]),0)+1 FROM [{_s}].[ApprovalFlowRevision] WHERE [FlowId]=@F;";
+                revNoCmd.Parameters.Add(new SqlParameter("@F", flowId));
+                var revNo = Convert.ToInt32(await revNoCmd.ExecuteScalarAsync(ct));
+
+                await using var revInsCmd = con.CreateCommand();
+                revInsCmd.Transaction = tx;
+                revInsCmd.CommandText = $"""
+                    INSERT INTO [{_s}].[ApprovalFlowRevision] ([FlowId],[RevisionNo],[Snapshot],[CreatedBy],[Created])
+                    VALUES (@F,@No,@Snap,@By,SYSUTCDATETIME());
+                    """;
+                revInsCmd.Parameters.Add(new SqlParameter("@F",    flowId));
+                revInsCmd.Parameters.Add(new SqlParameter("@No",   revNo));
+                revInsCmd.Parameters.Add(new SqlParameter("@Snap", newSnapshotJson));
+                revInsCmd.Parameters.Add(new SqlParameter("@By",   (object?)(byUserId?.ToString()) ?? DBNull.Value));
+                await revInsCmd.ExecuteNonQueryAsync(ct);
+            }
+
             tx.Commit();
             return flowId;
         }
@@ -277,22 +319,20 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
     private async Task<ApprovalFlowDto?> ReadFlowAsync(SqlConnection con, int id, CancellationToken ct)
     {
         ApprovalFlowSummaryDto? header = null;
-        string? extraColumnsView = null;
         await using (var cmd = con.CreateCommand())
         {
             cmd.CommandText = $"""
-                SELECT [Id],[Name],[Description],[DocumentKind],[Priority],[IsActive],[ExtraColumnsView]
+                SELECT [Id],[Name],[Description],[DocumentKind],[IsActive]
                 FROM [{_s}].[ApprovalFlow] WHERE [Id] = @Id;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", id));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct))
             {
-                extraColumnsView = r.IsDBNull(6) ? null : r.GetString(6);
                 header = new ApprovalFlowSummaryDto(
                     r.GetInt32(0), r.GetString(1),
                     r.IsDBNull(2) ? null : r.GetString(2),
-                    r.GetString(3), r.GetInt32(4), r.GetBoolean(5), 0, 0);
+                    r.GetString(3), r.GetBoolean(4), 0, 0);
             }
         }
         if (header is null) return null;
@@ -304,8 +344,7 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
 
         return new ApprovalFlowDto(
             header.Id, header.Name, header.Description, header.DocumentKind,
-            header.Priority, header.IsActive, rules, steps, edges, variables,
-            ExtraColumnsView: extraColumnsView);
+            header.IsActive, rules, steps, edges, variables);
     }
 
     private async Task<IReadOnlyList<ApprovalFlowVariableDto>> ReadVariablesAsync(SqlConnection con, int flowId, CancellationToken ct)
@@ -430,6 +469,43 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
         return false;
     }
 
+    // Semantik fingerprint: ID, PosX/Y ve oluşturma meta-verisini dışarıda bırakır.
+    // DELETE+REINSERT nedeniyle step/edge ID'leri her kayıtta yenilenir; bu alanlar
+    // gerçek içerik değişikliğini yansıtmaz. Pozisyon değişikliği (node taşıma) da
+    // revizyon oluşturmaz.
+    private static string ComputeSemanticFingerprint(SaveApprovalFlowRequest r)
+    {
+        var obj = new
+        {
+            n   = r.Name?.Trim(),
+            d   = r.Description?.Trim(),
+            dk  = r.DocumentKind,
+            act = r.IsActive,
+            rules = (r.Rules ?? [])
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.RuleType.ToString()).ThenBy(x => x.RuleValue)
+                .Select(x => new { rt = x.RuleType.ToString(), rv = x.RuleValue }),
+            steps = (r.Steps ?? [])
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.StepOrder)
+                .Select(x => new {
+                    sn  = x.StepName?.Trim(),
+                    at  = x.ApproverType.ToString(),
+                    aid = x.ApproverId,
+                    al  = x.ApproverLabel,
+                    nt  = x.NodeType,
+                    nd  = x.NodeData  // SLA/config JSON — içerik değişikliği
+                }),
+            edges = (r.Edges ?? [])
+                .OrderBy(x => x.EdgeKind).ThenBy(x => x.SortOrder).ThenBy(x => x.Condition)
+                .Select(x => new { ek = x.EdgeKind, cond = x.Condition, lbl = x.Label, sh = x.SourceHandle, th = x.TargetHandle }),
+            vars = (r.Variables ?? [])
+                .OrderBy(x => x.Name)
+                .Select(x => new { vn = x.Name?.Trim(), vt = x.TypeCode, vd = x.DefaultValue, vs = x.ValueSource, vq = x.SqlQuery })
+        };
+        return JsonSerializer.Serialize(obj);
+    }
+
     private async Task DeleteChildrenAsync(SqlConnection con, SqlTransaction tx, int flowId, CancellationToken ct)
     {
         // ApprovalFlowEdge önce silinmeli (FK → ApprovalFlowStep)
@@ -441,5 +517,102 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
             cmd.Parameters.Add(new SqlParameter("@Fid", flowId));
             await cmd.ExecuteNonQueryAsync(ct);
         }
+    }
+
+    // ── Revizyon geçmişi ────────────────────────────────────────────────────
+
+    public async Task<int?> GetLatestRevisionIdAsync(int flowId, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP 1 [Id] FROM [{_s}].[ApprovalFlowRevision]
+            WHERE [FlowId] = @F ORDER BY [RevisionNo] DESC;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@F", flowId));
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : (int?)Convert.ToInt32(result);
+    }
+
+    public async Task<IReadOnlyList<ApprovalFlowRevisionSummaryDto>> GetRevisionsAsync(int flowId, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT r.[Id], r.[FlowId], f.[Name], r.[RevisionNo], r.[CreatedBy], r.[Created],
+                   (SELECT COUNT(1) FROM [{_s}].[ApprovalInstance] i
+                    WHERE i.[RevisionId] = r.[Id] AND i.[Status] IN (N'Pending',N'InProgress')) AS PendingCount
+            FROM [{_s}].[ApprovalFlowRevision] r
+            JOIN [{_s}].[ApprovalFlow] f ON f.[Id] = r.[FlowId]
+            WHERE r.[FlowId] = @F
+            ORDER BY r.[RevisionNo] DESC;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@F", flowId));
+        var list = new List<ApprovalFlowRevisionSummaryDto>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(new ApprovalFlowRevisionSummaryDto(
+                reader.GetInt32(0), reader.GetInt32(1), reader.GetString(2),
+                reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetDateTime(5), reader.GetInt32(6)));
+        return list;
+    }
+
+    public async Task<ApprovalFlowRevisionDetailDto?> GetRevisionDetailAsync(int revisionId, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+
+        // Revision header
+        int id; int revNo; string? createdBy; DateTime createdAt; string snapshot;
+        await using (var cmd = con.CreateCommand())
+        {
+            cmd.CommandText = $"""
+                SELECT [Id],[RevisionNo],[CreatedBy],[Created],[Snapshot]
+                FROM [{_s}].[ApprovalFlowRevision] WHERE [Id]=@Id;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Id", revisionId));
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            if (!await r.ReadAsync(ct)) return null;
+            id        = r.GetInt32(0);
+            revNo     = r.GetInt32(1);
+            createdBy = r.IsDBNull(2) ? null : r.GetString(2);
+            createdAt = r.GetDateTime(3);
+            snapshot  = r.GetString(4);
+        }
+
+        // Pending instances for this revision
+        var pending = new List<RevisionPendingInstanceDto>();
+        await using (var cmd2 = con.CreateCommand())
+        {
+            cmd2.CommandText = $"""
+                SELECT i.[Id], i.[DocumentId],
+                       d.[DocumentNumber],
+                       sr.[StepName], sr.[ApproverName],
+                       i.[StartedAt]
+                FROM [{_s}].[ApprovalInstance] i
+                LEFT JOIN [{_s}].[Document] d ON d.[id] = i.[DocumentId]
+                OUTER APPLY (
+                    SELECT TOP 1 [StepName],[ApproverName]
+                    FROM [{_s}].[ApprovalStepRecord]
+                    WHERE [InstanceId] = i.[Id] AND [Status] = N'Pending'
+                    ORDER BY [StepOrder]
+                ) sr
+                WHERE i.[RevisionId] = @Id AND i.[Status] IN (N'Pending',N'InProgress')
+                ORDER BY i.[StartedAt];
+                """;
+            cmd2.Parameters.Add(new SqlParameter("@Id", revisionId));
+            await using var r2 = await cmd2.ExecuteReaderAsync(ct);
+            while (await r2.ReadAsync(ct))
+                pending.Add(new RevisionPendingInstanceDto(
+                    r2.GetInt32(0),
+                    r2.IsDBNull(1) ? null : (int?)r2.GetInt32(1),
+                    r2.IsDBNull(2) ? null : r2.GetString(2),
+                    r2.IsDBNull(3) ? null : r2.GetString(3),
+                    r2.IsDBNull(4) ? null : r2.GetString(4),
+                    r2.GetDateTime(5)));
+        }
+
+        return new ApprovalFlowRevisionDetailDto(id, revNo, createdBy, createdAt, snapshot, pending);
     }
 }

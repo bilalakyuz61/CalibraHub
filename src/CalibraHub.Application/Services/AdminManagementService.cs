@@ -136,7 +136,8 @@ public sealed class AdminManagementService : IAdminManagementService
             TaxOffice = taxOffice,
             TaxNumber = taxNumber,
             IsEDocumentApprovalEnabled = request.IsEDocumentApprovalEnabled,
-            DatabaseConnectionString = connectionString
+            DatabaseConnectionString = connectionString,
+            PublicBaseUrl = string.IsNullOrWhiteSpace(request.PublicBaseUrl) ? null : request.PublicBaseUrl.Trim()
         };
 
         if (!request.IsActive)

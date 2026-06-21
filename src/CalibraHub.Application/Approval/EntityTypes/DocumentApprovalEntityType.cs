@@ -32,12 +32,12 @@ public sealed class DocumentApprovalEntityType : IApprovalEntityType
 
     public async Task<ApprovalEntityContext> BuildContextAsync(string entityId, CancellationToken ct)
     {
-        if (!Guid.TryParse(entityId, out var documentId))
+        if (!int.TryParse(entityId, out var documentIntId) || documentIntId <= 0)
         {
             return new ApprovalEntityContext { EntityTypeCode = Code, EntityId = entityId ?? "" };
         }
 
-        var doc = await _docProvider.BuildAsync(documentId, ct);
+        var doc = await _docProvider.BuildAsync(documentIntId, ct);
         return MapToEntityContext(doc, Code);
     }
 
@@ -98,7 +98,7 @@ public sealed class DocumentApprovalEntityType : IApprovalEntityType
         return new ApprovalEntityContext
         {
             EntityTypeCode = entityTypeCode,
-            EntityId       = doc.DocumentId.ToString(),
+            EntityId       = doc.DocumentId?.ToString() ?? "",
             HeaderValues   = header,
             LineValues     = lines,
             SqlParameters  = sqlParams,
@@ -144,7 +144,7 @@ public sealed class DocumentApprovalEntityType : IApprovalEntityType
     // Public — GenericDocumentApprovalEntityType bu paylaşılan listeyi kullanır.
     public static readonly IReadOnlyList<ApprovalEntityParameter> CommonParameters = new[]
     {
-        new ApprovalEntityParameter { Name="documentId",   Type="guid",    Description="Belge GUID (IncomingDocument.Id)" },
+        new ApprovalEntityParameter { Name="documentId",   Type="int",     Description="Belge ID (Document.Id)" },
         new ApprovalEntityParameter { Name="contactId",    Type="int",     Description="Eşleşen cari ID (varsa)"          },
         new ApprovalEntityParameter { Name="amount",       Type="decimal", Description="Belge toplam tutar"               },
         new ApprovalEntityParameter { Name="userId",       Type="guid",    Description="Belgeyi oluşturan kullanıcı ID"   },

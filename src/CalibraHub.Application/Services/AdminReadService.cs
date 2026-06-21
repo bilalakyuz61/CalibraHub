@@ -60,7 +60,8 @@ public sealed class AdminReadService : IAdminReadService
                     x.TaxNumber,
                     x.IsEDocumentApprovalEnabled,
                     x.IsActive,
-                    x.DatabaseConnectionString))
+                    x.DatabaseConnectionString,
+                    x.PublicBaseUrl))
                 .ToArray(),
             Integrators: integrators
                 .Select(x => new IntegratorSettingsDto(

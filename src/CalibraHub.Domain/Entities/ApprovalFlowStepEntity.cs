@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Onay akışı adımı — sıra, onaylayıcı tipi (herhangi kullanıcı / belirli kişi / departman) ve React Flow tasarımcı konumu.")]
 public sealed class ApprovalFlowStepEntity
 {
     public int Id { get; init; }

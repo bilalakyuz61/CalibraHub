@@ -47,13 +47,14 @@ public interface IApprovalFlowExecutor
     /// Step approve/reject sonrası: sonraki yolda decision/notification node'ları
     /// varsa onları çalıştırır. Return: işlenen non-step node sayısı (info amaçlı).
     /// </summary>
-    Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct);
+    Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct, string? capturedBaseUrl = null);
 
     /// <summary>
     /// Instance start: Start node'dan ilk node'a kadar pass-through (decision/notif).
     /// CreateAsync linear step'leri kurduktan sonra çağrılır.
+    /// capturedBaseUrl: HTTP context varken yakalanan dış erişim URL'i (Task.Run fire-and-forget için).
     /// </summary>
-    Task<int> AfterStartAsync(int instanceId, CancellationToken ct);
+    Task<int> AfterStartAsync(int instanceId, CancellationToken ct, string? capturedBaseUrl = null);
 
     /// <summary>
     /// SLA timeout tetiklenmesi: currentStepOrder'dan çıkan "timeout" EdgeKind'lı
@@ -114,7 +115,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
             && !IsStepKind(s.NodeType));
     }
 
-    public async Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct)
+    public async Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct, string? capturedBaseUrl = null)
     {
         var inst = await _instRepo.GetByIdAsync(instanceId, ct);
         if (inst is null) return 0;
@@ -129,6 +130,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
 
         var ctx = await SafeBuildContextAsync(flow.DocumentKind, inst.DocumentId, ct);
         EnrichCtx(ctx, flow, inst);
+        ctx.BaseUrl = capturedBaseUrl;
         var processed = 0;
 
         foreach (var edge in SelectEdges(flow, currentNode.Id, isApproved))
@@ -141,7 +143,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         return processed;
     }
 
-    public async Task<int> AfterStartAsync(int instanceId, CancellationToken ct)
+    public async Task<int> AfterStartAsync(int instanceId, CancellationToken ct, string? capturedBaseUrl = null)
     {
         var inst = await _instRepo.GetByIdAsync(instanceId, ct);
         if (inst is null) return 0;
@@ -154,6 +156,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
 
         var ctx = await SafeBuildContextAsync(flow.DocumentKind, inst.DocumentId, ct);
         EnrichCtx(ctx, flow, inst);
+        ctx.BaseUrl = capturedBaseUrl;
         // Fan-out koruma: birden fazla dal aynı step node'a ulaşabilir; her step yalnızca bir kez loglanır.
         var visitedStepIds = new HashSet<int>();
         var processed = 0;
@@ -652,24 +655,25 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
     /// değerleri DB migration ile 'Document'a çevrildiği için lookup başarılı olur.
     /// Bilinmeyen tip → boş context (decision evaluator false döner).
     /// </summary>
-    private async Task<ApprovalEntityContext> SafeBuildContextAsync(string entityTypeCode, Guid documentId, CancellationToken ct)
+    private async Task<ApprovalEntityContext> SafeBuildContextAsync(string entityTypeCode, int? documentId, CancellationToken ct)
     {
         var typeCode = string.IsNullOrWhiteSpace(entityTypeCode) ? "Document" : entityTypeCode;
+        var entityIdStr = documentId?.ToString() ?? string.Empty;
         var entityType = _entityRegistry.Get(typeCode);
         if (entityType is null)
         {
             _logger.LogWarning("ApprovalEntityType '{Code}' kayıtlı değil — boş context.", typeCode);
-            return new ApprovalEntityContext { EntityTypeCode = typeCode, EntityId = documentId.ToString() };
+            return new ApprovalEntityContext { EntityTypeCode = typeCode, EntityId = entityIdStr };
         }
         try
         {
-            return await entityType.BuildContextAsync(documentId.ToString(), ct);
+            return await entityType.BuildContextAsync(entityIdStr, ct);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "EntityContext build hatası ({Type}, {Id}) — boş context kullanıldı.",
                 typeCode, documentId);
-            return new ApprovalEntityContext { EntityTypeCode = typeCode, EntityId = documentId.ToString() };
+            return new ApprovalEntityContext { EntityTypeCode = typeCode, EntityId = entityIdStr };
         }
     }
 }

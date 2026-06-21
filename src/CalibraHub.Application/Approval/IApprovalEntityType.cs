@@ -130,6 +130,13 @@ public sealed class ApprovalEntityContext
 
     /// <summary>Çalışan akışın adı — {flowName} token'ı için.</summary>
     public string? FlowName { get; set; }
+
+    /// <summary>
+    /// Hızlı onay/red link'lerinde kullanılacak dış erişim base URL'i.
+    /// Task.Run fire-and-forget'te HTTP context kaybolduğundan, executor bu değeri
+    /// HTTP context canlıyken (ApprovalFlowService) bir kez yakalar ve burada saklar.
+    /// </summary>
+    public string? BaseUrl { get; set; }
 }
 
 /// <summary>

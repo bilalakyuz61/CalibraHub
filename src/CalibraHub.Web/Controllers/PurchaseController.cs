@@ -1330,7 +1330,7 @@ public sealed class PurchaseController : Controller
                 FromRequestId:         req.RequestIds?.FirstOrDefault()
             );
 
-            var (success, error, doc) = await _documentService.SaveQuoteAsync(saveDocReq, CurrentUserId(), ct);
+            var (success, error, doc, _) = await _documentService.SaveQuoteAsync(saveDocReq, CurrentUserId(), User?.Identity?.Name, ct);
             if (!success || doc == null)
                 return Json(new { ok = false, error = error ?? "Belge oluşturulamadı." });
 
@@ -1600,7 +1600,7 @@ public sealed class PurchaseController : Controller
                 FromRequestId:   sourceDocIds.FirstOrDefault()
             );
 
-            var (success, error, doc) = await _documentService.SaveQuoteAsync(saveReq, CurrentUserId(), ct);
+            var (success, error, doc, _) = await _documentService.SaveQuoteAsync(saveReq, CurrentUserId(), User?.Identity?.Name, ct);
             if (!success || doc == null)
                 return Json(new { ok = false, error = error ?? "Belge oluşturulamadı." });
 
@@ -1677,8 +1677,7 @@ public sealed class PurchaseController : Controller
 
     /// <summary>
     /// Onay akışında (Pending) olan İhtiyaç Kaydı belge ID'lerini döner.
-    /// DocumentApprovalInstance tablosundaki DocumentId Guid'i, Guid.Parse formatıyla
-    /// 00000000-0000-0000-0000-{docId:D12} şeklinde encode edilmiştir.
+    /// ApprovalInstance.DocumentId (INT FK) üzerinden okunur.
     /// </summary>
     private async Task<IReadOnlyList<int>> GetPendingApprovalDocIdsAsync(CancellationToken ct)
     {
@@ -1688,19 +1687,15 @@ public sealed class PurchaseController : Controller
             await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
             await using var cmd  = conn.CreateCommand();
             cmd.CommandText = $"""
-                SELECT [DocumentId] FROM [{sl}].[DocumentApprovalInstance]
+                SELECT [DocumentId] FROM [{sl}].[ApprovalInstance]
                 WHERE [Status] = N'Pending' AND [IsActive] = 1
+                  AND [DocumentId] IS NOT NULL
                 """;
             var result = new List<int>();
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
-                var g = r.GetGuid(0);
-                // Format: 00000000-0000-0000-0000-XXXXXXXXXXXX
-                // Last 12 chars of D format = decimal docId padded to 12 digits
-                var s = g.ToString("D");
-                var lastSeg = s.Substring(s.LastIndexOf('-') + 1);
-                if (int.TryParse(lastSeg, out var docId)) result.Add(docId);
+                if (!r.IsDBNull(0)) result.Add(r.GetInt32(0));
             }
             return result;
         }

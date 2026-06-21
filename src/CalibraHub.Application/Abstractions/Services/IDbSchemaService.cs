@@ -16,4 +16,10 @@ public interface IDbSchemaService
 
     /// <summary>Tum semayi Markdown dokumanina donusturur (tablolar + FK'ler).</summary>
     Task<string> BuildMarkdownAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// CalibraViewCatalog'daki tum view'lari doner; fiziksel varlik ve kolon
+    /// bilgisi DB'den (sys.columns), aciklama / kullanim yeri katalogdan gelir.
+    /// </summary>
+    Task<IReadOnlyList<DbViewInfoDto>> GetViewsAsync(CancellationToken cancellationToken);
 }

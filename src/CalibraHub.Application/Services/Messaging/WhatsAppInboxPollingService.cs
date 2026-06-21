@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using CalibraHub.Application.Abstractions.Messaging;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.WhatsApp;
@@ -30,6 +31,7 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WhatsAppInboxPollingService> _logger;
     private readonly IWhatsAppRealTimeNotifier _notifier;
+    private readonly IMessageBus _bus;
 
     private DateTime _sinceCursor = DateTime.MinValue; // ilk tickte DB'den restore edilir
     private bool _backfillDone = false;                 // session basina bir kez calissin
@@ -38,12 +40,14 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
         IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
         ILogger<WhatsAppInboxPollingService> logger,
-        IWhatsAppRealTimeNotifier notifier)
+        IWhatsAppRealTimeNotifier notifier,
+        IMessageBus bus)
     {
         _scopeFactory       = scopeFactory;
         _httpClientFactory  = httpClientFactory;
         _logger             = logger;
         _notifier           = notifier;
+        _bus                = bus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -306,6 +310,15 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
                         mediaPath, m.MediaMime, m.MediaFileName, m.MediaSize,
                         ts, ct);
                     await _notifier.ConversationUpdatedAsync(phone, ct);
+                    await _bus.PublishAsync(new WhatsAppMessageReceived
+                    {
+                        ContactPhone = phone,
+                        Body         = m.Body,
+                        IsIncoming   = !m.FromMe,
+                        MediaType    = m.MediaType ?? "chat",
+                        BridgeMsgId  = m.Id,
+                        At           = ts,
+                    }, ct);
                 }
             }
             catch (Exception ex)

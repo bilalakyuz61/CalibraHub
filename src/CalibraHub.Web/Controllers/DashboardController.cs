@@ -235,13 +235,7 @@ public sealed class DashboardController : Controller
                 url        = $"/Dashboard/View/{d.Id}",
                 hideButton = true,
             },
-            secondaryAction = new
-            {
-                label = "Düzenle",
-                icon  = "Edit",
-                color = "amber",
-                url   = $"/Dashboard/DesignerEdit?load={d.Id}",
-            },
+            secondaryAction = (object?)null,   // Rapor Panoları'nda düzenleme yok — yalnızca görüntüleme
         }).ToArray();
 
         return new

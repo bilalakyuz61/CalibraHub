@@ -3,7 +3,7 @@ namespace CalibraHub.Application.Contracts;
 /// <summary>
 /// 2026-05-26 — Onayda Bekleyenler ekrani DTO'lari.
 ///
-/// Kapsam: DocumentApprovalInstance.Status = 'Pending' kayitlarda
+/// Kapsam: ApprovalInstance.Status = 'Pending' kayitlarda
 /// suanki adim (CurrentStep) icin ApproverId mevcut kullaniciyi gosteren
 /// (veya scope yetkisine gore departman/tumu) kayitlar.
 ///
@@ -31,9 +31,9 @@ public sealed record PendingApprovalItemDto(
     string StepName,
     string FlowName,
     int FlowId,
-    string? ExtraColumnsViewName,  // ApprovalFlow.ExtraColumnsView — hangi view bu akis icin ek sutun saglar
-    System.Guid DocumentId,
-    int? DocumentInternalId,     // Document.id (int) — eger varsa
+    string EntityKind,             // "Document", "WorkOrder", "StockCard" vb. — hangi entity türü
+    int? DocumentId,
+    int? DocumentInternalId,     // Document.id (int) — eger varsa (geriye donuk uyumluluk icin)
     string DocumentNumber,
     System.DateTime DocumentDate,
     int? DocumentTypeId,

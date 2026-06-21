@@ -8,8 +8,10 @@
 <style>
     .pa-wrap {
         padding: 18px;
-        height: calc(100vh - var(--app-header-height, 64px) - var(--app-tabs-height, 48px));
-        display: flex; flex-direction: column; min-height: 0;
+        flex: 1 1 0;
+        min-height: 0;
+        overflow: hidden;
+        display: flex; flex-direction: column;
         max-width: 100%;
     }
     .pa-header {
@@ -31,8 +33,7 @@
         background-repeat: no-repeat;
         background-position: right 10px center;
     }
-    body.app-theme-dark .pa-scope-picker select,
-    html.dark .pa-scope-picker select {
+    body.app-theme-dark .pa-scope-picker select {
         background-color: rgba(15,23,42,.5); color: #e2e8f0;
         border-color: rgba(255,255,255,.1);
     }
@@ -46,8 +47,7 @@
         border-radius: 10px; padding: 8px;
         overflow-y: auto; min-height: 0;
     }
-    body.app-theme-dark .pa-groups,
-    html.dark .pa-groups {
+    body.app-theme-dark .pa-groups {
         background: rgba(15,23,42,.4);
         border-color: rgba(255,255,255,.08);
     }
@@ -64,8 +64,7 @@
         border: 1px solid rgba(99,102,241,.3);
     }
     .pa-group-name { flex: 1 1 auto; font-weight: 500; color: #1e293b; }
-    body.app-theme-dark .pa-group-name,
-    html.dark .pa-group-name { color: #f1f5f9; }
+    body.app-theme-dark .pa-group-name { color: #f1f5f9; }
     .pa-group-count {
         flex: 0 0 auto;
         background: rgba(99,102,241,.18); color: #6366f1;
@@ -81,8 +80,7 @@
         border-radius: 10px; overflow: hidden;
         display: flex; flex-direction: column; min-height: 0;
     }
-    body.app-theme-dark .pa-list-wrap,
-    html.dark .pa-list-wrap {
+    body.app-theme-dark .pa-list-wrap {
         background: rgba(15,23,42,.4);
         border-color: rgba(255,255,255,.08);
     }
@@ -104,16 +102,14 @@
         padding: 7px 12px; text-align: left;
         border-bottom: 1px solid rgba(148,163,184,.15);
     }
-    body.app-theme-dark .pa-table th,
-    html.dark .pa-table th { background: rgba(30,41,59,1); }
+    body.app-theme-dark .pa-table th { background: rgba(30,41,59,1); }
     .pa-table td {
         padding: 6px 12px; border-bottom: 1px solid rgba(148,163,184,.08);
         vertical-align: middle;
     }
     .pa-table tr { cursor: pointer; transition: background 0.12s; }
     .pa-table tr:hover td { background: rgba(99,102,241,.05); }
-    body.app-theme-dark .pa-table tr:hover td,
-    html.dark .pa-table tr:hover td { background: rgba(99,102,241,.10); }
+    body.app-theme-dark .pa-table tr:hover td { background: rgba(99,102,241,.10); }
 
     .pa-empty {
         padding: 50px 20px; text-align: center; color: #94a3b8; font-size: 13px;
@@ -192,8 +188,7 @@
         box-shadow: 0 20px 60px rgba(15,23,42,.30);
         animation: pa-modal-in 0.18s ease-out;
     }
-    body.app-theme-dark .pa-modal,
-    html.dark .pa-modal { background: #1e293b; color: #e2e8f0; }
+    body.app-theme-dark .pa-modal { background: #1e293b; color: #e2e8f0; }
     @@keyframes pa-modal-in {
         from { opacity: 0; transform: translateY(20px) scale(.98); }
         to   { opacity: 1; transform: translateY(0)     scale(1); }
@@ -359,8 +354,6 @@
 
     let activeDocTypeId = null;  // null = tüm türler
     let currentInstanceId = null;
-    let _extraCols = [];          // [{key, label, dataType}] — aktif extra kolon defs
-    let _extraData = {};          // {instanceId: {colName: strValue}} — aktif extra kolon verileri
 
     function csrf() {
         const el = document.querySelector('input[name="__RequestVerificationToken"]');
@@ -441,72 +434,18 @@
             const data = await resp.json();
             if (!data.ok) throw new Error(data.error || 'Hata');
             renderList(data.items);
-            // noinspection ES6MissingAwait — arka planda extra kolon meta+veri yükle, hazır olunca yeniden render
-            loadExtraColumnsAndData(data.items);
         } catch (err) {
             listScrollEl.innerHTML = '<div class="pa-empty" style="color:#ef4444;">Hata: ' + escapeHtml(err.message) + '</div>';
         }
-    }
-
-    async function loadExtraColumnsAndData(items) {
-        const views = [...new Set(items.map(i => i.extraColumnsViewName).filter(Boolean))];
-        if (views.length !== 1) {
-            _extraCols = []; _extraData = {};
-            updateExtraColPanel();
-            return;
-        }
-        const viewName = views[0];
-        const idList   = items.map(i => i.instanceId).join(',');
-        try {
-            const [metaR, dataR] = await Promise.all([
-                fetch('/PendingApproval/FlowExtraColumns?viewName=' + encodeURIComponent(viewName), { credentials: 'same-origin' }),
-                fetch('/PendingApproval/FlowExtraData?viewName=' + encodeURIComponent(viewName) + '&ids=' + idList, { credentials: 'same-origin' })
-            ]);
-            const [metaJ, dataJ] = await Promise.all([metaR.json(), dataR.json()]);
-            _extraCols = (metaJ.ok && metaJ.columns) ? metaJ.columns : [];
-            _extraData = (dataJ.ok && dataJ.data)    ? dataJ.data    : {};
-        } catch(e) { _extraCols = []; _extraData = {}; }
-        renderList(items);
-        updateExtraColPanel();
-    }
-
-    function updateExtraColPanel() {
-        const panel = document.getElementById('paColPanel');
-        if (!panel) return;
-        panel.querySelectorAll('.pa-col-row-extra').forEach(el => el.remove());
-        if (!_extraCols.length) return;
-        let localCfg = {};
-        try { localCfg = JSON.parse(localStorage.getItem('pa-col-cfg') || '{}'); } catch(e) {}
-        const sep = document.createElement('div');
-        sep.style.cssText = 'padding:4px 14px 2px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;border-top:1px solid rgba(148,163,184,.12);margin-top:4px;';
-        sep.textContent = 'Akış Alanları';
-        sep.className = 'pa-col-row-extra';
-        panel.appendChild(sep);
-        _extraCols.forEach(col => {
-            const row = document.createElement('div');
-            row.className = 'pa-col-row pa-col-row-extra';
-            const cbId    = 'paColExt_' + col.key;
-            const checked = localCfg['ext_' + col.key] !== false;
-            row.innerHTML = '<input type="checkbox" id="' + cbId + '" ' + (checked ? 'checked' : '') +
-                            ' onchange="paColToggle(\'ext_' + col.key + '\',this.checked)">' +
-                            '<label for="' + cbId + '">' + escapeHtml(col.label) + '</label>';
-            panel.appendChild(row);
-        });
     }
 
     function renderList(items) {
         if (!items || items.length === 0) {
             listScrollEl.innerHTML = '<div class="pa-empty">Bu türde bekleyen kayıt yok.</div>';
             listCountEl.textContent = '';
-            _extraCols = []; _extraData = {};
-            updateExtraColPanel();
             return;
         }
         listCountEl.textContent = items.length + ' kayıt';
-        // Extra kolon header'ları
-        const extraHeaders = _extraCols.map(c =>
-            '<th class="pa-col-ext pa-col-ext-' + c.key + '">' + escapeHtml(c.label) + '</th>'
-        ).join('');
         let html = '<table class="pa-table"><thead><tr>' +
                    '<th>Belge No</th>' +
                    '<th class="pa-col-flow">Akış</th>' +
@@ -515,7 +454,6 @@
                    '<th class="pa-col-amt">Tutar</th>' +
                    '<th class="pa-col-step">Adım</th>' +
                    '<th class="pa-col-apvr">Onaylayıcı</th>' +
-                   extraHeaders +
                    '<th class="pa-col-dt">Bekliyor</th>' +
                    '</tr></thead><tbody>';
         const now = Date.now();
@@ -530,10 +468,6 @@
                     '<td class="pa-col-step"><span class="pa-step-pill">' + it.stepPosition + ' / ' + it.totalSteps + '</span>' +
                     '<span style="font-size:11px;color:#94a3b8;margin-left:6px;">' + escapeHtml(it.stepName) + '</span></td>' +
                     '<td class="pa-col-apvr">' + escapeHtml(it.approverName || '—') + '</td>' +
-                    _extraCols.map(function(c) {
-                        const extRow = _extraData[it.instanceId] || _extraData[String(it.instanceId)] || {};
-                        return '<td class="pa-col-ext pa-col-ext-' + c.key + '">' + escapeHtml(extRow[c.key] || '—') + '</td>';
-                    }).join('') +
                     '<td class="pa-col-dt ' + (overdue ? 'pa-overdue' : '') + '">' + fmtDate(it.stepCreated) + '</td>' +
                     '</tr>';
         });
@@ -581,9 +515,9 @@
         if (d.steps && d.steps.length > 0) {
             html += '<div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Akış Geçmişi</div>';
             html += '<ul class="pa-steps">';
-            d.steps.forEach(s => {
+            d.steps.forEach((s, idx) => {
                 html += '<li class="status-' + escapeHtml(s.status) + '">' +
-                        '<div class="pa-step-title">' + s.stepOrder + '. ' + escapeHtml(s.stepName) + ' — ' + escapeHtml(s.status) + '</div>' +
+                        '<div class="pa-step-title">' + (idx + 1) + '. ' + escapeHtml(s.stepName) + ' — ' + escapeHtml(s.status) + '</div>' +
                         '<div class="pa-step-meta">' +
                         (s.approverName ? escapeHtml(s.approverName) : '—') +
                         (s.actionDate ? ' • ' + fmtDate(s.actionDate) : '') +
@@ -674,21 +608,6 @@
 
     function getListWrap() { return document.querySelector('.pa-list-wrap'); }
 
-    function applyExtColStyle(colKey, hidden) {
-        const styleId = 'pa-ext-hide-' + colKey;
-        if (hidden) {
-            if (!document.getElementById(styleId)) {
-                const s = document.createElement('style');
-                s.id = styleId;
-                s.textContent = '.pa-col-ext-' + colKey + ' { display: none !important; }';
-                document.head.appendChild(s);
-            }
-        } else {
-            const s = document.getElementById(styleId);
-            if (s) s.remove();
-        }
-    }
-
     function applyAll() {
         const wrap = getListWrap();
         if (!wrap) return;
@@ -698,21 +617,13 @@
             const cb = document.getElementById(COL_CB_IDS[k]);
             if (cb) cb.checked = !hidden;
         });
-        // Kaydedilmiş ext kolon gizliliklerini uygula
-        Object.entries(_cfg).forEach(([k, v]) => {
-            if (k.startsWith('ext_')) applyExtColStyle(k.slice(4), v === false);
-        });
     }
 
     window.paColToggle = function(key, visible) {
         _cfg[key] = visible;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_cfg)); } catch(e) {}
-        if (key.startsWith('ext_')) {
-            applyExtColStyle(key.slice(4), !visible);
-        } else {
-            const wrap = getListWrap();
-            if (wrap) wrap.classList.toggle('pa-hide-' + key, !visible);
-        }
+        const wrap = getListWrap();
+        if (wrap) wrap.classList.toggle('pa-hide-' + key, !visible);
     };
 
     window.paToggleColPanel = function(e) {
