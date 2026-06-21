@@ -121,6 +121,140 @@
     }
     .pte-btn:disabled { opacity:0.5; cursor:not-allowed; }
     .pte-btn:active:not(:disabled) { transform: translateY(0.5px) scale(0.99); }
+    /* ─────────────────────────────────────────────────────────────────
+       CalibraHub Action Button — proje markası taşıyan ikon-only buton
+       ─────────────────────────────────────────────────────────────────
+       Tüm Edit ekranlarında ortak görsel dil. Hover'da floating tooltip
+       (layout shift YOK), aksiyona göre kendine has mikro-animasyon:
+         - Kaydet  → shimmer (cam parıltısı) hover + tıklamada pulse
+         - Sil     → çöp kutusu sallanma hover
+         - Yeni    → + ikonu 90° döner hover
+       Kullanıcı bu üç tarzı her CalibraHub Edit ekranında aynen görür → aşinalık. */
+    .pte-btn--icon {
+        padding: 6px 9px;
+        gap: 0;
+        position: relative;
+        overflow: visible; /* tooltip ve shimmer ::before disari tasabilsin */
+    }
+    /* Floating tooltip — tab başlığı + diğer header katmanlarının üstünde */
+    .pte-btn--icon .pte-btn__label {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%) translateY(4px);
+        padding: 5px 10px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #e2e8f0;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        letter-spacing: 0;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.35),
+                    0 0 0 1px rgba(99,102,241,0.25);
+        transition: opacity .12s var(--motion-ease-out),
+                    transform .15s var(--motion-ease-out);
+        z-index: 99999; /* tab/sidebar/sticky header — herşeyin üstünde */
+    }
+    .pte-btn--icon .pte-btn__label::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 4px solid transparent;
+        border-top-color: #1e293b;
+    }
+    .pte-btn--icon:hover .pte-btn__label,
+    .pte-btn--icon:focus-visible .pte-btn__label {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── KAYDET — indigo gradient + shimmer (cam parıltı hover) + click pulse ── */
+    .pte-btn--primary.pte-btn--icon::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: linear-gradient(120deg,
+            transparent 30%,
+            rgba(255,255,255,0.28) 50%,
+            transparent 70%);
+        transform: translateX(-120%);
+        transition: transform .6s var(--motion-ease-out);
+        pointer-events: none;
+        z-index: 1;
+    }
+    .pte-btn--primary.pte-btn--icon:hover::before {
+        transform: translateX(120%);
+    }
+    .pte-btn--primary.pte-btn--icon > svg,
+    .pte-btn--primary.pte-btn--icon > .pte-btn__label {
+        position: relative;
+        z-index: 2;
+    }
+    .pte-btn--primary.pte-btn--icon:active:not(:disabled) svg {
+        animation: cb-save-pulse .35s var(--motion-ease-out);
+    }
+    @keyframes cb-save-pulse {
+        0%   { transform: scale(1) rotate(0); }
+        40%  { transform: scale(1.25) rotate(-6deg); }
+        100% { transform: scale(1) rotate(0); }
+    }
+
+    /* ── SİL — rose gradient + hover'da çöp kutusu kapağı sallanır ── */
+    .pte-btn--danger.pte-btn--icon {
+        background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+        border-color: #e11d48;
+        color: #fff;
+        box-shadow: 0 1px 0 rgba(255,255,255,0.14) inset,
+                    0 1px 3px rgba(225,29,72,0.30);
+    }
+    .pte-btn--danger.pte-btn--icon:hover:not(:disabled) {
+        background: linear-gradient(135deg, #fb7185 0%, #ef4444 100%);
+    }
+    .pte-btn--danger.pte-btn--icon > svg {
+        transition: transform .2s var(--motion-ease-out);
+        transform-origin: 50% 30%; /* tepe çevresinde döner — kapak hissi */
+    }
+    .pte-btn--danger.pte-btn--icon:hover:not(:disabled) > svg {
+        animation: cb-trash-shake .45s ease-in-out;
+    }
+    @keyframes cb-trash-shake {
+        0%, 100% { transform: rotate(0); }
+        20%      { transform: rotate(-12deg); }
+        40%      { transform: rotate(10deg); }
+        60%      { transform: rotate(-6deg); }
+        80%      { transform: rotate(4deg); }
+    }
+
+    /* ── YENİ REÇETE — + ikonu hover'da 90° döner (yeni öğe ekleniyor hissi) ── */
+    #ptBtnNew.pte-btn--icon > svg {
+        transition: transform .25s var(--motion-ease-out);
+    }
+    #ptBtnNew.pte-btn--icon:hover:not(:disabled) > svg {
+        transform: rotate(90deg) scale(1.1);
+    }
+
+    /* ── LİSTE (geri) — sol oka hover'da 2px sola çek ── */
+    #ptBtnList.pte-btn--icon > svg {
+        transition: transform .18s var(--motion-ease-out);
+    }
+    #ptBtnList.pte-btn--icon:hover > svg {
+        transform: translateX(-2px);
+    }
+
+    /* ── İŞLEMLER (ayar çarkı) — hover'da yavaşça döner ── */
+    #ptBtnActions.pte-btn--icon > svg {
+        transition: transform .8s var(--motion-ease-out);
+    }
+    #ptBtnActions.pte-btn--icon:hover:not(:disabled) > svg {
+        transform: rotate(60deg);
+    }
 
     .pte-btn--primary {
         /* WorkOrderEdit DNA: indigo gradient — daha premium hava. */
@@ -1028,31 +1162,30 @@
 
     <!-- Action Bar -->
     <div class="pte-action-bar">
-        <a href="/Logistics/BOMs" class="pte-btn pte-btn--secondary" id="ptBtnList" title="Receteler listesine don">
+        <a href="/Logistics/BOMs" class="pte-btn pte-btn--secondary pte-btn--icon" id="ptBtnList" aria-label="Liste">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            Liste
+            <span class="pte-btn__label">Liste</span>
         </a>
-        <button type="button" class="pte-btn pte-btn--primary" id="ptBtnSave">
+        <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" id="ptBtnSave" aria-label="Kaydet">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-            Kaydet
+            <span class="pte-btn__label">Kaydet</span>
         </button>
-        <button type="button" class="pte-btn pte-btn--danger" id="ptBtnDelete">
+        <button type="button" class="pte-btn pte-btn--danger pte-btn--icon" id="ptBtnDelete" aria-label="Sil">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            Sil
+            <span class="pte-btn__label">Sil</span>
         </button>
-        <button type="button" class="pte-btn pte-btn--secondary" id="ptBtnNew">
+        <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="ptBtnNew" aria-label="Yeni Reçete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>
-            Yeni Recete
+            <span class="pte-btn__label">Yeni Reçete</span>
         </button>
         <span class="pte-meta" id="pteMeta"></span>
         <div class="pte-actions-wrap">
-            <button type="button" class="pte-btn pte-btn--actions" id="ptBtnActions" title="Recete islemleri" aria-haspopup="menu" aria-expanded="false">
+            <button type="button" class="pte-btn pte-btn--actions pte-btn--icon" id="ptBtnActions" aria-label="Reçete İşlemleri" aria-haspopup="menu" aria-expanded="false">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="3"/>
                     <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
                 </svg>
-                Islemler
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px;opacity:.6;"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="pte-btn__label">İşlemler</span>
             </button>
             <div class="pte-actions-menu" id="ptActionsMenu" role="menu" aria-labelledby="ptBtnActions">
                 <button type="button" class="pte-actions-menu__item" id="ptaMenuCopy" role="menuitem">

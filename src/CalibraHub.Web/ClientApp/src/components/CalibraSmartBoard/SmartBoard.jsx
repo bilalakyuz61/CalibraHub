@@ -595,7 +595,8 @@ export default function SmartBoard(props) {
           <Settings2 size={15} className="text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors" />
         </button>
 
-        {/* Actions */}
+        {/* Actions — ikon-only, label tooltip olarak gösterilir (Onay Akışı Edit header pattern).
+            Primary action indigo bg ile ayırt edilir; diğerleri Filter/Excel/Widget tarzı hayalet. */}
         {actions.length > 0 && (
           <div className="flex items-center gap-2 flex-shrink-0">
             {actions.map(function (action) {
@@ -605,14 +606,15 @@ export default function SmartBoard(props) {
                 <button
                   key={action.id || action.label}
                   onClick={function () { handleActionClick(action) }}
-                  className={'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ' +
+                  title={action.label}
+                  aria-label={action.label}
+                  className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
                     (isPrimary
-                      ? 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 border border-indigo-500 dark:border-indigo-400/20 text-white dark:text-indigo-300 shadow-sm'
-                      : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] text-slate-700 dark:text-white/70')
+                      ? 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 border-indigo-500 dark:border-indigo-400/20 text-white dark:text-indigo-300 shadow-sm'
+                      : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/40 hover:text-indigo-600 dark:hover:text-indigo-400/80')
                   }
                 >
                   <ActionIcon size={15} />
-                  <span>{action.label}</span>
                 </button>
               )
             })}
