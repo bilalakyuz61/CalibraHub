@@ -723,22 +723,19 @@
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
 
-    <!-- Aksiyon Seridi -->
-    <div class="pfe-action-bar" id="pfeActionBar">
-        <button type="button" class="pfe-btn pfe-btn--primary" onclick="pfeSave()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Kaydet
-        </button>
-        <button type="button" class="pfe-btn pfe-btn--secondary" onclick="pfeBackToList()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            Liste
-        </button>
-        <button type="button" class="pfe-btn pfe-btn--danger" id="pfeBtnDelete" style="display:none;" onclick="pfeDeleteFeature()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            Sil
-        </button>
-        <span class="pfe-meta" id="pfeMeta"></span>
-    </div>
+    @* Standart action bar — sticky üst *@
+    @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+    {
+        ["Title"]       = "Ürün Özelliği",
+        ["ListUrl"]     = "/Logistics/ProductFeatures",
+        ["NewUrl"]      = "/Logistics/ProductFeatureEdit",
+        ["SaveBtnId"]   = "pfeBtnSave",
+        ["DeleteBtnId"] = "pfeBtnDelete",
+    })
+    <script>
+        document.getElementById('pfeBtnSave')?.addEventListener('click', function () { pfeSave(); });
+        document.getElementById('pfeBtnDelete')?.addEventListener('click', function () { pfeDeleteFeature(); });
+    </script>
 
     <div class="pfe-body">
 

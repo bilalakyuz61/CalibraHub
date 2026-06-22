@@ -115,13 +115,14 @@
 }
 
 <div class="cr-page">
-    <div class="cr-header">
-        <div class="cr-header__title">@ViewData["Title"]</div>
-        <div class="cr-actions">
-            <button type="button" class="cr-btn cr-btn--ghost" onclick="window.history.back()">← Geri</button>
-            <button type="button" class="cr-btn cr-btn--primary" id="crSaveBtn">💾 Kaydet</button>
-        </div>
-    </div>
+    @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+    {
+        ["Title"]      = (string)ViewData["Title"],
+        ["ListUrl"]    = $"/CodeRule?entity={(entityType == "Item" ? "item" : "contact")}",
+        ["NewUrl"]     = $"/CodeRule/New?entity={(entityType == "Item" ? "item" : "contact")}",
+        ["SaveBtnId"]  = "crSaveBtn",
+        ["ShowDelete"] = false,
+    })
 
     <div class="cr-grid">
         <div class="cr-field">

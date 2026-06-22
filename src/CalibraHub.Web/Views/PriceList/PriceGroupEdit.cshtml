@@ -351,16 +351,16 @@
 }
 
 <div class="pge-shell">
-    <!-- Action bar -->
-    <div class="pge-action-bar">
-        <a href="/PriceList/PriceGroups" class="pge-btn pge-btn--secondary" title="Listeye dön">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            Geri
-        </a>
-        <button type="button" id="pgeBtnSave"   class="pge-btn pge-btn--primary">Kaydet</button>
-        <button type="button" id="pgeBtnDelete" class="pge-btn pge-btn--danger" disabled>Sil</button>
-        <span class="pge-meta"><strong id="pgeMeta">@(groupId > 0 ? $"Grup #{groupId}" : "Yeni Grup")</strong></span>
-    </div>
+    @* Standart action bar — sticky üst *@
+    @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+    {
+        ["Title"]       = groupId > 0 ? $"Fiyat Grubu #{groupId}" : "Yeni Fiyat Grubu",
+        ["ListUrl"]     = "/PriceList/PriceGroups",
+        ["NewUrl"]      = "/PriceList/PriceGroupEdit",
+        ["SaveBtnId"]   = "pgeBtnSave",
+        ["DeleteBtnId"] = "pgeBtnDelete",
+        ["ShowDelete"]  = groupId > 0,
+    })
 
     <!-- Body: sol form + sag cariler paneli -->
     <div class="pge-body">

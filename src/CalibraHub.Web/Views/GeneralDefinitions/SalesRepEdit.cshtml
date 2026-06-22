@@ -279,40 +279,22 @@ body.app-theme-dark .sre-root {
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
 <div class="sre-root">
 
-    @* ── Aksiyon Seridi ─────────────────────────────────────── *@
-    <div class="sre-action-bar" id="sre-action-bar">
-        <a href="/GeneralDefinitions/SalesRepresentatives" class="sre-btn" title="Listeye dön">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            Geri
-        </a>
-        <span class="sre-meta" id="sre-meta">@(isNew ? "Yeni Satış Temsilcisi" : Model.RepName)</span>
-
-        <label class="sre-active-wrap" title="Aktif/Pasif">
-            <div class="form-check form-switch">
-                <input id="sreIsActive" class="form-check-input" type="checkbox" role="switch" @(Model.IsActive ? "checked" : "") />
-            </div>
-            <span id="sreIsActiveLabel">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+    @* Standart action bar — sticky üst *@
+    @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+    {
+        ["Title"]       = isNew ? "Yeni Satış Temsilcisi" : Model.RepName,
+        ["ListUrl"]     = "/GeneralDefinitions/SalesRepresentatives",
+        ["NewUrl"]      = "/GeneralDefinitions/SalesRepEdit",
+        ["SaveBtnId"]   = "sre-save-btn",
+        ["DeleteBtnId"] = "sre-del-btn",
+        ["ShowDelete"]  = !isNew,
+    })
+    @* Aktif/Pasif switch — action bar altı ayrı satır *@
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border-subtle);background:var(--surface-elev-0);">
+        <label class="form-check form-switch" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
+            <input id="sreIsActive" class="form-check-input" type="checkbox" role="switch" @(Model.IsActive ? "checked" : "") />
         </label>
-
-        @if (!isNew)
-        {
-            <button type="button" class="sre-btn sre-btn--danger" id="sre-del-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                </svg>
-                Sil
-            </button>
-        }
-        <button type="button" class="sre-btn sre-btn--primary" id="sre-save-btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
-            </svg>
-            Kaydet
-        </button>
+        <span id="sreIsActiveLabel" style="font-size:12.5px;color:var(--text-secondary);">@(Model.IsActive ? "Aktif" : "Pasif")</span>
     </div>
 
     @* ── Body (tabs + content) ─────────────────────────────── *@
