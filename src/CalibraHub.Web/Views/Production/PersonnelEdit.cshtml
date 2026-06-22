@@ -310,7 +310,7 @@
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d && d.ok) {
-                    window.location.href = '/Production/Personnel';
+                    window.location.href = '/Production/Definitions';
                 } else {
                     setErr((d && d.error) || 'Kayıt başarısız.');
                     saveBtn.disabled = false;
@@ -343,7 +343,7 @@
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (d && d.ok) {
-                        window.location.href = '/Production/Personnel';
+                        window.location.href = '/Production/Definitions';
                     } else {
                         peCloseModal();
                         setErr((d && d.error) || 'Silinemedi.');

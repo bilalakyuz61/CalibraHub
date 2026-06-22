@@ -310,10 +310,14 @@
 
     // ---------- Bootstrap ----------
     function init() {
+        // Tab bar click intercept aktif (data-pdt-tab linkleri) — bunlar hızlı swap için.
         document.addEventListener('click', onClick, false);
         window.addEventListener('popstate', onPopState);
 
-        installLocationOverrides();
+        // location.href setter override DEVRE DIŞI — Service Worker + 301 redirect race
+        // condition Edit save sonrası swap fetch'ini cancel ediyor → ekran boş kalıyor.
+        // Save handler'ları normal full page navigation yapsın.
+        // installLocationOverrides();
 
         // İlk sayfa state'i (back/forward için)
         var current = document.getElementById(CONTENT_ID);
@@ -328,7 +332,7 @@
                 );
             } catch (e) { /* ignore */ }
         }
-        console.debug(LOG_PREFIX, 'aktif (URL-pattern intercept ON)');
+        console.debug(LOG_PREFIX, 'aktif (tab click intercept ON, location.href intercept OFF)');
     }
 
     if (document.readyState === 'loading') {
