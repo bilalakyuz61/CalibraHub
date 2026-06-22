@@ -21,28 +21,15 @@
       data-collaboration-record-title="@_colTitle"></form>
 
 <div class="ux-edit-shell">
-  <header class="ux-edit-bar">
-    <div class="ux-edit-bar__left">
-      <a class="ux-edit-bar__back" href="/Logistics/Machines">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Listeye Dön
-      </a>
-      <h1 class="ux-edit-bar__title">@(isNew ? "Yeni Makine" : (Model.MachineName ?? "Makineyi Düzenle"))</h1>
-      @if (!isNew)
-      {
-        var pillCls = Model.IsActive ? "ux-edit-bar__status" : "ux-edit-bar__status ux-edit-bar__status--off";
-        <span class="@pillCls">@(Model.IsActive ? "Aktif" : "Pasif")</span>
-      }
-    </div>
-    <div class="ux-edit-bar__right">
-      <a class="ux-edit-bar__btn" href="/Logistics/Machines">İptal</a>
-      <button class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="me-save">Kaydet</button>
-      @if (!isNew)
-      {
-        <button class="ux-edit-bar__btn ux-edit-bar__btn--danger" id="me-delete">Sil</button>
-      }
-    </div>
-  </header>
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Makine" : ((Model.MachineName ?? "Makineyi Düzenle") + (Model.IsActive ? "" : " (Pasif)")),
+      ["ListUrl"]     = "/Logistics/Machines",
+      ["NewUrl"]      = "/Logistics/MachineEdit",
+      ["SaveBtnId"]   = "me-save",
+      ["DeleteBtnId"] = "me-delete",
+      ["ShowDelete"]  = !isNew,
+  })
 
   <div class="ux-edit-body">
     <aside class="ux-edit-nav" id="meNav">

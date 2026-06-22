@@ -1,0 +1,360 @@
+/* ============================================================
+   CalibraHub Action Bar — tüm Edit ekranları için ortak stil
+   ============================================================
+   Referans implementasyon: Views/Logistics/BOMEdit.cshtml (orijinal).
+   Şu an ortak dosyaya taşındı — _Layout'a global import ile her
+   sayfada erişilebilir. Class isimleri (.pte-action-bar, .pte-btn,
+   #ptBtnSave vb.) JS hook uyumluluğu için KORUNDU.
+   Kullanım için Razor partial: Views/Shared/_CalibraActionBar.cshtml
+   ============================================================ */
+
+/* ── Action bar (glass header) ─────────────────────────────────
+   Sticky-feel: backdrop-filter blur + saturate, scroll'da is-scrolled
+   class'i ile shadow + border eklenir (sayfada JS listener var). */
+.pte-action-bar {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    flex-shrink: 0;
+    background: var(--surface-glass);
+    border-bottom: 1px solid var(--border-subtle);
+    backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+    -webkit-backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+    position: relative;
+    transition: box-shadow var(--motion-base) var(--motion-ease-out),
+                border-color var(--motion-base) var(--motion-ease-out);
+}
+.pte-action-bar.is-scrolled {
+    border-bottom-color: var(--border-strong);
+    box-shadow: var(--shadow-elev-2);
+}
+.pte-action-bar .pte-meta {
+    margin-left: auto;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: 0.01em;
+}
+
+/* Sayfa başlığı — action bar'ın TAM ORTASINDA (butonlardan bağımsız).
+   Absolute position → sol/sağ butonlar genişlese de başlık ortalanmış kalır. */
+.pte-action-bar__title {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-strong, #1e293b);
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    pointer-events: none;
+    line-height: 1;
+}
+body.app-theme-dark .pte-action-bar__title {
+    color: #e2e8f0;
+}
+
+/* ── KITT (Knight Rider) save flash — kaydet sonrası yeşil scanner. */
+.pte-action-bar::before {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+    height: 2px; pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        rgba(0,60,20,0) 0%,
+        rgba(10,120,40,.55) 50%,
+        rgba(0,60,20,0) 100%);
+}
+.pte-action-bar::after {
+    content: ''; position: absolute; left: 0; bottom: 0;
+    width: 18%; height: 4px; pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(34,197,94,.35) 18%,
+        rgba(74,255,140,1) 50%,
+        rgba(34,197,94,.35) 82%,
+        transparent 100%);
+    box-shadow:
+        0 0 10px 2px rgba(34,197,94,.95),
+        0 0 22px 6px rgba(34,197,94,.55),
+        0 0 40px 12px rgba(34,197,94,.22);
+    border-radius: 50%;
+}
+.pte-action-bar.is-save-flash::before { animation: pteKittBg   1800ms var(--motion-ease-out) forwards; }
+.pte-action-bar.is-save-flash::after  { animation: pteKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+@keyframes pteKittBg {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
+}
+@keyframes pteKittScan {
+    0%   { opacity: 0; left: 0; }
+    8%   { opacity: 1; }
+    48%  { opacity: 1; left: 82%; }
+    52%  { opacity: 1; left: 82%; }
+    92%  { opacity: 1; left: 0; }
+    100% { opacity: 0; left: 0; }
+}
+
+/* ── Buttons base (premium polish) ──
+   Token-based; hover'da lift, active'de mikro-sıkışma. */
+.pte-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-size: 12.5px;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.2;
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--motion-ease-out),
+                border-color var(--motion-fast) var(--motion-ease-out),
+                color var(--motion-fast) var(--motion-ease-out),
+                transform var(--motion-fast) var(--motion-ease-out),
+                box-shadow var(--motion-fast) var(--motion-ease-out);
+    background: transparent;
+    user-select: none;
+}
+.pte-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pte-btn:active:not(:disabled) { transform: translateY(0.5px) scale(0.99); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CalibraHub Action Buttons — light tema için soft tinted stil
+   ═══════════════════════════════════════════════════════════════════
+   Linear / Notion / Vercel admin UI dili: yumuşak pastel zemin + brand
+   renkli ikon. Aksiyona göre 5 farklı vurgu:
+     - Liste     → slate (nötr)
+     - Kaydet    → indigo (brand)
+     - Sil       → red
+     - Yeni      → emerald
+     - İşlemler  → slate (koyu)
+   Hover'da zemin biraz koyulaşır + hafif drop shadow + ikon hareketi.
+   60×42 buton, ikon sol üstte, label sağ altta diagonal. */
+.pte-btn--icon {
+    width: 62px;
+    height: 42px;
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    position: relative;
+    transition: background-color .18s var(--motion-ease-out),
+                border-color .18s var(--motion-ease-out),
+                color .18s var(--motion-ease-out),
+                transform .15s var(--motion-ease-out),
+                box-shadow .18s var(--motion-ease-out);
+    overflow: visible;
+}
+.pte-btn--icon > svg {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
+    transition: transform .25s var(--motion-ease-out);
+}
+.pte-btn--icon:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(15,23,42,0.06);
+}
+.pte-btn--icon:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+}
+.pte-btn--icon .pte-btn__label {
+    position: absolute;
+    right: 7px;
+    bottom: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0.9;
+}
+
+/* ── LİSTE — slate (nötr) ── */
+#ptBtnList.pte-btn--icon {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #475569;
+}
+#ptBtnList.pte-btn--icon:hover:not(:disabled) {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+#ptBtnList.pte-btn--icon:hover > svg {
+    transform: translateX(-2px);
+}
+
+/* ── KAYDET — indigo brand ── */
+.pte-btn--primary.pte-btn--icon {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #4f46e5;
+}
+.pte-btn--primary.pte-btn--icon:hover:not(:disabled) {
+    background: #e0e7ff;
+    border-color: #a5b4fc;
+    color: #4338ca;
+}
+.pte-btn--primary.pte-btn--icon:active:not(:disabled) svg {
+    animation: cb-save-pulse .3s var(--motion-ease-out);
+}
+@keyframes cb-save-pulse {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+/* ── SİL — red ── */
+.pte-btn--danger.pte-btn--icon {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+.pte-btn--danger.pte-btn--icon:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
+.pte-btn--danger.pte-btn--icon > svg {
+    transform-origin: 50% 30%;
+}
+.pte-btn--danger.pte-btn--icon:hover:not(:disabled) > svg {
+    animation: cb-trash-shake .5s ease-in-out;
+}
+@keyframes cb-trash-shake {
+    0%, 100% { transform: rotate(0); }
+    20%      { transform: rotate(-12deg); }
+    40%      { transform: rotate(10deg); }
+    60%      { transform: rotate(-6deg); }
+    80%      { transform: rotate(4deg); }
+}
+
+/* ── YENİ — emerald ── */
+#ptBtnNew.pte-btn--icon {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #059669;
+}
+#ptBtnNew.pte-btn--icon:hover:not(:disabled) {
+    background: #d1fae5;
+    border-color: #6ee7b7;
+    color: #047857;
+}
+#ptBtnNew.pte-btn--icon:hover:not(:disabled) > svg {
+    transform: rotate(180deg) scale(1.1);
+}
+
+/* ── İŞLEMLER — slate (secondary) ── */
+#ptBtnActions.pte-btn--icon {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #475569;
+}
+#ptBtnActions.pte-btn--icon:hover:not(:disabled) {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+#ptBtnActions.pte-btn--icon > svg {
+    transition: transform .6s var(--motion-ease-out);
+}
+#ptBtnActions.pte-btn--icon:hover:not(:disabled) > svg {
+    transform: rotate(90deg);
+}
+
+/* Dark tema override — soft tinted'in tersi: koyu zemin + açık ikon */
+body.app-theme-dark #ptBtnList.pte-btn--icon,
+body.app-theme-dark #ptBtnActions.pte-btn--icon {
+    background: rgba(100,116,139,0.15);
+    border-color: rgba(148,163,184,0.25);
+    color: #cbd5e1;
+}
+body.app-theme-dark #ptBtnList.pte-btn--icon:hover:not(:disabled),
+body.app-theme-dark #ptBtnActions.pte-btn--icon:hover:not(:disabled) {
+    background: rgba(100,116,139,0.25);
+    border-color: rgba(148,163,184,0.40);
+    color: #f1f5f9;
+}
+body.app-theme-dark .pte-btn--primary.pte-btn--icon {
+    background: rgba(99,102,241,0.18);
+    border-color: rgba(129,140,248,0.35);
+    color: #a5b4fc;
+}
+body.app-theme-dark .pte-btn--primary.pte-btn--icon:hover:not(:disabled) {
+    background: rgba(99,102,241,0.28);
+    border-color: rgba(129,140,248,0.55);
+    color: #c7d2fe;
+}
+body.app-theme-dark .pte-btn--danger.pte-btn--icon {
+    background: rgba(220,38,38,0.18);
+    border-color: rgba(248,113,113,0.35);
+    color: #fca5a5;
+}
+body.app-theme-dark .pte-btn--danger.pte-btn--icon:hover:not(:disabled) {
+    background: rgba(220,38,38,0.28);
+    border-color: rgba(248,113,113,0.55);
+    color: #fecaca;
+}
+body.app-theme-dark #ptBtnNew.pte-btn--icon {
+    background: rgba(16,185,129,0.18);
+    border-color: rgba(52,211,153,0.35);
+    color: #6ee7b7;
+}
+body.app-theme-dark #ptBtnNew.pte-btn--icon:hover:not(:disabled) {
+    background: rgba(16,185,129,0.28);
+    border-color: rgba(52,211,153,0.55);
+    color: #a7f3d0;
+}
+
+/* ── Islemler dropdown menu ──
+   position:fixed — app-content-area'da overflow:hidden var, absolute clipped olur.
+   Konum JS tarafinda buton rect'ine gore set edilir. */
+.pte-actions-wrap { position: relative; display: inline-flex; }
+.pte-actions-menu {
+    position: fixed; z-index: 9999;
+    min-width: 240px; display: none;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-elev-3);
+    backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+    -webkit-backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+    animation: pteActMenuIn var(--motion-fast) var(--motion-ease-out);
+    padding: var(--space-1);
+}
+.pte-actions-menu.is-open { display: block; }
+@keyframes pteActMenuIn {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.pte-actions-menu__item {
+    display: flex; align-items: center; gap: var(--space-3);
+    width: 100%; padding: 9px 12px;
+    border: 0; background: transparent;
+    font-size: 12.5px; font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+    cursor: pointer; text-align: left;
+    border-radius: var(--radius-sm);
+    transition: background var(--motion-fast) var(--motion-ease-out),
+                color      var(--motion-fast) var(--motion-ease-out);
+}
+.pte-actions-menu__item:hover {
+    background: var(--accent-soft-bg);
+    color: var(--accent-soft-fg);
+}
+.pte-actions-menu__item:disabled { opacity: .45; cursor: not-allowed; }
+.pte-actions-menu__item svg { flex-shrink: 0; opacity: .75; }
+.pte-actions-menu__divider {
+    height: 1px; background: var(--border-subtle); margin: var(--space-1) 0;
+}
+
+.pte-btn--sm {
+    padding: 5px 10px;
+    font-size: 11.5px;
+    border-radius: var(--radius-sm);
+}

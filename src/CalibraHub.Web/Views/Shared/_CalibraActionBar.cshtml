@@ -1,0 +1,107 @@
+@*
+    _CalibraActionBar.cshtml — CalibraHub standart Edit ekranı aksiyon şeridi
+
+    KULLANIM:
+        @await Html.PartialAsync("_CalibraActionBar", new ViewDataDictionary(ViewData)
+        {
+            ["Title"]    = "Reçete Düzenle",          // Orta başlık (zorunlu)
+            ["ListUrl"]  = "/Logistics/BOMs",         // ← Liste butonu hedefi (zorunlu)
+            ["NewUrl"]   = "/Logistics/BOMEdit",      // + Yeni butonu (opsiyonel; null/boş → buton gizli)
+        })
+
+    OPSIYONEL PARAMETRELER:
+        ShowDelete   (bool)  default: true   — 🗑 Sil butonu görünsün mü
+        ShowNew      (bool)  default: true   — + Yeni butonu görünsün mü (NewUrl boşsa zaten gizli)
+        ShowActions  (bool)  default: false  — ⚙ İşlemler dropdown butonu görünsün mü
+        SaveBtnId    (string) default: "ptBtnSave"
+        DeleteBtnId  (string) default: "ptBtnDelete"
+        NewBtnId     (string) default: "ptBtnNew"
+        ListBtnId    (string) default: "ptBtnList"
+        ActionsBtnId (string) default: "ptBtnActions"
+
+    ⚙ İŞLEMLER DROPDOWN İÇERİĞİ:
+        Partial sadece butonu render eder. Dropdown menu'yu sayfa kendi yazar
+        (her ekranın kendine has aksiyonları olduğu için). Örnek sayfa markup:
+
+            <div class="pte-actions-menu" id="ptActionsMenu" role="menu" aria-labelledby="ptBtnActions">
+                <button type="button" class="pte-actions-menu__item">Kopyala</button>
+                ...
+            </div>
+
+        Açma/kapama JS sayfa içinde wire edilir (ptBtnActions click + dış tıklama close).
+*@
+
+@{
+    var ab_title        = (string)(ViewData["Title"] ?? ViewBag.Title ?? "");
+    var ab_listUrl      = (string)(ViewData["ListUrl"] ?? "/");
+    var ab_newUrl       = (string)(ViewData["NewUrl"] ?? "");
+    var ab_saveBtnId    = (string)(ViewData["SaveBtnId"]    ?? "ptBtnSave");
+    var ab_deleteBtnId  = (string)(ViewData["DeleteBtnId"]  ?? "ptBtnDelete");
+    var ab_newBtnId     = (string)(ViewData["NewBtnId"]     ?? "ptBtnNew");
+    var ab_listBtnId    = (string)(ViewData["ListBtnId"]    ?? "ptBtnList");
+    var ab_actionsBtnId = (string)(ViewData["ActionsBtnId"] ?? "ptBtnActions");
+    var ab_showDelete   = !(ViewData["ShowDelete"]  is bool _sd) || _sd;
+    var ab_showNew      = !(ViewData["ShowNew"]     is bool _sn) || _sn;
+    var ab_showActions  =  (ViewData["ShowActions"] is bool _sa) && _sa;
+}
+
+<div class="pte-action-bar">
+    @if (!string.IsNullOrEmpty(ab_title))
+    {
+        <div class="pte-action-bar__title">@ab_title</div>
+    }
+
+    <a href="@ab_listUrl" class="pte-btn pte-btn--secondary pte-btn--icon" id="@ab_listBtnId" aria-label="Liste">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span class="pte-btn__label">Liste</span>
+    </a>
+
+    <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" id="@ab_saveBtnId" aria-label="Kaydet">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+        <span class="pte-btn__label">Kaydet</span>
+    </button>
+
+    @if (ab_showDelete)
+    {
+        <button type="button" class="pte-btn pte-btn--danger pte-btn--icon" id="@ab_deleteBtnId" aria-label="Sil">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            <span class="pte-btn__label">Sil</span>
+        </button>
+    }
+
+    @if (ab_showNew && !string.IsNullOrEmpty(ab_newUrl))
+    {
+        <a href="@ab_newUrl" class="pte-btn pte-btn--secondary pte-btn--icon" id="@ab_newBtnId" aria-label="Yeni Kayıt">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>
+            <span class="pte-btn__label">Yeni Kayıt</span>
+        </a>
+    }
+    else if (ab_showNew)
+    {
+        <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="@ab_newBtnId" aria-label="Yeni Kayıt">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7h14"/></svg>
+            <span class="pte-btn__label">Yeni Kayıt</span>
+        </button>
+    }
+
+    <span class="pte-meta"></span>
+
+    @if (ab_showActions)
+    {
+        <div class="pte-actions-wrap">
+            <button type="button" class="pte-btn pte-btn--actions pte-btn--icon" id="@ab_actionsBtnId" aria-label="İşlemler" aria-haspopup="menu" aria-expanded="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+                </svg>
+                <span class="pte-btn__label">İşlemler</span>
+            </button>
+            @*
+                Dropdown menu'yu sayfa kendi yazar — örnek:
+                <div class="pte-actions-menu" id="ptActionsMenu" role="menu" ...>
+                    <button class="pte-actions-menu__item">Kopyala</button>
+                </div>
+            *@
+        </div>
+    }
+</div>
