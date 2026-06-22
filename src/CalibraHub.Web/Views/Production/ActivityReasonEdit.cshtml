@@ -194,7 +194,9 @@
             if (!d.ok) { notify(d.error || 'Kaydedilemedi.', false); return; }
             notify('Kaydedildi.', true);
             if (!payload.id || payload.id === 0) {
-                setTimeout(function () { location.href = '/Production/ActivityReasonEdit?id=' + d.id; }, 600);
+                // Yeni kayıt → liste sayfasına dön (PJAX tab navigation güvenilir çalışır,
+                // Edit?id=... için PJAX swap unstable; F5 gerekiyordu).
+                setTimeout(function () { location.href = '/Production/ActivityReasons'; }, 600);
             }
         } catch (e) { notify('Hata: ' + e.message, false); }
     });
@@ -214,7 +216,8 @@
                 });
                 var d = await r.json();
                 if (!d.ok) { notify(d.error || 'Silinemedi.', false); return; }
-                location.href = '/Production/ActivityReasons';
+                notify('Silindi.', true);
+                setTimeout(function () { location.href = '/Production/ActivityReasons'; }, 600);
             } catch (e) { notify('Hata: ' + e.message, false); }
         });
     }

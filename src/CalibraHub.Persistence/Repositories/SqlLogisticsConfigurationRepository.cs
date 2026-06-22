@@ -2090,14 +2090,29 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 EXEC sp_rename N'[{s}].[location_types]', N'LocationType';
             END;
             -- Migration: kolon rename (snake_case → PascalCase, mevcut DB'ler)
+            -- Her kolon ayrı kontrol — kısmi migrate edilmiş DB'lerde sp_rename ambiguous
+            -- hatası (Err 15248) önlenir.
             IF OBJECT_ID(N'[{s}].[LocationType]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[LocationType]', N'code') IS NOT NULL
             BEGIN
-                EXEC sp_rename N'[{s}].[LocationType].[id]',         N'Id',        N'COLUMN';
-                EXEC sp_rename N'[{s}].[LocationType].[code]',       N'Code',      N'COLUMN';
-                EXEC sp_rename N'[{s}].[LocationType].[name]',       N'Name',      N'COLUMN';
-                EXEC sp_rename N'[{s}].[LocationType].[sort_order]', N'SortOrder', N'COLUMN';
-                EXEC sp_rename N'[{s}].[LocationType].[is_active]',  N'IsActive',  N'COLUMN';
+                IF COL_LENGTH(N'[{s}].[LocationType]', N'id') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[LocationType]', N'Id') IS NULL
+                    EXEC sp_rename N'[{s}].[LocationType].[id]', N'Id', N'COLUMN';
+
+                IF COL_LENGTH(N'[{s}].[LocationType]', N'code') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[LocationType]', N'Code') IS NULL
+                    EXEC sp_rename N'[{s}].[LocationType].[code]', N'Code', N'COLUMN';
+
+                IF COL_LENGTH(N'[{s}].[LocationType]', N'name') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[LocationType]', N'Name') IS NULL
+                    EXEC sp_rename N'[{s}].[LocationType].[name]', N'Name', N'COLUMN';
+
+                IF COL_LENGTH(N'[{s}].[LocationType]', N'sort_order') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[LocationType]', N'SortOrder') IS NULL
+                    EXEC sp_rename N'[{s}].[LocationType].[sort_order]', N'SortOrder', N'COLUMN';
+
+                IF COL_LENGTH(N'[{s}].[LocationType]', N'is_active') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[LocationType]', N'IsActive') IS NULL
+                    EXEC sp_rename N'[{s}].[LocationType].[is_active]', N'IsActive', N'COLUMN';
             END;
             IF OBJECT_ID(N'[{s}].[LocationType]', N'U') IS NULL
             BEGIN

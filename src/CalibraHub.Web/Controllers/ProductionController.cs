@@ -1614,7 +1614,7 @@ public sealed class ProductionController : Controller
 
     private async Task<object> BuildActivityReasonsBoardConfigAsync(CancellationToken ct)
     {
-        var reasons = await _activityReasons.ListAsync(activityType: null, includeInactive: true, ct);
+        var reasons = await _activityReasons.ListAsync(activityType: null, includeInactive: false, ct);
         var typeOptions = SmartBoardFilterHelpers.ToOptionsList(
             reasons.Select(r => r.ActivityTypeLabel).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
         var masterWidgets = new List<object>
