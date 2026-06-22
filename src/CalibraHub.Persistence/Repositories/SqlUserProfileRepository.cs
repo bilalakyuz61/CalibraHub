@@ -205,6 +205,50 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         return user;
     }
 
+    public async Task SetResetTokenAsync(int userId, string token, DateTime expiry, CancellationToken ct)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_tableName}
+            SET [PasswordResetToken] = @Token, [PasswordResetTokenExpiry] = @Expiry
+            WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Token", token));
+        command.Parameters.Add(new SqlParameter("@Expiry", expiry));
+        command.Parameters.Add(new SqlParameter("@Id", userId));
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<UserProfile?> GetByResetTokenAsync(string token, CancellationToken ct)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT {SelectColumns} FROM {_tableName}
+            WHERE [PasswordResetToken] = @Token
+              AND [PasswordResetTokenExpiry] > @Now
+              AND [IsActive] = 1;
+            """;
+        command.Parameters.Add(new SqlParameter("@Token", token));
+        command.Parameters.Add(new SqlParameter("@Now", DateTime.UtcNow));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? MapUser(reader) : null;
+    }
+
+    public async Task ClearResetTokenAsync(int userId, CancellationToken ct)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_tableName}
+            SET [PasswordResetToken] = NULL, [PasswordResetTokenExpiry] = NULL
+            WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", userId));
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     private static string SerializePermissions(IReadOnlyCollection<UserPermission> permissions) =>
         string.Join(',', permissions.Select(x => x.ToString()));
 

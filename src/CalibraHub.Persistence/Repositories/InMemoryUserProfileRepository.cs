@@ -59,4 +59,28 @@ public sealed class InMemoryUserProfileRepository : IUserProfileRepository
         _dataStore.Users[userProfile.Id] = userProfile;
         return Task.CompletedTask;
     }
+
+    // In-memory: token'ları user dictionary'ye ayrıca saklamak yerine basit bir dict kullan
+    private readonly Dictionary<int, (string Token, DateTime Expiry)> _resetTokens = new();
+
+    public Task SetResetTokenAsync(int userId, string token, DateTime expiry, CancellationToken ct)
+    {
+        _resetTokens[userId] = (token, expiry);
+        return Task.CompletedTask;
+    }
+
+    public Task<UserProfile?> GetByResetTokenAsync(string token, CancellationToken ct)
+    {
+        var entry = _resetTokens.FirstOrDefault(kv =>
+            kv.Value.Token == token && kv.Value.Expiry > DateTime.UtcNow);
+        if (entry.Key == 0) return Task.FromResult<UserProfile?>(null);
+        _dataStore.Users.TryGetValue(entry.Key, out var user);
+        return Task.FromResult<UserProfile?>(user?.IsActive == true ? user : null);
+    }
+
+    public Task ClearResetTokenAsync(int userId, CancellationToken ct)
+    {
+        _resetTokens.Remove(userId);
+        return Task.CompletedTask;
+    }
 }

@@ -30,6 +30,8 @@ public sealed class AccountController : Controller
     private readonly IDepartmentRepository _departmentRepository;
     private readonly IWebHostEnvironment _env;
     private readonly IPermissionService _permissionService;
+    private readonly IEmailSender _emailSender;
+    private readonly IPasswordHashService _passwordHashService;
 
     public AccountController(
         ICompanyRepository companyDefinitionRepository,
@@ -38,7 +40,9 @@ public sealed class AccountController : Controller
         IUserAuthenticationService userAuthenticationService,
         IDepartmentRepository departmentRepository,
         IWebHostEnvironment env,
-        IPermissionService permissionService)
+        IPermissionService permissionService,
+        IEmailSender emailSender,
+        IPasswordHashService passwordHashService)
     {
         _companyDefinitionRepository = companyDefinitionRepository;
         _uiConfigurationService = uiConfigurationService;
@@ -47,6 +51,8 @@ public sealed class AccountController : Controller
         _departmentRepository = departmentRepository;
         _env = env;
         _permissionService = permissionService;
+        _emailSender = emailSender;
+        _passwordHashService = passwordHashService;
     }
 
     [AllowAnonymous]
@@ -89,11 +95,125 @@ public sealed class AccountController : Controller
         return Json(payload);
     }
 
+    // ── Şifremi Unuttum ──────────────────────────────────────────────────────
+
+    [AllowAnonymous]
+    [HttpGet]
+    public IActionResult ForgotPassword(string? email = null)
+    {
+        return View(new ForgotPasswordInputModel { Email = email ?? string.Empty });
+    }
+
+    [AllowAnonymous]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordInputModel input, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return View(input);
+
+        // Email ile tüm aktif kullanıcıları bul (şirket sorulmaz — şifre şirket bazlı değil)
+        var allUsers = await _userProfileRepository.GetAllAsync(cancellationToken);
+        var matchedUsers = allUsers
+            .Where(u => u.IsActive && string.Equals(u.Email, input.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // Kullanıcı bulunsun ya da bulunmasın aynı mesajı göster (enumeration önleme)
+        foreach (var user in matchedUsers)
+        {
+            var tokenBytes = RandomNumberGenerator.GetBytes(32);
+            var token = Convert.ToHexString(tokenBytes);
+            var expiry = DateTime.UtcNow.AddHours(1);
+            await _userProfileRepository.SetResetTokenAsync(user.Id, token, expiry, cancellationToken);
+
+            var resetLink = Url.Action("ResetPassword", "Account", new { token }, Request.Scheme)!;
+
+            var company = (await _companyDefinitionRepository.GetAllAsync(cancellationToken))
+                .FirstOrDefault(c => c.Id == user.CompanyId);
+            var companyName = company?.Name ?? "CalibraHub";
+
+            var body = $"""
+                <html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:480px;margin:auto;padding:32px">
+                <h2 style="color:#6366f1">Şifre Sıfırlama</h2>
+                <p>Merhaba <strong>{user.FullName}</strong>,</p>
+                <p>Şifrenizi sıfırlamak için aşağıdaki butona tıklayın.
+                   Bu link <strong>1 saat</strong> süreyle geçerlidir.</p>
+                <p style="margin:28px 0">
+                  <a href="{resetLink}"
+                     style="background:#6366f1;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">
+                    Şifremi Sıfırla
+                  </a>
+                </p>
+                <p style="color:#64748b;font-size:13px">
+                  Bu talebi siz yapmadıysanız bu e-postayı görmezden gelebilirsiniz.
+                </p>
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0" />
+                <p style="color:#94a3b8;font-size:12px">{companyName} · CalibraHub</p>
+                </body></html>
+                """;
+
+            await _emailSender.SendAsync(
+                user.CompanyId,
+                new[] { user.Email },
+                "Şifre Sıfırlama Talebi",
+                body,
+                attachments: null,
+                cancellationToken,
+                isHtml: true);
+        }
+
+        ViewBag.Sent = true;
+        return View(input);
+    }
+
+    [AllowAnonymous]
+    [HttpGet]
+    public IActionResult ResetPassword(string? token = null)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return RedirectToAction(nameof(Login));
+
+        return View(new ResetPasswordInputModel { Token = token });
+    }
+
+    [AllowAnonymous]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(ResetPasswordInputModel input, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return View(input);
+
+        var (ok, strengthError) = CalibraHub.Application.Security.PasswordHasher.ValidateStrength(input.NewPassword);
+        if (!ok)
+        {
+            ModelState.AddModelError(nameof(input.NewPassword), strengthError ?? "Şifre yeterince güçlü değil.");
+            return View(input);
+        }
+
+        var user = await _userProfileRepository.GetByResetTokenAsync(input.Token, cancellationToken);
+        if (user is null)
+        {
+            ModelState.AddModelError(string.Empty, "Bağlantı geçersiz veya süresi dolmuş. Lütfen yeniden talep edin.");
+            return View(input);
+        }
+
+        var newHash = _passwordHashService.HashPassword(input.NewPassword);
+        user.SetPasswordHash(newHash);
+        await _userProfileRepository.UpdateAsync(user, cancellationToken);
+        await _userProfileRepository.ClearResetTokenAsync(user.Id, cancellationToken);
+
+        ViewBag.Success = true;
+        return View(input);
+    }
+
     [AllowAnonymous]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Login(LoginInputModel input, CancellationToken cancellationToken)
     {
+        var isAjax = string.Equals(Request.Headers["X-Requested-With"].ToString(), "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);
+
         input = await BuildLoginInputModel(input, cancellationToken);
 
         var companyFieldHasErrors = ModelState.TryGetValue(nameof(input.CompanyId), out var companyFieldState) &&
@@ -113,6 +233,8 @@ public sealed class AccountController : Controller
 
         if (!ModelState.IsValid)
         {
+            if (isAjax)
+                return Json(new { ok = false, error = "validation" });
             return View(input);
         }
 
@@ -124,6 +246,8 @@ public sealed class AccountController : Controller
 
         if (authenticatedUser is null)
         {
+            if (isAjax)
+                return Json(new { ok = false, error = "credentials" });
             ModelState.AddModelError(string.Empty, "Sirket, e-posta veya sifre hatali.");
             return View(input);
         }
@@ -175,12 +299,14 @@ public sealed class AccountController : Controller
             catch { /* tema kaydı başarısız olsa da login devam eder */ }
         }
 
-        if (!string.IsNullOrWhiteSpace(input.ReturnUrl) && Url.IsLocalUrl(input.ReturnUrl))
-        {
-            return Redirect(input.ReturnUrl);
-        }
+        var redirectUrl = (!string.IsNullOrWhiteSpace(input.ReturnUrl) && Url.IsLocalUrl(input.ReturnUrl))
+            ? input.ReturnUrl
+            : Url.Action("Index", "Home")!;
 
-        return RedirectToAction("Index", "Home");
+        if (isAjax)
+            return Json(new { ok = true, redirect = redirectUrl });
+
+        return Redirect(redirectUrl);
     }
 
     [Authorize]

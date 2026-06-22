@@ -91,6 +91,26 @@
         body.app-theme-dark .login-remember-label { color: #cbd5e1 !important; }
         body.app-theme-dark .login-card .text-muted { color: #94a3b8 !important; }
         body.app-theme-dark .login-card .border-top { border-color: rgba(148, 163, 184, 0.18) !important; }
+
+        @@keyframes loginShake {
+            0%, 100% { transform: translateX(0); }
+            15%  { transform: translateX(-7px); }
+            30%  { transform: translateX(7px); }
+            45%  { transform: translateX(-5px); }
+            60%  { transform: translateX(5px); }
+            75%  { transform: translateX(-2px); }
+        }
+        .login-pw-error .form-control {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+        }
+        body.app-theme-dark .login-pw-error .form-control {
+            border-color: #f87171 !important;
+            box-shadow: 0 0 0 3px rgba(248,113,113,.18) !important;
+        }
+        .login-pw-shake {
+            animation: loginShake .42s cubic-bezier(.36,.07,.19,.97) both;
+        }
     </style>
 </head>
 <body class="login-page app-theme-@runtime.ThemeCode"
@@ -132,12 +152,6 @@
         btn.addEventListener('click', function () {
             applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
         });
-        // Form submit öncesi hidden input'un güncel olduğundan emin ol
-        if (form) {
-            form.addEventListener('submit', function () {
-                if (themeInput) themeInput.value = currentTheme();
-            });
-        }
     })();
 </script>
 <div class="login-shell">
@@ -192,6 +206,14 @@
                 </div>
 
                 <button type="submit" class="btn btn-primary w-100">@ui.Text("submit")</button>
+
+                <div class="text-center mt-3">
+                    <a href="@Url.Action("ForgotPassword", "Account")" class="text-muted small"
+                       style="text-decoration:none;opacity:.75;transition:opacity .15s"
+                       onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.75'">
+                        Şifremi Unuttum
+                    </a>
+                </div>
             </form>
 
             @if (ViewBag.ShowSetupLink == true)
@@ -315,17 +337,59 @@
 
         var loginForm = emailInput.closest("form");
         if (loginForm) {
-            loginForm.addEventListener("submit", function () {
+            var pwInput = document.getElementById("Password");
+            var pwWrap  = pwInput ? pwInput.closest(".login-field") : null;
+
+            loginForm.addEventListener("submit", async function (e) {
+                e.preventDefault();
+
+                // Tema hidden input'u güncelle
+                var themeInput = document.getElementById("loginThemeInput");
+                if (themeInput) themeInput.value = document.body.classList.contains("app-theme-dark") ? "dark" : "light";
+
+                // Beni hatırla
                 if (rememberToggle && rememberToggle.checked) {
                     localStorage.setItem("calibra_login_remember", "1");
                     localStorage.setItem("calibra_login_email", emailInput.value.trim());
-                    if (companySelect.value) {
-                        localStorage.setItem("calibra_login_company", companySelect.value);
-                    }
+                    if (companySelect.value) localStorage.setItem("calibra_login_company", companySelect.value);
                 } else {
                     localStorage.removeItem("calibra_login_remember");
                     localStorage.removeItem("calibra_login_email");
                     localStorage.removeItem("calibra_login_company");
+                }
+
+                // AJAX submit
+                try {
+                    var resp = await fetch(loginForm.action || window.location.href, {
+                        method: "POST",
+                        body: new FormData(loginForm),
+                        headers: { "X-Requested-With": "XMLHttpRequest" }
+                    });
+                    var json = await resp.json();
+
+                    if (json.ok) {
+                        window.location.href = json.redirect;
+                        return;
+                    }
+
+                    if (json.error === "credentials" && pwWrap && pwInput) {
+                        pwInput.value = "";
+                        pwWrap.classList.add("login-pw-error");
+                        pwWrap.classList.remove("login-pw-shake");
+                        void pwWrap.offsetWidth; // force reflow
+                        pwWrap.classList.add("login-pw-shake");
+                        pwWrap.addEventListener("animationend", function () {
+                            pwWrap.classList.remove("login-pw-shake");
+                        }, { once: true });
+                        pwInput.focus();
+                        // Yazmaya başlayınca kırmızı çerçeve kalksın
+                        pwInput.addEventListener("input", function () {
+                            pwWrap.classList.remove("login-pw-error");
+                        }, { once: true });
+                    }
+                } catch {
+                    // Network hatası: normal submit
+                    loginForm.submit();
                 }
             });
         }

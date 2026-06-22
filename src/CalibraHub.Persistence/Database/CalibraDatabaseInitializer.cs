@@ -1124,6 +1124,17 @@ END;";
                     EXEC(N'CREATE UNIQUE INDEX [UX_Users_Comp_EmpCode] ON [{schemaForSql}].[Users]([CompanyId], [EmployeeCode]);');
             END;
 
+            -- 2026-06-22: Şifre sıfırlama token kolonları — idempotent.
+            IF OBJECT_ID(N'[{schemaForSql}].[Users]', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Users]') AND [name] = N'PasswordResetToken')
+                    ALTER TABLE [{schemaForSql}].[Users] ADD [PasswordResetToken] NVARCHAR(128) NULL;
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Users]') AND [name] = N'PasswordResetTokenExpiry')
+                    ALTER TABLE [{schemaForSql}].[Users] ADD [PasswordResetTokenExpiry] DATETIME NULL;
+            END;
+
             -- 2026-05-25: user_settings — user_id INT'e tasindi (Users.Id ile uyumlu).
             -- Eski UNIQUEIDENTIFIER kayitlari kayboluyor (data wipe).
             IF OBJECT_ID(N'[{schemaForSql}].[user_settings]', N'U') IS NOT NULL
