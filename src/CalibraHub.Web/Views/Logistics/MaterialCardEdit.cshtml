@@ -95,36 +95,58 @@
     /* Legacy meta span (artik kullanilmiyor ama JS uyumu icin) */
     .mce-action-bar .mce-meta { display: none; }
 
+    /* CalibraHub standart action bar pattern (soft tinted) — calibra-actionbar.css ile
+       görsel uyum. Identity rozeti ve collaboration banner host korunur. */
     .mce-btn {
         display: inline-flex; align-items: center; gap: 6px;
-        padding: 7px 15px; border-radius: 8px; border: 1px solid;
-        font-size: 0.78rem; font-weight: 600; cursor: pointer;
-        transition: all 0.14s ease; background: transparent;
+        padding: 7px 14px; border-radius: 10px; border: 1px solid transparent;
+        font-size: 12.5px; font-weight: 600; cursor: pointer;
+        transition: background-color .18s ease, border-color .18s ease, color .18s ease,
+                    transform .15s ease, box-shadow .18s ease;
         white-space: nowrap;
     }
-    .mce-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .mce-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .mce-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(15,23,42,0.06); }
+    .mce-btn:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
+    /* Kaydet — indigo soft */
     .mce-btn--primary {
-        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-        border-color: #4338ca; color: #fff;
-        box-shadow: 0 1px 4px rgba(99,102,241,0.35);
+        background: #eef2ff; border-color: #c7d2fe; color: #4f46e5;
     }
     .mce-btn--primary:hover:not(:disabled) {
-        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
-        box-shadow: 0 2px 8px rgba(99,102,241,0.5);
+        background: #e0e7ff; border-color: #a5b4fc; color: #4338ca;
     }
+    body.app-theme-dark .mce-btn--primary {
+        background: rgba(99,102,241,0.18); border-color: rgba(129,140,248,0.35); color: #a5b4fc;
+    }
+    body.app-theme-dark .mce-btn--primary:hover:not(:disabled) {
+        background: rgba(99,102,241,0.28); border-color: rgba(129,140,248,0.55); color: #c7d2fe;
+    }
+    /* Liste — slate (nötr) */
     .mce-btn--secondary {
-        background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);
-        color: rgba(255,255,255,0.6);
+        background: #f1f5f9; border-color: #e2e8f0; color: #475569;
     }
-    body.app-theme-light .mce-btn--secondary {
-        background: #fff; border-color: #e2e8f0; color: #475569;
+    .mce-btn--secondary:hover:not(:disabled) {
+        background: #e2e8f0; border-color: #cbd5e1; color: #1e293b;
     }
-    .mce-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,0.09); color: rgba(255,255,255,0.88); border-color: rgba(255,255,255,0.18); }
-    body.app-theme-light .mce-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
+    body.app-theme-dark .mce-btn--secondary {
+        background: rgba(100,116,139,0.15); border-color: rgba(148,163,184,0.25); color: #cbd5e1;
+    }
+    body.app-theme-dark .mce-btn--secondary:hover:not(:disabled) {
+        background: rgba(100,116,139,0.25); border-color: rgba(148,163,184,0.40); color: #f1f5f9;
+    }
+    /* Sil — red soft */
     .mce-btn--danger {
-        background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.22); color: #f87171;
+        background: #fef2f2; border-color: #fecaca; color: #dc2626;
     }
-    .mce-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.4); }
+    .mce-btn--danger:hover:not(:disabled) {
+        background: #fee2e2; border-color: #fca5a5; color: #b91c1c;
+    }
+    body.app-theme-dark .mce-btn--danger {
+        background: rgba(220,38,38,0.18); border-color: rgba(248,113,113,0.35); color: #fca5a5;
+    }
+    body.app-theme-dark .mce-btn--danger:hover:not(:disabled) {
+        background: rgba(220,38,38,0.28); border-color: rgba(248,113,113,0.55); color: #fecaca;
+    }
 
     /* Card */
     .mce-card {

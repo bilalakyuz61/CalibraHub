@@ -59,6 +59,14 @@ self.addEventListener('fetch', function (event) {
     // Probe isteklerini intercept etme — offline.html bunu kontrol için kullanıyor
     if (req.headers.get('X-Offline-Probe') === '1') return;
 
+    // PJAX swap fetch'lerini intercept ETME. production-defs-pjax.js içerik swap'i
+    // için Accept: text/html ile fetch atar; bu istek yukarıdaki isNav kontrolüne
+    // takılır ve FAST_FALLBACK_MS (600ms) içinde board rebuild bitmezse abort edilip
+    // offline.html dönüyordu → Edit save sonrası ekran boş kalıyordu. PJAX'ın kendi
+    // network-fail fallback'i (full navigation) var; backend gerçekten kapalıysa o
+    // full navigation yine SW'ye düşüp offline.html gösterir. Bu yüzden burada geç.
+    if (req.headers.get('X-Requested-With') === 'pdt-pjax') return;
+
     event.respondWith((async function () {
         // FAST_FALLBACK_MS içinde cevap gelmezse abort + offline.html göster.
         // Bu sayede tarayıcının kendi "bağlantı reddedildi" ekranı flash etmez,

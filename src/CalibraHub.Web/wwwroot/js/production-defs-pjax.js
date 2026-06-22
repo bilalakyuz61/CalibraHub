@@ -19,6 +19,33 @@
  *   Edit pattern'leri liste pattern'lerinden ÖNCE gelir
  *   (örn. /Production/PersonnelEdit, /Production/Personnel prefix'iyle eşleşmesin).
  */
+// ── Nested-shell self-heal (2026-06-22) ────────────────────────────────────
+// Iframe (workspace) içindeyken sunucu yanlışlıkla Shell host sayfasını
+// döndürürse sayfa boş kalır: #pdt-tab-content yok, _Layout inline guard'ı
+// shell-root'u gizliyor → tamamen boş ekran. Bu durum, iframe URL'de
+// workspace=1 OLMADAN navigate edildiğinde oluşur (örn. Edit save sonrası
+// eski full-page `window.location.href='/...'`; Chrome'da Location.href
+// setter override edilemediği için workspace-frame-nav-guard workspace=1
+// ekleyemiyor; sunucunun Sec-Fetch-Dest tespiti de bazı tarayıcılarda kayıp).
+// Burada matruska shell'i tespit edip URL'e workspace=1 ekleyerek yeniden
+// yükleriz → sunucu gerçek içeriği (#pdt-tab-content) döndürür.
+// NOT: Statik dosya olduğu için rebuild gerektirmez. Asıl/temiz çözüm Edit
+// ekranlarının PJAX in-place refresh kullanması; bu blok güvenlik ağıdır ve
+// PJAX devredeyse (full nav olmaz) hiç tetiklenmez.
+(function () {
+    'use strict';
+    try {
+        if (window.self === window.top) return;                      // üst pencere → matruska değil
+        if (window.location.search.indexOf('workspace=1') !== -1) return; // zaten param var, tekrar yok
+        if (!document.getElementById('shell-root')) return;          // shell host değil → normal içerik
+        var loc = window.location;
+        var healed = loc.pathname
+            + (loc.search ? loc.search + '&' : '?') + 'workspace=1'
+            + loc.hash;
+        loc.replace(healed);
+    } catch (e) { /* cross-origin top — dokunma */ }
+}());
+
 (function () {
     'use strict';
 
@@ -28,8 +55,11 @@
     var LOG_PREFIX = '[pdt-pjax]';
 
     // ---------- URL → tab key + body class inference ----------
-    // ÖNEMLİ: Edit pattern'leri liste pattern'lerinden ÖNCE.
+    // ÖNEMLİ: Definitions (full list) PersonnelEdit'ten ÖNCE gelmeli ki
+    // `/Production/Definitions` PersonnelEdit pattern'iyle eşleşmesin.
+    // Save/Delete sonrası kullanılır. Aynı tab'a ait (personnel).
     var URL_PATTERNS = [
+        { rx: /^\/Production\/Definitions(\/|\?|#|$)/i, key: 'personnel',   bodyClass: 'page-personnel' },
         { rx: /^\/Production\/PersonnelEdit/i,       key: 'personnel',       bodyClass: 'page-personnel-edit' },
         { rx: /^\/Production\/Personnel(\/|\?|#|$)/i, key: 'personnel',      bodyClass: 'page-personnel' },
         { rx: /^\/Production\/OperationEdit/i,       key: 'operations',      bodyClass: 'page-operation-edit' },
@@ -155,18 +185,21 @@
     function navigateTo(fetchUrl, displayUrl, key, newBodyClass, pushHistory) {
         var current = document.getElementById(CONTENT_ID);
         if (!current) {
-            // Yapı yok, fallback full nav
+            console.warn(LOG_PREFIX, '#' + CONTENT_ID + ' DOMda yok, full nav');
             setHrefRaw(fetchUrl);
             return Promise.resolve();
         }
 
+        console.log(LOG_PREFIX, 'navigateTo basladi:', fetchUrl);
         return fetch(fetchUrl, {
             credentials: 'same-origin',
             headers: { 'X-Requested-With': 'pdt-pjax', 'Accept': 'text/html' },
         }).then(function (resp) {
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            console.log(LOG_PREFIX, 'fetch OK:', resp.status);
             return resp.text();
         }).then(function (html) {
+            console.log(LOG_PREFIX, 'HTML alindi, boyut:', html.length);
             var parser = new DOMParser();
             var doc = parser.parseFromString(html, 'text/html');
             var fresh = doc.getElementById(CONTENT_ID);
@@ -184,6 +217,7 @@
 
             var imported = document.importNode(fresh, true);
             current.parentNode.replaceChild(imported, current);
+            console.log(LOG_PREFIX, 'content swap tamam');
 
             // Body class — önce parametre, yoksa wrapper data attr, yoksa URL inference
             var resolvedBodyClass = newBodyClass
@@ -334,6 +368,22 @@
         }
         console.debug(LOG_PREFIX, 'aktif (tab click intercept ON, location.href intercept OFF)');
     }
+
+    // Global PJAX navigate API — save/delete handler'ları dışarıdan çağırabilsin diye.
+    // Kullanım: window.pdtPjaxNavigate('/Production/Definitions', 'personnel', 'page-personnel');
+    window.pdtPjaxNavigate = function (url, key, bodyClass) {
+        if (!url) { console.warn(LOG_PREFIX, 'pdtPjaxNavigate: url bos'); return; }
+        var fetchUrl = ensureWorkspaceParam(url);
+        console.log(LOG_PREFIX, 'pdtPjaxNavigate basladi, url:', fetchUrl, 'key:', key);
+        navigateTo(fetchUrl, url, key || '', bodyClass || '', true)
+            .then(function () {
+                console.log(LOG_PREFIX, 'pdtPjaxNavigate basarili');
+            })
+            .catch(function (err) {
+                console.error(LOG_PREFIX, 'pdtPjaxNavigate hata, full nav fallback:', err);
+                setHrefRaw(fetchUrl);
+            });
+    };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

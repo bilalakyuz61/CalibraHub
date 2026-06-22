@@ -310,8 +310,15 @@
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d && d.ok) {
-                    // 600ms bekle: pending fetch'ler tamamlanır, navigate race önlenir
-                    setTimeout(function () { window.location.href = '/Production/Definitions'; }, 600);
+                    // In-place PJAX refresh (CLAUDE.md standardı) — full page reload yok.
+                    // pdtPjaxNavigate fetch'i SW tarafından intercept edilmez
+                    // (X-Requested-With: pdt-pjax), böylece 600ms abort race'i ve boş
+                    // ekran oluşmaz. PJAX yüklenmemişse full navigation fallback.
+                    if (typeof window.pdtPjaxNavigate === 'function') {
+                        window.pdtPjaxNavigate('/Production/Definitions', 'personnel', 'page-personnel');
+                    } else {
+                        window.location.href = '/Production/Definitions';
+                    }
                 } else {
                     setErr((d && d.error) || 'Kayıt başarısız.');
                     saveBtn.disabled = false;
@@ -344,7 +351,11 @@
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (d && d.ok) {
-                        setTimeout(function () { window.location.href = '/Production/Definitions'; }, 600);
+                        if (typeof window.pdtPjaxNavigate === 'function') {
+                            window.pdtPjaxNavigate('/Production/Definitions', 'personnel', 'page-personnel');
+                        } else {
+                            window.location.href = '/Production/Definitions';
+                        }
                     } else {
                         peCloseModal();
                         setErr((d && d.error) || 'Silinemedi.');
