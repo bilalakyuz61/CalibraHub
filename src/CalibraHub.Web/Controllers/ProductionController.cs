@@ -1072,7 +1072,7 @@ public sealed class ProductionController : Controller
     }
 
     [HttpGet]
-    public IActionResult Personnel() => RedirectToActionPermanent(nameof(Definitions));
+    public IActionResult Personnel() => RedirectToAction(nameof(Definitions));
 
     private async Task<object> BuildPersonnelBoardConfigAsync(CancellationToken ct)
     {

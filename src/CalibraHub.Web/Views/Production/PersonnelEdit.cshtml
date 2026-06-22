@@ -25,7 +25,7 @@
   @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
   {
       ["Title"]       = isNew ? "Yeni Personel" : ((Model!.FullName ?? "Personeli Düzenle") + (Model!.IsActive ? "" : " (Pasif)")),
-      ["ListUrl"]     = "/Production/Personnel",
+      ["ListUrl"]     = "/Production/Definitions",
       ["NewUrl"]      = "/Production/PersonnelEdit",
       ["SaveBtnId"]   = "pe-save",
       ["DeleteBtnId"] = "pe-delete",
@@ -277,7 +277,7 @@
         }
     })();
 
-    // ── Save ──
+    // ── Save handler ──
     var saveBtn = document.getElementById('pe-save');
     if (saveBtn) {
         saveBtn.addEventListener('click', function () {
@@ -310,7 +310,8 @@
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d && d.ok) {
-                    window.location.href = '/Production/Definitions';
+                    // 600ms bekle: pending fetch'ler tamamlanır, navigate race önlenir
+                    setTimeout(function () { window.location.href = '/Production/Definitions'; }, 600);
                 } else {
                     setErr((d && d.error) || 'Kayıt başarısız.');
                     saveBtn.disabled = false;
@@ -343,7 +344,7 @@
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (d && d.ok) {
-                        window.location.href = '/Production/Definitions';
+                        setTimeout(function () { window.location.href = '/Production/Definitions'; }, 600);
                     } else {
                         peCloseModal();
                         setErr((d && d.error) || 'Silinemedi.');
