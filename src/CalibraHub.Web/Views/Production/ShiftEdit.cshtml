@@ -417,7 +417,8 @@
             if (!d.ok) { notify(d.error || 'Kaydedilemedi.', false); return; }
             notify('Kaydedildi.', true);
             if (!payload.id || payload.id === 0) {
-                setTimeout(function () { location.href = '/Production/ShiftEdit?id=' + d.id; }, 600);
+                // PJAX swap Edit?id=... için unstable → liste sayfasına dön
+                setTimeout(function () { location.href = '/Production/Shifts'; }, 600);
             }
         } catch (e) { notify('Hata: ' + e.message, false); }
     });
@@ -437,7 +438,8 @@
                 });
                 var d = await r.json();
                 if (!d.ok) { notify(d.error || 'Silinemedi.', false); return; }
-                location.href = '/Production/Shifts';
+                notify('Silindi.', true);
+                setTimeout(function () { location.href = '/Production/Shifts'; }, 600);
             } catch (e) { notify('Hata: ' + e.message, false); }
         });
     }

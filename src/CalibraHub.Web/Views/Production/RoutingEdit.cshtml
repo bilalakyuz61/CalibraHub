@@ -956,7 +956,8 @@ body.app-theme-dark .map-row-code { color: #818cf8; }
             if (data.ok) {
                 flash('Kaydedildi.', true);
                 if (isNew && data.id) {
-                    setTimeout(() => location.href = '/Production/RoutingEdit?id=' + data.id, 500);
+                    // PJAX swap Edit?id=... için unstable → liste sayfasına dön
+                    setTimeout(() => location.href = '/Production/Routings', 500);
                 } else {
                     setTimeout(() => location.reload(), 500);
                 }

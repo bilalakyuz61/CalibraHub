@@ -183,11 +183,8 @@
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d && d.ok) {
-                    if (!idVal && d.id) {
-                        location.href = '/Production/OperationEdit?id=' + d.id;
-                    } else {
-                        location.href = '/Production/Operations';
-                    }
+                    // PJAX swap Edit?id=... için unstable → liste sayfasına dön (güvenilir)
+                    location.href = '/Production/Operations';
                 } else {
                     setErr((d && d.error) || 'Kayıt başarısız.');
                     saveBtn.disabled = false;
