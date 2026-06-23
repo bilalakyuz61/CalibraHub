@@ -222,7 +222,16 @@ builder.Services.AddScoped<IUserAuthenticationService, UserAuthenticationService
 builder.Services.AddScoped<IPasswordHashService, Pbkdf2PasswordHashService>();
 builder.Services.AddScoped<IUiTextService, UiTextService>();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    // Stale connection cleanup hızlandırma — default 30sn ServerTimeout +
+    // 15sn KeepAlive idle tab'larda 1+ dakika beklerken connection state RAM tutar.
+    // Client-side heartbeat 15sn (collaboration.js) → server 20sn'de yoksa disconnect.
+    options.ClientTimeoutInterval     = TimeSpan.FromSeconds(20); // server-side: client'tan 20sn ping gelmezse drop
+    options.KeepAliveInterval         = TimeSpan.FromSeconds(10); // server → client ping
+    options.HandshakeTimeout          = TimeSpan.FromSeconds(5);
+    options.MaximumReceiveMessageSize = 64 * 1024;
+});
 builder.Services.AddSingleton<CollaborationRuntimeStore>();
 builder.Services.AddHostedService<CollaborationStartupLoadService>();
 builder.Services.AddHostedService<CollaborationCleanupService>();

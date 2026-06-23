@@ -180,6 +180,9 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
         catch (HttpRequestException) { return; }   // Bridge kapali — bir sonraki tick
         catch (TaskCanceledException) { return; }  // timeout
 
+        // using: response body buffer + connection state dispose edilmeli
+        // (her early return'da resp leak oluyordu → saatte 3600 GET birikimi).
+        using var _resp = resp;
         if (!resp.IsSuccessStatusCode) return;
 
         var payload = await resp.Content.ReadFromJsonAsync<BridgeMessagesResponse>(ct);

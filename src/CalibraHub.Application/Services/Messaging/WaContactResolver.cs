@@ -103,7 +103,7 @@ public sealed class WaContactResolver : IWaContactResolver
             using var http = _httpClientFactory.CreateClient();
             http.Timeout = TimeSpan.FromSeconds(3);
             var url = bridgeBaseUrl.TrimEnd('/') + "/lid-resolve?jid=" + Uri.EscapeDataString(lidJid);
-            var resp = await http.GetAsync(url, ct);
+            using var resp = await http.GetAsync(url, ct);
             if (!resp.IsSuccessStatusCode) return null;
 
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
