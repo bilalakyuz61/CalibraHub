@@ -26,6 +26,10 @@ import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { EncryptPromptModal, DecryptPromptModal, FullNoteLockScreen } from './EncryptionModals'
+import { AudioRecorder } from './AudioRecorder'
+import { DrawingPanel }  from './DrawingPanel'
+import { DrawingNodeExtension } from './DrawingNodeExtension'
+import { CameraCapture } from './CameraCapture'
 import {
   encryptText, decryptText,
   rememberPassword, recallPassword, payloadCacheKey
@@ -45,7 +49,8 @@ import {
   Home, Share2, Tag, AlertCircle, BookOpen, Copy,
   Maximize2, Minimize2, Eye, EyeOff, LayoutTemplate,
   RefreshCw, Download,
-  Globe, Keyboard
+  Globe, Keyboard,
+  Mic, PenLine, Camera
 } from 'lucide-react'
 import * as api from '../../services/notesService'
 
@@ -280,6 +285,9 @@ var INSERT_ITEMS = [
   { section: 'Medya' },
   { id: 'image',   label: 'Resim',       icon: ImagePlus,   action: 'image' },
   { id: 'youtube', label: 'YouTube',     icon: YoutubeIcon, action: 'youtube' },
+  { id: 'audio',   label: 'Ses Kaydı',  icon: Mic,         action: 'audio' },
+  { id: 'draw',    label: 'Çizim',      icon: PenLine,     action: 'draw' },
+  { id: 'camera',  label: 'Kamera',     icon: Camera,      action: 'camera' },
 ]
 
 function InsertMenu(props) {
@@ -1270,6 +1278,8 @@ export default function NotesWorkspace() {
   var [gearMenuOpen, setGearMenuOpen] = useState(false)
   // importSubOpen kaldırıldı — direkt buton kullanılıyor
   var [searchQuery, setSearchQuery] = useState('')
+  var [audioRecordOpen, setAudioRecordOpen] = useState(false)
+  var [cameraOpen,      setCameraOpen]      = useState(false)
   var attachUploadRef = useRef(null)
   var imageInputRef   = useRef(null)
   var [attachmentsOpen, setAttachmentsOpen] = useState(false)
@@ -1301,6 +1311,14 @@ export default function NotesWorkspace() {
   var [shareUserDropOpen, setShareUserDropOpen] = useState(false)
   // ── Focus Mode / TOC / Find & Replace / Slash Command ─────────────────
   var [focusMode, setFocusMode] = useState(false)
+
+  useEffect(function () {
+    function onDrawingFullscreen(e) {
+      setFocusMode(e.detail.on)
+    }
+    window.addEventListener('calibra:drawing-fullscreen', onDrawingFullscreen)
+    return function () { window.removeEventListener('calibra:drawing-fullscreen', onDrawingFullscreen) }
+  }, [])
   var [tocOpen, setTocOpen] = useState(false)
   var [tocItems, setTocItems] = useState([])
   var tocTimerRef = useRef(null)
@@ -1363,6 +1381,7 @@ export default function NotesWorkspace() {
       Focus.configure({ className: 'has-focus', mode: 'deepest' }),
       EncryptedMark,
       SearchHighlightExtension,
+      DrawingNodeExtension,
     ],
     editorProps: {
       attributes: {
@@ -1501,6 +1520,10 @@ export default function NotesWorkspace() {
           }
         }
         setNotes(function (prev) {
+          var existing = prev.find(function (n) { return n.id === noteId })
+          // İçerik değişmediyse güncelleme yok — yalnızca görüntüleme amaçlı tetiklenen
+          // onUpdate'lerin (atom node transaction, gapcursor vs.) neden olduğu sahte kayıtları engeller.
+          if (existing && existing.content === finalContent) return prev
           var updated = prev.map(function (n) {
             return n.id === noteId ? { ...n, content: finalContent, updatedAt: new Date() } : n
           })
@@ -1664,24 +1687,24 @@ export default function NotesWorkspace() {
           isSwitchingNoteRef.current = true
           editor.commands.setContent('', false)
           clearTimeout(isSwitchingResetRef.current)
-          isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 0)
+          isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 300)
         }
       } else {
         var currentContent = editor.getHTML()
         if (currentContent !== selectedNote.content) {
           isSwitchingNoteRef.current = true
           editor.commands.setContent(selectedNote.content || '', false)
-          // TipTap bazı extension'lar appendTransaction ile async onUpdate tetikleyebilir;
-          // flag'i 0ms sonra sıfırla — bir event loop tick yeterli.
+          // React 18 concurrent mode'da atom node view'ların async commit'i
+          // 0ms'de tamamlanmayabilir; 300ms not geçişinin tüm render sürecini kapsar.
           clearTimeout(isSwitchingResetRef.current)
-          isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 0)
+          isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 300)
         }
       }
     } else if (editor && !selectedNote) {
       isSwitchingNoteRef.current = true
       editor.commands.setContent('', false)
       clearTimeout(isSwitchingResetRef.current)
-      isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 0)
+      isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 300)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNoteId, editor, unlockedNoteIds])
@@ -2496,6 +2519,9 @@ export default function NotesWorkspace() {
         if (ytUrl) editor.chain().focus().setYoutubeVideo({ src: ytUrl }).run()
         break
       }
+      case 'audio':  setAudioRecordOpen(true); break
+      case 'draw':   editor.chain().focus().insertDrawingCanvas().run(); break
+      case 'camera': setCameraOpen(true);       break
       default:
         break
     }
@@ -3094,7 +3120,12 @@ export default function NotesWorkspace() {
                 <button
                   className={'nw-topbar-icon-btn' + (focusMode ? ' nw-topbar-icon-btn--active' : '')}
                   title={focusMode ? 'Odak modundan çık (F11 / Esc)' : 'Odak modu (F11)'}
-                  onClick={function () { setFocusMode(function (p) { return !p }) }}
+                  onClick={function () {
+                    setFocusMode(function (p) {
+                      window.dispatchEvent(new CustomEvent('calibra:focus-mode', { detail: { on: !p } }))
+                      return !p
+                    })
+                  }}
                 >
                   {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                 </button>
@@ -3775,6 +3806,38 @@ export default function NotesWorkspace() {
           </div>
         </div>
       )}
+
+      {/* ═══ Ses Kaydı ═══ */}
+      <AudioRecorder
+        open={audioRecordOpen}
+        onClose={function () { setAudioRecordOpen(false) }}
+        noteId={selectedNoteId}
+        onAttachmentAdded={function () {
+          if (selectedNoteId) {
+            api.getAttachments(selectedNoteId)
+              .then(function (data) { setAttachments(data || []) })
+          }
+        }}
+      />
+
+
+      {/* ═══ Kamera ═══ */}
+      <CameraCapture
+        open={cameraOpen}
+        onClose={function () { setCameraOpen(false) }}
+        noteId={selectedNoteId}
+        onInsertImage={function (dataUrl) {
+          if (editor) {
+            editor.chain().focus().setImage({ src: dataUrl, alt: 'fotoğraf' }).run()
+          }
+        }}
+        onAttachmentAdded={function () {
+          if (selectedNoteId) {
+            api.getAttachments(selectedNoteId)
+              .then(function (data) { setAttachments(data || []) })
+          }
+        }}
+      />
 
       {/* ═══ Confirm Modal ═══ */}
       {confirmModal && (

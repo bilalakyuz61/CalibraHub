@@ -1,0 +1,199 @@
+/* ── Inline çizim node — notun parçası gibi ── */
+html body {
+  --dn-accent:    #6366f1;
+  --dn-border:    #e2e8f0;
+  --dn-text:      #0f172a;
+  --dn-sub:       #94a3b8;
+  --dn-tool-bg:   #f1f5f9;
+  --dn-tool-act:  #6366f1;
+  --dn-tool-act-text: #ffffff;
+  --dn-size-dot:  #64748b;
+  --dn-canvas-bg: #ffffff;
+  --dn-btn-cancel:#f1f5f9;
+  --dn-btn-cancel-text: #475569;
+  --dn-btn-insert:#6366f1;
+  --dn-btn-insert-text: #ffffff;
+}
+body.app-theme-dark {
+  --dn-accent:    #818cf8;
+  --dn-border:    #334155;
+  --dn-text:      #e2e8f0;
+  --dn-sub:       #64748b;
+  --dn-tool-bg:   #1e293b;
+  --dn-tool-act:  #818cf8;
+  --dn-tool-act-text: #ffffff;
+  --dn-size-dot:  #94a3b8;
+  --dn-canvas-bg: #ffffff;
+  --dn-btn-cancel:#1e293b;
+  --dn-btn-cancel-text: #94a3b8;
+  --dn-btn-insert:#818cf8;
+  --dn-btn-insert-text: #ffffff;
+}
+
+/* Dış sarmalayıcı — kart yok, notun akışına giriyor */
+.dn-wrap {
+  margin: 4px 0;
+  border-left: 3px solid var(--dn-accent);
+  padding-left: 12px;
+}
+
+/* Toolbar — sayfa arka planında soluk görünür */
+.dn-toolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 4px 0 8px;
+}
+
+.dn-tools { display: flex; gap: 3px; }
+.dn-tool {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px; border: none;
+  background: transparent; color: var(--dn-sub);
+  cursor: pointer; transition: all .15s;
+}
+.dn-tool:hover { background: var(--dn-tool-bg); color: var(--dn-text); }
+.dn-tool--active { background: var(--dn-tool-act); color: var(--dn-tool-act-text); }
+
+.dn-sep { width: 1px; height: 18px; background: var(--dn-border); margin: 0 2px; }
+
+.dn-colors { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.dn-color {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent;
+  cursor: pointer; padding: 0; transition: transform .12s, border-color .12s;
+}
+.dn-color:hover { transform: scale(1.25); }
+.dn-color--active { border-color: var(--dn-tool-act); transform: scale(1.25); }
+.dn-color[style*="#ffffff"] { border-color: var(--dn-border) !important; }
+.dn-color--active[style*="#ffffff"] { border-color: var(--dn-tool-act) !important; }
+
+.dn-sizes { display: flex; gap: 3px; align-items: center; }
+.dn-size {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; border: none;
+  background: transparent; cursor: pointer; transition: background .15s;
+}
+.dn-size:hover { background: var(--dn-tool-bg); }
+.dn-size--active { background: var(--dn-tool-act); }
+.dn-size--active span { background: white !important; }
+
+.dn-actions { display: flex; gap: 3px; margin-left: auto; }
+.dn-action {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; border: none;
+  background: transparent; color: var(--dn-sub); cursor: pointer;
+  transition: all .15s;
+}
+.dn-action:hover { background: var(--dn-tool-bg); color: var(--dn-text); }
+
+/* Canvas wrap + resize handle */
+.dn-canvas-wrap {
+  position: relative;
+  padding: 0;
+}
+.dn-canvas {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--dn-border);
+  border-bottom: none;      /* handle kenarlığı alır */
+  border-radius: 4px 4px 0 0;
+  background: var(--dn-canvas-bg);
+  touch-action: none;
+}
+
+/* Resize handle — canvas'ın hemen altında tam genişlik */
+.dn-resize-handle {
+  height: 10px;
+  background: var(--dn-tool-bg);
+  border: 1px solid var(--dn-border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  cursor: ns-resize;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.dn-resize-handle:hover { background: var(--dn-border); }
+
+/* Üç noktalı grip ikonu */
+.dn-resize-dots {
+  display: block;
+  width: 32px; height: 3px;
+  background-image: radial-gradient(circle, var(--dn-sub) 1.5px, transparent 1.5px);
+  background-size: 8px 3px;
+  background-repeat: repeat-x;
+  opacity: .5;
+}
+
+/* Alt bar — minimal */
+.dn-footer {
+  display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+  padding: 8px 0 2px;
+}
+/* ── Tam ekran overlay ── */
+.dn-fs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  background: var(--dn-canvas-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.dn-toolbar--fs {
+  border-bottom: 1px solid var(--dn-border);
+  background: var(--dn-tool-bg);
+  flex-shrink: 0;
+}
+
+.dn-fs-canvas-wrap {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+}
+
+.dn-canvas--fs {
+  flex: 1;
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.dn-action--exit-fs {
+  color: var(--dn-tool-act) !important;
+}
+
+/* Editörde yer tutucu (tam ekrandayken) */
+.dn-fs-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--dn-border);
+  border-radius: 4px;
+  color: var(--dn-sub);
+  font-size: 13px;
+  margin: 0;
+}
+
+.dn-saved-hint {
+  font-size: 11px; color: var(--dn-sub);
+  margin-right: auto;
+  animation: dn-fade-in .2s ease;
+}
+@keyframes dn-fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+.dn-btn {
+  padding: 4px 12px; border-radius: 6px; border: none;
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: opacity .15s, background .15s;
+}
+.dn-btn--delete {
+  background: transparent;
+  color: var(--dn-sub);
+}
+.dn-btn--delete:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+body.app-theme-dark .dn-btn--delete:hover {
+  background: rgba(239,68,68,.15);
+  color: #f87171;
+}

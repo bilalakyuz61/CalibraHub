@@ -1,0 +1,144 @@
+/* ── CameraCapture modal ── */
+html body {
+  --cc-bg:      #ffffff;
+  --cc-border:  #e2e8f0;
+  --cc-surface: #0f172a;
+  --cc-text:    #0f172a;
+  --cc-sub:     #64748b;
+  --cc-tab-act: #6366f1;
+  --cc-tab-text:#64748b;
+  --cc-tab-act-text: #ffffff;
+  --cc-capture-btn: #ffffff;
+  --cc-capture-ring: #6366f1;
+  --cc-btn-bg:  #f1f5f9;
+  --cc-btn-text:#475569;
+  --cc-btn-ins: #6366f1;
+  --cc-btn-ins-text: #ffffff;
+  --cc-btn-stop:#ef4444;
+  --cc-rec-bg:  #ef4444;
+  --cc-error:   #ef4444;
+}
+body.app-theme-dark {
+  --cc-bg:      #1e293b;
+  --cc-border:  #334155;
+  --cc-surface: #000000;
+  --cc-text:    #e2e8f0;
+  --cc-sub:     #94a3b8;
+  --cc-tab-act: #818cf8;
+  --cc-tab-text:#94a3b8;
+  --cc-tab-act-text: #ffffff;
+  --cc-capture-btn: #ffffff;
+  --cc-capture-ring: #818cf8;
+  --cc-btn-bg:  #334155;
+  --cc-btn-text:#94a3b8;
+  --cc-btn-ins: #818cf8;
+  --cc-btn-ins-text: #ffffff;
+  --cc-btn-stop:#f87171;
+  --cc-rec-bg:  #f87171;
+  --cc-error:   #f87171;
+}
+
+.cc-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.7);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9100;
+}
+
+.cc-panel {
+  background: var(--cc-bg);
+  border: 1px solid var(--cc-border);
+  border-radius: 16px;
+  width: 560px; max-width: 98vw;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,.3);
+  overflow: hidden;
+}
+
+.cc-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--cc-border);
+}
+.cc-mode-tabs { display: flex; gap: 6px; }
+.cc-tab {
+  padding: 6px 14px; border-radius: 8px; border: none; font-size: 13px;
+  font-weight: 600; cursor: pointer; background: transparent; color: var(--cc-tab-text);
+  transition: all .15s;
+}
+.cc-tab:hover { color: var(--cc-text); }
+.cc-tab--active { background: var(--cc-tab-act); color: var(--cc-tab-act-text); }
+.cc-close {
+  background: none; border: none; cursor: pointer; color: var(--cc-sub);
+  padding: 4px; border-radius: 6px; display: flex;
+  transition: color .15s;
+}
+.cc-close:hover { color: var(--cc-text); }
+
+.cc-viewfinder {
+  position: relative; background: var(--cc-surface);
+  aspect-ratio: 16/9; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.cc-video, .cc-preview-img {
+  width: 100%; height: 100%; object-fit: cover;
+  display: block;
+}
+
+.cc-rec-badge {
+  position: absolute; top: 12px; left: 12px;
+  background: var(--cc-rec-bg); color: #fff;
+  border-radius: 6px; padding: 4px 10px;
+  font-size: 12px; font-weight: 700;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 1px;
+}
+
+.cc-error {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(239,68,68,.9); color: #fff;
+  border-radius: 8px; padding: 6px 14px; font-size: 12px;
+  max-width: 90%; text-align: center;
+}
+
+.cc-controls {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 16px;
+  border-top: 1px solid var(--cc-border);
+}
+
+.cc-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: none; border-radius: 10px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.cc-btn:hover { opacity: .85; }
+.cc-btn:active { transform: scale(.95); }
+.cc-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.cc-btn--flip, .cc-btn--retake {
+  padding: 8px 14px;
+  background: var(--cc-btn-bg); color: var(--cc-btn-text);
+}
+.cc-btn--insert { padding: 9px 20px; background: var(--cc-btn-ins); color: var(--cc-btn-ins-text); }
+
+/* Big circular capture button */
+.cc-btn--capture {
+  width: 60px; height: 60px; border-radius: 50%; padding: 0;
+  background: var(--cc-capture-btn);
+  border: 4px solid var(--cc-capture-ring);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--cc-tab-act);
+  box-shadow: 0 0 0 2px var(--cc-capture-ring);
+  transition: transform .12s;
+}
+.cc-btn--capture:hover { transform: scale(1.08); }
+
+/* Record stop button — big red */
+.cc-btn--stop {
+  width: 56px; height: 56px; border-radius: 50%; padding: 0;
+  background: var(--cc-btn-stop);
+  display: flex; align-items: center; justify-content: center; color: #fff;
+}
