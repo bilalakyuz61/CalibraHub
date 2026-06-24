@@ -83,8 +83,8 @@ var bootstrapAdminOptions = new BootstrapAdminOptions
     EmployeeCode = builder.Configuration[$"{BootstrapAdminOptions.SectionName}:EmployeeCode"] ?? "ADM-001",
     DefaultPassword = builder.Configuration[$"{BootstrapAdminOptions.SectionName}:DefaultPassword"] ?? "12345678"
 };
-var useInMemoryPersistence = builder.Environment.IsDevelopment() &&
-                             !await CanOpenSqlConnectionAsync(databaseOptions.ConnectionString);
+var forceInMemory = builder.Configuration.GetValue<bool>("CalibraDatabase:ForceInMemory");
+var useInMemoryPersistence = builder.Environment.IsDevelopment() && forceInMemory;
 var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, ".app-data-protection");
 
 builder.Services.AddScoped<IDocumentImportService, DocumentImportService>();
