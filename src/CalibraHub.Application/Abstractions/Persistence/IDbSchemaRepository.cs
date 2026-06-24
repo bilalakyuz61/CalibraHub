@@ -24,4 +24,10 @@ public interface IDbSchemaRepository
     /// olarak sınıflandırılır.
     /// </summary>
     Task<IReadOnlyList<RdViewInfo>> GetDesignerViewsAsync(CancellationToken cancellationToken);
+
+    /// <summary>ViewMeta tablosundan kullanıcı tanımlı açıklamaları döner (ViewName → Description).</summary>
+    Task<IReadOnlyDictionary<string, string>> GetViewMetaAsync(CancellationToken cancellationToken);
+
+    /// <summary>ViewMeta tablosuna view açıklaması yazar (MERGE — yoksa INSERT, varsa UPDATE).</summary>
+    Task SaveViewMetaAsync(string viewName, string? description, string updatedBy, CancellationToken cancellationToken);
 }

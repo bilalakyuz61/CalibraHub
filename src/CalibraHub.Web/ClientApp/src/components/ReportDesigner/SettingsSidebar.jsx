@@ -110,7 +110,7 @@ const FilterIcon = (
 function SortableColRow({ id, cfg, expanded, onSetCol, onToggleExpand, detail }) {
   const sortable = useSortable({ id })
   const style = {
-    transform:  CSS.Transform.toString(sortable.transform),
+    transform:  sortable.transform ? CSS.Transform.toString({ ...sortable.transform, x: 0 }) : undefined,
     transition: sortable.transition,
     zIndex:     sortable.isDragging ? 40 : 1,
     position:   'relative',
@@ -499,6 +499,36 @@ export default function SettingsSidebar({
             <option value="right">Sağ</option>
           </select>
         </label>
+
+        <div className="rd-col-hdr">
+          <span className="rd-col-hdr__title">Başlık Görünümü</span>
+          <label className="rd-col-opt">
+            <span>Font</span>
+            <select className="rd-col-optsel" value={c.headerFont || 'auto'} onChange={e => setCol(name, { headerFont: e.target.value })}>
+              <option value="auto">Otomatik</option>
+              <option value="sans">Sans</option>
+              <option value="serif">Serif</option>
+              <option value="mono">Mono</option>
+            </select>
+          </label>
+          <div className="rd-col-hdr__row">
+            <button type="button" className={`rd-col-stylebtn${c.headerBold ? ' rd-col-stylebtn--on' : ''}`}
+              onClick={() => setCol(name, { headerBold: !c.headerBold })} title="Kalın"><b>B</b></button>
+            <button type="button" className={`rd-col-stylebtn${c.headerItalic ? ' rd-col-stylebtn--on' : ''}`}
+              onClick={() => setCol(name, { headerItalic: !c.headerItalic })} title="İtalik"><i style={{ fontFamily: 'Georgia, serif' }}>I</i></button>
+            <label className="rd-col-color" title="Yazı rengi">
+              <input type="color" value={c.headerColor || '#64748b'} onChange={e => setCol(name, { headerColor: e.target.value })} />
+            </label>
+            {c.headerColor && (
+              <button type="button" className="rd-col-stylebtn rd-col-stylebtn--x"
+                onClick={() => setCol(name, { headerColor: undefined })} title="Rengi sıfırla">×</button>
+            )}
+            <input type="number" min="8" max="22" className="rd-col-num rd-col-hsize"
+              value={Number.isFinite(c.headerSize) ? c.headerSize : ''} placeholder="px"
+              onChange={e => setCol(name, { headerSize: e.target.value ? Math.max(8, Math.min(22, +e.target.value)) : undefined })}
+              title="Yazı boyutu (px)" />
+          </div>
+        </div>
       </>
     )
   }

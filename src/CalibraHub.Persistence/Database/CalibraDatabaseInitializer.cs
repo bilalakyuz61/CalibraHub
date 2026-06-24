@@ -733,6 +733,7 @@ END;";
             await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
             await EnsureReportEngineTablesAsync(connection, cancellationToken);
             await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
+            await EnsureViewMetaTableAsync(connection, cancellationToken);
         }
         catch (SqlException sqlEx)
         {
@@ -740,6 +741,27 @@ END;";
             Console.Error.WriteLine($"[DB INIT ERROR] Procedure: {sqlEx.Procedure}");
             throw;
         }
+    }
+
+    /// <summary>
+    /// View açıklamalarını saklayan metadata tablosu.
+    /// Kullanıcılar Veritabanı Haritası'ndan view'lara açıklama yazabilir.
+    /// </summary>
+    private async Task EnsureViewMetaTableAsync(SqlConnection connection, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            IF OBJECT_ID(N'dbo.ViewMeta', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.[ViewMeta] (
+                    [ViewName]    NVARCHAR(200)  NOT NULL CONSTRAINT PK_ViewMeta PRIMARY KEY,
+                    [Description] NVARCHAR(1000) NULL,
+                    [UpdatedBy]   NVARCHAR(120)  NULL,
+                    [Updated]     DATETIME       NULL
+                );
+            END
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>

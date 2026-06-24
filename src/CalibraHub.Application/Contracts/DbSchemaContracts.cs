@@ -89,13 +89,19 @@ public sealed record RdColumnInfo(string Name, string SqlType, bool IsNumeric, b
 // ── DB Schema haritası — view kataloğu ────────────────────────────────────
 
 /// <summary>
-/// DB Schema haritasında gösterilen CalibraHub view bilgisi.
-/// Statik açıklamalar CalibraViewCatalog'dan, fiziksel kolon listesi sys.columns'dan gelir.
+/// DB Schema haritasında gösterilen view bilgisi.
+/// Katalog view'ları CalibraViewCatalog'dan, kullanıcı view'ları doğrudan DB'den gelir.
 /// </summary>
 public sealed record DbViewInfoDto(
     string Name,
-    string Description,
-    string UsedIn,
+    /// <summary>CalibraViewCatalog'dan statik açıklama (sadece katalog view'ları).</summary>
+    string? Description,
+    /// <summary>ViewMeta tablosundan kullanıcı tarafından yazılan açıklama.</summary>
+    string? UserDescription,
+    /// <summary>Kullanıldığı ekran / bağlam (katalog view'ları için).</summary>
+    string? UsedIn,
     bool IsCustomizable,
     bool ExistsInDb,
+    /// <summary>CalibraViewCatalog'da tanımlı mı, yoksa kullanıcının kendi view'ı mı.</summary>
+    bool IsInCatalog,
     IReadOnlyList<string> Columns);

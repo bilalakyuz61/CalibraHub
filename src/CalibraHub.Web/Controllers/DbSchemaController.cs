@@ -50,6 +50,15 @@ public sealed class DbSchemaController : Controller
         return Json(views, JsonOptions);
     }
 
+    [HttpPut("api/views/{name}/description")]
+    public async Task<IActionResult> SaveViewDescription(string name, [FromBody] SaveViewDescriptionRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return BadRequest(new { error = "View adı boş olamaz." });
+        var userName = User.Identity?.Name ?? "system";
+        await _service.SaveViewDescriptionAsync(name, request.Description?.Trim(), userName, ct);
+        return Ok(new { ok = true });
+    }
+
     [HttpGet("export")]
     public async Task<IActionResult> Export([FromQuery] string format, CancellationToken ct)
     {
@@ -94,3 +103,5 @@ public sealed class DbSchemaController : Controller
         }
     }
 }
+
+public sealed record SaveViewDescriptionRequest(string? Description);

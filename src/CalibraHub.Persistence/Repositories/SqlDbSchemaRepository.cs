@@ -355,4 +355,39 @@ public sealed class SqlDbSchemaRepository : IDbSchemaRepository
 
     private static bool IsRdTimeType(string t) =>
         t is "date" or "datetime" or "datetime2" or "datetimeoffset" or "smalldatetime";
+
+    public async Task<IReadOnlyDictionary<string, string>> GetViewMetaAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            IF OBJECT_ID(N'dbo.ViewMeta', N'U') IS NOT NULL
+                SELECT [ViewName], [Description] FROM dbo.[ViewMeta]
+                WHERE [Description] IS NOT NULL AND LEN([Description]) > 0
+            """;
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            dict[reader.GetString(0)] = reader.GetString(1);
+        return dict;
+    }
+
+    public async Task SaveViewMetaAsync(string viewName, string? description, string updatedBy, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            MERGE dbo.[ViewMeta] AS target
+            USING (SELECT @ViewName AS ViewName) AS source ON target.[ViewName] = source.ViewName
+            WHEN MATCHED THEN
+                UPDATE SET [Description] = @Desc, [Updated] = SYSUTCDATETIME(), [UpdatedBy] = @By
+            WHEN NOT MATCHED THEN
+                INSERT ([ViewName], [Description], [Updated], [UpdatedBy])
+                VALUES (@ViewName, @Desc, SYSUTCDATETIME(), @By);
+            """;
+        cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@ViewName", viewName));
+        cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Desc", (object?)description ?? DBNull.Value));
+        cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@By", (object?)updatedBy ?? DBNull.Value));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
 }

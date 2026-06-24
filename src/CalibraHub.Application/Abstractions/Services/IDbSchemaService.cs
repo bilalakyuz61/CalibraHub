@@ -18,8 +18,11 @@ public interface IDbSchemaService
     Task<string> BuildMarkdownAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// CalibraViewCatalog'daki tum view'lari doner; fiziksel varlik ve kolon
-    /// bilgisi DB'den (sys.columns), aciklama / kullanim yeri katalogdan gelir.
+    /// Tüm view'ları döner: CalibraViewCatalog view'ları + DB'de bulunan kullanıcı view'ları.
+    /// Açıklamalar: katalog view'ları için statik, kullanıcı view'ları için ViewMeta tablosundan.
     /// </summary>
     Task<IReadOnlyList<DbViewInfoDto>> GetViewsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Bir view için kullanıcı açıklamasını ViewMeta tablosuna kaydeder.</summary>
+    Task SaveViewDescriptionAsync(string viewName, string? description, string updatedBy, CancellationToken cancellationToken);
 }

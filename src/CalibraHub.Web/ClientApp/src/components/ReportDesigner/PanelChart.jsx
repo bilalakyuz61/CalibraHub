@@ -592,7 +592,26 @@ function aggValues(vals, agg) {
 // Hücre hizalaması: alan ayarındaki align ('auto'/'left'/'center'/'right'); auto → sayısal sağ, diğer sol
 function cellAlign(c) {
   if (c.align && c.align !== 'auto') return c.align
-  return FMT_NUMERIC.has(c.format) ? 'right' : 'left'
+  // Otomatik: başlık + hücreler birlikte SOLA hizalı (kod/ID/metin için doğal, aynı sol kenar).
+  // Gerçek miktar kolonu için kullanıcı Hizalama → "Sağ" seçebilir.
+  return 'left'
+}
+
+// Kolon başlığı (th) yazı stili — kullanıcı tanımlı font/renk/kalın/italik/boyut
+const HEADER_FONTS = {
+  sans:  'system-ui, "Segoe UI", Roboto, sans-serif',
+  serif: 'Georgia, "Times New Roman", serif',
+  mono:  'ui-monospace, Menlo, Consolas, monospace',
+}
+function headerStyle(c) {
+  const s = {
+    color: c.headerColor || '#64748b',
+    fontWeight: c.headerBold ? 700 : 500,
+    fontStyle: c.headerItalic ? 'italic' : 'normal',
+  }
+  if (c.headerSize) s.fontSize = c.headerSize + 'px'
+  if (HEADER_FONTS[c.headerFont]) s.fontFamily = HEADER_FONTS[c.headerFont]
+  return s
 }
 
 // Bir kolonun benzersiz değerleri (filtre listesi için) — yüklü veriden, client-side
@@ -669,7 +688,7 @@ function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, 
           <thead>
             <tr>
               {cols.map(c => (
-                <th key={c.name} style={{ position: 'sticky', top: 0, textAlign: cellAlign(c), padding: '2px 6px', color: '#64748b', background: '#111827', borderBottom: '1px solid rgba(255,255,255,.06)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                <th key={c.name} style={{ position: 'sticky', top: 0, textAlign: cellAlign(c), padding: '2px 6px', background: '#111827', borderBottom: '1px solid rgba(255,255,255,.06)', whiteSpace: 'nowrap', ...headerStyle(c) }}>
                   {c.label || c.name}{sortInfo[c.name] ? (sortInfo[c.name].dir === 'desc' ? ' ↓' : ' ↑') + (sortList.length > 1 ? sortInfo[c.name].ord : '') : ''}
                 </th>
               ))}

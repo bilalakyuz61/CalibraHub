@@ -1,7 +1,9 @@
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -16,10 +18,13 @@ namespace CalibraHub.Web.Controllers;
 public sealed class PendingApprovalController : Controller
 {
     private readonly IPendingApprovalService _service;
+    private readonly IUserSettingRepository _userSettingRepo;
+    private const string ColCfgKey = "ui.pa.col-cfg";
 
-    public PendingApprovalController(IPendingApprovalService service)
+    public PendingApprovalController(IPendingApprovalService service, IUserSettingRepository userSettingRepo)
     {
         _service = service;
+        _userSettingRepo = userSettingRepo;
     }
 
     [HttpGet("/PendingApproval")]
@@ -57,4 +62,27 @@ public sealed class PendingApprovalController : Controller
         return Json(new { ok = true, detail = dto });
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetColConfig(CancellationToken ct)
+    {
+        var uid = CurrentUserId();
+        if (!uid.HasValue) return Json(new { config = (string?)null });
+        var json = await _userSettingRepo.GetAsync(uid.Value, ColCfgKey, ct);
+        return Json(new { config = json });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveColConfig([FromBody] SaveColConfigRequest request, CancellationToken ct)
+    {
+        var uid = CurrentUserId();
+        if (!uid.HasValue) return Json(new { ok = false });
+        await _userSettingRepo.SetAsync(uid.Value, ColCfgKey, request.Config, ct);
+        return Json(new { ok = true });
+    }
+
+    private int? CurrentUserId()
+        => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 }
+
+public sealed record SaveColConfigRequest(string? Config);

@@ -207,25 +207,47 @@
         renderList();
         ELS.tabs.style.display = 'none';
 
-        const customLabel = v.isCustomizable
+        const catalogBadge = v.isInCatalog
+            ? ''
+            : ' <span class="sch-view-custom-badge" style="font-size:0.65rem;vertical-align:middle;">kullanıcı view</span>';
+        const customBadge = (v.isCustomizable && v.isInCatalog)
             ? ' <span class="sch-view-custom-badge" style="font-size:0.65rem;vertical-align:middle;">özelleştirilebilir</span>'
             : '';
-        ELS.detailTitle.innerHTML = `${escapeHtml(v.name)}${customLabel}`;
+        ELS.detailTitle.innerHTML = `${escapeHtml(v.name)}${catalogBadge}${customBadge}`;
 
         ELS.detailMeta.innerHTML = v.existsInDb
             ? `<div class="sch-meta-line">Kolon: ${v.columns.length} &nbsp;•&nbsp; <span style="color:var(--sch-badge-ix-fg,#166534);">Veritabanında mevcut</span></div>`
             : `<div class="sch-meta-line" style="color:var(--sch-warn-fg);">⚠ Veritabanında mevcut değil — kurulum tamamlanmamış olabilir</div>`;
 
         ELS.tabBody.innerHTML = renderViewDetail(v);
+        bindViewDescSave(v.name);
     }
 
     function renderViewDetail(v) {
-        const descBlock = `<div class="sch-table-summary" style="margin-bottom:14px;">${escapeHtml(v.description)}</div>`;
+        // Katalog açıklaması (sadece system view'lar için)
+        const catalogDescBlock = v.description
+            ? `<div class="sch-table-summary" style="margin-bottom:14px;">${escapeHtml(v.description)}</div>`
+            : '';
 
-        const usedInBlock = `
+        // Kullanıldığı yer (katalog view'ları için)
+        const usedInBlock = v.usedIn ? `
             <div style="margin-bottom:16px;">
                 <div style="font-size:0.7rem;font-weight:600;color:var(--app-text-muted,#64748b);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Kullanıldığı Yer</div>
                 <div style="font-size:0.82rem;">${escapeHtml(v.usedIn)}</div>
+            </div>` : '';
+
+        // Açıklama editörü (tüm view'lar için düzenlenebilir)
+        const editableDesc = `
+            <div style="margin-bottom:16px;">
+                <div style="font-size:0.7rem;font-weight:600;color:var(--app-text-muted,#64748b);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Açıklama</div>
+                <textarea id="view-desc-input"
+                    placeholder="Bu view'ın ne yaptığını ve nerede kullanıldığını yazın…"
+                    style="width:100%;min-height:72px;padding:8px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:6px;font-size:0.82rem;resize:vertical;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);font-family:inherit;"
+                >${escapeHtml(v.userDescription || '')}</textarea>
+                <div style="display:flex;gap:8px;margin-top:6px;align-items:center;">
+                    <button id="view-desc-save" style="padding:4px 14px;font-size:0.78rem;border:1px solid var(--app-accent,#6366f1);border-radius:5px;background:transparent;color:var(--app-accent,#6366f1);cursor:pointer;">Kaydet</button>
+                    <span id="view-desc-status" style="font-size:0.75rem;color:var(--app-text-muted,#64748b);"></span>
+                </div>
             </div>`;
 
         let colBlock = '';
@@ -244,7 +266,36 @@
                 </div>`;
         }
 
-        return `<div style="padding:4px 0;">${descBlock}${usedInBlock}${colBlock}</div>`;
+        return `<div style="padding:4px 0;">${catalogDescBlock}${usedInBlock}${editableDesc}${colBlock}</div>`;
+    }
+
+    function bindViewDescSave(viewName) {
+        const saveBtn = document.getElementById('view-desc-save');
+        const input = document.getElementById('view-desc-input');
+        const status = document.getElementById('view-desc-status');
+        if (!saveBtn || !input) return;
+
+        saveBtn.addEventListener('click', async () => {
+            saveBtn.disabled = true;
+            status.textContent = 'Kaydediliyor…';
+            try {
+                const res = await fetch(`/admin/db-schema/api/views/${encodeURIComponent(viewName)}/description`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description: input.value }),
+                    credentials: 'same-origin',
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                // state güncelle
+                const v = state.views.find(x => x.name === viewName);
+                if (v) v.userDescription = input.value;
+                status.textContent = 'Kaydedildi ✓';
+            } catch (e) {
+                status.textContent = 'Hata: ' + e.message;
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
     }
 
     // ── Shared ──────────────────────────────────────────────────────────────

@@ -308,24 +308,53 @@ public sealed class DbSchemaService : IDbSchemaService
     {
         var dbViews = await _repository.GetDesignerViewsAsync(cancellationToken);
         var dbByName = dbViews.ToDictionary(v => v.Name, StringComparer.OrdinalIgnoreCase);
+        var viewMeta = await _repository.GetViewMetaAsync(cancellationToken);
 
-        var result = new List<DbViewInfoDto>(CalibraViewCatalog.Entries.Count);
+        var result = new List<DbViewInfoDto>();
+
+        // 1. Katalog view'ları
         foreach (var entry in CalibraViewCatalog.Entries)
         {
             var exists = dbByName.TryGetValue(entry.Name, out var dbView);
             var columns = exists
                 ? (IReadOnlyList<string>)dbView!.Columns.Select(c => c.Name).ToList()
                 : Array.Empty<string>();
-
+            viewMeta.TryGetValue(entry.Name, out var userDesc);
             result.Add(new DbViewInfoDto(
                 Name: entry.Name,
                 Description: entry.Description,
+                UserDescription: userDesc,
                 UsedIn: entry.UsedIn,
                 IsCustomizable: entry.IsCustomizable,
                 ExistsInDb: exists,
+                IsInCatalog: true,
                 Columns: columns));
         }
+
+        // 2. DB'de olan ama katalogda olmayan kullanıcı view'ları
+        var catalogNames = CalibraViewCatalog.Entries
+            .Select(e => e.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var dbView in dbViews.Where(v => !catalogNames.Contains(v.Name)).OrderBy(v => v.Name))
+        {
+            viewMeta.TryGetValue(dbView.Name, out var userDesc);
+            result.Add(new DbViewInfoDto(
+                Name: dbView.Name,
+                Description: null,
+                UserDescription: userDesc,
+                UsedIn: null,
+                IsCustomizable: true,
+                ExistsInDb: true,
+                IsInCatalog: false,
+                Columns: dbView.Columns.Select(c => c.Name).ToList()));
+        }
+
         return result;
+    }
+
+    public async Task SaveViewDescriptionAsync(string viewName, string? description, string updatedBy, CancellationToken cancellationToken)
+    {
+        await _repository.SaveViewMetaAsync(viewName, description, updatedBy, cancellationToken);
     }
 
     private static IReadOnlyList<DbEnumValueDto> GetEnumValues(Type enumType)

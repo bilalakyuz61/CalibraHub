@@ -19,24 +19,40 @@
         flex: 0 0 auto;
     }
     .pa-title { font-size: 20px; font-weight: 700; margin: 0; }
-    .pa-subtitle { font-size: 12px; color: #64748b; }
-    .pa-scope-picker {
-        margin-left: auto; display: flex; align-items: center; gap: 8px;
+    /* Görünüm radio-pill grubu */
+    .pa-scope-radio {
+        margin-left: auto; display: flex; align-items: center;
+        background: rgba(148,163,184,.12); border-radius: 8px; padding: 2px; gap: 1px;
     }
-    .pa-scope-picker label { font-size: 12px; color: #64748b; font-weight: 500; }
-    .pa-scope-picker select {
-        padding: 5px 28px 5px 10px; border-radius: 6px;
-        border: 1px solid rgba(148,163,184,.3);
-        background: var(--surface, #fff); font-size: 13px;
-        appearance: none;
-        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><polyline points='1,1 5,5 9,1' fill='none' stroke='%2364748b' stroke-width='1.5'/></svg>");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
+    body.app-theme-dark .pa-scope-radio { background: rgba(255,255,255,.07); }
+    .pa-scope-opt { display: flex; align-items: center; cursor: pointer; }
+    .pa-scope-opt input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+    .pa-scope-opt span {
+        padding: 5px 13px; border-radius: 6px;
+        font-size: 12px; font-weight: 500; color: #64748b;
+        cursor: pointer; white-space: nowrap; user-select: none;
+        transition: background .12s, color .12s;
     }
-    body.app-theme-dark .pa-scope-picker select {
-        background-color: rgba(15,23,42,.5); color: #e2e8f0;
-        border-color: rgba(255,255,255,.1);
+    .pa-scope-opt input[type="radio"]:checked + span { background: #6366f1; color: #fff; }
+    body.app-theme-dark .pa-scope-opt span { color: #94a3b8; }
+    body.app-theme-dark .pa-scope-opt input[type="radio"]:checked + span { background: #6366f1; color: #fff; }
+    /* Arama kutusu */
+    .pa-search-wrap {
+        flex: 1 1 auto; max-width: 210px; position: relative; display: flex; align-items: center;
     }
+    .pa-search-input {
+        width: 100%; height: 30px; padding: 0 8px 0 30px;
+        border: 1px solid rgba(148,163,184,.22); border-radius: 7px;
+        background: transparent; font-size: 12px;
+        color: var(--app-text, #0f172a); outline: none;
+        transition: border-color .1s;
+    }
+    .pa-search-input:focus { border-color: rgba(99,102,241,.5); }
+    .pa-search-input::placeholder { color: #94a3b8; }
+    .pa-search-wrap svg { position: absolute; left: 8px; color: #94a3b8; pointer-events: none; flex-shrink: 0; }
+    body.app-theme-dark .pa-search-input { color: #e2e8f0; border-color: rgba(255,255,255,.1); }
+    body.app-theme-dark .pa-search-input:focus { border-color: rgba(99,102,241,.5); }
+    body.app-theme-dark .pa-search-input::placeholder { color: #475569; }
 
     .pa-body { display: flex; flex-direction: row; gap: 14px; flex: 1 1 auto; min-height: 0; }
 
@@ -85,12 +101,14 @@
         border-color: rgba(255,255,255,.08);
     }
     .pa-list-header {
-        padding: 10px 16px;
+        padding: 0 14px;
+        height: 44px;
         border-bottom: 1px solid rgba(148,163,184,.12);
         display: flex; align-items: center; gap: 10px;
         flex: 0 0 auto;
     }
-    .pa-list-title { font-size: 14px; font-weight: 600; }
+    body.app-theme-dark .pa-list-header { border-bottom-color: rgba(255,255,255,.07); }
+    .pa-list-title { font-size: 13.5px; font-weight: 600; }
     .pa-list-count { font-size: 11px; color: #94a3b8; }
 
     .pa-list-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
@@ -98,7 +116,7 @@
     .pa-table th {
         position: sticky; top: 0;
         background: rgba(241,245,249,1); color: #64748b;
-        font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+        font-size: 11px; font-weight: 600; letter-spacing: .02em;
         padding: 7px 12px; text-align: left;
         border-bottom: 1px solid rgba(148,163,184,.15);
     }
@@ -125,53 +143,141 @@
     /* ── Sütunlar butonu ─────────────────────────────────── */
     .pa-col-btn {
         margin-left: auto;
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 5px 12px; border-radius: 7px;
-        border: 1px solid rgba(148,163,184,.25);
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; padding: 0;
+        border-radius: 7px;
+        border: 1px solid rgba(148,163,184,.22);
         background: transparent; cursor: pointer;
-        font-size: 12px; font-weight: 500; color: #64748b;
-        transition: background 0.15s, border-color 0.15s;
+        color: #64748b;
+        transition: color .12s, background .12s, border-color .12s;
+        flex-shrink: 0;
     }
-    .pa-col-btn:hover { background: rgba(99,102,241,.07); border-color: rgba(99,102,241,.35); color: #6366f1; }
-    body.app-theme-dark .pa-col-btn { color: #94a3b8; border-color: rgba(255,255,255,.12); }
-    body.app-theme-dark .pa-col-btn:hover { background: rgba(99,102,241,.15); color: #818cf8; }
+    .pa-col-btn svg { width: 14px; height: 14px; }
+    .pa-col-btn:hover { background: rgba(99,102,241,.08); border-color: rgba(99,102,241,.35); color: #6366f1; }
+    .pa-col-btn.active { background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.4); color: #6366f1; }
+    body.app-theme-dark .pa-col-btn { color: #94a3b8; border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.03); }
+    body.app-theme-dark .pa-col-btn:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #818cf8; }
+    body.app-theme-dark .pa-col-btn.active { background: rgba(99,102,241,.18); border-color: rgba(99,102,241,.45); color: #818cf8; }
 
-    /* ── Sütun seçim paneli ──────────────────────────────── */
+    /* ── Sütun ayarları paneli ──────────────────────────────── */
     .pa-col-panel {
         display: none; position: fixed; z-index: 1100;
         background: var(--app-surface, #fff);
         border: 1px solid rgba(148,163,184,.2);
         border-radius: 10px;
         box-shadow: 0 8px 32px rgba(15,23,42,.18);
-        padding: 12px 0; min-width: 200px;
+        width: 320px; max-height: 520px;
+        flex-direction: column; overflow: hidden;
     }
-    .pa-col-panel.open { display: block; }
+    .pa-col-panel.open { display: flex; }
     body.app-theme-dark .pa-col-panel {
         background: #1e293b; border-color: rgba(255,255,255,.1);
         box-shadow: 0 8px 32px rgba(0,0,0,.5);
     }
     .pa-col-panel-title {
-        padding: 2px 14px 10px;
+        padding: 10px 12px 9px;
         font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
-        color: #94a3b8; border-bottom: 1px solid rgba(148,163,184,.12); margin-bottom: 6px;
+        color: #94a3b8; border-bottom: 1px solid rgba(148,163,184,.12); flex-shrink: 0;
     }
-    .pa-col-row {
-        padding: 5px 14px; display: flex; align-items: center; gap: 8px;
-        cursor: pointer; font-size: 13px; transition: background 0.12s;
+    .pa-col-panel-rows { overflow-y: auto; flex: 1; padding: 4px 0; }
+    .pa-cfg-row {
+        display: flex; align-items: center; gap: 5px;
+        padding: 4px 8px; user-select: none;
+        border-top: 2px solid transparent;
+        transition: border-color 0.1s;
     }
-    .pa-col-row:hover { background: rgba(99,102,241,.07); }
-    body.app-theme-dark .pa-col-row:hover { background: rgba(99,102,241,.12); }
-    .pa-col-row input[type="checkbox"] { cursor: pointer; accent-color: #6366f1; }
-    .pa-col-row label { cursor: pointer; flex: 1; user-select: none; }
-
-    /* ── Sütun gizleme (CSS class toggle on .pa-list-wrap) ── */
-    .pa-list-wrap.pa-hide-flow .pa-col-flow { display: none !important; }
-    .pa-list-wrap.pa-hide-typ  .pa-col-typ  { display: none !important; }
-    .pa-list-wrap.pa-hide-cari .pa-col-cari { display: none !important; }
-    .pa-list-wrap.pa-hide-amt  .pa-col-amt  { display: none !important; }
-    .pa-list-wrap.pa-hide-step .pa-col-step { display: none !important; }
-    .pa-list-wrap.pa-hide-apvr .pa-col-apvr { display: none !important; }
-    .pa-list-wrap.pa-hide-dt   .pa-col-dt   { display: none !important; }
+    .pa-cfg-row:not(.pa-cfg-fixed):hover { background: rgba(99,102,241,.06); }
+    body.app-theme-dark .pa-cfg-row:not(.pa-cfg-fixed):hover { background: rgba(99,102,241,.10); }
+    .pa-cfg-row.pa-cfg-dragging { opacity: .35; }
+    .pa-cfg-row.pa-cfg-dragover { border-top-color: #6366f1; }
+    .pa-cfg-grip {
+        width: 14px; height: 20px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        cursor: grab; color: #94a3b8;
+    }
+    .pa-cfg-grip:active { cursor: grabbing; }
+    .pa-cfg-fixed .pa-cfg-grip { visibility: hidden; }
+    .pa-cfg-eye {
+        width: 22px; height: 22px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 5px; cursor: pointer; border: none; background: transparent;
+        color: #6366f1; transition: background 0.1s; padding: 0;
+    }
+    .pa-cfg-eye:hover { background: rgba(99,102,241,.12); }
+    .pa-cfg-eye.pa-eye-off { color: #94a3b8; }
+    .pa-cfg-fixed .pa-cfg-eye { visibility: hidden; pointer-events: none; }
+    .pa-cfg-label {
+        flex: 1; font-size: 12px;
+        color: var(--app-text, #0f172a);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.app-theme-dark .pa-cfg-label { color: #e2e8f0; }
+    .pa-cfg-row.pa-cfg-hidden .pa-cfg-label { color: #94a3b8; }
+    .pa-cfg-align { display: flex; gap: 2px; flex-shrink: 0; }
+    .pa-cfg-align-btn {
+        width: 22px; height: 22px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 4px; border: 1px solid transparent;
+        cursor: pointer; font-size: 9px; font-weight: 700; letter-spacing: 0;
+        color: #94a3b8; background: transparent; padding: 0;
+        transition: all 0.1s;
+    }
+    .pa-cfg-align-btn:hover { background: rgba(99,102,241,.1); color: #6366f1; }
+    .pa-cfg-align-btn.pa-align-active {
+        background: rgba(99,102,241,.15); color: #6366f1;
+        border-color: rgba(99,102,241,.3);
+    }
+    body.app-theme-dark .pa-cfg-align-btn.pa-align-active {
+        background: rgba(99,102,241,.25); color: #818cf8;
+    }
+    /* Genişlet butonu */
+    .pa-cfg-exp {
+        width: 20px; height: 20px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 4px; border: none; background: transparent;
+        color: #94a3b8; cursor: pointer; padding: 0;
+        transition: transform 0.15s, color 0.1s;
+    }
+    .pa-cfg-exp:hover { color: #6366f1; }
+    .pa-cfg-exp.open { transform: rotate(180deg); }
+    /* Detay alt paneli */
+    .pa-cfg-detail {
+        display: none; flex-direction: column; gap: 7px;
+        padding: 8px 10px 10px 36px;
+        background: rgba(99,102,241,.03);
+        border-bottom: 1px solid rgba(148,163,184,.1);
+    }
+    body.app-theme-dark .pa-cfg-detail {
+        background: rgba(99,102,241,.05);
+        border-bottom-color: rgba(255,255,255,.06);
+    }
+    .pa-cfg-detail.open { display: flex; }
+    .pa-cfg-field-row {
+        display: flex; align-items: center; gap: 6px;
+    }
+    .pa-cfg-field-label {
+        font-size: 11px; color: #94a3b8; font-weight: 500;
+        flex: 0 0 54px;
+    }
+    .pa-cfg-field-input {
+        flex: 1; height: 26px; padding: 0 8px;
+        font-size: 12px;
+        border: 1px solid rgba(148,163,184,.25);
+        border-radius: 5px;
+        background: var(--app-surface, #fff);
+        color: var(--app-text, #0f172a);
+        outline: none;
+        transition: border-color .1s;
+    }
+    .pa-cfg-field-input:focus { border-color: rgba(99,102,241,.5); }
+    body.app-theme-dark .pa-cfg-field-input {
+        background: rgba(255,255,255,.05);
+        color: #e2e8f0;
+        border-color: rgba(255,255,255,.12);
+    }
+    body.app-theme-dark .pa-cfg-field-input:focus { border-color: rgba(99,102,241,.5); }
+    .pa-cfg-width-input { flex: none; width: 72px; }
+    .pa-cfg-field-unit { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
 
     /* Modal */
     .pa-modal-backdrop {
@@ -250,32 +356,23 @@
 
 <div class="pa-wrap">
     <div class="pa-header">
-        <div>
-            <h1 class="pa-title">Onayda Bekleyenler</h1>
-            <div class="pa-subtitle">Sizden onay bekleyen kayıtlar (sol panel: belge türü)</div>
-        </div>
-        <div class="pa-scope-picker">
-            <label for="paScope">Görünüm</label>
-            <select id="paScope">
-                @foreach (var s in scopes)
+        <h1 class="pa-title">Onayda Bekleyenler</h1>
+        <div class="pa-scope-radio" id="paScopeGroup">
+            @foreach (var s in scopes)
+            {
+                var label = s switch
                 {
-                    var label = s switch
-                    {
-                        "mine" => "Sadece benim",
-                        "department" => "Departmanım",
-                        "all" => "Tümü",
-                        _ => s
-                    };
-                    if (string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase))
-                    {
-                        <option value="@s" selected>@label</option>
-                    }
-                    else
-                    {
-                        <option value="@s">@label</option>
-                    }
-                }
-            </select>
+                    "mine" => "Sadece benim",
+                    "department" => "Departmanım",
+                    "all" => "Tümü",
+                    _ => s
+                };
+                var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
+                <label class="pa-scope-opt">
+                    <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
+                    <span>@label</span>
+                </label>
+            }
         </div>
     </div>
 
@@ -285,25 +382,29 @@
         </div>
         <div class="pa-list-wrap">
             <div class="pa-list-header">
-                <div>
+                <div style="flex-shrink:0">
                     <div class="pa-list-title" id="paListTitle">Tüm belge türleri</div>
                     <div class="pa-list-count" id="paListCount"></div>
                 </div>
-                <button type="button" class="pa-col-btn" id="paColBtn" onclick="paToggleColPanel(event)">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v1m0 16v1M4.22 4.22l.71.71m14.14 14.14.71.71M3 12h1m16 0h1M4.93 19.07l.71-.71M18.36 5.64l.71-.71"/><circle cx="12" cy="12" r="4"/></svg>
-                    Sütunlar
+                <div class="pa-search-wrap">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="paSearch" class="pa-search-input" placeholder="Hızlı ara…" autocomplete="off">
+                </div>
+                <button type="button" class="pa-col-btn" id="paColBtn" onclick="paToggleColPanel(event)" title="Sütun Ayarları">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="21" y1="4"  x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>
+                        <line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>
+                        <line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>
+                        <line x1="14" y1="2"  x2="14" y2="6"/>
+                        <line x1="8"  y1="10" x2="8"  y2="14"/>
+                        <line x1="16" y1="18" x2="16" y2="22"/>
+                    </svg>
                 </button>
             </div>
-            <!-- Sütun seçim paneli -->
+            <!-- Sütun ayarları paneli (JS tarafından doldurulur) -->
             <div class="pa-col-panel" id="paColPanel">
-                <div class="pa-col-panel-title">Sütun Görünürlüğü</div>
-                <div class="pa-col-row"><input type="checkbox" id="paColFlow" onchange="paColToggle('flow',this.checked)"><label for="paColFlow">Akış Adı</label></div>
-                <div class="pa-col-row"><input type="checkbox" id="paColTyp"  onchange="paColToggle('typ', this.checked)"><label for="paColTyp">Tür</label></div>
-                <div class="pa-col-row"><input type="checkbox" id="paColCari" onchange="paColToggle('cari',this.checked)"><label for="paColCari">Cari</label></div>
-                <div class="pa-col-row"><input type="checkbox" id="paColAmt"  onchange="paColToggle('amt', this.checked)"><label for="paColAmt">Tutar</label></div>
-                <div class="pa-col-row"><input type="checkbox" id="paColStep" onchange="paColToggle('step',this.checked)"><label for="paColStep">Adım</label></div>
-                <div class="pa-col-row"><input type="checkbox" id="paColApvr" onchange="paColToggle('apvr',this.checked)"><label for="paColApvr">Onaylayıcı</label></div>
-                <div class="pa-col-row"><input type="checkbox" id="paColDt"   onchange="paColToggle('dt',  this.checked)"><label for="paColDt">Bekliyor (Tarih)</label></div>
+                <div class="pa-col-panel-title">Sütun Ayarları</div>
+                <div class="pa-col-panel-rows" id="paColRows"></div>
             </div>
             <div class="pa-list-scroll" id="paListScroll">
                 <div class="pa-empty">Sol panelden bir belge türü seçin…</div>
@@ -337,9 +438,12 @@
 
 @section Scripts {
 <script>
-(function() {
-    const scopeEl = document.getElementById('paScope');
+(async function() {
     const groupsEl = document.getElementById('paGroups');
+    function getScope() {
+        var c = document.querySelector('input[name="paScope"]:checked');
+        return c ? c.value : 'mine';
+    }
     const listScrollEl = document.getElementById('paListScroll');
     const listTitleEl = document.getElementById('paListTitle');
     const listCountEl = document.getElementById('paListCount');
@@ -352,7 +456,255 @@
     const modalTitleEl = document.getElementById('paModalTitle');
     const modalSubEl = document.getElementById('paModalSub');
 
-    let activeDocTypeId = null;  // null = tüm türler
+    // ── Sütun yapılandırması ─────────────────────────────────────────────────
+    const COL_STORAGE_KEY = 'pa-col-cfg-v2';
+    const DEFAULT_DEFS = [
+        { key: 'docno', label: 'Belge No',    visible: true, align: 'left',   fixed: true },
+        { key: 'flow',  label: 'Akış',        visible: true, align: 'left'   },
+        { key: 'typ',   label: 'Tür',         visible: true, align: 'left'   },
+        { key: 'cari',  label: 'Cari',        visible: true, align: 'left'   },
+        { key: 'amt',   label: 'Tutar',       visible: true, align: 'right'  },
+        { key: 'step',  label: 'Adım',        visible: true, align: 'center' },
+        { key: 'apvr',  label: 'Onaylayıcı',  visible: true, align: 'left'   },
+        { key: 'dt',    label: 'Bekliyor',    visible: true, align: 'left'   },
+    ];
+
+    function _loadColDefs() {
+        try {
+            var saved = JSON.parse(localStorage.getItem(COL_STORAGE_KEY) || 'null');
+            if (!Array.isArray(saved)) return DEFAULT_DEFS.map(function(d) { return Object.assign({}, d); });
+            var result = [];
+            saved.forEach(function(s) {
+                var def = DEFAULT_DEFS.find(function(d) { return d.key === s.key; });
+                if (def) result.push(Object.assign({}, def, {
+                    visible: s.visible !== false,
+                    align:   s.align || def.align,
+                    label:   s.label || def.label,
+                    width:   s.width || null
+                }));
+            });
+            DEFAULT_DEFS.forEach(function(d) {
+                if (!result.find(function(r) { return r.key === d.key; }))
+                    result.push(Object.assign({}, d));
+            });
+            return result;
+        } catch(e) { return DEFAULT_DEFS.map(function(d) { return Object.assign({}, d); }); }
+    }
+
+    function _serializeColDefs() {
+        return JSON.stringify(_colDefs.map(function(c) {
+            return { key: c.key, visible: c.visible, align: c.align, label: c.label, width: c.width || null };
+        }));
+    }
+
+    function _saveColDefs() {
+        var serialized = _serializeColDefs();
+        try { localStorage.setItem(COL_STORAGE_KEY, serialized); } catch(e) {}
+        // Kullanıcı bazlı server-side saklama (fire-and-forget)
+        fetch('/PendingApproval/SaveColConfig', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': csrf()
+            },
+            body: JSON.stringify({ config: serialized })
+        }).catch(function() {});
+    }
+
+    function _applyServerConfig(json) {
+        try {
+            var saved = JSON.parse(json || 'null');
+            if (!Array.isArray(saved)) return;
+            var result = [];
+            saved.forEach(function(s) {
+                var def = DEFAULT_DEFS.find(function(d) { return d.key === s.key; });
+                if (def) result.push(Object.assign({}, def, {
+                    visible: s.visible !== false,
+                    align:   s.align || def.align,
+                    label:   s.label || def.label,
+                    width:   s.width || null
+                }));
+            });
+            DEFAULT_DEFS.forEach(function(d) {
+                if (!result.find(function(r) { return r.key === d.key; }))
+                    result.push(Object.assign({}, d));
+            });
+            _colDefs = result;
+        } catch(e) {}
+    }
+
+    function _renderCell(key, it, now) {
+        switch (key) {
+            case 'docno': return '<strong>' + escapeHtml(it.documentNumber) + '</strong>';
+            case 'flow':  return '<span style="font-size:11px;color:#94a3b8;">' + escapeHtml(it.flowName) + '</span>';
+            case 'typ':   return escapeHtml(it.documentTypeName || 'Belirsiz');
+            case 'cari':  return escapeHtml(it.contactName || '—');
+            case 'amt':   return fmtMoney(it.grandTotal, it.currencyCode);
+            case 'step':  return '<span class="pa-step-pill">' + it.stepPosition + ' / ' + it.totalSteps + '</span>' +
+                                 '<span style="font-size:11px;color:#94a3b8;margin-left:6px;">' + escapeHtml(it.stepName) + '</span>';
+            case 'apvr':  return escapeHtml(it.approverName || '—');
+            case 'dt': {
+                const od = it.dueDate && new Date(it.dueDate).getTime() < now;
+                return '<span class="' + (od ? 'pa-overdue' : '') + '">' + fmtDate(it.stepCreated) + '</span>';
+            }
+            default: return '';
+        }
+    }
+
+    let _colDefs = _loadColDefs();
+    let _lastItems = null;
+    let _expandedKeys = new Set();
+
+    // ── Sütun ayarları paneli renderer ───────────────────────────────────────
+    function _renderColPanel() {
+        var rowsEl = document.getElementById('paColRows');
+        if (!rowsEl) return;
+        var GRIP   = '<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" style="opacity:.45"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="7" r="1.5"/><circle cx="8" cy="7" r="1.5"/><circle cx="2" cy="12" r="1.5"/><circle cx="8" cy="12" r="1.5"/></svg>';
+        var EYE    = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        var EYEOFF = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+        var CHEV   = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6,9 12,15 18,9"/></svg>';
+
+        var html = '';
+        _colDefs.forEach(function(c, i) {
+            var fc   = c.fixed ? ' pa-cfg-fixed' : '';
+            var hc   = !c.visible ? ' pa-cfg-hidden' : '';
+            var isOpen = _expandedKeys.has(c.key);
+            var oc   = isOpen ? ' open' : '';
+            html +=
+                '<div class="pa-cfg-row' + fc + hc + '" data-idx="' + i + '" data-key="' + c.key + '" draggable="' + (c.fixed ? 'false' : 'true') + '">' +
+                    '<span class="pa-cfg-grip">' + GRIP + '</span>' +
+                    '<button type="button" class="pa-cfg-eye' + (!c.visible ? ' pa-eye-off' : '') + '" data-key="' + c.key + '">' + (c.visible ? EYE : EYEOFF) + '</button>' +
+                    '<span class="pa-cfg-label">' + escapeHtml(c.label) + '</span>' +
+                    '<span class="pa-cfg-align">' +
+                        '<button type="button" class="pa-cfg-align-btn' + (c.align === 'left'   ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="left"   title="Sola hizala">L</button>' +
+                        '<button type="button" class="pa-cfg-align-btn' + (c.align === 'center' ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="center" title="Ortala">C</button>' +
+                        '<button type="button" class="pa-cfg-align-btn' + (c.align === 'right'  ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="right"  title="Sağa hizala">R</button>' +
+                    '</span>' +
+                    '<button type="button" class="pa-cfg-exp' + oc + '" data-key="' + c.key + '" title="Detay ayarları">' + CHEV + '</button>' +
+                '</div>' +
+                '<div class="pa-cfg-detail' + oc + '" data-key="' + c.key + '">' +
+                    '<div class="pa-cfg-field-row">' +
+                        '<span class="pa-cfg-field-label">Başlık</span>' +
+                        '<input type="text" class="pa-cfg-field-input" data-key="' + c.key + '" data-field="label" value="' + escapeHtml(c.label) + '">' +
+                    '</div>' +
+                    '<div class="pa-cfg-field-row">' +
+                        '<span class="pa-cfg-field-label">Genişlik</span>' +
+                        '<input type="number" class="pa-cfg-field-input pa-cfg-width-input" data-key="' + c.key + '" data-field="width" value="' + (c.width || '') + '" placeholder="Otomatik" min="40" max="600">' +
+                        '<span class="pa-cfg-field-unit">px</span>' +
+                    '</div>' +
+                '</div>';
+        });
+        rowsEl.innerHTML = html;
+
+        // Panel genelinde dragover → yasak simgesi gözükmesin
+        var panelEl = document.getElementById('paColPanel');
+        if (panelEl) panelEl.ondragover = function(e) { e.preventDefault(); };
+
+        // Eye toggle
+        rowsEl.querySelectorAll('.pa-cfg-eye').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key = btn.getAttribute('data-key');
+                var def = _colDefs.find(function(c) { return c.key === key; });
+                if (!def || def.fixed) return;
+                def.visible = !def.visible;
+                _saveColDefs();
+                _renderColPanel();
+                if (_lastItems) renderList(_lastItems);
+            });
+        });
+
+        // Hizalama
+        rowsEl.querySelectorAll('.pa-cfg-align-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key = btn.getAttribute('data-key');
+                var align = btn.getAttribute('data-align');
+                var def = _colDefs.find(function(c) { return c.key === key; });
+                if (!def) return;
+                def.align = align;
+                _saveColDefs();
+                _renderColPanel();
+                if (_lastItems) renderList(_lastItems);
+            });
+        });
+
+        // Genişlet/daralt
+        rowsEl.querySelectorAll('.pa-cfg-exp').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key = btn.getAttribute('data-key');
+                if (_expandedKeys.has(key)) _expandedKeys.delete(key);
+                else _expandedKeys.add(key);
+                _renderColPanel();
+            });
+        });
+
+        // Başlık değiştirme (input event → sadece listeyi güncelle, paneli değil)
+        rowsEl.querySelectorAll('.pa-cfg-field-input[data-field="label"]').forEach(function(inp) {
+            inp.addEventListener('input', function() {
+                var key = inp.getAttribute('data-key');
+                var def = _colDefs.find(function(c) { return c.key === key; });
+                if (!def) return;
+                def.label = inp.value;
+                _saveColDefs();
+                var span = rowsEl.querySelector('.pa-cfg-row[data-key="' + key + '"] .pa-cfg-label');
+                if (span) span.textContent = def.label;
+                if (_lastItems) renderList(_lastItems);
+            });
+        });
+
+        // Genişlik değiştirme (change event — blur/Enter tetikler)
+        rowsEl.querySelectorAll('.pa-cfg-field-input[data-field="width"]').forEach(function(inp) {
+            inp.addEventListener('change', function() {
+                var key = inp.getAttribute('data-key');
+                var def = _colDefs.find(function(c) { return c.key === key; });
+                if (!def) return;
+                def.width = parseInt(inp.value) || null;
+                _saveColDefs();
+                if (_lastItems) renderList(_lastItems);
+            });
+        });
+
+        // Drag-and-drop sıralama
+        var dragSrcIdx = null;
+        rowsEl.querySelectorAll('.pa-cfg-row:not(.pa-cfg-fixed)').forEach(function(row) {
+            row.addEventListener('dragstart', function(e) {
+                dragSrcIdx = parseInt(row.getAttribute('data-idx'));
+                e.dataTransfer.effectAllowed = 'move';
+                setTimeout(function() { row.classList.add('pa-cfg-dragging'); }, 0);
+            });
+            row.addEventListener('dragend', function() {
+                dragSrcIdx = null;
+                rowsEl.querySelectorAll('.pa-cfg-row').forEach(function(r) {
+                    r.classList.remove('pa-cfg-dragging', 'pa-cfg-dragover');
+                });
+            });
+            row.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                rowsEl.querySelectorAll('.pa-cfg-row').forEach(function(r) { r.classList.remove('pa-cfg-dragover'); });
+                row.classList.add('pa-cfg-dragover');
+            });
+            row.addEventListener('dragleave', function() { row.classList.remove('pa-cfg-dragover'); });
+            row.addEventListener('drop', function(e) {
+                e.preventDefault();
+                var targetIdx = parseInt(row.getAttribute('data-idx'));
+                if (dragSrcIdx !== null && dragSrcIdx !== targetIdx) {
+                    var moved = _colDefs.splice(dragSrcIdx, 1)[0];
+                    _colDefs.splice(targetIdx, 0, moved);
+                    _saveColDefs();
+                    _renderColPanel();
+                    if (_lastItems) renderList(_lastItems);
+                }
+            });
+        });
+    }
+
+    // ── /Sütun yapılandırması ────────────────────────────────────────────────
+
+    let activeDocTypeId = null;  // ilk yüklemede ilk gruba otomatik set edilir
     let currentInstanceId = null;
 
     function csrf() {
@@ -376,7 +728,7 @@
     }
 
     async function loadGroups() {
-        const scope = scopeEl.value;
+        const scope = getScope();
         groupsEl.innerHTML = '<div class="pa-group empty">Yükleniyor…</div>';
         try {
             const resp = await fetch('/PendingApproval/Groups?scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
@@ -396,15 +748,10 @@
             listCountEl.textContent = '';
             return;
         }
-        const total = groups.reduce((s, g) => s + g.count, 0);
-        let html = '<div class="pa-group ' + (activeDocTypeId === null ? 'active' : '') + '" data-doctype="">' +
-                   '<span class="pa-group-name">Tüm türler</span>' +
-                   '<span class="pa-group-count">' + total + '</span>' +
-                   '</div>';
+        let html = '';
         groups.forEach(g => {
             const id = g.documentTypeId == null ? '' : g.documentTypeId;
-            const active = (g.documentTypeId === activeDocTypeId) ? 'active' : '';
-            html += '<div class="pa-group ' + active + '" data-doctype="' + id + '">' +
+            html += '<div class="pa-group" data-doctype="' + id + '">' +
                     '<span class="pa-group-name">' + escapeHtml(g.documentTypeName) + '</span>' +
                     '<span class="pa-group-count">' + g.count + '</span>' +
                     '</div>';
@@ -420,12 +767,19 @@
                 loadList();
             });
         });
-        // İlk yüklemede otomatik tüm türleri göster
+        // İlk yüklemede ilk grubu otomatik seç
+        const firstEl = groupsEl.querySelector('.pa-group[data-doctype]');
+        if (firstEl) {
+            const raw = firstEl.getAttribute('data-doctype');
+            activeDocTypeId = raw === '' ? null : Number(raw);
+            firstEl.classList.add('active');
+            listTitleEl.textContent = firstEl.querySelector('.pa-group-name').textContent;
+        }
         loadList();
     }
 
     async function loadList() {
-        const scope = scopeEl.value;
+        const scope = getScope();
         listScrollEl.innerHTML = '<div class="pa-empty">Yükleniyor…</div>';
         try {
             let url = '/PendingApproval/List?scope=' + encodeURIComponent(scope);
@@ -440,41 +794,49 @@
     }
 
     function renderList(items) {
-        if (!items || items.length === 0) {
-            listScrollEl.innerHTML = '<div class="pa-empty">Bu türde bekleyen kayıt yok.</div>';
-            listCountEl.textContent = '';
+        _lastItems = items;
+        var filtered = _filterItems(items);
+        if (!filtered || filtered.length === 0) {
+            listScrollEl.innerHTML = '<div class="pa-empty">' +
+                (_searchQuery ? 'Arama sonucu bulunamadı.' : 'Bu türde bekleyen kayıt yok.') + '</div>';
+            listCountEl.textContent = _searchQuery ? (filtered.length + ' / ' + (items||[]).length) : '';
             return;
         }
-        listCountEl.textContent = items.length + ' kayıt';
-        let html = '<table class="pa-table"><thead><tr>' +
-                   '<th>Belge No</th>' +
-                   '<th class="pa-col-flow">Akış</th>' +
-                   '<th class="pa-col-typ">Tür</th>' +
-                   '<th class="pa-col-cari">Cari</th>' +
-                   '<th class="pa-col-amt">Tutar</th>' +
-                   '<th class="pa-col-step">Adım</th>' +
-                   '<th class="pa-col-apvr">Onaylayıcı</th>' +
-                   '<th class="pa-col-dt">Bekliyor</th>' +
-                   '</tr></thead><tbody>';
-        const now = Date.now();
-        items.forEach(it => {
-            const overdue = it.dueDate && new Date(it.dueDate).getTime() < now;
-            html += '<tr data-instance-id="' + it.instanceId + '">' +
-                    '<td><strong>' + escapeHtml(it.documentNumber) + '</strong></td>' +
-                    '<td class="pa-col-flow" style="font-size:11px;color:#94a3b8;">' + escapeHtml(it.flowName) + '</td>' +
-                    '<td class="pa-col-typ">' + escapeHtml(it.documentTypeName || 'Belirsiz') + '</td>' +
-                    '<td class="pa-col-cari">' + escapeHtml(it.contactName || '—') + '</td>' +
-                    '<td class="pa-col-amt">' + fmtMoney(it.grandTotal, it.currencyCode) + '</td>' +
-                    '<td class="pa-col-step"><span class="pa-step-pill">' + it.stepPosition + ' / ' + it.totalSteps + '</span>' +
-                    '<span style="font-size:11px;color:#94a3b8;margin-left:6px;">' + escapeHtml(it.stepName) + '</span></td>' +
-                    '<td class="pa-col-apvr">' + escapeHtml(it.approverName || '—') + '</td>' +
-                    '<td class="pa-col-dt ' + (overdue ? 'pa-overdue' : '') + '">' + fmtDate(it.stepCreated) + '</td>' +
-                    '</tr>';
+        listCountEl.textContent = _searchQuery
+            ? (filtered.length + ' / ' + items.length + ' kayıt')
+            : (filtered.length + ' kayıt');
+        items = filtered;
+        var vis = _colDefs.filter(function(c) { return c.visible; });
+        // colgroup: genişlik tanımlı sütunlar için kesin width
+        var html = '<table class="pa-table"><colgroup>';
+        vis.forEach(function(c) {
+            html += c.width ? '<col style="width:' + c.width + 'px;min-width:' + c.width + 'px">' : '<col>';
+        });
+        html += '</colgroup><thead><tr>';
+        vis.forEach(function(c) {
+            var styleArr = [];
+            if (c.align && c.align !== 'left') styleArr.push('text-align:' + c.align);
+            if (c.width) styleArr.push('min-width:' + c.width + 'px');
+            var as = styleArr.length ? ' style="' + styleArr.join(';') + '"' : '';
+            html += '<th class="pa-col-' + c.key + '"' + as + '>' + escapeHtml(c.label) + '</th>';
+        });
+        html += '</tr></thead><tbody>';
+        var now = Date.now();
+        items.forEach(function(it) {
+            html += '<tr data-instance-id="' + it.instanceId + '">';
+            vis.forEach(function(c) {
+                var styleArr = [];
+                if (c.align && c.align !== 'left') styleArr.push('text-align:' + c.align);
+                if (c.width) styleArr.push('min-width:' + c.width + 'px');
+                var as = styleArr.length ? ' style="' + styleArr.join(';') + '"' : '';
+                html += '<td class="pa-col-' + c.key + '"' + as + '>' + _renderCell(c.key, it, now) + '</td>';
+            });
+            html += '</tr>';
         });
         html += '</tbody></table>';
         listScrollEl.innerHTML = html;
-        listScrollEl.querySelectorAll('tr[data-instance-id]').forEach(row => {
-            row.addEventListener('click', () => {
+        listScrollEl.querySelectorAll('tr[data-instance-id]').forEach(function(row) {
+            row.addEventListener('click', function() {
                 openDetail(Number(row.getAttribute('data-instance-id')));
             });
         });
@@ -487,7 +849,7 @@
         modalTitleEl.textContent = 'Belge Detayı';
         modalSubEl.textContent = '';
         try {
-            const scope = scopeEl.value;
+            const scope = getScope();
             const resp = await fetch('/PendingApproval/Detail?instanceId=' + instanceId + '&scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
             const data = await resp.json();
             if (!data.ok) throw new Error(data.error || 'Hata');
@@ -585,7 +947,31 @@
         }
     }
 
-    scopeEl.addEventListener('change', () => { activeDocTypeId = null; loadGroups(); });
+    document.getElementById('paScopeGroup')?.addEventListener('change', function() {
+        activeDocTypeId = null; loadGroups();
+    });
+
+    // Arama
+    let _searchQuery = '';
+    const searchEl = document.getElementById('paSearch');
+    if (searchEl) {
+        searchEl.addEventListener('input', function() {
+            _searchQuery = searchEl.value.trim().toLowerCase();
+            if (_lastItems) renderList(_lastItems);
+        });
+    }
+
+    function _filterItems(items) {
+        if (!_searchQuery) return items;
+        return items.filter(function(it) {
+            return (it.documentNumber  || '').toLowerCase().includes(_searchQuery) ||
+                   (it.flowName        || '').toLowerCase().includes(_searchQuery) ||
+                   (it.documentTypeName|| '').toLowerCase().includes(_searchQuery) ||
+                   (it.contactName     || '').toLowerCase().includes(_searchQuery) ||
+                   (it.approverName    || '').toLowerCase().includes(_searchQuery) ||
+                   (it.stepName        || '').toLowerCase().includes(_searchQuery);
+        });
+    }
     modalCloseEl.addEventListener('click', closeModal);
     modalCancelEl.addEventListener('click', closeModal);
     backdropEl.addEventListener('click', e => { if (e.target === backdropEl) closeModal(); });
@@ -593,63 +979,43 @@
     modalApproveEl.addEventListener('click', approveCurrent);
     modalRejectEl.addEventListener('click', rejectCurrent);
 
-    // İlk yüklemede grupları çek
-    loadGroups();
-})();
-
-// ── Sütun görünürlüğü (localStorage: pa-col-cfg) ─────────────────────────
-(function() {
-    const STORAGE_KEY = 'pa-col-cfg';
-    const COL_KEYS    = ['flow','typ','cari','amt','step','apvr','dt'];
-    const COL_CB_IDS  = { flow:'paColFlow', typ:'paColTyp', cari:'paColCari', amt:'paColAmt', step:'paColStep', apvr:'paColApvr', dt:'paColDt' };
-
-    let _cfg = {};
-    try { _cfg = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) {}
-
-    function getListWrap() { return document.querySelector('.pa-list-wrap'); }
-
-    function applyAll() {
-        const wrap = getListWrap();
-        if (!wrap) return;
-        COL_KEYS.forEach(k => {
-            const hidden = _cfg[k] === false;
-            wrap.classList.toggle('pa-hide-' + k, hidden);
-            const cb = document.getElementById(COL_CB_IDS[k]);
-            if (cb) cb.checked = !hidden;
-        });
-    }
-
-    window.paColToggle = function(key, visible) {
-        _cfg[key] = visible;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_cfg)); } catch(e) {}
-        const wrap = getListWrap();
-        if (wrap) wrap.classList.toggle('pa-hide-' + key, !visible);
-    };
-
     window.paToggleColPanel = function(e) {
         e.stopPropagation();
-        const panel = document.getElementById('paColPanel');
+        var panel = document.getElementById('paColPanel');
+        var btn   = document.getElementById('paColBtn');
         if (!panel) return;
-        const isOpen = panel.classList.contains('open');
-        panel.classList.toggle('open', !isOpen);
+        var isOpen = panel.classList.contains('open');
         if (!isOpen) {
-            applyAll(); // checkbox state'lerini sync et
-            const btn  = document.getElementById('paColBtn');
-            const rect = btn ? btn.getBoundingClientRect() : { left: 0, bottom: 0, width: 0 };
+            _renderColPanel();
+            var rect = btn ? btn.getBoundingClientRect() : { right: 0, bottom: 0 };
             panel.style.top  = (rect.bottom + 4) + 'px';
-            panel.style.left = Math.max(4, rect.right - panel.offsetWidth) + 'px';
+            panel.style.left = Math.max(4, rect.right - 300) + 'px';
         }
+        panel.classList.toggle('open', !isOpen);
+        if (btn) btn.classList.toggle('active', !isOpen);
     };
 
     document.addEventListener('click', function(e) {
-        const panel = document.getElementById('paColPanel');
+        var panel = document.getElementById('paColPanel');
         if (panel && panel.classList.contains('open') && !panel.contains(e.target)) {
             panel.classList.remove('open');
+            var btn = document.getElementById('paColBtn');
+            if (btn) btn.classList.remove('active');
         }
     });
 
-    // Sayfa açıldığında hemen uygula
-    applyAll();
+    // Kullanıcı bazlı sütun config'ini sunucudan yükle, ardından grupları çek
+    try {
+        const cfgResp = await fetch('/PendingApproval/GetColConfig', { credentials: 'same-origin' });
+        const cfgData = await cfgResp.json();
+        if (cfgData && cfgData.config) {
+            _applyServerConfig(cfgData.config);
+            // Sunucu config'i localStorage'a da yaz (soğuk yükleme için cache)
+            try { localStorage.setItem(COL_STORAGE_KEY, cfgData.config); } catch(e) {}
+        }
+    } catch(e) { /* sunucuya ulaşılamazsa localStorage ile devam */ }
+
+    loadGroups();
 })();
 </script>
 }
