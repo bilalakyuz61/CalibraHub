@@ -173,6 +173,57 @@ body.app-theme-dark {
   margin: 0;
 }
 
+/* ── Silme onay modalı ── */
+.dn-confirm-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9600;
+}
+.dn-confirm-card {
+  background: #ffffff;
+  border: 1px solid var(--dn-border);
+  border-radius: 14px;
+  padding: 28px 32px 24px;
+  max-width: 360px; width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+body.app-theme-dark .dn-confirm-card {
+  background: #1e293b;
+}
+.dn-confirm-icon {
+  display: flex; justify-content: center;
+  margin-bottom: 12px;
+}
+.dn-confirm-title {
+  font-size: 16px; font-weight: 600; color: var(--dn-text);
+  margin-bottom: 8px;
+}
+.dn-confirm-msg {
+  font-size: 13px; color: var(--dn-sub); line-height: 1.5;
+  margin-bottom: 20px;
+}
+.dn-confirm-actions {
+  display: flex; gap: 8px; justify-content: center;
+}
+.dn-confirm-btn {
+  padding: 8px 20px; border-radius: 8px; border: none;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: opacity .15s;
+}
+.dn-confirm-btn:hover { opacity: .85; }
+.dn-confirm-btn--cancel {
+  background: var(--dn-tool-bg); color: var(--dn-text);
+}
+.dn-confirm-btn--ok {
+  background: #ef4444; color: #ffffff;
+}
+.dn-confirm-btn--ok:focus {
+  outline: 2px solid #ef4444; outline-offset: 2px;
+}
+
 .dn-saved-hint {
   font-size: 11px; color: var(--dn-sub);
   margin-right: auto;

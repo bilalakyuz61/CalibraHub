@@ -3,7 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"] = isNew ? "Yeni Malzeme Grubu" : $"Grup: {Model.GroupCode}";
     ViewData["FormCode"] = "MATERIAL_GROUPS";
-    ViewData["BodyClass"] = "page-mg-edit";
+    ViewData["BodyClass"] = "page-mg-edit workspace-frame-body";
 }
 
 @section Styles {
@@ -16,7 +16,7 @@
         --mge-muted:   #64748b;
         --mge-accent:  #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
-        min-height: 100%; padding: 32px 16px;
+        flex: 1 1 auto; overflow-y: auto; padding: 32px 16px;
         background: var(--mge-bg);
     }
     body.app-theme-dark .mge-root {
@@ -32,21 +32,6 @@
         border-radius: 14px; padding: 28px 28px 24px;
         box-shadow: 0 4px 24px rgba(0,0,0,.08);
     }
-    .mge-header {
-        display: flex; align-items: center; gap: 10px;
-        margin-bottom: 24px; padding-bottom: 16px;
-        border-bottom: 1px solid var(--mge-border);
-    }
-    .mge-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--mge-text); }
-    .mge-back {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 6px 12px; border-radius: 8px;
-        border: 1px solid var(--mge-border); background: none;
-        color: var(--mge-muted); font-size: 13px; cursor: pointer;
-        text-decoration: none; transition: background .12s;
-    }
-    .mge-back:hover { background: var(--mge-bg); color: var(--mge-text); }
-    .mge-spacer { flex: 1; }
 
     .mge-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
     .mge-label { font-size: 12px; font-weight: 600; color: var(--mge-muted); }
@@ -74,24 +59,6 @@
     body.app-theme-dark .mge-select {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
     }
-
-    .mge-actions {
-        display: flex; gap: 8px; margin-top: 24px;
-        padding-top: 16px; border-top: 1px solid var(--mge-border);
-    }
-    .mge-btn {
-        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
-        border: 1px solid transparent; cursor: pointer; transition: all .12s;
-    }
-    .mge-btn--primary { background: var(--mge-accent); color: #fff; border-color: #4f46e5; }
-    .mge-btn--primary:hover { filter: brightness(1.1); }
-    .mge-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
-    .mge-btn--ghost { background: none; border-color: var(--mge-border); color: var(--mge-text); }
-    .mge-btn--ghost:hover { background: var(--mge-bg); }
-    .mge-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
-    body.app-theme-dark .mge-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
-    .mge-btn--danger:hover { background: rgba(239,68,68,.08); }
-    .mge-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
 
     .mge-err {
         margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
@@ -130,18 +97,21 @@
 </style>
 }
 
-<div class="mge-root">
-  <div class="mge-card">
-    <div class="mge-header">
-      <a class="mge-back" href="/Logistics/MaterialGroups">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Listeye Dön
-      </a>
-      <span class="mge-spacer"></span>
-      <h1>@(isNew ? "Yeni Malzeme Grubu" : "Grubu Düzenle")</h1>
-    </div>
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Malzeme Grubu" : "Malzeme Grubu Düzenle",
+      ["ListUrl"]     = "/Logistics/MaterialGroups",
+      ["NewUrl"]      = "/Logistics/MaterialGroupEdit",
+      ["SaveBtnId"]   = "mge-save",
+      ["DeleteBtnId"] = "mge-delete",
+      ["ShowDelete"]  = !isNew,
+  })
 
-    <input type="hidden" id="mge-id" value="@(Model.Id?.ToString() ?? "")" />
+  <div class="mge-root">
+    <div class="mge-card">
+
+      <input type="hidden" id="mge-id" value="@(Model.Id?.ToString() ?? "")" />
 
     <div class="mge-field">
       <label class="mge-label" for="mge-cat">Kategori *</label>
@@ -169,13 +139,6 @@
 
     <div id="mge-err" style="display:none;" class="mge-err"></div>
 
-    <div class="mge-actions">
-      <button class="mge-btn mge-btn--primary" id="mge-save">Kaydet</button>
-      <a class="mge-btn mge-btn--ghost" href="/Logistics/MaterialGroups">İptal</a>
-      @if (!isNew)
-      {
-        <button class="mge-btn mge-btn--danger" id="mge-delete">Sil</button>
-      }
     </div>
   </div>
 </div>

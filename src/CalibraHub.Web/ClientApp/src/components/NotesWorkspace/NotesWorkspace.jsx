@@ -1311,14 +1311,6 @@ export default function NotesWorkspace() {
   var [shareUserDropOpen, setShareUserDropOpen] = useState(false)
   // ── Focus Mode / TOC / Find & Replace / Slash Command ─────────────────
   var [focusMode, setFocusMode] = useState(false)
-
-  useEffect(function () {
-    function onDrawingFullscreen(e) {
-      setFocusMode(e.detail.on)
-    }
-    window.addEventListener('calibra:drawing-fullscreen', onDrawingFullscreen)
-    return function () { window.removeEventListener('calibra:drawing-fullscreen', onDrawingFullscreen) }
-  }, [])
   var [tocOpen, setTocOpen] = useState(false)
   var [tocItems, setTocItems] = useState([])
   var tocTimerRef = useRef(null)
@@ -3120,12 +3112,7 @@ export default function NotesWorkspace() {
                 <button
                   className={'nw-topbar-icon-btn' + (focusMode ? ' nw-topbar-icon-btn--active' : '')}
                   title={focusMode ? 'Odak modundan çık (F11 / Esc)' : 'Odak modu (F11)'}
-                  onClick={function () {
-                    setFocusMode(function (p) {
-                      window.dispatchEvent(new CustomEvent('calibra:focus-mode', { detail: { on: !p } }))
-                      return !p
-                    })
-                  }}
+                  onClick={function () { setFocusMode(function (p) { return !p }) }}
                 >
                   {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                 </button>

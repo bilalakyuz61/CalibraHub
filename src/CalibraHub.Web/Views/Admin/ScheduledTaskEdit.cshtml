@@ -3,7 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"]    = isNew ? "Yeni Görev" : $"Görev: {Model.Name}";
     ViewData["FormCode"] = "SCHEDULED_TASKS";
-    ViewData["BodyClass"] = "page-st-edit";
+    ViewData["BodyClass"] = "page-st-edit workspace-frame-body";
 }
 
 @section Styles {
@@ -12,7 +12,7 @@
     --ste-bg:      #f1f5f9; --ste-surface: #ffffff; --ste-border: #e2e8f0;
     --ste-text:    #0f172a; --ste-muted:   #64748b; --ste-accent: #6366f1;
     display: flex; align-items: flex-start; justify-content: center;
-    min-height: 100%; padding: 32px 16px; background: var(--ste-bg);
+    flex: 1 1 auto; overflow-y: auto; padding: 32px 16px; background: var(--ste-bg);
 }
 body.app-theme-dark .ste-root {
     --ste-bg: #080c17; --ste-surface: #0d1323;
@@ -23,19 +23,6 @@ body.app-theme-dark .ste-root {
     border: 1px solid var(--ste-border); border-radius: 14px;
     box-shadow: 0 4px 24px rgba(0,0,0,.08); overflow: hidden;
 }
-.ste-header {
-    display: flex; align-items: center; gap: 10px;
-    padding: 18px 24px; border-bottom: 1px solid var(--ste-border);
-}
-.ste-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ste-text); }
-.ste-back {
-    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
-    border-radius: 8px; border: 1px solid var(--ste-border); background: none;
-    color: var(--ste-muted); font-size: 13px; cursor: pointer;
-    text-decoration: none; transition: background .12s;
-}
-.ste-back:hover { background: var(--ste-bg); color: var(--ste-text); }
-.ste-spacer { flex: 1; }
 .ste-builtin-note {
     margin: 16px 24px 0; padding: 10px 14px; border-radius: 8px; font-size: 13px;
     background: rgba(251,191,36,.1); color: #d97706; border: 1px solid rgba(251,191,36,.25);
@@ -119,21 +106,6 @@ body.app-theme-dark .ste-builtin-note { color: #fbbf24; }
 .ste-kv-add { font-size: 12px; font-weight: 500; color: var(--ste-accent); background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 4px; }
 .ste-kv-add:hover { opacity: .8; }
 
-/* ── Actions ── */
-.ste-actions {
-    display: flex; gap: 8px; padding: 16px 24px;
-    border-top: 1px solid var(--ste-border);
-}
-.ste-btn { padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: all .12s; }
-.ste-btn--primary { background: var(--ste-accent); color: #fff; border-color: #4f46e5; }
-.ste-btn--primary:hover { filter: brightness(1.1); }
-.ste-btn--primary:disabled { opacity: .5; cursor: not-allowed; }
-.ste-btn--ghost { background: none; border-color: var(--ste-border); color: var(--ste-text); }
-.ste-btn--ghost:hover { background: var(--ste-bg); }
-.ste-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
-body.app-theme-dark .ste-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
-.ste-btn--danger:hover { background: rgba(239,68,68,.08); }
-.ste-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
 .ste-err { margin: 0 24px 12px; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2); }
 body.app-theme-dark .ste-err { color: #f87171; }
 
@@ -156,17 +128,19 @@ body.app-theme-dark .ste-err { color: #f87171; }
 </style>
 }
 
-<div class="ste-root">
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Görev" : "Görevi Düzenle",
+      ["ListUrl"]     = "/Admin/ScheduledTasks",
+      ["SaveBtnId"]   = "ste-save",
+      ["DeleteBtnId"] = "ste-delete",
+      ["ShowDelete"]  = !isNew && !Model.IsBuiltin,
+      ["ShowSave"]    = !Model.IsBuiltin,
+      ["ShowNew"]     = false,
+  })
+  <div class="ste-root">
   <div class="ste-card">
-
-    <div class="ste-header">
-      <a class="ste-back" href="/Admin/ScheduledTasks">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Görevler
-      </a>
-      <span class="ste-spacer"></span>
-      <h1>@(isNew ? "Yeni Görev" : "Görevi Düzenle")</h1>
-    </div>
 
     @if (Model.IsBuiltin)
     {
@@ -419,17 +393,7 @@ body.app-theme-dark .ste-err { color: #f87171; }
 
     <div id="ste-err" style="display:none;" class="ste-err"></div>
 
-    <div class="ste-actions">
-      @if (!Model.IsBuiltin)
-      {
-        <button class="ste-btn ste-btn--primary" id="ste-save">Kaydet</button>
-      }
-      <a class="ste-btn ste-btn--ghost" href="/Admin/ScheduledTasks">İptal</a>
-      @if (!isNew && !Model.IsBuiltin)
-      {
-        <button class="ste-btn ste-btn--danger" id="ste-delete">Sil</button>
-      }
-    </div>
+  </div>
   </div>
 </div>
 

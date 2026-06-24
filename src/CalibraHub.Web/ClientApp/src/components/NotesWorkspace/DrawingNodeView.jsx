@@ -14,12 +14,13 @@ var MIN_H = 180
 var MAX_H = 1400
 
 export function DrawingNodeView({ node, updateAttributes, deleteNode }) {
-  var [tool,       setTool]       = useState('pen')
-  var [color,      setColor]      = useState('#000000')
-  var [size,       setSize]       = useState(5)
-  var [saved,      setSaved]      = useState(!!node.attrs.snapshot)
-  var [displayH,   setDisplayH]   = useState(node.attrs.height || 460)
-  var [fullscreen, setFullscreen] = useState(false)
+  var [tool,          setTool]          = useState('pen')
+  var [color,         setColor]         = useState('#000000')
+  var [size,          setSize]          = useState(5)
+  var [saved,         setSaved]         = useState(!!node.attrs.snapshot)
+  var [displayH,      setDisplayH]      = useState(node.attrs.height || 460)
+  var [fullscreen,    setFullscreen]    = useState(false)
+  var [confirmDelete, setConfirmDelete] = useState(false)
 
   /* ── iki ayrı canvas: biri editörde, biri portal'da ── */
   var embeddedRef        = useRef(null)
@@ -77,31 +78,25 @@ export function DrawingNodeView({ node, updateAttributes, deleteNode }) {
 
   /* ── Esc ile çık + focus-mode event dinle ── */
   useEffect(function () {
-    function onKey(e) { if (e.key === 'Escape' && fullscreen) exitFullscreen() }
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        if (confirmDelete) { setConfirmDelete(false); return }
+        if (fullscreen) exitFullscreen()
+      }
+    }
     window.addEventListener('keydown', onKey)
     return function () { window.removeEventListener('keydown', onKey) }
-  }, [fullscreen])
-
-  useEffect(function () {
-    function onFocusMode(e) {
-      if (e.detail.on) openFullscreen()
-      else if (fullscreen) exitFullscreen()
-    }
-    window.addEventListener('calibra:focus-mode', onFocusMode)
-    return function () { window.removeEventListener('calibra:focus-mode', onFocusMode) }
-  }, [fullscreen])
+  }, [fullscreen, confirmDelete])
 
   function openFullscreen() {
     fsInitializedRef.current = false
     setFullscreen(true)
-    window.dispatchEvent(new CustomEvent('calibra:drawing-fullscreen', { detail: { on: true } }))
   }
 
   function exitFullscreen() {
     var emb = embeddedRef.current
     var fs  = fsRef.current
     if (emb && fs) {
-      /* fs → embedded: içeriği geri kopyala */
       if (emb.height !== fs.height) {
         emb.height = fs.height
         heightRef.current = fs.height
@@ -114,7 +109,6 @@ export function DrawingNodeView({ node, updateAttributes, deleteNode }) {
     }
     fsInitializedRef.current = false
     setFullscreen(false)
-    window.dispatchEvent(new CustomEvent('calibra:drawing-fullscreen', { detail: { on: false } }))
     scheduleSnapshot()
   }
 
@@ -278,14 +272,34 @@ export function DrawingNodeView({ node, updateAttributes, deleteNode }) {
         <div className="dn-actions">
           <button className="dn-action" onClick={undo}  title="Geri al"><Undo2  size={14} /></button>
           <button className="dn-action" onClick={clear} title="Temizle"><Trash2 size={14} /></button>
-          {inFullscreen && (<>
-            <div className="dn-sep" />
-            <button className="dn-action dn-action--exit-fs" onClick={exitFullscreen} title="Tam ekrandan çık (Esc)"><Minimize2 size={14} /></button>
-          </>)}
+          <div className="dn-sep" />
+          {inFullscreen
+            ? <button className="dn-action dn-action--exit-fs" onClick={exitFullscreen} title="Tam ekrandan çık (Esc)"><Minimize2 size={14} /></button>
+            : <button className="dn-action" onClick={openFullscreen} title="Çizimi tam ekrana aç"><Maximize2 size={14} /></button>
+          }
         </div>
       </>
     )
   }
+
+  /* ── Silme onay modalı ── */
+  var deleteConfirmModal = confirmDelete ? createPortal(
+    <div
+      className="dn-confirm-backdrop"
+      onClick={function (e) { if (e.target === e.currentTarget) setConfirmDelete(false) }}
+    >
+      <div className="dn-confirm-card">
+        <div className="dn-confirm-icon"><Trash2 size={28} color="#ef4444" /></div>
+        <div className="dn-confirm-title">Çizimi Sil</div>
+        <div className="dn-confirm-msg">Bu çizim kalıcı olarak silinecek. Emin misiniz?</div>
+        <div className="dn-confirm-actions">
+          <button className="dn-confirm-btn dn-confirm-btn--cancel" onClick={function () { setConfirmDelete(false) }}>Vazgeç</button>
+          <button className="dn-confirm-btn dn-confirm-btn--ok" autoFocus onClick={deleteNode}>Sil</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null
 
   /* ── Fullscreen portal ── */
   var fsOverlay = fullscreen ? createPortal(
@@ -311,6 +325,7 @@ export function DrawingNodeView({ node, updateAttributes, deleteNode }) {
 
   return (
     <NodeViewWrapper contentEditable={false}>
+      {deleteConfirmModal}
       {fsOverlay}
 
       <div className="dn-wrap">
@@ -338,7 +353,7 @@ export function DrawingNodeView({ node, updateAttributes, deleteNode }) {
 
         <div className="dn-footer">
           {saved && <span className="dn-saved-hint">kaydedildi</span>}
-          <button className="dn-btn dn-btn--delete" onClick={deleteNode}>Çizimi Sil</button>
+          <button className="dn-btn dn-btn--delete" onClick={function () { setConfirmDelete(true) }}>Çizimi Sil</button>
         </div>
       </div>
     </NodeViewWrapper>

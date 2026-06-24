@@ -2,7 +2,7 @@
 @{
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni Departman" : $"Departman: {Model!.Name}";
-    ViewData["BodyClass"] = "page-department-edit";
+    ViewData["BodyClass"] = "page-department-edit workspace-frame-body";
     var companies = (System.Collections.Generic.IReadOnlyCollection<CalibraHub.Application.Contracts.CompanyDto>)
         (ViewBag.Companies ?? System.Array.Empty<CalibraHub.Application.Contracts.CompanyDto>());
 }
@@ -17,7 +17,7 @@
         --de-muted:   #64748b;
         --de-accent:  #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
-        min-height: 100%; padding: 32px 16px;
+        flex: 1 1 auto; overflow-y: auto; padding: 32px 16px;
         background: var(--de-bg);
     }
     body.app-theme-dark .de-root {
@@ -33,21 +33,6 @@
         border-radius: 14px; padding: 28px 28px 24px;
         box-shadow: 0 4px 24px rgba(0,0,0,.08);
     }
-    .de-header {
-        display: flex; align-items: center; gap: 10px;
-        margin-bottom: 24px; padding-bottom: 16px;
-        border-bottom: 1px solid var(--de-border);
-    }
-    .de-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--de-text); }
-    .de-back {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 6px 12px; border-radius: 8px;
-        border: 1px solid var(--de-border); background: none;
-        color: var(--de-muted); font-size: 13px; cursor: pointer;
-        text-decoration: none; transition: background .12s;
-    }
-    .de-back:hover { background: var(--de-bg); color: var(--de-text); }
-    .de-spacer { flex: 1; }
 
     .de-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
     .de-label { font-size: 12px; font-weight: 600; color: var(--de-muted); }
@@ -95,25 +80,6 @@
     .de-switch input:checked + .de-switch-track::before { transform: translateX(18px); }
     .de-switch-label { font-size: 13px; font-weight: 600; color: var(--de-muted); }
 
-    .de-actions {
-        display: flex; gap: 8px; margin-top: 24px;
-        padding-top: 16px; border-top: 1px solid var(--de-border);
-    }
-    .de-btn {
-        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
-        border: 1px solid transparent; cursor: pointer; transition: all .12s;
-        text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
-    }
-    .de-btn--primary { background: var(--de-accent); color: #fff; border-color: #4f46e5; }
-    .de-btn--primary:hover { filter: brightness(1.1); }
-    .de-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
-    .de-btn--ghost { background: none; border-color: var(--de-border); color: var(--de-text); }
-    .de-btn--ghost:hover { background: var(--de-bg); }
-    .de-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
-    body.app-theme-dark .de-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
-    .de-btn--danger:hover { background: rgba(239,68,68,.08); }
-    .de-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
-
     .de-err {
         margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
         background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
@@ -151,18 +117,21 @@
 </style>
 }
 
-<div class="de-root">
-  <div class="de-card">
-    <div class="de-header">
-      <a class="de-back" href="/Admin/Departments">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Listeye Dön
-      </a>
-      <span class="de-spacer"></span>
-      <h1>@(isNew ? "Yeni Departman" : "Departmanı Düzenle")</h1>
-    </div>
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Departman" : "Departman Düzenle",
+      ["ListUrl"]     = "/Admin/Departments",
+      ["NewUrl"]      = "/Admin/DepartmentEdit",
+      ["SaveBtnId"]   = "de-save",
+      ["DeleteBtnId"] = "de-delete",
+      ["ShowDelete"]  = !isNew,
+  })
 
-    <input type="hidden" id="de-id" value="@(Model?.Id.ToString() ?? "")" />
+  <div class="de-root">
+    <div class="de-card">
+
+      <input type="hidden" id="de-id" value="@(Model?.Id.ToString() ?? "")" />
 
     <div class="de-field">
       <label class="de-label" for="de-name">Departman Adı *</label>
@@ -186,13 +155,6 @@
 
     <div id="de-err" style="display:none;" class="de-err"></div>
 
-    <div class="de-actions">
-      <button class="de-btn de-btn--primary" id="de-save">Kaydet</button>
-      <a class="de-btn de-btn--ghost" href="/Admin/Departments">İptal</a>
-      @if (!isNew)
-      {
-        <button class="de-btn de-btn--danger" id="de-delete">Sil</button>
-      }
     </div>
   </div>
 </div>

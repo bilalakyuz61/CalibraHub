@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = Model.Id == 0 ? "Yeni Numara Kuralı" : "Numara Kuralı Düzenle";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["BodyClass"] = "page-dnr-edit workspace-frame-body";
 
     var docTypes     = (IEnumerable<dynamic>)(ViewBag.DocumentTypes ?? Array.Empty<object>());
     var resetPeriods = (IEnumerable<dynamic>)(ViewBag.ResetPeriods   ?? Array.Empty<object>());
@@ -22,7 +23,7 @@
         --dnr-success:   #10b981;
 
         display: flex; justify-content: center; align-items: flex-start;
-        padding: 24px 16px; min-height: 100%;
+        padding: 24px 16px; flex: 1 1 auto; overflow-y: auto;
         background: var(--dnr-bg);
         color: var(--dnr-text);
     }
@@ -49,16 +50,14 @@
         overflow: hidden;
     }
 
-    /* Header — tum kolonlar uzerinde, baslik + Aktif switch */
+    /* Switch satırı (eski header yerine — sadece Aktif switch) */
     .dnr-header {
         grid-column: 1 / -1;
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 16px 22px;
+        display: flex; justify-content: flex-end; align-items: center;
+        padding: 10px 22px;
         border-bottom: 1px solid var(--dnr-border);
         background: var(--dnr-surface-2);
     }
-    .dnr-header h2 { margin: 0 0 2px; font-size: 16px; font-weight: 700; color: var(--dnr-text); }
-    .dnr-header p  { margin: 0; color: var(--dnr-muted); font-size: 12px; }
 
     .dnr-switch {
         display: flex; align-items: center; gap: 10px;
@@ -190,27 +189,6 @@
     }
     .dnr-preview-hint strong { color: var(--dnr-accent); }
 
-    /* Footer */
-    .dnr-footer {
-        grid-column: 1 / -1;
-        padding: 12px 22px; display: flex; gap: 8px; justify-content: flex-end;
-        border-top: 1px solid var(--dnr-border);
-        background: var(--dnr-surface-2);
-    }
-    .dnr-btn {
-        padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 600;
-        cursor: pointer; border: 1px solid transparent; text-decoration: none;
-        display: inline-flex; align-items: center; gap: 6px; transition: all .12s;
-    }
-    .dnr-btn.primary {
-        background: linear-gradient(135deg, #7c3aed, #6366f1); color: #fff;
-    }
-    .dnr-btn.primary:hover { filter: brightness(1.1); color: #fff; }
-    .dnr-btn.secondary {
-        background: var(--dnr-surface); color: var(--dnr-text);
-        border-color: var(--dnr-border);
-    }
-    .dnr-btn.secondary:hover { background: var(--dnr-surface-2); }
 
     /* Responsive — 1100px alti: preview alta katlanir */
     @@media (max-width: 1100px) {
@@ -220,14 +198,19 @@
 </style>
 }
 
+<div class="ux-edit-shell">
+@await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+{
+    ["Title"]      = (string)(ViewData["Title"] ?? ""),
+    ["ListUrl"]    = "/DocumentNumberRule",
+    ["SaveBtnId"]  = "dnr-save",
+    ["ShowDelete"] = false,
+    ["ShowNew"]    = false,
+})
 <div class="dnr-wrap">
     <div class="dnr-shell">
-        <!-- Header — tüm kolonların üstünde -->
+        <!-- Switch satırı — tüm kolonların üstünde -->
         <div class="dnr-header">
-            <div>
-                <h2>@ViewData["Title"]</h2>
-                <p>Belge numarası türetme kuralı — koşula bağlı (belge tipi, cari, kullanıcı, tarih) format + sayaç.</p>
-            </div>
             <label class="dnr-switch">
                 <input type="checkbox" id="dnrIsActive" @(Model.IsActive ? "checked" : "") />
                 <span class="track"><span class="thumb"></span></span>
@@ -374,14 +357,8 @@
             </div>
         </aside>
 
-        <!-- Footer — tüm kolonların altında -->
-        <div class="dnr-footer">
-            <a href="/DocumentNumberRule" class="dnr-btn secondary">İptal</a>
-            <button type="button" class="dnr-btn primary" id="dnrSaveBtn">
-                @(Model.Id == 0 ? "Oluştur" : "Kaydet")
-            </button>
-        </div>
     </div>
+</div>
 </div>
 
 @section Scripts {
@@ -448,7 +425,7 @@
     updatePreview();   // initial
 
     // ── Save ──
-    var saveBtn = document.getElementById('dnrSaveBtn');
+    var saveBtn = document.getElementById('dnr-save');
     var form = document.getElementById('dnrForm');
     saveBtn.addEventListener('click', async function() {
         saveBtn.disabled = true;

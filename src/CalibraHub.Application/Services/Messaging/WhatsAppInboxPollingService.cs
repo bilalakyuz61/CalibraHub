@@ -18,13 +18,16 @@ namespace CalibraHub.Application.Services.Messaging;
 /// </summary>
 public sealed class WhatsAppInboxPollingService : BackgroundService
 {
-    // 2026-06-20: PollInterval 3sn → 15sn. Sebep: 3sn polling dakikada 20 GET / saatte 1200
+    // 2026-06-24: PollInterval 15sn → 60sn. Sebep: 15sn polling dakikada 4 GET + her
+    // tick'te DB sorgu (LastReceivedAt) + her message için resolver çağrısı CPU'yu yoruyor.
+    // 60sn yeterli — yeni mesaj 1 dakika gecikme ile gelir, real-time SignalR ile push var.
+    // Önceki: 2026-06-20: PollInterval 3sn → 15sn. Sebep: 3sn polling dakikada 20 GET / saatte 1200
     // GET üretiyordu; 1-5 şirket + tek-makine deployment topolojisi için aşırı. 15sn ile yük 5×
     // azalır (saatte 240 GET). Kullanıcıya etki: yeni mesaj görünme gecikmesi 3sn → en kötü 15sn —
     // chat UI için kabul edilebilir. Webhook push'a çevirmek (Bridge → Web) tam refactor gerektirir
     // (WaContact resolve, media download, dedup tarafının webhook handler'a taşınması + retry +
     // Bridge buffer fallback) — gerçek performans metriği gösterene kadar polling kalıyor.
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(30); // Bridge URL yoksa daha az sik dene
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -342,6 +345,26 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
     {
         try
         {
+            // Idempotency: dosya disk'te zaten varsa indirme — her polling tick'inde
+            // aynı mesaj geliyor ve medya tekrar tekrar indiriliyordu (saatte 100+
+            // 500 KB allocation = memory churn + disk I/O + RAM şişmesi).
+            var effectiveMime = mime; // mime bilinmiyorsa indir + Content-Type'tan al
+            if (!string.IsNullOrEmpty(effectiveMime))
+            {
+                var preExt   = MimeToExtension(effectiveMime);
+                var preSafeId = SafeId(msgId);
+                var preSubPath = Path.Combine("uploads", "whatsapp",
+                    receivedAt.Year.ToString(), receivedAt.Month.ToString("D2"));
+                var preFullPath = Path.Combine(
+                    Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"),
+                    preSubPath, $"{preSafeId}.{preExt}");
+                if (File.Exists(preFullPath))
+                {
+                    // Zaten kayıtlı, log spam'i ve allocation atla
+                    return "/" + preSubPath.Replace('\\', '/') + "/" + preSafeId + "." + preExt;
+                }
+            }
+
             // bridgeBase = http://127.0.0.1:61100, mediaPathOnBridge = /media/<id>
             var url = bridgeBase + mediaPathOnBridge;
             using var http = _httpClientFactory.CreateClient();
@@ -353,7 +376,7 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
             if (bytes.Length == 0) return null;
 
             // Content-Type header'dan mime'i da yakala (yedek)
-            var effectiveMime = mime ?? resp.Content.Headers.ContentType?.MediaType;
+            effectiveMime = mime ?? resp.Content.Headers.ContentType?.MediaType;
             var ext = MimeToExtension(effectiveMime);
             var safeId = SafeId(msgId);
 
@@ -364,6 +387,13 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
             var dir = Path.Combine(wwwroot, subPath);
             Directory.CreateDirectory(dir);
             var fullPath = Path.Combine(dir, $"{safeId}.{ext}");
+            // Mime bilinmediği için yukarıdaki guard çalışmadıysa, son şans:
+            // dosya yine de varsa skip (yeniden yazmaya gerek yok)
+            if (File.Exists(fullPath))
+            {
+                Array.Clear(bytes, 0, bytes.Length);
+                return "/" + subPath.Replace('\\', '/') + "/" + safeId + "." + ext;
+            }
             await File.WriteAllBytesAsync(fullPath, bytes, ct);
 
             // UI'a verilecek relative URL — Forward slash, leading /

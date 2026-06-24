@@ -1557,9 +1557,31 @@ html:not(.dark) .nw-modal-btn--ghost:hover { background: #e2e8f0; }
   border-left: none;
 }
 .nw-focus-mode .nw-editor-scroll-wrap {
+  padding: 0 48px;
+}
+.nw-focus-mode .ProseMirror > p,
+.nw-focus-mode .ProseMirror > h1,
+.nw-focus-mode .ProseMirror > h2,
+.nw-focus-mode .ProseMirror > h3,
+.nw-focus-mode .ProseMirror > h4,
+.nw-focus-mode .ProseMirror > h5,
+.nw-focus-mode .ProseMirror > h6,
+.nw-focus-mode .ProseMirror > ul,
+.nw-focus-mode .ProseMirror > ol,
+.nw-focus-mode .ProseMirror > ul.contains-task-list {
   max-width: 720px;
-  margin: 0 auto;
-  padding: 0 24px;
+  margin-left: auto;
+  margin-right: auto;
+}
+/* Tablo, kod bloğu, alıntı, ayraç, çizim gibi geniş içerikler tam genişlik kullanır */
+.nw-focus-mode .ProseMirror > table,
+.nw-focus-mode .ProseMirror > .tableWrapper,
+.nw-focus-mode .ProseMirror > pre,
+.nw-focus-mode .ProseMirror > blockquote,
+.nw-focus-mode .ProseMirror > hr,
+.nw-focus-mode .ProseMirror > div[data-drawing-canvas] {
+  width: 100%;
+  max-width: 100%;
 }
 
 /* ── Active state for topbar icon buttons ── */

@@ -2,7 +2,7 @@
 @{
     var isNew = !Model.Id.HasValue;
     ViewData["Title"] = isNew ? "Yeni Kart Grubu" : $"Kart Grubu: {Model.Code}";
-    ViewData["BodyClass"] = "page-card-group-edit";
+    ViewData["BodyClass"] = "page-card-group-edit workspace-frame-body";
 }
 
 @section Styles {
@@ -30,30 +30,10 @@ body.app-theme-dark .cge-page {
     --cge-accent:       #a78bfa;
 }
 .cge-page {
-    padding: 16px 24px; height: 100%;
+    padding: 16px 24px; flex: 1 1 auto; overflow-y: auto;
     display: flex; flex-direction: column; min-height: 0; gap: 12px;
-    overflow: auto; background: var(--cge-bg); color: var(--cge-text);
+    background: var(--cge-bg); color: var(--cge-text);
 }
-.cge-toolbar {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    padding-bottom: 10px; border-bottom: 1px solid var(--cge-border);
-}
-.cge-toolbar h1 { font-size: 18px; margin: 0; }
-.cge-toolbar .spacer { flex: 1; }
-.cge-back { color: var(--cge-text-muted); text-decoration: none; font-size: 13px; }
-.cge-back:hover { color: var(--cge-text); }
-.cge-btn {
-    padding: 7px 14px; border-radius: 7px; border: 1px solid var(--cge-border);
-    background: var(--cge-surface); color: var(--cge-text);
-    cursor: pointer; font-size: 13px; font-weight: 500;
-    transition: background .12s, border-color .12s;
-}
-.cge-btn:hover:not(:disabled) { background: var(--cge-surface2); border-color: var(--cge-accent); }
-.cge-btn:disabled { opacity: .4; cursor: not-allowed; }
-.cge-btn--primary {
-    background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border-color: #6d28d9;
-}
-.cge-btn--primary:hover:not(:disabled) { filter: brightness(1.07); border-color: #6d28d9; }
 
 .cge-card {
     background: var(--cge-surface); border: 1px solid var(--cge-border);
@@ -90,14 +70,17 @@ body.app-theme-dark .cge-toast--err { background: rgba(239,68,68,.18); color: #f
 </style>
 }
 
-<div class="cge-page">
-    <div class="cge-toolbar">
-        <a href="/Definitions/CardGroups" class="cge-back">← Kart Grupları</a>
-        <h1>@(isNew ? "Yeni Kart Grubu" : $"Düzenle: {Model.Code}")</h1>
-        <div class="spacer"></div>
-        <button id="btnSave" class="cge-btn cge-btn--primary" onclick="saveGroup()">Kaydet</button>
-    </div>
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]      = isNew ? "Yeni Kart Grubu" : "Kart Grubu Düzenle",
+      ["ListUrl"]    = "/Definitions/CardGroups",
+      ["NewUrl"]     = "/Definitions/CardGroupEdit",
+      ["SaveBtnId"]  = "btnSave",
+      ["ShowDelete"] = false,
+  })
 
+  <div class="cge-page">
     <div class="cge-card">
 
         @if (isNew)
@@ -167,6 +150,7 @@ body.app-theme-dark .cge-toast--err { background: rgba(239,68,68,.18); color: #f
         </div>
 
     </div>
+  </div>
 </div>
 
 <div id="toast" class="cge-toast"></div>
@@ -259,6 +243,9 @@ body.app-theme-dark .cge-toast--err { background: rgba(239,68,68,.18); color: #f
         t.classList.add('show');
         setTimeout(function() { t.classList.remove('show'); }, 3000);
     }
+
+    var _saveBtn = document.getElementById('btnSave');
+    if (_saveBtn) _saveBtn.addEventListener('click', saveGroup);
 
     // Klavye kısayolu
     document.addEventListener('keydown', function(e) {

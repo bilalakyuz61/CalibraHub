@@ -610,6 +610,8 @@ if (useInMemoryPersistence)
                                CalibraHub.Persistence.Repositories.SqlBpmFormRepository>();
     builder.Services.AddScoped<CalibraHub.Application.Services.BpmFormService>();
     builder.Services.AddScoped<CalibraHub.Application.Workflow.BpmFormContextBuilder>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAttachmentRepository,
+                               CalibraHub.Persistence.Repositories.SqlAttachmentRepository>();
 }
 else
 {

@@ -11,6 +11,7 @@
 
     OPSIYONEL PARAMETRELER:
         ShowDelete   (bool)  default: true   — 🗑 Sil butonu görünsün mü
+        ShowSave     (bool)  default: true   — ✔ Kaydet butonu görünsün mü
         ShowNew      (bool)  default: true   — + Yeni butonu görünsün mü (NewUrl boşsa zaten gizli)
         ShowActions  (bool)  default: false  — ⚙ İşlemler dropdown butonu görünsün mü
         SaveBtnId    (string) default: "ptBtnSave"
@@ -42,6 +43,7 @@
     var ab_actionsBtnId = (string)(ViewData["ActionsBtnId"] ?? "ptBtnActions");
     var ab_showDelete   = !(ViewData["ShowDelete"]  is bool _sd) || _sd;
     var ab_showNew      = !(ViewData["ShowNew"]     is bool _sn) || _sn;
+    var ab_showSave     = !(ViewData["ShowSave"]    is bool _ss) || _ss;
     var ab_showActions  =  (ViewData["ShowActions"] is bool _sa) && _sa;
 }
 
@@ -56,10 +58,13 @@
         <span class="pte-btn__label">Liste</span>
     </a>
 
-    <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" id="@ab_saveBtnId" aria-label="Kaydet">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-        <span class="pte-btn__label">Kaydet</span>
-    </button>
+    @if (ab_showSave)
+    {
+        <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" id="@ab_saveBtnId" aria-label="Kaydet">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+            <span class="pte-btn__label">Kaydet</span>
+        </button>
+    }
 
     @if (ab_showDelete)
     {

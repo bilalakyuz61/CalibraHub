@@ -4,7 +4,7 @@
     var isNew = Model.IsNew;
     ViewData["Title"]     = isNew ? "Yeni Veri Perdeleme Kuralı" : $"Kural: {Model.Name}";
     ViewData["FormCode"]  = "DATA_VISIBILITY";
-    ViewData["BodyClass"] = "page-dv-edit";
+    ViewData["BodyClass"] = "page-dv-edit workspace-frame-body";
 
     var valuesJson = JsonSerializer.Serialize(Model.Values ?? new List<string>());
     var isEn = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("en", StringComparison.OrdinalIgnoreCase);
@@ -15,7 +15,7 @@
 .dv-root {
     --dv-bg:      #f1f5f9; --dv-surface: #ffffff; --dv-border: #e2e8f0;
     --dv-text:    #0f172a; --dv-muted:   #64748b; --dv-accent: #6366f1;
-    display: flex; flex-direction: column; min-height: 100%; background: var(--dv-bg);
+    display: flex; flex-direction: column; flex: 1 1 auto; background: var(--dv-bg);
 }
 body.app-theme-dark .dv-root {
     --dv-bg: #080c17; --dv-surface: #0d1323;
@@ -27,22 +27,8 @@ body.app-theme-dark .dv-root {
 .dv-card {
     width: 100%; max-width: none; background: var(--dv-surface);
     border: none; border-radius: 0; box-shadow: none;
-    display: flex; flex-direction: column; flex: 1 1 auto; min-height: 100dvh;
+    display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
 }
-.dv-header {
-    display: flex; align-items: center; gap: 10px;
-    padding: 18px 28px; border-bottom: 1px solid var(--dv-border);
-}
-.dv-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--dv-text); }
-.dv-back {
-    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
-    border-radius: 8px; border: 1px solid var(--dv-border); background: none;
-    color: var(--dv-muted); font-size: 13px; cursor: pointer;
-    text-decoration: none; transition: background .12s;
-}
-.dv-back:hover { background: var(--dv-bg); color: var(--dv-text); }
-.dv-spacer { flex: 1; }
-
 /* ── Tabs ── */
 .dv-body { display: flex; flex: 1 1 auto; min-height: 0; }
 .dv-tabs {
@@ -138,17 +124,6 @@ body.app-theme-dark .dv-grant-type-btn.active { box-shadow: 0 1px 4px rgba(0,0,0
 .dv-grant-item-name { font-size: 13px; color: var(--dv-text); }
 .dv-grant-empty { padding: 16px 12px; text-align: center; font-size: 13px; color: var(--dv-muted); }
 
-/* ── Actions ── */
-.dv-actions { display: flex; gap: 8px; padding: 16px 28px; border-top: 1px solid var(--dv-border); }
-.dv-btn { padding: 9px 22px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: all .12s; }
-.dv-btn--primary { background: var(--dv-accent); color: #fff; border-color: #4f46e5; }
-.dv-btn--primary:hover { filter: brightness(1.1); }
-.dv-btn--primary:disabled { opacity: .5; cursor: not-allowed; }
-.dv-btn--ghost { background: none; border-color: var(--dv-border); color: var(--dv-text); text-decoration: none; display: inline-flex; align-items: center; }
-.dv-btn--ghost:hover { background: var(--dv-bg); }
-.dv-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
-body.app-theme-dark .dv-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
-.dv-btn--danger:hover { background: rgba(239,68,68,.08); }
 .dv-err { margin: 0 28px 12px; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2); }
 body.app-theme-dark .dv-err { color: #f87171; }
 
@@ -184,23 +159,18 @@ body.app-theme-dark .dv-rp-hide { color: #f87171; }
 </style>
 }
 
-<div class="dv-root">
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Kural" : "Kuralı Düzenle",
+      ["ListUrl"]     = "/Admin/DataVisibilityRules?workspace=1",
+      ["SaveBtnId"]   = "dv-save",
+      ["DeleteBtnId"] = "dv-delete",
+      ["ShowDelete"]  = !isNew,
+      ["ShowNew"]     = false,
+  })
+  <div class="dv-root">
   <div class="dv-card">
-
-    <div class="dv-header">
-      <a class="dv-back" href="/Admin/DataVisibilityRules">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Kurallar
-      </a>
-      @if (!isNew)
-      {
-        <button class="dv-btn dv-btn--danger" id="dv-delete">Sil</button>
-      }
-      <button type="button" class="dv-btn dv-btn--ghost" onclick="dvNavBack()">İptal</button>
-      <button class="dv-btn dv-btn--primary" id="dv-save">Kaydet</button>
-      <span class="dv-spacer"></span>
-      <h1>@(isNew ? "Yeni Kural" : "Kuralı Düzenle")</h1>
-    </div>
 
     <div class="dv-body">
       <div class="dv-tabs">
@@ -316,6 +286,7 @@ body.app-theme-dark .dv-rp-hide { color: #f87171; }
     </div>
 
     <div id="dv-err" style="display:none;" class="dv-err"></div>
+  </div>
   </div>
 </div>
 

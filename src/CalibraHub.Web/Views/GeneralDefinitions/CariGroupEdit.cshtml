@@ -3,7 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"]    = isNew ? "Yeni Cari Grup" : $"Grup: {Model.Name}";
     ViewData["FormCode"] = "CARI_GROUPS";
-    ViewData["BodyClass"] = "page-cge";
+    ViewData["BodyClass"] = "page-cge workspace-frame-body";
 }
 
 @section Styles {
@@ -12,7 +12,7 @@
     --cge-bg:      #f1f5f9; --cge-surface: #ffffff; --cge-border: #e2e8f0;
     --cge-text:    #0f172a; --cge-muted:   #64748b; --cge-accent: #6366f1;
     display: flex; align-items: flex-start; justify-content: center;
-    min-height: 100%; padding: 32px 16px; background: var(--cge-bg);
+    flex: 1 1 auto; overflow-y: auto; padding: 32px 16px; background: var(--cge-bg);
 }
 body.app-theme-dark .cge-root {
     --cge-bg: #080c17; --cge-surface: #0d1323;
@@ -23,27 +23,6 @@ body.app-theme-dark .cge-root {
     border: 1px solid var(--cge-border); border-radius: 14px;
     box-shadow: 0 4px 24px rgba(0,0,0,.08); overflow: hidden;
 }
-.cge-header {
-    display: flex; align-items: center; gap: 10px;
-    padding: 18px 24px; border-bottom: 1px solid var(--cge-border);
-}
-.cge-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--cge-text); flex: 1; }
-.cge-back {
-    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
-    border-radius: 8px; border: 1px solid var(--cge-border); background: none;
-    color: var(--cge-muted); font-size: 13px; cursor: pointer;
-    text-decoration: none; transition: background .12s; flex-shrink: 0;
-}
-.cge-back:hover { background: var(--cge-bg); color: var(--cge-text); }
-.cge-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 18px; border-radius: 8px; border: 1px solid transparent;
-    font-size: 13px; font-weight: 600; cursor: pointer; transition: all .12s; flex-shrink: 0;
-}
-.cge-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
-.cge-btn--primary:hover { background: #4f46e5; }
-.cge-btn--danger { background: transparent; border-color: rgba(239,68,68,.35); color: #ef4444; }
-.cge-btn--danger:hover { background: rgba(239,68,68,.08); }
 .cge-body { padding: 24px; }
 .cge-rows { display: flex; flex-direction: column; }
 .cge-row {
@@ -100,26 +79,19 @@ body.app-theme-dark .cge-msg.err { color: #f87171; }
 </style>
 }
 
-<div class="cge-root">
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Cari Grup" : "Cari Grup Düzenle",
+      ["ListUrl"]     = "/GeneralDefinitions/CariGroups",
+      ["NewUrl"]      = "/GeneralDefinitions/CariGroupEdit",
+      ["SaveBtnId"]   = "cge-save",
+      ["DeleteBtnId"] = "cge-delete",
+      ["ShowDelete"]  = !isNew,
+  })
+
+  <div class="cge-root">
     <div class="cge-card">
-        <div class="cge-header">
-            <a href="/GeneralDefinitions/CariGroups" class="cge-back">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-                Geri
-            </a>
-            <h1>@(isNew ? "Yeni Cari Grup" : Model.Name)</h1>
-            @if (!isNew)
-            {
-                <button type="button" class="cge-btn cge-btn--danger" onclick="cgeDelete()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    Sil
-                </button>
-            }
-            <button type="button" class="cge-btn cge-btn--primary" onclick="cgeSave()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Kaydet
-            </button>
-        </div>
         <div class="cge-body">
             <input type="hidden" id="cgeId" value="@Model.Id" />
             <div class="cge-rows">
@@ -150,6 +122,7 @@ body.app-theme-dark .cge-msg.err { color: #f87171; }
             <div id="cgeMsg"></div>
         </div>
     </div>
+  </div>
 </div>
 
 @section Scripts {
@@ -220,6 +193,12 @@ body.app-theme-dark .cge-msg.err { color: #f87171; }
         var el = document.getElementById(id);
         if (el) el.addEventListener('input', function() { el.classList.remove('is-invalid'); });
     });
+
+    var _saveBtn = document.getElementById('cge-save');
+    if (_saveBtn) _saveBtn.addEventListener('click', window.cgeSave);
+    var _deleteBtn = document.getElementById('cge-delete');
+    if (_deleteBtn) _deleteBtn.addEventListener('click', window.cgeDelete);
+
     function cgeMsg(msg, ok) {
         var el = document.getElementById('cgeMsg');
         if (!msg) { el.innerHTML = ''; return; }

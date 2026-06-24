@@ -3,7 +3,7 @@
     var isNew = Model.Enum == null;
     ViewData["Title"]    = isNew ? "Yeni Enum Tanımı" : $"Enum: {Model.Enum!.Code}";
     ViewData["FormCode"] = "INTEGRATION_DOC_ENUM_EDIT";
-    ViewData["BodyClass"] = "page-ide";
+    ViewData["BodyClass"] = "page-ide workspace-frame-body";
 }
 
 @section Styles {
@@ -17,7 +17,7 @@
         --ide-muted: var(--app-text-muted, #64748b);
         --ide-accent: #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
-        min-height: 100%; padding: 24px 16px; background: var(--ide-bg);
+        padding: 24px 16px; background: var(--ide-bg);
         color: var(--ide-text);
     }
     body.app-theme-dark .ide-wrap, body.app-theme-midnight .ide-wrap {
@@ -27,8 +27,7 @@
     /* 2026-05-21: Tam ekran flex layout — header sabit, body scroll'lu, değerler listesi
        kalan alanı dolduran iç-scroll. Sayfa hiç dış scroll açmaz, Kaydet hep görünür. */
     .ide-wrap {
-        height: 100dvh;            /* tarayıcı viewport'unun gerçek yüksekliği */
-        max-height: 100dvh;
+        flex: 1 1 auto; min-height: 0;
         padding: 16px;
         display: flex; align-items: stretch; justify-content: center;
         overflow: hidden;
@@ -38,21 +37,14 @@
         display: flex; flex-direction: column;
         height: 100%; min-height: 0;
         overflow: hidden; }
-    .ide-header { flex: 0 0 auto; }
     /* ide-body iç scroll açmaz — Değerler bölümü kalan alanı kapar (flex:1)
-       ve içeride scroll yapar. Böylece Kaydet + form alanları + usage hep görünür. */
+       ve içeride scroll yapar. Böylece form alanları + usage hep görünür. */
     .ide-body   { flex: 1 1 auto; min-height: 0; overflow: hidden;
                   display: flex; flex-direction: column; gap: 0; }
-    .ide-header { display: flex; align-items: center; gap: 10px;
-        padding: 18px 22px; border-bottom: 1px solid var(--ide-border);
-        background: var(--ide-surface-2); }
-    .ide-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ide-text); flex: 1; }
-    .ide-back, .ide-btn { display: inline-flex; align-items: center; gap: 6px;
+    .ide-btn { display: inline-flex; align-items: center; gap: 6px;
         padding: 6px 12px; border-radius: 8px; border: 1px solid var(--ide-border);
         background: none; color: var(--ide-muted); font-size: 13px; cursor: pointer;
         text-decoration: none; }
-    .ide-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; padding: 8px 18px; font-weight: 600; }
-    .ide-btn--danger { background: transparent; border-color: rgba(239,68,68,.35); color: #ef4444; padding: 8px 18px; }
     .ide-body { padding: 20px 24px; }
     .ide-row { display: grid; grid-template-columns: 160px 1fr; gap: 10px 14px;
         align-items: center; margin-bottom: 12px; }
@@ -129,17 +121,18 @@
 </style>
 }
 
-<div class="ide-wrap">
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Enum Tanımı" : "Enum Düzenle",
+      ["ListUrl"]     = "/Integrations#enums",
+      ["SaveBtnId"]   = "ide-save",
+      ["DeleteBtnId"] = "ide-delete",
+      ["ShowDelete"]  = !isNew,
+      ["ShowNew"]     = false,
+  })
+  <div class="ide-wrap">
     <div class="ide-card">
-        <div class="ide-header">
-            <a href="/Integrations#enums" class="ide-back">← Geri</a>
-            <h1>@(isNew ? "Yeni Enum Tanımı" : Model.Enum!.Code)</h1>
-            @if (!isNew)
-            {
-                <button type="button" class="ide-btn ide-btn--danger" onclick="ideDelete()">Sil</button>
-            }
-            <button type="button" class="ide-btn ide-btn--primary" onclick="ideSave()">Kaydet</button>
-        </div>
         <div class="ide-body">
             <input type="hidden" id="ideId" value="@(Model.Enum?.Id ?? 0)" />
 
@@ -243,6 +236,7 @@
             <div id="ideMsg"></div>
         </div>
     </div>
+  </div>
 </div>
 
 @section Scripts {
@@ -631,6 +625,11 @@
         if (type === 'ok') setTimeout(() => { el.innerHTML = ''; }, 3000);
     }
     function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    var _idesSave = document.getElementById('ide-save');
+    if (_idesSave) _idesSave.addEventListener('click', window.ideSave);
+    var _idesDel = document.getElementById('ide-delete');
+    if (_idesDel) _idesDel.addEventListener('click', window.ideDelete);
 })();
 </script>
 }

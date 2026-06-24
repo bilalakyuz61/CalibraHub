@@ -4,7 +4,7 @@
 @model CalibraHub.Application.Contracts.ApprovalFlowDto?
 @{
     ViewData["Title"] = Model is null ? "Yeni Onay Akışı" : $"Akış Düzenle — {Model.Name}";
-    ViewData["BodyClass"] = "page-approval-flow-edit";
+    ViewData["BodyClass"] = "page-approval-flow-edit workspace-frame-body";
     var isNew = Model is null;
     var flowId = Model?.Id ?? 0;
     var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -61,7 +61,7 @@
     --afe-danger:    #ef4444;
     --afe-ok:        #10b981;
     display: flex; flex-direction: column;
-    height: 100%; min-height: 0;
+    flex: 1 1 auto; min-height: 0;
     background: var(--afe-bg); color: var(--afe-text);
 }
 body.app-theme-dark .afe-wrapper {
@@ -72,72 +72,6 @@ body.app-theme-dark .afe-wrapper {
     --afe-muted:     #94a3b8;
     --afe-accent:    #818cf8;
     --afe-accent-s:  rgba(129,140,248,.15);
-}
-
-/* ── Sticky header bar ─────────────────────────────────────── */
-.afe-headerbar {
-    position: relative;
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 16px; flex-shrink: 0;
-    background: var(--afe-surface);
-    border-bottom: 1px solid var(--afe-border);
-    flex-wrap: nowrap;
-}
-/* Headerbar butonları — Bootstrap secondary/primary değişkenlerini ezip
-   CSS değişkenleriyle tutarlı çerçeve ve renk sağlar (light + dark). */
-.afe-headerbar .btn {
-    border-color: var(--afe-border);
-    color: var(--afe-muted);
-    background: transparent;
-    transition: border-color .15s, color .15s, background .15s;
-}
-.afe-headerbar .btn:hover {
-    border-color: var(--afe-text);
-    color: var(--afe-text);
-    background: transparent;
-}
-.afe-headerbar .btn-save {
-    border-color: var(--afe-accent);
-    color: var(--afe-accent);
-}
-.afe-headerbar .btn-save:hover {
-    border-color: var(--afe-accent);
-    color: var(--afe-surface);
-    background: var(--afe-accent);
-}
-.afe-headerbar .afe-hb-input,
-.afe-headerbar .afe-hb-select {
-    padding: 7px 11px; border: 1px solid var(--afe-border);
-    border-radius: 7px; font-size: .85rem;
-    background: var(--afe-bg); color: var(--afe-text);
-    transition: border-color .15s, box-shadow .15s;
-    font-family: inherit;
-}
-.afe-headerbar .afe-hb-input:focus,
-.afe-headerbar .afe-hb-select:focus {
-    outline: none; border-color: var(--afe-accent);
-    box-shadow: 0 0 0 3px var(--afe-accent-s);
-}
-.afe-hb-display {
-    font-size: .88rem; font-weight: 600; color: var(--afe-text);
-    max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-/* ── Ortalanmış ad + durum noktası ─────────────────────────── */
-.afe-hb-center {
-    position: absolute; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 8px;
-    pointer-events: none; max-width: 420px;
-}
-.afe-status-dot {
-    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
-    background: #10b981;
-    box-shadow: 0 0 0 2px rgba(16,185,129,.2);
-    transition: background .2s, box-shadow .2s;
-}
-.afe-status-dot.passive {
-    background: #ef4444;
-    box-shadow: 0 0 0 2px rgba(239,68,68,.2);
 }
 
 /* ── Genel Bilgiler sağ panel ──────────────────────────────── */
@@ -438,60 +372,22 @@ body.app-theme-dark .afh-pending-table td { border-color: rgba(255,255,255,.06);
 </style>
 }
 
+<div class="ux-edit-shell">
+@await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+{
+    ["Title"]      = isNew ? "Yeni Onay Akışı" : $"Akış: {Model!.Name}",
+    ["ListUrl"]    = "/ApprovalFlow",
+    ["SaveBtnId"]  = "afe-save",
+    ["ShowDelete"] = false,
+    ["ShowNew"]    = false,
+})
 <div class="afe-wrapper">
-
-    <!-- Sticky header bar -->
-    <div class="afe-headerbar">
-        <!-- Sol: Listeye Dön -->
-        <a href="/ApprovalFlow" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center" title="Listeye Dön" style="flex-shrink:0;padding:6px 9px">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        </a>
-
-        <!-- Orta: Süreç adı + durum noktası (absolute) -->
-        <div class="afe-hb-center">
-            <span id="hbStatusDot" class="afe-status-dot@(Model?.IsActive == false ? " passive" : "")"></span>
-            <span id="hbFlowName" class="afe-hb-display">@(isNew ? "Yeni Akış" : Model?.Name)</span>
-        </div>
-
-        <!-- Sağ: araç butonları -->
-        <div style="flex:1"></div>
-        <button id="btnVars" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
-                title="Değişkenler" style="padding:6px 9px">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/>
-                <path d="M16 3h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 1-2 2v5a2 2 0 0 1-2 2h-1"/>
-            </svg>
-        </button>
-        <button id="btnMiniMap" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
-                title="Mini Harita" style="padding:6px 9px">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m3 6 6-3 6 3 6-3v14l-6 3-6-3-6 3V6z"/>
-                <path d="M9 3v14M15 6v14"/>
-            </svg>
-        </button>
-        <button id="btnInfo" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
-                title="Genel Bilgiler" style="padding:6px 9px">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-        </button>
-        @if (!isNew)
-        {
-            <button id="btnHistory" type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center"
-                    title="Revizyon Geçmişi" style="padding:6px 9px">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>
-            </button>
-        }
-        <button id="btnSave" class="btn btn-sm btn-save d-inline-flex align-items-center" title="Kaydet" style="padding:6px 9px">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-        </button>
-    </div>
-
     <!-- Body: tam ekran designer -->
     <div class="afe-body-designer">
         <div id="approval-flow-designer-root"></div>
     </div>
 
+</div>
 </div>
 
 <div class="afe-toast" id="toast"></div>
@@ -605,6 +501,48 @@ body.app-theme-dark .afh-pending-table td { border-color: rgba(255,255,255,.06);
     var fName      = document.getElementById('fName');
     var fKind      = document.getElementById('fKind');
     var fActive    = document.getElementById('fActive');
+
+    // Action bar title'a status dot + name span enjekte et
+    (function() {
+        var titleEl = document.querySelector('.pte-action-bar__title');
+        if (!titleEl) return;
+        titleEl.style.cssText += 'display:inline-flex;align-items:center;gap:7px;';
+        titleEl.innerHTML = '';
+        var dotEl = document.createElement('span');
+        dotEl.id = 'hbStatusDot';
+        dotEl.style.cssText = 'width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#10b981;box-shadow:0 0 0 2px rgba(16,185,129,.2);transition:background .2s,box-shadow .2s;';
+        var nameEl = document.createElement('span');
+        nameEl.id = 'hbFlowName';
+        titleEl.appendChild(dotEl);
+        titleEl.appendChild(nameEl);
+    })();
+
+    // Action bar'a sağ taraf araç butonlarını ekle (pte-meta sonrasına = sağ taraf)
+    (function() {
+        var bar = document.querySelector('.pte-action-bar');
+        if (!bar) return;
+        var toolBtns = [
+            { id: 'btnVars',    title: 'Değişkenler',
+              svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 1-2 2v5a2 2 0 0 1-2 2h-1"/></svg>' },
+            { id: 'btnMiniMap', title: 'Mini Harita',
+              svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v14l-6 3-6-3-6 3V6z"/><path d="M9 3v14M15 6v14"/></svg>' },
+            { id: 'btnInfo',    title: 'Genel Bilgiler',
+              svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' },
+        ];
+        if (!@(isNew ? "true" : "false")) {
+            toolBtns.push({ id: 'btnHistory', title: 'Revizyon Geçmişi',
+                svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>' });
+        }
+        toolBtns.forEach(function(b) {
+            var el = document.createElement('button');
+            el.type = 'button'; el.id = b.id;
+            el.className = 'pte-btn pte-btn--secondary pte-btn--icon';
+            el.title = b.title; el.setAttribute('aria-label', b.title);
+            el.innerHTML = b.svg + '<span class="pte-btn__label">' + b.title + '</span>';
+            bar.appendChild(el);
+        });
+    })();
+
     var hbName     = document.getElementById('hbFlowName');
     var hbDot      = document.getElementById('hbStatusDot');
 
@@ -868,8 +806,8 @@ body.app-theme-dark .afh-pending-table td { border-color: rgba(255,255,255,.06);
             }).filter(function (v) { return v.name; }),
         };
 
-        var btn = document.getElementById('btnSave');
-        btn.disabled = true;
+        var btn = document.getElementById('afe-save');
+        if (btn) btn.disabled = true;
 
         try {
             var token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
@@ -895,11 +833,11 @@ body.app-theme-dark .afh-pending-table td { border-color: rgba(255,255,255,.06);
         } catch(e) {
             showToast('Bağlantı hatası: ' + e.message, false);
         } finally {
-            btn.disabled = false;
+            if (btn) btn.disabled = false;
         }
     }
 
-    document.getElementById('btnSave').addEventListener('click', doSave);
+    document.getElementById('afe-save').addEventListener('click', doSave);
 
     // ── Toolbar: ad + durum noktası senkronizasyonu ──────────────────────────
     fName.addEventListener('input', function () {
@@ -908,7 +846,13 @@ body.app-theme-dark .afh-pending-table td { border-color: rgba(255,255,255,.06);
 
     function updateStatusDot() {
         if (!hbDot) return;
-        hbDot.classList.toggle('passive', !fActive.checked);
+        if (fActive.checked) {
+            hbDot.style.background = '#10b981';
+            hbDot.style.boxShadow = '0 0 0 2px rgba(16,185,129,.2)';
+        } else {
+            hbDot.style.background = '#ef4444';
+            hbDot.style.boxShadow = '0 0 0 2px rgba(239,68,68,.2)';
+        }
     }
     fActive.addEventListener('change', updateStatusDot);
     updateStatusDot();

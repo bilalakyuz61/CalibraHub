@@ -1065,7 +1065,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
         ["ListUrl"]     = "/Finance/Contacts",
         ["NewUrl"]      = "/Finance/ContactEdit",
         ["SaveBtnId"]   = "caSaveBtn",
-        ["ShowDelete"]  = false,
+        ["ShowDelete"]  = isEdit,
     })
 
     <div class="ca-body">
@@ -1641,6 +1641,32 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
     var existingId  = document.getElementById('caId').value;
 
     var saveBtn = document.getElementById('caSaveBtn');
+
+    // Ana kayıt silme
+    var deleteBtn = document.getElementById('ptBtnDelete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async function () {
+            var id = parseInt(document.getElementById('caId').value || '0', 10);
+            if (!id) return;
+            if (window.CalibraAlert && CalibraAlert.confirm) {
+                var ok = await CalibraAlert.confirm('Bu cari hesap silinsin mi?', { title: 'Cari Sil', okText: 'Evet, Sil', cancelText: 'İptal', danger: true });
+                if (!ok) return;
+            }
+            try {
+                var token = document.querySelector('input[name="__RequestVerificationToken"]');
+                var r = await fetch('/Finance/DeleteContactJson?id=' + id, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': token ? token.value : '' },
+                    credentials: 'same-origin',
+                });
+                var data = await r.json();
+                if (!data.success) { if (window.CalibraAlert) CalibraAlert.error(data.message || 'Silinemedi'); return; }
+                location.replace('/Finance/Contacts');
+            } catch (e) {
+                if (window.CalibraAlert) CalibraAlert.error('Silme hatası: ' + e.message);
+            }
+        });
+    }
 
     // Bilgilendirme: ekranda yer kaplamayan, ortalanmis modal kullan.
     // Basari durumunda zaten KITT yesil tarayici var, ek mesaj cikmasin.

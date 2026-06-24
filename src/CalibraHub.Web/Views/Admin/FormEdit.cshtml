@@ -2,7 +2,7 @@
 @{
     var isNew = Model.Id == null;
     ViewData["Title"] = isNew ? "Yeni Form" : $"Form: {Model.FormName ?? Model.FormCode}";
-    ViewData["BodyClass"] = "page-form-edit";
+    ViewData["BodyClass"] = "page-form-edit workspace-frame-body";
 }
 
 @section Styles {
@@ -15,12 +15,8 @@
         --fe-muted:   #64748b;
         --fe-accent:  #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
-        min-height: 100vh; padding: 32px 16px;
+        flex: 1 1 auto; overflow-y: auto; padding: 32px 16px;
         background: var(--fe-bg);
-        overflow-y: auto;
-    }
-    body.page-form-edit, body.page-form-edit html {
-        overflow: auto !important; height: auto !important; min-height: 100vh;
     }
     body.app-theme-dark .fe-root {
         --fe-bg:      #080c17;
@@ -36,25 +32,6 @@
         border-radius: 14px; padding: 0 28px;
         box-shadow: 0 4px 24px rgba(0,0,0,.08);
     }
-
-    .fe-header {
-        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-        position: sticky; top: 0; z-index: 20;
-        background: var(--fe-surface);
-        margin: 0 -28px 18px; padding: 12px 20px;
-        border-bottom: 1px solid var(--fe-border);
-        border-radius: 14px 14px 0 0;
-    }
-    .fe-header h1 { font-size: 15px; font-weight: 700; margin: 0; color: var(--fe-text); }
-    .fe-back {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 6px 12px; border-radius: 8px;
-        border: 1px solid var(--fe-border); background: none;
-        color: var(--fe-muted); font-size: 12px; cursor: pointer;
-        text-decoration: none; transition: background .12s;
-    }
-    .fe-back:hover { background: var(--fe-bg); color: var(--fe-text); }
-    .fe-spacer { flex: 1; }
 
     .fe-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
     .fe-label { font-size: 12px; font-weight: 600; color: var(--fe-muted); }
@@ -106,20 +83,6 @@
         padding-top: 16px;
     }
 
-    .fe-btn {
-        padding: 7px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
-        border: 1px solid transparent; cursor: pointer; transition: all .12s;
-    }
-    .fe-btn--primary { background: var(--fe-accent); color: #fff; border-color: #4f46e5; }
-    .fe-btn--primary:hover { filter: brightness(1.1); }
-    .fe-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
-    .fe-btn--ghost { background: none; border-color: var(--fe-border); color: var(--fe-text); }
-    .fe-btn--ghost:hover { background: var(--fe-bg); }
-    .fe-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
-    body.app-theme-dark .fe-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
-    .fe-btn--danger:hover { background: rgba(239,68,68,.08); }
-    .fe-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
-
     .fe-err {
         margin: 10px 0; padding: 8px 12px; border-radius: 8px; font-size: 13px;
         background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
@@ -164,22 +127,18 @@
 </style>
 }
 
-<div class="fe-root">
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Form" : "Formu Düzenle",
+      ["ListUrl"]     = "/Admin/FormManagement",
+      ["SaveBtnId"]   = "fe-save",
+      ["DeleteBtnId"] = "fe-delete",
+      ["ShowDelete"]  = !isNew,
+      ["ShowNew"]     = false,
+  })
+  <div class="fe-root">
   <div class="fe-card">
-    <div class="fe-header">
-      <a class="fe-back" href="/Admin/FormManagement">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Listeye Dön
-      </a>
-      <h1>@(isNew ? "Yeni Form" : "Formu Düzenle")</h1>
-      <span class="fe-spacer"></span>
-      <button class="fe-btn fe-btn--primary" id="fe-save">Kaydet</button>
-      <a class="fe-btn fe-btn--ghost" href="/Admin/FormManagement">İptal</a>
-      @if (!isNew)
-      {
-        <button class="fe-btn fe-btn--danger" id="fe-delete">Sil</button>
-      }
-    </div>
 
     <input type="hidden" id="fe-id"       value="@(Model.Id?.ToString() ?? "")" />
     <input type="hidden" id="fe-origcode" value="@(Model.FormCode ?? "")" />
@@ -251,6 +210,7 @@
 
     <div id="fe-err" class="fe-err"></div>
     <div style="height: 18px;"></div>
+  </div>
   </div>
 </div>
 
