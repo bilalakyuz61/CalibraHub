@@ -207,6 +207,20 @@
         background:rgba(99,102,241,.15); color:#818cf8;
         border-color:rgba(99,102,241,.3); font-weight:600;
     }
+    /* Genişlik stepper (sütun paneli detay) */
+    .fc3-cfg-stepper { display:flex; align-items:center; gap:5px; flex:1; }
+    .fc3-cfg-step-btn {
+        width:22px; height:22px; border-radius:5px; flex-shrink:0;
+        border:1px solid rgba(148,163,184,.2); background:transparent;
+        cursor:pointer; font-size:15px; font-weight:600; color:#64748b;
+        display:flex; align-items:center; justify-content:center; line-height:1;
+        transition:all .1s;
+    }
+    .fc3-cfg-step-btn:hover:not(:disabled) { background:rgba(99,102,241,.1); color:#6366f1; border-color:rgba(99,102,241,.3); }
+    .fc3-cfg-step-btn:disabled { opacity:.28; cursor:not-allowed; }
+    .fc3-step-dots { display:flex; gap:4px; flex:1; justify-content:center; align-items:center; }
+    .fc3-step-dot { width:7px; height:7px; border-radius:50%; background:rgba(148,163,184,.25); transition:background .15s; }
+    .fc3-step-dot.on { background:#6366f1; }
     /* Grup başlık satırı */
     .fc3-group-hdr {
         display:flex; align-items:center; gap:5px;
@@ -1573,7 +1587,7 @@
         var h = '<span class="fc3-fhdr__cb"></span>';
         visCols.forEach(function(c) {
             var align = c.align || 'left';
-            var hStyle = 'text-align:' + align;
+            var hStyle = (c.flexWeight > 0 ? 'flex:' + c.flexWeight + ';' : '') + 'text-align:' + align;
             if (c.fontSize)   hStyle += ';font-size:'   + c.fontSize   + 'px';
             if (c.fontWeight) hStyle += ';font-weight:' + c.fontWeight;
             if (c.key === 'qty') {
@@ -1709,17 +1723,17 @@
                     case 'num':
                         return '<span class="fc3-flat-num" style="text-align:' + al + '">' + esc(r.documentNumber || '') + '</span>';
                     case 'who':
-                        return '<span class="fc3-flat-who" style="text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
+                        return '<span class="fc3-flat-who" style="flex:' + (c.flexWeight||1) + ';text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
                     case 'dt':
                         return '<span class="fc3-flat-dt" style="text-align:' + al + '">' + fmtDate(r.documentDate) + '</span>';
                     case 'mat':
-                        return '<span class="fc3-sub-mat" style="text-align:' + al + '" title="' + esc(l.materialName || l.materialCode || '') + '">'
+                        return '<span class="fc3-sub-mat" style="flex:' + (c.flexWeight||1) + ';text-align:' + al + '" title="' + esc(l.materialName || l.materialCode || '') + '">'
                             + esc(l.materialName || l.materialCode || '—') + '</span>';
                     case 'qty':
                         return '<span class="fc3-sub-qty" style="text-align:' + al + '">' + fmtN(qty) + '</span>'
                             + '<span class="fc3-sub-unit">' + esc(l.unitCode || '') + '</span>';
                     case 'stk':
-                        return '<span class="fc3-sub-stk">' + stkHtml + '</span>';
+                        return '<span class="fc3-sub-stk" style="flex:' + (c.flexWeight||1) + '">' + stkHtml + '</span>';
                     case 'remain':
                         return '<span class="fc3-sub-remain" style="color:' + remainColor + ';text-align:' + al + '" title="Kalan: ' + fmtN(remain) + '">'
                             + fmtN(Math.max(0, remain)) + '</span>';
@@ -1731,7 +1745,7 @@
                             var extKey   = c.key.slice(4);
                             var extLabel = (FC3_EXTRA_COLS.find(function(ec) { return ec.key === extKey; }) || {}).label || '';
                             var val = (l.extras && l.extras[extLabel] != null) ? l.extras[extLabel] : '';
-                            return '<span class="fc3-sub-ext fc3-sub-ext-' + extKey + '" title="' + esc(val) + '">' + esc(val) + '</span>';
+                            return '<span class="fc3-sub-ext fc3-sub-ext-' + extKey + '" style="flex:' + (c.flexWeight||1) + '" title="' + esc(val) + '">' + esc(val) + '</span>';
                         }
                         return '';
                 }
@@ -1925,20 +1939,20 @@
 
     // ── Sütun yapılandırması ──────────────────────────────────────────────────
     var DEFAULT_DEFS = [
-        { key: 'num',    label: 'Belge No',    visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
-        { key: 'who',    label: 'Talep Eden',  visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
-        { key: 'dt',     label: 'Tarih',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
-        { key: 'mat',    label: 'Malzeme',     visible: true, align: 'left',   fixed: true,  fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
-        { key: 'qty',    label: 'Miktar',      visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
-        { key: 'stk',    label: 'Stok',        visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
-        { key: 'remain', label: 'Kalan',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
-        { key: 'fst',    label: 'Durum',       visible: true, align: 'center', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'num',    label: 'Belge No',    visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0 },
+        { key: 'who',    label: 'Talep Eden',  visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2 },
+        { key: 'dt',     label: 'Tarih',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0 },
+        { key: 'mat',    label: 'Malzeme',     visible: true, align: 'left',   fixed: true,  fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2 },
+        { key: 'qty',    label: 'Miktar',      visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0 },
+        { key: 'stk',    label: 'Stok',        visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2 },
+        { key: 'remain', label: 'Kalan',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0 },
+        { key: 'fst',    label: 'Durum',       visible: true, align: 'center', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0 },
     ];
 
     function _makeDefaultDefs() {
         var d = DEFAULT_DEFS.map(function(x) { return Object.assign({}, x); });
         FC3_EXTRA_COLS.forEach(function(c) {
-            d.push({ key: 'ext_' + c.key, label: c.label, visible: true, align: 'left', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 });
+            d.push({ key: 'ext_' + c.key, label: c.label, visible: true, align: 'left', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2 });
         });
         return d;
     }
@@ -1957,6 +1971,7 @@
             if (s.visible    !== undefined && !def.fixed) def.visible = s.visible;
             if (s.groupBy    !== undefined) def.groupBy    = !!s.groupBy;
             if (s.groupOrder !== undefined) def.groupOrder = s.groupOrder || 0;
+            if (s.flexWeight !== undefined && def.flexWeight > 0) def.flexWeight = Math.max(1, Math.min(4, s.flexWeight || 2));
         });
         var order = saved.map(function(s) { return s.key; });
         _colDefs.sort(function(a, b) {
@@ -1968,19 +1983,19 @@
 
     (function loadFromStorage() {
         try {
-            var json = localStorage.getItem('fc3-col-flat-v2');
+            var json = localStorage.getItem('fc3-col-flat-v3');
             if (json) _applyColSaved(JSON.parse(json));
         } catch(e) {}
     })();
 
     function _serializeDefs() {
         return JSON.stringify(_colDefs.map(function(c) {
-            return { key: c.key, visible: c.visible, align: c.align, label: c.label, fontSize: c.fontSize || 0, fontWeight: c.fontWeight || 0, groupBy: c.groupBy || false, groupOrder: c.groupOrder || 0 };
+            return { key: c.key, visible: c.visible, align: c.align, label: c.label, fontSize: c.fontSize || 0, fontWeight: c.fontWeight || 0, groupBy: c.groupBy || false, groupOrder: c.groupOrder || 0, flexWeight: c.flexWeight || 0 };
         }));
     }
     function _saveColDefs() {
         var json = _serializeDefs();
-        try { localStorage.setItem('fc3-col-flat-v2', json); } catch(e) {}
+        try { localStorage.setItem('fc3-col-flat-v3', json); } catch(e) {}
         fetch('/Purchase/SaveFlatColConfig', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ config: json })
@@ -2043,6 +2058,18 @@
                             '<option value="700"' + (c.fontWeight === 700 ? ' selected' : '') + '>Kalın (700)</option>' +
                         '</select>' +
                     '</div>' +
+                    (c.flexWeight > 0 ?
+                    '<div class="fc3-cfg-field-row">' +
+                        '<span class="fc3-cfg-field-label">Genişlik</span>' +
+                        '<span class="fc3-cfg-stepper">' +
+                            '<button type="button" class="fc3-cfg-step-btn" data-key="' + c.key + '" data-dir="-1"' + (c.flexWeight <= 1 ? ' disabled' : '') + '>−</button>' +
+                            '<span class="fc3-step-dots">' +
+                                [1,2,3,4].map(function(i) { return '<span class="fc3-step-dot' + (i <= c.flexWeight ? ' on' : '') + '"></span>'; }).join('') +
+                            '</span>' +
+                            '<button type="button" class="fc3-cfg-step-btn" data-key="' + c.key + '" data-dir="1"' + (c.flexWeight >= 4 ? ' disabled' : '') + '>+</button>' +
+                        '</span>' +
+                    '</div>'
+                    : '') +
                     '<div class="fc3-cfg-field-row">' +
                         '<span class="fc3-cfg-field-label">Grupla</span>' +
                         '<button type="button" class="fc3-cfg-group-btn' + (c.groupBy ? ' active' : '') + '" data-key="' + c.key + '">' +
@@ -2120,6 +2147,21 @@
                 def.fontWeight = parseInt(sel.value, 10) || 0;
                 _saveColDefs();
                 renderFlatColHdr();
+            });
+        });
+
+        // Genişlik stepper
+        rowsEl.querySelectorAll('.fc3-cfg-step-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key = btn.getAttribute('data-key');
+                var dir = parseInt(btn.getAttribute('data-dir'), 10);
+                var def = _colDefs.find(function(d) { return d.key === key; });
+                if (!def || def.flexWeight <= 0) return;
+                def.flexWeight = Math.max(1, Math.min(4, def.flexWeight + dir));
+                _saveColDefs();
+                _renderColPanel();
+                renderList();
             });
         });
 
@@ -2224,7 +2266,7 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data || !data.config) return;
-            var localJson = localStorage.getItem('fc3-col-flat-v2');
+            var localJson = localStorage.getItem('fc3-col-flat-v3');
             if (data.config === localJson) return;
             _colDefs = _makeDefaultDefs();
             try { _applyColSaved(JSON.parse(data.config)); } catch(e) {}
