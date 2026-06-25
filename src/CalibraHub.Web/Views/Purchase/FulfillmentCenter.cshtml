@@ -196,6 +196,32 @@
     .fc3-cfg-align-btn svg { width:13px; height:13px; }
     .fc3-cfg-align-btn:hover { background:rgba(99,102,241,.1); color:#818cf8; }
     .fc3-cfg-align-btn.fc3-align-active { background:rgba(99,102,241,.15); color:#818cf8; border-color:rgba(99,102,241,.3); }
+    /* Grupla butonu (sütun paneli detay) */
+    .fc3-cfg-group-btn {
+        height:24px; padding:0 10px; border-radius:5px; cursor:pointer;
+        border:1px solid rgba(148,163,184,.25); background:transparent;
+        font-size:11px; color:#64748b; transition:all .1s; white-space:nowrap;
+    }
+    .fc3-cfg-group-btn:hover { border-color:rgba(99,102,241,.3); color:#818cf8; }
+    .fc3-cfg-group-btn.active {
+        background:rgba(99,102,241,.15); color:#818cf8;
+        border-color:rgba(99,102,241,.3); font-weight:600;
+    }
+    /* Grup başlık satırı */
+    .fc3-group-hdr {
+        display:flex; align-items:center; gap:5px;
+        padding:5px 12px; min-height:30px;
+        background:rgba(99,102,241,.05);
+        border-top:1px solid rgba(99,102,241,.1);
+        border-bottom:1px solid rgba(99,102,241,.1);
+        font-size:11.5px; user-select:none; position:sticky; left:0;
+    }
+    .fc3-group-hdr__dim { color:#64748b; font-weight:400; }
+    .fc3-group-hdr__sep { color:#94a3b8; font-size:10px; }
+    .fc3-group-hdr__val { color:#e2e8f0; font-weight:600; }
+    body.app-theme-light .fc3-group-hdr { background:rgba(99,102,241,.04); border-color:rgba(99,102,241,.12); }
+    body.app-theme-light .fc3-group-hdr__val { color:#1e293b; }
+    body.app-theme-light .fc3-group-hdr__dim { color:#94a3b8; }
     /* Line header */
     .fc3-sub-hdr {
         display:flex; align-items:center; gap:8px;
@@ -1598,6 +1624,25 @@
         });
     }
 
+    // ── Gruplama değeri (her kolon için) ─────────────────────────────────────
+    function getGroupValue(r, l, key) {
+        var FSL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam' };
+        switch (key) {
+            case 'num':    return r.documentNumber || '—';
+            case 'who':    return r.requesterPersonnelName || r.contactName || '—';
+            case 'dt':     return fmtDate(r.documentDate);
+            case 'mat':    return l.materialName || l.materialCode || '—';
+            case 'fst':    return PENDING_APPROVAL_IDS.has(r.id) ? 'Onay Sürecinde' : (FSL[l.fulfillmentStatus] || 'Bekliyor');
+            default:
+                if (key.indexOf('ext_') === 0) {
+                    var xKey   = key.slice(4);
+                    var xLabel = (FC3_EXTRA_COLS.find(function(ec) { return ec.key === xKey; }) || {}).label || '';
+                    return l.extras && l.extras[xLabel] != null ? String(l.extras[xLabel]) : '—';
+                }
+                return '';
+        }
+    }
+
     function renderList() {
         renderFlatColHdr();
         var el = document.getElementById('fc3List');
@@ -1623,88 +1668,135 @@
         var FS_CLASS = { 0: 'fm-fst--pending', 1: 'fm-fst--partial', 2: 'fm-fst--full' };
         var FS_LABEL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam' };
 
-        el.innerHTML = _vis.map(function(r) {
-            var lines = _docLineCache[r.id] || [];
+        function buildRowHtml(r, l) {
             var who = r.requesterPersonnelName || r.contactName || '—';
             var docHasApproval = PENDING_APPROVAL_IDS.has(r.id);
+            var qty     = l.quantity || 0;
+            var fromStk = l.fulfilledFromStock || 0;
+            var fromPur = l.fulfilledByPurchase || 0;
+            var remain  = l.remaining != null ? l.remaining : Math.max(0, qty - fromStk - fromPur);
+            var stocks  = _globalStockMap[l.itemId] || [];
+            var totalStk = stocks.reduce(function(a, s) { return a + (s.balance || 0); }, 0);
 
-            return lines.map(function(l) {
-                var qty     = l.quantity || 0;
-                var fromStk = l.fulfilledFromStock || 0;
-                var fromPur = l.fulfilledByPurchase || 0;
-                var remain  = l.remaining != null ? l.remaining : Math.max(0, qty - fromStk - fromPur);
-                var stocks  = _globalStockMap[l.itemId] || [];
-                var totalStk = stocks.reduce(function(a, s) { return a + (s.balance || 0); }, 0);
-
-                var stkHtml;
-                if (!stocks.length) {
-                    stkHtml = '<span class="fc3-sk fc3-sk--zero" title="Stok kaydı yok">Stok yok</span>';
-                } else {
-                    var show = stocks.slice(0, 4);
-                    stkHtml = show.map(function(s) {
-                        var bal = s.balance || 0;
-                        var cls = bal >= remain && remain > 0 ? 'fc3-sk--ok'
-                                : bal > 0 ? 'fc3-sk--warn'
-                                : 'fc3-sk--none';
-                        return '<span class="fc3-sk ' + cls + '" title="' + esc((s.locationName || '') + ': ' + fmtN(bal) + ' ' + (l.unitCode || '')) + '">'
-                            + esc(s.locationName || 'Depo') + ':&thinsp;' + fmtN(bal) + '</span>';
-                    }).join('');
-                    if (stocks.length > 4) stkHtml += '<span class="fc3-sk fc3-sk--zero">+' + (stocks.length - 4) + '</span>';
-                }
-
-                var remainColor = remain <= 0 ? '#34d399' : (totalStk >= remain ? '#fbbf24' : '#f87171');
-                var sufIcon  = remain <= 0 ? '✓' : (totalStk >= remain ? '⚠' : '✕');
-                var sufTitle = remain <= 0 ? 'Karşılandı' : (totalStk >= remain ? 'Stok yeterli' : 'Stok yetersiz');
-                var fstClass = docHasApproval ? 'fm-fst--approval' : (FS_CLASS[l.fulfillmentStatus] || FS_CLASS[0]);
-                var fstLabel = docHasApproval ? 'Onay Sürecinde' : (FS_LABEL[l.fulfillmentStatus] || FS_LABEL[0]);
-
-                var isLineSel = !docHasApproval && !!_lineSel[l.lineId];
-                var cbOnClick = 'event.stopPropagation();fc3LineCheck(' + l.lineId + ',' + r.id + ',' + (l.itemId||0) + ')';
-
-                var cells = visCols.map(function(c) {
-                    var al = c.align || 'left';
-                    switch(c.key) {
-                        case 'num':
-                            return '<span class="fc3-flat-num" style="text-align:' + al + '">' + esc(r.documentNumber || '') + '</span>';
-                        case 'who':
-                            return '<span class="fc3-flat-who" style="text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
-                        case 'dt':
-                            return '<span class="fc3-flat-dt" style="text-align:' + al + '">' + fmtDate(r.documentDate) + '</span>';
-                        case 'mat':
-                            return '<span class="fc3-sub-mat" style="text-align:' + al + '" title="' + esc(l.materialName || l.materialCode || '') + '">'
-                                + esc(l.materialName || l.materialCode || '—') + '</span>';
-                        case 'qty':
-                            return '<span class="fc3-sub-qty" style="text-align:' + al + '">' + fmtN(qty) + '</span>'
-                                + '<span class="fc3-sub-unit">' + esc(l.unitCode || '') + '</span>';
-                        case 'stk':
-                            return '<span class="fc3-sub-stk">' + stkHtml + '</span>';
-                        case 'remain':
-                            return '<span class="fc3-sub-remain" style="color:' + remainColor + ';text-align:' + al + '" title="Kalan: ' + fmtN(remain) + '">'
-                                + fmtN(Math.max(0, remain)) + '</span>';
-                        case 'fst':
-                            return '<span class="fc3-sub-fst ' + fstClass + '" style="text-align:' + al + '">' + fstLabel + '</span>'
-                                + '<span class="fc3-sub-suf" style="color:' + remainColor + '" title="' + sufTitle + '">' + sufIcon + '</span>';
-                        default:
-                            if (c.key.indexOf('ext_') === 0) {
-                                var extKey   = c.key.slice(4);
-                                var extLabel = (FC3_EXTRA_COLS.find(function(ec) { return ec.key === extKey; }) || {}).label || '';
-                                var val = (l.extras && l.extras[extLabel] != null) ? l.extras[extLabel] : '';
-                                return '<span class="fc3-sub-ext fc3-sub-ext-' + extKey + '" title="' + esc(val) + '">' + esc(val) + '</span>';
-                            }
-                            return '';
-                    }
+            var stkHtml;
+            if (!stocks.length) {
+                stkHtml = '<span class="fc3-sk fc3-sk--zero" title="Stok kaydı yok">Stok yok</span>';
+            } else {
+                var show = stocks.slice(0, 4);
+                stkHtml = show.map(function(s) {
+                    var bal = s.balance || 0;
+                    var cls = bal >= remain && remain > 0 ? 'fc3-sk--ok'
+                            : bal > 0 ? 'fc3-sk--warn'
+                            : 'fc3-sk--none';
+                    return '<span class="fc3-sk ' + cls + '" title="' + esc((s.locationName || '') + ': ' + fmtN(bal) + ' ' + (l.unitCode || '')) + '">'
+                        + esc(s.locationName || 'Depo') + ':&thinsp;' + fmtN(bal) + '</span>';
                 }).join('');
+                if (stocks.length > 4) stkHtml += '<span class="fc3-sk fc3-sk--zero">+' + (stocks.length - 4) + '</span>';
+            }
 
-                return '<div class="fc3-flat-row" data-doc-id="' + r.id + '" data-line-id="' + l.lineId + '">'
-                    + '<input type="checkbox" class="fc3-sub-cb" data-line-id="' + l.lineId + '"'
-                    + (docHasApproval ? ' disabled title="Onay sürecinde — seçilemez"' : '')
-                    + (isLineSel ? ' checked' : '')
-                    + (!docHasApproval ? ' onclick="' + cbOnClick + '"' : '')
-                    + '>'
-                    + cells
-                    + '</div>';
+            var remainColor = remain <= 0 ? '#34d399' : (totalStk >= remain ? '#fbbf24' : '#f87171');
+            var sufIcon  = remain <= 0 ? '✓' : (totalStk >= remain ? '⚠' : '✕');
+            var sufTitle = remain <= 0 ? 'Karşılandı' : (totalStk >= remain ? 'Stok yeterli' : 'Stok yetersiz');
+            var fstClass = docHasApproval ? 'fm-fst--approval' : (FS_CLASS[l.fulfillmentStatus] || FS_CLASS[0]);
+            var fstLabel = docHasApproval ? 'Onay Sürecinde' : (FS_LABEL[l.fulfillmentStatus] || FS_LABEL[0]);
+
+            var isLineSel = !docHasApproval && !!_lineSel[l.lineId];
+            var cbOnClick = 'event.stopPropagation();fc3LineCheck(' + l.lineId + ',' + r.id + ',' + (l.itemId||0) + ')';
+
+            var cells = visCols.map(function(c) {
+                var al = c.align || 'left';
+                switch(c.key) {
+                    case 'num':
+                        return '<span class="fc3-flat-num" style="text-align:' + al + '">' + esc(r.documentNumber || '') + '</span>';
+                    case 'who':
+                        return '<span class="fc3-flat-who" style="text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
+                    case 'dt':
+                        return '<span class="fc3-flat-dt" style="text-align:' + al + '">' + fmtDate(r.documentDate) + '</span>';
+                    case 'mat':
+                        return '<span class="fc3-sub-mat" style="text-align:' + al + '" title="' + esc(l.materialName || l.materialCode || '') + '">'
+                            + esc(l.materialName || l.materialCode || '—') + '</span>';
+                    case 'qty':
+                        return '<span class="fc3-sub-qty" style="text-align:' + al + '">' + fmtN(qty) + '</span>'
+                            + '<span class="fc3-sub-unit">' + esc(l.unitCode || '') + '</span>';
+                    case 'stk':
+                        return '<span class="fc3-sub-stk">' + stkHtml + '</span>';
+                    case 'remain':
+                        return '<span class="fc3-sub-remain" style="color:' + remainColor + ';text-align:' + al + '" title="Kalan: ' + fmtN(remain) + '">'
+                            + fmtN(Math.max(0, remain)) + '</span>';
+                    case 'fst':
+                        return '<span class="fc3-sub-fst ' + fstClass + '" style="text-align:' + al + '">' + fstLabel + '</span>'
+                            + '<span class="fc3-sub-suf" style="color:' + remainColor + '" title="' + sufTitle + '">' + sufIcon + '</span>';
+                    default:
+                        if (c.key.indexOf('ext_') === 0) {
+                            var extKey   = c.key.slice(4);
+                            var extLabel = (FC3_EXTRA_COLS.find(function(ec) { return ec.key === extKey; }) || {}).label || '';
+                            var val = (l.extras && l.extras[extLabel] != null) ? l.extras[extLabel] : '';
+                            return '<span class="fc3-sub-ext fc3-sub-ext-' + extKey + '" title="' + esc(val) + '">' + esc(val) + '</span>';
+                        }
+                        return '';
+                }
             }).join('');
-        }).join('');
+
+            return '<div class="fc3-flat-row" data-doc-id="' + r.id + '" data-line-id="' + l.lineId + '">'
+                + '<input type="checkbox" class="fc3-sub-cb" data-line-id="' + l.lineId + '"'
+                + (docHasApproval ? ' disabled title="Onay sürecinde — seçilemez"' : '')
+                + (isLineSel ? ' checked' : '')
+                + (!docHasApproval ? ' onclick="' + cbOnClick + '"' : '')
+                + '>'
+                + cells
+                + '</div>';
+        }
+
+        // Aktif grup kolonları (sıraya göre)
+        var groupCols = _colDefs.filter(function(c) { return c.groupBy && c.visible; })
+                                .sort(function(a, b) { return a.groupOrder - b.groupOrder; });
+
+        if (groupCols.length > 0) {
+            // Tüm (belge, kalem) çiftlerini düzleştir
+            var allPairs = [];
+            _vis.forEach(function(r) {
+                (_docLineCache[r.id] || []).forEach(function(l) { allPairs.push({ r: r, l: l }); });
+            });
+
+            // Grup sütun değerlerine göre sırala
+            allPairs.sort(function(a, b) {
+                for (var gi = 0; gi < groupCols.length; gi++) {
+                    var ga = getGroupValue(a.r, a.l, groupCols[gi].key);
+                    var gb = getGroupValue(b.r, b.l, groupCols[gi].key);
+                    if (ga < gb) return -1;
+                    if (ga > gb) return 1;
+                }
+                return 0;
+            });
+
+            var sentinelKeys = groupCols.map(function() { return '\x00'; });
+            var gHtml = '';
+
+            allPairs.forEach(function(p) {
+                for (var gi = 0; gi < groupCols.length; gi++) {
+                    var gv = getGroupValue(p.r, p.l, groupCols[gi].key);
+                    if (gv !== sentinelKeys[gi]) {
+                        // Bu ve alt seviyeleri sıfırla
+                        for (var ri = gi; ri < groupCols.length; ri++) sentinelKeys[ri] = '\x00';
+                        sentinelKeys[gi] = gv;
+                        var indent = gi * 16;
+                        gHtml += '<div class="fc3-group-hdr" style="padding-left:' + (12 + indent) + 'px">'
+                            + '<span class="fc3-group-hdr__dim">' + esc(groupCols[gi].label) + '</span>'
+                            + '<span class="fc3-group-hdr__sep"> › </span>'
+                            + '<span class="fc3-group-hdr__val">' + esc(gv || '—') + '</span>'
+                            + '</div>';
+                    }
+                }
+                gHtml += buildRowHtml(p.r, p.l);
+            });
+
+            el.innerHTML = gHtml;
+        } else {
+            // Düz liste (mevcut davranış)
+            el.innerHTML = _vis.map(function(r) {
+                return (_docLineCache[r.id] || []).map(function(l) { return buildRowHtml(r, l); }).join('');
+            }).join('');
+        }
     }
 
     // ── Satır seçimi (Depodan Karşıla) ────────────────────────────────────────
@@ -1833,20 +1925,20 @@
 
     // ── Sütun yapılandırması ──────────────────────────────────────────────────
     var DEFAULT_DEFS = [
-        { key: 'num',    label: 'Belge No',    visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0 },
-        { key: 'who',    label: 'Talep Eden',  visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0 },
-        { key: 'dt',     label: 'Tarih',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0 },
-        { key: 'mat',    label: 'Malzeme',     visible: true, align: 'left',   fixed: true,  fontSize: 0, fontWeight: 0 },
-        { key: 'qty',    label: 'Miktar',      visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0 },
-        { key: 'stk',    label: 'Stok',        visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0 },
-        { key: 'remain', label: 'Kalan',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0 },
-        { key: 'fst',    label: 'Durum',       visible: true, align: 'center', fixed: false, fontSize: 0, fontWeight: 0 },
+        { key: 'num',    label: 'Belge No',    visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'who',    label: 'Talep Eden',  visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'dt',     label: 'Tarih',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'mat',    label: 'Malzeme',     visible: true, align: 'left',   fixed: true,  fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'qty',    label: 'Miktar',      visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'stk',    label: 'Stok',        visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'remain', label: 'Kalan',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
+        { key: 'fst',    label: 'Durum',       visible: true, align: 'center', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 },
     ];
 
     function _makeDefaultDefs() {
         var d = DEFAULT_DEFS.map(function(x) { return Object.assign({}, x); });
         FC3_EXTRA_COLS.forEach(function(c) {
-            d.push({ key: 'ext_' + c.key, label: c.label, visible: true, align: 'left', fixed: false, fontSize: 0, fontWeight: 0 });
+            d.push({ key: 'ext_' + c.key, label: c.label, visible: true, align: 'left', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0 });
         });
         return d;
     }
@@ -1863,6 +1955,8 @@
             if (s.fontSize   !== undefined) def.fontSize   = s.fontSize   || 0;
             if (s.fontWeight !== undefined) def.fontWeight = s.fontWeight || 0;
             if (s.visible    !== undefined && !def.fixed) def.visible = s.visible;
+            if (s.groupBy    !== undefined) def.groupBy    = !!s.groupBy;
+            if (s.groupOrder !== undefined) def.groupOrder = s.groupOrder || 0;
         });
         var order = saved.map(function(s) { return s.key; });
         _colDefs.sort(function(a, b) {
@@ -1874,19 +1968,19 @@
 
     (function loadFromStorage() {
         try {
-            var json = localStorage.getItem('fc3-col-flat-v1');
+            var json = localStorage.getItem('fc3-col-flat-v2');
             if (json) _applyColSaved(JSON.parse(json));
         } catch(e) {}
     })();
 
     function _serializeDefs() {
         return JSON.stringify(_colDefs.map(function(c) {
-            return { key: c.key, visible: c.visible, align: c.align, label: c.label, fontSize: c.fontSize || 0, fontWeight: c.fontWeight || 0 };
+            return { key: c.key, visible: c.visible, align: c.align, label: c.label, fontSize: c.fontSize || 0, fontWeight: c.fontWeight || 0, groupBy: c.groupBy || false, groupOrder: c.groupOrder || 0 };
         }));
     }
     function _saveColDefs() {
         var json = _serializeDefs();
-        try { localStorage.setItem('fc3-col-flat-v1', json); } catch(e) {}
+        try { localStorage.setItem('fc3-col-flat-v2', json); } catch(e) {}
         fetch('/Purchase/SaveFlatColConfig', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ config: json })
@@ -1948,6 +2042,12 @@
                             '<option value="600"' + (c.fontWeight === 600 ? ' selected' : '') + '>Yarı Kalın (600)</option>' +
                             '<option value="700"' + (c.fontWeight === 700 ? ' selected' : '') + '>Kalın (700)</option>' +
                         '</select>' +
+                    '</div>' +
+                    '<div class="fc3-cfg-field-row">' +
+                        '<span class="fc3-cfg-field-label">Grupla</span>' +
+                        '<button type="button" class="fc3-cfg-group-btn' + (c.groupBy ? ' active' : '') + '" data-key="' + c.key + '">' +
+                            (c.groupBy ? '#' + c.groupOrder + ' — Kaldır' : 'Gruplama ekle') +
+                        '</button>' +
                     '</div>' +
                 '</div>';
         });
@@ -2020,6 +2120,31 @@
                 def.fontWeight = parseInt(sel.value, 10) || 0;
                 _saveColDefs();
                 renderFlatColHdr();
+            });
+        });
+
+        // Grupla toggle
+        rowsEl.querySelectorAll('.fc3-cfg-group-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key = btn.getAttribute('data-key');
+                var def = _colDefs.find(function(d) { return d.key === key; });
+                if (!def) return;
+                if (def.groupBy) {
+                    def.groupBy = false;
+                    def.groupOrder = 0;
+                    // Kalan grupları yeniden numaralandır
+                    _colDefs.filter(function(d) { return d.groupBy; })
+                            .sort(function(a, b) { return a.groupOrder - b.groupOrder; })
+                            .forEach(function(d, i) { d.groupOrder = i + 1; });
+                } else {
+                    var maxOrd = _colDefs.reduce(function(m, d) { return d.groupBy ? Math.max(m, d.groupOrder) : m; }, 0);
+                    def.groupBy = true;
+                    def.groupOrder = maxOrd + 1;
+                }
+                _saveColDefs();
+                _renderColPanel();
+                renderList();
             });
         });
 
@@ -2099,7 +2224,7 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data || !data.config) return;
-            var localJson = localStorage.getItem('fc3-col-flat-v1');
+            var localJson = localStorage.getItem('fc3-col-flat-v2');
             if (data.config === localJson) return;
             _colDefs = _makeDefaultDefs();
             try { _applyColSaved(JSON.parse(data.config)); } catch(e) {}
