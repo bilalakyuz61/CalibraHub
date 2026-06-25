@@ -235,7 +235,7 @@
     .fc3-sub-hdr-unit { min-width:28px; }
     .fc3-sub-hdr-stk  { flex:1; }
     .fc3-sub-hdr-rem  { min-width:52px; text-align:right; }
-    .fc3-sub-hdr-fst  { min-width:58px; text-align:center; }
+    .fc3-sub-hdr-fst  { width:100px; min-width:100px; max-width:100px; text-align:center; }
     .fc3-sub-hdr-suf  { min-width:18px; text-align:center; }
     .fc3-list { flex:1; overflow-y:auto; }
     .fc3-list::-webkit-scrollbar { width:4px; }
@@ -288,7 +288,7 @@
     .fc3-sk--zero { background:rgba(100,116,139,.1);  color:#475569; }
     .fc3-sub-remain { color:#94a3b8; min-width:52px; text-align:right; flex-shrink:0;
                       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.74rem; }
-    .fc3-sub-fst { padding:1px 5px; border-radius:999px; font-size:.63rem; font-weight:700; flex-shrink:0; min-width:58px; text-align:center; box-sizing:border-box; }
+    .fc3-sub-fst { padding:1px 5px; border-radius:999px; font-size:.63rem; font-weight:700; flex-shrink:0; width:100px; min-width:100px; max-width:100px; text-align:center; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .fm-fst--pending  { background:rgba(100,116,139,.15); color:#94a3b8; }
     .fm-fst--partial  { background:rgba(245,158,11,.15);  color:#fbbf24; }
     .fm-fst--full     { background:rgba(16,185,129,.15);  color:#34d399; }
@@ -820,7 +820,7 @@
     .fc3-fhdr__unit   { min-width:28px; flex-shrink:0; }
     .fc3-fhdr__stk    { flex:1; min-width:0; }
     .fc3-fhdr__remain { min-width:52px; text-align:right; flex-shrink:0; }
-    .fc3-fhdr__fst    { min-width:58px; text-align:center; flex-shrink:0; }
+    .fc3-fhdr__fst    { width:100px; min-width:100px; max-width:100px; text-align:center; flex-shrink:0; }
     .fc3-fhdr__suf    { min-width:18px; flex-shrink:0; }
     .fc3-fhdr__ext    { min-width:80px; max-width:140px; flex-shrink:0; }
 </style>
