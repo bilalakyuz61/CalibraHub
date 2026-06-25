@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   Treemap, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  FunnelChart, Funnel,
+  FunnelChart, Funnel, ComposedChart, ReferenceLine,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  ScatterChart, Scatter, ZAxis,
 } from 'recharts'
 import ChartPreview from './ChartPreview'
 
@@ -55,13 +57,14 @@ function filtersSig(panel, filters, viewFields) {
 }
 
 function buildSql(panel, filters, viewFields) {
-  const { sourceType, source, metric, group, groupIsTime, sqlQuery, aggregate } = panel
+  const { sourceType, source, metric, group, groupIsTime, sqlQuery, aggregate, type } = panel
   if (sourceType === 'sql') return sqlQuery?.trim() || null
+  if (type === 'text') return null
 
   const where = buildWhere(panel, filters, viewFields)
 
   // Pivot: ham satır+sütun+değer kolonlarını çek; çok-alanlı pivot client-side hesaplanır (computePivot)
-  if (panel.type === 'pivot') {
+  if (type === 'pivot') {
     const cfg = ensurePivotCfg(panel)
     const fields = [...new Set([...cfg.rows, ...cfg.cols, ...cfg.values.map(v => v.field)])].filter(Boolean)
     if (!source || !fields.length) return null
@@ -75,12 +78,46 @@ function buildSql(panel, filters, viewFields) {
   const grp  = group ? `[${group}]` : null
   const agg  = aggSql(aggregate, col)
 
-  // Tek deger ciktisi: stat (KPI) + gauge (gosterge)
-  if (!grp || panel.type === 'stat' || panel.type === 'gauge')
+  // Tek değer çıktısı: stat (KPI) + gauge (gösterge) + bullet (hedef göstergesi)
+  if (!grp || type === 'stat' || type === 'gauge' || type === 'bullet')
     return `SELECT ${agg} AS [value] FROM ${view}${where}`
+
+  // Kombi (bar + çizgi): iki metrik
+  if (type === 'combo') {
+    const agg2 = panel.metric2
+      ? `, ${aggSql(panel.aggregate2 || aggregate, `[${panel.metric2}]`)} AS [value2]`
+      : ''
+    if (groupIsTime)
+      return `SELECT CAST(${grp} AS DATE) AS [time], ${agg} AS [value]${agg2} FROM ${view}${where} GROUP BY CAST(${grp} AS DATE) ORDER BY [time]`
+    return `SELECT ${grp} AS [label], ${agg} AS [value]${agg2} FROM ${view}${where} GROUP BY ${grp} ORDER BY ${grp}`
+  }
+
+  // %100 Yığılmış bar: üç kolon (label, series, value)
+  if (type === 'stacked100' && panel.series)
+    return `SELECT ${grp} AS [label], [${panel.series}] AS [series], ${agg} AS [value] FROM ${view}${where} GROUP BY ${grp}, [${panel.series}] ORDER BY ${grp}, [${panel.series}]`
+
+  // Isı haritası: group → satır, heatCol → sütun
+  if (type === 'heatmap' && panel.heatCol)
+    return `SELECT ${grp} AS [row], [${panel.heatCol}] AS [col], ${agg} AS [value] FROM ${view}${where} GROUP BY ${grp}, [${panel.heatCol}] ORDER BY ${grp}, [${panel.heatCol}]`
+
+  // Dağılım: group → etiket, metric → x, metric2 → y
+  if (type === 'scatter') {
+    const agg2 = panel.metric2
+      ? `, ${aggSql(panel.aggregate2 || aggregate, `[${panel.metric2}]`)} AS [y]`
+      : ''
+    return `SELECT ${grp} AS [label], ${agg} AS [x]${agg2} FROM ${view}${where} GROUP BY ${grp} ORDER BY ${grp}`
+  }
+
+  // Şelale: grup sırası korunur (ORDER BY değere göre değil)
+  if (type === 'waterfall') {
+    if (groupIsTime)
+      return `SELECT CAST(${grp} AS DATE) AS [time], ${agg} AS [value] FROM ${view}${where} GROUP BY CAST(${grp} AS DATE) ORDER BY [time]`
+    return `SELECT ${grp} AS [label], ${agg} AS [value] FROM ${view}${where} GROUP BY ${grp} ORDER BY ${grp}`
+  }
+
   if (groupIsTime)
     return `SELECT CAST(${grp} AS DATE) AS [time], ${agg} AS [value] FROM ${view}${where} GROUP BY CAST(${grp} AS DATE) ORDER BY [time]`
-  if (panel.type === 'table')
+  if (type === 'table')
     return `SELECT TOP 100 ${grp} AS [label], ${col} FROM ${view}${where} ORDER BY ${grp}`
   return `SELECT ${grp} AS [label], ${agg} AS [value] FROM ${view}${where} GROUP BY ${grp} ORDER BY [value] DESC`
 }
@@ -132,6 +169,7 @@ function useReportData(panel, activeFilters, viewFields) {
     panel.sourceType, panel.source, panel.metric, panel.aggregate,
     panel.group, panel.groupIsTime, panel.sqlQuery, panel.sourceId, panel.type,
     panel.rowField, panel.colField, panel.measure, panel._nonce, pvSig, fkey,
+    panel.metric2, panel.aggregate2, panel.series, panel.heatCol,
   ])
 
   return state
@@ -175,6 +213,75 @@ function toChartData(apiData, labelField, valueField, agg) {
     groups[d.label].push(isNaN(d.value) ? 0 : d.value)
   })
   return order.map(label => ({ label, value: aggValues(groups[label], agg) }))
+}
+
+// Kombi (bar+line): labelField/valueField/valueField2 → {label, bar, line}[]
+function toComboData(apiData, labelField, valueField, valueField2, agg, agg2) {
+  if (!apiData?.columns?.length || !apiData.rows?.length) return []
+  const cols = apiData.columns
+  const li  = colIndex(cols, labelField, 0)
+  const v1i = colIndex(cols, valueField,  cols.length > 1 ? 1 : 0)
+  const v2i = colIndex(cols, valueField2 || 'value2', cols.length > 2 ? 2 : (cols.length > 1 ? 1 : 0))
+  const raw = apiData.rows.map(row => ({
+    label: row[li]  != null ? String(row[li])  : '',
+    bar:   row[v1i] != null ? Number(row[v1i]) : 0,
+    line:  row[v2i] != null ? Number(row[v2i]) : 0,
+  }))
+  if (!agg || agg === 'NONE') return raw
+  const order = [], groups = {}
+  raw.forEach(d => {
+    if (!(d.label in groups)) { groups[d.label] = { bars: [], lines: [] }; order.push(d.label) }
+    groups[d.label].bars.push(isNaN(d.bar) ? 0 : d.bar)
+    groups[d.label].lines.push(isNaN(d.line) ? 0 : d.line)
+  })
+  return order.map(label => ({
+    label,
+    bar:  aggValues(groups[label].bars,  agg),
+    line: aggValues(groups[label].lines, agg2 || agg),
+  }))
+}
+
+// %100 Yığılmış bar: → { seriesKeys, data: [{label, [s]: pct}] }
+function toStacked100Data(apiData, labelField, seriesField, valueField) {
+  if (!apiData?.columns?.length || !apiData.rows?.length) return { seriesKeys: [], data: [] }
+  const cols = apiData.columns
+  const li = colIndex(cols, labelField, 0)
+  const si = colIndex(cols, seriesField, 1)
+  const vi = colIndex(cols, valueField, 2)
+  const labelOrder = [], seriesSet = new Set(), matrix = {}
+  apiData.rows.forEach(row => {
+    const lbl = row[li] != null ? String(row[li]) : ''
+    const ser = row[si] != null ? String(row[si]) : ''
+    const val = row[vi] != null ? Number(row[vi]) : 0
+    if (!matrix[lbl]) { matrix[lbl] = {}; labelOrder.push(lbl) }
+    matrix[lbl][ser] = (matrix[lbl][ser] || 0) + val
+    seriesSet.add(ser)
+  })
+  const seriesKeys = [...seriesSet].sort()
+  const data = labelOrder.map(lbl => {
+    const row = matrix[lbl]
+    const total = seriesKeys.reduce((s, k) => s + (row[k] || 0), 0)
+    const entry = { label: lbl }
+    seriesKeys.forEach(k => { entry[k] = total > 0 ? Math.round(((row[k] || 0) / total) * 1000) / 10 : 0 })
+    return entry
+  })
+  return { seriesKeys, data }
+}
+
+// Dağılım: ham kaynak için xField/yField/labelField → {x, y, label?}[]
+function toScatterData(apiData, xField, yField, labelField) {
+  if (!apiData?.columns?.length || !apiData.rows?.length) return []
+  const cols = apiData.columns
+  const xi = colIndex(cols, xField, 0)
+  const yi = colIndex(cols, yField, cols.length > 1 ? 1 : 0)
+  const li = labelField ? colIndex(cols, labelField, -1) : -1
+  return apiData.rows
+    .map(row => ({
+      x:     row[xi] != null ? Number(row[xi]) : 0,
+      y:     row[yi] != null ? Number(row[yi]) : 0,
+      label: li >= 0 && row[li] != null ? String(row[li]) : undefined,
+    }))
+    .filter(d => !isNaN(d.x) && !isNaN(d.y))
 }
 
 // valueField verilirse o kolonu agg'le (kayıtlı/SQL KPI/gösterge); değilse 1. satırdaki ilk sayısal (view).
@@ -341,6 +448,230 @@ function RdFunnelChart({ data, color, height = 110 }) {
           <LabelList position="center" dataKey="value" stroke="none" fill="#ffffff" fontSize={10} formatter={fmtBarLabel} />
         </Funnel>
       </FunnelChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── Kombi (Bar + Çizgi) ───────────────────────────────────────────────────────
+
+function RdComboChart({ data, color, color2 = '#10b981', thickness = 2, height = 110, showValues = false, curve = true }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ComposedChart data={data} margin={{ top: showValues ? 14 : 4, right: 4, bottom: 0, left: -20 }}>
+        <XAxis dataKey="label" tick={TICK} axisLine={axisLine} tickLine={false} interval="preserveStartEnd" />
+        <YAxis tick={TICK} axisLine={false} tickLine={false} />
+        <Tooltip content={<RdTooltip color={color} />} />
+        <Bar dataKey="bar" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40}>
+          {showValues && <LabelList dataKey="bar" position="top" style={{ fontSize: 8, fill: '#94a3b8' }} />}
+        </Bar>
+        <Line type={curve ? 'monotone' : 'linear'} dataKey="line" stroke={color2} strokeWidth={thickness}
+              dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: color2 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── Şelale (Waterfall) ────────────────────────────────────────────────────────
+
+function RdWaterfallChart({ data, height = 110 }) {
+  let base = 0
+  const wData = data.map(d => {
+    const entry = { label: d.label, base: d.value >= 0 ? base : base + d.value, delta: Math.abs(d.value), start: base, up: d.value >= 0 }
+    base += d.value
+    return entry
+  })
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={wData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+        <XAxis dataKey="label" tick={TICK} axisLine={axisLine} tickLine={false} interval="preserveStartEnd" />
+        <YAxis tick={TICK} axisLine={false} tickLine={false} />
+        <Tooltip content={({ active, payload, label }) => {
+          if (!active || !payload?.length) return null
+          const e = payload[0]?.payload
+          if (!e) return null
+          const val = e.up ? e.delta : -e.delta
+          return (
+            <div style={{ background: '#0c1525', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#e2e8f0' }}>
+              <div style={{ color: '#94a3b8', marginBottom: 2 }}>{label}</div>
+              <div style={{ color: e.up ? '#10b981' : '#ef4444' }}>{val >= 0 ? '+' : ''}{val.toLocaleString('tr-TR')}</div>
+              <div style={{ fontSize: 9, color: '#64748b' }}>{(e.start + val).toLocaleString('tr-TR')}</div>
+            </div>
+          )
+        }} />
+        <Bar dataKey="base" stackId="wf" fill="transparent" stroke="none" />
+        <Bar dataKey="delta" stackId="wf" radius={[3, 3, 0, 0]} maxBarSize={40}>
+          {wData.map((r, i) => <Cell key={i} fill={r.up ? '#10b981' : '#ef4444'} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── %100 Yığılmış Bar ─────────────────────────────────────────────────────────
+
+function RdStacked100Chart({ stacked, height = 110 }) {
+  const { seriesKeys = [], data = [] } = stacked || {}
+  if (!data.length || !seriesKeys.length) return null
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+        <XAxis dataKey="label" tick={TICK} axisLine={axisLine} tickLine={false} interval="preserveStartEnd" />
+        <YAxis tick={TICK} axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={v => v + '%'} />
+        <Tooltip formatter={(v, name) => [v.toLocaleString('tr-TR') + '%', name]} />
+        {seriesKeys.map((sk, i) => (
+          <Bar key={sk} dataKey={sk} stackId="s100" fill={PIE_COLORS[i % PIE_COLORS.length]}
+               maxBarSize={40} radius={i === seriesKeys.length - 1 ? [3, 3, 0, 0] : undefined} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── Hedef Göstergesi (Bullet) ─────────────────────────────────────────────────
+
+function RdBulletChart({ apiData, color = '#6366f1', height = 110, min, max, bulletTarget, valueField, valueAgg, fill = false }) {
+  const actual = toStatValue(apiData, valueField, valueAgg)
+  if (actual == null) return (
+    <div style={{ height: fill ? '100%' : height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 11 }}>—</div>
+  )
+  const lo = Number.isFinite(+min) ? +min : 0
+  const tgt = Number.isFinite(+bulletTarget) ? +bulletTarget : null
+  const hi = Number.isFinite(+max) && +max > lo ? +max : Math.max(actual, tgt ?? actual) * 1.25 || 100
+  const W = 220, barH = 16, totalH = 62
+  const barY = (totalH - barH) / 2
+  const pct = v => Math.min(1, Math.max(0, (v - lo) / (hi - lo || 1)))
+  return (
+    <div style={{ height: fill ? '100%' : height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 16px' }}>
+      <svg viewBox={`0 0 ${W} ${totalH}`} style={{ width: '100%', maxWidth: 300 }}>
+        <rect x={0} y={barY} width={W} height={barH} rx={3} fill="rgba(255,255,255,.08)" />
+        <rect x={0} y={barY} width={W * pct(actual)} height={barH} rx={3} fill={color} fillOpacity=".85" />
+        {tgt != null && <rect x={W * pct(tgt) - 1.5} y={barY - 6} width={3} height={barH + 12} rx={1.5} fill="#f59e0b" />}
+        <text x={0} y={totalH - 1} fontSize={8} fill="#475569">{lo.toLocaleString('tr-TR')}</text>
+        <text x={W} y={totalH - 1} textAnchor="end" fontSize={8} fill="#475569">{hi.toLocaleString('tr-TR')}</text>
+        {tgt != null && (
+          <text x={Math.min(W - 10, Math.max(10, W * pct(tgt)))} y={barY - 9} textAnchor="middle" fontSize={8} fill="#f59e0b">
+            {tgt.toLocaleString('tr-TR')}
+          </text>
+        )}
+      </svg>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', letterSpacing: '-0.02em', lineHeight: 1 }}>
+        {actual.toLocaleString('tr-TR')}
+        {tgt != null && <span style={{ fontSize: 9, color: '#64748b', marginLeft: 6, fontWeight: 400 }}>/ {tgt.toLocaleString('tr-TR')}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Isı Haritası (Heatmap) ────────────────────────────────────────────────────
+
+function RdHeatmap({ apiData, color = '#6366f1', height = 110, fill = false, labelField, seriesField, valueField }) {
+  if (!apiData?.columns?.length || !apiData.rows?.length)
+    return <div style={{ height: fill ? '100%' : height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 11 }}>Veri yok</div>
+  const cols = apiData.columns
+  const ri = colIndex(cols, labelField, 0)
+  const ci = colIndex(cols, seriesField, 1)
+  const vi = colIndex(cols, valueField, 2)
+  const rowKeys = [], colKeys = [], matrix = {}
+  let minV = Infinity, maxV = -Infinity
+  apiData.rows.forEach(row => {
+    const r = String(row[ri] ?? ''), c = String(row[ci] ?? ''), v = Number(row[vi]) || 0
+    if (!rowKeys.includes(r)) rowKeys.push(r)
+    if (!colKeys.includes(c)) colKeys.push(c)
+    if (!matrix[r]) matrix[r] = {}
+    matrix[r][c] = (matrix[r][c] || 0) + v
+    if (v < minV) minV = v; if (v > maxV) maxV = v
+  })
+  const range = maxV - minV || 1
+  const hex = color.replace('#', '')
+  const rgb = hex.length === 6
+    ? [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)]
+    : [99, 102, 241]
+  const CELL = 28, PAD = 2, LBL = 56
+  return (
+    <div style={{ height: fill ? '100%' : height, overflow: 'auto', fontSize: 8, padding: '4px 0' }}>
+      <div style={{ display: 'inline-block', minWidth: LBL + colKeys.length * (CELL + PAD) }}>
+        <div style={{ display: 'flex', marginLeft: LBL }}>
+          {colKeys.map(c => (
+            <div key={c} style={{ width: CELL, marginRight: PAD, textAlign: 'center', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c}>{c}</div>
+          ))}
+        </div>
+        {rowKeys.map(r => (
+          <div key={r} style={{ display: 'flex', marginBottom: PAD }}>
+            <div style={{ width: LBL, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4, flexShrink: 0 }} title={r}>{r}</div>
+            {colKeys.map(c => {
+              const v = matrix[r]?.[c]
+              const op = v != null ? 0.08 + 0.82 * ((v - minV) / range) : 0
+              return (
+                <div key={c} title={v != null ? v.toLocaleString('tr-TR') : '—'}
+                     style={{ width: CELL, height: CELL, marginRight: PAD, borderRadius: 3,
+                              background: v != null ? `rgba(${rgb.join(',')},${op.toFixed(2)})` : 'rgba(255,255,255,.02)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: op > 0.5 ? '#fff' : '#475569', fontSize: 7 }}>
+                  {v != null ? (v > 9999 ? (v / 1000).toFixed(1) + 'k' : v) : ''}
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Radar Grafiği ─────────────────────────────────────────────────────────────
+
+function RdRadarChart({ data, color, height = 110, fillOpacity = 0.25 }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <RadarChart data={data} margin={{ top: 8, right: 20, bottom: 8, left: 20 }}>
+        <PolarGrid stroke="rgba(255,255,255,.08)" />
+        <PolarAngleAxis dataKey="label" tick={{ ...TICK, fontSize: 8 }} />
+        <PolarRadiusAxis tick={false} axisLine={false} />
+        <Radar dataKey="value" stroke={color} strokeWidth={2} fill={color} fillOpacity={fillOpacity} dot={false} />
+        <Tooltip content={<RdTooltip color={color} />} />
+      </RadarChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── Metin Kartı ───────────────────────────────────────────────────────────────
+
+function RdTextCard({ panel, height, fill = false }) {
+  const text = panel.textContent || ''
+  return (
+    <div style={{ height: fill ? '100%' : height, padding: '8px 12px', overflow: 'auto',
+                  fontSize: panel.textSize || 12, color: '#e2e8f0', lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      {text || <span style={{ color: '#475569', fontStyle: 'italic' }}>Metin kartı — sağ panelden içerik girin.</span>}
+    </div>
+  )
+}
+
+// ── Dağılım Grafiği (Scatter) ─────────────────────────────────────────────────
+
+function RdScatterChart({ data, color, height = 110, xLabel = 'X', yLabel = 'Y' }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ScatterChart margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+        <XAxis dataKey="x" type="number" name={xLabel} tick={TICK} axisLine={axisLine} tickLine={false} />
+        <YAxis dataKey="y" type="number" name={yLabel} tick={TICK} axisLine={false} tickLine={false} />
+        <ZAxis range={[30, 30]} />
+        <Tooltip cursor={{ strokeDasharray: '3 3', stroke: 'rgba(255,255,255,.15)' }}
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null
+            const p = payload[0]?.payload
+            if (!p) return null
+            return (
+              <div style={{ background: '#0c1525', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#e2e8f0' }}>
+                {p.label != null && <div style={{ color: '#94a3b8', marginBottom: 2 }}>{p.label}</div>}
+                <div>{xLabel}: <span style={{ color }}>{p.x?.toLocaleString('tr-TR')}</span></div>
+                <div>{yLabel}: <span style={{ color }}>{p.y?.toLocaleString('tr-TR')}</span></div>
+              </div>
+            )
+          }}
+        />
+        <Scatter data={data} fill={color} fillOpacity={0.75} />
+      </ScatterChart>
     </ResponsiveContainer>
   )
 }
@@ -957,6 +1288,10 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
   if (panel.type === 'filter')
     return fullWrap(<RdFilterPanel panel={panel} activeFilters={activeFilters} onFilterChange={onFilterChange} height={containerH} />)
 
+  // Metin kartı: veri bağımsız, her zaman içeriği göster
+  if (panel.type === 'text')
+    return fullWrap(<RdTextCard panel={panel} height={containerH} fill={isFull} />)
+
   if (loading) {
     return fullWrap(
       <div style={{ height: statH, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -989,6 +1324,62 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
     return fullWrap(<RdPivotEx pivot={pv} maxHeight={containerH} fill={isFull} showTotals={panel.showTotals !== false} />)
   }
 
+  // Hedef göstergesi: tek değer + hedef marker
+  if (panel.type === 'bullet')
+    return fullWrap(<RdBulletChart apiData={data} color={color} height={containerH} fill={isFull}
+                      min={panel.gaugeMin} max={panel.gaugeMax} bulletTarget={panel.bulletTarget}
+                      valueField={isRaw ? panel.valueField : null} valueAgg={rawAgg} />)
+
+  // Isı haritası: matris grid
+  if (panel.type === 'heatmap')
+    return fullWrap(<RdHeatmap apiData={data} color={color} height={containerH} fill={isFull}
+                      labelField={isRaw ? panel.labelField : null}
+                      seriesField={isRaw ? panel.seriesField : null}
+                      valueField={isRaw ? panel.valueField : null} />)
+
+  // Kombi: bar + çizgi (toComboData ile)
+  if (panel.type === 'combo') {
+    const comboData = toComboData(
+      data,
+      isRaw ? panel.labelField : null,
+      isRaw ? panel.valueField : null,
+      isRaw ? panel.valueField2 : null,
+      isRaw ? rawAgg : null,
+      isRaw ? (panel.rawAgg2 || rawAgg) : null,
+    )
+    if (!comboData.length) return fullWrap(<ChartPreview type="combo" color={color} height={containerH} />)
+    return fullWrap(<RdComboChart data={comboData} color={color} color2={panel.color2 || '#10b981'}
+                      thickness={panel.thickness ?? 2} height={containerH}
+                      showValues={!!panel.showValues} curve={panel.curve !== false} />)
+  }
+
+  // %100 Yığılmış bar
+  if (panel.type === 'stacked100') {
+    const stacked = toStacked100Data(
+      data,
+      isRaw ? panel.labelField : null,
+      isRaw ? panel.seriesField : null,
+      isRaw ? panel.valueField : null,
+    )
+    if (!stacked.data.length) return fullWrap(<ChartPreview type="stacked100" color={color} height={containerH} />)
+    return fullWrap(<RdStacked100Chart stacked={stacked} height={containerH} />)
+  }
+
+  // Dağılım grafiği
+  if (panel.type === 'scatter') {
+    const sd = isRaw
+      ? toScatterData(data, panel.xField, panel.yField, panel.labelField)
+      : (data.rows || []).map(r => ({
+          label: r[0] != null ? String(r[0]) : undefined,
+          x: r[1] != null ? Number(r[1]) : 0,
+          y: r[2] != null ? Number(r[2]) : 0,
+        })).filter(d => !isNaN(d.x) && !isNaN(d.y))
+    if (!sd.length) return fullWrap(<ChartPreview type="scatter" color={color} height={containerH} />)
+    return fullWrap(<RdScatterChart data={sd} color={color} height={containerH}
+                      xLabel={isRaw ? (panel.xField || 'X') : (panel.metric || 'X')}
+                      yLabel={isRaw ? (panel.yField || 'Y') : (panel.metric2 || 'Y')} />)
+  }
+
   const chartData = toChartData(
     data,
     isRaw ? panel.labelField : null,
@@ -997,10 +1388,12 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
   )
   if (!chartData.length) return fullWrap(<ChartPreview type={panel.type} color={color} height={containerH} />)
 
-  if (panel.type === 'bar')     return fullWrap(<RdBarChart data={chartData} color={color} height={containerH} horizontal={!!panel.horizontal} showValues={!!panel.showValues} />)
-  if (panel.type === 'pie')     return fullWrap(<RdPieChart data={chartData} color={color} height={containerH} radiusPx={px} donut={panel.donut !== false} showLabels={!!panel.showLabels} showPercent={!!panel.showPercent} />)
-  if (panel.type === 'area')    return fullWrap(<RdAreaChart data={chartData} color={color} thickness={panel.thickness} height={containerH} curve={panel.curve !== false} fillOpacity={panel.fillOpacity != null ? panel.fillOpacity : 0.25} dots={!!panel.dots} />)
-  if (panel.type === 'treemap') return fullWrap(<RdTreemap data={chartData} height={containerH} showLabels={panel.showLabels !== false} />)
-  if (panel.type === 'funnel')  return fullWrap(<RdFunnelChart data={chartData} color={color} height={containerH} />)
+  if (panel.type === 'bar')       return fullWrap(<RdBarChart data={chartData} color={color} height={containerH} horizontal={!!panel.horizontal} showValues={!!panel.showValues} />)
+  if (panel.type === 'pie')       return fullWrap(<RdPieChart data={chartData} color={color} height={containerH} radiusPx={px} donut={panel.donut !== false} showLabels={!!panel.showLabels} showPercent={!!panel.showPercent} />)
+  if (panel.type === 'area')      return fullWrap(<RdAreaChart data={chartData} color={color} thickness={panel.thickness} height={containerH} curve={panel.curve !== false} fillOpacity={panel.fillOpacity != null ? panel.fillOpacity : 0.25} dots={!!panel.dots} />)
+  if (panel.type === 'treemap')   return fullWrap(<RdTreemap data={chartData} height={containerH} showLabels={panel.showLabels !== false} />)
+  if (panel.type === 'funnel')    return fullWrap(<RdFunnelChart data={chartData} color={color} height={containerH} />)
+  if (panel.type === 'waterfall') return fullWrap(<RdWaterfallChart data={chartData} height={containerH} />)
+  if (panel.type === 'radar')     return fullWrap(<RdRadarChart data={chartData} color={color} height={containerH} fillOpacity={panel.fillOpacity ?? 0.25} />)
   return fullWrap(<RdLineChart data={chartData} color={color} thickness={panel.thickness} height={containerH} curve={panel.curve !== false} dots={!!panel.dots} />)
 }

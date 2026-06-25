@@ -67,8 +67,8 @@ const RAW_AGG_OPTIONS = [
 const NUMERIC_FORMATS = new Set(['number', 'decimal2', 'currency', 'percent', 'duration'])
 
 // Hangi türlerde "Görünüm" bölümü/renk gösterilsin
-const APPEARANCE_TYPES = ['line', 'area', 'bar', 'pie', 'stat', 'gauge', 'treemap']
-const COLOR_TYPES      = ['line', 'area', 'bar', 'pie', 'gauge']
+const APPEARANCE_TYPES = ['line', 'area', 'bar', 'pie', 'stat', 'gauge', 'treemap', 'combo', 'waterfall', 'stacked100', 'bullet', 'heatmap', 'radar', 'scatter', 'text']
+const COLOR_TYPES      = ['line', 'area', 'bar', 'pie', 'gauge', 'combo', 'waterfall', 'bullet', 'heatmap', 'radar', 'scatter']
 
 function TypeBadge({ sqlType }) {
   if (!sqlType) return null
@@ -558,7 +558,9 @@ export default function SettingsSidebar({
           />
         </div>
 
-        {src ? (
+        {settings.type === 'text' ? (
+          <div className="rd-saved-empty">Metin kartı veri kaynağı kullanmaz.</div>
+        ) : src ? (
           <>
             {settings.type === 'pivot' ? (
               <PivotFieldPane
@@ -598,10 +600,14 @@ export default function SettingsSidebar({
                   </div>
                 )}
 
-                {settings.type !== 'stat' && settings.type !== 'gauge' && (
+                {settings.type !== 'stat' && settings.type !== 'gauge' && settings.type !== 'bullet' && (
                   <div className="rd-field">
                     <label className="rd-label">
-                      {settings.type === 'pie' ? 'Dilim (Kategori)' : settings.type === 'treemap' ? 'Kategori' : 'Gruplama / X Ekseni'}
+                      {settings.type === 'pie' ? 'Dilim (Kategori)'
+                        : settings.type === 'treemap' ? 'Kategori'
+                        : settings.type === 'heatmap' ? 'Satır Boyutu'
+                        : settings.type === 'scatter' ? 'Grupla / X Etiketi'
+                        : 'Gruplama / X Ekseni'}
                       {selectedGroup && <TypeBadge sqlType={selectedGroup.sqlType} />}
                       {selectedGroup?.isTime && (
                         <span style={{ fontSize: 9, color: '#818cf8', marginLeft: 2 }}>📅</span>
@@ -620,6 +626,71 @@ export default function SettingsSidebar({
                         <option key={g.value} value={g.value}>{g.label}</option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {/* heatmap: sütun boyutu */}
+                {settings.type === 'heatmap' && (
+                  <div className="rd-field">
+                    <label className="rd-label">Sütun Boyutu</label>
+                    <select className="rd-sel" value={settings.heatCol || ''} onChange={e => set('heatCol', e.target.value)}>
+                      <option value="">— Seçin —</option>
+                      {(src?.groups || []).map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {/* combo: ikinci metrik (çizgi) */}
+                {settings.type === 'combo' && (
+                  <>
+                    <div className="rd-field">
+                      <label className="rd-label">İkinci Metrik (Çizgi)</label>
+                      <select className="rd-sel" value={settings.metric2 || ''} onChange={e => set('metric2', e.target.value)}>
+                        <option value="">— Seçin —</option>
+                        {(src?.metrics || []).map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      </select>
+                    </div>
+                    {settings.metric2 && (
+                      <div className="rd-field">
+                        <label className="rd-label">Çizgi Hesaplaması</label>
+                        <select className="rd-sel" value={settings.aggregate2 || 'SUM'} onChange={e => set('aggregate2', e.target.value)}>
+                          {AGG_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* stacked100: seri boyutu */}
+                {settings.type === 'stacked100' && (
+                  <div className="rd-field">
+                    <label className="rd-label">Seri Boyutu (Renk Grubu)</label>
+                    <select className="rd-sel" value={settings.series || ''} onChange={e => set('series', e.target.value)}>
+                      <option value="">— Seçin —</option>
+                      {(src?.groups || []).map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {/* scatter: Y ekseni metriği */}
+                {settings.type === 'scatter' && (
+                  <div className="rd-field">
+                    <label className="rd-label">Y Ekseni Metriği</label>
+                    <select className="rd-sel" value={settings.metric2 || ''} onChange={e => set('metric2', e.target.value)}>
+                      <option value="">— Seçin —</option>
+                      {(src?.metrics || []).map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {/* bullet: sabit hedef değeri */}
+                {settings.type === 'bullet' && (
+                  <div className="rd-field">
+                    <label className="rd-label">Hedef Değeri</label>
+                    <input type="number" className="rd-input"
+                      value={settings.bulletTarget ?? ''}
+                      placeholder="örn: 1000"
+                      onChange={e => set('bulletTarget', e.target.value === '' ? null : +e.target.value)} />
                   </div>
                 )}
               </>
@@ -646,7 +717,7 @@ export default function SettingsSidebar({
               isNumeric={f => !!discoveredNumeric[f]}
               onChange={c => setMany({ pivotRows: c.rows, pivotCols: c.cols, pivotValues: c.values }, true)}
             />
-          ) : (settings.type === 'stat' || settings.type === 'gauge') ? (
+          ) : (settings.type === 'stat' || settings.type === 'gauge' || settings.type === 'bullet') ? (
             <>
               <div className="rd-field">
                 <label className="rd-label">Değer Alanı</label>
@@ -659,6 +730,118 @@ export default function SettingsSidebar({
                 <label className="rd-label">Hesaplama</label>
                 <select className="rd-sel" value={settings.rawAgg || 'SUM'} onChange={e => setAndApply('rawAgg', e.target.value)}>
                   {RAW_AGG_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              {settings.type === 'bullet' && (
+                <div className="rd-field">
+                  <label className="rd-label">Hedef Değeri</label>
+                  <input type="number" className="rd-input"
+                    value={settings.bulletTarget ?? ''}
+                    placeholder="örn: 1000"
+                    onChange={e => setAndApply('bulletTarget', e.target.value === '' ? null : +e.target.value)} />
+                </div>
+              )}
+            </>
+          ) : settings.type === 'combo' ? (
+            <>
+              <div className="rd-field">
+                <label className="rd-label">Kategori (X)</label>
+                <select className="rd-sel" value={settings.labelField || ''} onChange={e => setAndApply('labelField', e.target.value)}>
+                  <option value="">— İlk kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Bar Değeri (Y)</label>
+                <select className="rd-sel" value={settings.valueField || ''} onChange={e => setAndApply('valueField', e.target.value)}>
+                  <option value="">— İkinci kolon —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Çizgi Değeri (Y2)</label>
+                <select className="rd-sel" value={settings.valueField2 || ''} onChange={e => setAndApply('valueField2', e.target.value)}>
+                  <option value="">— Üçüncü kolon —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Hesaplama</label>
+                <select className="rd-sel" value={settings.rawAgg || 'SUM'} onChange={e => setAndApply('rawAgg', e.target.value)}>
+                  <option value="NONE">Ham (gruplama yok)</option>
+                  {RAW_AGG_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+            </>
+          ) : settings.type === 'stacked100' ? (
+            <>
+              <div className="rd-field">
+                <label className="rd-label">Kategori (X)</label>
+                <select className="rd-sel" value={settings.labelField || ''} onChange={e => setAndApply('labelField', e.target.value)}>
+                  <option value="">— İlk kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Seri Boyutu (Renk Grubu)</label>
+                <select className="rd-sel" value={settings.seriesField || ''} onChange={e => setAndApply('seriesField', e.target.value)}>
+                  <option value="">— İkinci kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Değer (Y)</label>
+                <select className="rd-sel" value={settings.valueField || ''} onChange={e => setAndApply('valueField', e.target.value)}>
+                  <option value="">— Üçüncü kolon —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </>
+          ) : settings.type === 'scatter' ? (
+            <>
+              <div className="rd-field">
+                <label className="rd-label">X Ekseni</label>
+                <select className="rd-sel" value={settings.xField || ''} onChange={e => setAndApply('xField', e.target.value)}>
+                  <option value="">— İlk sayısal kolon —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Y Ekseni</label>
+                <select className="rd-sel" value={settings.yField || ''} onChange={e => setAndApply('yField', e.target.value)}>
+                  <option value="">— İkinci sayısal kolon —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Etiket (opsiyonel)</label>
+                <select className="rd-sel" value={settings.labelField || ''} onChange={e => setAndApply('labelField', e.target.value)}>
+                  <option value="">— Yok —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </>
+          ) : settings.type === 'heatmap' ? (
+            <>
+              <div className="rd-field">
+                <label className="rd-label">Satır Boyutu</label>
+                <select className="rd-sel" value={settings.labelField || ''} onChange={e => setAndApply('labelField', e.target.value)}>
+                  <option value="">— İlk kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Sütun Boyutu</label>
+                <select className="rd-sel" value={settings.seriesField || ''} onChange={e => setAndApply('seriesField', e.target.value)}>
+                  <option value="">— İkinci kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Değer (renk)</label>
+                <select className="rd-sel" value={settings.valueField || ''} onChange={e => setAndApply('valueField', e.target.value)}>
+                  <option value="">— Üçüncü kolon —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
             </>
@@ -892,6 +1075,107 @@ export default function SettingsSidebar({
                   <span className="rd-toggle__thumb" />
                 </button>
               </div>
+            )}
+
+            {/* Kombi: çizgi rengi + kalınlık + değer etiketi */}
+            {settings.type === 'combo' && (
+              <>
+                <div className="rd-field">
+                  <label className="rd-label">Çizgi Rengi</label>
+                  <div className="rd-colors">
+                    {['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899'].map(c => (
+                      <button key={c} type="button" aria-label={c}
+                        className={`rd-color${settings.color2 === c ? ' rd-color--on' : ''}`}
+                        style={{ background: c, '--ring': c }}
+                        onClick={() => setAndApply('color2', c)} />
+                    ))}
+                  </div>
+                </div>
+                <div className="rd-field">
+                  <label className="rd-label">
+                    Çizgi Kalınlığı
+                    <span className="rd-label__val">{settings.thickness ?? 2}px</span>
+                  </label>
+                  <input type="range" min="1" max="6" step="1" className="rd-range"
+                    value={settings.thickness ?? 2}
+                    onChange={e => setAndApply('thickness', +e.target.value)} />
+                </div>
+                <div className="rd-field">
+                  <label className="rd-label">
+                    Değerleri Göster
+                    <span className="rd-label__val">{settings.showValues ? 'Açık' : 'Kapalı'}</span>
+                  </label>
+                  <button type="button" className={`rd-toggle${settings.showValues ? ' rd-toggle--on' : ''}`}
+                    onClick={() => setAndApply('showValues', !settings.showValues)}>
+                    <span className="rd-toggle__thumb" />
+                  </button>
+                </div>
+                <div className="rd-field">
+                  <label className="rd-label">
+                    Eğri (yumuşat)
+                    <span className="rd-label__val">{settings.curve !== false ? 'Açık' : 'Kapalı'}</span>
+                  </label>
+                  <button type="button" className={`rd-toggle${settings.curve !== false ? ' rd-toggle--on' : ''}`}
+                    onClick={() => setAndApply('curve', settings.curve === false)}>
+                    <span className="rd-toggle__thumb" />
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Hedef göstergesi: aralık */}
+            {settings.type === 'bullet' && (
+              <>
+                <div className="rd-field">
+                  <label className="rd-label">Minimum</label>
+                  <input type="number" className="rd-input"
+                    value={Number.isFinite(settings.gaugeMin) ? settings.gaugeMin : 0}
+                    onChange={e => setAndApply('gaugeMin', +e.target.value || 0)} />
+                </div>
+                <div className="rd-field">
+                  <label className="rd-label">Maksimum</label>
+                  <input type="number" className="rd-input"
+                    value={Number.isFinite(settings.gaugeMax) ? settings.gaugeMax : ''}
+                    placeholder="Otomatik"
+                    onChange={e => setAndApply('gaugeMax', e.target.value ? +e.target.value : null)} />
+                </div>
+              </>
+            )}
+
+            {/* Radar: dolgu opaklığı */}
+            {settings.type === 'radar' && (
+              <div className="rd-field">
+                <label className="rd-label">
+                  Dolgu Opaklığı
+                  <span className="rd-label__val">{Math.round((settings.fillOpacity ?? 0.25) * 100)}%</span>
+                </label>
+                <input type="range" min="0" max="100" step="5" className="rd-range"
+                  value={Math.round((settings.fillOpacity ?? 0.25) * 100)}
+                  onChange={e => setAndApply('fillOpacity', +e.target.value / 100)} />
+              </div>
+            )}
+
+            {/* Metin kartı: içerik + yazı boyutu */}
+            {settings.type === 'text' && (
+              <>
+                <div className="rd-field">
+                  <label className="rd-label">İçerik</label>
+                  <textarea className="rd-input" rows="5"
+                    style={{ resize: 'vertical', height: 'auto', lineHeight: 1.5, padding: '6px 8px', fontFamily: 'inherit' }}
+                    value={settings.textContent || ''}
+                    placeholder="Gösterilecek metin…"
+                    onChange={e => setAndApply('textContent', e.target.value)} />
+                </div>
+                <div className="rd-field">
+                  <label className="rd-label">
+                    Yazı Boyutu
+                    <span className="rd-label__val">{settings.textSize || 12}px</span>
+                  </label>
+                  <input type="range" min="9" max="28" step="1" className="rd-range"
+                    value={settings.textSize || 12}
+                    onChange={e => setAndApply('textSize', +e.target.value)} />
+                </div>
+              </>
             )}
           </>
         )}

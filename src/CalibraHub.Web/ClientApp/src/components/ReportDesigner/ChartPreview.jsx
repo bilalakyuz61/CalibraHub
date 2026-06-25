@@ -10,6 +10,93 @@ export default function ChartPreview({ type, color, height = 56 }) {
     : [99, 102, 241]
   const soft = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.18)`
 
+  if (type === 'combo') return (
+    <svg viewBox="0 0 120 56" preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block' }}>
+      {[22, 38, 14, 52, 32, 44].map((bh, i) => (
+        <rect key={i} x={i * 20 + 1} y={56 - bh} width={16} height={bh} fill={soft} rx="2" />
+      ))}
+      <polyline points="9,26 29,12 49,36 69,8 89,18 109,14" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+
+  if (type === 'waterfall') return (
+    <svg viewBox="0 0 120 56" preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block' }}>
+      <rect x="0"  y="36" width="18" height="20" rx="2" fill={soft} />
+      <rect x="22" y="26" width="18" height="10" rx="2" fill="rgba(16,185,129,.6)" />
+      <rect x="44" y="18" width="18" height="8"  rx="2" fill="rgba(16,185,129,.6)" />
+      <rect x="66" y="28" width="18" height="10" rx="2" fill="rgba(239,68,68,.6)" />
+      <rect x="88" y="22" width="18" height="6"  rx="2" fill="rgba(16,185,129,.6)" />
+      <rect x="110" y="22" width="10" height="34" rx="2" fill={soft} />
+    </svg>
+  )
+
+  if (type === 'stacked100') return (
+    <svg viewBox="0 0 120 56" preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block' }}>
+      {[
+        [0,  0, 28, c, 0.8],  [0,  28, 28, '#10b981', 0.7],
+        [22, 0, 38, c, 0.8],  [22, 38, 18, '#10b981', 0.7],
+        [44, 0, 20, c, 0.8],  [44, 20, 36, '#10b981', 0.7],
+        [66, 0, 42, c, 0.8],  [66, 42, 14, '#10b981', 0.7],
+        [88, 0, 10, c, 0.8],  [88, 10, 46, '#10b981', 0.7],
+      ].map(([x, y, h2, fill, op], i) => (
+        <rect key={i} x={x} y={y} width="18" height={h2} rx="1" fill={fill} fillOpacity={op} />
+      ))}
+    </svg>
+  )
+
+  if (type === 'bullet') return (
+    <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
+      <rect x="4"  y="22" width="112" height="12" rx="3" fill="rgba(255,255,255,.08)" />
+      <rect x="4"  y="22" width="76"  height="12" rx="3" fill={c} fillOpacity=".7" />
+      <rect x="88" y="17" width="3"   height="22" rx="1.5" fill="#f59e0b" />
+      <text x="60" y="48" textAnchor="middle" fontSize="9" fill="#94a3b8">76 / 88</text>
+    </svg>
+  )
+
+  if (type === 'heatmap') return (
+    <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
+      {[
+        [.8,.4,.2,.6],[.3,.9,.7,.3],[.5,.3,.6,.8],[.2,.7,.4,.5]
+      ].map((row, ri) =>
+        row.map((op, ci) => (
+          <rect key={`${ri}-${ci}`} x={ci * 28 + 2} y={ri * 13 + 1} width="25" height="11" rx="2"
+                fill={c} fillOpacity={op} />
+        ))
+      )}
+    </svg>
+  )
+
+  if (type === 'radar') return (
+    <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
+      <g transform="translate(60,30)">
+        <polygon points="0,-26 22,-8 14,20 -14,20 -22,-8" fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="1" />
+        <polygon points="0,-14 12,-4 8,10 -8,10 -12,-4" fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="1" />
+        {['0,-26','22,-8','14,20','-14,20','-22,-8'].map((pt, i) => (
+          <line key={i} x1="0" y1="0" x2={pt.split(',')[0]} y2={pt.split(',')[1]} stroke="rgba(255,255,255,.08)" strokeWidth="1" />
+        ))}
+        <polygon points="0,-20 18,-6 10,16 -10,16 -16,-5" fill={c} fillOpacity=".25" stroke={c} strokeWidth="1.5" />
+      </g>
+    </svg>
+  )
+
+  if (type === 'text') return (
+    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4px 8px', height: h, gap: 4 }}>
+      {['███████████████', '████████████', '██████████████████', '█████████'].map((t, i) => (
+        <div key={i} style={{ fontSize: 6, letterSpacing: 1, color: i === 0 ? '#e2e8f0' : '#475569', opacity: 1 - i * 0.15 }}>{t}</div>
+      ))}
+    </div>
+  )
+
+  if (type === 'scatter') return (
+    <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
+      <line x1="8" y1="52" x2="8" y2="4" stroke="rgba(255,255,255,.12)" strokeWidth="1" />
+      <line x1="8" y1="52" x2="116" y2="52" stroke="rgba(255,255,255,.12)" strokeWidth="1" />
+      {[[22,38],[42,18],[68,28],[84,12],[55,44],[30,22],[96,20],[75,38]].map(([x,y], i) => (
+        <circle key={i} cx={x} cy={y} r={i % 3 === 0 ? 3.5 : 2.5} fill={c} fillOpacity={.55 + (i % 3) * .1} />
+      ))}
+    </svg>
+  )
+
   if (type === 'bar') return (
     <svg viewBox="0 0 120 56" preserveAspectRatio="none" style={{ width: '100%', height: h, display: 'block' }}>
       {[22, 38, 14, 52, 32, 44, 26, 48].map((bh, i) => (
