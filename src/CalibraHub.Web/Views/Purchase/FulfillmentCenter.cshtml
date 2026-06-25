@@ -115,29 +115,87 @@
     .fc3-count-sel { font-size:.79rem; font-weight:700; color:#a5b4fc; display:none; }
     .fc3-count-sel.show { display:inline; }
 
-    /* ── Sütun özelleştirme butonu + paneli ── */
-    .fc3-col-btn { /* fc3-hd-icon-btn ile aynı görünüm — alias */ }
+    /* ── Sütun ayarları paneli (tam) ── */
     .fc3-col-panel {
-        position:fixed; z-index:9000;
-        background:#111827; border:1px solid rgba(255,255,255,.12);
-        border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,.5);
-        padding:14px 16px; min-width:210px;
-        display:none;
+        position:fixed; z-index:9000; width:260px; max-height:580px;
+        background:#0f172a; border:1px solid rgba(255,255,255,.1);
+        border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,.55);
+        display:none; flex-direction:column; overflow:hidden;
     }
-    .fc3-col-panel.open { display:block; }
-    .fc3-col-panel-title { font-size:.75rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px; }
-    .fc3-col-group-lbl { font-size:.7rem; color:#475569; margin:8px 0 4px; font-weight:600; }
-    .fc3-col-row { display:flex; align-items:center; gap:7px; padding:3px 0; }
-    .fc3-col-row label { font-size:.8rem; color:#94a3b8; cursor:pointer; display:flex; align-items:center; gap:6px; user-select:none; }
-    .fc3-col-row input[type="checkbox"] { accent-color:#6366f1; width:13px; height:13px; }
-    /* CSS-class column hiding */
-    .fc3-hide-who  .fc3-who             { display:none!important; }
-    .fc3-hide-lc   .fc3-lc              { display:none!important; }
-    .fc3-hide-dt   .fc3-dt              { display:none!important; }
-    .fc3-hide-stk  .fc3-sub-stk         { display:none!important; }
-    .fc3-hide-remain .fc3-sub-remain,
-    .fc3-hide-remain .fc3-sub-suf       { display:none!important; }
-    .fc3-hide-fst  .fc3-sub-fst         { display:none!important; }
+    body.app-theme-light .fc3-col-panel {
+        background:#ffffff; border-color:rgba(148,163,184,.2);
+        box-shadow:0 8px 24px rgba(0,0,0,.13);
+    }
+    .fc3-col-panel.open { display:flex; }
+    .fc3-cfg-hdr {
+        padding:8px 14px 7px; font-size:.68rem; font-weight:700;
+        text-transform:uppercase; letter-spacing:.07em; color:#475569;
+        border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0;
+    }
+    body.app-theme-light .fc3-cfg-hdr { color:#94a3b8; border-bottom-color:rgba(148,163,184,.15); }
+    .fc3-cfg-hdr--sep { border-top:1px solid rgba(255,255,255,.07); }
+    body.app-theme-light .fc3-cfg-hdr--sep { border-top-color:rgba(148,163,184,.15); }
+    .fc3-col-rows-inner { overflow-y:auto; padding:3px 0; }
+    .fc3-cfg-row {
+        display:flex; align-items:center; gap:5px;
+        padding:3px 10px; cursor:grab; border-radius:6px; margin:1px 3px;
+        transition:background .1s;
+    }
+    .fc3-cfg-row:hover { background:rgba(99,102,241,.07); }
+    .fc3-cfg-row.is-fixed { cursor:default; }
+    .fc3-cfg-row.is-hidden { opacity:.45; }
+    .fc3-cfg-row.drag-over { outline:2px solid #6366f1; outline-offset:-2px; }
+    .fc3-cfg-dragging { opacity:.4; }
+    .fc3-cfg-grip { color:#475569; flex-shrink:0; display:flex; align-items:center; }
+    .fc3-cfg-grip svg { width:10px; height:14px; }
+    .fc3-cfg-eye {
+        width:22px; height:22px; padding:0; border:none; background:transparent;
+        cursor:pointer; display:flex; align-items:center; justify-content:center;
+        color:#6366f1; border-radius:4px; flex-shrink:0; transition:background .1s;
+    }
+    .fc3-cfg-eye.fc3-eye-off { color:#475569; }
+    .fc3-cfg-eye:hover { background:rgba(99,102,241,.1); }
+    .fc3-cfg-eye svg { width:13px; height:13px; }
+    .fc3-cfg-label { flex:1; font-size:.79rem; font-weight:500; color:#94a3b8; }
+    body.app-theme-light .fc3-cfg-label { color:#475569; }
+    .fc3-cfg-exp {
+        width:20px; height:20px; padding:0; border:none; background:transparent;
+        cursor:pointer; display:flex; align-items:center; justify-content:center;
+        color:#475569; border-radius:4px; flex-shrink:0; transition:background .1s;
+    }
+    .fc3-cfg-exp:hover { background:rgba(99,102,241,.1); color:#818cf8; }
+    .fc3-cfg-exp svg { width:10px; height:10px; transition:transform .15s; }
+    .fc3-cfg-exp.open svg { transform:rotate(180deg); }
+    .fc3-cfg-detail {
+        display:none; flex-direction:column; gap:5px;
+        padding:5px 10px 8px 34px;
+        border-bottom:1px solid rgba(255,255,255,.05);
+        margin:0 3px 2px;
+    }
+    body.app-theme-light .fc3-cfg-detail { border-bottom-color:rgba(148,163,184,.12); }
+    .fc3-cfg-detail.open { display:flex; }
+    .fc3-cfg-field-row { display:flex; align-items:center; gap:8px; }
+    .fc3-cfg-field-label { width:64px; font-size:.71rem; color:#475569; flex-shrink:0; }
+    .fc3-cfg-field-input {
+        flex:1; height:24px; padding:0 7px; border-radius:5px;
+        border:1px solid rgba(255,255,255,.1);
+        background:rgba(255,255,255,.04); font-size:.77rem;
+        color:#94a3b8; outline:none;
+    }
+    .fc3-cfg-field-input:focus { border-color:rgba(99,102,241,.5); }
+    body.app-theme-light .fc3-cfg-field-input {
+        background:#f8fafc; color:#0f172a; border-color:rgba(148,163,184,.25);
+    }
+    .fc3-cfg-align { display:flex; gap:2px; flex:1; }
+    .fc3-cfg-align-btn {
+        flex:1; height:24px; display:flex; align-items:center; justify-content:center;
+        border-radius:4px; border:1px solid rgba(255,255,255,.08);
+        cursor:pointer; color:#475569; background:transparent; padding:0; transition:all .1s;
+    }
+    body.app-theme-light .fc3-cfg-align-btn { border-color:rgba(148,163,184,.2); }
+    .fc3-cfg-align-btn svg { width:13px; height:13px; }
+    .fc3-cfg-align-btn:hover { background:rgba(99,102,241,.1); color:#818cf8; }
+    .fc3-cfg-align-btn.fc3-align-active { background:rgba(99,102,241,.15); color:#818cf8; border-color:rgba(99,102,241,.3); }
     /* Line header */
     .fc3-sub-hdr {
         display:flex; align-items:center; gap:8px;
@@ -204,7 +262,7 @@
     .fc3-sk--zero { background:rgba(100,116,139,.1);  color:#475569; }
     .fc3-sub-remain { color:#94a3b8; min-width:52px; text-align:right; flex-shrink:0;
                       font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.74rem; }
-    .fc3-sub-fst { padding:1px 5px; border-radius:999px; font-size:.63rem; font-weight:700; flex-shrink:0; }
+    .fc3-sub-fst { padding:1px 5px; border-radius:999px; font-size:.63rem; font-weight:700; flex-shrink:0; min-width:58px; text-align:center; box-sizing:border-box; }
     .fm-fst--pending  { background:rgba(100,116,139,.15); color:#94a3b8; }
     .fm-fst--partial  { background:rgba(245,158,11,.15);  color:#fbbf24; }
     .fm-fst--full     { background:rgba(16,185,129,.15);  color:#34d399; }
@@ -214,7 +272,7 @@
     body.app-theme-light .fm-fst--full     { background:rgba(16,185,129,.12);  color:#047857; }
     body.app-theme-light .fm-fst--approval { background:rgba(99,102,241,.12);  color:#4f46e5; }
     .fc3-sub-cb:disabled { opacity:.4; cursor:not-allowed; }
-    .fc3-sub-suf { font-size:.8rem; flex-shrink:0; margin-left:1px; }
+    .fc3-sub-suf { font-size:.8rem; flex-shrink:0; min-width:18px; text-align:center; }
     .fc3-sub-loading { padding:8px 48px; font-size:.76rem; color:#475569; font-style:italic; }
     /* Ek saha hücreleri (cbv_FulfillmentLineExtras) */
     .fc3-sub-ext { min-width:80px; max-width:140px; font-size:.74rem; color:#94a3b8; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:4px; }
@@ -500,10 +558,6 @@
     body.app-theme-light .fc3-count-all { color:#64748b; }
     body.app-theme-light .fc3-col-btn { background:#f1f5f9; border-color:#e2e8f0; color:#64748b; }
     body.app-theme-light .fc3-col-btn:hover { background:#e2e8f0; color:#0f172a; }
-    body.app-theme-light .fc3-col-panel { background:#fff; border-color:#e2e8f0; box-shadow:0 4px 20px rgba(0,0,0,.12); }
-    body.app-theme-light .fc3-col-panel-title { color:#94a3b8; }
-    body.app-theme-light .fc3-col-group-lbl { color:#94a3b8; }
-    body.app-theme-light .fc3-col-row label { color:#475569; }
     body.app-theme-light .fc3-sub-hdr { background:#f8fafc; border-bottom-color:#e2e8f0; color:#94a3b8; }
     body.app-theme-light .fc3-count-sel { color:#4338ca; }
     body.app-theme-light .fc3-list::-webkit-scrollbar-thumb { background:#cbd5e1; }
@@ -671,7 +725,7 @@
 
     /* ── Satır bazlı checkbox ── */
     .fc3-sub-row { cursor:default; }
-    .fc3-sub-cb { accent-color:#6366f1; cursor:pointer; flex-shrink:0; margin-right:2px; }
+    .fc3-sub-cb { accent-color:#6366f1; cursor:pointer; width:15px; min-width:15px; flex-shrink:0; }
 
     /* ── Depodan Karşıla Bar ── */
     .fc3-fulfill-bar {
@@ -705,6 +759,44 @@
     body.app-theme-light .fc3-fb-cancel:hover { background:#f1f5f9; color:#0f172a; }
     body.app-theme-light .fc3-fb-res.ok  { color:#047857; }
     body.app-theme-light .fc3-fb-res.err { color:#b91c1c; }
+
+    /* ── Flat liste (tek katmanlı kalem satırları) ──────────────── */
+    .fc3-flat-hdr {
+        display:flex; align-items:center; gap:8px;
+        padding:3px 12px; flex-shrink:0;
+        font-size:.62rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+        color:#475569; border-bottom:1px solid rgba(255,255,255,.06);
+        background:rgba(255,255,255,.02);
+    }
+    body.app-theme-light .fc3-flat-hdr { color:#94a3b8; border-bottom-color:#f1f5f9; background:#f8fafc; }
+    .fc3-flat-row {
+        display:flex; align-items:center; gap:8px; flex-wrap:nowrap;
+        padding:5px 12px; border-bottom:1px solid rgba(255,255,255,.03);
+        font-size:.76rem; cursor:default; transition:background .1s;
+    }
+    .fc3-flat-row:hover { background:rgba(255,255,255,.025); }
+    body.app-theme-light .fc3-flat-row { border-bottom-color:#f1f5f9; }
+    body.app-theme-light .fc3-flat-row:hover { background:#f8fafc; }
+    /* Belge sütun hücreleri (flat row içinde) */
+    .fc3-flat-num { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; font-weight:700; color:#c7d2fe; min-width:130px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .fc3-flat-who { color:#94a3b8; min-width:80px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .fc3-flat-dt  { color:#475569; font-size:.72rem; min-width:55px; text-align:right; flex-shrink:0; white-space:nowrap; }
+    body.app-theme-light .fc3-flat-num { color:#4338ca; }
+    body.app-theme-light .fc3-flat-who { color:#0f172a; }
+    body.app-theme-light .fc3-flat-dt  { color:#64748b; }
+    /* Başlık spacer'ları — hücre genişlikleriyle eşleşir */
+    .fc3-fhdr__cb     { width:15px; flex-shrink:0; }
+    .fc3-fhdr__num    { min-width:130px; flex-shrink:0; }
+    .fc3-fhdr__who    { min-width:80px; flex:1; }
+    .fc3-fhdr__dt     { min-width:55px; text-align:right; flex-shrink:0; }
+    .fc3-fhdr__mat    { flex:1; min-width:0; overflow:hidden; }
+    .fc3-fhdr__qty    { min-width:54px; text-align:right; flex-shrink:0; }
+    .fc3-fhdr__unit   { min-width:28px; flex-shrink:0; }
+    .fc3-fhdr__stk    { flex:1; min-width:0; }
+    .fc3-fhdr__remain { min-width:52px; text-align:right; flex-shrink:0; }
+    .fc3-fhdr__fst    { min-width:58px; text-align:center; flex-shrink:0; }
+    .fc3-fhdr__suf    { min-width:18px; flex-shrink:0; }
+    .fc3-fhdr__ext    { min-width:80px; max-width:140px; flex-shrink:0; }
 </style>
 }
 
@@ -713,9 +805,8 @@
 
     @* ── Başlık ── *@
     <div class="fc3-hd">
-        <a href="/Purchase/Requests" class="fc3-back">
+        <a href="/Purchase/Requests" class="fc3-back" title="İhtiyaç Listesi">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            İhtiyaç Listesi
         </a>
         <div class="fc3-title-icon">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -742,29 +833,13 @@
                 <span id="fc3SelCnt" class="fc3-count-sel"></span>
                 <span id="fc3AllCnt" class="fc3-count-all"></span>
             </div>
-            @* Sütun özelleştirme paneli *@
-            <div class="fc3-col-panel" id="fc3ColPanel">
-                <div class="fc3-col-panel-title">Sütun Görünürlüğü</div>
-                <div class="fc3-col-group-lbl">Belge Satırı</div>
-                <div class="fc3-col-row"><label><input type="checkbox" id="fc3ColWho" checked onchange="fc3ColToggle('who',this.checked)"> Talep Eden</label></div>
-                <div class="fc3-col-row"><label><input type="checkbox" id="fc3ColLc" checked onchange="fc3ColToggle('lc',this.checked)"> Kalem Sayısı</label></div>
-                <div class="fc3-col-row"><label><input type="checkbox" id="fc3ColDt" checked onchange="fc3ColToggle('dt',this.checked)"> Tarih</label></div>
-                <div class="fc3-col-group-lbl">Kalem Satırı</div>
-                <div class="fc3-col-row"><label><input type="checkbox" id="fc3ColQty" checked onchange="fc3ColToggle('qty',this.checked)"> Miktar / Birim</label></div>
-                <div class="fc3-col-row"><label><input type="checkbox" id="fc3ColStk" checked onchange="fc3ColToggle('stk',this.checked)"> Stok Durumu</label></div>
-                <div class="fc3-col-row"><label><input type="checkbox" id="fc3ColRemain" checked onchange="fc3ColToggle('remain',this.checked)"> Kalan Miktar</label></div>
-                <div class="fc3-col-row"><label><input type="checkbox" id="fc3ColFst" checked onchange="fc3ColToggle('fst',this.checked)"> Karşılama Durumu</label></div>
-                @if (extraColTuples.Any())
-                {
-                    <div class="fc3-col-group-lbl">Ek Alanlar</div>
-                    @foreach (var col in extraColTuples)
-                    {
-                        <div class="fc3-col-row">
-                            <label><input type="checkbox" id="fc3ColExt_@col.Key" checked onchange="fc3ColToggle('ext_@col.Key',this.checked)"> @col.Label</label>
-                        </div>
-                    }
-                }
+            @* Sütun ayarları paneli — JS tarafından doldurulur *@
+            <div class="fc3-col-panel" id="fc3ColPanel" data-nodirty>
+                <div class="fc3-cfg-hdr">Sütun Ayarları</div>
+                <div id="fc3ColRows" class="fc3-col-rows-inner"></div>
             </div>
+            @* Flat liste sütun başlık satırı — JS tarafından doldurulur *@
+            <div class="fc3-flat-hdr" id="fc3FlatColHdr"></div>
             <div class="fc3-list" id="fc3List">
                 <div class="fc3-empty-list">Yükleniyor…</div>
             </div>
@@ -792,7 +867,7 @@
 
 @* ── DRAWER ── *@
 <div class="fc3-drawer-backdrop" id="fc3Backdrop" onclick="fc3BackdropClick()"></div>
-<div class="fc3-drawer" id="fc3Drawer">
+<div class="fc3-drawer" id="fc3Drawer" data-nodirty>
 
     <div class="fc3-drw-hd">
         <div class="fc3-drw-hd-icon">
@@ -1184,12 +1259,9 @@
                   Rejected:'#f87171', Cancelled:'#475569', Closed:'#818cf8' };
 
     var _vis = [], _lines = [], _stock = {}, _tmr = null;
-    // Belge satır genişletme state'i
-    var _expState     = {};   // { docId: true }   — hangi belgeler açık
-    var _docLineCache = {};   // { docId: [...] }  — kalemler (RequestLines)
-    var _docStockCache = {};  // { docId: { itemId: [...] } } — stok
-    // Satır bazlı seçim (Depodan Karşıla için)
-    var _lineSel = {};        // { lineId: { docId, itemId } }
+    var _docLineCache  = {};   // { docId: [...] }   — kalemler (RequestLines)
+    var _globalStockMap = {};  // { itemId: [...] }  — stok (tüm belgeler için ortak)
+    var _lineSel = {};         // { lineId: { docId, itemId } }
 
     // ── Drawer aç/kapat ──────────────────────────────────────────────────────
     window.fc3OpenDrawer = function() {
@@ -1423,14 +1495,6 @@
             ? total + ' filtre aktif · ' + _vis.length + ' kayıt'
             : 'Tüm kayıtlar görünüyor (' + ALL.length + ')';
 
-        // Bekleyen belgeler ilk görünümde otomatik açık gelir.
-        // Kullanıcı kapatmışsa (_expState[id] === false) buna dokunmayız.
-        _vis.forEach(function(r) {
-            if (!(r.id in _expState) && fulfillCategory(r) === 'pending') {
-                _expState[r.id] = true;
-            }
-        });
-
         renderList();
     }
 
@@ -1473,82 +1537,175 @@
         applyFilters();
     };
 
-    // ── Liste render ─────────────────────────────────────────────────────────
-    // SVG ikonları — renderList her çağrıldığında DOM'a yazılır, inline küçük olsun
-    var CHEVRON_RIGHT = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
-    var CHEVRON_DOWN  = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    // ── Flat liste render ─────────────────────────────────────────────────────
     var FC3_EXTRA_COLS = @Html.Raw(extraColsJson);
-    function buildSubHdr() {
-        return '<div class="fc3-sub-hdr"><span style="width:20px;flex-shrink:0;"></span><span class="fc3-sub-hdr-mat">Malzeme</span><span class="fc3-sub-hdr-qty">Miktar</span><span class="fc3-sub-hdr-unit"></span><span class="fc3-sub-hdr-stk">Stok</span><span class="fc3-sub-hdr-rem">Kalan</span><span class="fc3-sub-hdr-fst">Durum</span><span class="fc3-sub-hdr-suf"></span>'
-            + FC3_EXTRA_COLS.map(function(c) { return '<span class="fc3-sub-hdr-ext fc3-sub-ext-' + c.key + '">' + esc(c.label) + '</span>'; }).join('')
-            + '</div>';
+
+    function renderFlatColHdr() {
+        var el = document.getElementById('fc3FlatColHdr');
+        if (!el) return;
+        var visCols = _colDefs.filter(function(c) { return c.visible; });
+        var h = '<span class="fc3-fhdr__cb"></span>';
+        visCols.forEach(function(c) {
+            var align = c.align || 'left';
+            var hStyle = 'text-align:' + align;
+            if (c.fontSize)   hStyle += ';font-size:'   + c.fontSize   + 'px';
+            if (c.fontWeight) hStyle += ';font-weight:' + c.fontWeight;
+            if (c.key === 'qty') {
+                h += '<span class="fc3-fhdr__qty" style="' + hStyle + '">' + esc(c.label) + '</span>'
+                   + '<span class="fc3-fhdr__unit"></span>';
+            } else if (c.key === 'fst') {
+                h += '<span class="fc3-fhdr__fst" style="' + hStyle + '">' + esc(c.label) + '</span>'
+                   + '<span class="fc3-fhdr__suf"></span>';
+            } else if (c.key.indexOf('ext_') === 0) {
+                h += '<span class="fc3-fhdr__ext" style="' + hStyle + '">' + esc(c.label) + '</span>';
+            } else {
+                h += '<span class="fc3-fhdr__' + c.key + '" style="' + hStyle + '">' + esc(c.label) + '</span>';
+            }
+        });
+        el.innerHTML = h;
     }
 
-    function renderList() {
-        var el = document.getElementById('fc3List');
-        if (!el) return;
-        var cnt = document.getElementById('fc3AllCnt');
-        if (cnt) cnt.textContent = _vis.length + ' kayıt';
-        if (_vis.length === 0) { el.innerHTML = '<div class="fc3-empty-list">Filtre koşullarına uygun kayıt yok</div>'; return; }
-        var FULFILL_BADGE = {
-            'full':    '<span style="margin-left:4px;padding:1px 6px;border-radius:999px;font-size:.65rem;font-weight:700;background:rgba(16,185,129,.15);color:#34d399">Tamamlandı</span>',
-            'partial': '<span style="margin-left:4px;padding:1px 6px;border-radius:999px;font-size:.65rem;font-weight:700;background:rgba(245,158,11,.15);color:#fbbf24">Kısmen</span>',
-        };
-        el.innerHTML = _vis.map(function(r) {
-            var exp = !!_expState[r.id];
-            var dot = S_DOT[r.status] || '#64748b';
-            var who = r.requesterPersonnelName || r.contactName || '—';
-            var cat = fulfillCategory(r);
-            var fbadge = FULFILL_BADGE[cat] || '';
-            var subHtml = (exp && _docLineCache[r.id])
-                ? (buildSubHdr() + renderDocLineRows(r.id))
-                : '<div class="fc3-sub-loading">Yükleniyor…</div>';
-            return '<div class="fc3-row" data-id="' + r.id + '" onclick="fc3ExpandToggle(' + r.id + ',this.querySelector(\'.fc3-exp-btn\'))">'
-                + '<button class="fc3-exp-btn' + (exp ? ' active' : '') + '" title="Kalemleri ' + (exp ? 'gizle' : 'göster') + '"'
-                + ' onclick="event.stopPropagation();fc3ExpandToggle(' + r.id + ',this)">'
-                + (exp ? CHEVRON_DOWN : CHEVRON_RIGHT) + '</button>'
-                + '<span class="fc3-dot" style="background:' + dot + '"></span>'
-                + '<span class="fc3-num">' + esc(r.documentNumber || '') + '</span>'
-                + '<span class="fc3-who" title="' + esc(who) + '">' + esc(who) + fbadge + '</span>'
-                + '<span class="fc3-lc">' + (r.lineCount || 0) + ' kal.</span>'
-                + '<span class="fc3-dt">' + fmtDate(r.documentDate) + '</span>'
-                + '</div>'
-                + '<div class="fc3-sub" id="fc3sub-' + r.id + '" style="display:' + (exp ? 'block' : 'none') + ';">'
-                + subHtml
-                + '</div>';
-        }).join('');
-
-        // Açık ama henüz yüklenmemiş belgeler için fetch başlat
-        _vis.forEach(function(r) {
-            if (_expState[r.id] && !_docLineCache[r.id]) {
-                fc3LoadDocLines(r.id);
-            }
+    function loadAllLines() {
+        var docIds = ALL.map(function(r) { return r.id; });
+        if (!docIds.length) { renderList(); return; }
+        var pending = docIds.filter(function(id) { return !_docLineCache[id]; });
+        var promises = pending.map(function(id) {
+            return fetch('/Purchase/RequestLines?requestIds=' + id)
+                .then(function(res) { return res.json(); })
+                .then(function(lines) { _docLineCache[id] = Array.isArray(lines) ? lines : []; })
+                .catch(function() { _docLineCache[id] = []; });
+        });
+        Promise.all(promises).then(function() {
+            var allItemIds = [];
+            docIds.forEach(function(id) {
+                (_docLineCache[id] || []).forEach(function(l) {
+                    if (l.itemId && allItemIds.indexOf(l.itemId) < 0) allItemIds.push(l.itemId);
+                });
+            });
+            if (!allItemIds.length) { _globalStockMap = {}; renderList(); return; }
+            var qry = allItemIds.map(function(id) { return 'itemIds=' + id; }).join('&');
+            fetch('/Purchase/StockBalances?' + qry)
+                .then(function(r) { return r.json(); })
+                .then(function(stockArr) {
+                    _globalStockMap = {};
+                    (stockArr || []).forEach(function(s) {
+                        if (!_globalStockMap[s.itemId]) _globalStockMap[s.itemId] = [];
+                        _globalStockMap[s.itemId].push(s);
+                    });
+                    renderList();
+                })
+                .catch(function() { _globalStockMap = {}; renderList(); });
         });
     }
 
-    // ── Satır genişletme / daraltma ────────────────────────────────────────────
-    window.fc3ExpandToggle = function(docId, btn) {
-        if (_expState[docId]) {
-            // Kapat
-            _expState[docId] = false;
-            var sub = document.getElementById('fc3sub-' + docId);
-            if (sub) sub.style.display = 'none';
-            if (btn) { btn.innerHTML = CHEVRON_RIGHT; btn.classList.remove('active'); btn.title = 'Kalemleri göster'; }
-        } else {
-            // Aç
-            _expState[docId] = true;
-            var sub2 = document.getElementById('fc3sub-' + docId);
-            if (sub2) sub2.style.display = 'block';
-            if (btn) { btn.innerHTML = CHEVRON_DOWN; btn.classList.add('active'); btn.title = 'Kalemleri gizle'; }
-            if (_docLineCache[docId]) {
-                if (sub2) sub2.innerHTML = buildSubHdr() + renderDocLineRows(docId);
-            } else {
-                // Fetch → render
-                if (sub2) sub2.innerHTML = '<div class="fc3-sub-loading">Yükleniyor…</div>';
-                fc3LoadDocLines(docId);
-            }
+    function renderList() {
+        renderFlatColHdr();
+        var el = document.getElementById('fc3List');
+        if (!el) return;
+        var cnt = document.getElementById('fc3AllCnt');
+
+        var allLoaded = _vis.every(function(r) { return _docLineCache[r.id] !== undefined; });
+        if (!allLoaded) {
+            if (cnt) cnt.textContent = _vis.length + ' belge';
+            el.innerHTML = '<div class="fc3-empty-list">Kalemler yükleniyor…</div>';
+            return;
         }
-    };
+
+        var totalLines = _vis.reduce(function(s, r) { return s + (_docLineCache[r.id] || []).length; }, 0);
+        if (cnt) cnt.textContent = totalLines + ' kalem';
+
+        if (totalLines === 0) {
+            el.innerHTML = '<div class="fc3-empty-list">Filtre koşullarına uygun kayıt yok</div>';
+            return;
+        }
+
+        var visCols = _colDefs.filter(function(c) { return c.visible; });
+        var FS_CLASS = { 0: 'fm-fst--pending', 1: 'fm-fst--partial', 2: 'fm-fst--full' };
+        var FS_LABEL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam' };
+
+        el.innerHTML = _vis.map(function(r) {
+            var lines = _docLineCache[r.id] || [];
+            var who = r.requesterPersonnelName || r.contactName || '—';
+            var docHasApproval = PENDING_APPROVAL_IDS.has(r.id);
+
+            return lines.map(function(l) {
+                var qty     = l.quantity || 0;
+                var fromStk = l.fulfilledFromStock || 0;
+                var fromPur = l.fulfilledByPurchase || 0;
+                var remain  = l.remaining != null ? l.remaining : Math.max(0, qty - fromStk - fromPur);
+                var stocks  = _globalStockMap[l.itemId] || [];
+                var totalStk = stocks.reduce(function(a, s) { return a + (s.balance || 0); }, 0);
+
+                var stkHtml;
+                if (!stocks.length) {
+                    stkHtml = '<span class="fc3-sk fc3-sk--zero" title="Stok kaydı yok">Stok yok</span>';
+                } else {
+                    var show = stocks.slice(0, 4);
+                    stkHtml = show.map(function(s) {
+                        var bal = s.balance || 0;
+                        var cls = bal >= remain && remain > 0 ? 'fc3-sk--ok'
+                                : bal > 0 ? 'fc3-sk--warn'
+                                : 'fc3-sk--none';
+                        return '<span class="fc3-sk ' + cls + '" title="' + esc((s.locationName || '') + ': ' + fmtN(bal) + ' ' + (l.unitCode || '')) + '">'
+                            + esc(s.locationName || 'Depo') + ':&thinsp;' + fmtN(bal) + '</span>';
+                    }).join('');
+                    if (stocks.length > 4) stkHtml += '<span class="fc3-sk fc3-sk--zero">+' + (stocks.length - 4) + '</span>';
+                }
+
+                var remainColor = remain <= 0 ? '#34d399' : (totalStk >= remain ? '#fbbf24' : '#f87171');
+                var sufIcon  = remain <= 0 ? '✓' : (totalStk >= remain ? '⚠' : '✕');
+                var sufTitle = remain <= 0 ? 'Karşılandı' : (totalStk >= remain ? 'Stok yeterli' : 'Stok yetersiz');
+                var fstClass = docHasApproval ? 'fm-fst--approval' : (FS_CLASS[l.fulfillmentStatus] || FS_CLASS[0]);
+                var fstLabel = docHasApproval ? 'Onay Sürecinde' : (FS_LABEL[l.fulfillmentStatus] || FS_LABEL[0]);
+
+                var isLineSel = !docHasApproval && !!_lineSel[l.lineId];
+                var cbOnClick = 'event.stopPropagation();fc3LineCheck(' + l.lineId + ',' + r.id + ',' + (l.itemId||0) + ')';
+
+                var cells = visCols.map(function(c) {
+                    var al = c.align || 'left';
+                    switch(c.key) {
+                        case 'num':
+                            return '<span class="fc3-flat-num" style="text-align:' + al + '">' + esc(r.documentNumber || '') + '</span>';
+                        case 'who':
+                            return '<span class="fc3-flat-who" style="text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
+                        case 'dt':
+                            return '<span class="fc3-flat-dt" style="text-align:' + al + '">' + fmtDate(r.documentDate) + '</span>';
+                        case 'mat':
+                            return '<span class="fc3-sub-mat" style="text-align:' + al + '" title="' + esc(l.materialName || l.materialCode || '') + '">'
+                                + esc(l.materialName || l.materialCode || '—') + '</span>';
+                        case 'qty':
+                            return '<span class="fc3-sub-qty" style="text-align:' + al + '">' + fmtN(qty) + '</span>'
+                                + '<span class="fc3-sub-unit">' + esc(l.unitCode || '') + '</span>';
+                        case 'stk':
+                            return '<span class="fc3-sub-stk">' + stkHtml + '</span>';
+                        case 'remain':
+                            return '<span class="fc3-sub-remain" style="color:' + remainColor + ';text-align:' + al + '" title="Kalan: ' + fmtN(remain) + '">'
+                                + fmtN(Math.max(0, remain)) + '</span>';
+                        case 'fst':
+                            return '<span class="fc3-sub-fst ' + fstClass + '" style="text-align:' + al + '">' + fstLabel + '</span>'
+                                + '<span class="fc3-sub-suf" style="color:' + remainColor + '" title="' + sufTitle + '">' + sufIcon + '</span>';
+                        default:
+                            if (c.key.indexOf('ext_') === 0) {
+                                var extKey   = c.key.slice(4);
+                                var extLabel = (FC3_EXTRA_COLS.find(function(ec) { return ec.key === extKey; }) || {}).label || '';
+                                var val = (l.extras && l.extras[extLabel] != null) ? l.extras[extLabel] : '';
+                                return '<span class="fc3-sub-ext fc3-sub-ext-' + extKey + '" title="' + esc(val) + '">' + esc(val) + '</span>';
+                            }
+                            return '';
+                    }
+                }).join('');
+
+                return '<div class="fc3-flat-row" data-doc-id="' + r.id + '" data-line-id="' + l.lineId + '">'
+                    + '<input type="checkbox" class="fc3-sub-cb" data-line-id="' + l.lineId + '"'
+                    + (docHasApproval ? ' disabled title="Onay sürecinde — seçilemez"' : '')
+                    + (isLineSel ? ' checked' : '')
+                    + (!docHasApproval ? ' onclick="' + cbOnClick + '"' : '')
+                    + '>'
+                    + cells
+                    + '</div>';
+            }).join('');
+        }).join('');
+    }
 
     // ── Satır seçimi (Depodan Karşıla) ────────────────────────────────────────
     window.fc3LineCheck = function(lineId, docId, itemId) {
@@ -1598,19 +1755,13 @@
                 var fulfilled = (data.results || []).filter(function(r) { return r.fulfilled > 0; }).length;
                 var msg = (data.docNo ? data.docNo + ' fişi oluşturuldu · ' : '') + fulfilled + ' kalem karşılandı';
                 if (res) { res.textContent = '✓ ' + msg; res.className = 'fc3-fb-res ok'; }
-                // Etkilenen belgelerin cache'ini temizle
-                var docIds = new Set(ids.map(function(id) { return (_lineSel[id]||{}).docId; }));
+                // Cache'i temizle ve yenile
                 _lineSel = {};
-                docIds.forEach(function(did) {
-                    delete _docLineCache[did];
-                    delete _docStockCache[did];
-                });
+                _docLineCache  = {};
+                _globalStockMap = {};
                 document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
-                // Açık belgeleri yenile
-                docIds.forEach(function(did) {
-                    if (_expState[did]) fc3LoadDocLines(did);
-                });
                 fc3UpdateFulfillBar();
+                loadAllLines();
                 // Bar 3 sn sonra kapansın
                 setTimeout(function() {
                     var b2 = document.getElementById('fc3FulfillBar');
@@ -1626,127 +1777,6 @@
             if (res) { res.textContent = '✕ Bağlantı hatası'; res.className = 'fc3-fb-res err'; }
         });
     };
-
-    function fc3LoadDocLines(docId) {
-        fetch('/Purchase/RequestLines?requestIds=' + docId)
-            .then(function(res) {
-                var ct = res.headers.get('content-type') || '';
-                if (!ct.includes('json')) {
-                    return res.text().then(function() { throw new Error('HTTP ' + res.status); });
-                }
-                return res.json();
-            })
-            .then(function(data) {
-                if (data && data.error) throw new Error(data.message || 'Sunucu hatası');
-                var lines = data;
-                _docLineCache[docId] = lines;
-                // Stok için item id'leri topla
-                var itemIds = lines.map(function(l) { return l.itemId; })
-                    .filter(function(v, i, a) { return v && a.indexOf(v) === i; });
-                if (!itemIds.length) {
-                    _docStockCache[docId] = {};
-                    if (_expState[docId]) {
-                        var sub = document.getElementById('fc3sub-' + docId);
-                        if (sub) sub.innerHTML = buildSubHdr() + renderDocLineRows(docId);
-                    }
-                    return;
-                }
-                var qry = itemIds.map(function(id) { return 'itemIds=' + id; }).join('&');
-                fetch('/Purchase/StockBalances?' + qry)
-                    .then(function(res2) { return res2.json(); })
-                    .then(function(stockArr) {
-                        var smap = {};
-                        (stockArr || []).forEach(function(s) {
-                            if (!smap[s.itemId]) smap[s.itemId] = [];
-                            smap[s.itemId].push(s);
-                        });
-                        _docStockCache[docId] = smap;
-                        if (_expState[docId]) {
-                            var sub2 = document.getElementById('fc3sub-' + docId);
-                            if (sub2) sub2.innerHTML = buildSubHdr() + renderDocLineRows(docId);
-                        }
-                    })
-                    .catch(function() {
-                        _docStockCache[docId] = {};
-                        if (_expState[docId]) {
-                            var sub3 = document.getElementById('fc3sub-' + docId);
-                            if (sub3) sub3.innerHTML = buildSubHdr() + renderDocLineRows(docId);
-                        }
-                    });
-            })
-            .catch(function(err) {
-                if (_expState[docId]) {
-                    var sub = document.getElementById('fc3sub-' + docId);
-                    if (sub) sub.innerHTML = '<div class="fc3-sub-err">Satırlar yüklenemedi: ' + (err && err.message ? err.message : '?') + '</div>';
-                }
-            });
-    }
-
-    function renderDocLineRows(docId) {
-        var lines = _docLineCache[docId] || [];
-        var smap  = _docStockCache[docId] || {};
-        if (!lines.length) return '<div class="fc3-sub-loading">Bu belgede kalem bulunamadı.</div>';
-
-        var FS_CLASS = { 0: 'fm-fst--pending', 1: 'fm-fst--partial', 2: 'fm-fst--full' };
-        var FS_LABEL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam' };
-        var docHasApproval = PENDING_APPROVAL_IDS.has(docId);
-
-        return lines.map(function(l) {
-            var qty     = l.quantity || 0;
-            var fromStk = l.fulfilledFromStock || 0;
-            var fromPur = l.fulfilledByPurchase || 0;
-            var remain  = l.remaining != null ? l.remaining : Math.max(0, qty - fromStk - fromPur);
-            var stocks  = smap[l.itemId] || [];
-            var totalStk = stocks.reduce(function(a, s) { return a + (s.balance || 0); }, 0);
-
-            // Stok pill'leri (max 4 konum, sonra "+N daha")
-            var stkHtml;
-            if (!stocks.length) {
-                stkHtml = '<span class="fc3-sk fc3-sk--zero" title="Stok kaydı yok">Stok yok</span>';
-            } else {
-                var show = stocks.slice(0, 4);
-                stkHtml = show.map(function(s) {
-                    var bal = s.balance || 0;
-                    var cls = bal >= remain && remain > 0 ? 'fc3-sk--ok'
-                            : bal > 0 ? 'fc3-sk--warn'
-                            : 'fc3-sk--none';
-                    return '<span class="fc3-sk ' + cls + '" title="' + esc((s.locationName || '') + ': ' + fmtN(bal) + ' ' + (l.unitCode || '')) + '">'
-                        + esc(s.locationName || 'Depo') + ':&thinsp;' + fmtN(bal) + '</span>';
-                }).join('');
-                if (stocks.length > 4) stkHtml += '<span class="fc3-sk fc3-sk--zero">+' + (stocks.length - 4) + '</span>';
-            }
-
-            // Kalan rengi ve yeterlilik ikonu
-            var remainColor = remain <= 0 ? '#34d399' : (totalStk >= remain ? '#fbbf24' : '#f87171');
-            var sufIcon  = remain <= 0 ? '✓' : (totalStk >= remain ? '⚠' : '✕');
-            var sufTitle = remain <= 0 ? 'Karşılandı' : (totalStk >= remain ? 'Stok yeterli' : 'Stok yetersiz');
-            var fstClass = docHasApproval ? 'fm-fst--approval' : (FS_CLASS[l.fulfillmentStatus] || FS_CLASS[0]);
-            var fstLabel = docHasApproval ? 'Onay Sürecinde' : (FS_LABEL[l.fulfillmentStatus] || FS_LABEL[0]);
-
-            var isLineSel = !docHasApproval && !!_lineSel[l.lineId];
-            var cbOnClick = 'event.stopPropagation();fc3LineCheck(' + l.lineId + ',' + docId + ',' + (l.itemId||0) + ')';
-            return '<div class="fc3-sub-row">'
-                + '<input type="checkbox" class="fc3-sub-cb" data-line-id="' + l.lineId + '"'
-                + (docHasApproval ? ' disabled title="Onay sürecinde — seçilemez"' : '')
-                + (isLineSel ? ' checked' : '')
-                + (!docHasApproval ? ' onclick="' + cbOnClick + '"' : '')
-                + '>'
-                + '<span class="fc3-sub-mat" title="' + esc(l.materialName || l.materialCode || '') + '">'
-                + esc(l.materialName || l.materialCode || '—') + '</span>'
-                + '<span class="fc3-sub-qty">' + fmtN(qty) + '</span>'
-                + '<span class="fc3-sub-unit">' + esc(l.unitCode || '') + '</span>'
-                + '<span class="fc3-sub-stk">' + stkHtml + '</span>'
-                + '<span class="fc3-sub-remain" style="color:' + remainColor + '" title="Kalan: ' + fmtN(remain) + '">'
-                + fmtN(Math.max(0, remain)) + '</span>'
-                + '<span class="fc3-sub-fst ' + fstClass + '">' + fstLabel + '</span>'
-                + '<span class="fc3-sub-suf" style="color:' + remainColor + '" title="' + sufTitle + '">' + sufIcon + '</span>'
-                + FC3_EXTRA_COLS.map(function(c) {
-                    var val = (l.extras && l.extras[c.label] != null) ? l.extras[c.label] : '';
-                    return '<span class="fc3-sub-ext fc3-sub-ext-' + c.key + '" title="' + esc(val) + '">' + esc(val) + '</span>';
-                }).join('')
-                + '</div>';
-        }).join('');
-    }
 
     // ── Kalem seçimi → drawer beslemesi ──────────────────────────────────────
     function buildSelectedLines() {
@@ -1801,61 +1831,280 @@
         renderLines(); renderTf(); renderSf(); renderPr();
     }
 
-    // ── Sütun özelleştirme ──────────────────────────────────────────────────
-    var FC3_COL_KEYS = ['who','lc','dt','qty','stk','remain','fst'].concat(
-        FC3_EXTRA_COLS.map(function(c) { return 'ext_' + c.key; })
-    );
-    var _colCfg = {};
+    // ── Sütun yapılandırması ──────────────────────────────────────────────────
+    var DEFAULT_DEFS = [
+        { key: 'num',    label: 'Belge No',    visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0 },
+        { key: 'who',    label: 'Talep Eden',  visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0 },
+        { key: 'dt',     label: 'Tarih',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0 },
+        { key: 'mat',    label: 'Malzeme',     visible: true, align: 'left',   fixed: true,  fontSize: 0, fontWeight: 0 },
+        { key: 'qty',    label: 'Miktar',      visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0 },
+        { key: 'stk',    label: 'Stok',        visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0 },
+        { key: 'remain', label: 'Kalan',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0 },
+        { key: 'fst',    label: 'Durum',       visible: true, align: 'center', fixed: false, fontSize: 0, fontWeight: 0 },
+    ];
 
-    // Dinamik CSS enjeksiyonu — ek kolonlar için hide kuralları
-    (function injectExtraColCss() {
+    function _makeDefaultDefs() {
+        var d = DEFAULT_DEFS.map(function(x) { return Object.assign({}, x); });
         FC3_EXTRA_COLS.forEach(function(c) {
-            var el = document.createElement('style');
-            el.textContent = '.fc3-hide-ext_' + c.key + ' .fc3-sub-ext-' + c.key + '{display:none!important}';
-            document.head.appendChild(el);
+            d.push({ key: 'ext_' + c.key, label: c.label, visible: true, align: 'left', fixed: false, fontSize: 0, fontWeight: 0 });
         });
+        return d;
+    }
+
+    var _colDefs = _makeDefaultDefs();
+
+    function _applyColSaved(saved) {
+        if (!Array.isArray(saved)) return;
+        saved.forEach(function(s) {
+            var def = _colDefs.find(function(d) { return d.key === s.key; });
+            if (!def) return;
+            if (s.label      !== undefined) def.label      = s.label;
+            if (s.align      !== undefined) def.align      = s.align;
+            if (s.fontSize   !== undefined) def.fontSize   = s.fontSize   || 0;
+            if (s.fontWeight !== undefined) def.fontWeight = s.fontWeight || 0;
+            if (s.visible    !== undefined && !def.fixed) def.visible = s.visible;
+        });
+        var order = saved.map(function(s) { return s.key; });
+        _colDefs.sort(function(a, b) {
+            var ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+            if (ia < 0) return 1; if (ib < 0) return -1;
+            return ia - ib;
+        });
+    }
+
+    (function loadFromStorage() {
+        try {
+            var json = localStorage.getItem('fc3-col-flat-v1');
+            if (json) _applyColSaved(JSON.parse(json));
+        } catch(e) {}
     })();
 
-    (function initColCfg() {
-        try { _colCfg = JSON.parse(localStorage.getItem('fc3-col-cfg') || '{}'); } catch(e) { _colCfg = {}; }
-        var outer = document.getElementById('fc3Outer');
-        FC3_COL_KEYS.forEach(function(k) {
-            var hidden = _colCfg[k] === false;
-            // ext_ prefix'li extra kolonlar → checkbox id: fc3ColExt_<key>
-            var cbId = k.indexOf('ext_') === 0
-                ? 'fc3ColExt_' + k.slice(4)
-                : 'fc3Col' + k.charAt(0).toUpperCase() + k.slice(1);
-            var cb = document.getElementById(cbId);
-            if (cb) cb.checked = !hidden;
-            if (outer) outer.classList.toggle('fc3-hide-' + k, hidden);
-        });
-    })();
+    function _serializeDefs() {
+        return JSON.stringify(_colDefs.map(function(c) {
+            return { key: c.key, visible: c.visible, align: c.align, label: c.label, fontSize: c.fontSize || 0, fontWeight: c.fontWeight || 0 };
+        }));
+    }
+    function _saveColDefs() {
+        var json = _serializeDefs();
+        try { localStorage.setItem('fc3-col-flat-v1', json); } catch(e) {}
+        fetch('/Purchase/SaveFlatColConfig', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config: json })
+        }).catch(function() {});
+    }
 
-    window.fc3ColToggle = function(key, visible) {
-        _colCfg[key] = visible;
-        try { localStorage.setItem('fc3-col-cfg', JSON.stringify(_colCfg)); } catch(e) {}
-        var outer = document.getElementById('fc3Outer');
-        if (outer) outer.classList.toggle('fc3-hide-' + key, !visible);
+    // ── Panel SVG sabitler ────────────────────────────────────────────────────
+    var _GRIP   = '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>';
+    var _EYE    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    var _EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    var _CHEV   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
+    var _ALIGN_ICONS = {
+        left:   '<svg viewBox="0 0 16 14" fill="currentColor"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="0" y="4" width="10" height="2" rx="1"/><rect x="0" y="8" width="13" height="2" rx="1"/><rect x="0" y="12" width="8" height="2" rx="1"/></svg>',
+        center: '<svg viewBox="0 0 16 14" fill="currentColor"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="3" y="4" width="10" height="2" rx="1"/><rect x="1.5" y="8" width="13" height="2" rx="1"/><rect x="4" y="12" width="8" height="2" rx="1"/></svg>',
+        right:  '<svg viewBox="0 0 16 14" fill="currentColor"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="6" y="4" width="10" height="2" rx="1"/><rect x="2.5" y="8" width="13" height="2" rx="1"/><rect x="8" y="12" width="8" height="2" rx="1"/></svg>',
     };
+    var _expandedKeys = new Set();
+
+    function _renderColPanel() {
+        var rowsEl = document.getElementById('fc3ColRows');
+        if (!rowsEl) return;
+        var html = '';
+        _colDefs.forEach(function(c, i) {
+            var fc = c.fixed   ? ' is-fixed'  : '';
+            var hc = !c.visible ? ' is-hidden' : '';
+            var isOpen = _expandedKeys.has(c.key);
+            var oc = isOpen ? ' open' : '';
+            html +=
+                '<div class="fc3-cfg-row' + fc + hc + '" data-idx="' + i + '" data-key="' + c.key + '" draggable="' + (c.fixed ? 'false' : 'true') + '">' +
+                    '<span class="fc3-cfg-grip">' + _GRIP + '</span>' +
+                    '<button type="button" class="fc3-cfg-eye' + (!c.visible ? ' fc3-eye-off' : '') + '" data-key="' + c.key + '">' + (c.visible ? _EYE : _EYEOFF) + '</button>' +
+                    '<span class="fc3-cfg-label">' + esc(c.label) + '</span>' +
+                    '<button type="button" class="fc3-cfg-exp' + oc + '" data-key="' + c.key + '" title="Detay ayarları">' + _CHEV + '</button>' +
+                '</div>' +
+                '<div class="fc3-cfg-detail' + oc + '" data-key="' + c.key + '">' +
+                    '<div class="fc3-cfg-field-row">' +
+                        '<span class="fc3-cfg-field-label">Başlık</span>' +
+                        '<input type="text" class="fc3-cfg-field-input" data-key="' + c.key + '" data-field="label" value="' + esc(c.label) + '">' +
+                    '</div>' +
+                    '<div class="fc3-cfg-field-row">' +
+                        '<span class="fc3-cfg-field-label">Hizalama</span>' +
+                        '<span class="fc3-cfg-align">' +
+                            '<button type="button" class="fc3-cfg-align-btn' + (c.align === 'left'   ? ' fc3-align-active' : '') + '" data-key="' + c.key + '" data-align="left"   title="Sola">'   + _ALIGN_ICONS.left   + '</button>' +
+                            '<button type="button" class="fc3-cfg-align-btn' + (c.align === 'center' ? ' fc3-align-active' : '') + '" data-key="' + c.key + '" data-align="center" title="Orta">'   + _ALIGN_ICONS.center + '</button>' +
+                            '<button type="button" class="fc3-cfg-align-btn' + (c.align === 'right'  ? ' fc3-align-active' : '') + '" data-key="' + c.key + '" data-align="right"  title="Sağa">'  + _ALIGN_ICONS.right  + '</button>' +
+                        '</span>' +
+                    '</div>' +
+                    '<div class="fc3-cfg-field-row">' +
+                        '<span class="fc3-cfg-field-label">Bşlk Boyutu</span>' +
+                        '<input type="number" class="fc3-cfg-field-input fc3-cfg-width-input" data-key="' + c.key + '" data-field="fontSize" value="' + (c.fontSize || '') + '" placeholder="Varsayılan" min="8" max="18" step="1">' +
+                        '<span class="fc3-cfg-field-unit">px</span>' +
+                    '</div>' +
+                    '<div class="fc3-cfg-field-row">' +
+                        '<span class="fc3-cfg-field-label">Bşlk Kalınlık</span>' +
+                        '<select class="fc3-cfg-field-input" data-key="' + c.key + '" data-field="fontWeight">' +
+                            '<option value="0"' + (!c.fontWeight ? ' selected' : '') + '>Varsayılan</option>' +
+                            '<option value="400"' + (c.fontWeight === 400 ? ' selected' : '') + '>Normal (400)</option>' +
+                            '<option value="500"' + (c.fontWeight === 500 ? ' selected' : '') + '>Orta (500)</option>' +
+                            '<option value="600"' + (c.fontWeight === 600 ? ' selected' : '') + '>Yarı Kalın (600)</option>' +
+                            '<option value="700"' + (c.fontWeight === 700 ? ' selected' : '') + '>Kalın (700)</option>' +
+                        '</select>' +
+                    '</div>' +
+                '</div>';
+        });
+        rowsEl.innerHTML = html;
+
+        // Göz toggle
+        rowsEl.querySelectorAll('.fc3-cfg-eye').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key = btn.getAttribute('data-key');
+                var def = _colDefs.find(function(d) { return d.key === key; });
+                if (!def || def.fixed) return;
+                def.visible = !def.visible;
+                _saveColDefs();
+                _renderColPanel();
+                renderList();
+            });
+        });
+
+        // Hizalama
+        rowsEl.querySelectorAll('.fc3-cfg-align-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key   = btn.getAttribute('data-key');
+                var align = btn.getAttribute('data-align');
+                var def   = _colDefs.find(function(d) { return d.key === key; });
+                if (!def) return;
+                def.align = align;
+                _saveColDefs();
+                _renderColPanel();
+                renderList();
+            });
+        });
+
+        // Başlık düzenleme
+        rowsEl.querySelectorAll('input[data-field="label"]').forEach(function(inp) {
+            inp.addEventListener('input', function(e) {
+                e.stopPropagation();
+                var key = inp.getAttribute('data-key');
+                var def = _colDefs.find(function(d) { return d.key === key; });
+                if (!def) return;
+                def.label = inp.value;
+                _saveColDefs();
+                var span = rowsEl.querySelector('.fc3-cfg-row[data-key="' + key + '"] .fc3-cfg-label');
+                if (span) span.textContent = def.label;
+                renderList();
+            });
+        });
+
+        // Başlık font boyutu
+        rowsEl.querySelectorAll('input[data-field="fontSize"]').forEach(function(inp) {
+            inp.addEventListener('change', function(e) {
+                e.stopPropagation();
+                var key = inp.getAttribute('data-key');
+                var def = _colDefs.find(function(d) { return d.key === key; });
+                if (!def) return;
+                def.fontSize = parseInt(inp.value, 10) || 0;
+                _saveColDefs();
+                renderFlatColHdr();
+            });
+        });
+
+        // Başlık font ağırlığı
+        rowsEl.querySelectorAll('select[data-field="fontWeight"]').forEach(function(sel) {
+            sel.addEventListener('change', function(e) {
+                e.stopPropagation();
+                var key = sel.getAttribute('data-key');
+                var def = _colDefs.find(function(d) { return d.key === key; });
+                if (!def) return;
+                def.fontWeight = parseInt(sel.value, 10) || 0;
+                _saveColDefs();
+                renderFlatColHdr();
+            });
+        });
+
+        // Expand/collapse
+        rowsEl.querySelectorAll('.fc3-cfg-exp').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var key = btn.getAttribute('data-key');
+                if (_expandedKeys.has(key)) _expandedKeys.delete(key); else _expandedKeys.add(key);
+                _renderColPanel();
+            });
+        });
+
+        // Drag-and-drop sıralama
+        var dragSrcIdx = null;
+        rowsEl.querySelectorAll('.fc3-cfg-row:not(.is-fixed)').forEach(function(row) {
+            row.addEventListener('dragstart', function(e) {
+                dragSrcIdx = parseInt(row.getAttribute('data-idx'), 10);
+                e.dataTransfer.effectAllowed = 'copyMove';
+                setTimeout(function() { row.classList.add('fc3-cfg-dragging'); }, 0);
+            });
+            row.addEventListener('dragend', function() {
+                dragSrcIdx = null;
+                rowsEl.querySelectorAll('.fc3-cfg-row').forEach(function(r) { r.classList.remove('fc3-cfg-dragging', 'drag-over'); });
+            });
+            row.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                rowsEl.querySelectorAll('.fc3-cfg-row').forEach(function(r) { r.classList.remove('drag-over'); });
+                row.classList.add('drag-over');
+            });
+            row.addEventListener('drop', function(e) {
+                e.preventDefault();
+                if (dragSrcIdx === null) return;
+                var tgtIdx = parseInt(row.getAttribute('data-idx'), 10);
+                if (isNaN(tgtIdx) || dragSrcIdx === tgtIdx) return;
+                if (_colDefs[tgtIdx] && _colDefs[tgtIdx].fixed) return;
+                var moved = _colDefs.splice(dragSrcIdx, 1)[0];
+                _colDefs.splice(tgtIdx, 0, moved);
+                _saveColDefs();
+                _renderColPanel();
+                renderList();
+            });
+        });
+
+        var panelEl = document.getElementById('fc3ColPanel');
+        if (panelEl) panelEl.ondragover = function(e2) { e2.preventDefault(); };
+    }
 
     window.fc3ToggleColPanel = function(e) {
         e.stopPropagation();
         var panel = document.getElementById('fc3ColPanel');
         if (!panel) return;
+        var wasOpen = panel.classList.contains('open');
         panel.classList.toggle('open');
-        if (panel.classList.contains('open')) {
+        if (!wasOpen) {
             var btn = document.getElementById('fc3ColBtn');
-            var rect = btn ? btn.getBoundingClientRect() : {left:0, bottom:0};
+            var rect = btn ? btn.getBoundingClientRect() : { left: 0, bottom: 0, width: 0 };
             panel.style.top  = (rect.bottom + 6) + 'px';
-            panel.style.left = Math.max(4, rect.left - panel.offsetWidth + rect.width) + 'px';
+            panel.style.left = Math.max(4, rect.left - 280 + rect.width) + 'px';
+            _renderColPanel();
         }
     };
+
     document.addEventListener('click', function(e) {
         var panel = document.getElementById('fc3ColPanel');
-        if (panel && panel.classList.contains('open') && !panel.contains(e.target)) {
+        if (panel && panel.classList.contains('open')
+            && !panel.contains(e.target)
+            && e.target.id !== 'fc3ColBtn'
+            && !e.target.closest('#fc3ColBtn')) {
             panel.classList.remove('open');
         }
     });
+
+    // Async: server'dan yükle, farklıysa yeniden render
+    fetch('/Purchase/GetFlatColConfig')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || !data.config) return;
+            var localJson = localStorage.getItem('fc3-col-flat-v1');
+            if (data.config === localJson) return;
+            _colDefs = _makeDefaultDefs();
+            try { _applyColSaved(JSON.parse(data.config)); } catch(e) {}
+            renderList();
+        }).catch(function() {});
 
     // ── Drawer: seçili kalemler tablosu ─────────────────────────────────────
     function renderLines() {
@@ -2123,10 +2372,10 @@
         });
     };
 
-    // Belge oluşturulduktan sonra expand cache'ini temizle (stok değişti)
     function invalidateDocCache() {
-        _docLineCache  = {};
-        _docStockCache = {};
+        _docLineCache   = {};
+        _globalStockMap = {};
+        loadAllLines();
     }
 
     // ── Yardımcılar ──────────────────────────────────────────────────────────
@@ -2270,7 +2519,8 @@
         });
     }
 
-    applyFilters();    // İlk render
+    applyFilters();    // İlk render (filtre state'ini _vis'e yaz)
+    loadAllLines();    // Tüm kalemleri paralel fetch et, sonra renderList()
 })();
 </script>
 }

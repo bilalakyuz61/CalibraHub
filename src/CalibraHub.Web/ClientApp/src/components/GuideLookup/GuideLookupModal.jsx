@@ -293,6 +293,7 @@ export default function GuideLookupModal(props) {
   return createPortal(
     <div
       className="gl-modal-backdrop"
+      data-nodirty
       onClick={function (e) { if (e.target === e.currentTarget && onClose) onClose() }}
     >
       <div className="gl-modal">

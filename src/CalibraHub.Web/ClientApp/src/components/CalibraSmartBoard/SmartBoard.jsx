@@ -525,7 +525,7 @@ export default function SmartBoard(props) {
 
         {/* Search */}
         {searchable && (
-          <div className="flex-1 max-w-md">
+          <div className="flex-1 max-w-md" data-nodirty>
             <div className="relative">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/40" />
               <input

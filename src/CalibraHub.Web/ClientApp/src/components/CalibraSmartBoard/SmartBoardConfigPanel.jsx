@@ -293,6 +293,7 @@ export default function SmartBoardConfigPanel(props) {
             exit={{ opacity: 0, x: 60 }}
             transition={{ type: 'spring', stiffness: 320, damping: 30 }}
             className="fixed right-0 top-0 bottom-0 z-[9999] w-full max-w-md"
+            data-nodirty
           >
             <div
               className="h-full flex flex-col border-l border-slate-200 dark:border-white/10 shadow-[-8px_0_40px_rgba(15,23,42,0.15)] dark:shadow-[-8px_0_40px_rgba(0,0,0,0.35)]"

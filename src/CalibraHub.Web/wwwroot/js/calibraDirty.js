@@ -52,6 +52,8 @@
     }
     function onAnyInput(e) {
         if (_suspend > 0) return;
+        // [data-nodirty] işaretli container içindeki inputlar dirty tetiklemez
+        if (e.target && e.target.closest && e.target.closest('[data-nodirty]')) return;
         if (matchesInput(e.target)) setDirty(true);
     }
     document.addEventListener('input',  onAnyInput, true);

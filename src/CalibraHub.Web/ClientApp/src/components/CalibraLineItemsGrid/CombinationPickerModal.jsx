@@ -242,6 +242,7 @@ export default function CombinationPickerModal(props) {
 
   var modalContent = (
     <div
+      data-nodirty
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 10000,

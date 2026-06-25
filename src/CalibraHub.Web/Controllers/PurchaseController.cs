@@ -38,7 +38,9 @@ public sealed class PurchaseController : Controller
     private readonly ILogisticsConfigurationService _logisticsService;
     private readonly ICompanyParameterService _companyParams;
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IUserSettingRepository _userSettingRepo;
     private readonly string _schema;
+    private const string FlatColCfgKey = "ui.fc3.col-cfg-flat";
 
     public PurchaseController(
         IDocumentService documentService,
@@ -50,6 +52,7 @@ public sealed class PurchaseController : Controller
         ILogisticsConfigurationService logisticsService,
         ICompanyParameterService companyParams,
         SqlServerConnectionFactory connectionFactory,
+        IUserSettingRepository userSettingRepo,
         CalibraDatabaseOptions dbOptions)
     {
         _documentService   = documentService;
@@ -61,6 +64,7 @@ public sealed class PurchaseController : Controller
         _logisticsService  = logisticsService;
         _companyParams     = companyParams;
         _connectionFactory = connectionFactory;
+        _userSettingRepo   = userSettingRepo;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -1701,4 +1705,25 @@ public sealed class PurchaseController : Controller
         }
         catch { return []; }
     }
+
+    // ── Sütun ayarları (Karşılama Merkezi — flat view) ──────────────────────
+    [HttpGet]
+    public async Task<IActionResult> GetFlatColConfig(CancellationToken ct)
+    {
+        var uid = CurrentUserId();
+        if (!uid.HasValue) return Json(new { config = (string?)null });
+        var json = await _userSettingRepo.GetAsync(uid.Value, FlatColCfgKey, ct);
+        return Json(new { config = json });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveFlatColConfig([FromBody] Fc3SaveColConfigRequest request, CancellationToken ct)
+    {
+        var uid = CurrentUserId();
+        if (!uid.HasValue) return Json(new { ok = false });
+        await _userSettingRepo.SetAsync(uid.Value, FlatColCfgKey, request.Config, ct);
+        return Json(new { ok = true });
+    }
 }
+
+public sealed record Fc3SaveColConfigRequest(string? Config);

@@ -1859,6 +1859,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
     function wpicker(opts) {
         var bd = document.createElement('div');
         bd.className = 'wpicker-backdrop';
+        bd.setAttribute('data-nodirty', '');
         bd.innerHTML =
             '<div class="wpicker">' +
               '<div class="wpicker__head">' +

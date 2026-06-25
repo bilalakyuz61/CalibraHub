@@ -213,15 +213,15 @@
     }
     body.app-theme-dark .pa-cfg-label { color: #e2e8f0; }
     .pa-cfg-row.pa-cfg-hidden .pa-cfg-label { color: #94a3b8; }
-    .pa-cfg-align { display: flex; gap: 2px; flex-shrink: 0; }
+    .pa-cfg-align { display: flex; gap: 2px; flex: 1; }
     .pa-cfg-align-btn {
-        width: 22px; height: 22px;
+        flex: 1; height: 28px;
         display: flex; align-items: center; justify-content: center;
-        border-radius: 4px; border: 1px solid transparent;
-        cursor: pointer; font-size: 9px; font-weight: 700; letter-spacing: 0;
-        color: #94a3b8; background: transparent; padding: 0;
+        border-radius: 5px; border: 1px solid rgba(148,163,184,.2);
+        cursor: pointer; color: #94a3b8; background: transparent; padding: 0;
         transition: all 0.1s;
     }
+    .pa-cfg-align-btn svg { width: 14px; height: 14px; }
     .pa-cfg-align-btn:hover { background: rgba(99,102,241,.1); color: #6366f1; }
     .pa-cfg-align-btn.pa-align-active {
         background: rgba(99,102,241,.15); color: #6366f1;
@@ -386,7 +386,7 @@
                     <div class="pa-list-title" id="paListTitle">Tüm belge türleri</div>
                     <div class="pa-list-count" id="paListCount"></div>
                 </div>
-                <div class="pa-search-wrap">
+                <div class="pa-search-wrap" data-nodirty>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <input type="text" id="paSearch" class="pa-search-input" placeholder="Hızlı ara…" autocomplete="off">
                 </div>
@@ -402,7 +402,7 @@
                 </button>
             </div>
             <!-- Sütun ayarları paneli (JS tarafından doldurulur) -->
-            <div class="pa-col-panel" id="paColPanel">
+            <div class="pa-col-panel" id="paColPanel" data-nodirty>
                 <div class="pa-col-panel-title">Sütun Ayarları</div>
                 <div class="pa-col-panel-rows" id="paColRows"></div>
             </div>
@@ -556,6 +556,12 @@
     let _lastItems = null;
     let _expandedKeys = new Set();
 
+    var ALIGN_ICONS = {
+        left:   '<svg viewBox="0 0 16 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="0" y="4" width="10" height="2" rx="1"/><rect x="0" y="8" width="13" height="2" rx="1"/><rect x="0" y="12" width="8" height="2" rx="1"/></svg>',
+        center: '<svg viewBox="0 0 16 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="3" y="4" width="10" height="2" rx="1"/><rect x="1.5" y="8" width="13" height="2" rx="1"/><rect x="4" y="12" width="8" height="2" rx="1"/></svg>',
+        right:  '<svg viewBox="0 0 16 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="6" y="4" width="10" height="2" rx="1"/><rect x="2.5" y="8" width="13" height="2" rx="1"/><rect x="8" y="12" width="8" height="2" rx="1"/></svg>',
+    };
+
     // ── Sütun ayarları paneli renderer ───────────────────────────────────────
     function _renderColPanel() {
         var rowsEl = document.getElementById('paColRows');
@@ -576,11 +582,6 @@
                     '<span class="pa-cfg-grip">' + GRIP + '</span>' +
                     '<button type="button" class="pa-cfg-eye' + (!c.visible ? ' pa-eye-off' : '') + '" data-key="' + c.key + '">' + (c.visible ? EYE : EYEOFF) + '</button>' +
                     '<span class="pa-cfg-label">' + escapeHtml(c.label) + '</span>' +
-                    '<span class="pa-cfg-align">' +
-                        '<button type="button" class="pa-cfg-align-btn' + (c.align === 'left'   ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="left"   title="Sola hizala">L</button>' +
-                        '<button type="button" class="pa-cfg-align-btn' + (c.align === 'center' ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="center" title="Ortala">C</button>' +
-                        '<button type="button" class="pa-cfg-align-btn' + (c.align === 'right'  ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="right"  title="Sağa hizala">R</button>' +
-                    '</span>' +
                     '<button type="button" class="pa-cfg-exp' + oc + '" data-key="' + c.key + '" title="Detay ayarları">' + CHEV + '</button>' +
                 '</div>' +
                 '<div class="pa-cfg-detail' + oc + '" data-key="' + c.key + '">' +
@@ -592,6 +593,14 @@
                         '<span class="pa-cfg-field-label">Genişlik</span>' +
                         '<input type="number" class="pa-cfg-field-input pa-cfg-width-input" data-key="' + c.key + '" data-field="width" value="' + (c.width || '') + '" placeholder="Otomatik" min="40" max="600">' +
                         '<span class="pa-cfg-field-unit">px</span>' +
+                    '</div>' +
+                    '<div class="pa-cfg-field-row">' +
+                        '<span class="pa-cfg-field-label">Hizalama</span>' +
+                        '<span class="pa-cfg-align">' +
+                            '<button type="button" class="pa-cfg-align-btn' + (c.align === 'left'   ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="left"   title="Sola hizala">'   + ALIGN_ICONS.left   + '</button>' +
+                            '<button type="button" class="pa-cfg-align-btn' + (c.align === 'center' ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="center" title="Ortala">'         + ALIGN_ICONS.center + '</button>' +
+                            '<button type="button" class="pa-cfg-align-btn' + (c.align === 'right'  ? ' pa-align-active' : '') + '" data-key="' + c.key + '" data-align="right"  title="Sağa hizala">'   + ALIGN_ICONS.right  + '</button>' +
+                        '</span>' +
                     '</div>' +
                 '</div>';
         });

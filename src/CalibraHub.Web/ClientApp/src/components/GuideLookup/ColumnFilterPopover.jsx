@@ -105,7 +105,7 @@ export default function ColumnFilterPopover(props) {
   }
 
   return (
-    <div ref={rootRef} className="gl-popover" style={popoverStyle} onKeyDown={onKey}>
+    <div ref={rootRef} className="gl-popover" style={popoverStyle} onKeyDown={onKey} data-nodirty>
       <div className="gl-popover-title">
         <Filter size={11} strokeWidth={2.4} />
         <span>{props.colLabel}</span>

@@ -100,7 +100,7 @@ export default function InvoiceDataGrid(props) {
     }}>
 
       {/* ── Arama çubuğu ─────────────────────────────────── */}
-      <div style={{
+      <div data-nodirty style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '7px 12px', flexShrink: 0,
         borderBottom: '1px solid var(--igd-border)',

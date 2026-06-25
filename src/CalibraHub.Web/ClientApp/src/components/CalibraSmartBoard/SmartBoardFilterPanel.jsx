@@ -467,6 +467,7 @@ export default function SmartBoardFilterPanel(props) {
 
       {/* Panel — sagdan slide-in */}
       <aside
+        data-nodirty
         style={{
           position: 'absolute', top: 0, right: 0, bottom: 0,
           width: 'min(520px, 100vw)',
