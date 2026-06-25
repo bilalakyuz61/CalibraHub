@@ -196,17 +196,16 @@
     .fc3-cfg-align-btn svg { width:13px; height:13px; }
     .fc3-cfg-align-btn:hover { background:rgba(99,102,241,.1); color:#818cf8; }
     .fc3-cfg-align-btn.fc3-align-active { background:rgba(99,102,241,.15); color:#818cf8; border-color:rgba(99,102,241,.3); }
-    /* Grupla butonu (sütun paneli detay) */
-    .fc3-cfg-group-btn {
-        height:24px; padding:0 10px; border-radius:5px; cursor:pointer;
-        border:1px solid rgba(148,163,184,.25); background:transparent;
-        font-size:11px; color:#64748b; transition:all .1s; white-space:nowrap;
+    /* Grupla ikonu (ana satır) */
+    .fc3-cfg-grp-btn {
+        width:20px; height:20px; padding:0; border:none; background:transparent;
+        cursor:pointer; display:flex; align-items:center; justify-content:center;
+        color:#334155; border-radius:4px; flex-shrink:0; transition:background .1s, color .1s;
     }
-    .fc3-cfg-group-btn:hover { border-color:rgba(99,102,241,.3); color:#818cf8; }
-    .fc3-cfg-group-btn.active {
-        background:rgba(99,102,241,.15); color:#818cf8;
-        border-color:rgba(99,102,241,.3); font-weight:600;
-    }
+    .fc3-cfg-grp-btn:hover { background:rgba(99,102,241,.1); color:#818cf8; }
+    .fc3-cfg-grp-btn.active { color:#818cf8; }
+    .fc3-cfg-grp-btn svg { width:12px; height:12px; }
+    .fc3-cfg-grp-ord { font-size:10px; font-weight:700; color:#818cf8; min-width:12px; text-align:center; line-height:1; }
     /* Genişlik stepper (sütun paneli detay) */
     .fc3-cfg-stepper { display:flex; align-items:center; gap:5px; flex:1; }
     .fc3-cfg-step-btn {
@@ -2007,6 +2006,7 @@
     var _EYE    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
     var _EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
     var _CHEV   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
+    var _GRP    = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="1" y1="3" x2="13" y2="3"/><line x1="3" y1="7" x2="13" y2="7"/><line x1="5" y1="11" x2="13" y2="11"/></svg>';
     var _ALIGN_ICONS = {
         left:   '<svg viewBox="0 0 16 14" fill="currentColor"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="0" y="4" width="10" height="2" rx="1"/><rect x="0" y="8" width="13" height="2" rx="1"/><rect x="0" y="12" width="8" height="2" rx="1"/></svg>',
         center: '<svg viewBox="0 0 16 14" fill="currentColor"><rect x="0" y="0" width="16" height="2" rx="1"/><rect x="3" y="4" width="10" height="2" rx="1"/><rect x="1.5" y="8" width="13" height="2" rx="1"/><rect x="4" y="12" width="8" height="2" rx="1"/></svg>',
@@ -2028,6 +2028,9 @@
                     '<span class="fc3-cfg-grip">' + _GRIP + '</span>' +
                     '<button type="button" class="fc3-cfg-eye' + (!c.visible ? ' fc3-eye-off' : '') + '" data-key="' + c.key + '">' + (c.visible ? _EYE : _EYEOFF) + '</button>' +
                     '<span class="fc3-cfg-label">' + esc(c.label) + '</span>' +
+                    '<button type="button" class="fc3-cfg-grp-btn' + (c.groupBy ? ' active' : '') + '" data-key="' + c.key + '" title="' + (c.groupBy ? '#' + c.groupOrder + ' — Gruplamayı kaldır' : 'Grupla') + '">' +
+                        (c.groupBy ? '<span class="fc3-cfg-grp-ord">' + c.groupOrder + '</span>' : _GRP) +
+                    '</button>' +
                     '<button type="button" class="fc3-cfg-exp' + oc + '" data-key="' + c.key + '" title="Detay ayarları">' + _CHEV + '</button>' +
                 '</div>' +
                 '<div class="fc3-cfg-detail' + oc + '" data-key="' + c.key + '">' +
@@ -2070,12 +2073,6 @@
                         '</span>' +
                     '</div>'
                     : '') +
-                    '<div class="fc3-cfg-field-row">' +
-                        '<span class="fc3-cfg-field-label">Grupla</span>' +
-                        '<button type="button" class="fc3-cfg-group-btn' + (c.groupBy ? ' active' : '') + '" data-key="' + c.key + '">' +
-                            (c.groupBy ? '#' + c.groupOrder + ' — Kaldır' : 'Gruplama ekle') +
-                        '</button>' +
-                    '</div>' +
                 '</div>';
         });
         rowsEl.innerHTML = html;
@@ -2165,8 +2162,8 @@
             });
         });
 
-        // Grupla toggle
-        rowsEl.querySelectorAll('.fc3-cfg-group-btn').forEach(function(btn) {
+        // Grupla toggle (ana satır)
+        rowsEl.querySelectorAll('.fc3-cfg-grp-btn').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 var key = btn.getAttribute('data-key');
