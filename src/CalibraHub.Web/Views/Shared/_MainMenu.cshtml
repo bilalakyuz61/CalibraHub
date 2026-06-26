@@ -1160,7 +1160,8 @@
 
     <!-- Daralt / Genişlet butonu — sidebar alt footer -->
     <div class="side-nav-footer">
-        <span class="side-nav-version menu-text" title="CalibraHub v1.1.0">v1.1.0</span>
+        @{ var _navVer = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "?"; }
+        <span class="side-nav-version menu-text" title="CalibraHub v@_navVer">v@_navVer</span>
         <button type="button"
                 class="side-collapse-btn"
                 data-sidebar-toggle

@@ -48,20 +48,6 @@ public sealed class LogisticsController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
-    // DEBUG (2026-05-24): masterWidgets JSON'unu raw goster — Dictionary serialization debug.
-    [AllowAnonymous]
-    [HttpGet("/Debug/MaterialCardsBoardJson")]
-    public async Task<IActionResult> DebugMaterialCardsBoardJson(CancellationToken ct)
-    {
-        var cfg = await BuildMaterialCardsBoardConfigAsync(ct);
-        var opts = new System.Text.Json.JsonSerializerOptions {
-            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-            WriteIndented = true,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        };
-        var json = System.Text.Json.JsonSerializer.Serialize(cfg, opts);
-        return Content(json, "application/json; charset=utf-8");
-    }
 
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]

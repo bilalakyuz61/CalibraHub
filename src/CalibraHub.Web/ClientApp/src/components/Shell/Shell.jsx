@@ -192,7 +192,7 @@ function findLabelByUrl(menu, url) {
 export default function Shell(props) {
   var config = props.config || {}
   var user = config.user || { name: '—', email: '', initials: '?', userKey: 'anon' }
-  var system = config.system || { company: '', year: '', status: 'Hazir' }
+  var system = config.system || { company: '', year: '', status: 'Hazir', appVersion: '?' }
   var initialUrl = config.initialUrl || '/'
   var savePrefsUrl = config.savePreferencesUrl || '/Account/SaveInterfacePreferences'
   var antiforgery = config.antiforgeryToken || ''
@@ -1403,7 +1403,7 @@ function Sidebar(props) {
               <span className={isDark ? 'text-white/20' : 'text-slate-300'}>·</span>
             </>
           )}
-          <span className="flex-shrink-0">v1.0.0</span>
+          <span className="flex-shrink-0">{'v' + ((props.system && props.system.appVersion) || '?')}</span>
         </div>
       </div>
     </aside>
@@ -2329,7 +2329,7 @@ function StatusBar(props) {
           </span>
         )}
         <span className={dividerColor}>·</span>
-        <span>v1.0.0</span>
+        <span>{'v' + ((props.system && props.system.appVersion) || '?')}</span>
       </div>
     </footer>
   )

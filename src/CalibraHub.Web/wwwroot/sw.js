@@ -13,7 +13,7 @@
 // **Cache key versioning:** Yeni offline.html deploy'unda CACHE_VERSION arttırılır;
 // activate event eski cache'leri temizler.
 
-const CACHE_VERSION = 'calibra-offline-v17';
+const CACHE_VERSION = 'calibra-offline-v18';
 const OFFLINE_URL   = '/offline.html';
 
 // Sunucu cevap vermezse bu süre içinde abort edip offline.html'i göster.

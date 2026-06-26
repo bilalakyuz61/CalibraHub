@@ -105,7 +105,12 @@
         } else {
             const tokens = q.split(/\s+/).filter(Boolean);
             state.filteredItems = source.filter(item => {
-                const hay = item.name.toLowerCase();
+                const hay = [
+                    item.name,
+                    item.usedIn,
+                    item.description,
+                    item.userDescription,
+                ].filter(Boolean).join(' ').toLowerCase();
                 return tokens.every(tok => hay.includes(tok));
             });
         }

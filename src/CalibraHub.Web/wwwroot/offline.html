@@ -152,30 +152,6 @@
             transition: transform .12s ease-out;
         }
 
-        /* Rüya baloncuğu — uydunun gördüğü ortak hayal: "Cuma 17:00". Yavaş float +
-           saat ":" yanıp söner. Drag/anger esnasında gizlenir (uyku bozulur). */
-        .sat-dream {
-            transform-box: fill-box;
-            transform-origin: center;
-            animation: dreamFloat 4s ease-in-out infinite;
-            transition: opacity .3s ease-out;
-        }
-        .satellite.is-grabbed .sat-dream,
-        .satellite[data-anger="2"] .sat-dream,
-        .satellite[data-anger="3"] .sat-dream {
-            opacity: 0;
-        }
-        @keyframes dreamFloat {
-            0%, 100% { transform: translateY(0); }
-            50%      { transform: translateY(-3px); }
-        }
-        .sat-dream-colon {
-            animation: dreamColonBlink 1.05s steps(2) infinite;
-        }
-        @keyframes dreamColonBlink {
-            0%, 49%   { opacity: 1; }
-            50%, 100% { opacity: 0.25; }
-        }
         .sat-antenna-light {
             fill: #ef4444; transform-origin: 100px 22px;
             animation: antBlink 1.6s ease-in-out infinite;
@@ -185,76 +161,12 @@
             50%      { opacity: 0.3; }
         }
 
-        /* Loading spinner — içinde geri sayım sayısı */
-        .reconnect {
-            display: flex; align-items: center; justify-content: center;
-            margin: 0 0 18px; min-height: 56px;
-        }
-        .reconnect__spinner {
-            position: relative;
-            width: 56px; height: 56px;
-            display: inline-flex; align-items: center; justify-content: center;
-        }
-        /* Dönen border halkası — sadece çerçeve döner, içerik döz */
-        .reconnect__spinner::before {
-            content: ''; position: absolute; inset: 0;
-            border-radius: 50%;
-            border: 3px solid rgba(99,102,241,0.18);
-            border-top-color: var(--accent);
-            animation: spinnerRot 1s linear infinite;
-        }
-        @keyframes spinnerRot { to { transform: rotate(360deg); } }
-        /* Sayı tam merkeze — döner border'ın içinde sabit durur */
-        .reconnect__countdown {
-            position: relative; z-index: 1;
-            font-family: ui-monospace, Menlo, Consolas, monospace;
-            font-size: 20px; font-weight: 700; color: var(--accent);
-            line-height: 1;
-        }
         h1 {
             margin: 0 0 6px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em;
         }
         .subtitle {
             margin: 0 0 22px; font-size: 13px; color: var(--muted);
         }
-        .pulse {
-            display: inline-flex; align-items: center; gap: 10px;
-            padding: 8px 14px; border-radius: 999px;
-            background: var(--accent-soft); color: var(--accent);
-            font-size: 12px; font-weight: 600; margin-bottom: 22px;
-        }
-        .dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: var(--accent);
-            animation: pulse 1.4s ease-in-out infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.8); }
-        }
-        .progress {
-            height: 4px; border-radius: 2px; overflow: hidden;
-            background: var(--accent-soft); margin: 0 0 22px;
-        }
-        .progress__bar {
-            height: 100%; width: 30%; border-radius: 2px;
-            background: var(--accent);
-            animation: slide 1.6s ease-in-out infinite;
-        }
-        @keyframes slide {
-            0%   { margin-left: -30%; width: 30%; }
-            50%  { margin-left: 35%;  width: 30%; }
-            100% { margin-left: 100%; width: 30%; }
-        }
-        /* Sabit yer tutar — hata mesajı çıkıp kaybolurken kart boyutu değişmesin */
-        .status {
-            margin: 0 0 22px; font-size: 12px; color: var(--muted);
-            min-height: 18px; line-height: 18px;
-            opacity: 0; transition: opacity .22s ease-out;
-            pointer-events: none;
-        }
-        .status.err { color: var(--danger); opacity: 1; }
-        .status.ok  { color: #10b981;       opacity: 1; }
         .actions {
             display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
         }
@@ -382,29 +294,6 @@
 
             </g>
 
-            <!-- Rüya baloncuğu — yazısız: 17:00'ı gösteren küçük analog saat -->
-            <g class="sat-dream">
-                <!-- Thought-bubble kuyrukları: uydudan baloncuğa uzanan iki küçük yuvarlak -->
-                <circle cx="132" cy="56" r="2.2" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.8"/>
-                <circle cx="138" cy="48" r="3.2" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.8"/>
-                <!-- Ana baloncuk -->
-                <circle cx="173" cy="36" r="18"
-                        fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
-                <!-- Saat kadranı (iç çerçeve) -->
-                <circle cx="173" cy="36" r="13" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.8"/>
-                <!-- 12/3/6/9 işaretleri -->
-                <line x1="173" y1="25" x2="173" y2="27.5" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
-                <line x1="184" y1="36" x2="181.5" y2="36" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
-                <line x1="173" y1="47" x2="173" y2="44.5" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
-                <line x1="162" y1="36" x2="164.5" y2="36" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
-                <!-- Akrep (5'i gösterir, ~150°) -->
-                <line x1="173" y1="36" x2="178" y2="42" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round"/>
-                <!-- Yelkovan (12'yi gösterir, dikey yukarı) -->
-                <line x1="173" y1="36" x2="173" y2="27" stroke="#6366f1" stroke-width="1.6" stroke-linecap="round"/>
-                <!-- Merkez nokta -->
-                <circle cx="173" cy="36" r="1.4" fill="#1e293b"/>
-            </g>
-
             <!-- Emote ?/! — anger seviyesine göre sağ üstte görünür -->
             <text class="sat-emote sat-emote--q" x="172" y="58" font-size="22" font-weight="800" fill="#f59e0b">?</text>
             <text class="sat-emote sat-emote--e" x="174" y="58" font-size="26" font-weight="900" fill="#ef4444">!</text>
@@ -412,18 +301,6 @@
 
         <h1>Sunucuya bağlanılamıyor</h1>
         <p class="subtitle">Hizmetimiz kısa bir uyku molasında. Bağlantı kurulur kurulmaz sayfanız otomatik olarak açılacaktır.</p>
-
-        <div class="pulse"><span class="dot" aria-hidden="true"></span><span id="pulseLabel">Sunucuya bağlanılıyor…</span></div>
-
-        <div class="progress" aria-hidden="true"><div class="progress__bar"></div></div>
-
-        <!-- Loading spinner + içinde geri sayım -->
-        <div class="reconnect" id="reconnectBox" aria-hidden="true">
-            <span class="reconnect__spinner" aria-hidden="true">
-                <span class="reconnect__countdown" id="countdown">10</span>
-            </span>
-        </div>
-        <p class="status" id="status">&nbsp;</p>
 
         <div class="actions">
             <button type="button" class="btn btn--primary" onclick="checkNow()">Şimdi Tekrar Dene</button>
@@ -450,41 +327,24 @@
             return location.pathname + location.search;
         })();
 
-        var countdownSec = 10;
-        var PROBE_INTERVAL = 10; // saniye — sonraki kontrol için reset değeri
-        var cdEl = document.getElementById('countdown');
-        var statusEl = document.getElementById('status');
-        var pulseLabel = document.getElementById('pulseLabel');
+        var PROBE_INTERVAL = 10000; // ms
         var checking = false;
         var timerId = null;
-
-        function setCountdown(n) { countdownSec = n; if (cdEl) cdEl.textContent = n; }
 
         async function probe() {
             if (checking) return;
             checking = true;
-            pulseLabel.textContent = 'Sunucuya bağlanılıyor…';
             try {
-                // Probe için cache bypass — sunucu canlı mı diye kesin yanıt iste
                 var r = await fetch('/?_probe=' + Date.now(), {
                     method: 'GET', credentials: 'same-origin', cache: 'no-store',
                     headers: { 'Accept': 'text/html', 'X-Offline-Probe': '1' }
                 });
-                // Bağlanabildi (200/302/4xx hepsi geçerli — server up demek)
                 if (r.status >= 200 && r.status < 600) {
-                    statusEl.classList.remove('err');         // hata mesajı varsa fade-out
-                    pulseLabel.textContent = 'Bağlandı! Yeniden yönlendiriliyor…';
                     try { sessionStorage.removeItem('calibra:offlineTarget'); } catch (_) {}
                     setTimeout(function () { location.replace(target || '/'); }, 400);
                     return;
                 }
-            } catch (e) {
-                // Hata durumunda status'a sevimli mesaj — kart boyutu sabit kalır
-                // (opacity ile gösteriliyor, hidden değişmiyor → layout shift yok)
-                statusEl.classList.add('err');
-                statusEl.textContent = 'Henüz cevap yok, biraz sonra tekrar deneyeceğiz…';
-                pulseLabel.textContent = 'Bağlantı kontrol ediliyor';
-            }
+            } catch (_) {}
             checking = false;
         }
 
@@ -613,25 +473,15 @@
             });
         }
 
-        async function tick() {
-            if (countdownSec <= 1) {
-                setCountdown(PROBE_INTERVAL); // sonraki tur için reset
-                await probe();
-            } else {
-                setCountdown(countdownSec - 1);
-            }
-        }
-
         function start() {
             if (timerId) return;
-            timerId = setInterval(tick, 1000);
-            // İlk probe'ı hemen yap
             probe();
+            timerId = setInterval(probe, PROBE_INTERVAL);
         }
 
         window.checkNow = function () {
-            setCountdown(PROBE_INTERVAL);
-            probe();
+            if (timerId) { clearInterval(timerId); timerId = null; }
+            start();
         };
 
         start();

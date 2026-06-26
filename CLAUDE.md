@@ -24,6 +24,16 @@ Tüm geliştirme akışı Claude üzerinden yürür. Kod değişikliği yaptığ
 
 ## Mimari kararlar — KALIN UYULMASI GEREKEN
 
+### DepartmentManager Rolü — Bilinçli Bypass Kararı (2026-06-25)
+
+`PermissionService.CheckAsync` içinde `DepartmentManager` rolü, `SetupDefinitions` ve `Scheduler` dışında tüm formlara DB grant'larına bakmaksızın `true` döndürmektedir.
+
+**Sebep:** DepartmentManager'ın kendi departmanındaki her operasyonu yönetmesi beklenmekte, granüler kısıtlama ihtiyacı henüz gündeme gelmemiştir.
+
+**YAPILMAMASI GEREKEN:** Bu bypass'ı sessizce kaldırmak. Kaldırılması gerekirse önce tüm DeptManager kullanıcılarına gerekli grant'lar atanmalı, ardından bypass kaldırılmalıdır.
+
+**Yeniden değerlendirme şartı:** Birden fazla müşteri "DepartmentManager farklı formlara farklı erişimde olsun" talebinde bulunursa bypass kaldırılıp grant matrix'e dahil edilebilir.
+
 ### ENGINE Architecture — KARARLAŞTIRILDI: YAPILMAYACAK (2026-06-10)
 
 Metadata-driven engine motoru (`engine.Entity` + `engine.Field` + dynamic DDL) vizyonu **tamamen rafa kaldırıldı**. İlgili tüm kod (interfaces, services, controllers, DB schema) kaldırıldı. Şu kararlar **bilinçli** olarak verildi:

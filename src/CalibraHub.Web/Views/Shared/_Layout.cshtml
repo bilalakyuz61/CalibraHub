@@ -294,6 +294,7 @@
                 company = profileCompany,
                 year = DateTime.Now.Year.ToString(),
                 status = layoutUi.Text("system_status"),
+                appVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "?",
             },
             menu = await BuildMenuForCurrentUserAsync(),
             theme = uiRuntime.ThemeCode,
