@@ -115,33 +115,37 @@
     .fc3-count-sel { font-size:.79rem; font-weight:700; color:#a5b4fc; display:none; }
     .fc3-count-sel.show { display:inline; }
 
-    /* ── Sütun ayarları paneli (tam) ── */
+    /* ── Sütun ayarları drawer ── */
+    .fc3-col-drw-backdrop {
+        position:fixed; inset:0; z-index:9982;
+        background:rgba(7,11,22,.22); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);
+        opacity:0; pointer-events:none;
+        transition:opacity 260ms cubic-bezier(.23,1,.32,1);
+    }
+    .fc3-col-drw-backdrop.open { opacity:1; pointer-events:auto; }
     .fc3-col-panel {
-        position:fixed; z-index:9000; width:260px; max-height:580px;
-        background:#0f172a; border:1px solid rgba(255,255,255,.1);
-        border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,.55);
-        display:none; flex-direction:column; overflow:hidden;
+        position:fixed; top:0; right:0; bottom:0; z-index:9983;
+        width:min(310px,100vw);
+        background:rgba(13,18,34,.97); border-left:1px solid rgba(255,255,255,.09);
+        transform:translateX(100%);
+        transition:transform 280ms cubic-bezier(.23,1,.32,1), box-shadow 280ms;
+        display:flex; flex-direction:column; overflow:hidden;
     }
+    .fc3-col-panel.open { transform:translateX(0); box-shadow:-16px 0 48px rgba(0,0,0,.4); }
     body.app-theme-light .fc3-col-panel {
-        background:#ffffff; border-color:rgba(148,163,184,.2);
-        box-shadow:0 8px 24px rgba(0,0,0,.13);
+        background:rgba(255,255,255,.98); border-left-color:#e2e8f0;
     }
-    .fc3-col-panel.open { display:flex; }
-    .fc3-cfg-hdr {
-        padding:8px 14px 7px; font-size:.68rem; font-weight:700;
-        text-transform:uppercase; letter-spacing:.07em; color:#475569;
-        border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0;
-    }
-    body.app-theme-light .fc3-cfg-hdr { color:#94a3b8; border-bottom-color:rgba(148,163,184,.15); }
-    .fc3-cfg-hdr--sep { border-top:1px solid rgba(255,255,255,.07); }
-    body.app-theme-light .fc3-cfg-hdr--sep { border-top-color:rgba(148,163,184,.15); }
-    .fc3-col-rows-inner { overflow-y:auto; padding:3px 0; }
+    body.app-theme-light .fc3-col-panel.open { box-shadow:-16px 0 48px rgba(15,23,42,.15); }
+    .fc3-col-rows-inner { overflow-y:auto; flex:1; padding:4px 0; }
+    .fc3-col-rows-inner::-webkit-scrollbar { width:4px; }
+    .fc3-col-rows-inner::-webkit-scrollbar-thumb { background:rgba(255,255,255,.09); border-radius:2px; }
+    body.app-theme-light .fc3-col-rows-inner::-webkit-scrollbar-thumb { background:#cbd5e1; }
     .fc3-cfg-row {
-        display:flex; align-items:center; gap:5px;
-        padding:3px 10px; cursor:grab; border-radius:6px; margin:1px 3px;
+        display:flex; align-items:center; gap:6px;
+        padding:5px 12px; cursor:grab; border-radius:7px; margin:1px 5px;
         transition:background .1s;
     }
-    .fc3-cfg-row:hover { background:rgba(99,102,241,.07); }
+    .fc3-cfg-row:hover { background:rgba(99,102,241,.08); }
     .fc3-cfg-row.is-fixed { cursor:default; }
     .fc3-cfg-row.is-hidden { opacity:.45; }
     .fc3-cfg-row.drag-over { outline:2px solid #6366f1; outline-offset:-2px; }
@@ -149,38 +153,39 @@
     .fc3-cfg-grip { color:#475569; flex-shrink:0; display:flex; align-items:center; }
     .fc3-cfg-grip svg { width:10px; height:14px; }
     .fc3-cfg-eye {
-        width:22px; height:22px; padding:0; border:none; background:transparent;
+        width:24px; height:24px; padding:0; border:none; background:transparent;
         cursor:pointer; display:flex; align-items:center; justify-content:center;
-        color:#6366f1; border-radius:4px; flex-shrink:0; transition:background .1s;
+        color:#6366f1; border-radius:5px; flex-shrink:0; transition:background .1s;
     }
     .fc3-cfg-eye.fc3-eye-off { color:#475569; }
     .fc3-cfg-eye:hover { background:rgba(99,102,241,.1); }
-    .fc3-cfg-eye svg { width:13px; height:13px; }
-    .fc3-cfg-label { flex:1; font-size:.79rem; font-weight:500; color:#94a3b8; }
-    body.app-theme-light .fc3-cfg-label { color:#475569; }
+    .fc3-cfg-eye svg { width:14px; height:14px; }
+    .fc3-cfg-label { flex:1; font-size:.88rem; font-weight:500; color:#cbd5e1; }
+    body.app-theme-light .fc3-cfg-label { color:#334155; }
     .fc3-cfg-exp {
-        width:20px; height:20px; padding:0; border:none; background:transparent;
+        width:22px; height:22px; padding:0; border:none; background:transparent;
         cursor:pointer; display:flex; align-items:center; justify-content:center;
-        color:#475569; border-radius:4px; flex-shrink:0; transition:background .1s;
+        color:#475569; border-radius:5px; flex-shrink:0; transition:background .1s;
     }
     .fc3-cfg-exp:hover { background:rgba(99,102,241,.1); color:#818cf8; }
-    .fc3-cfg-exp svg { width:10px; height:10px; transition:transform .15s; }
+    .fc3-cfg-exp svg { width:11px; height:11px; transition:transform .15s; }
     .fc3-cfg-exp.open svg { transform:rotate(180deg); }
     .fc3-cfg-detail {
-        display:none; flex-direction:column; gap:5px;
-        padding:5px 10px 8px 34px;
+        display:none; flex-direction:column; gap:6px;
+        padding:6px 12px 10px 36px;
         border-bottom:1px solid rgba(255,255,255,.05);
-        margin:0 3px 2px;
+        margin:0 5px 3px;
     }
     body.app-theme-light .fc3-cfg-detail { border-bottom-color:rgba(148,163,184,.12); }
     .fc3-cfg-detail.open { display:flex; }
     .fc3-cfg-field-row { display:flex; align-items:center; gap:8px; }
-    .fc3-cfg-field-label { width:64px; font-size:.71rem; color:#475569; flex-shrink:0; }
+    .fc3-cfg-field-label { width:70px; font-size:.78rem; color:#64748b; flex-shrink:0; }
+    body.app-theme-light .fc3-cfg-field-label { color:#64748b; }
     .fc3-cfg-field-input {
-        flex:1; height:24px; padding:0 7px; border-radius:5px;
+        flex:1; height:26px; padding:0 8px; border-radius:6px;
         border:1px solid rgba(255,255,255,.1);
-        background:rgba(255,255,255,.04); font-size:.77rem;
-        color:#94a3b8; outline:none;
+        background:rgba(255,255,255,.05); font-size:.82rem;
+        color:#e2e8f0; outline:none;
     }
     .fc3-cfg-field-input:focus { border-color:rgba(99,102,241,.5); }
     body.app-theme-light .fc3-cfg-field-input {
@@ -188,12 +193,12 @@
     }
     .fc3-cfg-align { display:flex; gap:2px; flex:1; }
     .fc3-cfg-align-btn {
-        flex:1; height:24px; display:flex; align-items:center; justify-content:center;
-        border-radius:4px; border:1px solid rgba(255,255,255,.08);
+        flex:1; height:26px; display:flex; align-items:center; justify-content:center;
+        border-radius:5px; border:1px solid rgba(255,255,255,.08);
         cursor:pointer; color:#475569; background:transparent; padding:0; transition:all .1s;
     }
     body.app-theme-light .fc3-cfg-align-btn { border-color:rgba(148,163,184,.2); }
-    .fc3-cfg-align-btn svg { width:13px; height:13px; }
+    .fc3-cfg-align-btn svg { width:14px; height:14px; }
     .fc3-cfg-align-btn:hover { background:rgba(99,102,241,.1); color:#818cf8; }
     .fc3-cfg-align-btn.fc3-align-active { background:rgba(99,102,241,.15); color:#818cf8; border-color:rgba(99,102,241,.3); }
     /* Grupla ikonu (ana satır) */
@@ -872,11 +877,6 @@
                 <span id="fc3SelCnt" class="fc3-count-sel"></span>
                 <span id="fc3AllCnt" class="fc3-count-all"></span>
             </div>
-            @* Sütun ayarları paneli — JS tarafından doldurulur *@
-            <div class="fc3-col-panel" id="fc3ColPanel" data-nodirty>
-                <div class="fc3-cfg-hdr">Sütun Ayarları</div>
-                <div id="fc3ColRows" class="fc3-col-rows-inner"></div>
-            </div>
             @* Flat liste sütun başlık satırı — JS tarafından doldurulur *@
             <div class="fc3-flat-hdr" id="fc3FlatColHdr"></div>
             <div class="fc3-list" id="fc3List">
@@ -902,6 +902,27 @@
         Depodan Karşıla
     </button>
     <span class="fc3-fb-res" id="fc3FbRes"></span>
+</div>
+
+@* ── SÜTUN AYARLARI DRAWER ── *@
+<div class="fc3-col-drw-backdrop" id="fc3ColBackdrop" onclick="fc3CloseColPanel()"></div>
+<div class="fc3-col-panel" id="fc3ColPanel" data-nodirty>
+    <div class="fc3-drw-hd">
+        <div class="fc3-drw-hd-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/>
+                <circle cx="18" cy="12" r="2"/><line x1="4" y1="18" x2="11" y2="18"/><circle cx="15" cy="18" r="2"/>
+            </svg>
+        </div>
+        <div class="fc3-drw-hd-tx">
+            <strong>Sütun Ayarları</strong>
+            <small>Görünürlük, sıralama ve biçim</small>
+        </div>
+        <button type="button" class="fc3-drw-close" onclick="fc3CloseColPanel()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+    <div id="fc3ColRows" class="fc3-col-rows-inner"></div>
 </div>
 
 @* ── DRAWER ── *@
@@ -2234,29 +2255,25 @@
     }
 
     window.fc3ToggleColPanel = function(e) {
-        e.stopPropagation();
-        var panel = document.getElementById('fc3ColPanel');
+        if (e) e.stopPropagation();
+        var panel    = document.getElementById('fc3ColPanel');
+        var backdrop = document.getElementById('fc3ColBackdrop');
         if (!panel) return;
-        var wasOpen = panel.classList.contains('open');
-        panel.classList.toggle('open');
-        if (!wasOpen) {
-            var btn = document.getElementById('fc3ColBtn');
-            var rect = btn ? btn.getBoundingClientRect() : { left: 0, bottom: 0, width: 0 };
-            panel.style.top  = (rect.bottom + 6) + 'px';
-            panel.style.left = Math.max(4, rect.left - 280 + rect.width) + 'px';
+        if (panel.classList.contains('open')) {
+            panel.classList.remove('open');
+            if (backdrop) backdrop.classList.remove('open');
+        } else {
+            panel.classList.add('open');
+            if (backdrop) backdrop.classList.add('open');
             _renderColPanel();
         }
     };
-
-    document.addEventListener('click', function(e) {
-        var panel = document.getElementById('fc3ColPanel');
-        if (panel && panel.classList.contains('open')
-            && !panel.contains(e.target)
-            && e.target.id !== 'fc3ColBtn'
-            && !e.target.closest('#fc3ColBtn')) {
-            panel.classList.remove('open');
-        }
-    });
+    window.fc3CloseColPanel = function() {
+        var panel    = document.getElementById('fc3ColPanel');
+        var backdrop = document.getElementById('fc3ColBackdrop');
+        if (panel)    panel.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('open');
+    };
 
     // Async: server'dan yükle, farklıysa yeniden render
     fetch('/Purchase/GetFlatColConfig')
