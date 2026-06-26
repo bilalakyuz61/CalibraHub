@@ -9,7 +9,10 @@ namespace CalibraHub.Application.Abstractions.Services;
 /// </summary>
 public interface IImportService
 {
-    /// <summary>Hedef entity için eşlenebilir alan kataloğu. Pilot: "CONTACT".</summary>
+    /// <summary>İçe aktarım yapılabilen hedef entity'ler (Cari, Stok, Cari İletişim, ...).</summary>
+    IReadOnlyList<ImportEntityDto> GetEntities();
+
+    /// <summary>Hedef entity için eşlenebilir alan kataloğu.</summary>
     IReadOnlyList<ImportTargetFieldDto> GetTargetFields(string targetEntity);
 
     Task<IReadOnlyList<ImportTemplateDto>> ListTemplatesAsync(bool includeInactive, CancellationToken ct);

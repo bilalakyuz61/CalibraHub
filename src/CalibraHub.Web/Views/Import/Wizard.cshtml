@@ -1,11 +1,7 @@
 @{
-    ViewData["Title"] = "Veri Aktarımı";
+    ViewData["Title"] = "İçe Aktarım Sihirbazı";
     ViewData["FormCode"] = "DATA_IMPORT";
     ViewData["BodyClass"] = "page-data-import";
-    ViewData["DbInfo"] =
-        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>ImportTemplate</td><td style='padding:6px 8px;'>İçe aktarım şablonları (kaynak kolon → hedef alan eşleme)</td></tr>"
-        + "</table>";
 }
 
 @section Styles {
@@ -13,43 +9,42 @@
     .workspace-frame-body.page-data-import .app-content-area--workspace-frame {
         height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
     }
-    #reactSmartBoard { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+    #dataImportRoot { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
 </style>
 }
 
-<div id="reactSmartBoard"></div>
+<div id="dataImportRoot"></div>
 
 @section Scripts {
 <script>
 (function () {
-    var BOARD_CONFIG = @Html.Raw(ViewData["BoardConfigJson"] ?? "null");
     var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
     var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
-    var el = document.getElementById('reactSmartBoard');
+    var el = document.getElementById('dataImportRoot');
 
     function showError(msg) { if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>'; }
     function loadCss() {
-        if (document.querySelector('link[data-di-sb]')) return;
+        if (document.querySelector('link[data-data-import]')) return;
         var link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = CSS_URL; link.setAttribute('data-di-sb', '1');
+        link.rel = 'stylesheet'; link.href = CSS_URL; link.setAttribute('data-data-import', '1');
         document.head.appendChild(link);
     }
     function loadScript(cb) {
-        var prev = document.querySelector('script[data-di-sb]');
+        var prev = document.querySelector('script[data-data-import]');
         if (prev) { prev.addEventListener('load', cb); return; }
         var s = document.createElement('script');
-        s.src = BUNDLE_URL; s.setAttribute('data-di-sb', '1');
+        s.src = BUNDLE_URL; s.setAttribute('data-data-import', '1');
         s.onload = function () { setTimeout(cb, 0); };
         s.onerror = function () { showError('React bundle yüklenemedi.'); };
         document.head.appendChild(s);
     }
     function doMount() {
-        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('mountSmartBoard bulunamadı.'); return; }
-        window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+        if (!window.CalibraHub || !window.CalibraHub.mountDataImport) { showError('mountDataImport bulunamadı.'); return; }
+        window.CalibraHub.mountDataImport(el);
     }
 
     loadCss();
-    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
+    if (window.CalibraHub && window.CalibraHub.mountDataImport) doMount();
     else loadScript(doMount);
 })();
 </script>

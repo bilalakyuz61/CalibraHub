@@ -1,3 +1,4 @@
+﻿using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Services;
@@ -25,6 +26,7 @@ namespace CalibraHub.Web.Controllers;
 ///   POST /Import/api/commit               → dosya + şablon → kayıt + rapor
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DataVisibility)]
 public sealed class ImportController : Controller
 {
     private const long MaxUploadBytes = 12L * 1024 * 1024;   // 12 MB
@@ -36,7 +38,74 @@ public sealed class ImportController : Controller
 
     // ── Razor ──────────────────────────────────────────────────────────
     [HttpGet("/Import")]
-    public IActionResult Index() => View();
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        var config = await BuildBoardConfigAsync(ct);
+        ViewData["BoardConfigJson"] = JsonSerializer.Serialize(config, Json);
+        return View();
+    }
+
+    /// <summary>SmartBoard in-place refresh (GET, JSON) — şablon kart listesi.</summary>
+    [HttpGet("/Import/BoardConfig")]
+    public async Task<IActionResult> BoardConfig(CancellationToken ct)
+        => Json(await BuildBoardConfigAsync(ct));
+
+    /// <summary>İçe aktarım sihirbazı (yeni / düzenle / çalıştır — query: id, mode).</summary>
+    [HttpGet("/Import/Wizard")]
+    public IActionResult Wizard() => View();
+
+    private async Task<object> BuildBoardConfigAsync(CancellationToken ct)
+    {
+        var templates = await _service.ListTemplatesAsync(true, ct);
+        var labels = _service.GetEntities().ToDictionary(e => e.Entity, e => e.Label, StringComparer.OrdinalIgnoreCase);
+        string Label(string? ent) => labels.TryGetValue(ent ?? "", out var l) ? l : (ent ?? "");
+
+        var entities = templates.Select(t => new
+        {
+            id = t.Id,
+            title = t.Name,
+            subtitle = Label(t.TargetEntity),
+            statusBadge = new { label = t.IsActive ? "Aktif" : "Pasif", color = t.IsActive ? "emerald" : "slate" },
+            widgets = new object[]
+            {
+                new { id = "w_entity", type = "data", dataType = "text",    label = "Tür",        value = (object)Label(t.TargetEntity), color = "indigo", alwaysVisible = true },
+                new { id = "w_fields", type = "data", dataType = "numeric", label = "Alan",       value = (object)t.Columns.Count,       color = "slate",  alwaysVisible = true },
+                new { id = "w_match",  type = "data", dataType = "text",    label = "Eşleştirme", value = (object)(string.IsNullOrEmpty(t.MatchKeyField) ? "Hep ekle" : t.MatchKeyField), color = "violet", alwaysVisible = true },
+            },
+            primaryAction = new { label = "İçe Aktar", icon = "Play", url = $"/Import/Wizard?id={t.Id}&mode=run" },
+            secondaryAction = new { label = "Sil", icon = "Trash2", apiUrl = $"/Import/api/templates/delete/{t.Id}", apiMethod = "POST", confirm = $"'{t.Name}' şablonu silinsin mi? Bu işlem geri alınamaz." },
+            extraActions = new object[]
+            {
+                new { id = "edit",   label = "Düzenle", icon = "Pencil", url = $"/Import/Wizard?id={t.Id}&mode=edit", color = "blue" },
+                new { id = "toggle", label = t.IsActive ? "Pasifleştir" : "Aktifleştir", icon = "Power", type = "api-post", url = $"/Import/api/templates/toggle/{t.Id}", color = "amber" },
+            },
+        }).ToList();
+
+        return new
+        {
+            boardKey = "data-import-templates",
+            title = "Veri Aktarımı",
+            subtitle = $"{templates.Count} içe aktarım şablonu",
+            icon = "Upload",
+            iconColor = "indigo",
+            refreshUrl = "/Import/BoardConfig",
+            searchPlaceholder = "Şablon ara…",
+            emptyText = "Henüz şablon yok — sağ üstten 'Yeni Şablon' ile oluşturun.",
+            actions = new object[] { new { id = "new", label = "Yeni Şablon", icon = "Plus", variant = "primary", url = "/Import/Wizard?mode=new" } },
+            masterWidgets = new object[]
+            {
+                new { id = "w_entity", label = "Tür",        dataType = "text" },
+                new { id = "w_fields", label = "Alan",       dataType = "numeric" },
+                new { id = "w_match",  label = "Eşleştirme", dataType = "text" },
+            },
+            entities,
+        };
+    }
+
+    // ── Hedef entity listesi ───────────────────────────────────────────
+    [HttpGet("/Import/api/entities")]
+    public IActionResult Entities()
+        => Json(new { success = true, entities = _service.GetEntities() });
 
     // ── Hedef alan kataloğu ────────────────────────────────────────────
     [HttpGet("/Import/api/target-fields")]

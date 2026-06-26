@@ -5,7 +5,10 @@ namespace CalibraHub.Application.Contracts;
 //   Akış: Şablon tanımla → Excel/CSV yükle → önizle/doğrula → kayıt → rapor
 // ════════════════════════════════════════════════════════════════════════
 
-// ── Hedef alan kataloğu (Cari pilot: sabit liste; ileride form metadata) ──
+// ── İçe aktarım yapılabilen hedef entity'ler (handler başına) ─────────────
+public sealed record ImportEntityDto(string Entity, string Label);
+
+// ── Hedef alan kataloğu (handler başına) ──────────────────────────────────
 public sealed record ImportTargetFieldDto(
     string Key,             // "AccountTitle"
     string Label,           // "Cari Unvanı"
