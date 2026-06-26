@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps'
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   Treemap, LabelList, XAxis, YAxis, Tooltip, ResponsiveContainer,
   FunnelChart, Funnel, ComposedChart, ReferenceLine,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  ScatterChart, Scatter, ZAxis,
+  ScatterChart, Scatter, ZAxis, Legend,
 } from 'recharts'
 import ChartPreview from './ChartPreview'
 
@@ -268,20 +269,56 @@ function toStacked100Data(apiData, labelField, seriesField, valueField) {
   return { seriesKeys, data }
 }
 
-// Dağılım: ham kaynak için xField/yField/labelField → {x, y, label?}[]
-function toScatterData(apiData, xField, yField, labelField) {
+// Dağılım/Balon: ham kaynak için xField/yField/labelField/sizeField → {x, y, z?, label?}[]
+function toScatterData(apiData, xField, yField, labelField, sizeField) {
   if (!apiData?.columns?.length || !apiData.rows?.length) return []
   const cols = apiData.columns
   const xi = colIndex(cols, xField, 0)
   const yi = colIndex(cols, yField, cols.length > 1 ? 1 : 0)
   const li = labelField ? colIndex(cols, labelField, -1) : -1
+  const zi = sizeField  ? colIndex(cols, sizeField,  -1) : -1
   return apiData.rows
     .map(row => ({
       x:     row[xi] != null ? Number(row[xi]) : 0,
       y:     row[yi] != null ? Number(row[yi]) : 0,
+      z:     zi >= 0 && row[zi] != null && !isNaN(Number(row[zi])) ? Number(row[zi]) : undefined,
       label: li >= 0 && row[li] != null ? String(row[li]) : undefined,
     }))
     .filter(d => !isNaN(d.x) && !isNaN(d.y))
+}
+
+// Radar: tek seri (label×value) veya çoklu seri (label×series → her seri bir kolon)
+function toRadarData(apiData, labelField, seriesField, valueField, agg) {
+  if (!apiData?.columns?.length || !apiData.rows?.length) return { seriesKeys: [], data: [] }
+  const cols = apiData.columns
+  const li = colIndex(cols, labelField, 0)
+  const si = seriesField ? colIndex(cols, seriesField, -1) : -1
+  const vi = colIndex(cols, valueField, cols.length > 1 ? 1 : 0)
+  if (si < 0) {
+    const order = [], groups = {}
+    apiData.rows.forEach(row => {
+      const lbl = row[li] != null ? String(row[li]) : ''
+      if (!(lbl in groups)) { groups[lbl] = []; order.push(lbl) }
+      groups[lbl].push(row[vi] != null ? Number(row[vi]) : 0)
+    })
+    return { seriesKeys: ['value'], data: order.map(lbl => ({ label: lbl, value: aggValues(groups[lbl], agg || 'SUM') })) }
+  }
+  const labelOrder = [], seriesSet = new Set(), matrix = {}
+  apiData.rows.forEach(row => {
+    const lbl = row[li] != null ? String(row[li]) : ''
+    const ser = row[si] != null ? String(row[si]) : ''
+    const val = row[vi] != null ? Number(row[vi]) : 0
+    if (!matrix[lbl]) { matrix[lbl] = {}; labelOrder.push(lbl) }
+    matrix[lbl][ser] = (matrix[lbl][ser] || 0) + val
+    seriesSet.add(ser)
+  })
+  const seriesKeys = [...seriesSet].sort()
+  const data = labelOrder.map(lbl => {
+    const entry = { label: lbl }
+    seriesKeys.forEach(k => { entry[k] = matrix[lbl][k] || 0 })
+    return entry
+  })
+  return { seriesKeys, data }
 }
 
 // valueField verilirse o kolonu agg'le (kayıtlı/SQL KPI/gösterge); değilse 1. satırdaki ilk sayısal (view).
@@ -385,7 +422,8 @@ function RdAreaChart({ data, color, thickness = 2, height = 110, curve = true, f
 const valueLabelStyle = { fontSize: 9, fill: '#94a3b8' }
 const fmtBarLabel = v => (typeof v === 'number' ? v.toLocaleString('tr-TR') : v)
 
-function RdBarChart({ data, color, height = 110, horizontal = false, showValues = false }) {
+function RdBarChart({ data, color, height = 110, horizontal = false, showValues = false, onClick }) {
+  const barClick = onClick ? (d) => onClick(d?.label ?? d?.payload?.label) : undefined
   if (horizontal) {
     return (
       <ResponsiveContainer width="100%" height={height}>
@@ -393,7 +431,7 @@ function RdBarChart({ data, color, height = 110, horizontal = false, showValues 
           <XAxis type="number" tick={TICK} axisLine={false} tickLine={false} />
           <YAxis type="category" dataKey="label" tick={TICK} axisLine={axisLine} tickLine={false} width={72} />
           <Tooltip content={<RdTooltip color={color} />} />
-          <Bar dataKey="value" fill={color} radius={[0, 3, 3, 0]} maxBarSize={28}>
+          <Bar dataKey="value" fill={color} radius={[0, 3, 3, 0]} maxBarSize={28} onClick={barClick} cursor={onClick ? 'pointer' : undefined}>
             {showValues && <LabelList dataKey="value" position="right" style={valueLabelStyle} formatter={fmtBarLabel} />}
           </Bar>
         </BarChart>
@@ -406,7 +444,7 @@ function RdBarChart({ data, color, height = 110, horizontal = false, showValues 
         <XAxis dataKey="label" tick={TICK} axisLine={axisLine} tickLine={false} interval="preserveStartEnd" />
         <YAxis tick={TICK} axisLine={false} tickLine={false} />
         <Tooltip content={<RdTooltip color={color} />} />
-        <Bar dataKey="value" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40}>
+        <Bar dataKey="value" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40} onClick={barClick} cursor={onClick ? 'pointer' : undefined}>
           {showValues && <LabelList dataKey="value" position="top" style={valueLabelStyle} formatter={fmtBarLabel} />}
         </Bar>
       </BarChart>
@@ -414,7 +452,7 @@ function RdBarChart({ data, color, height = 110, horizontal = false, showValues 
   )
 }
 
-function RdPieChart({ data, color, height = 110, radiusPx = 110, donut = true, showLabels = false, showPercent = false }) {
+function RdPieChart({ data, color, height = 110, radiusPx = 110, donut = true, showLabels = false, showPercent = false, onClick }) {
   const colors = data.length > 0 ? data.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]) : [color]
   const outerR = Math.round(radiusPx * 0.42)
   const innerR = donut ? Math.round(radiusPx * 0.18) : 0
@@ -423,6 +461,7 @@ function RdPieChart({ data, color, height = 110, radiusPx = 110, donut = true, s
       <PieChart>
         <Pie data={data} dataKey="value" nameKey="label" cx="50%" cy="50%"
              outerRadius={outerR} innerRadius={innerR} paddingAngle={donut ? 2 : 0}
+             onClick={onClick ? (d) => onClick(d?.name ?? d?.payload?.label) : undefined} cursor={onClick ? 'pointer' : undefined}
              label={(showLabels || showPercent) ? ({ name, percent }) => showPercent ? `%${Math.round((percent || 0) * 100)}` : name : false} labelLine={false}
              style={{ fontSize: 9, fill: '#94a3b8' }}>
           {data.map((_, i) => <Cell key={i} fill={colors[i]} />)}
@@ -434,7 +473,7 @@ function RdPieChart({ data, color, height = 110, radiusPx = 110, donut = true, s
 }
 
 // Huni (Funnel) — aşama bazlı değer; çoktan aza sıralanır, her aşama bir dilim.
-function RdFunnelChart({ data, color, height = 110 }) {
+function RdFunnelChart({ data, color, height = 110, onClick }) {
   const rows = [...data]
     .sort((a, b) => (b.value || 0) - (a.value || 0))
     .map((d, i) => ({ ...d, _fill: i === 0 ? color : PIE_COLORS[i % PIE_COLORS.length] }))
@@ -442,7 +481,8 @@ function RdFunnelChart({ data, color, height = 110 }) {
     <ResponsiveContainer width="100%" height={height}>
       <FunnelChart margin={{ top: 6, right: 70, bottom: 6, left: 8 }}>
         <Tooltip content={<RdTooltip color={color} />} />
-        <Funnel dataKey="value" nameKey="label" data={rows} isAnimationActive={false} stroke="rgba(10,16,32,.55)">
+        <Funnel dataKey="value" nameKey="label" data={rows} isAnimationActive={false} stroke="rgba(10,16,32,.55)"
+          onClick={onClick ? (d) => onClick(d?.label ?? d?.payload?.label) : undefined} cursor={onClick ? 'pointer' : undefined}>
           {rows.map((r, i) => <Cell key={i} fill={r._fill} />)}
           <LabelList position="right" dataKey="label" stroke="none" fill="#cbd5e1" fontSize={10} />
           <LabelList position="center" dataKey="value" stroke="none" fill="#ffffff" fontSize={10} formatter={fmtBarLabel} />
@@ -454,17 +494,30 @@ function RdFunnelChart({ data, color, height = 110 }) {
 
 // ── Kombi (Bar + Çizgi) ───────────────────────────────────────────────────────
 
-function RdComboChart({ data, color, color2 = '#10b981', thickness = 2, height = 110, showValues = false, curve = true }) {
+// Eksen için kompakt sayı (1.2K, 3.4M)
+function fmtAxis(v) {
+  if (v == null || isNaN(v)) return ''
+  const a = Math.abs(v)
+  if (a >= 1e9) return (v / 1e9).toFixed(1).replace('.0', '') + 'B'
+  if (a >= 1e6) return (v / 1e6).toFixed(1).replace('.0', '') + 'M'
+  if (a >= 1e3) return (v / 1e3).toFixed(1).replace('.0', '') + 'K'
+  return String(Math.round(v * 100) / 100)
+}
+
+// Kombi (Bar + Çizgi) — ÇİFT Y EKSENİ: bar solda, çizgi sağda (farklı ölçekler okunur).
+function RdComboChart({ data, color, color2 = '#10b981', thickness = 2, height = 110, showValues = false, curve = true, barLabel = 'Bar', lineLabel = 'Çizgi' }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={data} margin={{ top: showValues ? 14 : 4, right: 4, bottom: 0, left: -20 }}>
+      <ComposedChart data={data} margin={{ top: showValues ? 16 : 6, right: 2, bottom: 0, left: -6 }}>
         <XAxis dataKey="label" tick={TICK} axisLine={axisLine} tickLine={false} interval="preserveStartEnd" />
-        <YAxis tick={TICK} axisLine={false} tickLine={false} />
+        <YAxis yAxisId="left"  tick={{ ...TICK, fill: color }}  axisLine={false} tickLine={false} width={36} tickFormatter={fmtAxis} />
+        <YAxis yAxisId="right" orientation="right" tick={{ ...TICK, fill: color2 }} axisLine={false} tickLine={false} width={36} tickFormatter={fmtAxis} />
         <Tooltip content={<RdTooltip color={color} />} />
-        <Bar dataKey="bar" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40}>
+        <Legend wrapperStyle={{ fontSize: 9 }} iconSize={9} />
+        <Bar yAxisId="left" name={barLabel} dataKey="bar" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40}>
           {showValues && <LabelList dataKey="bar" position="top" style={{ fontSize: 8, fill: '#94a3b8' }} />}
         </Bar>
-        <Line type={curve ? 'monotone' : 'linear'} dataKey="line" stroke={color2} strokeWidth={thickness}
+        <Line yAxisId="right" name={lineLabel} type={curve ? 'monotone' : 'linear'} dataKey="line" stroke={color2} strokeWidth={thickness}
               dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: color2 }} />
       </ComposedChart>
     </ResponsiveContainer>
@@ -620,15 +673,24 @@ function RdHeatmap({ apiData, color = '#6366f1', height = 110, fill = false, lab
 
 // ── Radar Grafiği ─────────────────────────────────────────────────────────────
 
-function RdRadarChart({ data, color, height = 110, fillOpacity = 0.25 }) {
+// Radar — tek seri ya da çoklu seri (her seri ayrı renk + legend). radar = { seriesKeys, data }
+function RdRadarChart({ radar, color, height = 110, fillOpacity = 0.25 }) {
+  const { seriesKeys = [], data = [] } = radar || {}
+  if (!data.length || !seriesKeys.length) return null
+  const multi = seriesKeys.length > 1
+  const colors = multi ? seriesKeys.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]) : [color]
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <RadarChart data={data} margin={{ top: 8, right: 20, bottom: 8, left: 20 }}>
+      <RadarChart data={data} margin={{ top: 8, right: 20, bottom: multi ? 2 : 8, left: 20 }}>
         <PolarGrid stroke="rgba(255,255,255,.08)" />
         <PolarAngleAxis dataKey="label" tick={{ ...TICK, fontSize: 8 }} />
         <PolarRadiusAxis tick={false} axisLine={false} />
-        <Radar dataKey="value" stroke={color} strokeWidth={2} fill={color} fillOpacity={fillOpacity} dot={false} />
+        {seriesKeys.map((sk, i) => (
+          <Radar key={sk} name={sk === 'value' ? 'Değer' : sk} dataKey={sk} stroke={colors[i]} strokeWidth={2}
+                 fill={colors[i]} fillOpacity={multi ? 0.12 : fillOpacity} dot={false} />
+        ))}
         <Tooltip content={<RdTooltip color={color} />} />
+        {multi && <Legend wrapperStyle={{ fontSize: 9 }} iconSize={9} />}
       </RadarChart>
     </ResponsiveContainer>
   )
@@ -636,26 +698,55 @@ function RdRadarChart({ data, color, height = 110, fillOpacity = 0.25 }) {
 
 // ── Metin Kartı ───────────────────────────────────────────────────────────────
 
+// Basit markdown → güvenli React düğümleri (dangerouslySetInnerHTML YOK)
+function parseInline(text, kbase) {
+  const out = []
+  let rest = text, k = 0
+  const re = /(\*\*([^*]+)\*\*|\*([^*]+)\*|__([^_]+)__)/
+  while (rest) {
+    const m = rest.match(re)
+    if (!m) { out.push(rest); break }
+    if (m.index > 0) out.push(rest.slice(0, m.index))
+    if (m[2] != null || m[4] != null) out.push(<strong key={kbase + '_' + (k++)}>{m[2] ?? m[4]}</strong>)
+    else out.push(<em key={kbase + '_' + (k++)}>{m[3]}</em>)
+    rest = rest.slice(m.index + m[0].length)
+  }
+  return out
+}
+function renderRichText(text, base) {
+  return String(text).split('\n').map((line, i) => {
+    if (line.startsWith('## ')) return <div key={i} style={{ fontSize: base * 1.22, fontWeight: 700, color: '#f1f5f9', margin: '7px 0 2px' }}>{parseInline(line.slice(3), i)}</div>
+    if (line.startsWith('# '))  return <div key={i} style={{ fontSize: base * 1.55, fontWeight: 700, color: '#ffffff', margin: '9px 0 3px' }}>{parseInline(line.slice(2), i)}</div>
+    if (line.startsWith('- '))  return <div key={i} style={{ paddingLeft: 16, position: 'relative' }}><span style={{ position: 'absolute', left: 3, color: '#818cf8' }}>•</span>{parseInline(line.slice(2), i)}</div>
+    if (line.trim() === '')     return <div key={i} style={{ height: base * 0.55 }} />
+    return <div key={i}>{parseInline(line, i)}</div>
+  })
+}
+
 function RdTextCard({ panel, height, fill = false }) {
   const text = panel.textContent || ''
+  const base = panel.textSize || 12
   return (
     <div style={{ height: fill ? '100%' : height, padding: '8px 12px', overflow: 'auto',
-                  fontSize: panel.textSize || 12, color: '#e2e8f0', lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-      {text || <span style={{ color: '#475569', fontStyle: 'italic' }}>Metin kartı — sağ panelden içerik girin.</span>}
+                  fontSize: base, color: '#e2e8f0', lineHeight: 1.6, wordBreak: 'break-word' }}>
+      {text
+        ? renderRichText(text, base)
+        : <span style={{ color: '#475569', fontStyle: 'italic' }}>Metin kartı — sağ panelden içerik girin. (# Başlık · **kalın** · *italik* · - liste)</span>}
     </div>
   )
 }
 
 // ── Dağılım Grafiği (Scatter) ─────────────────────────────────────────────────
 
-function RdScatterChart({ data, color, height = 110, xLabel = 'X', yLabel = 'Y' }) {
+// Dağılım / Balon — z (boyut) verilirse kabarcık boyutu ona göre ölçeklenir.
+function RdScatterChart({ data, color, height = 110, xLabel = 'X', yLabel = 'Y', zLabel = '' }) {
+  const hasZ = data.some(d => Number.isFinite(d.z))
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ScatterChart margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-        <XAxis dataKey="x" type="number" name={xLabel} tick={TICK} axisLine={axisLine} tickLine={false} />
-        <YAxis dataKey="y" type="number" name={yLabel} tick={TICK} axisLine={false} tickLine={false} />
-        <ZAxis range={[30, 30]} />
+      <ScatterChart margin={{ top: 6, right: 10, bottom: 0, left: -12 }}>
+        <XAxis dataKey="x" type="number" name={xLabel} tick={TICK} axisLine={axisLine} tickLine={false} tickFormatter={fmtAxis} />
+        <YAxis dataKey="y" type="number" name={yLabel} tick={TICK} axisLine={false} tickLine={false} width={36} tickFormatter={fmtAxis} />
+        <ZAxis dataKey="z" range={hasZ ? [40, 420] : [44, 44]} name={zLabel || 'Boyut'} />
         <Tooltip cursor={{ strokeDasharray: '3 3', stroke: 'rgba(255,255,255,.15)' }}
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null
@@ -666,13 +757,160 @@ function RdScatterChart({ data, color, height = 110, xLabel = 'X', yLabel = 'Y' 
                 {p.label != null && <div style={{ color: '#94a3b8', marginBottom: 2 }}>{p.label}</div>}
                 <div>{xLabel}: <span style={{ color }}>{p.x?.toLocaleString('tr-TR')}</span></div>
                 <div>{yLabel}: <span style={{ color }}>{p.y?.toLocaleString('tr-TR')}</span></div>
+                {hasZ && Number.isFinite(p.z) && <div>{zLabel || 'Boyut'}: <span style={{ color }}>{p.z.toLocaleString('tr-TR')}</span></div>}
               </div>
             )
           }}
         />
-        <Scatter data={data} fill={color} fillOpacity={0.75} />
+        <Scatter data={data} fill={color} fillOpacity={hasZ ? 0.55 : 0.78} />
       </ScatterChart>
     </ResponsiveContainer>
+  )
+}
+
+// ── Haritalar (react-simple-maps) ────────────────────────────────────────────
+// Geo verisi runtime'da CDN'den çekilir; offline kurulumda panel ayarından kendi
+// GeoJSON/TopoJSON URL'nizi (örn. /maps/tr.json) verebilirsiniz.
+const MAP_PRESETS = {
+  tr:    { url: 'https://cdn.jsdelivr.net/gh/cihadturhan/tr-geojson@master/geo/tr-cities-utf8.json', projection: 'geoMercator',   config: { center: [35.2, 39.05], scale: 2600 } },
+  world: { url: 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',                 projection: 'geoEqualEarth', config: { scale: 150 } },
+}
+const GEO_NAME_PROPS = ['name', 'NAME', 'NAME_1', 'ADMIN', 'il', 'Il', 'IL', 'ADM1_TR', 'sehir', 'province']
+function geoName(geo) {
+  const p = geo.properties || {}
+  for (const k of GEO_NAME_PROPS) if (p[k] != null && p[k] !== '') return String(p[k])
+  return ''
+}
+// Bölge adı eşleştirme normalizasyonu (Türkçe karakter + noktalama temizliği)
+function normRegion(s) {
+  return String(s || '').toLocaleLowerCase('tr')
+    .replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c')
+    .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+}
+function hexRgb(h) { const x = (h || '#6366f1').replace('#', ''); return [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2, 4), 16), parseInt(x.slice(4, 6), 16)] }
+function mixColor(c1, c2, t) {
+  const a = hexRgb(c1), b = hexRgb(c2)
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`
+}
+
+function RdMapChart({ apiData, mode = 'tr', base = 'tr', color = '#6366f1', height = 110, fill = false,
+                      regionField, valueField, agg, geoUrl, latField, lonField, sizeField, labelField, onClick }) {
+  const preset = MAP_PRESETS[(mode === 'world' || (mode === 'bubble' && base === 'world')) ? 'world' : 'tr']
+  const url = geoUrl || preset.url
+  const cols = apiData?.columns || []
+
+  // Choropleth: bölge adı → toplanmış değer
+  const valueByRegion = {}
+  let vMax = 0
+  if (mode !== 'bubble' && cols.length) {
+    const ri = colIndex(cols, regionField, 0)
+    const vi = colIndex(cols, valueField, cols.length > 1 ? 1 : 0)
+    const groups = {}
+    ;(apiData.rows || []).forEach(r => {
+      const key = normRegion(r[ri])
+      if (!key) return
+      const val = r[vi] != null ? Number(r[vi]) : 0
+      ;(groups[key] = groups[key] || []).push(isNaN(val) ? 0 : val)
+    })
+    Object.keys(groups).forEach(k => { valueByRegion[k] = aggValues(groups[k], agg || 'SUM'); if (valueByRegion[k] > vMax) vMax = valueByRegion[k] })
+  }
+
+  // Balon: koordinat + boyut
+  let bubbles = []
+  if (mode === 'bubble' && cols.length) {
+    const lai = colIndex(cols, latField, -1), loi = colIndex(cols, lonField, -1)
+    const si = sizeField ? colIndex(cols, sizeField, -1) : -1
+    const li = labelField ? colIndex(cols, labelField, -1) : -1
+    bubbles = (apiData.rows || []).map(r => ({
+      lat: lai >= 0 ? Number(r[lai]) : NaN,
+      lon: loi >= 0 ? Number(r[loi]) : NaN,
+      val: si >= 0 ? Number(r[si]) : 1,
+      label: li >= 0 && r[li] != null ? String(r[li]) : '',
+    })).filter(b => !isNaN(b.lat) && !isNaN(b.lon))
+    const bMax = Math.max(1, ...bubbles.map(b => b.val || 0))
+    bubbles.forEach(b => { b.r = 2.5 + Math.sqrt(Math.max(0, b.val || 0) / bMax) * 11 })
+  }
+
+  return (
+    <div style={{ height: fill ? '100%' : height, width: '100%', overflow: 'hidden' }}>
+      <ComposableMap projection={preset.projection} projectionConfig={preset.config} style={{ width: '100%', height: '100%' }}>
+        <Geographies geography={url}>
+          {({ geographies }) => geographies.map(geo => {
+            if (mode === 'bubble') {
+              return <Geography key={geo.rsmKey} geography={geo} fill="#1e293b" stroke="#0c1525" strokeWidth={0.4}
+                       style={{ default: { outline: 'none' }, hover: { outline: 'none' }, pressed: { outline: 'none' } }} />
+            }
+            const nm = geoName(geo)
+            const v  = valueByRegion[normRegion(nm)]
+            const t  = (v != null && vMax > 0) ? Math.min(1, v / vMax) : null
+            const f  = t == null ? '#172033' : mixColor('#172033', color, 0.22 + t * 0.78)
+            return (
+              <Geography key={geo.rsmKey} geography={geo} fill={f} stroke="#0c1525" strokeWidth={0.4}
+                onClick={onClick ? () => onClick(nm) : undefined}
+                style={{ default: { outline: 'none', cursor: onClick ? 'pointer' : 'default' }, hover: { fill: color, outline: 'none' }, pressed: { outline: 'none' } }}>
+                <title>{nm}{v != null ? ': ' + v.toLocaleString('tr-TR') : ''}</title>
+              </Geography>
+            )
+          })}
+        </Geographies>
+        {mode === 'bubble' && bubbles.map((b, i) => (
+          <Marker key={i} coordinates={[b.lon, b.lat]}>
+            <circle r={b.r} fill={color} fillOpacity={0.5} stroke={color} strokeWidth={0.8} />
+            <title>{b.label}{b.label ? ': ' : ''}{(b.val || 0).toLocaleString('tr-TR')}</title>
+          </Marker>
+        ))}
+      </ComposableMap>
+    </div>
+  )
+}
+
+// ── Gantt / Zaman Çizelgesi ───────────────────────────────────────────────────
+function toGanttData(apiData, labelField, startField, endField, catField) {
+  if (!apiData?.columns?.length || !apiData.rows?.length) return []
+  const cols = apiData.columns
+  const li = colIndex(cols, labelField, 0)
+  const si = colIndex(cols, startField, 1)
+  const ei = colIndex(cols, endField, 2)
+  const ci = catField ? colIndex(cols, catField, -1) : -1
+  return apiData.rows.map(r => {
+    const s = new Date(r[si]), e = new Date(r[ei])
+    return {
+      label: r[li] != null ? String(r[li]) : '',
+      start: s, end: e,
+      cat: ci >= 0 && r[ci] != null ? String(r[ci]) : '',
+    }
+  }).filter(t => !isNaN(t.start.getTime()) && !isNaN(t.end.getTime()))
+}
+
+function RdGanttChart({ data, color, height = 110, fill = false, onClick }) {
+  if (!data.length) return <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 10, textAlign: 'center', padding: '0 8px' }}>Gantt için Görev + Başlangıç + Bitiş alanlarını seçin</div>
+  const minT = Math.min(...data.map(t => t.start.getTime()))
+  const maxT = Math.max(...data.map(t => t.end.getTime()))
+  const span = Math.max(1, maxT - minT)
+  const cats = [...new Set(data.map(t => t.cat))].filter(Boolean)
+  const catColor = c => cats.length ? PIE_COLORS[Math.max(0, cats.indexOf(c)) % PIE_COLORS.length] : color
+  const fmtD = ms => new Date(ms).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })
+  return (
+    <div style={{ height: fill ? '100%' : height, overflow: 'auto', fontSize: 9, color: '#94a3b8' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', padding: '0 4px 5px 116px', fontSize: 8 }}>
+        <span>{fmtD(minT)}</span><span>{fmtD((minT + maxT) / 2)}</span><span>{fmtD(maxT)}</span>
+      </div>
+      {data.map((t, i) => {
+        const left = ((t.start.getTime() - minT) / span) * 100
+        const width = Math.max(1.2, ((t.end.getTime() - t.start.getTime()) / span) * 100)
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', height: 19, gap: 6 }}>
+            <span style={{ width: 110, flexShrink: 0, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.label}>{t.label}</span>
+            <div style={{ position: 'relative', flex: 1, height: 12, background: 'rgba(255,255,255,.03)', borderRadius: 3 }}>
+              <div onClick={onClick ? () => onClick(t.label) : undefined}
+                   title={`${t.label}: ${fmtD(t.start.getTime())} → ${fmtD(t.end.getTime())}`}
+                   style={{ position: 'absolute', left: left + '%', width: width + '%', top: 0, height: 12, background: catColor(t.cat), borderRadius: 3, opacity: 0.88, cursor: onClick ? 'pointer' : 'default' }} />
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -725,11 +963,12 @@ function TreemapNode(props) {
   )
 }
 
-function RdTreemap({ data, height = 110, showLabels = true }) {
+function RdTreemap({ data, height = 110, showLabels = true, onClick }) {
   const tdata = data.map(d => ({ name: d.label, size: Math.abs(d.value) || 0 }))
   return (
     <ResponsiveContainer width="100%" height={height}>
       <Treemap data={tdata} dataKey="size" nameKey="name" stroke="#0c1525"
+               onClick={onClick ? (node) => onClick(node?.name) : undefined}
                content={<TreemapNode colors={PIE_COLORS} showLabels={showLabels} />} isAnimationActive={false}>
         <Tooltip content={<RdTooltip color={PIE_COLORS[0]} />} />
       </Treemap>
@@ -955,7 +1194,7 @@ export function distinctVals(rows, idx) {
   return out.sort((a, b) => a.localeCompare(b, 'tr'))
 }
 
-function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, sorts, sortField, sortDir, activeFilters }) {
+function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, sorts, sortField, sortDir, activeFilters, onRowClick }) {
   const { columns, rows } = toTableData(apiData)
   const cfg  = colConfig || {}
   const cols = orderColumns(columns, colOrder)
@@ -1027,7 +1266,9 @@ function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, 
           </thead>
           <tbody>
             {dataRows.slice(0, visibleRows).map((row, ri) => (
-              <tr key={ri} style={{ background: ri % 2 === 0 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
+              <tr key={ri}
+                  onClick={onRowClick && cols[0] ? () => onRowClick(row[cols[0].idx], cols[0].name) : undefined}
+                  style={{ background: ri % 2 === 0 ? 'rgba(255,255,255,.025)' : 'transparent', cursor: onRowClick ? 'pointer' : 'default' }}>
                 {cols.map(c => (
                   <td key={c.name} style={{ padding: '2px 6px', color: '#e2e8f0', textAlign: cellAlign(c), whiteSpace: 'nowrap' }}>
                     {formatCell(row[c.idx], c)}
@@ -1249,7 +1490,7 @@ function RdPivotEx({ pivot, maxHeight = 110, fill = false, showTotals = true }) 
 
 // ── Ana component ─────────────────────────────────────────────────────────────
 
-export default function PanelChart({ panel, chartHeight = 110, onColumns, onData, activeFilters, onFilterChange, viewFields }) {
+export default function PanelChart({ panel, chartHeight = 110, onColumns, onData, activeFilters, onFilterChange, viewFields, interactive = false }) {
   const { data, loading, error } = useReportData(panel, activeFilters, viewFields)
   const color = panel.color || '#6366f1'
 
@@ -1316,9 +1557,24 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
   const isRaw   = panel.sourceType === 'saved' || panel.sourceType === 'sql'
   const rawAgg  = panel.rawAgg || 'SUM'
 
+  // ── Tıklama etkileşimi: drill (sayfada filtrele) veya rapora git ──
+  const clickField = isRaw ? (panel.labelField || panel.regionField || panel.xField) : panel.group
+  const onEl = (interactive && (panel.clickAction === 'drill' || panel.clickAction === 'navigate'))
+    ? (value, fieldOverride) => {
+        if (value == null || value === '') return
+        const field = fieldOverride || clickField
+        if (panel.clickAction === 'navigate' && panel.clickTargetId) {
+          const q = field ? `?dF=${encodeURIComponent(field)}&dV=${encodeURIComponent(value)}` : ''
+          window.open(`/Dashboard/View/${panel.clickTargetId}${q}`, '_self')
+        } else if (panel.clickAction === 'drill' && field && onFilterChange) {
+          onFilterChange(field, { source: panel.source, field, values: [String(value)] })
+        }
+      }
+    : null
+
   if (panel.type === 'stat')  return fullWrap(<RdStatCard apiData={data} height={statH} big={bigStat} prefix={panel.prefix || ''} suffix={panel.suffix || ''} decimals={panel.decimals} valueField={isRaw ? panel.valueField : null} valueAgg={rawAgg} />)
   if (panel.type === 'gauge') return fullWrap(<RdGauge apiData={data} color={color} height={containerH} min={panel.gaugeMin} max={panel.gaugeMax} suffix={panel.suffix || ''} valueField={isRaw ? panel.valueField : null} valueAgg={rawAgg} />)
-  if (panel.type === 'table') return fullWrap(<RdTable apiData={data} maxHeight={containerH} fill={isFull} colConfig={panel.columns} colOrder={panel.columnOrder} sorts={panel.sorts} sortField={panel.sortField} sortDir={panel.sortDir} activeFilters={activeFilters} />)
+  if (panel.type === 'table') return fullWrap(<RdTable apiData={data} maxHeight={containerH} fill={isFull} colConfig={panel.columns} colOrder={panel.columnOrder} sorts={panel.sorts} sortField={panel.sortField} sortDir={panel.sortDir} activeFilters={activeFilters} onRowClick={onEl} />)
   if (panel.type === 'pivot') {
     const pv = computePivot(data, ensurePivotCfg(panel))
     return fullWrap(<RdPivotEx pivot={pv} maxHeight={containerH} fill={isFull} showTotals={panel.showTotals !== false} />)
@@ -1350,7 +1606,9 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
     if (!comboData.length) return fullWrap(<ChartPreview type="combo" color={color} height={containerH} />)
     return fullWrap(<RdComboChart data={comboData} color={color} color2={panel.color2 || '#10b981'}
                       thickness={panel.thickness ?? 2} height={containerH}
-                      showValues={!!panel.showValues} curve={panel.curve !== false} />)
+                      showValues={!!panel.showValues} curve={panel.curve !== false}
+                      barLabel={isRaw ? (panel.valueField || 'Bar') : (panel.metric || 'Bar')}
+                      lineLabel={isRaw ? (panel.valueField2 || 'Çizgi') : (panel.metric2 || 'Çizgi')} />)
   }
 
   // %100 Yığılmış bar
@@ -1368,7 +1626,7 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
   // Dağılım grafiği
   if (panel.type === 'scatter') {
     const sd = isRaw
-      ? toScatterData(data, panel.xField, panel.yField, panel.labelField)
+      ? toScatterData(data, panel.xField, panel.yField, panel.labelField, panel.sizeField)
       : (data.rows || []).map(r => ({
           label: r[0] != null ? String(r[0]) : undefined,
           x: r[1] != null ? Number(r[1]) : 0,
@@ -1377,7 +1635,8 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
     if (!sd.length) return fullWrap(<ChartPreview type="scatter" color={color} height={containerH} />)
     return fullWrap(<RdScatterChart data={sd} color={color} height={containerH}
                       xLabel={isRaw ? (panel.xField || 'X') : (panel.metric || 'X')}
-                      yLabel={isRaw ? (panel.yField || 'Y') : (panel.metric2 || 'Y')} />)
+                      yLabel={isRaw ? (panel.yField || 'Y') : (panel.metric2 || 'Y')}
+                      zLabel={isRaw ? (panel.sizeField || '') : ''} />)
   }
 
   const chartData = toChartData(
@@ -1388,12 +1647,34 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
   )
   if (!chartData.length) return fullWrap(<ChartPreview type={panel.type} color={color} height={containerH} />)
 
-  if (panel.type === 'bar')       return fullWrap(<RdBarChart data={chartData} color={color} height={containerH} horizontal={!!panel.horizontal} showValues={!!panel.showValues} />)
-  if (panel.type === 'pie')       return fullWrap(<RdPieChart data={chartData} color={color} height={containerH} radiusPx={px} donut={panel.donut !== false} showLabels={!!panel.showLabels} showPercent={!!panel.showPercent} />)
+  if (panel.type === 'bar')       return fullWrap(<RdBarChart data={chartData} color={color} height={containerH} horizontal={!!panel.horizontal} showValues={!!panel.showValues} onClick={onEl} />)
+  if (panel.type === 'pie')       return fullWrap(<RdPieChart data={chartData} color={color} height={containerH} radiusPx={px} donut={panel.donut !== false} showLabels={!!panel.showLabels} showPercent={!!panel.showPercent} onClick={onEl} />)
   if (panel.type === 'area')      return fullWrap(<RdAreaChart data={chartData} color={color} thickness={panel.thickness} height={containerH} curve={panel.curve !== false} fillOpacity={panel.fillOpacity != null ? panel.fillOpacity : 0.25} dots={!!panel.dots} />)
-  if (panel.type === 'treemap')   return fullWrap(<RdTreemap data={chartData} height={containerH} showLabels={panel.showLabels !== false} />)
-  if (panel.type === 'funnel')    return fullWrap(<RdFunnelChart data={chartData} color={color} height={containerH} />)
+  if (panel.type === 'treemap')   return fullWrap(<RdTreemap data={chartData} height={containerH} showLabels={panel.showLabels !== false} onClick={onEl} />)
+  if (panel.type === 'funnel')    return fullWrap(<RdFunnelChart data={chartData} color={color} height={containerH} onClick={onEl} />)
   if (panel.type === 'waterfall') return fullWrap(<RdWaterfallChart data={chartData} height={containerH} />)
-  if (panel.type === 'radar')     return fullWrap(<RdRadarChart data={chartData} color={color} height={containerH} fillOpacity={panel.fillOpacity ?? 0.25} />)
+  if (panel.type === 'gantt') {
+    const g = toGanttData(data, isRaw ? panel.labelField : null, isRaw ? panel.startField : null, isRaw ? panel.endField : null, isRaw ? panel.colorField : null)
+    if (!g.length) return fullWrap(<ChartPreview type="gantt" color={color} height={containerH} />)
+    return fullWrap(<RdGanttChart data={g} color={color} height={containerH} fill={isFull} onClick={onEl} />)
+  }
+  if (panel.type === 'radar') {
+    const radar = isRaw
+      ? toRadarData(data, panel.labelField, panel.seriesField, panel.valueField, rawAgg)
+      : { seriesKeys: ['value'], data: chartData }
+    if (!radar.data.length) return fullWrap(<ChartPreview type="radar" color={color} height={containerH} />)
+    return fullWrap(<RdRadarChart radar={radar} color={color} height={containerH} fillOpacity={panel.fillOpacity ?? 0.25} />)
+  }
+
+  // Haritalar — choropleth (TR/Dünya) + balon. Geo verisi RdMapChart içinde URL'den çekilir.
+  if (panel.type === 'map_tr' || panel.type === 'map_world')
+    return fullWrap(<RdMapChart apiData={data} mode={panel.type === 'map_world' ? 'world' : 'tr'} color={color}
+                      height={containerH} fill={isFull} geoUrl={panel.geoUrl} onClick={onEl}
+                      regionField={panel.regionField} valueField={panel.valueField} agg={rawAgg} />)
+  if (panel.type === 'map_bubble')
+    return fullWrap(<RdMapChart apiData={data} mode="bubble" base={panel.mapBase || 'tr'} color={color}
+                      height={containerH} fill={isFull} geoUrl={panel.geoUrl} onClick={onEl}
+                      latField={panel.latField} lonField={panel.lonField} sizeField={panel.sizeField} labelField={panel.labelField} />)
+
   return fullWrap(<RdLineChart data={chartData} color={color} thickness={panel.thickness} height={containerH} curve={panel.curve !== false} dots={!!panel.dots} />)
 }

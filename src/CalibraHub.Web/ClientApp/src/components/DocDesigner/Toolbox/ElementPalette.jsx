@@ -2,17 +2,20 @@ import React from 'react'
 import {
   Type, Database, Image, Square, DollarSign, Hash, Clock,
   GripVertical, MailOpen, CalendarDays, UserCircle, FileSignature, MessageSquare, Building2, Sparkles,
+  Sigma, Table2,
 } from 'lucide-react'
 
 // Temel element tipleri — palette ust kismi
 const KINDS = [
   { kind: 'Label',         label: 'Etiket',          Icon: Type },
   { kind: 'BoundField',    label: 'Veri Alanı',      Icon: Database },
-  { kind: 'Image',         label: 'Resim',            Icon: Image },
-  { kind: 'Shape',         label: 'Şekil',            Icon: Square },
+  { kind: 'Image',         label: 'Resim',           Icon: Image },
+  { kind: 'Shape',         label: 'Şekil',           Icon: Square },
   { kind: 'AmountInWords', label: 'Yazı ile Tutar',  Icon: DollarSign },
-  { kind: 'PageNumber',    label: 'Sayfa No',         Icon: Hash },
-  { kind: 'DateTimeNow',   label: 'Tarih / Saat',    Icon: Clock },
+  { kind: 'Aggregate',     label: 'Alt Toplam',      Icon: Sigma },
+  { kind: 'Table',         label: 'Tablo',           Icon: Table2 },
+  { kind: 'PageNumber',    label: 'Sayfa No',        Icon: Hash },
+  { kind: 'DateTimeNow',   label: 'Tarih / Saat',   Icon: Clock },
 ]
 
 // Hazir snippet'ler — drop edilince Label element olusur, text+style override edilir.

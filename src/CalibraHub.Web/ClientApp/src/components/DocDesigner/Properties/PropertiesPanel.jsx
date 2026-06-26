@@ -119,6 +119,63 @@ const gi = {
   fontFamily: 'inherit',
 }
 
+// ─── Tablo kolon editörü ──────────────────────────────────────────────────────
+
+function TableColsEditor({ cols, onChange }) {
+  const colBorder = '1px solid var(--dd-border, #e5e7eb)'
+  const inputS = {
+    border: colBorder, borderRadius: 3, background: 'transparent',
+    fontSize: 10, color: 'var(--dd-text, #111)', padding: '1px 4px',
+    fontFamily: 'inherit', outline: 'none', width: '100%',
+  }
+  return (
+    <div style={{ padding: '4px 8px 8px' }}>
+      {cols.map((col, i) => (
+        <div key={col.key ?? i} style={{ marginBottom: 5, padding: 5, border: colBorder, borderRadius: 5, fontSize: 11 }}>
+          <div style={{ display: 'flex', gap: 3, marginBottom: 3, alignItems: 'center' }}>
+            <input value={col.header ?? ''} placeholder="Başlık" onChange={e => {
+              const nc = [...cols]; nc[i] = { ...col, header: e.target.value }; onChange(nc)
+            }} style={{ ...inputS, flex: 2 }} />
+            <input type="number" value={col.width ?? 30} placeholder="mm" min={5} max={200}
+              onChange={e => { const nc = [...cols]; nc[i] = { ...col, width: +e.target.value }; onChange(nc) }}
+              style={{ ...inputS, width: 36, textAlign: 'right', flex: 'none' }} />
+            <span style={{ fontSize: 9, color: '#aaa', flexShrink: 0 }}>mm</span>
+            <button onClick={() => { const nc = [...cols]; nc.splice(i, 1); onChange(nc) }}
+              style={{ width: 18, height: 18, border: '1px solid #fca5a5', borderRadius: 3, background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 11, flexShrink: 0, padding: 0 }}>
+              ×
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+            <input value={col.alias ?? ''} placeholder="alias" onChange={e => {
+              const nc = [...cols]; nc[i] = { ...col, alias: e.target.value }; onChange(nc)
+            }} style={{ ...inputS, flex: 1 }} />
+            <span style={{ color: '#aaa', flexShrink: 0, fontSize: 10 }}>.</span>
+            <input value={col.field ?? ''} placeholder="kolon" onChange={e => {
+              const nc = [...cols]; nc[i] = { ...col, field: e.target.value }; onChange(nc)
+            }} style={{ ...inputS, flex: 1 }} />
+            <select value={col.align ?? 'left'} onChange={e => {
+              const nc = [...cols]; nc[i] = { ...col, align: e.target.value }; onChange(nc)
+            }} style={{ ...inputS, width: 42, flex: 'none', cursor: 'pointer' }}>
+              <option value="left">Sol</option>
+              <option value="center">Orta</option>
+              <option value="right">Sağ</option>
+            </select>
+          </div>
+        </div>
+      ))}
+      <button onClick={() => onChange([...cols, {
+        key: 'col' + (cols.length + 1), header: '', width: 30, alias: '', field: '', align: 'left',
+      }])} style={{
+        width: '100%', height: 26, border: '1px dashed var(--dd-accent, #7c3aed)',
+        borderRadius: 5, background: 'rgba(124,58,237,0.06)', color: 'var(--dd-accent, #7c3aed)',
+        cursor: 'pointer', fontSize: 11, fontWeight: 500,
+      }}>
+        + Kolon Ekle
+      </button>
+    </div>
+  )
+}
+
 const hexToRgb = hex => {
   const h = (hex ?? '#6366f1').replace('#', '')
   const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16)
@@ -777,11 +834,13 @@ const KIND_LABELS = {
   Label: 'Etiket', BoundField: 'Veri Alanı', Image: 'Resim', Shape: 'Şekil',
   Barcode: 'Barkod', QrCode: 'QR Kod',
   AmountInWords: 'Yazı ile Tutar', PageNumber: 'Sayfa No', DateTimeNow: 'Tarih/Saat',
+  Aggregate: 'Alt Toplam', Table: 'Tablo',
 }
 const KIND_COLORS = {
   Label: '#6366f1', BoundField: '#3b82f6', Image: '#10b981', Shape: '#8b5cf6',
   Barcode: '#0ea5e9', QrCode: '#14b8a6',
   AmountInWords: '#f59e0b', PageNumber: '#ec4899', DateTimeNow: '#06b6d4',
+  Aggregate: '#16a34a', Table: '#7c3aed',
 }
 
 function ElementGrid({ el, dispatch }) {
@@ -1077,6 +1136,110 @@ function ElementGrid({ el, dispatch }) {
               )}
             </>
           )}
+        </>
+      )}
+
+      {/* Alt Toplam (Aggregate) */}
+      {el.kind === 'Aggregate' && (
+        <>
+          <PCategory title="Toplam Kaynağı" color={color} />
+          <PRow label="Alias">
+            <input value={el.aggSource ?? ''} onChange={e => set({ aggSource: e.target.value })}
+              style={gi} placeholder="lines" />
+          </PRow>
+          <PRow label="Kolon">
+            <input value={el.aggField ?? ''} onChange={e => set({ aggField: e.target.value })}
+              style={gi} placeholder="Amount" />
+          </PRow>
+          <PRow label="Fonksiyon">
+            <select value={el.aggFunc ?? 'SUM'} onChange={e => set({ aggFunc: e.target.value })}
+              style={{ ...gi, cursor: 'pointer' }}>
+              <option value="SUM">SUM — Toplam</option>
+              <option value="COUNT">COUNT — Adet</option>
+              <option value="AVG">AVG — Ortalama</option>
+              <option value="MIN">MIN — En Küçük</option>
+              <option value="MAX">MAX — En Büyük</option>
+            </select>
+          </PRow>
+          <PRow label="Format">
+            <input value={el.aggFormat ?? ''} onChange={e => set({ aggFormat: e.target.value || null })}
+              style={gi} placeholder="#,##0.##" />
+          </PRow>
+          <PRow label="Önek">
+            <input value={el.aggPrefix ?? ''} onChange={e => set({ aggPrefix: e.target.value })}
+              style={gi} placeholder="Toplam: " />
+          </PRow>
+        </>
+      )}
+
+      {/* Tablo (Table) */}
+      {el.kind === 'Table' && (
+        <>
+          <PCategory title="Tablo Veri Kaynağı" color={color} />
+          <PRow label="Alias">
+            <input value={el.tableDataSource ?? ''} onChange={e => set({ tableDataSource: e.target.value })}
+              style={gi} placeholder="lines" />
+          </PRow>
+          <PRow label="Başlık Satırı">
+            <input type="checkbox" checked={el.showHeader !== false}
+              onChange={e => set({ showHeader: e.target.checked })} />
+          </PRow>
+          <PRow label="Kenarlık Rengi">
+            <ColorInput value={el.tableBorderColor ?? '#e2e8f0'}
+              onChange={v => set({ tableBorderColor: v })} />
+          </PRow>
+          <PRow label="Başlık Arkaplanı">
+            <ColorInput value={el.tableHeaderBgColor ?? '#f1f5f9'}
+              onChange={v => set({ tableHeaderBgColor: v })} />
+          </PRow>
+          <PCategory title="Kolonlar" color={color} />
+          <TableColsEditor cols={el.tableCols ?? []} onChange={cols => set({ tableCols: cols })} />
+        </>
+      )}
+
+      {/* Koşul (tüm element tipleri) */}
+      <PCategory title="Koşul" color="#6b7280" />
+      <PRow label="Koşul Uygula">
+        <input type="checkbox" checked={!!el.condition}
+          onChange={e => set({ condition: e.target.checked
+            ? { source: '', field: '', op: 'eq', value: '', action: 'hide' }
+            : null })} />
+      </PRow>
+      {el.condition && (
+        <>
+          <PRow label="Alias">
+            <input value={el.condition.source ?? ''} style={gi} placeholder="master"
+              onChange={e => set({ condition: { ...el.condition, source: e.target.value } })} />
+          </PRow>
+          <PRow label="Alan">
+            <input value={el.condition.field ?? ''} style={gi} placeholder="Status"
+              onChange={e => set({ condition: { ...el.condition, field: e.target.value } })} />
+          </PRow>
+          <PRow label="Operatör">
+            <select value={el.condition.op ?? 'eq'} style={{ ...gi, cursor: 'pointer' }}
+              onChange={e => set({ condition: { ...el.condition, op: e.target.value } })}>
+              <option value="eq">= Eşit</option>
+              <option value="neq">≠ Eşit Değil</option>
+              <option value="gt">&gt; Büyük</option>
+              <option value="lt">&lt; Küçük</option>
+              <option value="contains">İçerir</option>
+              <option value="empty">Boş</option>
+              <option value="notempty">Dolu</option>
+            </select>
+          </PRow>
+          {!['empty', 'notempty'].includes(el.condition.op ?? 'eq') && (
+            <PRow label="Değer">
+              <input value={el.condition.value ?? ''} style={gi}
+                onChange={e => set({ condition: { ...el.condition, value: e.target.value } })} />
+            </PRow>
+          )}
+          <PRow label="Aksiyon">
+            <select value={el.condition.action ?? 'hide'} style={{ ...gi, cursor: 'pointer' }}
+              onChange={e => set({ condition: { ...el.condition, action: e.target.value } })}>
+              <option value="hide">Koşul sağlanınca Gizle</option>
+              <option value="show">Koşul sağlanınca Göster</option>
+            </select>
+          </PRow>
         </>
       )}
 

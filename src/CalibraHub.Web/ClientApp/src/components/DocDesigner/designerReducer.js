@@ -44,6 +44,8 @@ export const ELEMENT_KINDS = [
   { kind: 'Shape',         label: 'Şekil',           icon: '▬' },
   { kind: 'Barcode',       label: 'Barkod',          icon: '▥' },
   { kind: 'AmountInWords', label: 'Yazı ile Tutar',  icon: '₺' },
+  { kind: 'Aggregate',     label: 'Alt Toplam',       icon: 'Σ' },
+  { kind: 'Table',         label: 'Tablo',           icon: '⊞' },
   { kind: 'PageNumber',    label: 'Sayfa No',        icon: '#' },
   { kind: 'DateTimeNow',   label: 'Tarih/Saat',      icon: '📅' },
 ]
@@ -91,10 +93,13 @@ export function makeDefaultElement(kind, x = 0, y = 0, binding = null) {
       : kind === 'Image' ? 40
       : kind === 'AmountInWords' ? 80
       : kind === 'Barcode' ? 50
+      : kind === 'Aggregate' ? 60
+      : kind === 'Table' ? 120
       : 50,
     h: kind === 'Shape' ? 1
       : kind === 'Image' ? 15
       : kind === 'Barcode' ? 15
+      : kind === 'Table' ? 50
       : 8,
     text: kind === 'Label' ? 'Yeni Etiket' : null,
     zIndex: 0,
@@ -105,15 +110,32 @@ export function makeDefaultElement(kind, x = 0, y = 0, binding = null) {
     barcodeType: kind === 'Barcode' ? 'Code128' : null,
     showBarcodeText: kind === 'Barcode' ? true : null,
     qrErrorCorrection: kind === 'Barcode' ? 'M' : null,
-    imageSrc: kind === 'Image' ? null  : null,            // base64 / URL
-    imageFit: kind === 'Image' ? 'contain' : null,        // contain | stretch | original
+    imageSrc: kind === 'Image' ? null  : null,
+    imageFit: kind === 'Image' ? 'contain' : null,
+
+    // Aggregate (Alt Toplam)
+    aggSource: kind === 'Aggregate' ? '' : null,
+    aggField:  kind === 'Aggregate' ? '' : null,
+    aggFunc:   kind === 'Aggregate' ? 'SUM' : null,
+    aggFormat: kind === 'Aggregate' ? '#,##0.##' : null,
+    aggPrefix: kind === 'Aggregate' ? '' : null,
+
+    // Table (Tablo)
+    tableCols:          kind === 'Table' ? [] : null,
+    tableDataSource:    kind === 'Table' ? '' : null,
+    showHeader:         kind === 'Table' ? true : null,
+    tableBorderColor:   kind === 'Table' ? '#e2e8f0' : null,
+    tableHeaderBgColor: kind === 'Table' ? '#f1f5f9' : null,
+
+    // Koşullu görünürlük (tüm element tipleri için opsiyonel)
+    condition: null,   // { source, field, op, value, action:'hide'|'show' }
 
     // Davranış
-    visible:          true,    // Görünür
-    printable:        true,    // PDF/print çıktısında basılır
-    rotation:         0,       // 0 / 90 / 180 / 270 (derece)
-    suppressRepeated: false,   // Detail satırında aynı değer tekrarlanmasın
-    hideZeros:        false,   // Sayı 0 ise boş gösterilsin
+    visible:          true,
+    printable:        true,
+    rotation:         0,
+    suppressRepeated: false,
+    hideZeros:        false,
   }
 }
 

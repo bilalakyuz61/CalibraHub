@@ -116,6 +116,30 @@ export default function ChartPreview({ type, color, height = 56 }) {
     </svg>
   )
 
+  if (type === 'gantt') return (
+    <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
+      <rect x="6"  y="8"  width="48" height="7" rx="2" fill={c} />
+      <rect x="32" y="20" width="58" height="7" rx="2" fill={`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.6)`} />
+      <rect x="14" y="32" width="38" height="7" rx="2" fill={soft} />
+      <rect x="50" y="44" width="44" height="7" rx="2" fill={`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.45)`} />
+    </svg>
+  )
+
+  if (type === 'map_tr' || type === 'map_world' || type === 'map_bubble') return (
+    <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
+      <path d="M16,26 Q30,12 52,20 Q72,14 96,22 Q108,32 98,42 Q72,52 46,45 Q24,42 16,26 Z" fill={soft} stroke={c} strokeWidth="1.2" />
+      {type === 'map_bubble' ? (
+        <>
+          <circle cx="44" cy="30" r="5" fill={c} fillOpacity="0.6" />
+          <circle cx="68" cy="34" r="8" fill={c} fillOpacity="0.5" />
+          <circle cx="86" cy="27" r="4" fill={c} fillOpacity="0.6" />
+        </>
+      ) : (
+        <path d="M52,20 Q72,14 96,22 Q108,32 98,42 Q86,46 74,42 Z" fill={`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`} />
+      )}
+    </svg>
+  )
+
   if (type === 'funnel') return (
     <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
       <polygon points="10,8 110,8 92,20 28,20" fill={c} />

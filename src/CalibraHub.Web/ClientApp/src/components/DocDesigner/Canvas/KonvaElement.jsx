@@ -100,6 +100,9 @@ export default function KonvaElement({
     : el.kind === 'Image'       ? (el.imageSrc ? '' : '[ 🖼 ]')
     : el.kind === 'Barcode'     ? '' // own rendering (bar lines veya QR matrisi)
     : el.kind === 'Shape'       ? ''
+    : el.kind === 'Aggregate'
+      ? `Σ ${el.aggFunc ?? 'SUM'}(${el.aggSource || '?'}.${el.aggField || '?'})`
+    : el.kind === 'Table'       ? ''
     : el.kind
 
   // Tek bayrak: Barcode elementi QR tipinde mi? QR ayri kind degil, barcodeType.
@@ -293,6 +296,42 @@ export default function KonvaElement({
           </>
         )}
 
+        {/* Tablo canvas önizlemesi */}
+        {el.kind === 'Table' && (() => {
+          const cols = el.tableCols ?? []
+          const headerH = mmToPx(6)
+          const borderC = el.tableBorderColor ?? '#e2e8f0'
+          const headerBg = el.tableHeaderBgColor ?? '#f1f5f9'
+          // Kolon genişliklerini toplam mm'den px'e
+          const totalColMm = cols.reduce((s, c) => s + (c.width ?? 30), 0)
+          const scaleX = totalColMm > 0 ? w / mmToPx(totalColMm) : 1
+          let cx = 0
+          const colLines = []
+          cols.forEach((col, i) => {
+            const cw = mmToPx(col.width ?? 30) * scaleX
+            if (i > 0) colLines.push(cx)
+            cx += cw
+          })
+          return (
+            <>
+              <Rect width={w} height={h} fill="#f8fafc" stroke={borderC} strokeWidth={0.7} strokeScaleEnabled={false} />
+              {el.showHeader !== false && (
+                <Rect width={w} height={Math.min(headerH, h)} fill={headerBg} strokeScaleEnabled={false} />
+              )}
+              <Line points={[0, headerH, w, headerH]} stroke={borderC} strokeWidth={0.7} strokeScaleEnabled={false} />
+              {colLines.map((cx2, i) => (
+                <Line key={i} points={[cx2, 0, cx2, h]} stroke={borderC} strokeWidth={0.7} strokeScaleEnabled={false} />
+              ))}
+              {cols.length === 0 && (
+                <Text x={4} y={4} width={w - 8} height={h - 8}
+                  text="[Tablo — kolon tanımı yok]"
+                  fontSize={8} fontFamily="Arial" fill="#94a3b8"
+                  align="center" verticalAlign="middle" />
+              )}
+            </>
+          )
+        })()}
+
         {/* Resim — yüklenmişse */}
         {el.kind === 'Image' && imgEl && (() => {
           const fit = computeFit(imgEl.naturalWidth, imgEl.naturalHeight, w, h, el.imageFit ?? 'contain')
@@ -308,6 +347,14 @@ export default function KonvaElement({
           <>
             <Rect x={w - 18} y={2} width={16} height={11} fill="#fef3c7" stroke="#f59e0b" strokeWidth={0.5} cornerRadius={2} strokeScaleEnabled={false} />
             <Text x={w - 18} y={3.5} width={16} height={11} text="⊘" fontSize={9} fontFamily="Arial" fill="#b45309" align="center" />
+          </>
+        )}
+
+        {/* Koşul badge — koşul tanımlıysa küçük "?" rozeti */}
+        {el.condition && (
+          <>
+            <Rect x={2} y={2} width={13} height={10} fill="#ede9fe" stroke="#7c3aed" strokeWidth={0.5} cornerRadius={2} strokeScaleEnabled={false} />
+            <Text x={2} y={3} width={13} height={10} text="?" fontSize={8} fontFamily="Arial" fill="#7c3aed" align="center" />
           </>
         )}
 

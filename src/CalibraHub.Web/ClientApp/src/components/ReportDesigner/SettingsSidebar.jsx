@@ -67,8 +67,8 @@ const RAW_AGG_OPTIONS = [
 const NUMERIC_FORMATS = new Set(['number', 'decimal2', 'currency', 'percent', 'duration'])
 
 // Hangi türlerde "Görünüm" bölümü/renk gösterilsin
-const APPEARANCE_TYPES = ['line', 'area', 'bar', 'pie', 'stat', 'gauge', 'treemap', 'combo', 'waterfall', 'stacked100', 'bullet', 'heatmap', 'radar', 'scatter', 'text']
-const COLOR_TYPES      = ['line', 'area', 'bar', 'pie', 'gauge', 'combo', 'waterfall', 'bullet', 'heatmap', 'radar', 'scatter']
+const APPEARANCE_TYPES = ['line', 'area', 'bar', 'pie', 'stat', 'gauge', 'treemap', 'combo', 'waterfall', 'stacked100', 'bullet', 'heatmap', 'radar', 'scatter', 'text', 'map_tr', 'map_world', 'map_bubble', 'gantt']
+const COLOR_TYPES      = ['line', 'area', 'bar', 'pie', 'gauge', 'combo', 'waterfall', 'bullet', 'heatmap', 'radar', 'scatter', 'map_tr', 'map_world', 'map_bubble', 'gantt']
 
 function TypeBadge({ sqlType }) {
   if (!sqlType) return null
@@ -164,6 +164,25 @@ function SortableColRow({ id, cfg, expanded, onSetCol, onToggleExpand, detail })
 }
 
 /* Açılır-kapanır grup başlığı (akordeon) */
+const ALIGN_ICONS = {
+  left:   'M4 6h16M4 12h11M4 18h13',
+  center: 'M4 6h16M7 12h10M5 18h14',
+  right:  'M4 6h16M9 12h11M7 18h13',
+}
+function AlignToggle({ value, onChange }) {
+  return (
+    <div className="rd-align-grp">
+      {['left', 'center', 'right'].map(a => (
+        <button key={a} type="button"
+          className={`rd-col-stylebtn${(value || 'left') === a ? ' rd-col-stylebtn--on' : ''}`}
+          onClick={() => onChange(a)} title={a === 'left' ? 'Sola' : a === 'center' ? 'Ortaya' : 'Sağa'}>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d={ALIGN_ICONS[a]} /></svg>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function GroupHead({ title, open, badge, onToggle }) {
   return (
     <button type="button" className={`rd-group-head${open ? ' rd-group-head--open' : ''}`} onClick={onToggle}>
@@ -261,7 +280,7 @@ function PivotFieldPane({ cfg, fieldOpts, valueOpts, isNumeric, onChange }) {
 }
 
 export default function SettingsSidebar({
-  open, settings, sources, pageSource, discoveredColumns = [], discoveredNumeric = {}, onChange, onApply, onClose,
+  open, settings, sources, pageSource, discoveredColumns = [], discoveredNumeric = {}, reports = [], onChange, onApply, onClose,
   reportTitle, reportGroup, reportDescription, currentPageTitle,
   onReportTitleChange, onReportGroupChange, onReportDescriptionChange, onManageSource,
 }) {
@@ -546,16 +565,55 @@ export default function SettingsSidebar({
           </button>
         </div>
 
-        {/* Başlık */}
+        {/* Başlık & Alt Açıklama */}
         <div className="rd-field">
           <label className="rd-label">Başlık</label>
           <input
             type="text"
             className="rd-input"
             value={settings.title || ''}
-            onChange={e => set('title', e.target.value)}
+            onChange={e => setAndApply('title', e.target.value)}
             placeholder="Panel başlığı…"
           />
+          <div className="rd-tstyle">
+            <AlignToggle value={settings.titleAlign} onChange={v => setAndApply('titleAlign', v)} />
+            <span className="rd-tstyle__sep" />
+            <label className="rd-col-color" title="Başlık rengi">
+              <input type="color" value={settings.titleColor || '#e2e8f0'} onChange={e => setAndApply('titleColor', e.target.value)} />
+            </label>
+            {settings.titleColor && (
+              <button type="button" className="rd-col-stylebtn rd-col-stylebtn--x" onClick={() => setAndApply('titleColor', undefined)} title="Rengi sıfırla">×</button>
+            )}
+            <input type="number" min="9" max="40" className="rd-col-num rd-col-hsize" placeholder="px"
+              value={Number.isFinite(settings.titleSize) ? settings.titleSize : ''}
+              onChange={e => setAndApply('titleSize', e.target.value ? Math.max(9, Math.min(40, +e.target.value)) : undefined)}
+              title="Yazı boyutu (px)" />
+          </div>
+        </div>
+
+        <div className="rd-field">
+          <label className="rd-label">Alt Açıklama</label>
+          <input
+            type="text"
+            className="rd-input"
+            value={settings.subtitle || ''}
+            onChange={e => setAndApply('subtitle', e.target.value)}
+            placeholder="Opsiyonel açıklama metni…"
+          />
+          <div className="rd-tstyle">
+            <AlignToggle value={settings.subtitleAlign} onChange={v => setAndApply('subtitleAlign', v)} />
+            <span className="rd-tstyle__sep" />
+            <label className="rd-col-color" title="Açıklama rengi">
+              <input type="color" value={settings.subtitleColor || '#64748b'} onChange={e => setAndApply('subtitleColor', e.target.value)} />
+            </label>
+            {settings.subtitleColor && (
+              <button type="button" className="rd-col-stylebtn rd-col-stylebtn--x" onClick={() => setAndApply('subtitleColor', undefined)} title="Rengi sıfırla">×</button>
+            )}
+            <input type="number" min="8" max="28" className="rd-col-num rd-col-hsize" placeholder="px"
+              value={Number.isFinite(settings.subtitleSize) ? settings.subtitleSize : ''}
+              onChange={e => setAndApply('subtitleSize', e.target.value ? Math.max(8, Math.min(28, +e.target.value)) : undefined)}
+              title="Yazı boyutu (px)" />
+          </div>
         </div>
 
         {settings.type === 'text' ? (
@@ -820,6 +878,16 @@ export default function SettingsSidebar({
                   {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
+              <div className="rd-field">
+                <label className="rd-label">
+                  Boyut / Balon
+                  <span className="rd-label__val">opsiyonel</span>
+                </label>
+                <select className="rd-sel" value={settings.sizeField || ''} onChange={e => setAndApply('sizeField', e.target.value)}>
+                  <option value="">— Yok (sabit nokta) —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
             </>
           ) : settings.type === 'heatmap' ? (
             <>
@@ -845,6 +913,108 @@ export default function SettingsSidebar({
                 </select>
               </div>
             </>
+          ) : (settings.type === 'map_tr' || settings.type === 'map_world') ? (
+            <>
+              <div className="rd-field">
+                <label className="rd-label">Bölge Alanı {settings.type === 'map_world' ? '(ülke adı)' : '(il adı)'}</label>
+                <select className="rd-sel" value={settings.regionField || ''} onChange={e => setAndApply('regionField', e.target.value)}>
+                  <option value="">— İlk kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Değer (renk)</label>
+                <select className="rd-sel" value={settings.valueField || ''} onChange={e => setAndApply('valueField', e.target.value)}>
+                  <option value="">— İkinci kolon —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Hesaplama</label>
+                <select className="rd-sel" value={settings.rawAgg || 'SUM'} onChange={e => setAndApply('rawAgg', e.target.value)}>
+                  {RAW_AGG_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Harita Kaynağı URL<span className="rd-label__val">opsiyonel</span></label>
+                <input className="rd-input" value={settings.geoUrl || ''} placeholder="varsayılan CDN — offline'da kendi URL'niz"
+                  onChange={e => setAndApply('geoUrl', e.target.value)} />
+              </div>
+            </>
+          ) : settings.type === 'map_bubble' ? (
+            <>
+              <div className="rd-field">
+                <label className="rd-label">Enlem (Lat)</label>
+                <select className="rd-sel" value={settings.latField || ''} onChange={e => setAndApply('latField', e.target.value)}>
+                  <option value="">— Seçin —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Boylam (Lon)</label>
+                <select className="rd-sel" value={settings.lonField || ''} onChange={e => setAndApply('lonField', e.target.value)}>
+                  <option value="">— Seçin —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Boyut<span className="rd-label__val">opsiyonel</span></label>
+                <select className="rd-sel" value={settings.sizeField || ''} onChange={e => setAndApply('sizeField', e.target.value)}>
+                  <option value="">— Eşit boyut —</option>
+                  {discoveredColumns.filter(c => discoveredNumeric[c]).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Etiket<span className="rd-label__val">opsiyonel</span></label>
+                <select className="rd-sel" value={settings.labelField || ''} onChange={e => setAndApply('labelField', e.target.value)}>
+                  <option value="">— Yok —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Taban Harita</label>
+                <select className="rd-sel" value={settings.mapBase || 'tr'} onChange={e => setAndApply('mapBase', e.target.value)}>
+                  <option value="tr">Türkiye</option>
+                  <option value="world">Dünya</option>
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Harita Kaynağı URL<span className="rd-label__val">opsiyonel</span></label>
+                <input className="rd-input" value={settings.geoUrl || ''} placeholder="varsayılan CDN"
+                  onChange={e => setAndApply('geoUrl', e.target.value)} />
+              </div>
+            </>
+          ) : settings.type === 'gantt' ? (
+            <>
+              <div className="rd-field">
+                <label className="rd-label">Görev / Etiket</label>
+                <select className="rd-sel" value={settings.labelField || ''} onChange={e => setAndApply('labelField', e.target.value)}>
+                  <option value="">— İlk kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Başlangıç Tarihi</label>
+                <select className="rd-sel" value={settings.startField || ''} onChange={e => setAndApply('startField', e.target.value)}>
+                  <option value="">— İkinci kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Bitiş Tarihi</label>
+                <select className="rd-sel" value={settings.endField || ''} onChange={e => setAndApply('endField', e.target.value)}>
+                  <option value="">— Üçüncü kolon —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="rd-field">
+                <label className="rd-label">Renk Grubu<span className="rd-label__val">opsiyonel</span></label>
+                <select className="rd-sel" value={settings.colorField || ''} onChange={e => setAndApply('colorField', e.target.value)}>
+                  <option value="">— Tek renk —</option>
+                  {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </>
           ) : (
             <>
               <div className="rd-field">
@@ -861,6 +1031,18 @@ export default function SettingsSidebar({
                   {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
+              {settings.type === 'radar' && (
+                <div className="rd-field">
+                  <label className="rd-label">
+                    Seri (karşılaştırma)
+                    <span className="rd-label__val">opsiyonel</span>
+                  </label>
+                  <select className="rd-sel" value={settings.seriesField || ''} onChange={e => setAndApply('seriesField', e.target.value)}>
+                    <option value="">— Tek seri —</option>
+                    {discoveredColumns.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="rd-field">
                 <label className="rd-label">
                   Hesaplama
@@ -1311,6 +1493,36 @@ export default function SettingsSidebar({
                 <span className="rd-toggle__thumb" />
               </button>
             </div>
+          </>
+        )}
+
+        {/* ── Etkileşim: tıklayınca drill / rapora git ── */}
+        {!['text', 'pivot', 'stat', 'gauge'].includes(settings.type) && (
+          <>
+            <div className="rd-divider" />
+            <label className="rd-section-label">Tıklama Etkileşimi</label>
+            <div className="rd-field">
+              <label className="rd-label">Tıklayınca</label>
+              <select className="rd-sel" value={settings.clickAction || 'none'} onChange={e => setAndApply('clickAction', e.target.value)}>
+                <option value="none">Yok</option>
+                <option value="drill">Sayfada filtrele (drill-down)</option>
+                <option value="navigate">Başka rapora git</option>
+              </select>
+            </div>
+            {settings.clickAction === 'navigate' && (
+              <div className="rd-field">
+                <label className="rd-label">Hedef Rapor</label>
+                <select className="rd-sel" value={settings.clickTargetId || ''} onChange={e => setAndApply('clickTargetId', e.target.value ? +e.target.value : null)}>
+                  <option value="">— Seçin —</option>
+                  {reports.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                </select>
+              </div>
+            )}
+            {settings.clickAction === 'drill' && (
+              <div className="rd-saved-empty" style={{ marginTop: 2 }}>
+                Bir öğeye tıklayınca o kategori <strong>sayfa filtresine</strong> eklenir; diğer paneller daralır.
+              </div>
+            )}
           </>
         )}
 

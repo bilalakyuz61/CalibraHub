@@ -715,6 +715,10 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
                 // Elements sıralanır: JSON'daki dizi sırası = z-index (son = üstte)
                 foreach (var el in band.Elements)
                 {
+                    // Koşul değerlendirme — false dönerse element çıktıya girmez
+                    if (el.Condition != null && EvaluateConditionSkip(el.Condition, data))
+                        continue;
+
                     var xPx = el.X * 3.78;
                     var yPx = el.Y * 3.78;
                     var wPx = el.W * 3.78;
@@ -771,6 +775,8 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
                             "PageNumber"   => "Sayfa 1 / 1",
                             "DateTimeNow"  => DateTime.Now.ToString("dd.MM.yyyy"),
                             "AmountInWords"=> ResolveAmountInWords(el, data),
+                            "Aggregate"    => ResolveAggregate(el, data),
+                            "Table"        => RenderTableHtml(el, data),
                             _              => System.Net.WebUtility.HtmlEncode(el.Text ?? "")
                         };
                     }
@@ -799,7 +805,10 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
         // konumlanır, JSON sırası z-index olarak korunur (sonradan eklenen üstte).
         // JSON dizisindeki sıra zaten z-index (önce eklenen alt katman, sonra eklenen üst).
         // Layers() çağrı sırası da bunu doğrudan koruyor — ekstra sıralama gerekmiyor.
-        var sorted = band.Elements;
+        // Koşullu elementleri filtrele
+        var sorted = band.Elements
+            .Where(el => el.Condition == null || !EvaluateConditionSkip(el.Condition, data))
+            .ToList();
         if (sorted.Count == 0) return;
 
         var maxMm = (double)contentWidthMm;
@@ -987,6 +996,12 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
             return;
         }
 
+        if (el.Kind == "Table")
+        {
+            RenderTablePdf(container, el, data);
+            return;
+        }
+
         // Arka plan rengi varsa container'ı boyamadan önce uygula
         var cell = container;
         if (!string.IsNullOrEmpty(s?.BgColor) && !s.BgColor.Equals("transparent", StringComparison.OrdinalIgnoreCase))
@@ -1119,6 +1134,7 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
             "BoundField"    => ResolveFieldRaw(el, data),
             "DateTimeNow"   => DateTime.Now.ToString("dd.MM.yyyy"),
             "AmountInWords" => ResolveAmountInWordsRaw(el, data),
+            "Aggregate"     => ResolveAggregateRaw(el, data),
             _               => el.Text ?? ""
         };
 
@@ -1497,6 +1513,238 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
         return amt.HasValue ? NumberToWordsTr(amt.Value) : "";
     }
 
+    // ── Aggregate (Alt Toplam) ────────────────────────────────────────────────
+
+    private static string ResolveAggregate(LayoutElement el, IReadOnlyDictionary<string, ReportRawResult> data)
+    {
+        var alias = el.AggSource ?? "master";
+        if (!data.TryGetValue(alias, out var result) || result.Rows.Count == 0)
+            return "";
+        var colIndex = BuildColIndex(result);
+        var fieldName = el.AggField ?? "";
+        if (!colIndex.TryGetValue(fieldName, out var ci))
+            return "";
+
+        var values = result.Rows
+            .Select(row => row.Count > ci ? row[ci] : null)
+            .Select(v => v == null || v is DBNull ? (decimal?)null
+                : v is decimal d ? d
+                : v is double dbl ? (decimal)dbl
+                : v is int i ? i
+                : decimal.TryParse(v.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var p) ? p : (decimal?)null)
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .ToList();
+
+        decimal result2 = (el.AggFunc ?? "SUM") switch
+        {
+            "COUNT" => values.Count,
+            "AVG"   => values.Count > 0 ? values.Average() : 0m,
+            "MIN"   => values.Count > 0 ? values.Min() : 0m,
+            "MAX"   => values.Count > 0 ? values.Max() : 0m,
+            _       => values.Sum(),
+        };
+
+        var formatted = string.IsNullOrEmpty(el.AggFormat)
+            ? result2.ToString(new CultureInfo("tr-TR"))
+            : result2.ToString(el.AggFormat, new CultureInfo("tr-TR"));
+
+        return System.Net.WebUtility.HtmlEncode((el.AggPrefix ?? "") + formatted);
+    }
+
+    private static string ResolveAggregateRaw(LayoutElement el, IReadOnlyDictionary<string, ReportRawResult> data)
+    {
+        var alias = el.AggSource ?? "master";
+        if (!data.TryGetValue(alias, out var result) || result.Rows.Count == 0)
+            return "";
+        var colIndex = BuildColIndex(result);
+        var fieldName = el.AggField ?? "";
+        if (!colIndex.TryGetValue(fieldName, out var ci))
+            return "";
+
+        var values = result.Rows
+            .Select(row => row.Count > ci ? row[ci] : null)
+            .Select(v => v == null || v is DBNull ? (decimal?)null
+                : v is decimal d ? d
+                : v is double dbl ? (decimal)dbl
+                : v is int i ? i
+                : decimal.TryParse(v.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var p) ? p : (decimal?)null)
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .ToList();
+
+        decimal result2 = (el.AggFunc ?? "SUM") switch
+        {
+            "COUNT" => values.Count,
+            "AVG"   => values.Count > 0 ? values.Average() : 0m,
+            "MIN"   => values.Count > 0 ? values.Min() : 0m,
+            "MAX"   => values.Count > 0 ? values.Max() : 0m,
+            _       => values.Sum(),
+        };
+
+        var formatted = string.IsNullOrEmpty(el.AggFormat)
+            ? result2.ToString(new CultureInfo("tr-TR"))
+            : result2.ToString(el.AggFormat, new CultureInfo("tr-TR"));
+
+        return (el.AggPrefix ?? "") + formatted;
+    }
+
+    // ── Table (Tablo) HTML render ─────────────────────────────────────────────
+
+    private static string RenderTableHtml(LayoutElement el, IReadOnlyDictionary<string, ReportRawResult> data)
+    {
+        var cols = el.TableCols ?? [];
+        if (cols.Count == 0) return "<span style='color:#888;font-size:8pt'>[Tablo — kolon tanımı yok]</span>";
+
+        var alias = el.TableDataSource ?? "master";
+        var border = el.TableBorderColor ?? "#e2e8f0";
+        var headerBg = el.TableHeaderBgColor ?? "#f1f5f9";
+        var fontSize = (el.Style?.FontSize ?? 9f).ToString(CultureInfo.InvariantCulture);
+        var cellBorder = $"border:1px solid {border};padding:2px 4px;";
+
+        var sb2 = new StringBuilder();
+        sb2.Append($"<table style='width:100%;border-collapse:collapse;font-size:{fontSize}pt;'>");
+
+        if (el.ShowHeader != false)
+        {
+            sb2.Append($"<tr style='background:{headerBg};font-weight:bold;'>");
+            foreach (var col in cols)
+                sb2.Append($"<th style='{cellBorder}text-align:{col.Align ?? "left"};'>{System.Net.WebUtility.HtmlEncode(col.Header ?? "")}</th>");
+            sb2.Append("</tr>");
+        }
+
+        if (data.TryGetValue(alias, out var tableDs) && tableDs.Rows.Count > 0)
+        {
+            var colIndex = BuildColIndex(tableDs);
+            foreach (var row in tableDs.Rows)
+            {
+                sb2.Append("<tr>");
+                foreach (var col in cols)
+                {
+                    var fieldKey = col.Field ?? "";
+                    // Alias mismatch: if col.Alias is set, look up that data source
+                    IReadOnlyList<object?> dataRow = row;
+                    IReadOnlyDictionary<string, int> idx = colIndex;
+                    if (!string.IsNullOrEmpty(col.Alias) && col.Alias != alias
+                        && data.TryGetValue(col.Alias, out var altDs) && altDs.Rows.Count > 0)
+                    {
+                        dataRow = altDs.Rows[0];
+                        idx = BuildColIndex(altDs);
+                    }
+                    var val = idx.TryGetValue(fieldKey, out var fi) && dataRow.Count > fi
+                        ? dataRow[fi]?.ToString() ?? ""
+                        : "";
+                    sb2.Append($"<td style='{cellBorder}text-align:{col.Align ?? "left"};'>{System.Net.WebUtility.HtmlEncode(val)}</td>");
+                }
+                sb2.Append("</tr>");
+            }
+        }
+
+        sb2.Append("</table>");
+        return sb2.ToString();
+    }
+
+    private static void RenderTablePdf(IContainer container, LayoutElement el,
+        IReadOnlyDictionary<string, ReportRawResult> data)
+    {
+        var cols = el.TableCols ?? [];
+        if (cols.Count == 0) return;
+
+        var alias = el.TableDataSource ?? "master";
+        var border = SafeColor(el.TableBorderColor ?? "#e2e8f0", Colors.Grey.Lighten2);
+        var headerBg = SafeColor(el.TableHeaderBgColor ?? "#f1f5f9", Colors.Grey.Lighten3);
+        var fontSize = el.Style?.FontSize ?? 9f;
+
+        IReadOnlyList<IReadOnlyList<object?>> rows = [];
+        IReadOnlyDictionary<string, int> colIndex = new Dictionary<string, int>();
+        if (data.TryGetValue(alias, out var tableDs) && tableDs.Rows.Count > 0)
+        {
+            rows = tableDs.Rows;
+            colIndex = BuildColIndex(tableDs);
+        }
+
+        // Toplam genişliğe göre kolon oran payları hesapla
+        var totalW = cols.Sum(c => c.Width > 0 ? c.Width : 30);
+
+        container.ShowOnce().Table(t =>
+        {
+            t.ColumnsDefinition(cd =>
+            {
+                foreach (var col in cols)
+                    cd.RelativeColumn((float)(col.Width > 0 ? col.Width : 30) / (float)totalW);
+            });
+
+            if (el.ShowHeader != false)
+            {
+                foreach (var col in cols)
+                {
+                    t.Header(h =>
+                    {
+                        var cell = h.Cell().Background(headerBg)
+                            .Border(0.3f).BorderColor(border)
+                            .PaddingVertical(1).PaddingHorizontal(2);
+                        cell.Text(col.Header ?? "").FontSize(fontSize).Bold();
+                    });
+                }
+            }
+
+            foreach (var row in rows)
+            {
+                foreach (var col in cols)
+                {
+                    var fieldKey = col.Field ?? "";
+                    var val = colIndex.TryGetValue(fieldKey, out var fi) && row.Count > fi
+                        ? row[fi]?.ToString() ?? ""
+                        : "";
+                    var cellContainer = t.Cell().Border(0.3f).BorderColor(border)
+                        .PaddingVertical(1).PaddingHorizontal(2);
+                    var aligned = (col.Align ?? "left") switch
+                    {
+                        "right"  => cellContainer.AlignRight(),
+                        "center" => cellContainer.AlignCenter(),
+                        _        => cellContainer.AlignLeft(),
+                    };
+                    aligned.Text(val).FontSize(fontSize);
+                }
+            }
+        });
+    }
+
+    // ── Koşul değerlendirme ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Koşul değerlendirilmesi sonucu elementi atla (skip) mı?
+    /// action="hide" → koşul doğruysa atla; action="show" → koşul yanlışsa atla.
+    /// </summary>
+    private static bool EvaluateConditionSkip(ElementCondition cond, IReadOnlyDictionary<string, ReportRawResult> data)
+    {
+        var alias = cond.Source ?? "master";
+        if (!data.TryGetValue(alias, out var result) || result.Rows.Count == 0)
+            return false;
+        var colIndex = BuildColIndex(result);
+        var fieldName = cond.Field ?? "";
+        var rawVal = colIndex.TryGetValue(fieldName, out var ci) && result.Rows[0].Count > ci
+            ? result.Rows[0][ci]?.ToString() ?? ""
+            : "";
+        var condValue = cond.Value ?? "";
+
+        bool conditionMet = (cond.Op ?? "eq") switch
+        {
+            "eq"       => string.Equals(rawVal, condValue, StringComparison.OrdinalIgnoreCase),
+            "neq"      => !string.Equals(rawVal, condValue, StringComparison.OrdinalIgnoreCase),
+            "gt"       => decimal.TryParse(rawVal, NumberStyles.Any, CultureInfo.InvariantCulture, out var gd)
+                       && decimal.TryParse(condValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var gc) && gd > gc,
+            "lt"       => decimal.TryParse(rawVal, NumberStyles.Any, CultureInfo.InvariantCulture, out var ld)
+                       && decimal.TryParse(condValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var lc) && ld < lc,
+            "contains" => rawVal.Contains(condValue, StringComparison.OrdinalIgnoreCase),
+            "empty"    => string.IsNullOrWhiteSpace(rawVal),
+            "notempty" => !string.IsNullOrWhiteSpace(rawVal),
+            _          => false,
+        };
+
+        return (cond.Action ?? "hide") == "hide" ? conditionMet : !conditionMet;
+    }
+
     /// <summary>
     /// Bağlanmış kolondan ham <see cref="decimal"/> değeri okur. FormatValue'dan
     /// geçmediği için culture-dependent string→decimal parse problemleri yaşanmaz.
@@ -1676,7 +1924,36 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
         // barcodeType == "QR" ile ayirt edilir (frontend'le tutarli).
         [property: System.Text.Json.Serialization.JsonPropertyName("barcodeType")]       string? BarcodeType = null,
         [property: System.Text.Json.Serialization.JsonPropertyName("showBarcodeText")]   bool?   ShowBarcodeText = null,
-        [property: System.Text.Json.Serialization.JsonPropertyName("qrErrorCorrection")] string? QrErrorCorrection = null);
+        [property: System.Text.Json.Serialization.JsonPropertyName("qrErrorCorrection")] string? QrErrorCorrection = null,
+        // Aggregate (Alt Toplam)
+        [property: System.Text.Json.Serialization.JsonPropertyName("aggSource")] string? AggSource = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("aggField")]  string? AggField  = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("aggFunc")]   string? AggFunc   = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("aggFormat")] string? AggFormat = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("aggPrefix")] string? AggPrefix = null,
+        // Table (Tablo)
+        [property: System.Text.Json.Serialization.JsonPropertyName("tableCols")]          List<TableColDef>? TableCols         = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("tableDataSource")]    string?            TableDataSource   = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("showHeader")]         bool?              ShowHeader        = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("tableBorderColor")]   string?            TableBorderColor  = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("tableHeaderBgColor")] string?            TableHeaderBgColor = null,
+        // Koşullu görünürlük
+        [property: System.Text.Json.Serialization.JsonPropertyName("condition")] ElementCondition? Condition = null);
+
+    private sealed record TableColDef(
+        [property: System.Text.Json.Serialization.JsonPropertyName("key")]    string? Key,
+        [property: System.Text.Json.Serialization.JsonPropertyName("header")] string? Header,
+        [property: System.Text.Json.Serialization.JsonPropertyName("width")]  double  Width,
+        [property: System.Text.Json.Serialization.JsonPropertyName("alias")]  string? Alias,
+        [property: System.Text.Json.Serialization.JsonPropertyName("field")]  string? Field,
+        [property: System.Text.Json.Serialization.JsonPropertyName("align")]  string? Align = "left");
+
+    private sealed record ElementCondition(
+        [property: System.Text.Json.Serialization.JsonPropertyName("source")] string? Source,
+        [property: System.Text.Json.Serialization.JsonPropertyName("field")]  string? Field,
+        [property: System.Text.Json.Serialization.JsonPropertyName("op")]     string? Op,
+        [property: System.Text.Json.Serialization.JsonPropertyName("value")]  string? Value,
+        [property: System.Text.Json.Serialization.JsonPropertyName("action")] string? Action = "hide");
 
     private sealed record ElementStyle(
         float FontSize, bool Bold, bool Italic, bool Underline,

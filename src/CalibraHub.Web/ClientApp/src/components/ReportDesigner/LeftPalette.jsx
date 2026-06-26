@@ -136,6 +136,40 @@ const CHART_TYPES = [
     ),
   },
   {
+    k: 'map_tr', label: 'Türkiye Haritası',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 9 L7 7 L11 9 L15 7 L21 9 L20 14 L16 16 L11 15 L6 16 L3 13 Z" fill="currentColor" fillOpacity=".18" />
+      </svg>
+    ),
+  },
+  {
+    k: 'map_world', label: 'Dünya Haritası',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" />
+      </svg>
+    ),
+  },
+  {
+    k: 'map_bubble', label: 'Balon Haritası',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 9 L7 7 L11 9 L15 7 L21 9 L20 14 L16 16 L11 15 L6 16 L3 13 Z" fill="currentColor" fillOpacity=".12" />
+        <circle cx="9" cy="11" r="2.4" fill="currentColor" fillOpacity=".55" stroke="none" />
+        <circle cx="15" cy="12" r="1.6" fill="currentColor" fillOpacity=".55" stroke="none" />
+      </svg>
+    ),
+  },
+  {
+    k: 'gantt', label: 'Zaman Çizelgesi',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <line x1="3" y1="6" x2="14" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="5" y1="18" x2="13" y2="18" />
+      </svg>
+    ),
+  },
+  {
     k: 'stat', label: 'KPI / Kart',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

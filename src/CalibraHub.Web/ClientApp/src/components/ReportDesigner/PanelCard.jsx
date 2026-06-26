@@ -39,7 +39,20 @@ export default function PanelCard({ panel, selected, onSelect, onDelete, onColum
             </svg>
           </span>
         )}
-        <span className="rd-panel__title">{panel.title || 'Başlıksız Panel'}</span>
+        <div className="rd-panel__titles">
+          <span className="rd-panel__title" style={{
+            textAlign: panel.titleAlign || 'left',
+            color: panel.titleColor || undefined,
+            fontSize: Number.isFinite(panel.titleSize) ? panel.titleSize : undefined,
+          }}>{panel.title || 'Başlıksız Panel'}</span>
+          {panel.subtitle && (
+            <span className="rd-panel__subtitle" style={{
+              textAlign: panel.subtitleAlign || 'left',
+              color: panel.subtitleColor || undefined,
+              fontSize: Number.isFinite(panel.subtitleSize) ? panel.subtitleSize : undefined,
+            }}>{panel.subtitle}</span>
+          )}
+        </div>
         <button
           type="button"
           className="rd-panel__del"

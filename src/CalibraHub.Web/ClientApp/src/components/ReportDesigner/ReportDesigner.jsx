@@ -115,6 +115,7 @@ export default function ReportDesigner({ sourcesUrl, saveUrl, listUrl, loadId })
   const [selectedId,     setSelId]          = useState(null)
   const [settings,       setSettings]       = useState(null)
   const [sources,        setSources]        = useState([])
+  const [reports,        setReports]        = useState([])  // tıklama→rapora git hedefleri
   const [dataNonce,      setDataNonce]      = useState(0)   // kaynak kaydedilince bump → liste + panel verisi refetch
   const [saving,         setSaving]         = useState(false)
   const [toast,          setToast]          = useState(null)
@@ -187,6 +188,13 @@ export default function ReportDesigner({ sourcesUrl, saveUrl, listUrl, loadId })
       .then(data => setSources(Array.isArray(data) ? data : []))
       .catch(() => setSources([]))
   }, [sourcesUrl, dataNonce])
+
+  useEffect(() => {
+    fetch('/Dashboard/DesignsList', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setReports(Array.isArray(data) ? data : []))
+      .catch(() => setReports([]))
+  }, [])
 
   useEffect(() => {
     if (!loadId) return
@@ -691,6 +699,7 @@ export default function ReportDesigner({ sourcesUrl, saveUrl, listUrl, loadId })
           pageSource={currentPage?.source}
           discoveredColumns={selectedId ? (colMeta[selectedId] || []) : []}
           discoveredNumeric={selectedId ? (colNumeric[selectedId] || {}) : {}}
+          reports={reports}
           onChange={setSettings}
           onApply={applySettings}
           onClose={closeSidebar}

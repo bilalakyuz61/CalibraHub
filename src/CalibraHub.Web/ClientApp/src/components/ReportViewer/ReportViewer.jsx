@@ -114,6 +114,17 @@ export default function ReportViewer({ loadUrl }) {
       .finally(() => setLoading(false))
   }, [loadUrl])
 
+  // Cross-report drill: başka rapordan ?dF=alan&dV=değer ile gelindiyse ilk sayfaya filtre uygula
+  useEffect(() => {
+    if (!pages.length) return
+    const q = new URLSearchParams(window.location.search)
+    const dF = q.get('dF'), dV = q.get('dV')
+    if (!dF || dV == null) return
+    const pg = pages[0]
+    setFiltersByPage(prev => (prev[pg.id] && prev[pg.id][dF]) ? prev
+      : { ...prev, [pg.id]: { ...(prev[pg.id] || {}), [dF]: { field: dF, values: [String(dV)] } } })
+  }, [pages])
+
   // View → alan adları (filtrenin alan-adı eşleştirmesi için)
   useEffect(() => {
     fetch('/Dashboard/DesignerSources', { credentials: 'same-origin' })
@@ -268,11 +279,24 @@ export default function ReportViewer({ loadUrl }) {
               renderPanel={panel => (
                 <div className="rv-panel">
                   <div className="rv-panel__head">
-                    <span className="rv-panel__title">{panel.title || 'Panel'}</span>
+                    <div className="rv-panel__titles">
+                      <span className="rv-panel__title" style={{
+                        textAlign: panel.titleAlign || 'left',
+                        color: panel.titleColor || undefined,
+                        fontSize: Number.isFinite(panel.titleSize) ? panel.titleSize : undefined,
+                      }}>{panel.title || 'Panel'}</span>
+                      {panel.subtitle && (
+                        <span className="rv-panel__subtitle" style={{
+                          textAlign: panel.subtitleAlign || 'left',
+                          color: panel.subtitleColor || undefined,
+                          fontSize: Number.isFinite(panel.subtitleSize) ? panel.subtitleSize : undefined,
+                        }}>{panel.subtitle}</span>
+                      )}
+                    </div>
                     <span className="rv-panel__type">{panel.type}</span>
                   </div>
                   <div className="rv-panel__chart">
-                    <PanelChart panel={{ ...panel, ...(currentPage?.source || {}) }} chartHeight="full" activeFilters={pageFilters} onFilterChange={handleFilterChange} onData={d => handlePanelData(panel, d)} viewFields={viewFields} />
+                    <PanelChart panel={{ ...panel, ...(currentPage?.source || {}) }} chartHeight="full" activeFilters={pageFilters} onFilterChange={handleFilterChange} onData={d => handlePanelData(panel, d)} viewFields={viewFields} interactive />
                   </div>
                 </div>
               )}
