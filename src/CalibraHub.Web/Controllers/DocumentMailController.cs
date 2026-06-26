@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using CalibraHub.Application.Abstractions.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +23,7 @@ namespace CalibraHub.Web.Controllers;
 ///   (Ileride eklenenler icin PrepareContext switch'ine case ekleyin.)
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.BulkMail)]
 public sealed class DocumentMailController : Controller
 {
     private readonly IDocumentService _quoteService;

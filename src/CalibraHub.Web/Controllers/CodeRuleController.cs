@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -25,6 +25,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("[controller]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DocNumberRules)]
 public sealed class CodeRuleController : Controller
 {
     private readonly ICodeRuleRepository _repo;

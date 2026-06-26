@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Helpers;
@@ -14,6 +14,7 @@ using System.Xml;
 namespace CalibraHub.Web.Controllers;
 
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ApprovalFlows)]
 public sealed class ApprovalController : Controller
 {
     private readonly IApprovalQueueService _approvalQueueService;

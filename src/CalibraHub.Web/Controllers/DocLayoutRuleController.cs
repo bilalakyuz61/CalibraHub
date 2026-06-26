@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Helpers;
@@ -10,6 +10,7 @@ namespace CalibraHub.Web.Controllers;
 
 [Authorize]
 [Route("[controller]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DocLayoutRules)]
 public sealed class DocLayoutRuleController : Controller
 {
     private readonly IDocLayoutRuleService _svc;

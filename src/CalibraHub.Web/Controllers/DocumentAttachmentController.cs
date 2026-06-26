@@ -1,4 +1,4 @@
-using CalibraHub.Persistence.Database;
+﻿using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +17,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Sales/DeleteDocumentAttachment            → soft-delete
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DocTemplates)]
 public sealed class DocumentAttachmentController : Controller
 {
     private readonly SqlServerConnectionFactory _connectionFactory;

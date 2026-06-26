@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +18,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Admin/TestErpConnectionJson      → SQL baglanti testi
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Integrations)]
 public sealed class ErpSettingsJsonController : Controller
 {
     private readonly IAdminReadService _adminReadService;

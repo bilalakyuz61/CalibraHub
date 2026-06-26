@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.SmartBoard;
 using CalibraHub.Web.Models.Admin;
@@ -27,6 +27,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - GET  /Admin/Departments (view) + form-post Departments
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Departments)]
 public sealed class DepartmentController : Controller
 {
     private readonly IAdminReadService _adminReadService;

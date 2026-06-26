@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
@@ -18,6 +18,7 @@ namespace CalibraHub.Web.Controllers;
 /// Faz 1.B (Summarize) + Faz 1.C (NlSql) bu controller'a eklenecek (ileride).
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CompanySettings)]
 public sealed class AiController : Controller
 {
     private readonly IAiChatService _chat;

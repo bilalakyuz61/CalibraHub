@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -12,6 +12,7 @@ namespace CalibraHub.Web.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/doc-designer")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DocTemplates)]
 public sealed class DocDesignerApiController : ControllerBase
 {
     private readonly IDocDesignerService _svc;

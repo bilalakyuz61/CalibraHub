@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +11,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("[controller]/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Notes)]
 public sealed class NotificationsController : Controller
 {
     private readonly IUserNotificationRepository _repo;

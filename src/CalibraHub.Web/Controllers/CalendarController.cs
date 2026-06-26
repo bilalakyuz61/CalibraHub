@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Services.Calendar;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +8,7 @@ namespace CalibraHub.Web.Controllers;
 
 [Authorize]
 [Route("[controller]/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Notes)]
 public sealed class CalendarController : Controller
 {
     private readonly CalendarService _calendarService;

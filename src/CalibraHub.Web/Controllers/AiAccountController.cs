@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
@@ -13,6 +13,7 @@ namespace CalibraHub.Web.Controllers;
 ///   POST   /Account/AiKeys/delete/{providerId}→ override sil (şirket default'una dön)
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CompanySettings)]
 public sealed class AiAccountController : Controller
 {
     private readonly IAiUserKeyService _service;

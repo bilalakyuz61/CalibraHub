@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Models.Logistics;
@@ -32,6 +32,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("Logistics/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ProductFeatureEdit)]
 public sealed class ProductFeatureController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;

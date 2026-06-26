@@ -326,6 +326,17 @@ builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IExce
                            CalibraHub.Infrastructure.Import.ExcelReader>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportService,
                            CalibraHub.Application.Services.ImportService>();
+// İçe aktarım hedef-handler'ları (her entity bir handler; ImportService IEnumerable ile toplar).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.ContactImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.ItemImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.ContactPersonImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.PriceListImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.BomImportHandler>();
 
 // 2026-06-06 Yetkilendirme (F1) — PermissionDef + UserPermission repository + service.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionDefRepository,
@@ -664,7 +675,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 // ──────────────────────────────────────────────────────────────────────────
 var mvcBuilder = builder.Services.AddControllersWithViews(opts =>

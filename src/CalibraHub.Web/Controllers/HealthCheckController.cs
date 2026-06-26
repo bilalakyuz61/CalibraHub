@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using CalibraHub.Web.Models.Diagnostics;
@@ -15,6 +15,7 @@ namespace CalibraHub.Web.Controllers;
 /// HTTP status + sure + hata mesajini doner. Frontend tablo halinde gosterir.
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class HealthCheckController : Controller
 {
     private readonly IHttpClientFactory _httpFactory;

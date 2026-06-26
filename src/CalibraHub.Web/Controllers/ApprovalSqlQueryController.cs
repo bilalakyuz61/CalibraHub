@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -15,6 +15,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("/Admin/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ApprovalFlows)]
 public sealed class ApprovalSqlQueryController : Controller
 {
     private readonly IApprovalSqlQueryService _service;

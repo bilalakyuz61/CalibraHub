@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Services.Security;   // CanViewFieldAsync extension
@@ -26,6 +26,7 @@ namespace CalibraHub.Web.Controllers;
 [ApiController]
 [Route("api/widgets")]
 [IgnoreAntiforgeryToken]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
 public sealed class WidgetsController : ControllerBase
 {
     private readonly IWidgetService _widgetService;

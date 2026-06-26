@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
@@ -19,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Admin/UpdateAdminUserJson    → guncelle
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class AdminUserJsonController : Controller
 {
     private readonly IAdminReadService _adminReadService;

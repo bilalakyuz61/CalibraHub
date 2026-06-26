@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Services;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -9,6 +9,7 @@ using System.Security.Claims;
 namespace CalibraHub.Web.Controllers;
 
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.OrgChart)]
 public sealed class OrgChartController : Controller
 {
     private readonly IOrgChartRepository _orgChartRepository;

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +8,7 @@ namespace CalibraHub.Web.Controllers;
 
 [Authorize]
 [Route("[controller]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DocTemplates)]
 public sealed class DocDesignerController : Controller
 {
     private readonly IDocDesignerService _svc;

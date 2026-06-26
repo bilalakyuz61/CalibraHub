@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
@@ -32,6 +32,7 @@ namespace CalibraHub.Web.Controllers;
 [Authorize]
 [Route("api/export")]
 [IgnoreAntiforgeryToken]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Dashboards)]
 public sealed class GenericExportController : ControllerBase
 {
     private readonly ILogger<GenericExportController> _logger;

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
@@ -13,6 +13,7 @@ namespace CalibraHub.Web.Controllers;
 /// JSON API'lar `IntegrationsController`'da (`/Integrations/api/doc-catalog/...`).
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Integrations)]
 public sealed class IntegrationDocCatalogController : Controller
 {
     private readonly IIntegrationDocCatalogService _svc;

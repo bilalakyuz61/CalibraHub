@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -21,6 +21,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Admin/PullIntegratorDataJson        → manuel veri cekme
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Integrations)]
 public sealed class IntegratorSettingsJsonController : Controller
 {
     private readonly IAdminReadService _adminReadService;

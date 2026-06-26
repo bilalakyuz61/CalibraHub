@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.DesignProvider;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
@@ -19,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 /// PrintDispatcher uzerinden render edilir.
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DocTemplates)]
 public sealed class DocumentController : Controller
 {
     private readonly IDocumentTypeRepository _docTypeRepo;

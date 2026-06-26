@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +15,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("PendingApproval/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ApprovalPending)]
 public sealed class PendingApprovalController : Controller
 {
     private readonly IPendingApprovalService _service;

@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using CalibraHub.Persistence.Database;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 [ApiController]
 [Route("api/database")]
 [IgnoreAntiforgeryToken]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class DatabaseMetadataController : ControllerBase
 {
     private static readonly Regex IdentifierRegex =

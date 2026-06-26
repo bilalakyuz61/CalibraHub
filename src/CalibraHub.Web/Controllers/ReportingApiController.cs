@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -13,6 +13,7 @@ namespace CalibraHub.Web.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/reporting")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ReportDesigner)]
 public sealed class ReportingApiController : ControllerBase
 {
     private readonly IReportEngineService _engine;

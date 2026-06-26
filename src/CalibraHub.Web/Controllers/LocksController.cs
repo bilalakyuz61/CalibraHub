@@ -1,4 +1,4 @@
-using CalibraHub.Web.Helpers;
+﻿using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Infrastructure.Collaboration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +15,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - GET  /Admin/LocksBoardConfig     → board refresh JSON
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class LocksController : Controller
 {
     private readonly CollaborationRuntimeStore _collaborationStore;

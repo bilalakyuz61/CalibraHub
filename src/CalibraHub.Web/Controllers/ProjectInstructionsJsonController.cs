@@ -1,4 +1,4 @@
-using CalibraHub.Web.Models.Admin;
+﻿using CalibraHub.Web.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
@@ -19,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 /// form-post (BuildProjectInstructionsViewModelAsync helper'a bagli).
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class ProjectInstructionsJsonController : Controller
 {
     private readonly IWebHostEnvironment _webHostEnvironment;

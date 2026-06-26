@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Admin;
@@ -19,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - GET  /Admin/FormEdit?id=       → edit view
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class FormManagementController : Controller
 {
     private readonly IFormRepository _formRepository;

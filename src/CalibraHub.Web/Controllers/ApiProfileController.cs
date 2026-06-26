@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -17,6 +17,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Admin/DeleteApiProfileJson?id=        → soft delete
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Integrations)]
 public sealed class ApiProfileController : Controller
 {
     private readonly IIntegrationApiProfileRepository _apiProfileRepo;

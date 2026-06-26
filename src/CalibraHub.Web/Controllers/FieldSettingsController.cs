@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/field-settings")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
 public sealed class FieldSettingsController : ControllerBase
 {
     private readonly IFieldSettingRepository _repo;

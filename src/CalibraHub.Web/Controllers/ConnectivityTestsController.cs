@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +14,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Admin/TestCompanyDatabaseConnection    → SQL Server baglanti testi
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class ConnectivityTestsController : Controller
 {
     private readonly IAdminManagementService _adminManagementService;

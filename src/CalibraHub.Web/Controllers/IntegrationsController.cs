@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -33,6 +33,7 @@ namespace CalibraHub.Web.Controllers;
 /// Sprint 3 ek olarak gelecek: /Integrations/Runs (audit log SmartBoard).
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Integrations)]
 public sealed class IntegrationsController : Controller
 {
     private readonly IIntegrationService _service;

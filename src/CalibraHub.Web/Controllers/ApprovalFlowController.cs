@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Approval;
 using CalibraHub.Application.Approval.EntityTypes;
@@ -13,6 +13,7 @@ using System.Text.Json;
 namespace CalibraHub.Web.Controllers;
 
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ApprovalFlows)]
 public sealed class ApprovalFlowController : Controller
 {
     private readonly IApprovalFlowService _service;

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
@@ -12,6 +12,7 @@ namespace CalibraHub.Web.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/collaboration")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Notes)]
 public sealed class CollaborationController : ControllerBase
 {
     private readonly CollaborationRuntimeStore _runtimeStore;

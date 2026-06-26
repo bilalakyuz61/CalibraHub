@@ -1,7 +1,10 @@
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CalibraHub.Web.Controllers;
@@ -19,8 +22,10 @@ namespace CalibraHub.Web.Controllers;
 ///   GET    /api/guides/{guideCode}/resolve      → Tek value → display
 ///   GET    /api/guides/{guideCode}/distinct/{column} → Distinct degerler (filtre cipleri)
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/guides")]
+[PermissionScope(FormCodes.ViewSettings)]
 public sealed class GuidesController : ControllerBase
 {
     private readonly IGuideService _guideService;

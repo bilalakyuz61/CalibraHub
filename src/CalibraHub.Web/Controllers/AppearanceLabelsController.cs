@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +16,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Admin/SaveFormLabelsJson           → form etiketi cevirilerini kaydet
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CompanySettings)]
 public sealed class AppearanceLabelsController : Controller
 {
     private readonly IUiConfigurationService _uiConfigurationService;

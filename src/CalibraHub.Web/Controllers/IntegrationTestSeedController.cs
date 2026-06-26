@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -22,6 +22,7 @@ namespace CalibraHub.Web.Controllers;
 /// Sprint 2'de wizard UI tamamlandiginda BU CONTROLLER SILINIR.
 /// </summary>
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class IntegrationTestSeedController : Controller
 {
     [HttpPost("/Integration/Test/SeedHttpBinEcho")]

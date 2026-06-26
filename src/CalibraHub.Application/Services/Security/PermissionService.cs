@@ -5,6 +5,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Application.Services.Security;
 
@@ -23,20 +24,26 @@ public sealed class PermissionService : IPermissionService
     private readonly IPermissionGrantRepository _grantRepo;
     private readonly IFormRepository _formRepo;
     private readonly IMemoryCache _cache;
+    private readonly ILogger<PermissionService> _logger;
 
-    // 60sn — yetki değişikliği yaygın değil, bu süre 10-100x hızlanma sağlar.
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
+    // 10sn — departman izni değiştiğinde sadece sentinel key temizleniyor;
+    // aynı dept'e bağlı kullanıcıların bireysel key'leri (perm:grants:u{uid}:d{deptId})
+    // IMemoryCache prefix-removal desteklemediği için manuel temizlenemiyor.
+    // Kısa TTL stale window'u 60s → 10s'e indirerek riski minimize eder.
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
 
     public PermissionService(
         IPermissionDefRepository defRepo,
         IPermissionGrantRepository grantRepo,
         IFormRepository formRepo,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        ILogger<PermissionService> logger)
     {
         _defRepo = defRepo;
         _grantRepo = grantRepo;
         _formRepo = formRepo;
         _cache = cache;
+        _logger = logger;
     }
 
     /// <summary>
@@ -145,7 +152,7 @@ public sealed class PermissionService : IPermissionService
             string.Equals(d.ActionCode, actionCode, StringComparison.OrdinalIgnoreCase));
         if (permDef is null || !permDef.IsActive)
         {
-            Console.WriteLine($"[PERM][DIAG] DENY u={userId} dept={departmentId?.ToString() ?? "-"} {formCode}:{actionCode} → def bulunamadı/pasif (toplam aktif def: {allDefs.Count})");
+            _logger.LogDebug("[PERM][DIAG] DENY u={UserId} dept={DeptId} {FormCode}:{ActionCode} → def bulunamadı/pasif (toplam aktif def: {DefCount})", userId, departmentId?.ToString() ?? "-", formCode, actionCode, allDefs.Count);
             return false;
         }
 
@@ -157,7 +164,7 @@ public sealed class PermissionService : IPermissionService
         var userGrant = relevant.FirstOrDefault(g => g.UserId == userId);
         if (userGrant is not null)
         {
-            Console.WriteLine($"[PERM][DIAG] {(userGrant.IsGranted ? "ALLOW" : "DENY")} u={userId} dept={departmentId?.ToString() ?? "-"} {formCode}:{actionCode} → user grant defId={permDef.Id}");
+            _logger.LogDebug("[PERM][DIAG] {Result} u={UserId} dept={DeptId} {FormCode}:{ActionCode} → user grant defId={DefId}", userGrant.IsGranted ? "ALLOW" : "DENY", userId, departmentId?.ToString() ?? "-", formCode, actionCode, permDef.Id);
             return userGrant.IsGranted;
         }
 
@@ -167,13 +174,13 @@ public sealed class PermissionService : IPermissionService
             var deptGrant = relevant.FirstOrDefault(g => g.DepartmentId == departmentId.Value);
             if (deptGrant is not null)
             {
-                Console.WriteLine($"[PERM][DIAG] {(deptGrant.IsGranted ? "ALLOW" : "DENY")} u={userId} dept={departmentId} {formCode}:{actionCode} → dept grant defId={permDef.Id}");
+                _logger.LogDebug("[PERM][DIAG] {Result} u={UserId} dept={DeptId} {FormCode}:{ActionCode} → dept grant defId={DefId}", deptGrant.IsGranted ? "ALLOW" : "DENY", userId, departmentId, formCode, actionCode, permDef.Id);
                 return deptGrant.IsGranted;
             }
         }
 
         // 6) Hiçbiri yok → deny
-        Console.WriteLine($"[PERM][DIAG] DENY u={userId} dept={departmentId?.ToString() ?? "-"} {formCode}:{actionCode} → grant yok (defId={permDef.Id}, toplam grant: {grants.Count}, ilgili: {relevant.Count})");
+        _logger.LogDebug("[PERM][DIAG] DENY u={UserId} dept={DeptId} {FormCode}:{ActionCode} → grant yok (defId={DefId}, toplam grant: {GrantCount}, ilgili: {RelevantCount})", userId, departmentId?.ToString() ?? "-", formCode, actionCode, permDef.Id, grants.Count, relevant.Count);
         return false;
     }
 

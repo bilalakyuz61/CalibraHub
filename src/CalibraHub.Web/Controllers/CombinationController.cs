@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Logistics;
 using Microsoft.AspNetCore.Authorization;
@@ -25,6 +25,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("Logistics/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ProductCombinations)]
 public sealed class CombinationController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;

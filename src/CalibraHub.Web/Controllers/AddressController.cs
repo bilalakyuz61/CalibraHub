@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -12,6 +12,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("[controller]/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Contacts)]
 public sealed class AddressController : Controller
 {
     private readonly IAddressRepository _repo;

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Persistence;
+﻿using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -24,6 +24,7 @@ namespace CalibraHub.Web.Controllers;
 [ApiController]
 [Route("api/forms")]
 [IgnoreAntiforgeryToken]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
 public sealed class FormsController : ControllerBase
 {
     private readonly IFormRepository _formRepository;

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Enums;
@@ -22,6 +22,7 @@ namespace CalibraHub.Web.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/integration-events")]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.IntegrationEvents)]
 public sealed class IntegrationEventsController : ControllerBase
 {
     private readonly IServiceScopeFactory _scopeFactory;

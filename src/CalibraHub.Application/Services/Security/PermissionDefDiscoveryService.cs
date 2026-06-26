@@ -3,6 +3,7 @@ using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Application.Services.Security;
 
@@ -23,19 +24,22 @@ public sealed class PermissionDefDiscoveryService
     private readonly IWidgetRepository _widgetRepo;
     private readonly IPermissionService _permService;
     private readonly IReportDesignRepository _designRepo;
+    private readonly ILogger<PermissionDefDiscoveryService> _logger;
 
     public PermissionDefDiscoveryService(
         IFormRepository formRepo,
         IPermissionDefRepository permRepo,
         IWidgetRepository widgetRepo,
         IPermissionService permService,
-        IReportDesignRepository designRepo)
+        IReportDesignRepository designRepo,
+        ILogger<PermissionDefDiscoveryService> logger)
     {
         _formRepo    = formRepo;
         _permRepo    = permRepo;
         _widgetRepo  = widgetRepo;
         _permService = permService;
         _designRepo  = designRepo;
+        _logger      = logger;
     }
 
     /// <summary>Field permission action prefix — <c>FIELD:&lt;WidgetCode&gt;</c>.</summary>
@@ -145,7 +149,7 @@ public sealed class PermissionDefDiscoveryService
         var forms = await _formRepo.GetAllAsync(ct);
         if (forms.Count == 0)
         {
-            Console.WriteLine("[PERM DISCOVERY] dbo.Forms boş — seed atlandı.");
+            _logger.LogWarning("[PERM DISCOVERY] dbo.Forms boş — seed atlandı.");
             return 0;
         }
 
@@ -244,7 +248,7 @@ public sealed class PermissionDefDiscoveryService
         catch (Exception ex)
         {
             // WidgetMas tablosu henüz oluşmamış olabilir (ilk init); discovery zincirini bozma.
-            Console.WriteLine($"[PERM DISCOVERY] Field permission seed atlandı: {ex.Message}");
+            _logger.LogWarning(ex, "[PERM DISCOVERY] Field permission seed atlandı.");
         }
 
         // ── RESOURCE:DASH:{id} — Her rapor panosu için ayrı PermissionDef ──
@@ -272,13 +276,14 @@ public sealed class PermissionDefDiscoveryService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PERM DISCOVERY] Dashboard resource permission seed atlandı: {ex.Message}");
+            _logger.LogWarning(ex, "[PERM DISCOVERY] Dashboard resource permission seed atlandı.");
         }
 
         await _permRepo.BulkUpsertAsync(defs, ct);
         var btnDefCount = defs.Count(d => d.ActionCode.StartsWith(FormButtonCatalog.ActionPrefix, StringComparison.Ordinal));
         var crudDefCount = defs.Count - btnDefCount - fieldDefCount - dashDefCount;
-        Console.WriteLine($"[PERM DISCOVERY] {defs.Count} izin tanımı upsert edildi (CRUD: {crudDefCount}, Buton: {btnDefCount}, Alan: {fieldDefCount}, Pano: {dashDefCount}; {skippedCount} master-detail alt form atlandı).");
+        _logger.LogInformation("[PERM DISCOVERY] {Count} izin tanımı upsert edildi (CRUD: {Crud}, Buton: {Btn}, Alan: {Field}, Pano: {Dash}; {Skipped} master-detail alt form atlandı).",
+            defs.Count, crudDefCount, btnDefCount, fieldDefCount, dashDefCount, skippedCount);
         return defs.Count;
     }
 
