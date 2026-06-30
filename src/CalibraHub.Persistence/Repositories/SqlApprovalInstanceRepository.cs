@@ -269,6 +269,129 @@ WHERE sr.[Status] = N'Pending'
         return items;
     }
 
+    public async Task<IReadOnlyList<PendingApprovalItemDto>> GetCompletedForUserAsync(
+        string userId, string scope, IReadOnlyCollection<string>? departmentUserIds, CancellationToken ct)
+    {
+        var s = _s;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($@"
+SELECT
+    sr.[Id]                AS StepRecordId,
+    inst.[Id]              AS InstanceId,
+    sr.[StepOrder]         AS StepOrder,
+    sr.[StepName]          AS StepName,
+    sr.[ApproverId]        AS ApproverId,
+    sr.[ApproverName]      AS ApproverName,
+    ISNULL(inst.[CompletedAt], inst.[StartedAt]) AS StepCreated,
+    inst.[Id]              AS InstanceIdAlias,
+    inst.[DocumentId]      AS DocumentId,
+    inst.[EntityKind]      AS EntityKind,
+    inst.[StartedAt]       AS InstanceStarted,
+    inst.[FlowId]          AS FlowId,
+    inst.[Status]          AS InstanceStatus,
+    flow.[Name]            AS FlowName,
+    (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id]) AS TotalSteps,
+    (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id] AND [StepOrder] <= sr.[StepOrder]) AS StepPosition,
+    doc.[id]               AS DocumentInternalId,
+    doc.[DocumentNumber]   AS DocumentNumber,
+    doc.[DocumentDate]     AS DocumentDate,
+    doc.[DocumentTypeId]   AS DocumentTypeId,
+    dt.[name]              AS DocumentTypeName,
+    doc.[ContactId]        AS ContactId,
+    c.[AccountTitle]       AS ContactName,
+    doc.[GrandTotal]       AS GrandTotal,
+    cur.[code]             AS CurrencyCode
+FROM [{s}].[ApprovalInstance] inst
+INNER JOIN [{s}].[ApprovalFlow] flow              ON flow.[Id] = inst.[FlowId]
+INNER JOIN [{s}].[ApprovalStepRecord] sr          ON sr.[InstanceId] = inst.[Id]
+    AND sr.[StepOrder] = (
+        SELECT MAX([StepOrder]) FROM [{s}].[ApprovalStepRecord]
+        WHERE [InstanceId] = inst.[Id] AND [Status] NOT IN (N'Pending',N'Waiting',N'Skipped')
+    )
+LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[id] = inst.[DocumentId]
+LEFT  JOIN [{s}].[document_types] dt              ON dt.[id] = doc.[DocumentTypeId]
+LEFT  JOIN [{s}].[Contact] c                      ON c.[Id]  = doc.[ContactId]
+LEFT  JOIN [{s}].[currencies] cur                 ON cur.[id] = doc.[CurrencyId]
+WHERE inst.[Status] IN (N'Approved',N'Rejected')
+  AND inst.[IsActive] = 1
+  AND inst.[DocumentId] IS NOT NULL
+  AND (inst.[EntityKind] <> N'Document' OR doc.[IsActive] = 1)
+");
+
+        var sql = sb.ToString();
+
+        if (string.Equals(scope, PendingApprovalScope.Mine, StringComparison.OrdinalIgnoreCase))
+        {
+            sql += $@" AND (
+    inst.[StartedBy] = @UserId
+    OR EXISTS (
+        SELECT 1 FROM [{s}].[ApprovalStepRecord] asr
+        WHERE asr.[InstanceId] = inst.[Id] AND asr.[ApproverId] = @UserId
+    )
+)";
+        }
+        else if (string.Equals(scope, PendingApprovalScope.Department, StringComparison.OrdinalIgnoreCase)
+                 && departmentUserIds != null && departmentUserIds.Count > 0)
+        {
+            var paramNames = departmentUserIds.Select((_, i) => "@DU" + i).ToArray();
+            sql += $@" AND (
+    inst.[StartedBy] IN ({string.Join(",", paramNames)})
+    OR EXISTS (
+        SELECT 1 FROM [{s}].[ApprovalStepRecord] asr
+        WHERE asr.[InstanceId] = inst.[Id] AND asr.[ApproverId] IN ({string.Join(",", paramNames)})
+    )
+)";
+        }
+
+        sql += " ORDER BY ISNULL(inst.[CompletedAt], inst.[StartedAt]) DESC";
+
+        var items = new List<PendingApprovalItemDto>();
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@UserId", userId ?? string.Empty));
+        if (string.Equals(scope, PendingApprovalScope.Department, StringComparison.OrdinalIgnoreCase)
+            && departmentUserIds != null && departmentUserIds.Count > 0)
+        {
+            var idx = 0;
+            foreach (var u in departmentUserIds)
+                cmd.Parameters.Add(new SqlParameter("@DU" + idx++, u ?? string.Empty));
+        }
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            items.Add(new PendingApprovalItemDto(
+                InstanceId:          rdr.GetInt32(rdr.GetOrdinal("InstanceId")),
+                StepRecordId:        rdr.GetInt32(rdr.GetOrdinal("StepRecordId")),
+                StepOrder:           rdr.GetInt32(rdr.GetOrdinal("StepOrder")),
+                StepPosition:        rdr.GetInt32(rdr.GetOrdinal("StepPosition")),
+                TotalSteps:          rdr.GetInt32(rdr.GetOrdinal("TotalSteps")),
+                StepName:            rdr.GetString(rdr.GetOrdinal("StepName")),
+                FlowName:            rdr.GetString(rdr.GetOrdinal("FlowName")),
+                FlowId:              rdr.GetInt32(rdr.GetOrdinal("FlowId")),
+                EntityKind:          rdr.IsDBNull(rdr.GetOrdinal("EntityKind")) ? "Document" : rdr.GetString(rdr.GetOrdinal("EntityKind")),
+                DocumentId:          rdr.IsDBNull(rdr.GetOrdinal("DocumentId")) ? (int?)null : rdr.GetInt32(rdr.GetOrdinal("DocumentId")),
+                DocumentInternalId:  rdr.IsDBNull(rdr.GetOrdinal("DocumentInternalId")) ? null : rdr.GetInt32(rdr.GetOrdinal("DocumentInternalId")),
+                DocumentNumber:      rdr.IsDBNull(rdr.GetOrdinal("DocumentNumber")) ? "(belge yok)" : rdr.GetString(rdr.GetOrdinal("DocumentNumber")),
+                DocumentDate:        rdr.IsDBNull(rdr.GetOrdinal("DocumentDate")) ? DateTime.MinValue : rdr.GetDateTime(rdr.GetOrdinal("DocumentDate")),
+                DocumentTypeId:      rdr.IsDBNull(rdr.GetOrdinal("DocumentTypeId")) ? null : rdr.GetInt32(rdr.GetOrdinal("DocumentTypeId")),
+                DocumentTypeName:    rdr.IsDBNull(rdr.GetOrdinal("DocumentTypeName")) ? null : rdr.GetString(rdr.GetOrdinal("DocumentTypeName")),
+                ContactId:           rdr.IsDBNull(rdr.GetOrdinal("ContactId")) ? null : rdr.GetInt32(rdr.GetOrdinal("ContactId")),
+                ContactName:         rdr.IsDBNull(rdr.GetOrdinal("ContactName")) ? null : rdr.GetString(rdr.GetOrdinal("ContactName")),
+                GrandTotal:          rdr.IsDBNull(rdr.GetOrdinal("GrandTotal")) ? 0m : rdr.GetDecimal(rdr.GetOrdinal("GrandTotal")),
+                CurrencyCode:        rdr.IsDBNull(rdr.GetOrdinal("CurrencyCode")) ? null : rdr.GetString(rdr.GetOrdinal("CurrencyCode")),
+                ApproverId:          rdr.IsDBNull(rdr.GetOrdinal("ApproverId")) ? null : rdr.GetString(rdr.GetOrdinal("ApproverId")),
+                ApproverName:        rdr.IsDBNull(rdr.GetOrdinal("ApproverName")) ? null : rdr.GetString(rdr.GetOrdinal("ApproverName")),
+                StepCreated:         rdr.GetDateTime(rdr.GetOrdinal("StepCreated")),
+                DueDate:             null,
+                InstanceStarted:     rdr.GetDateTime(rdr.GetOrdinal("InstanceStarted")),
+                InstanceStatus:      rdr.IsDBNull(rdr.GetOrdinal("InstanceStatus")) ? null : rdr.GetString(rdr.GetOrdinal("InstanceStatus"))
+            ));
+        }
+        return items;
+    }
+
     public async Task<PendingApprovalDetailDto?> GetPendingDetailAsync(int instanceId, CancellationToken ct)
     {
         // Tek satir basligi icin GetPendingForUserAsync ile ayni pencereyi paylasalim — basit yol:

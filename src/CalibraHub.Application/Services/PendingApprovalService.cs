@@ -72,6 +72,45 @@ public sealed class PendingApprovalService : IPendingApprovalService
     public Task<IReadOnlyList<string>> GetAvailableScopesAsync(CancellationToken ct)
         => _authority.GetAvailableScopesAsync(ct);
 
+    public async Task<IReadOnlyList<PendingApprovalGroupDto>> GetCompletedGroupsAsync(string scope, CancellationToken ct)
+    {
+        var allowed = await EnsureScopeAllowedAsync(scope, ct);
+        var (userId, depUsers) = await _authority.ResolveContextAsync(allowed, ct);
+        var items = await _repo.GetCompletedForUserAsync(userId, allowed, depUsers, ct);
+        return items
+            .GroupBy(x => new { x.DocumentTypeId, x.DocumentTypeName })
+            .Select(g => new PendingApprovalGroupDto(
+                DocumentTypeId:   g.Key.DocumentTypeId,
+                DocumentTypeCode: null,
+                DocumentTypeName: string.IsNullOrEmpty(g.Key.DocumentTypeName) ? "Belirsiz" : g.Key.DocumentTypeName!,
+                Count:            g.Count()))
+            .OrderByDescending(g => g.Count)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<PendingApprovalItemDto>> GetCompletedListAsync(string scope, int? documentTypeId, CancellationToken ct)
+    {
+        var allowed = await EnsureScopeAllowedAsync(scope, ct);
+        var (userId, depUsers) = await _authority.ResolveContextAsync(allowed, ct);
+        var items = await _repo.GetCompletedForUserAsync(userId, allowed, depUsers, ct);
+        if (documentTypeId.HasValue)
+            items = items.Where(x => x.DocumentTypeId == documentTypeId.Value).ToArray();
+        return items;
+    }
+
+    public async Task<PendingApprovalDetailDto?> GetCompletedDetailAsync(int instanceId, string scope, CancellationToken ct)
+    {
+        var allowed = await EnsureScopeAllowedAsync(scope, ct);
+        var (userId, depUsers) = await _authority.ResolveContextAsync(allowed, ct);
+        var visible = await _repo.GetCompletedForUserAsync(userId, allowed, depUsers, ct);
+        var item = visible.FirstOrDefault(x => x.InstanceId == instanceId);
+        if (item is null) return null;
+
+        var detail = await _repo.GetPendingDetailAsync(instanceId, ct);
+        if (detail is null) return null;
+        return detail with { Header = item };
+    }
+
     public Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct)
         => _repo.GetViewColumnMetaAsync(viewName, ct);
 

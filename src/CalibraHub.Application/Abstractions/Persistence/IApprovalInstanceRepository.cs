@@ -23,6 +23,13 @@ public interface IApprovalInstanceRepository
 
     /// <summary>Tek bir instance icin tum step kayitlarini doner (detail modal).</summary>
     Task<PendingApprovalDetailDto?> GetPendingDetailAsync(int instanceId, CancellationToken ct);
+
+    /// <summary>Tamamlanmis (Approved/Rejected) instancelari kullaniciya gore doner.</summary>
+    Task<IReadOnlyList<PendingApprovalItemDto>> GetCompletedForUserAsync(
+        string userId,
+        string scope,
+        IReadOnlyCollection<string>? departmentUserIds,
+        CancellationToken ct);
     Task<int> CreateAsync(StartApprovalRequest request, IReadOnlyList<ApprovalFlowStepDto> steps, CancellationToken ct);
     Task UpdateRevisionIdAsync(int instanceId, int revisionId, CancellationToken ct);
     Task ApproveStepAsync(int instanceId, int stepOrder, string approverId, string approverName, string? note, CancellationToken ct);

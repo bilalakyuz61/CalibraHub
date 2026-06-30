@@ -15,25 +15,28 @@
         max-width: 100%;
     }
     .pa-header {
-        display: flex; align-items: center; gap: 14px; margin-bottom: 14px;
+        display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
         flex: 0 0 auto;
     }
+    .pa-header-sep {
+        width: 1px; height: 20px; background: rgba(148,163,184,.25); flex-shrink: 0;
+    }
+    body.app-theme-dark .pa-header-sep { background: rgba(255,255,255,.12); }
     .pa-title { font-size: 20px; font-weight: 700; margin: 0; }
-    /* Kapsam radio-pill grubu (kenar çubuğu alt kısmı) */
+    /* Kapsam radio-pill grubu (üst başlık satırı) */
     .pa-scope-radio {
         display: flex; align-items: center;
         background: rgba(148,163,184,.12); border-radius: 8px; padding: 2px; gap: 1px;
-        width: 100%;
+        flex-shrink: 0;
     }
     body.app-theme-dark .pa-scope-radio { background: rgba(255,255,255,.07); }
-    .pa-scope-opt { display: flex; align-items: center; cursor: pointer; flex: 1; }
+    .pa-scope-opt { display: flex; align-items: center; cursor: pointer; }
     .pa-scope-opt input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
     .pa-scope-opt span {
-        padding: 5px 8px; border-radius: 6px;
-        font-size: 11px; font-weight: 500; color: #64748b;
+        padding: 5px 13px; border-radius: 6px;
+        font-size: 12px; font-weight: 500; color: #64748b;
         cursor: pointer; white-space: nowrap; user-select: none;
         transition: background .12s, color .12s;
-        flex: 1; text-align: center;
     }
     .pa-scope-opt input[type="radio"]:checked + span { background: #6366f1; color: #fff; }
     body.app-theme-dark .pa-scope-opt span { color: #94a3b8; }
@@ -85,12 +88,6 @@
         padding: 8px;
         overflow-y: auto; min-height: 0;
     }
-    .pa-scope-footer {
-        flex: 0 0 auto;
-        padding: 8px 6px;
-        border-top: 1px solid rgba(148,163,184,.12);
-    }
-    body.app-theme-dark .pa-scope-footer { border-top-color: rgba(255,255,255,.08); }
 
     /* ── Kenar çubuğu aç/kapat butonu ── */
     .pa-sidebar-toggle-btn {
@@ -475,6 +472,31 @@
         border-radius: 10px; padding: 10px 12px 10px;
     }
     body.app-theme-dark .pa-flow-step.sf-current .pa-flow-content { background: rgba(99,102,241,.09); }
+
+    /* ── Bekleyen / Tamamlanan tab ── */
+    .pa-mode-tabs {
+        display: flex; align-items: center; gap: 2px;
+        background: rgba(148,163,184,.12); border-radius: 8px; padding: 2px;
+        flex-shrink: 0;
+    }
+    body.app-theme-dark .pa-mode-tabs { background: rgba(255,255,255,.07); }
+    .pa-mode-tab {
+        padding: 5px 14px; border-radius: 6px;
+        font-size: 12px; font-weight: 500; color: #64748b;
+        cursor: pointer; white-space: nowrap; user-select: none;
+        transition: background .12s, color .12s;
+        border: none; background: transparent;
+    }
+    .pa-mode-tab.active { background: #6366f1; color: #fff; }
+    body.app-theme-dark .pa-mode-tab { color: #94a3b8; }
+    body.app-theme-dark .pa-mode-tab.active { background: #6366f1; color: #fff; }
+
+    /* Tamamlanmış listede durum rozeti sütunu */
+    .pa-status-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11px; font-weight: 600;
+        padding: 2px 8px; border-radius: 10px;
+    }
 </style>
 }
 
@@ -485,7 +507,45 @@
                 <polyline points="15 18 9 12 15 6"/>
             </svg>
         </button>
-        <h1 class="pa-title">Onayda Bekleyenler</h1>
+        <h1 class="pa-title">Onay Takibi</h1>
+        <div class="pa-mode-tabs" id="paModeTabsGroup">
+            <button type="button" class="pa-mode-tab active" data-mode="pending" onclick="paSetMode('pending')">Bekleyenler</button>
+            <button type="button" class="pa-mode-tab" data-mode="completed" onclick="paSetMode('completed')">Tamamlananlar</button>
+        </div>
+        @if (scopes.Count > 1)
+        {
+        <div class="pa-header-sep"></div>
+        <div class="pa-scope-radio" id="paScopeGroup">
+            @foreach (var s in scopes)
+            {
+                var label = s switch
+                {
+                    "mine" => "Sadece Benim",
+                    "department" => "Departmanım",
+                    "all" => "Tümü",
+                    _ => s
+                };
+                var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
+                <label class="pa-scope-opt">
+                    <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
+                    <span>@label</span>
+                </label>
+            }
+        </div>
+        }
+        else
+        {
+        <div style="display:none;" id="paScopeGroup">
+            @foreach (var s in scopes)
+            {
+                var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
+                <label class="pa-scope-opt">
+                    <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
+                    <span>@s</span>
+                </label>
+            }
+        </div>
+        }
     </div>
 
     <div class="pa-body">
@@ -493,43 +553,6 @@
             <div class="pa-groups" id="paGroups">
                 <div class="pa-group empty">Yükleniyor…</div>
             </div>
-            @if (scopes.Count > 1)
-            {
-            <div class="pa-scope-footer">
-                <div class="pa-scope-radio" id="paScopeGroup">
-                    @foreach (var s in scopes)
-                    {
-                        var label = s switch
-                        {
-                            "mine" => "Sadece Benim",
-                            "department" => "Departmanım",
-                            "all" => "Tümü",
-                            _ => s
-                        };
-                        var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
-                        <label class="pa-scope-opt">
-                            <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
-                            <span>@label</span>
-                        </label>
-                    }
-                </div>
-            </div>
-            }
-            else
-            {
-            <div class="pa-scope-footer" style="display:none;">
-                <div class="pa-scope-radio" id="paScopeGroup">
-                    @foreach (var s in scopes)
-                    {
-                        var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
-                        <label class="pa-scope-opt">
-                            <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
-                            <span>@s</span>
-                        </label>
-                    }
-                </div>
-            </div>
-            }
         </div>
         <div class="pa-list-wrap">
             <div class="pa-list-header">
@@ -626,6 +649,7 @@
     const noteSubmitEl = document.getElementById('paNoteSubmit');
     const noteCancelEl = document.getElementById('paNoteCancel');
     let _noteAction = null; // 'approve' | 'reject'
+    let _currentMode = 'pending'; // 'pending' | 'completed'
 
     // ── Sütun yapılandırması ─────────────────────────────────────────────────
     const COL_STORAGE_KEY = 'pa-col-cfg-v2';
@@ -716,6 +740,12 @@
                                  '<span style="font-size:11px;color:#94a3b8;margin-left:6px;">' + escapeHtml(it.stepName) + '</span>';
             case 'apvr':  return escapeHtml(it.approverName || '—');
             case 'dt': {
+                if (_currentMode === 'completed') {
+                    const statusTr  = STATUS_TR[it.instanceStatus]   || it.instanceStatus || '—';
+                    const badgeCls  = it.instanceStatus === 'Approved' ? 'badge-approved' : 'badge-rejected';
+                    return '<span class="pa-status-badge ' + badgeCls + '">' + statusTr + '</span>' +
+                           '<span style="font-size:11px;color:#94a3b8;margin-left:6px;">' + fmtDate(it.stepCreated) + '</span>';
+                }
                 const od = it.dueDate && new Date(it.dueDate).getTime() < now;
                 return '<span class="' + (od ? 'pa-overdue' : '') + '">' + fmtDate(it.stepCreated) + '</span>';
             }
@@ -911,7 +941,8 @@
         const scope = getScope();
         groupsEl.innerHTML = '<div class="pa-group empty">Yükleniyor…</div>';
         try {
-            const resp = await fetch('/PendingApproval/Groups?scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
+            const ep = _currentMode === 'completed' ? '/PendingApproval/CompletedGroups' : '/PendingApproval/Groups';
+            const resp = await fetch(ep + '?scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
             const data = await resp.json();
             if (!data.ok) throw new Error(data.error || 'Hata');
             renderGroups(data.groups);
@@ -921,9 +952,12 @@
     }
 
     function renderGroups(groups) {
+        const emptyMsg = _currentMode === 'completed'
+            ? 'Tamamlanmış akış bulunamadı.'
+            : 'Onayda bekleyen kayıt yok.';
         if (!groups || groups.length === 0) {
-            groupsEl.innerHTML = '<div class="pa-group empty">Onayda bekleyen kayıt yok 🎉</div>';
-            listScrollEl.innerHTML = '<div class="pa-empty">Bu görünümde bekleyen kayıt bulunmuyor.</div>';
+            groupsEl.innerHTML = '<div class="pa-group empty">' + emptyMsg + '</div>';
+            listScrollEl.innerHTML = '<div class="pa-empty">Bu görünümde kayıt bulunmuyor.</div>';
             listTitleEl.textContent = '—';
             listCountEl.textContent = '';
             return;
@@ -962,7 +996,8 @@
         const scope = getScope();
         listScrollEl.innerHTML = '<div class="pa-empty">Yükleniyor…</div>';
         try {
-            let url = '/PendingApproval/List?scope=' + encodeURIComponent(scope);
+            const ep = _currentMode === 'completed' ? '/PendingApproval/CompletedList' : '/PendingApproval/List';
+            let url = ep + '?scope=' + encodeURIComponent(scope);
             if (activeDocTypeId != null) url += '&documentTypeId=' + activeDocTypeId;
             const resp = await fetch(url, { credentials: 'same-origin' });
             const data = await resp.json();
@@ -1028,9 +1063,18 @@
         modalBodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;">Yükleniyor…</div>';
         modalTitleEl.textContent = 'Belge Detayı';
         modalSubEl.textContent = '';
+        // Tamamlananlar modunda aksiyon butonlarını gizle
+        if (_currentMode === 'completed') {
+            modalApproveEl.style.display = 'none';
+            modalRejectEl.style.display  = 'none';
+        } else {
+            modalApproveEl.style.display = '';
+            modalRejectEl.style.display  = '';
+        }
         try {
             const scope = getScope();
-            const resp = await fetch('/PendingApproval/Detail?instanceId=' + instanceId + '&scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
+            const ep = _currentMode === 'completed' ? '/PendingApproval/CompletedDetail' : '/PendingApproval/Detail';
+            const resp = await fetch(ep + '?instanceId=' + instanceId + '&scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
             const data = await resp.json();
             if (!data.ok) throw new Error(data.error || 'Hata');
             renderDetail(data.detail);
@@ -1087,7 +1131,13 @@
         if (d.steps && d.steps.length > 0) {
             html += '<div class="pa-flow-section-title">Onay Süreci</div>';
             html += '<div class="pa-flow">';
-            d.steps.forEach((s, idx) => {
+            // Tamamlanmış (Approved/Rejected) akışlarda hiç devreye girmemiş
+            // (Pending + actionDate yok) adımları gizle.
+            const instanceDone = h.instanceStatus === 'Approved' || h.instanceStatus === 'Rejected';
+            const visibleSteps = d.steps.filter(s =>
+                !instanceDone || s.status !== 'Pending' || s.actionDate != null
+            );
+            visibleSteps.forEach((s, idx) => {
                 const status    = s.status || 'Waiting';
                 const isCurrent = status === 'Pending';
                 const cssClass  = STATUS_CSS[status]   || 'sf-waiting';
@@ -1099,7 +1149,7 @@
                 // sonraki adımlar için önceki adımın aksiyon tarihi.
                 const entryTime = idx === 0
                     ? (d.header.instanceStarted || s.enteredAt)
-                    : (d.steps[idx - 1].actionDate || d.header.instanceStarted);
+                    : (visibleSteps[idx - 1].actionDate || d.header.instanceStarted);
 
                 let metaHtml = '';
                 if (s.approverName) {
@@ -1251,6 +1301,21 @@
             if (toggleBtn) toggleBtn.classList.add('collapsed');
         }
     })();
+
+    window.paSetMode = function(mode) {
+        if (_currentMode === mode) return;
+        _currentMode = mode;
+        document.querySelectorAll('.pa-mode-tab').forEach(function(btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+        });
+        // Başlık sütununu mode'a göre güncelle
+        var dtDef = DEFAULT_DEFS.find(function(d) { return d.key === 'dt'; });
+        if (dtDef) dtDef.label = mode === 'completed' ? 'Tamamlanma' : 'Bekliyor';
+        activeDocTypeId = null;
+        listTitleEl.textContent = 'Tüm belge türleri';
+        listCountEl.textContent = '';
+        loadGroups();
+    };
 
     window.paToggleSidebar = function() {
         var sidebar = document.getElementById('paSidebar');

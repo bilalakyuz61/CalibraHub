@@ -21,6 +21,15 @@ public interface IPendingApprovalService
     /// <summary>Mevcut kullanicinin secebilecegi scope'lar (yetkiye gore).</summary>
     Task<IReadOnlyList<string>> GetAvailableScopesAsync(CancellationToken ct);
 
+    /// <summary>Tamamlanan akislar — sol panel gruplar.</summary>
+    Task<IReadOnlyList<PendingApprovalGroupDto>> GetCompletedGroupsAsync(string scope, CancellationToken ct);
+
+    /// <summary>Tamamlanan akislar — liste. docTypeId = null → tum turler.</summary>
+    Task<IReadOnlyList<PendingApprovalItemDto>> GetCompletedListAsync(string scope, int? documentTypeId, CancellationToken ct);
+
+    /// <summary>Tamamlanan akis detayi (read-only modal).</summary>
+    Task<PendingApprovalDetailDto?> GetCompletedDetailAsync(int instanceId, string scope, CancellationToken ct);
+
     Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct);
 
     /// <summary>

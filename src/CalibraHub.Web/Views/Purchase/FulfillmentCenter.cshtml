@@ -95,6 +95,30 @@
     .fc3-title-tx  { font-size:1rem; font-weight:700; color:#e2e8f0; }
     .fc3-title-sub { font-size:.75rem; color:#475569; }
 
+    /* Genel arama kutusu */
+    .fc3-qs-wrap {
+        flex:1 1 auto; max-width:280px; position:relative;
+        display:flex; align-items:center;
+    }
+    .fc3-qs-icon {
+        position:absolute; left:9px; color:#475569; pointer-events:none; flex-shrink:0;
+    }
+    .fc3-qs-input {
+        width:100%; height:32px; padding:0 8px 0 30px;
+        border:1px solid rgba(255,255,255,.09); border-radius:8px;
+        background:rgba(255,255,255,.04); font-size:.8rem;
+        color:#e2e8f0; outline:none; transition:border-color .13s;
+    }
+    .fc3-qs-input::placeholder { color:#334155; }
+    .fc3-qs-input:focus { border-color:rgba(99,102,241,.45); }
+    .fc3-qs-input::-webkit-search-cancel-button { cursor:pointer; }
+    body.app-theme-light .fc3-qs-input {
+        background:#f8fafc; border-color:#e2e8f0; color:#0f172a;
+    }
+    body.app-theme-light .fc3-qs-input::placeholder { color:#94a3b8; }
+    body.app-theme-light .fc3-qs-input:focus { border-color:rgba(99,102,241,.5); }
+    body.app-theme-light .fc3-qs-icon { color:#94a3b8; }
+
     /* Filtre ve Sütun ikon butonları (üst bar) */
     .fc3-hd-icon-btn {
         display:inline-flex; align-items:center; justify-content:center;
@@ -1003,9 +1027,13 @@
                 <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
             </svg>
         </div>
-        <div style="flex:1">
+        <div>
             <div class="fc3-title-tx">Karşılama Merkezi</div>
             <div class="fc3-title-sub">Birden fazla ihtiyaç seçerek transfer, teklif veya sipariş oluşturun</div>
+        </div>
+        <div class="fc3-qs-wrap">
+            <svg class="fc3-qs-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="fc3QuickSearch" class="fc3-qs-input" placeholder="Belge no, talep eden, malzeme…" autocomplete="off" oninput="applyFilters()">
         </div>
         <button class="fc3-filt-btn fc3-hd-icon-btn" id="fc3FiltBtn" onclick="fc3OpenDrawer()" title="Filtreler">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
@@ -1668,6 +1696,9 @@
     }
 
     function applyFilters() {
+        var qsEl    = document.getElementById('fc3QuickSearch');
+        var qs      = qsEl ? (qsEl.value || '').trim().toLowerCase() : '';
+
         var textFilters  = readFilters();
         var reqSel       = Array.from(document.querySelectorAll('.fc3-ms-cb-req:checked')).map(function(cb) { return cb.value.toLowerCase(); }).filter(function(v) { return v !== '__all__'; });
         var statSel      = Array.from(document.querySelectorAll('.fc3-ms-cb-stat:checked')).map(function(cb) { return cb.value; }).filter(function(v) { return v !== '__all__'; });
@@ -1678,6 +1709,12 @@
         var matSearch    = matSearchEl ? (matSearchEl.value || '').trim().toLowerCase() : '';
 
         _vis = ALL.filter(function(r) {
+            if (qs) {
+                var docNo  = (r.documentNumber || '').toLowerCase();
+                var who    = ((r.requesterPersonnelName || r.contactName) || '').toLowerCase();
+                var mats   = (r.materialItems || []).map(function(m) { return ((m.code || '') + ' ' + (m.name || '')).toLowerCase(); }).join(' ');
+                if (docNo.indexOf(qs) < 0 && who.indexOf(qs) < 0 && mats.indexOf(qs) < 0) return false;
+            }
             if (!textFilters.every(function(f) { return matchOp(fieldVal(r, f.field), f.op, f.val, f.val2); })) return false;
             if (reqSel.length > 0) {
                 var who = (r.requesterPersonnelName || r.contactName || '').toLowerCase();
@@ -1774,6 +1811,8 @@
         // Malzeme arama
         var _ms = document.getElementById('fc3MatSearch'); if (_ms) _ms.value = '';
         var _ml = document.getElementById('fc3MatLbl');    if (_ml) _ml.textContent = 'herhangi biri';
+        // Genel arama
+        var _qs = document.getElementById('fc3QuickSearch'); if (_qs) _qs.value = '';
         applyFilters();
     };
 

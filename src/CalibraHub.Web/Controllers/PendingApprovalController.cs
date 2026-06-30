@@ -64,6 +64,29 @@ public sealed class PendingApprovalController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> CompletedGroups(string? scope, CancellationToken ct)
+    {
+        var groups = await _service.GetCompletedGroupsAsync(scope ?? PendingApprovalScope.Mine, ct);
+        return Json(new { ok = true, groups });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CompletedList(string? scope, int? documentTypeId, CancellationToken ct)
+    {
+        var items = await _service.GetCompletedListAsync(scope ?? PendingApprovalScope.Mine, documentTypeId, ct);
+        return Json(new { ok = true, items });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CompletedDetail(int instanceId, string? scope, CancellationToken ct)
+    {
+        var dto = await _service.GetCompletedDetailAsync(instanceId, scope ?? PendingApprovalScope.Mine, ct);
+        if (dto is null)
+            return Json(new { ok = false, error = "Bu kaydı görüntüleme yetkiniz yok veya tamamlanmamış." });
+        return Json(new { ok = true, detail = dto });
+    }
+
+    [HttpGet]
     public async Task<IActionResult> GetColConfig(CancellationToken ct)
     {
         var uid = CurrentUserId();

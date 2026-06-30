@@ -1,6 +1,11 @@
 ﻿using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Models.Diagnostics;
 using CalibraHub.Web.Models.Navigation;
 using CalibraHub.Web.Services;
@@ -22,17 +27,26 @@ public sealed class HealthCheckController : Controller
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<HealthCheckController> _logger;
     private readonly SchemaProbeService _schemaProbe;
+    private readonly IAdminManagementService _adminManagement;
+    private readonly ICompanyRepository _companyRepository;
+    private readonly IDepartmentRepository _departmentRepository;
 
     public HealthCheckController(
         IHttpClientFactory httpFactory,
         IHttpContextAccessor httpContextAccessor,
         ILogger<HealthCheckController> logger,
-        SchemaProbeService schemaProbe)
+        SchemaProbeService schemaProbe,
+        IAdminManagementService adminManagement,
+        ICompanyRepository companyRepository,
+        IDepartmentRepository departmentRepository)
     {
         _httpFactory = httpFactory;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
         _schemaProbe = schemaProbe;
+        _adminManagement = adminManagement;
+        _companyRepository = companyRepository;
+        _departmentRepository = departmentRepository;
     }
 
     [HttpGet("/Admin/HealthCheck")]
@@ -153,19 +167,22 @@ public sealed class HealthCheckController : Controller
 
     private (List<CheckTarget> Checks, HttpClient Client, string BaseUrl, string CookieHeader) PrepareRun()
     {
+        var checks = BuildCheckList();
+        var req = _httpContextAccessor.HttpContext!.Request;
+        var baseUrl = $"{req.Scheme}://{req.Host}";
+        var cookieHeader = string.Join("; ", req.Cookies.Select(c => $"{c.Key}={c.Value}"));
+        var client = _httpFactory.CreateClient("health-check");
+        client.Timeout = TimeSpan.FromSeconds(15);
+        return (checks, client, baseUrl, cookieHeader);
+    }
+
+    private List<CheckTarget> BuildCheckList()
+    {
         var isAdmin = string.Equals(User.Identity?.Name, "admin@calibra.local", StringComparison.OrdinalIgnoreCase);
         var menu = MenuDefinition.GetMainMenu(isAdmin);
         var checks = new List<CheckTarget>();
         FlattenMenu(menu, null, checks);
-
-        var req = _httpContextAccessor.HttpContext!.Request;
-        var baseUrl = $"{req.Scheme}://{req.Host}";
-        var cookieHeader = string.Join("; ", req.Cookies.Select(c => $"{c.Key}={c.Value}"));
-
-        var client = _httpFactory.CreateClient("health-check");
-        client.Timeout = TimeSpan.FromSeconds(15);
-
-        return (checks, client, baseUrl, cookieHeader);
+        return checks;
     }
 
     private async Task<CheckResult> RunSingleAsync(
@@ -212,6 +229,192 @@ public sealed class HealthCheckController : Controller
             result.ErrorSnippet = "İşlem sırasında bir hata oluştu.";
         }
         return result;
+    }
+
+    /// <summary>
+    /// Test şirketi oluştur → test kullanıcısı oluştur → login → tüm formları test et.
+    /// Her adım NDJSON stream olarak frontend'e iletilir.
+    /// Frame tipleri: setup_start | setup_step | setup_done | setup_error | start | checking | result | done
+    /// </summary>
+    [HttpPost("/Admin/HealthCheck/StreamTestCompany")]
+    [ValidateAntiForgeryToken]
+    public async Task StreamTestCompany(CancellationToken ct)
+    {
+        Response.ContentType = "application/x-ndjson; charset=utf-8";
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers["X-Accel-Buffering"] = "no";
+        Response.StatusCode = 200;
+
+        // Test şirketi adı: TEST_DDMMYYHHII (UTC)
+        var now = DateTime.UtcNow;
+        var testCompanyName = $"TEST_{now:ddMMyy}{now:HHmm}";
+        var testEmail       = $"test.hc.{now:ddMMyyHHmm}@calibra.test";
+        var testPassword    = $"Hc!{Guid.NewGuid().ToString("N")[..8]}";
+
+        await WriteFrameAsync(new { type = "setup_start", total = 3 }, ct);
+
+        // Mevcut şirketin DB bağlantısını al (test şirketi aynı DB'yi paylaşır)
+        int.TryParse(User.FindFirst("company_id")?.Value, out var currentCompanyId);
+        var currentCompany  = currentCompanyId > 0
+            ? await _companyRepository.GetByIdAsync(currentCompanyId, ct)
+            : null;
+        var connectionString = currentCompany?.DatabaseConnectionString;
+
+        int testCompanyId;
+        try
+        {
+            // Adım 1: Test şirketi oluştur
+            await WriteFrameAsync(new { type = "setup_step", step = 1, total = 3, message = $"Test şirketi oluşturuluyor: {testCompanyName}" }, ct);
+            var taxNumber = $"TST-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
+            testCompanyId = await _adminManagement.SaveCompanyAsync(
+                new SaveCompanyRequest(null, testCompanyName, testCompanyName, "-", null, null, null, "-", taxNumber, false, true, connectionString),
+                ct);
+
+            // Adım 2: Test departmanı + kullanıcısı oluştur
+            await WriteFrameAsync(new { type = "setup_step", step = 2, total = 3, message = "Test kullanıcısı oluşturuluyor..." }, ct);
+            await _adminManagement.CreateDepartmentAsync(new CreateDepartmentRequest(testCompanyId, "Yönetim"), ct);
+            var allDepts = await _departmentRepository.GetAllAsync(ct);
+            var dept = allDepts.First(x => x.CompanyId == testCompanyId);
+            await _adminManagement.CreateUserAsync(
+                new CreateUserRequest(
+                    testCompanyId, "Test Admin", testEmail, "TST-001", dept.Id, null,
+                    UserRole.SystemAdmin, UserAuthorizationCatalog.GetAllowedPermissions(UserRole.SystemAdmin),
+                    testPassword),
+                ct);
+        }
+        catch (Exception ex)
+        {
+            await WriteFrameAsync(new { type = "setup_error", message = $"Ortam oluşturulamadı: {ex.Message}" }, ct);
+            return;
+        }
+
+        // Adım 3: Test oturumu başlat (programmatic login)
+        try
+        {
+            await WriteFrameAsync(new { type = "setup_step", step = 3, total = 3, message = "Test oturumu başlatılıyor..." }, ct);
+            var req     = _httpContextAccessor.HttpContext!.Request;
+            var baseUrl = $"{req.Scheme}://{req.Host}";
+
+            var (testCookieHeader, loginError) = await LoginAsTestUserAsync(baseUrl, testEmail, testPassword, testCompanyId, ct);
+            if (testCookieHeader == null)
+            {
+                await WriteFrameAsync(new { type = "setup_error", message = $"Test oturumu başlatılamadı: {loginError}" }, ct);
+                return;
+            }
+
+            await WriteFrameAsync(new { type = "setup_done", companyName = testCompanyName, userEmail = testEmail, testCompanyId }, ct);
+
+            // Form testleri — mevcut Stream() ile aynı mantık, test kullanıcısının cookie'si ile
+            var checks = BuildCheckList();
+            var total   = checks.Count;
+            var results = new List<CheckResult>(total);
+            var client  = _httpFactory.CreateClient("health-check");
+            client.Timeout = TimeSpan.FromSeconds(15);
+
+            await WriteFrameAsync(new { type = "start", total }, ct);
+
+            for (var i = 0; i < checks.Count; i++)
+            {
+                var target = checks[i];
+                await WriteFrameAsync(new
+                {
+                    type        = "checking",
+                    index       = i + 1,
+                    total,
+                    label       = target.Label,
+                    parentLabel = target.ParentLabel,
+                    path        = target.Path,
+                }, ct);
+
+                var result = await RunSingleAsync(client, baseUrl, testCookieHeader, target, ct);
+                results.Add(result);
+
+                await WriteFrameAsync(new { type = "result", index = i + 1, total, result }, ct);
+            }
+
+            await WriteFrameAsync(new
+            {
+                type    = "done",
+                summary = new
+                {
+                    total,
+                    ok         = results.Count(r => r.Status == "ok"),
+                    redirect   = results.Count(r => r.Status == "redirect"),
+                    warn       = results.Count(r => r.Status == "warn"),
+                    error      = results.Count(r => r.Status == "error"),
+                    exception  = results.Count(r => r.Status == "exception"),
+                    durationMs = results.Sum(r => r.DurationMs),
+                    testCompanyId,
+                    testCompanyName,
+                },
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            await WriteFrameAsync(new { type = "setup_error", message = $"Test sırasında hata: {ex.Message}" }, ct);
+        }
+    }
+
+    /// <summary>
+    /// Programmatic login: GET login sayfasından CSRF token al, POST ile giriş yap, auth cookie'yi döndür.
+    /// </summary>
+    private async Task<(string? CookieHeader, string? Error)> LoginAsTestUserAsync(
+        string baseUrl, string email, string password, int companyId, CancellationToken ct)
+    {
+        var cookieContainer = new CookieContainer();
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies        = true,
+            CookieContainer   = cookieContainer,
+        };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+        var loginUri = new Uri($"{baseUrl}/Account/Login");
+
+        try
+        {
+            // 1. GET login sayfası → antiforgery cookie + form token
+            using var getResp = await client.GetAsync(loginUri, ct);
+            var html = await getResp.Content.ReadAsStringAsync(ct);
+            var csrfToken = ExtractCsrfToken(html);
+            if (string.IsNullOrWhiteSpace(csrfToken))
+                return (null, "CSRF token bulunamadı");
+
+            // 2. POST login
+            var form = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["CompanyId"]                    = companyId.ToString(),
+                ["Email"]                        = email,
+                ["Password"]                     = password,
+                ["RememberMe"]                   = "false",
+                ["__RequestVerificationToken"]   = csrfToken,
+            });
+            using var postResp = await client.PostAsync(loginUri, form, ct);
+
+            // Başarı = 302 redirect to home
+            if (postResp.StatusCode is not (HttpStatusCode.Redirect or HttpStatusCode.OK or HttpStatusCode.Found))
+                return (null, $"Giriş başarısız (HTTP {(int)postResp.StatusCode})");
+
+            var cookies = cookieContainer.GetCookies(loginUri);
+            if (cookies.Count == 0)
+                return (null, "Oturum cookie'si alınamadı");
+
+            var cookieHeader = string.Join("; ", cookies.Cast<Cookie>().Select(c => $"{c.Name}={c.Value}"));
+            return (cookieHeader, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, $"Login hatası: {ex.Message}");
+        }
+    }
+
+    private static string? ExtractCsrfToken(string html)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            html,
+            @"<input[^>]+name=""__RequestVerificationToken""[^>]+value=""([^""]+)""",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups[1].Value : null;
     }
 
     private static void FlattenMenu(IReadOnlyList<MenuDefinition.MenuNode> menu, string? parentLabel, List<CheckTarget> output)

@@ -46,7 +46,8 @@ public sealed record PendingApprovalItemDto(
     string? ApproverName,
     System.DateTime StepCreated,
     System.DateTime? DueDate,
-    System.DateTime InstanceStarted
+    System.DateTime InstanceStarted,
+    string? InstanceStatus = null  // null = "Pending"; "Approved" / "Rejected" tamamlananlar için
 );
 
 /// <summary>Ek sutun metadata — FlowExtraColumns endpoint'inden donerler.</summary>

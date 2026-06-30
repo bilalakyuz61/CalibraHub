@@ -9,6 +9,7 @@ using CalibraHub.Infrastructure.Reporting;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Persistence.Repositories;
+using CalibraHub.Web.Infrastructure;
 using CalibraHub.Web.Infrastructure.Collaboration;
 using CalibraHub.Web.Infrastructure.Ui;
 using CalibraHub.Web.Infrastructure.Workspace;
@@ -719,6 +720,9 @@ mvcBuilder.AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(
         new System.Text.Json.Serialization.JsonStringEnumConverter(
             namingPolicy: null, allowIntegerValues: true));
+    // SQL Server DATETIME → ADO.NET Kind=Unspecified → JS new Date() local time sanıyor.
+    // Tüm DateTime değerlerini UTC olarak serialize et (Z suffix'i ekle).
+    options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
 });
 
 // ── FluentValidation (rapor §2.5) ────────────────────────────────────────
