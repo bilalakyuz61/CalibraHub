@@ -160,7 +160,7 @@ public sealed class AddressController : Controller
         }
         catch (HttpRequestException ex) { return Json(new { success = false, message = "URL erisilemedi: " + ex.Message }); }
         catch (JsonException ex)        { return Json(new { success = false, message = "JSON ayristirilamadi: " + ex.Message }); }
-        catch (Exception ex)            { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex)            { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     private static string? Pick(JsonElement el, params string[] names)
@@ -303,7 +303,7 @@ public sealed class AddressController : Controller
         }
         catch (HttpRequestException ex) { return Json(new { success = false, message = "URL erisilemedi: " + ex.Message }); }
         catch (JsonException ex)        { return Json(new { success = false, message = "JSON ayristirilamadi: " + ex.Message }); }
-        catch (Exception ex)            { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex)            { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost]
@@ -331,7 +331,7 @@ public sealed class AddressController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -391,7 +391,7 @@ public sealed class AddressController : Controller
             if (input.IsDefault) await _repo.SetDefaultAddressAsync(input.ContactId, id, ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     public sealed class DeleteAddressBody { public int Id { get; set; } }
@@ -404,7 +404,7 @@ public sealed class AddressController : Controller
             await _repo.DeleteAddressAsync(body.Id, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     public sealed class SetDefaultBody { public int ContactId { get; set; } public int AddressId { get; set; } }

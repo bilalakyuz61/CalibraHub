@@ -19,7 +19,10 @@ public sealed record DocumentDto(
     string? CurrencySymbol = null,        // Display (₺/$/€) — currencies.symbol
     // Talep Eden — Personnel.Id FK (İhtiyaç Kaydı).
     int? RequesterPersonnelId = null,
-    string? RequesterPersonnelName = null);   // Personnel.FullName (JOIN ile gelir)
+    string? RequesterPersonnelName = null,   // Personnel.FullName (JOIN ile gelir)
+    // Hedef Lokasyon — Location.Id FK (İhtiyaç Kaydı başlık düzeyi).
+    int? LocationId = null,
+    string? LocationName = null);            // Location.LocationName (JOIN ile gelir)
 
 /// <summary>
 /// DocumentLineDto — UI'a gonderilen satir goruntusu. ItemId + CombinationId tablodaki
@@ -83,7 +86,9 @@ public sealed record SaveDocumentRequest(
     int? RequesterPersonnelId = null,
     // Kaynak İhtiyaç Kaydı ID'si — teklif/sipariş bu İhtiyaç'tan türetiliyorsa set edilir.
     // Yeni belge kaydedilince document_source köprüsü otomatik eklenir.
-    int? FromRequestId = null);
+    int? FromRequestId = null,
+    // Hedef Lokasyon — Location.Id FK (İhtiyaç Kaydı başlık düzeyi).
+    int? LocationId = null);
 
 /// <summary>
 /// Client'tan gelen kayit istegi. ItemId zorunludur — malzeme kodu/adi tabloda tutulmaz,

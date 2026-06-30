@@ -41,6 +41,9 @@ public sealed class Personnel
     /// <summary>Opsiyonel: Sistem kullanıcısı varsa link. Operatör web/desktop login yapabilir mi.</summary>
     public int? UserId { get; init; }
 
+    /// <summary>Varsayılan depo/lokasyon (FK -> Location.Id). İhtiyaç kaydında otomatik dolar.</summary>
+    public int? LocationId { get; init; }
+
     public string? Phone { get; init; }
     public string? Email { get; init; }
     public string? Notes { get; init; }

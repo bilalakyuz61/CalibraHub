@@ -46,6 +46,13 @@ function normalizeTriggerType(t) {
   return 0
 }
 
+const SOURCE_TYPE_NUM = { FormField: 0, Constant: 1, Formula: 2, Lookup: 3, Function: 4 }
+function normalizeSourceType(t) {
+  if (typeof t === 'number') return t
+  if (typeof t === 'string' && t in SOURCE_TYPE_NUM) return SOURCE_TYPE_NUM[t]
+  return 0
+}
+
 const STEPS = [
   // Veri Kaynagi adimini kaldirdik — form secimi context bar'da kompakt combobox.
   // 2026-05-22: "Kısıt Kuralları" (Pre-flight Filter) eklenmesi ile 5 adım.
@@ -82,6 +89,9 @@ const emptyState = () => ({
   // 2026-05-22 Cascade target flag — bu integration baska entegrasyonlar tarafindan cascade
   // hedefi olarak secilebilir mi? Default TRUE — herkes cascade'lenebilir; bilincli kapatma gerek.
   allowAsCascadeTarget: true,
+  // Kod bazlı cascade: bu integration cascade hedefi olarak KOD ile çağrıldığında
+  // hangi kolona göre entity bulunacak (orn. "CariKod"). NULL = ID bazlı (default).
+  sourceCodeColumn: null,
 })
 
 /**
@@ -138,7 +148,7 @@ export default function IntegrationWizard({ config }) {
             mappings: (it.mappings || []).map(m => ({
               targetPath: m.targetPath,
               targetDataType: m.targetDataType,
-              sourceType: m.sourceType,
+              sourceType: normalizeSourceType(m.sourceType),
               sourceValue: m.sourceValue,
               lookupSourceField: m.lookupSourceField,
               defaultValue: m.defaultValue,
@@ -151,6 +161,7 @@ export default function IntegrationWizard({ config }) {
               lookupReturnColumn: m.lookupReturnColumn || null,
               lookupParam: m.lookupParam || null,
               cascadeToIntegrationId: m.cascadeToIntegrationId ?? null,   // 2026-05-22 Cascade
+            cascadeByValue: m.cascadeByValue ?? false,
             })),
             // 2026-05-21: Backend artik JsonStringEnumConverter ile string enum
             // ("Manual","Cron","OnSave","Event") doner. Frontend tarafindaki tum
@@ -171,6 +182,7 @@ export default function IntegrationWizard({ config }) {
             sourceFilterJson:        it.sourceFilterJson || null,
             // 2026-05-22 Cascade — backend default true; null gelirse true varsay
             allowAsCascadeTarget:    it.allowAsCascadeTarget ?? true,
+            sourceCodeColumn:        it.sourceCodeColumn || null,
           })
         } else {
           toast(d.error || 'Entegrasyon yüklenemedi', 'err')
@@ -326,6 +338,7 @@ export default function IntegrationWizard({ config }) {
           sourceFilterJson:        state.sourceFilterJson || null,
           // 2026-05-22 Cascade — bu integration cascade hedefi olarak görünür mü
           allowAsCascadeTarget:    state.allowAsCascadeTarget !== false,
+          sourceCodeColumn:        state.sourceCodeColumn || null,
         }),
       })
       const d = await r.json()
@@ -719,7 +732,6 @@ function ContextBar({ state, update, apiBase }) {
             • Endpoint seçilmişse               → form değişirse endpoint uyumsuz
             • Filter (Kısıt Kuralları) yazılmışsa → field'lar form'a özel
           Tek serbest hâl: yepyeni wizard'ın ilk adımı. */}
-      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--iw-muted)' }}>Form:</span>
       {(() => {
         const isEdit = state.id > 0
         const hasMappings = (state.mappings?.length || 0) > 0
@@ -743,24 +755,8 @@ function ContextBar({ state, update, apiBase }) {
         )
       })()}
 
-      {/* 2026-05-25: "2 Kademe · SALES_ORDER_LINES" chip kullanici talebiyle kaldirildi —
-          alan bilgisi kullanici icin teknik detay, gerek yok. Master-detail durumu zaten
-          Step 3'te source alanlarinda gorulur. */}
-
-      {state.sourceFormCode && state.targetEndpointId && !state.procedureOnlyMode && (
-        <ArrowRight size={12} style={{ color: 'var(--iw-muted)', flexShrink: 0 }} />
-      )}
-      {state.targetEndpointId && !state.procedureOnlyMode && (
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '3px 8px', borderRadius: 4,
-          background: 'var(--iw-emerald-bg)', color: 'var(--iw-emerald-color)',
-          fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11, fontWeight: 600,
-          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 500,
-        }} title="Hedef endpoint">
-          <Globe size={11} /> {endpointName || `Endpoint #${state.targetEndpointId}`}
-        </span>
-      )}
+      {/* Step-specific actions — Step 3 (mapping) toolbar portals into this slot */}
+      <span id="iw-step-actions-portal" style={{ display: 'contents' }} />
 
       {/* Sadece Prosedür switch — dikey stack: switch üstte + label altta (kompakt) */}
       <span style={{ flex: 1 }} />
@@ -785,36 +781,15 @@ function ContextBar({ state, update, apiBase }) {
                 ? 'Sadece Prosedür modu AÇIK — HTTP çağrısı yok, mapping atlanır'
                 : 'Açarsan: HTTP çağrısı yapmadan sadece SQL prosedürü çalıştırır (cron/OnSave)'}
               style={{
-                display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                padding: '4px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
-                cursor: 'pointer', lineHeight: 1.2,
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                cursor: 'pointer',
                 border: '1px solid ' + (state.procedureOnlyMode ? 'var(--iw-emerald-color)' : 'var(--iw-border)'),
                 background: state.procedureOnlyMode ? 'var(--iw-emerald-bg)' : 'transparent',
                 color: state.procedureOnlyMode ? 'var(--iw-emerald-color)' : 'var(--iw-muted)',
               }}>
-        <span style={{
-          width: 26, height: 14, borderRadius: 7, position: 'relative',
-          background: state.procedureOnlyMode ? 'var(--iw-emerald-color)' : 'var(--iw-border)',
-          transition: 'background .15s',
-        }}>
-          <span style={{
-            position: 'absolute', top: 1, left: state.procedureOnlyMode ? 13 : 1,
-            width: 12, height: 12, borderRadius: '50%', background: '#fff',
-            transition: 'left .15s',
-          }} />
-        </span>
-        <span>⚙ Sadece Prosedür</span>
+        ⚙ Sadece Prosedür
       </button>
-      {state.mappings?.length > 0 && (
-        <span title="Toplam alan eşlemesi">
-          <strong style={{ color: 'var(--iw-text)' }}>{state.mappings.length}</strong> eşleme
-        </span>
-      )}
-      {state.triggers?.length > 0 && (
-        <span title="Aktif tetikleyici sayısı" style={{ marginLeft: 12 }}>
-          <strong style={{ color: 'var(--iw-text)' }}>{state.triggers.length}</strong> tetikleyici
-        </span>
-      )}
       {state.preProcedureName && (
         <span title="Öncesi prosedür" style={{ marginLeft: 12, color: 'var(--iw-amber-color)' }}>
           ↪ {state.preProcedureName}

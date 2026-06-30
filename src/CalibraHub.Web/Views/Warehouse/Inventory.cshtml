@@ -1,0 +1,102 @@
+@model CalibraHub.Web.Models.Warehouse.WarehouseBoardViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Stok Sayımı";
+    ViewData["BodyClass"] = "page-wh-inventory";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
+}
+
+@section Styles {
+<style>
+    .page-wh-inventory .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-wh-inventory .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-wh-inventory .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-wh-inventory .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[Inventory] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:#f87171;font-size:14px;gap:12px;">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayı Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard yüklenemedi');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+        } catch (ex) {
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-inv-sb]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-inv-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-inv-sb', '1');
+        script.onload  = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
+
+    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
+})();
+</script>
+}

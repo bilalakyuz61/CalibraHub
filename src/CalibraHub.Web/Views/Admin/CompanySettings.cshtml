@@ -862,6 +862,12 @@
                             <label>Webhook Token</label>
                             <input type="text" class="form-control form-control-sm" id="waWebhookToken" placeholder="opsiyonel — gelen mesajlar için" value="@waCfg?.WebhookVerifyToken" />
                         </div>
+                        <div class="cs-line">
+                            <label>App Secret</label>
+                            <input type="password" class="form-control form-control-sm" id="waAppSecret" autocomplete="new-password"
+                                   placeholder="@(string.IsNullOrEmpty(waCfg?.AppSecretEncrypted) ? "Webhook imza doğrulaması için (önerilir)" : "Değiştirmek için yeni secret gir")" />
+                            <small class="text-muted" style="font-size:.75rem;">Meta App Dashboard → App Settings → App Secret</small>
+                        </div>
                     </div>
 
                     <!-- Web QR panel -->
@@ -1655,6 +1661,7 @@
         var fd = new FormData();
         fd.append('provider', providerEl.value);
         fd.append('accessToken', (document.getElementById('waToken') || {}).value || '');
+        fd.append('appSecret', (document.getElementById('waAppSecret') || {}).value || '');
         fd.append('phoneNumberId', (document.getElementById('waPhoneId') || {}).value || '');
         fd.append('businessAccountId', (document.getElementById('waBizId') || {}).value || '');
         fd.append('webhookVerifyToken', (document.getElementById('waWebhookToken') || {}).value || '');

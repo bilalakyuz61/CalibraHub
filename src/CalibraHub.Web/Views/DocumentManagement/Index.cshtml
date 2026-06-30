@@ -1,0 +1,354 @@
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"]     = "Döküman Yönetimi";
+    ViewData["FormCode"]  = "DOC_MANAGEMENT";
+    ViewData["BodyClass"] = "page-docmgmt";
+    var token = Antiforgery.GetAndStoreTokens(Context).RequestToken;
+}
+
+<style>
+/* ── Upload Modal ──────────────────────────────────────────────────────────── */
+.dm-modal-backdrop {
+    display:none; position:fixed; inset:0; z-index:9999;
+    background:rgba(15,23,42,.55); backdrop-filter:blur(3px);
+    align-items:center; justify-content:center;
+}
+.dm-modal-backdrop.open { display:flex; }
+.dm-modal-card {
+    background:var(--app-surface,#fff); border-radius:14px; width:520px; max-width:95vw;
+    max-height:90vh; overflow-y:auto; padding:28px 28px 24px;
+    box-shadow:0 20px 60px rgba(0,0,0,.25);
+    border:1px solid var(--app-border,#e2e8f0);
+}
+.dm-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+.dm-modal-icon {
+    width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg,#6366f1,#4f46e5); flex-shrink:0;
+}
+.dm-modal-icon svg { width:20px; height:20px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; }
+.dm-modal-title { font-size:1.08rem; font-weight:700; color:var(--bs-body-color,#0f172a); }
+.dm-modal-close {
+    margin-left:auto; width:32px; height:32px; border-radius:6px; border:none; cursor:pointer;
+    background:transparent; color:var(--bs-secondary-color,#64748b); font-size:1.3rem; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+}
+.dm-modal-close:hover { background:var(--app-surface-2,#f1f5f9); }
+.dm-f-label { display:block; font-size:0.78rem; font-weight:600; color:var(--bs-secondary-color,#6c757d); margin-bottom:4px; }
+.dm-f-row { margin-bottom:14px; }
+.dm-f-input {
+    width:100%; padding:8px 11px; border-radius:7px; font-size:0.88rem;
+    border:1px solid var(--app-border,#e2e8f0); background:var(--app-input-bg,#fff);
+    color:var(--bs-body-color,#0f172a); outline:none; box-sizing:border-box; transition:border-color .15s;
+    font-family:inherit;
+}
+.dm-f-input:focus { border-color:#6366f1; box-shadow:0 0 0 2px rgba(99,102,241,.12); }
+/* Drop zone */
+.dm-drop {
+    border:2px dashed var(--app-border,#d1d5db); border-radius:10px; padding:28px 20px;
+    text-align:center; cursor:pointer; transition:border-color .15s,background .15s;
+    margin-bottom:0; position:relative; background:var(--app-surface,#fff);
+}
+.dm-drop:hover, .dm-drop.dragover { border-color:#6366f1; background:rgba(99,102,241,.04); }
+.dm-drop input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+.dm-drop-icon { color:#94a3b8; margin-bottom:6px; }
+.dm-drop-icon svg { width:34px; height:34px; stroke:currentColor; fill:none; stroke-width:1.5; }
+.dm-drop-text { font-size:0.88rem; color:var(--bs-secondary-color,#64748b); }
+.dm-drop-hint { font-size:0.74rem; color:#94a3b8; margin-top:4px; }
+.dm-file-selected { font-size:0.84rem; font-weight:600; color:#6366f1; margin-top:6px; min-height:18px; }
+/* Progress */
+.dm-progress-wrap { display:none; margin-top:10px; margin-bottom:4px; }
+.dm-progress-wrap.visible { display:block; }
+.dm-progress-bar { height:5px; border-radius:3px; background:var(--app-border,#e2e8f0); overflow:hidden; }
+.dm-progress-fill { height:100%; background:#6366f1; width:0; transition:width .3s; border-radius:3px; }
+.dm-progress-text { font-size:0.74rem; color:var(--bs-secondary-color,#64748b); margin-top:3px; text-align:right; }
+/* Buttons */
+.dm-modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
+.dm-btn {
+    padding:8px 20px; border-radius:7px; font-size:0.88rem; font-weight:600;
+    border:none; cursor:pointer; transition:background .15s; font-family:inherit;
+}
+.dm-btn--primary { background:#6366f1; color:#fff; }
+.dm-btn--primary:hover { background:#4f46e5; }
+.dm-btn--primary:disabled { opacity:.5; cursor:default; }
+.dm-btn--secondary { background:var(--app-surface-2,#f1f5f9); color:var(--bs-body-color,#0f172a); }
+.dm-btn--secondary:hover { background:var(--app-border,#e2e8f0); }
+.dm-status { font-size:0.8rem; margin-top:8px; min-height:18px; text-align:center; }
+.dm-status--ok  { color:#22c55e; }
+.dm-status--err { color:#ef4444; }
+/* SmartBoard layout */
+.page-docmgmt .integrator-dashboard {
+    height:100% !important; min-height:0 !important; padding:0 !important;
+    max-width:none !important; background:transparent !important;
+    box-shadow:none !important; border:none !important; border-radius:0 !important;
+}
+.page-docmgmt .integrator-dashboard__content {
+    display:flex !important; flex-direction:column !important; width:100% !important;
+    max-width:none !important; min-height:0 !important; padding:0 !important;
+    margin:0 !important; overflow:hidden !important;
+}
+.workspace-frame-body.page-docmgmt .app-content-area--workspace-frame {
+    height:100dvh; display:flex; flex-direction:column; overflow:hidden; padding:0;
+}
+.workspace-frame-body.page-docmgmt .integrator-dashboard { flex:1 1 auto; min-height:0; height:100%; }
+/* Dark */
+body.app-theme-dark .dm-modal-card  { background:#0b1220; border-color:#1e293b; }
+body.app-theme-dark .dm-modal-close:hover { background:#1e293b; }
+body.app-theme-dark .dm-drop        { background:#0b1220; }
+body.app-theme-dark .dm-f-input     { background:#1e293b; border-color:#334155; color:#e2e8f0; }
+body.app-theme-dark .dm-btn--secondary { background:#1e293b; color:#e2e8f0; }
+body.app-theme-dark .dm-btn--secondary:hover { background:#334155; }
+</style>
+
+<!-- ── Upload Modal ─────────────────────────────────────────────────────── -->
+<div class="dm-modal-backdrop" id="dm-upload-modal" role="dialog" aria-modal="true" aria-labelledby="dm-modal-title">
+    <div class="dm-modal-card">
+        <div class="dm-modal-header">
+            <div class="dm-modal-icon">
+                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <span class="dm-modal-title" id="dm-modal-title">Belge Yükle</span>
+            <button class="dm-modal-close" onclick="dmCloseModal()" aria-label="Kapat">×</button>
+        </div>
+
+        <div class="dm-f-row">
+            <label class="dm-f-label">Dosya *</label>
+            <div class="dm-drop" id="dm-drop-zone">
+                <div class="dm-drop-icon">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <div class="dm-drop-text">Dosyayı buraya sürükleyin veya tıklayın</div>
+                <div class="dm-drop-hint">Maks. 50 MB — PDF, Word, Excel, görsel ve diğer formatlar</div>
+                <div class="dm-file-selected" id="dm-filename-display"></div>
+                <input type="file" id="dm-file-input" onchange="dmFileSelected(this)">
+            </div>
+            <div class="dm-progress-wrap" id="dm-progress-wrap">
+                <div class="dm-progress-bar"><div class="dm-progress-fill" id="dm-progress-fill"></div></div>
+                <div class="dm-progress-text" id="dm-progress-text">0%</div>
+            </div>
+        </div>
+
+        <div class="dm-f-row">
+            <label class="dm-f-label">Başlık</label>
+            <input id="dm-title" class="dm-f-input" type="text" placeholder="Opsiyonel — boş bırakılırsa dosya adı gösterilir">
+        </div>
+        <div class="dm-f-row">
+            <label class="dm-f-label">Kategori</label>
+            <select id="dm-category" class="dm-f-input">
+                <option value="">— Seçiniz —</option>
+                @foreach (var c in (string[])ViewBag.Categories)
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </div>
+        <div class="dm-f-row">
+            <label class="dm-f-label">Etiketler</label>
+            <input id="dm-tags" class="dm-f-input" type="text" placeholder="Virgülle ayırın: kalite, teknik, sözleşme">
+        </div>
+        <div class="dm-f-row">
+            <label class="dm-f-label">Açıklama</label>
+            <textarea id="dm-description" class="dm-f-input" rows="2" style="resize:vertical;" placeholder="Kısa açıklama (opsiyonel)"></textarea>
+        </div>
+
+        <div class="dm-modal-actions">
+            <button class="dm-btn dm-btn--secondary" onclick="dmCloseModal()">Vazgeç</button>
+            <button id="dm-upload-btn" class="dm-btn dm-btn--primary" disabled onclick="dmUpload()">Yükle</button>
+        </div>
+        <div id="dm-status" class="dm-status"></div>
+    </div>
+</div>
+
+<!-- ── SmartBoard mount ──────────────────────────────────────────────────── -->
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactDocBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(ViewBag.BoardConfigJson ?? "null");
+    var CSRF_TOKEN   = '@token';
+    var BUNDLE_URL   = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL      = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+
+    // ── Upload Modal ─────────────────────────────────────────────────────────
+    var modal = document.getElementById('dm-upload-modal');
+
+    // SmartBoard trigger: board config'te trigger:"dmOpenUpload"
+    window.dmOpenUpload = function() {
+        document.getElementById('dm-file-input').value = '';
+        document.getElementById('dm-filename-display').textContent = '';
+        document.getElementById('dm-title').value = '';
+        document.getElementById('dm-category').value = '';
+        document.getElementById('dm-tags').value = '';
+        document.getElementById('dm-description').value = '';
+        document.getElementById('dm-upload-btn').disabled = true;
+        document.getElementById('dm-status').textContent = '';
+        document.getElementById('dm-status').className = 'dm-status';
+        document.getElementById('dm-progress-wrap').classList.remove('visible');
+        modal.classList.add('open');
+        setTimeout(function() { document.getElementById('dm-title').focus(); }, 80);
+    };
+
+    window.dmCloseModal = function() { modal.classList.remove('open'); };
+    modal.addEventListener('click', function(e) { if (e.target === modal) window.dmCloseModal(); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) window.dmCloseModal();
+    });
+
+    // Drop zone drag-drop
+    var dz = document.getElementById('dm-drop-zone');
+    dz.addEventListener('dragover',  function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', function()  { dz.classList.remove('dragover'); });
+    dz.addEventListener('drop', function(e) {
+        e.preventDefault(); dz.classList.remove('dragover');
+        var fi = document.getElementById('dm-file-input');
+        fi.files = e.dataTransfer.files;
+        window.dmFileSelected(fi);
+    });
+
+    window.dmFileSelected = function(input) {
+        var btn = document.getElementById('dm-upload-btn');
+        var lbl = document.getElementById('dm-filename-display');
+        if (input.files && input.files.length > 0) {
+            var f = input.files[0];
+            var mb = f.size / (1024 * 1024);
+            if (mb > 50) {
+                lbl.textContent = 'Dosya 50 MB sınırını aşıyor!';
+                lbl.style.color = '#ef4444';
+                btn.disabled = true;
+                return;
+            }
+            var disp = mb >= 1 ? mb.toFixed(1) + ' MB' : (f.size / 1024).toFixed(1) + ' KB';
+            lbl.textContent = f.name + ' — ' + disp;
+            lbl.style.color = '';
+            btn.disabled = false;
+        } else {
+            lbl.textContent = '';
+            btn.disabled = true;
+        }
+    };
+
+    window.dmUpload = function() {
+        var fileInput = document.getElementById('dm-file-input');
+        if (!fileInput.files || fileInput.files.length === 0) return;
+        var btn = document.getElementById('dm-upload-btn');
+        var statusEl = document.getElementById('dm-status');
+        btn.disabled = true;
+        statusEl.textContent = '';
+        statusEl.className = 'dm-status';
+
+        var form = new FormData();
+        form.append('file',        fileInput.files[0]);
+        form.append('title',       document.getElementById('dm-title').value);
+        form.append('category',    document.getElementById('dm-category').value);
+        form.append('tags',        document.getElementById('dm-tags').value);
+        form.append('description', document.getElementById('dm-description').value);
+        form.append('__RequestVerificationToken', CSRF_TOKEN);
+
+        var xhr = new XMLHttpRequest();
+        var pw = document.getElementById('dm-progress-wrap');
+        var pf = document.getElementById('dm-progress-fill');
+        var pt = document.getElementById('dm-progress-text');
+        pw.classList.add('visible');
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                var pct = Math.round((e.loaded / e.total) * 100);
+                pf.style.width = pct + '%';
+                pt.textContent = pct + '%';
+            }
+        };
+        xhr.onload = function() {
+            pw.classList.remove('visible');
+            try {
+                var d = JSON.parse(xhr.responseText);
+                if (d.ok) {
+                    statusEl.className = 'dm-status dm-status--ok';
+                    statusEl.textContent = 'Belge başarıyla yüklendi!';
+                    setTimeout(function() {
+                        window.dmCloseModal();
+                        if (window._dmBoardRefresh) window._dmBoardRefresh();
+                        else window.location.reload();
+                    }, 900);
+                } else {
+                    btn.disabled = false;
+                    statusEl.className = 'dm-status dm-status--err';
+                    statusEl.textContent = d.error || 'Yükleme başarısız.';
+                }
+            } catch (ex) {
+                btn.disabled = false;
+                statusEl.className = 'dm-status dm-status--err';
+                statusEl.textContent = 'Sunucu yanıtı okunamadı.';
+            }
+        };
+        xhr.onerror = function() {
+            pw.classList.remove('visible');
+            btn.disabled = false;
+            statusEl.className = 'dm-status dm-status--err';
+            statusEl.textContent = 'Bağlantı hatası.';
+        };
+        xhr.open('POST', '/DocumentManagement/Upload');
+        xhr.send(form);
+    };
+
+    // fetch-modal'ların "kaydet+kapat" callback'i — SmartCard bu ismi kullanır
+    window._dmepCancel = function(refresh) {
+        if (refresh && window._dmBoardRefresh) window._dmBoardRefresh();
+    };
+
+    // ── SmartBoard mount ──────────────────────────────────────────────────────
+    var el = document.getElementById('reactDocBoard');
+    if (!el) { console.error('[DocMgmt] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div class="cb-mount-error">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()">Sayfayı Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadı'); return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            window._dmBoardRefresh = function() {
+                fetch('/DocumentManagement/BoardConfig', { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) { window.CalibraHub.mountSmartBoard(el, data); })
+                    .catch(function() { window.location.reload(); });
+            };
+            console.log('[DocMgmt] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'belge');
+        } catch (ex) {
+            console.error('[DocMgmt] Mount exception:', ex);
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-docmgmt-sb]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-docmgmt-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        if (document.querySelector('script[data-docmgmt-sb]')) { cb(); return; }
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL;
+        s.setAttribute('data-docmgmt-sb', '1');
+        s.onload  = function() { setTimeout(cb, 0); };
+        s.onerror = function() { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(s);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
+    else loadScript(doMount);
+})();
+</script>
+}

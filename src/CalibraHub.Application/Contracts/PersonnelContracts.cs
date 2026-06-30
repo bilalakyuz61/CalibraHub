@@ -18,7 +18,9 @@ public sealed record PersonnelDto(
     string? Notes,
     DateTime? BirthDate,
     DateTime Created,
-    DateTime? Updated);
+    DateTime? Updated,
+    int? LocationId = null,
+    string? LocationName = null);
 
 public sealed record SavePersonnelRequest(
     int Id,
@@ -34,4 +36,5 @@ public sealed record SavePersonnelRequest(
     string? Phone,
     string? Email,
     string? Notes,
-    DateTime? BirthDate);
+    DateTime? BirthDate,
+    int? LocationId = null);

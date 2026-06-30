@@ -23,6 +23,7 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _ruleTable;
     private readonly string _counterTable;
+    private readonly string _docTable;
 
     public SqlDocumentNumberService(
         SqlServerConnectionFactory connectionFactory,
@@ -32,6 +33,7 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _ruleTable    = $"[{schema}].[DocumentNumberRule]";
         _counterTable = $"[{schema}].[DocumentNumberCounter]";
+        _docTable     = $"[{schema}].[Document]";
     }
 
     public async Task<string?> GenerateNextAsync(DocumentNumberContext context, CancellationToken ct)
@@ -51,7 +53,7 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
 
         // 3) Sayaç state'ini increment et (transaction + UPDLOCK)
         var resetKey = ComputeResetKey(winner.ResetPeriod, context.IssueDate);
-        var nextValue = await IncrementCounterAsync(conn, winner, resetKey, ct);
+        var nextValue = await IncrementCounterAsync(conn, winner, resetKey, context.IssueDate, ct);
 
         // 4) Format
         return FormatNumber(winner, context.IssueDate, nextValue);
@@ -137,7 +139,7 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
 
     // ── Sayaç increment (transaction + lock) ────────────────────────────────
     private async Task<long> IncrementCounterAsync(
-        SqlConnection conn, DocumentNumberRule rule, string resetKey, CancellationToken ct)
+        SqlConnection conn, DocumentNumberRule rule, string resetKey, DateTime date, CancellationToken ct)
     {
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
@@ -157,18 +159,21 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
                 var raw = await sel.ExecuteScalarAsync(ct);
                 if (raw is null || raw is DBNull)
                 {
-                    // İlk insert — CounterStart - 1 ile başla, sonraki UPDATE +1 yapacak
+                    // Sayaç yok — Document tablosundaki max numarayla başla (counter reset sonrası
+                    // çakışmayı önler). CounterStart - 1 ile bu değerin büyüğü kullanılır.
+                    var existingMax = await ReadMaxExistingCounterAsync(conn, tx, rule, date, ct);
+                    current = Math.Max((long)(rule.CounterStart - 1), existingMax);
+
                     await using var ins = conn.CreateCommand();
                     ins.Transaction = tx;
                     ins.CommandText = $"""
                         INSERT INTO {_counterTable} ([RuleId], [ResetKey], [CurrentValue])
-                        VALUES (@RuleId, @ResetKey, @StartMinusOne);
+                        VALUES (@RuleId, @ResetKey, @StartValue);
                         """;
                     ins.Parameters.Add(new SqlParameter("@RuleId", rule.Id));
                     ins.Parameters.Add(new SqlParameter("@ResetKey", resetKey));
-                    ins.Parameters.Add(new SqlParameter("@StartMinusOne", (long)(rule.CounterStart - 1)));
+                    ins.Parameters.Add(new SqlParameter("@StartValue", current));
                     await ins.ExecuteNonQueryAsync(ct);
-                    current = rule.CounterStart - 1;
                 }
                 else
                 {
@@ -176,8 +181,11 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
                 }
             }
 
-            // 2) Increment + return new value
+            // 2) Increment; üretilen numara zaten Document tablosunda varsa geç (desync kurtarma)
             var next = current + 1;
+            while (await DocumentNumberExistsAsync(conn, tx, rule, date, next, ct))
+                next++;
+
             await using (var upd = conn.CreateCommand())
             {
                 upd.Transaction = tx;
@@ -200,6 +208,54 @@ public sealed class SqlDocumentNumberService : IDocumentNumberService
             await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    // ── Numara çakışma kontrolü (desync kurtarma) ──────────────────────────
+    private async Task<bool> DocumentNumberExistsAsync(
+        SqlConnection conn, SqlTransaction tx, DocumentNumberRule rule, DateTime date, long counter, CancellationToken ct)
+    {
+        var docNumber = FormatNumber(rule, date, counter);
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT COUNT(1) FROM {_docTable}
+            WHERE [DocumentNumber] = @DocNumber;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@DocNumber", docNumber));
+        var raw = await cmd.ExecuteScalarAsync(ct);
+        return raw is not null && Convert.ToInt32(raw) > 0;
+    }
+
+    // ── Mevcut max sayaç okuma (counter sıfırdan başlarken desync önleme) ──
+    private async Task<long> ReadMaxExistingCounterAsync(
+        SqlConnection conn, SqlTransaction tx, DocumentNumberRule rule, DateTime date, CancellationToken ct)
+    {
+        // Prefix (prefix + yıl + ay) oluştur — sayaç kısmını hariç tut
+        var sb = new System.Text.StringBuilder();
+        if (!string.IsNullOrEmpty(rule.Prefix))      sb.Append(rule.Prefix);
+        if (!string.IsNullOrEmpty(rule.YearFormat))  sb.Append(date.ToString(rule.YearFormat, CultureInfo.InvariantCulture));
+        if (!string.IsNullOrEmpty(rule.MonthFormat)) sb.Append(date.ToString(rule.MonthFormat, CultureInfo.InvariantCulture));
+        var prefix = sb.ToString();
+
+        // prefix boşsa güvenli biçimde çık
+        if (string.IsNullOrEmpty(prefix)) return 0;
+
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT TOP 1 [DocumentNumber]
+            FROM {_docTable}
+            WHERE [DocumentNumber] LIKE @Prefix + '%'
+            ORDER BY LEN([DocumentNumber]) DESC, [DocumentNumber] DESC;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Prefix", prefix));
+        var raw = await cmd.ExecuteScalarAsync(ct);
+        if (raw is null || raw is DBNull) return 0;
+
+        var docNumber = raw.ToString()!;
+        if (docNumber.Length <= prefix.Length) return 0;
+        var suffix = docNumber[prefix.Length..];
+        return long.TryParse(suffix, out var parsed) ? parsed : 0;
     }
 
     // ── Format ──────────────────────────────────────────────────────────────

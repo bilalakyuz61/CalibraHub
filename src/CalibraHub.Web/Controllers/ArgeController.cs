@@ -64,7 +64,7 @@ public sealed class ArgeController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -142,7 +142,7 @@ public sealed class ArgeController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 

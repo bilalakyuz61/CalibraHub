@@ -12,10 +12,11 @@ public sealed record ImportEntityDto(string Entity, string Label);
 public sealed record ImportTargetFieldDto(
     string Key,             // "AccountTitle"
     string Label,           // "Cari Unvanı"
-    string DataType,        // "string" | "type" (AccountType) | "int" | "decimal"
+    string DataType,        // "string" | "type" (AccountType) | "int" | "decimal" | "bool"
     bool IsRequired,        // unvan zorunlu
     bool CanBeMatchKey,     // upsert anahtarı olabilir mi
-    string? Hint = null);
+    string? Hint = null,
+    IReadOnlyList<string>? AllowedValues = null);   // enum/bool → boş şablonda açılır liste + yardımcı sayfa
 
 // ── Bir şablondaki tek kolon eşlemesi ────────────────────────────────────
 public sealed record ImportColumnMapDto(

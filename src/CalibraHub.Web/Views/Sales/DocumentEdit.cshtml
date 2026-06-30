@@ -2359,6 +2359,8 @@
                     var personnels         = ViewData["RequesterPersonnels"] as System.Collections.IEnumerable;
                     var requesterLocked    = (bool)(ViewData["RequesterLocked"] ?? false);
                     var curPersonnelId     = ViewData["CurrentUserPersonnelId"] as int?;
+                    var locationList       = ViewData["LocationList"] as System.Collections.IEnumerable;
+                    var curLocationId      = ViewData["CurrentLocationId"] as int?;
                     <div class="sqe-hrow">
                         <label class="sqe-hlabel">Talep Eden</label>
                         <select id="sqRequesterId" class="form-select form-select-sm sqe-hinput"
@@ -2383,6 +2385,29 @@
                         (function(){
                             var sel = document.getElementById('sqRequesterId');
                             if (sel) { sel.value = '@curPersonnelId'; }
+                        })();
+                        </script>
+                    }
+
+                    <div class="sqe-hrow">
+                        <label class="sqe-hlabel">Hedef Depo</label>
+                        <select id="sqLocationId" class="form-select form-select-sm sqe-hinput" onchange="sqPropagateHeaderLocation()">
+                            <option value="">Seçiniz…</option>
+                            @if (locationList != null)
+                            {
+                                foreach (dynamic loc in locationList)
+                                {
+                                    <option value="@loc.Id">@loc.LocationName</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @if (curLocationId.HasValue)
+                    {
+                        <script>
+                        (function(){
+                            var sel = document.getElementById('sqLocationId');
+                            if (sel) { sel.value = '@curLocationId'; }
                         })();
                         </script>
                     }
@@ -2495,6 +2520,7 @@
     </div><!-- /sqe-body -->
 </section>
 
+@Html.AntiForgeryToken()
 @section Scripts {
 <!-- flatpickr — kurumsal date picker (CDN) -->
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
@@ -2669,6 +2695,29 @@
         return (n/Math.pow(k,i)).toFixed(i === 0 ? 0 : 1) + ' ' + u[i];
     }
 
+    // fetch + Blob URL ile indir — anchor navigasyon olmaz (iframe/workspace uyumlu)
+    window.sqAttDownload = function(id) {
+        fetch('/Sales/DownloadDocumentAttachment?id=' + id, { credentials: 'same-origin' })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                var disp = r.headers.get('content-disposition') || '';
+                var star  = disp.match(/filename\*=UTF-8''([^;\s\r\n]+)/i);
+                var plain = disp.match(/filename="([^"]+)"/i);
+                var name  = star ? decodeURIComponent(star[1]) : (plain ? plain[1] : 'dosya');
+                return r.blob().then(function(b) { return { blob: b, name: name }; });
+            })
+            .then(function(d) {
+                var url = URL.createObjectURL(d.blob);
+                var el = document.createElement('a');
+                el.href = url; el.download = d.name; el.style.display = 'none';
+                document.body.appendChild(el); el.click();
+                setTimeout(function() { URL.revokeObjectURL(url); el.remove(); }, 100);
+            })
+            .catch(function(e) {
+                if (window.CalibraAlert) CalibraAlert.error('İndirme hatası: ' + (e.message || e));
+            });
+    };
+
     async function sqAttLoad() {
         var listEl = document.getElementById('sqAttList');
         if (!listEl) return;
@@ -2698,8 +2747,8 @@
             return '<div class="sqe-att-item">' +
                 '<span class="sqe-att-item__name" title="' + a.fileName.replace(/"/g,'&quot;') + '">' + a.fileName + '</span>' +
                 '<span class="sqe-att-item__meta">' + sqFormatBytes(a.fileSize) + '</span>' +
-                '<a class="sqe-att-item__btn" href="/Sales/DownloadDocumentAttachment?id=' + a.id + '" target="_blank" rel="noopener">Indir</a>' +
-                '<button type="button" class="sqe-att-item__btn is-danger" onclick="sqAttDelete(' + a.id + ')">Sil</button>' +
+                '<button type="button" class="sqe-att-item__btn" onclick="event.stopPropagation();sqAttDownload(' + a.id + ')">İndir</button>' +
+                '<button type="button" class="sqe-att-item__btn is-danger" onclick="event.stopPropagation();sqAttDelete(' + a.id + ')">Sil</button>' +
                 '</div>';
         }).join('');
     }
@@ -2714,6 +2763,8 @@
         var fd = new FormData();
         fd.append('documentId', currentQuoteId);
         for (var i = 0; i < files.length; i++) fd.append('files', files[i]);
+        var csrfEl = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (csrfEl) fd.append('__RequestVerificationToken', csrfEl.value);
         try {
             var resp = await fetch('/Sales/UploadDocumentAttachment', { method: 'POST', body: fd });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -2732,10 +2783,11 @@
             ? await CalibraAlert.confirm('Dosya silinecek. Emin misiniz?', { title: 'Dosya Sil', okLabel: 'Sil' })
             : confirm('Dosya silinecek. Emin misiniz?');
         if (!ok) return;
+        var csrfToken = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
         try {
             await fetch('/Sales/DeleteDocumentAttachment', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken },
                 body: JSON.stringify({ id: Number(id) })
             });
         } catch (e) { CalibraAlert.error('Silme hatasi: ' + (e.message||e)); }
@@ -3363,6 +3415,22 @@
     window.sqRecalcValidFromDays = sqRecalcValidFromDays;
     window.sqRecalcDaysFromValid = sqRecalcDaysFromValid;
 
+    // Başlık depo → satırlar propagasyonu: locationId boş satırlara header lokasyonunu yaz.
+    window.sqPropagateHeaderLocation = function () {
+        var sel = document.getElementById('sqLocationId');
+        if (!sel) return;
+        var hLocId = parseInt(sel.value) || null;
+        if (!hLocId) return;
+        var rows = window.__SQ_LINES__ || [];
+        var updated = rows.map(function (r) {
+            if (r && !r.locationId) {
+                return Object.assign({}, r, { locationId: hLocId });
+            }
+            return r;
+        });
+        if (typeof setGridRows === 'function') setGridRows(updated);
+    };
+
     /* ── Currency dropdown: dinamik yukleme + ID/code map ─────────────────
        Backend Document.CurrencyId int FK tutar; dropdown value=id, data-code=ISO.
        Sayfa load'da /PriceList/GetCurrencies'ten option'lar doldurulur.
@@ -3967,6 +4035,7 @@
             contactAddress:  null,
             salesRepId:      (function(){ var el = document.getElementById('sqSalesRepId'); return el ? parseInt(el.value) || null : null; })(),
             requesterPersonnelId: (function(){ var el = document.getElementById('sqRequesterId'); return el && el.value ? parseInt(el.value) || null : null; })(),
+            locationId:           (function(){ var el = document.getElementById('sqLocationId');  return el && el.value ? parseInt(el.value) || null : null; })(),
             currencyId:      parseInt(document.getElementById('sqCurrency').value) || 1,
             discountRate:    (function(){ var el = document.getElementById('sqDiscountRate'); return el ? parseFloat(el.value || 0) : 0; })(),
             // Satir bazli KDV hesaplandigi icin belge basligindaki TaxRate legacy —

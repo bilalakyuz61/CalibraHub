@@ -1,4 +1,4 @@
-using CalibraHub.Application.Constants;
+﻿using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
-/// ContactItem (cari × stok eslestirmesi) JSON CRUD'leri.
+/// ContactItem (cari Ã— stok eslestirmesi) JSON CRUD'leri.
 /// ContactEdit sayfasi JS tarafindan satir-bazli (anlik) save akisiyla cagirir.
 /// </summary>
 [Authorize]
@@ -79,7 +79,7 @@ public sealed class ContactItemController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -96,7 +96,7 @@ public sealed class ContactItemController : Controller
             await _repo.DeleteAsync(body.Id, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     private static string? NullIfBlank(string? s) =>

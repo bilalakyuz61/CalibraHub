@@ -57,6 +57,7 @@ public sealed class PersonnelService : IPersonnelService
             IsProductionOperator = req.IsProductionOperator,
             IsActive = req.IsActive,
             UserId = req.UserId,
+            LocationId = req.LocationId,
             Phone = string.IsNullOrWhiteSpace(req.Phone) ? null : req.Phone.Trim(),
             Email = string.IsNullOrWhiteSpace(req.Email) ? null : req.Email.Trim(),
             Notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim(),
@@ -81,4 +82,7 @@ public sealed class PersonnelService : IPersonnelService
 
     public Task<PersonnelDto?> GetByPinOrCardAsync(string? personnelCode, string? pinCode, string? cardNo, CancellationToken ct)
         => _repo.GetByPinOrCardAsync(personnelCode, pinCode, cardNo, ct);
+
+    public Task<PersonnelDto?> GetByUserIdAsync(int userId, CancellationToken ct)
+        => _repo.GetByUserIdAsync(userId, ct);
 }

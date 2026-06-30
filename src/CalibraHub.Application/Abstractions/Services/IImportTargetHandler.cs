@@ -32,4 +32,19 @@ public interface IImportTargetHandler
 
     /// <summary>Geçerli satırları kaydet (insert/update) ve satır-bazlı sonuç döndür.</summary>
     Task<ImportCommitResultDto> CommitAsync(ImportRowSet set, int? userId, CancellationToken ct);
+
+    /// <summary>
+    /// Dinamik (DB lookup) izinli değerler — boş şablon açılır listesi + "Gecerli Degerler"
+    /// sayfası için. Statik <see cref="ImportTargetFieldDto.AllowedValues"/> taşımayan ama
+    /// sınırlı-değerli alanlar (örn. Cari İletişim "Unvan"). Anahtar = alan Key. Varsayılan boş.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetDynamicAllowedValuesAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(
+            new Dictionary<string, IReadOnlyList<string>>());
+
+    /// <summary>
+    /// Dinamik durumu (örn. form özel-alan/widget tanımları) yükler. Preview/Commit/katalog
+    /// ÖNCESİ çağrılır; sonrasında <see cref="GetFields"/> dinamik alanları da içerebilir. Varsayılan no-op.
+    /// </summary>
+    Task PreloadAsync(CancellationToken ct) => Task.CompletedTask;
 }

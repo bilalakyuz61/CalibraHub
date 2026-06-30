@@ -40,7 +40,7 @@ public sealed class ConnectivityTestsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { isSuccess = false, message = ex.Message });
+            return Json(new { isSuccess = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -66,7 +66,7 @@ public sealed class ConnectivityTestsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Baglanti kurulamadi: {ex.Message}" });
+            return Json(new { success = false, message = $"Baglanti kurulamadi: {"İşlem sırasında bir hata oluştu."}" });
         }
     }
 }

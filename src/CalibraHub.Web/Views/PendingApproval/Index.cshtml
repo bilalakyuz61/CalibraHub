@@ -54,19 +54,51 @@
     body.app-theme-dark .pa-search-input:focus { border-color: rgba(99,102,241,.5); }
     body.app-theme-dark .pa-search-input::placeholder { color: #475569; }
 
-    .pa-body { display: flex; flex-direction: row; gap: 14px; flex: 1 1 auto; min-height: 0; }
+    .pa-body { display: flex; flex-direction: row; gap: 0; flex: 1 1 auto; min-height: 0; }
 
-    .pa-groups {
-        flex: 0 0 260px;
+    /* ── Sol kenar çubuğu (belge türleri + kapsam) ── */
+    .pa-sidebar {
+        width: 260px; flex: 0 0 auto;
+        display: flex; flex-direction: column;
         background: var(--surface, #fff);
         border: 1px solid rgba(148,163,184,.18);
-        border-radius: 10px; padding: 8px;
-        overflow-y: auto; min-height: 0;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-right: 14px;
+        transition: width .22s ease, margin-right .22s ease, opacity .18s;
     }
-    body.app-theme-dark .pa-groups {
+    .pa-sidebar.collapsed { width: 0; margin-right: 0; opacity: 0; pointer-events: none; }
+    body.app-theme-dark .pa-sidebar {
         background: rgba(15,23,42,.4);
         border-color: rgba(255,255,255,.08);
     }
+    .pa-groups {
+        flex: 1 1 auto;
+        padding: 8px;
+        overflow-y: auto; min-height: 0;
+    }
+    .pa-scope-footer {
+        flex: 0 0 auto;
+        padding: 8px 6px;
+        border-top: 1px solid rgba(148,163,184,.12);
+    }
+    body.app-theme-dark .pa-scope-footer { border-top-color: rgba(255,255,255,.08); }
+
+    /* ── Kenar çubuğu aç/kapat butonu ── */
+    .pa-sidebar-toggle-btn {
+        width: 28px; height: 28px; flex-shrink: 0;
+        border-radius: 7px;
+        border: 1px solid rgba(148,163,184,.22);
+        background: transparent; cursor: pointer;
+        color: #64748b;
+        display: flex; align-items: center; justify-content: center;
+        transition: background .12s, color .12s, border-color .12s;
+    }
+    .pa-sidebar-toggle-btn svg { transition: transform .22s ease; }
+    .pa-sidebar-toggle-btn.collapsed svg { transform: rotate(180deg); }
+    .pa-sidebar-toggle-btn:hover { background: rgba(99,102,241,.08); border-color: rgba(99,102,241,.35); color: #6366f1; }
+    body.app-theme-dark .pa-sidebar-toggle-btn { color: #94a3b8; border-color: rgba(255,255,255,.1); }
+    body.app-theme-dark .pa-sidebar-toggle-btn:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); color: #818cf8; }
     .pa-group {
         display: flex; align-items: center; gap: 10px;
         padding: 10px 12px; margin: 4px 0;
@@ -325,32 +357,116 @@
     .pa-btn-primary { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
     .pa-btn-danger  { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
     .pa-btn-ghost   { background: rgba(148,163,184,.15); color: #64748b; }
+    /* Not girişi paneli */
+    .pa-note-panel {
+        padding: 12px 20px 14px;
+        border-top: 1px solid rgba(148,163,184,.18);
+        flex: 0 0 auto;
+    }
+    .pa-note-label {
+        font-size: 12px; font-weight: 600; margin-bottom: 6px;
+        color: var(--app-text, #0f172a);
+    }
+    .pa-note-textarea {
+        width: 100%; box-sizing: border-box; resize: vertical;
+        border: 1px solid rgba(148,163,184,.3); border-radius: 8px;
+        padding: 7px 10px; font-size: 13px; line-height: 1.4;
+        background: transparent; color: var(--app-text, #0f172a);
+        font-family: inherit; outline: none;
+        transition: border-color .12s;
+    }
+    .pa-note-textarea:focus { border-color: rgba(99,102,241,.55); }
+    body.app-theme-dark .pa-note-textarea { border-color: rgba(255,255,255,.15); color: #e2e8f0; }
+    .pa-note-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+    .pa-note-panel--approve { background: rgba(16,185,129,.05); }
+    .pa-note-panel--reject  { background: rgba(239,68,68,.05); }
+    .pa-note-panel--approve .pa-note-label { color: #059669; }
+    .pa-note-panel--reject  .pa-note-label { color: #dc2626; }
 
     .pa-detail-grid {
-        display: grid; grid-template-columns: 110px 1fr; gap: 8px 14px;
-        font-size: 13px; margin-bottom: 18px;
+        display: grid; grid-template-columns: 110px 1fr; gap: 6px 14px;
+        font-size: 13px; margin-bottom: 20px;
     }
     .pa-detail-grid dt { color: #94a3b8; font-weight: 500; }
     .pa-detail-grid dd { margin: 0; font-weight: 500; }
 
-    .pa-steps {
-        list-style: none; padding: 0; margin: 0;
+    /* ─── Süreç zaman çizelgesi ─── */
+    .pa-flow-section-title {
+        font-size: 11px; font-weight: 700; letter-spacing: .06em;
+        color: #94a3b8; text-transform: uppercase;
+        margin-bottom: 14px;
     }
-    .pa-steps li {
-        position: relative; padding: 10px 14px 10px 32px; margin: 6px 0;
-        border-radius: 8px;
+    .pa-flow { display: flex; flex-direction: column; gap: 0; }
+
+    .pa-flow-step {
+        display: flex; gap: 14px; position: relative;
+    }
+    /* Dikey bağlantı çizgisi — son adım hariç */
+    .pa-flow-step:not(:last-child) .pa-flow-line {
+        position: absolute; left: 17px; top: 36px;
+        width: 2px; bottom: -2px;
+        background: #e2e8f0;
+    }
+    body.app-theme-dark .pa-flow-step:not(:last-child) .pa-flow-line { background: rgba(255,255,255,.1); }
+    .pa-flow-step.sf-approved:not(:last-child) .pa-flow-line { background: #10b981; }
+
+    /* Sol: ikon halkası */
+    .pa-flow-icon-wrap {
+        flex: 0 0 36px; display: flex; flex-direction: column; align-items: center;
+    }
+    .pa-flow-dot {
+        width: 36px; height: 36px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; font-weight: 700; flex-shrink: 0;
+        border: 2px solid #e2e8f0;
+        background: var(--app-surface, #fff); color: #94a3b8;
+        position: relative; z-index: 1;
+    }
+    body.app-theme-dark .pa-flow-dot { background: #1e293b; border-color: rgba(255,255,255,.15); color: #64748b; }
+    .pa-flow-step.sf-approved .pa-flow-dot { border-color: #10b981; background: #ecfdf5; color: #059669; }
+    .pa-flow-step.sf-pending  .pa-flow-dot { border-color: #f59e0b; background: #fffbeb; color: #b45309; }
+    .pa-flow-step.sf-rejected .pa-flow-dot { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+    body.app-theme-dark .pa-flow-step.sf-approved .pa-flow-dot { background: rgba(16,185,129,.15); }
+    body.app-theme-dark .pa-flow-step.sf-pending  .pa-flow-dot { background: rgba(245,158,11,.12); }
+    body.app-theme-dark .pa-flow-step.sf-rejected .pa-flow-dot { background: rgba(239,68,68,.12); }
+
+    /* Sağ: içerik */
+    .pa-flow-content {
+        flex: 1; padding-bottom: 20px;
+    }
+    .pa-flow-step:last-child .pa-flow-content { padding-bottom: 4px; }
+
+    .pa-flow-top {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;
+    }
+    .pa-flow-name { font-size: 13px; font-weight: 600; }
+    .pa-flow-badge {
+        font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+        letter-spacing: .03em; white-space: nowrap;
+    }
+    .badge-approved { background: #d1fae5; color: #065f46; }
+    .badge-pending  { background: #fef3c7; color: #92400e; }
+    .badge-rejected { background: #fee2e2; color: #991b1b; }
+    .badge-waiting  { background: #f1f5f9; color: #64748b; }
+    body.app-theme-dark .badge-approved { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    body.app-theme-dark .badge-pending  { background: rgba(245,158,11,.18); color: #fcd34d; }
+    body.app-theme-dark .badge-rejected { background: rgba(239,68,68,.18); color: #fca5a5; }
+    body.app-theme-dark .badge-waiting  { background: rgba(148,163,184,.1); color: #94a3b8; }
+
+    .pa-flow-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .pa-flow-meta-times { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+    .pa-flow-meta-lbl { font-weight: 600; color: #94a3b8; }
+    .pa-flow-note {
+        margin-top: 5px; font-size: 12px; padding: 5px 10px;
+        border-left: 3px solid #e2e8f0; color: #64748b; border-radius: 0 4px 4px 0;
         background: rgba(148,163,184,.06);
     }
-    .pa-steps li::before {
-        content: ''; position: absolute; left: 10px; top: 14px;
-        width: 12px; height: 12px; border-radius: 50%;
-        background: #cbd5e1;
+    body.app-theme-dark .pa-flow-note { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
+    .pa-flow-step.sf-current .pa-flow-content {
+        background: rgba(99,102,241,.04); border: 1px solid rgba(99,102,241,.18);
+        border-radius: 10px; padding: 10px 12px 10px;
     }
-    .pa-steps li.status-Approved::before { background: #10b981; }
-    .pa-steps li.status-Pending::before  { background: #f59e0b; }
-    .pa-steps li.status-Rejected::before { background: #ef4444; }
-    .pa-step-title { font-weight: 600; font-size: 13px; }
-    .pa-step-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+    body.app-theme-dark .pa-flow-step.sf-current .pa-flow-content { background: rgba(99,102,241,.09); }
 </style>
 }
 
@@ -426,7 +542,16 @@
         <div class="pa-modal-body" id="paModalBody">
             <div style="text-align:center;padding:30px;color:#94a3b8;">Yükleniyor…</div>
         </div>
-        <div class="pa-modal-footer">
+        <!-- Not girişi — Onayla/Reddet tıklandığında açılır, native prompt() yerine -->
+        <div class="pa-note-panel" id="paNotePanel" style="display:none;">
+            <div class="pa-note-label" id="paNoteLabel">Onay Notu</div>
+            <textarea id="paNoteText" class="pa-note-textarea" rows="2" placeholder="Not girin…"></textarea>
+            <div class="pa-note-actions">
+                <button type="button" class="pa-btn pa-btn-ghost" id="paNoteCancel">Vazgeç</button>
+                <button type="button" class="pa-btn" id="paNoteSubmit">Gönder</button>
+            </div>
+        </div>
+        <div class="pa-modal-footer" id="paModalFooter">
             <button type="button" class="pa-btn pa-btn-danger"  id="paBtnReject">Reddet</button>
             <button type="button" class="pa-btn pa-btn-primary" id="paBtnApprove">Onayla</button>
             <button type="button" class="pa-btn pa-btn-ghost"   id="paBtnCancel">Kapat</button>
@@ -455,6 +580,13 @@
     const modalBodyEl = document.getElementById('paModalBody');
     const modalTitleEl = document.getElementById('paModalTitle');
     const modalSubEl = document.getElementById('paModalSub');
+    const modalFooterEl = document.getElementById('paModalFooter');
+    const notePanelEl = document.getElementById('paNotePanel');
+    const noteLabelEl = document.getElementById('paNoteLabel');
+    const noteTextEl = document.getElementById('paNoteText');
+    const noteSubmitEl = document.getElementById('paNoteSubmit');
+    const noteCancelEl = document.getElementById('paNoteCancel');
+    let _noteAction = null; // 'approve' | 'reject'
 
     // ── Sütun yapılandırması ─────────────────────────────────────────────────
     const COL_STORAGE_KEY = 'pa-col-cfg-v2';
@@ -868,6 +1000,39 @@
         }
     }
 
+    const STATUS_TR = {
+        'Approved':  'Onaylandı',
+        'Pending':   'Bekliyor',
+        'Rejected':  'Reddedildi',
+        'Waiting':   'Beklemede',
+        'Skipped':   'Atlandı',
+        'Cancelled': 'İptal Edildi',
+    };
+    const STATUS_CSS = {
+        'Approved':  'sf-approved',
+        'Pending':   'sf-pending',
+        'Rejected':  'sf-rejected',
+        'Waiting':   'sf-waiting',
+        'Skipped':   'sf-waiting',
+        'Cancelled': 'sf-rejected',
+    };
+    const STATUS_BADGE = {
+        'Approved':  'badge-approved',
+        'Pending':   'badge-pending',
+        'Rejected':  'badge-rejected',
+        'Waiting':   'badge-waiting',
+        'Skipped':   'badge-waiting',
+        'Cancelled': 'badge-rejected',
+    };
+    const STATUS_ICON = {
+        'Approved':  '✓',
+        'Pending':   '…',
+        'Rejected':  '✕',
+        'Waiting':   '○',
+        'Skipped':   '–',
+        'Cancelled': '✕',
+    };
+
     function renderDetail(d) {
         const h = d.header;
         modalTitleEl.textContent = 'Belge: ' + (h.documentNumber || '—');
@@ -878,24 +1043,52 @@
                    '<dt>Tür</dt><dd>' + escapeHtml(h.documentTypeName || 'Belirsiz') + '</dd>' +
                    '<dt>Cari</dt><dd>' + escapeHtml(h.contactName || '—') + '</dd>' +
                    '<dt>Tutar</dt><dd>' + fmtMoney(h.grandTotal, h.currencyCode) + '</dd>' +
-                   '<dt>Adım Adı</dt><dd>' + escapeHtml(h.stepName || '—') + '</dd>' +
-                   '<dt>Onaycı</dt><dd>' + escapeHtml(h.approverName || h.approverId || '—') + '</dd>' +
-                   '<dt>Bekliyor</dt><dd>' + fmtDate(h.stepCreated) + '</dd>' +
                    '</dl>';
 
         if (d.steps && d.steps.length > 0) {
-            html += '<div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Akış Geçmişi</div>';
-            html += '<ul class="pa-steps">';
+            html += '<div class="pa-flow-section-title">Onay Süreci</div>';
+            html += '<div class="pa-flow">';
             d.steps.forEach((s, idx) => {
-                html += '<li class="status-' + escapeHtml(s.status) + '">' +
-                        '<div class="pa-step-title">' + (idx + 1) + '. ' + escapeHtml(s.stepName) + ' — ' + escapeHtml(s.status) + '</div>' +
-                        '<div class="pa-step-meta">' +
-                        (s.approverName ? escapeHtml(s.approverName) : '—') +
-                        (s.actionDate ? ' • ' + fmtDate(s.actionDate) : '') +
-                        (s.note ? ' • ' + escapeHtml(s.note) : '') +
-                        '</div></li>';
+                const status    = s.status || 'Waiting';
+                const isCurrent = status === 'Pending';
+                const cssClass  = STATUS_CSS[status]   || 'sf-waiting';
+                const badge     = STATUS_BADGE[status] || 'badge-waiting';
+                const icon      = STATUS_ICON[status]  || '○';
+                const labelTr   = STATUS_TR[status]    || status;
+
+                // Adıma giriş zamanı: ilk adım için instance başlangıcı,
+                // sonraki adımlar için önceki adımın aksiyon tarihi.
+                const entryTime = idx === 0
+                    ? (d.header.instanceStarted || s.enteredAt)
+                    : (d.steps[idx - 1].actionDate || d.header.instanceStarted);
+
+                let metaHtml = '';
+                if (s.approverName) {
+                    metaHtml += '<div class="pa-flow-meta">' + escapeHtml(s.approverName) + '</div>';
+                }
+                metaHtml += '<div class="pa-flow-meta pa-flow-meta-times">' +
+                            '<span><span class="pa-flow-meta-lbl">Giriş:</span> ' + fmtDate(entryTime) + '</span>';
+                if (s.actionDate) {
+                    metaHtml += '<span><span class="pa-flow-meta-lbl">İşlem:</span> ' + fmtDate(s.actionDate) + '</span>';
+                }
+                metaHtml += '</div>';
+
+                html += '<div class="pa-flow-step ' + cssClass + (isCurrent ? ' sf-current' : '') + '">' +
+                        '<div class="pa-flow-icon-wrap">' +
+                        '<div class="pa-flow-dot">' + icon + '</div>' +
+                        '<div class="pa-flow-line"></div>' +
+                        '</div>' +
+                        '<div class="pa-flow-content">' +
+                        '<div class="pa-flow-top">' +
+                        '<span class="pa-flow-name">' + escapeHtml(s.stepName || ('Adım ' + (idx + 1))) + '</span>' +
+                        '<span class="pa-flow-badge ' + badge + '">' + labelTr + '</span>' +
+                        '</div>' +
+                        metaHtml +
+                        (s.note ? '<div class="pa-flow-note">' + escapeHtml(s.note) + '</div>' : '') +
+                        '</div>' +
+                        '</div>';
             });
-            html += '</ul>';
+            html += '</div>';
         }
 
         modalBodyEl.innerHTML = html;
@@ -904,43 +1097,51 @@
     function closeModal() {
         backdropEl.classList.remove('show');
         currentInstanceId = null;
+        hideNotePanel();
     }
 
-    async function approveCurrent() {
-        if (!currentInstanceId) return;
-        const note = prompt('İsterseniz onay notu girin (opsiyonel):', '');
-        if (note === null) return; // cancel
-        modalApproveEl.disabled = true;
+    function showNotePanel(action) {
+        _noteAction = action;
+        notePanelEl.className = 'pa-note-panel pa-note-panel--' + action;
+        noteTextEl.value = '';
+        if (action === 'approve') {
+            noteLabelEl.textContent = 'Onay Notu (opsiyonel)';
+            noteTextEl.placeholder = 'Onay notu eklemek isterseniz girin…';
+            noteSubmitEl.className = 'pa-btn pa-btn-primary';
+            noteSubmitEl.textContent = 'Onayla';
+        } else {
+            noteLabelEl.textContent = 'Ret Gerekçesi';
+            noteTextEl.placeholder = 'Ret gerekçesini girin…';
+            noteSubmitEl.className = 'pa-btn pa-btn-danger';
+            noteSubmitEl.textContent = 'Reddet';
+        }
+        notePanelEl.style.display = '';
+        modalFooterEl.style.display = 'none';
+        noteTextEl.focus();
+    }
+
+    function hideNotePanel() {
+        notePanelEl.style.display = 'none';
+        modalFooterEl.style.display = '';
+        _noteAction = null;
+    }
+
+    async function submitNote() {
+        if (!currentInstanceId || !_noteAction) return;
+        const note = noteTextEl.value.trim();
+        if (_noteAction === 'reject' && !note) {
+            noteTextEl.focus();
+            noteTextEl.style.borderColor = '#ef4444';
+            setTimeout(() => { noteTextEl.style.borderColor = ''; }, 1500);
+            return;
+        }
+        noteSubmitEl.disabled = true;
         try {
             const fd = new FormData();
             fd.set('instanceId', currentInstanceId);
             if (note) fd.set('note', note);
-            const resp = await fetch('/Approval/ApproveStep', {
-                method: 'POST', credentials: 'same-origin',
-                headers: { 'RequestVerificationToken': csrf() },
-                body: fd,
-            });
-            const data = await resp.json();
-            if (!data.ok) throw new Error(data.error || 'Hata');
-            closeModal();
-            await loadGroups();  // sayım yenilensin
-        } catch (err) {
-            alert('Onaylama hatası: ' + err.message);
-        } finally {
-            modalApproveEl.disabled = false;
-        }
-    }
-
-    async function rejectCurrent() {
-        if (!currentInstanceId) return;
-        const note = prompt('Lütfen ret gerekçesini girin:', '');
-        if (!note || !note.trim()) return;
-        modalRejectEl.disabled = true;
-        try {
-            const fd = new FormData();
-            fd.set('instanceId', currentInstanceId);
-            fd.set('note', note);
-            const resp = await fetch('/Approval/RejectApproval', {
+            const url = _noteAction === 'approve' ? '/Approval/ApproveStep' : '/Approval/RejectApproval';
+            const resp = await fetch(url, {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'RequestVerificationToken': csrf() },
                 body: fd,
@@ -950,11 +1151,17 @@
             closeModal();
             await loadGroups();
         } catch (err) {
-            alert('Reddetme hatası: ' + err.message);
+            const prefix = _noteAction === 'approve' ? 'Onaylama' : 'Reddetme';
+            // inline hata — note label altında kırmızı metin
+            noteLabelEl.innerHTML = noteLabelEl.textContent
+                + `<span style="color:#ef4444;font-weight:400;margin-left:8px;">${prefix} hatası: ${err.message}</span>`;
         } finally {
-            modalRejectEl.disabled = false;
+            noteSubmitEl.disabled = false;
         }
     }
+
+    function approveCurrent() { if (currentInstanceId) showNotePanel('approve'); }
+    function rejectCurrent()  { if (currentInstanceId) showNotePanel('reject');  }
 
     document.getElementById('paScopeGroup')?.addEventListener('change', function() {
         activeDocTypeId = null; loadGroups();
@@ -984,47 +1191,17 @@
     modalCloseEl.addEventListener('click', closeModal);
     modalCancelEl.addEventListener('click', closeModal);
     backdropEl.addEventListener('click', e => { if (e.target === backdropEl) closeModal(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && backdropEl.classList.contains('show')) closeModal(); });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && backdropEl.classList.contains('show')) {
+            if (_noteAction) hideNotePanel(); else closeModal();
+        }
+        if (e.key === 'Enter' && e.ctrlKey && _noteAction) submitNote();
+    });
     modalApproveEl.addEventListener('click', approveCurrent);
     modalRejectEl.addEventListener('click', rejectCurrent);
+    noteSubmitEl.addEventListener('click', submitNote);
+    noteCancelEl.addEventListener('click', hideNotePanel);
 
     window.paToggleColPanel = function(e) {
         e.stopPropagation();
-        var panel = document.getElementById('paColPanel');
-        var btn   = document.getElementById('paColBtn');
-        if (!panel) return;
-        var isOpen = panel.classList.contains('open');
-        if (!isOpen) {
-            _renderColPanel();
-            var rect = btn ? btn.getBoundingClientRect() : { right: 0, bottom: 0 };
-            panel.style.top  = (rect.bottom + 4) + 'px';
-            panel.style.left = Math.max(4, rect.right - 300) + 'px';
-        }
-        panel.classList.toggle('open', !isOpen);
-        if (btn) btn.classList.toggle('active', !isOpen);
-    };
-
-    document.addEventListener('click', function(e) {
-        var panel = document.getElementById('paColPanel');
-        if (panel && panel.classList.contains('open') && !panel.contains(e.target)) {
-            panel.classList.remove('open');
-            var btn = document.getElementById('paColBtn');
-            if (btn) btn.classList.remove('active');
-        }
-    });
-
-    // Kullanıcı bazlı sütun config'ini sunucudan yükle, ardından grupları çek
-    try {
-        const cfgResp = await fetch('/PendingApproval/GetColConfig', { credentials: 'same-origin' });
-        const cfgData = await cfgResp.json();
-        if (cfgData && cfgData.config) {
-            _applyServerConfig(cfgData.config);
-            // Sunucu config'i localStorage'a da yaz (soğuk yükleme için cache)
-            try { localStorage.setItem(COL_STORAGE_KEY, cfgData.config); } catch(e) {}
-        }
-    } catch(e) { /* sunucuya ulaşılamazsa localStorage ile devam */ }
-
-    loadGroups();
-})();
-</script>
-}
+        var panel = docu

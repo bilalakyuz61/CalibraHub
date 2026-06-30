@@ -68,7 +68,7 @@ public sealed class DatabaseMetadataController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "View listesi alınırken hata");
-            return StatusCode(500, new { success = false, message = "View listesi alınamadı: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "View listesi alınamadı: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -106,7 +106,7 @@ public sealed class DatabaseMetadataController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Tablo listesi alınırken hata");
-            return StatusCode(500, new { success = false, message = "Tablo listesi alınamadı: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "Tablo listesi alınamadı: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -166,7 +166,7 @@ public sealed class DatabaseMetadataController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Kolon listesi alınırken hata: {TableName}", tableName);
-            return StatusCode(500, new { success = false, message = "Kolon listesi alınamadı: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "Kolon listesi alınamadı: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 }

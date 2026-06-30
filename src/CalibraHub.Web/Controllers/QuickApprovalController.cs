@@ -48,7 +48,7 @@ public sealed class QuickApprovalController : Controller
         }
         catch
         {
-            return QuickView(error: "Şirket bulunamadı veya bağlantı erişilemiyor.");
+            return QuickView(error: "�?irket bulunamadı veya bağlantı erişilemiyor.");
         }
 
         if (record is null)
@@ -106,7 +106,7 @@ public sealed class QuickApprovalController : Controller
         }
         catch (Exception ex)
         {
-            var msg = ex.Message;
+            var msg = "Islem sirasinda bir hata olustu.";
             if (msg.Contains("durumda değil") || msg.Contains("Approved") || msg.Contains("Rejected") || msg.Contains("Completed"))
                 return QuickView(error: "Bu onay talebi zaten sonuçlandırılmış veya başka biri tarafından işleme alınmış.");
             return QuickView(error: msg);

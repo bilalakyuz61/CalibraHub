@@ -84,6 +84,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
+                   q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
@@ -92,6 +93,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
             LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
+            LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
             {where.Replace("[", "q.[")}
             {dv.Sql}
             ORDER BY q.[Created] DESC;
@@ -129,6 +131,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
+                   q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
@@ -140,6 +143,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
             LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
+            LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
             INNER JOIN [{_schema}].[document_types] dt ON dt.[id] = q.[DocumentTypeId]
             {where}
             {dv.Sql}
@@ -192,6 +196,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
+                   q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
@@ -200,6 +205,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
             LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
+            LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
             INNER JOIN [{_schema}].[document_types] dt ON dt.[id] = q.[DocumentTypeId]
             {where}
             ORDER BY q.[ContactId], q.[DocumentDate] DESC;
@@ -220,6 +226,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
+                   q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
@@ -228,6 +235,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
             LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
+            LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
             WHERE q.[id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -284,7 +292,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     [DocumentTypeId]=@DocumentTypeId,
                     [DocumentDate]=@DocumentDate, [ValidUntil]=@ValidUntil, [DeliveryDate]=@DeliveryDate, [DeliveryDays]=@DeliveryDays,
                     [ContactId]=@ContactId, [ContactAddress]=@ContactAddress,
-                    [SalesRepId]=@SalesRepId, [RequesterPersonnelId]=@RequesterPersonnelId,
+                    [SalesRepId]=@SalesRepId, [RequesterPersonnelId]=@RequesterPersonnelId, [LocationId]=@LocationId,
                     [CurrencyId]=@CurrencyId, [SubTotal]=@SubTotal, [DiscountRate]=@DiscountRate,
                     [DiscountAmount]=@DiscountAmount, [TaxRate]=@TaxRate, [TaxAmount]=@TaxAmount,
                     [GrandTotal]=@GrandTotal, [PaymentTerms]=@PaymentTerms, [DeliveryTerms]=@DeliveryTerms,
@@ -301,12 +309,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             cmd.CommandText = $"""
                 INSERT INTO {_quoteTable}
                     ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[ValidUntil],[DeliveryDate],[DeliveryDays],[ContactId],[ContactAddress],
-                     [SalesRepId],[RequesterPersonnelId],[CurrencyId],[SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
+                     [SalesRepId],[RequesterPersonnelId],[LocationId],[CurrencyId],[SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
                      [PaymentTerms],[DeliveryTerms],[DeliveryAddress],[status],[RevisionNo],[ParentDocumentId],
                      [notes],[CreatedById],[Created],[Updated],[IsActive])
                 VALUES
                     (@CompanyId,@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@DeliveryDate,@DeliveryDays,@ContactId,@ContactAddress,
-                     @SalesRepId,@RequesterPersonnelId,@CurrencyId,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
+                     @SalesRepId,@RequesterPersonnelId,@LocationId,@CurrencyId,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
                      @PaymentTerms,@DeliveryTerms,@DeliveryAddress,@Status,@RevisionNo,@ParentDocumentId,
                      @Notes,@CreatedById,@CreatedAt,@UpdatedAt,@IsActive);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
@@ -327,6 +335,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@ContactAddress", (object?)q.ContactAddress ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SalesRepId", (object?)q.SalesRepId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@RequesterPersonnelId", (object?)q.RequesterPersonnelId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@LocationId", (object?)q.LocationId ?? DBNull.Value));
         // CurrencyId — entity'de int, default 1 (TRY). Display alanlari (CurrencyCode/Symbol)
         // SELECT'te currencies JOIN ile doldurulur, INSERT/UPDATE'te kullanilmaz.
         cmd.Parameters.Add(new SqlParameter("@CurrencyId", q.CurrencyId > 0 ? q.CurrencyId : 1));
@@ -646,6 +655,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             ? r.GetInt32(reqOrd) : null,
         RequesterPersonnelName = TryGetOrdinal(r, "RequesterPersonnelName") is int rnOrd && rnOrd >= 0 && !r.IsDBNull(rnOrd)
             ? r.GetString(rnOrd) : null,
+        LocationId = TryGetOrdinal(r, "LocationId") is int hlocOrd && hlocOrd >= 0 && !r.IsDBNull(hlocOrd)
+            ? r.GetInt32(hlocOrd) : null,
+        LocationName = TryGetOrdinal(r, "HeaderLocationName") is int hlocNOrd && hlocNOrd >= 0 && !r.IsDBNull(hlocNOrd)
+            ? r.GetString(hlocNOrd) : null,
         CurrencyId = TryGetOrdinal(r, "CurrencyId") is int curOrd && curOrd >= 0 && !r.IsDBNull(curOrd)
             ? r.GetInt32(curOrd) : 1,
         CurrencyCode = TryGetOrdinal(r, "CurrencyCode") is int curCodeOrd && curCodeOrd >= 0 && !r.IsDBNull(curCodeOrd)

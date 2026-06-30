@@ -96,6 +96,7 @@ public sealed class MaterialController : Controller
             unitId            = card.UnitId,
             trackCombinations = card.Combinations,
             taxRate           = card.TaxRate,
+            trackingType      = card.TrackingType ?? "None",
             meta              = new { createdDate = card.Created, modifiedDate = card.Updated },
             combinations
         });
@@ -124,13 +125,13 @@ public sealed class MaterialController : Controller
             {
                 await _logisticsConfigurationService.UpdateItemAsync(
                     new UpdateItemRequest(input.ItemId!.Value, input.Code, input.Name,
-                        input.TypeId, input.UnitId, input.Combinations, input.TaxRate), ct);
+                        input.TypeId, input.UnitId, input.Combinations, input.TaxRate, input.TrackingType), ct);
             }
             else
             {
                 await _logisticsConfigurationService.CreateItemAsync(
                     new CreateItemRequest(input.Code, input.Name,
-                        input.TypeId, input.UnitId, input.Combinations, input.TaxRate), ct);
+                        input.TypeId, input.UnitId, input.Combinations, input.TaxRate, input.TrackingType), ct);
             }
 
             // Yeni kart icin id'yi turet

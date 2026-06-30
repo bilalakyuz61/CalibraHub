@@ -1,0 +1,753 @@
+@model CalibraHub.Web.Models.Warehouse.InventoryEditViewModel
+@{
+    var isEdit    = Model.DocId.HasValue;
+    var pageTitle = isEdit ? "Sayım Düzenle" : "Yeni Sayım";
+
+    ViewData["Title"]     = pageTitle;
+    ViewData["BodyClass"] = "page-inv-edit";
+}
+
+@section Styles {
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
+<style>
+    /* ── Viewport iskelet ─────────────────────────────────────────────── */
+    .page-inv-edit .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-inv-edit .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .workspace-frame-body.page-inv-edit .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-inv-edit .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    /* ── Aksiyon seridi ─────────────────────────────────────────────── */
+    .inv-action-bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 16px; flex-shrink: 0;
+        background: rgba(15,15,26,0.85); border-bottom: 1px solid rgba(255,255,255,0.06);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        position: relative; overflow: hidden;
+    }
+    body.app-theme-light .inv-action-bar {
+        background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
+    }
+    /* KITT flash */
+    .inv-action-bar::before {
+        content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+        height: 2px; pointer-events: none; opacity: 0;
+        background: linear-gradient(90deg,rgba(0,60,20,0) 0%,rgba(10,120,40,.55) 50%,rgba(0,60,20,0) 100%);
+    }
+    .inv-action-bar::after {
+        content: ''; position: absolute; left: 0; bottom: -1px;
+        width: 18%; height: 4px; pointer-events: none; opacity: 0;
+        background: linear-gradient(90deg,transparent 0%,rgba(34,197,94,.35) 18%,rgba(74,255,140,1) 50%,rgba(34,197,94,.35) 82%,transparent 100%);
+        box-shadow: 0 0 10px 2px rgba(34,197,94,.95),0 0 22px 6px rgba(34,197,94,.55),0 0 40px 12px rgba(34,197,94,.22);
+        border-radius: 50%;
+    }
+    .inv-action-bar.is-save-flash::before { animation: invKittBg   1800ms ease-out forwards; }
+    .inv-action-bar.is-save-flash::after  { animation: invKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+    @@keyframes invKittBg { 0%,100%{opacity:0;} 10%,90%{opacity:1;} }
+    @@keyframes invKittScan {
+        0%{opacity:0;left:0;} 8%{opacity:1;} 48%{opacity:1;left:82%;} 52%{opacity:1;left:82%;} 92%{opacity:1;left:0;} 100%{opacity:0;left:0;}
+    }
+
+    /* ── Butonlar ────────────────────────────────────────────────────── */
+    .inv-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 14px; border-radius: 10px; border: 1px solid;
+        font-size: 0.8rem; font-weight: 600; cursor: pointer;
+        text-decoration: none; transition: all .14s;
+    }
+    .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .inv-btn--primary  { background: #6366f1; border-color: #4f46e5; color: #fff; }
+    .inv-btn--primary:hover { background: #4f46e5; color: #fff; }
+    .inv-btn--secondary {
+        background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.75);
+    }
+    body.app-theme-light .inv-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .inv-btn--secondary:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    body.app-theme-light .inv-btn--secondary:hover { background: #f1f5f9; color: #1e293b; }
+    .inv-btn--danger {
+        background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #f87171;
+    }
+    body.app-theme-light .inv-btn--danger { color: #dc2626; }
+    .inv-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+    .inv-btn--violet {
+        background: rgba(139,92,246,0.14); border-color: rgba(139,92,246,0.35); color: #c4b5fd;
+    }
+    body.app-theme-light .inv-btn--violet { color: #7c3aed; background: rgba(139,92,246,0.08); border-color: rgba(139,92,246,0.3); }
+    .inv-btn--violet:hover:not(:disabled) { background: rgba(139,92,246,0.22); color: #ddd6fe; }
+    body.app-theme-light .inv-btn--violet:hover:not(:disabled) { background: rgba(139,92,246,0.15); color: #5b21b6; }
+
+    /* ── Belge bilgisi ───────────────────────────────────────────────── */
+    .inv-docinfo {
+        display: flex; align-items: center; gap: 10px; margin-right: auto;
+    }
+    .inv-docno { font-size: 0.88rem; font-weight: 700; color: rgba(255,255,255,0.85); }
+    body.app-theme-light .inv-docno { color: #1e293b; }
+    .inv-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 10px; border-radius: 20px; font-size: 0.73rem; font-weight: 600;
+        background: rgba(139,92,246,.15); color: #c4b5fd;
+    }
+    body.app-theme-light .inv-badge { color: #6d28d9; }
+
+    /* ── Sol tab + sağ içerik ────────────────────────────────────────── */
+    .inv-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .inv-tab-nav {
+        width: 200px; flex-shrink: 0;
+        border-right: 1px solid var(--app-border,#dde3ee);
+        background: var(--app-surface,#fff);
+        padding: 10px; display: flex; flex-direction: column; overflow-y: auto;
+    }
+    body.app-theme-dark .inv-tab-nav { background: rgba(255,255,255,.02); border-right-color: rgba(255,255,255,.06); }
+    .inv-tab-btn {
+        display: block; width: 100%; text-align: left;
+        padding: 10px 16px; font-size: 0.9rem; font-weight: 600;
+        color: var(--app-text-muted,#64748b); background: none;
+        border: 1px solid transparent; border-radius: 8px;
+        margin-bottom: 4px; border-left: 3px solid transparent;
+        cursor: pointer; transition: color .12s, background .12s, border-color .12s;
+    }
+    .inv-tab-btn:hover { background: var(--app-muted-surface,#f3f5f7); color: var(--app-text,#333); border-color: var(--app-border,#e2e8f0); }
+    body.app-theme-dark .inv-tab-btn:hover { background: rgba(255,255,255,.06); color: #e2e8f0; border-color: rgba(255,255,255,.1); }
+    .inv-tab-btn.is-active { color: #7c3aed; background: rgba(139,92,246,.10); border-color: rgba(139,92,246,.30); box-shadow: 0 1px 4px rgba(139,92,246,.15); }
+    body.app-theme-dark .inv-tab-btn.is-active { color: #c4b5fd; background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.35); }
+    .inv-tab-content { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 20px; scrollbar-gutter: stable; }
+    .inv-tab-pane { display: none; }
+    .inv-tab-pane.is-active { display: block; }
+    .inv-tab-pane--lines { display: none; flex-direction: column; height: calc(100vh - 90px); }
+    .inv-tab-pane--lines.is-active { display: flex; }
+    #reactInvLineGrid { flex: 1 1 auto; min-height: 0; }
+
+    /* ── Üst bilgi formu ─────────────────────────────────────────────── */
+    .inv-hform { display: flex; flex-direction: column; gap: 10px; max-width: 680px; }
+    .inv-hrow { display: flex; align-items: center; gap: 12px; min-height: 38px; }
+    .inv-hlabel {
+        flex: 0 0 140px; text-align: left; font-size: 0.85rem; font-weight: 600;
+        color: var(--app-text-muted,#64748b); white-space: nowrap; user-select: none;
+    }
+    body.app-theme-dark .inv-hlabel { color: rgba(255,255,255,.78); }
+    .inv-hinput { flex: 1; max-width: 320px; }
+    .inv-hform .form-control,
+    .inv-hform .form-select {
+        background: var(--app-input-bg,#f8fafc); border: 1px solid var(--app-border,#d4dfeb);
+        border-radius: 8px; font-size: .88rem; color: var(--app-text,#1e293b); outline: none;
+        transition: border-color .15s, box-shadow .15s; padding: 7px 10px;
+    }
+    .inv-hform .form-control:focus,
+    .inv-hform .form-select:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(139,92,246,.12); }
+    .inv-hform .form-control[readonly] {
+        background: var(--app-surface-2,#f1f5f9); color: var(--app-text-muted,#64748b); cursor: default;
+    }
+    body.app-theme-dark .inv-hform .form-control,
+    body.app-theme-dark .inv-hform .form-select {
+        background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.10); color: rgba(255,255,255,.88);
+    }
+    body.app-theme-dark .inv-hform .form-control[readonly] { background: rgba(255,255,255,.02); color: rgba(255,255,255,.45); }
+    body.app-theme-dark .inv-hform .form-select option { background: #0c0f1a; color: #fff; }
+
+    /* ── Stok yükle bölümü ───────────────────────────────────────────── */
+    .inv-load-section {
+        margin-top: 16px; padding: 14px 16px; border-radius: 12px;
+        border: 1px dashed rgba(139,92,246,.35);
+        background: rgba(139,92,246,.04);
+    }
+    body.app-theme-light .inv-load-section { border-color: rgba(109,40,217,.3); background: rgba(139,92,246,.04); }
+    .inv-load-title { font-size: .82rem; font-weight: 600; color: #a78bfa; margin-bottom: 8px; }
+    body.app-theme-light .inv-load-title { color: #6d28d9; }
+    .inv-load-desc { font-size: .78rem; color: rgba(255,255,255,.5); margin-bottom: 10px; line-height: 1.5; }
+    body.app-theme-light .inv-load-desc { color: #64748b; }
+    .inv-load-status { font-size: .78rem; margin-top: 8px; min-height: 18px; }
+    .inv-load-status--ok  { color: #34d399; }
+    .inv-load-status--err { color: #f87171; }
+    body.app-theme-light .inv-load-status--ok  { color: #059669; }
+    body.app-theme-light .inv-load-status--err { color: #dc2626; }
+
+    /* ── Silme onay modal ────────────────────────────────────────────── */
+    .inv-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9990;
+        background: rgba(15,23,42,.6); backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .inv-modal {
+        background: var(--app-surface,#fff); border: 1px solid var(--app-border,#d4dfeb);
+        border-radius: 16px; padding: 28px 32px; min-width: 340px; max-width: 440px; width: 100%;
+        box-shadow: 0 20px 60px rgba(0,0,0,.18); display: flex; flex-direction: column; gap: 16px;
+    }
+    .inv-modal__icon { width: 52px; height: 52px; border-radius: 14px; background: #fef2f2; display: flex; align-items: center; justify-content: center; font-size: 26px; margin: 0 auto; }
+    .inv-modal__title { text-align: center; font-size: 1.05rem; font-weight: 700; color: var(--app-text,#1e293b); margin: 0; }
+    .inv-modal__msg { text-align: center; font-size: .88rem; color: var(--app-text-muted,#64748b); margin: 0; }
+    .inv-modal__actions { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
+    .inv-modal__cancel { flex: 1; padding: 9px; border-radius: 8px; font-size: .88rem; font-weight: 600; border: 1px solid var(--app-border,#d4dfeb); background: transparent; cursor: pointer; color: var(--app-text-muted,#64748b); transition: all .15s; }
+    .inv-modal__cancel:hover { background: var(--app-surface-2,#f1f5f9); }
+    .inv-modal__ok { flex: 1; padding: 9px; border-radius: 8px; font-size: .88rem; font-weight: 600; border: none; background: #ef4444; color: #fff; cursor: pointer; transition: all .15s; }
+    .inv-modal__ok:hover { background: #dc2626; }
+
+    /* ── Loading mask ────────────────────────────────────────────────── */
+    .inv-loading-mask {
+        position: absolute; inset: 0; z-index: 50;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 12px; background: rgba(255,255,255,.65); backdrop-filter: blur(4px);
+    }
+    body.app-theme-dark .inv-loading-mask { background: rgba(10,13,23,.65); }
+    .inv-loading-mask.is-hidden { display: none; }
+    .inv-loading-mask__spinner {
+        width: 32px; height: 32px; border-radius: 50%;
+        border: 3px solid rgba(139,92,246,.2); border-top-color: #7c3aed;
+        animation: invSpin .75s linear infinite;
+    }
+    @@keyframes invSpin { to { transform: rotate(360deg); } }
+    .inv-loading-mask__text { font-size: .8rem; color: #64748b; }
+    body.app-theme-dark .inv-loading-mask__text { color: rgba(255,255,255,.55); }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+
+  <!-- Aksiyon Seridi -->
+  <div class="inv-action-bar" id="invActionBar">
+    <button type="button" class="inv-btn inv-btn--primary" id="invSaveBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Kaydet
+    </button>
+    <a href="/Warehouse/Inventory" class="inv-btn inv-btn--secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Listeye Dön
+    </a>
+    @if (isEdit)
+    {
+        <button type="button" class="inv-btn inv-btn--danger" id="invDeleteBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          Sil
+        </button>
+    }
+
+    <!-- Belge no + rozet -->
+    <div class="inv-docinfo">
+      <span class="inv-docno" id="invDocNoDisplay"></span>
+      <span class="inv-badge">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        Sayım
+      </span>
+    </div>
+  </div>
+
+  <!-- Sol tab + sağ içerik -->
+  <div class="inv-body" style="position:relative;">
+
+    <div id="invLoadingMask" class="inv-loading-mask@(isEdit ? "" : " is-hidden")" aria-hidden="true">
+      <div class="inv-loading-mask__spinner"></div>
+      <span class="inv-loading-mask__text">Yükleniyor…</span>
+    </div>
+
+    <nav class="inv-tab-nav">
+      <button type="button" class="inv-tab-btn is-active" data-inv-tab="general"
+              onclick="invSwitchTab('general')">Üst Bilgi</button>
+      <button type="button" class="inv-tab-btn" data-inv-tab="lines"
+              onclick="invSwitchTab('lines')">Kalem Bilgileri</button>
+    </nav>
+
+    <div class="inv-tab-content" id="invTabContent">
+
+      <!-- TAB 1: Üst Bilgi -->
+      <div class="inv-tab-pane is-active" data-inv-pane="general">
+        <div class="inv-hform">
+
+          <div class="inv-hrow">
+            <label class="inv-hlabel">Belge No</label>
+            <input type="text" id="invDocNoInput" class="form-control form-control-sm inv-hinput"
+                   placeholder="Kaydedilince oluşturulur" readonly />
+          </div>
+
+          <div class="inv-hrow">
+            <label class="inv-hlabel">Sayım Tarihi</label>
+            <input type="text" id="invDocDate" class="form-control form-control-sm inv-hinput"
+                   placeholder="gg.aa.yyyy" autocomplete="off" />
+          </div>
+
+          <div class="inv-hrow">
+            <label class="inv-hlabel">Sayım Deposu</label>
+            <select id="invLocation" class="form-select form-select-sm inv-hinput">
+              <option value="">-- Depo seçiniz --</option>
+            </select>
+          </div>
+
+          <div class="inv-hrow" style="align-items:flex-start;">
+            <label class="inv-hlabel" style="padding-top:8px;">Notlar</label>
+            <textarea id="invNotes" class="form-control inv-hinput"
+                      placeholder="Açıklama…" style="max-width:400px;resize:vertical;min-height:72px;"></textarea>
+          </div>
+
+          <!-- Stok Yükle bölümü -->
+          <div class="inv-load-section">
+            <div class="inv-load-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-bottom:1px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Stok Yükle
+            </div>
+            <div class="inv-load-desc">
+              Seçili depo ve tarih baz alınarak depodaki beklenen stok miktarları kalem listesine otomatik aktarılır.
+              Kalem bilgileri sekmesine geçip sayılan miktarları düzenleyebilirsiniz.
+            </div>
+            <button type="button" class="inv-btn inv-btn--violet" id="invLoadStockBtn" style="font-size:0.78rem;padding:7px 12px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Stok Yükle
+            </button>
+            <div class="inv-load-status" id="invLoadStatus"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- TAB 2: Kalem Bilgileri -->
+      <div class="inv-tab-pane inv-tab-pane--lines" data-inv-pane="lines">
+        <div id="reactInvLineGrid" style="height:100%;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Silme onay modal -->
+  <div id="invDeleteModal" class="inv-modal-backdrop" style="display:none;">
+    <div class="inv-modal">
+      <div class="inv-modal__icon">🗑️</div>
+      <h3 class="inv-modal__title">Sayım Belgesini Sil</h3>
+      <p class="inv-modal__msg">Bu işlem geri alınamaz. Sayım belgesini silmek istiyor musunuz?</p>
+      <div class="inv-modal__actions">
+        <button type="button" class="inv-modal__cancel" id="invModalCancel">Vazgeç</button>
+        <button type="button" class="inv-modal__ok"     id="invModalOk">Sil</button>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var DOC_ID     = @Html.Raw(Model.DocId.HasValue ? Model.DocId.Value.ToString() : "null");
+    var LINE_GRID_CONFIG = @Html.Raw(Model.LineGridConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var TOKEN      = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+    var _gridReady   = false;
+    var _pendingRows = null;
+    var _gridMounted = false;
+    window.__INV_LINES__ = [];
+
+    // ── Tab geçişi ────────────────────────────────────────────────────
+    window.invSwitchTab = function(tabKey) {
+        document.querySelectorAll('[data-inv-tab]').forEach(function(btn) {
+            btn.classList.toggle('is-active', btn.getAttribute('data-inv-tab') === tabKey);
+        });
+        document.querySelectorAll('[data-inv-pane]').forEach(function(pane) {
+            pane.classList.toggle('is-active', pane.getAttribute('data-inv-pane') === tabKey);
+        });
+        if (tabKey === 'lines' && !_gridMounted) mountLineGrid();
+    };
+
+    // ── Lokasyon dropdown ─────────────────────────────────────────────
+    async function loadLocations() {
+        try {
+            var r    = await fetch('/Warehouse/GetLocationsJson', { credentials: 'same-origin' });
+            var locs = await r.json();
+            var el   = document.getElementById('invLocation');
+            if (!el) return;
+            locs.forEach(function(l) {
+                var o = document.createElement('option');
+                o.value = l.id;
+                o.textContent = (l.locationName || l.locationCode || '').trim();
+                el.appendChild(o);
+            });
+        } catch (e) { console.warn('[INV] Lokasyon yüklenemedi:', e); }
+    }
+
+    // ── Stok Yükle ───────────────────────────────────────────────────
+    async function loadStock() {
+        var locEl  = document.getElementById('invLocation');
+        var locId  = locEl ? parseInt(locEl.value, 10) : 0;
+        if (!locId) {
+            setLoadStatus('Önce bir depo seçiniz.', 'err');
+            return;
+        }
+
+        var dateFp   = document.getElementById('invDocDate')?._flatpickr;
+        var selDates = dateFp ? dateFp.selectedDates : [];
+        var dateStr  = selDates.length > 0
+            ? selDates[0].toISOString().substring(0, 10)
+            : new Date().toISOString().substring(0, 10);
+
+        var btn = document.getElementById('invLoadStockBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Yükleniyor…'; }
+        setLoadStatus('', '');
+
+        try {
+            var r = await fetch('/Warehouse/GetLocationStockSnapshotJson?locationId=' + locId + '&date=' + dateStr,
+                                { credentials: 'same-origin' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var items = await r.json();
+
+            if (!items || items.length === 0) {
+                setLoadStatus('Bu depo ve tarihte stok hareketi bulunamadı.', 'err');
+                return;
+            }
+
+            var headerLocId = locId || null;
+            var rows = items.map(function(it) {
+                return {
+                    stockCardId:       it.itemId,
+                    materialCode:      it.materialCode || '',
+                    materialName:      it.materialName || '',
+                    unitId:            it.unitId || null,
+                    quantity:          it.expectedQty,
+                    combinationCode:   it.combinationCode || '',
+                    combinationId:     it.combinationId || null,
+                    trackCombinations: !!it.combinationId,
+                    notes:             '',
+                    fromLocationId:    headerLocId,
+                };
+            });
+
+            setGridRows(rows);
+            setLoadStatus(items.length + ' malzeme yüklendi. Kalem Bilgileri sekmesinde sayılan miktarları düzenleyebilirsiniz.', 'ok');
+
+            // Kalem sekmesine geç
+            if (!_gridMounted) mountLineGrid();
+            invSwitchTab('lines');
+        } catch (e) {
+            setLoadStatus('Stok yüklenirken hata oluştu: ' + (e.message || e), 'err');
+            console.warn('[INV] Stok yüklenemedi:', e);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Stok Yükle';
+            }
+        }
+    }
+
+    function setLoadStatus(msg, type) {
+        var el = document.getElementById('invLoadStatus');
+        if (!el) return;
+        el.textContent = msg;
+        el.className   = 'inv-load-status' + (type ? ' inv-load-status--' + type : '');
+    }
+
+    // ── Belgeyi yükle (edit mod) ──────────────────────────────────────
+    async function loadDoc() {
+        if (!DOC_ID) { hideMask(); return; }
+        try {
+            var r = await fetch('/Warehouse/GetDocJson?id=' + DOC_ID, { credentials: 'same-origin' });
+            if (!r.ok) { hideMask(); return; }
+            var data  = await r.json();
+            var doc   = data.doc;
+            var lines = data.lines || [];
+
+            if (doc) {
+                var noEl = document.getElementById('invDocNoInput');
+                if (noEl) noEl.value = doc.docNo || '';
+                document.getElementById('invDocNoDisplay').textContent = doc.docNo || '';
+
+                var dateFp = document.getElementById('invDocDate')?._flatpickr;
+                if (dateFp && doc.docDate) dateFp.setDate(doc.docDate.substring(0, 10));
+
+                var locEl = document.getElementById('invLocation');
+                var locId = doc.fromLocationId || null;
+                if (locEl && locId) locEl.value = String(locId);
+
+                var notesEl = document.getElementById('invNotes');
+                if (notesEl) notesEl.value = doc.notes || '';
+            }
+
+            var rows = lines.map(function(l) {
+                return {
+                    stockCardId:       l.itemId,
+                    materialCode:      l.materialCode || '',
+                    materialName:      l.materialName || '',
+                    unitId:            l.unitId || null,
+                    quantity:          l.qty,
+                    combinationCode:   l.combinationCode || '',
+                    combinationId:     l.combinationId || null,
+                    trackCombinations: !!l.combinationId,
+                    notes:             l.notes || '',
+                    fromLocationId:    l.fromLocationId || null,
+                };
+            });
+            setGridRows(rows);
+        } catch (e) {
+            console.warn('[INV] Belge yüklenemedi:', e);
+        } finally {
+            hideMask();
+        }
+    }
+
+    function hideMask() {
+        var m = document.getElementById('invLoadingMask');
+        if (m) m.classList.add('is-hidden');
+    }
+
+    // ── Grid satırları ────────────────────────────────────────────────
+    function setGridRows(rows) {
+        if (_gridReady && window.CalibraHub && window.CalibraHub.whLineGrid) {
+            window.CalibraHub.whLineGrid.setRows(rows || []);
+        } else {
+            _pendingRows = rows || [];
+        }
+    }
+
+    function getGridRows() {
+        if (window.CalibraHub && window.CalibraHub.whLineGrid &&
+            typeof window.CalibraHub.whLineGrid.getRows === 'function') {
+            try { return window.CalibraHub.whLineGrid.getRows() || []; } catch(_) {}
+        }
+        return window.__INV_LINES__ || [];
+    }
+
+    // ── Kaydet ───────────────────────────────────────────────────────
+    async function save() {
+        var btn = document.getElementById('invSaveBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor…'; }
+        try {
+            var locEl   = document.getElementById('invLocation');
+            var fromLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
+
+            var dateFp  = document.getElementById('invDocDate');
+            var docDate = dateFp?._flatpickr?.selectedDates?.[0]
+                ? dateFp._flatpickr.selectedDates[0].toISOString()
+                : new Date().toISOString();
+
+            var rawLines = getGridRows();
+            var lines = rawLines
+                .filter(function(r) { return r && r.materialCode && String(r.materialCode).trim(); })
+                .map(function(r) {
+                    return {
+                        id:            null,
+                        itemId:        r.stockCardId || null,
+                        materialCode:  r.materialCode,
+                        materialName:  r.materialName,
+                        unitId:        r.unitId || null,
+                        qty:           parseFloat(r.quantity) || 0,
+                        combinationId: r.combinationId || null,
+                        notes:         r.notes || null,
+                        fromLocationId: r.fromLocationId || null,
+                        toLocationId:   null,
+                    };
+                });
+
+            var body = {
+                id:             DOC_ID,
+                docType:        'INVENTORY_COUNT',
+                docDate:        docDate,
+                fromLocationId: fromLoc,
+                toLocationId:   null,
+                refNo:          null,
+                notes:          (document.getElementById('invNotes')?.value || '').trim() || null,
+                argeProjectId:  null,
+                lines:          lines,
+            };
+
+            var resp = await fetch('/Warehouse/SaveInventoryJson', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            var json = await resp.json();
+
+            if (json && json.success) {
+                var noEl = document.getElementById('invDocNoInput');
+                if (noEl) noEl.value = json.docNo || '';
+                document.getElementById('invDocNoDisplay').textContent = json.docNo || '';
+                if (!DOC_ID) {
+                    DOC_ID = json.id;
+                    history.replaceState(null, '', window.location.pathname + '?id=' + DOC_ID);
+                    var delBtn = document.getElementById('invDeleteBtn');
+                    if (delBtn) delBtn.style.display = '';
+                }
+                var bar = document.getElementById('invActionBar');
+                if (bar) {
+                    bar.classList.remove('is-save-flash');
+                    void bar.offsetWidth;
+                    bar.classList.add('is-save-flash');
+                    setTimeout(function() { bar.classList.remove('is-save-flash'); }, 1900);
+                }
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast('Sayım belgesi kaydedildi.', 'ok');
+            } else {
+                var msg = (json && json.message) || 'Kayıt başarısız.';
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(msg, 'err');
+                else alert(msg);
+            }
+        } catch (ex) {
+            if (window.CalibraHub && window.CalibraHub.toast)
+                window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
+            else alert('Hata: ' + ex.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Kaydet';
+            }
+        }
+    }
+
+    // ── Sil ──────────────────────────────────────────────────────────
+    function showDeleteModal() { document.getElementById('invDeleteModal').style.display = 'flex'; document.getElementById('invModalOk').focus(); }
+    function hideDeleteModal() { document.getElementById('invDeleteModal').style.display = 'none'; }
+    async function doDelete() {
+        hideDeleteModal();
+        if (!DOC_ID) return;
+        try {
+            var resp = await fetch('/Warehouse/DeleteInventoryJson?id=' + DOC_ID, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': TOKEN },
+            });
+            var json = await resp.json();
+            if (json && json.ok) {
+                window.location.href = '/Warehouse/Inventory';
+            } else {
+                var msg = (json && json.error) || 'Silme başarısız.';
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(msg, 'err');
+                else alert(msg);
+            }
+        } catch (ex) {
+            if (window.CalibraHub && window.CalibraHub.toast)
+                window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
+        }
+    }
+
+    // ── Line Grid ────────────────────────────────────────────────────
+    function patchGridKey() {
+        Object.defineProperty(window.CalibraHub, 'salesLineGrid', {
+            get: function() { return window.CalibraHub.__inv_grid; },
+            set: function(v) {
+                window.CalibraHub.__inv_grid  = v;
+                window.CalibraHub.whLineGrid  = v;
+            },
+            configurable: true,
+        });
+    }
+
+    function mountLineGrid() {
+        if (_gridMounted) return;
+        var el = document.getElementById('reactInvLineGrid');
+        if (!el) return;
+        if (!window.CalibraHub || !window.CalibraHub.mountLineItemsGrid) {
+            console.error('[INV] mountLineItemsGrid yok');
+            return;
+        }
+        _gridMounted = true;
+        try {
+            window.CalibraHub.mountLineItemsGrid(el, LINE_GRID_CONFIG, {
+                onRowsChange: function(rows) { window.__INV_LINES__ = rows || []; }
+            });
+            var tries = 0;
+            var timer = setInterval(function() {
+                if (window.CalibraHub && window.CalibraHub.whLineGrid) {
+                    clearInterval(timer);
+                    _gridReady = true;
+                    if (_pendingRows !== null) {
+                        window.CalibraHub.whLineGrid.setRows(_pendingRows);
+                        _pendingRows = null;
+                    }
+                } else if (++tries > 80) {
+                    clearInterval(timer);
+                }
+            }, 25);
+        } catch (ex) {
+            console.error('[INV] grid mount exception:', ex);
+            _gridMounted = false;
+        }
+    }
+
+    // ── Bootstrap ────────────────────────────────────────────────────
+    function bootstrap() {
+        // Flatpickr
+        function initFlatpickr() {
+            flatpickr('#invDocDate', {
+                dateFormat: 'd.m.Y', locale: 'tr', defaultDate: new Date(),
+            });
+        }
+        if (window.flatpickr) {
+            initFlatpickr();
+        } else {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js';
+            s.onload = function() {
+                var l = document.createElement('script');
+                l.src = 'https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/tr.js';
+                l.onload = initFlatpickr;
+                document.head.appendChild(l);
+            };
+            document.head.appendChild(s);
+        }
+
+        // React bundle
+        if (!document.querySelector('link[data-inv-grid-css]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = CSS_URL;
+            link.setAttribute('data-inv-grid-css', '1');
+            document.head.appendChild(link);
+        }
+
+        function ensureBundle(cb) {
+            if (window.CalibraHub && window.CalibraHub.mountLineItemsGrid) { cb(); return; }
+            var sc = document.createElement('script');
+            sc.src = BUNDLE_URL;
+            sc.setAttribute('data-inv-grid', '1');
+            sc.onload  = function() { setTimeout(cb, 0); };
+            sc.onerror = function() { console.error('[INV] Bundle yüklenemedi'); };
+            document.head.appendChild(sc);
+        }
+
+        loadLocations().then(function() {
+            ensureBundle(function() {
+                patchGridKey();
+                mountLineGrid();
+                loadDoc();
+            });
+        });
+
+        // Header lokasyon değişince tüm satırlara propagate et
+        document.getElementById('invLocation')?.addEventListener('change', function() {
+            var newLocId = this.value ? parseInt(this.value, 10) : null;
+            if (!window.CalibraHub || !window.CalibraHub.whLineGrid) return;
+            var rows = window.CalibraHub.whLineGrid.getRows() || [];
+            if (rows.length === 0) return;
+            window.CalibraHub.whLineGrid.setRows(
+                rows.map(function(r) { return Object.assign({}, r, { fromLocationId: newLocId }); })
+            );
+        });
+
+        // Buton olayları
+        document.getElementById('invSaveBtn')?.addEventListener('click', save);
+        document.getElementById('invLoadStockBtn')?.addEventListener('click', loadStock);
+        var delBtn = document.getElementById('invDeleteBtn');
+        if (delBtn) delBtn.addEventListener('click', showDeleteModal);
+        document.getElementById('invModalCancel')?.addEventListener('click', hideDeleteModal);
+        document.getElementById('invModalOk')?.addEventListener('click', doDelete);
+        document.getElementById('invDeleteModal')?.addEventListener('click', function(e) {
+            if (e.target === this) hideDeleteModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') hideDeleteModal();
+        });
+        if (!DOC_ID) {
+            if (delBtn) delBtn.style.display = 'none';
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootstrap);
+    } else {
+        bootstrap();
+    }
+
+    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
+})();
+</script>
+}

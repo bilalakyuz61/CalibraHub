@@ -315,8 +315,22 @@ public sealed class IntegrationRunner : IIntegrationRunner
 
                     foreach (var fkValue in fkValues.Distinct())
                     {
+                        // CascadeByValue: fkValue bir KOD string'i (orn. "120-01-001"), entity ID degil.
+                        // Hedef integration'in SourceCodeColumn'u ile kod → entity ID cevirimi yapilir.
+                        string cascadeRecordId = fkValue;
+                        if (m.CascadeByValue && !string.IsNullOrWhiteSpace(targetIntegration.SourceCodeColumn))
+                        {
+                            var resolvedId = await _formMeta.FindRecordIdByFieldValueAsync(
+                                targetIntegration.SourceFormCode,
+                                targetIntegration.SourceCodeColumn,
+                                fkValue, ct);
+                            if (string.IsNullOrWhiteSpace(resolvedId))
+                                continue;   // Kod CalibraHub'da bulunamadı — bu satırı atla
+                            cascadeRecordId = resolvedId;
+                        }
+
                         // Daha once Sent edilmis mi?
-                        var existingStatus = await _recordStatusRepo.GetAsync(targetIntegrationId, fkValue, ct);
+                        var existingStatus = await _recordStatusRepo.GetAsync(targetIntegrationId, cascadeRecordId, ct);
                         if (existingStatus is not null &&
                             existingStatus.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Sent)
                         {
@@ -326,7 +340,7 @@ public sealed class IntegrationRunner : IIntegrationRunner
                         // Recursive cascade — child run
                         var childResult = await RunInternalAsync(
                             targetIntegrationId,
-                            fkValue,
+                            cascadeRecordId,
                             IntegrationTriggerType.Cascade,
                             triggeredBy: $"cascade:#{integrationId}",
                             parentRunId: thisRunId,
@@ -336,7 +350,7 @@ public sealed class IntegrationRunner : IIntegrationRunner
 
                         if (!childResult.Success)
                         {
-                            cascadeError = $"Cascade [{m.TargetPath} → Integration#{targetIntegrationId}/{fkValue}]: " +
+                            cascadeError = $"Cascade [{m.TargetPath} → Integration#{targetIntegrationId}/{cascadeRecordId}]: " +
                                            (childResult.ErrorMessage ?? "bilinmeyen hata");
                             break;   // fail-fast — bu mapping'i terk et
                         }

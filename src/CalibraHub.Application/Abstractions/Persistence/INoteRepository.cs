@@ -5,6 +5,10 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 public interface INoteRepository
 {
     Task<IReadOnlyCollection<Note>> GetByUserAsync(int companyId, int userId, Guid? folderId, CancellationToken cancellationToken);
+    /// <summary>İçerik (Content) sütunu olmadan metadata listesi döner — ilk yükleme performansı için.</summary>
+    Task<IReadOnlyCollection<Note>> GetListByUserAsync(int companyId, int userId, CancellationToken cancellationToken);
+    /// <summary>Tek bir notun içeriğini (Content + OcrText) döner — lazy load için.</summary>
+    Task<(string Content, string? OcrText)?> GetContentByIdAsync(Guid noteId, int userId, CancellationToken cancellationToken);
     Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task SaveAsync(Note note, CancellationToken cancellationToken);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken);

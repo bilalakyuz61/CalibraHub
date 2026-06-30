@@ -35,4 +35,7 @@ public interface IPersonnelRepository
 
     /// <summary>ShopFloor lockout için: sicili pasife alır (IsActive = 0). Audit alanları dokunulmaz.</summary>
     Task DeactivateAsync(int id, CancellationToken ct);
+
+    /// <summary>Sistem kullanıcısına bağlı personel kartını döner (UserId eşleşmesi).</summary>
+    Task<PersonnelDto?> GetByUserIdAsync(int userId, CancellationToken ct);
 }

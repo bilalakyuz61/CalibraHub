@@ -26,7 +26,8 @@ public sealed class ItemImportHandler : RowImportHandlerBase
     {
         new ImportTargetFieldDto("Name",    "Stok Adı",  "string",  true,  false, "Malzeme/ürün adı (zorunlu)"),
         new ImportTargetFieldDto("Code",    "Stok Kodu", "string",  false, true,  "Boşsa addan otomatik üretilir; eşleştirme anahtarı olabilir"),
-        new ImportTargetFieldDto("TaxRate", "KDV Oranı", "decimal", false, false, "Yüzde (boşsa %20)"),
+        new ImportTargetFieldDto("TaxRate",      "KDV Oranı",  "decimal", false, false, "Yüzde (boşsa %20)"),
+        new ImportTargetFieldDto("TrackingType", "Takip Tipi", "string",  false, false, "Yok / Lot / Seri (boşsa Yok)", new[] { "Yok", "Lot", "Seri" }),
     };
 
     protected override IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> d)
@@ -60,19 +61,20 @@ public sealed class ItemImportHandler : RowImportHandlerBase
     {
         var name = Get(d, "Name")!.Trim();
         var taxRate = ParseDecimal(Get(d, "TaxRate")) ?? 20m;
+        var tracking = ResolveTracking(Get(d, "TrackingType"));
 
         if (action == "update" && existingId is > 0)
         {
             var items = await EnsureItemsAsync(ct);
             var ex = items.FirstOrDefault(i => i.Id == existingId.Value);
             var req = new UpdateItemRequest(existingId.Value, ex?.Code ?? (Get(d, "Code") ?? name), name,
-                ex?.TypeId, ex?.UnitId, ex?.Combinations ?? false, taxRate);
+                ex?.TypeId, ex?.UnitId, ex?.Combinations ?? false, taxRate, tracking ?? ex?.TrackingType ?? "None");
             await _logistics.UpdateItemAsync(req, ct);
             return (true, null, existingId);
         }
 
         var code = await DeriveUniqueCodeAsync(Get(d, "Code"), name, usedCodes, ct);
-        await _logistics.CreateItemAsync(new CreateItemRequest(code, name, null, null, false, taxRate), ct);
+        await _logistics.CreateItemAsync(new CreateItemRequest(code, name, null, null, false, taxRate, tracking ?? "None"), ct);
         return (true, null, null);
     }
 
@@ -96,5 +98,15 @@ public sealed class ItemImportHandler : RowImportHandlerBase
         while (Exists(candidate)) { n++; candidate = baseCode + n; }
         used.Add(candidate);
         return candidate;
+    }
+
+    /// <summary>Serbest metni takip tipine eşle: Lot / Seri / Yok. Boş → null (servis "None" yapar).</summary>
+    private static string? ResolveTracking(string? raw)
+    {
+        var v = (raw ?? "").Trim().ToLowerInvariant();
+        if (v.Length == 0) return null;
+        if (v is "lot" or "lot takibi" or "lot takip") return "Lot";
+        if (v is "seri" or "serial" or "seri takibi" or "seri takip") return "Serial";
+        return "None";
     }
 }

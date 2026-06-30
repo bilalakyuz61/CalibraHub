@@ -42,9 +42,11 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
             SELECT p.[Id], p.[CompanyId], p.[Code], p.[FullName], p.[Title], p.[Department],
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
-                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated]
+                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
             WHERE p.[CompanyId] = @CompanyId
             {activeFilter}
             {operatorFilter}
@@ -65,9 +67,11 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                    p.[Id], p.[CompanyId], p.[Code], p.[FullName], p.[Title], p.[Department],
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
-                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated]
+                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
             WHERE p.[Id] = @Id AND p.[CompanyId] = @CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -86,11 +90,11 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                 INSERT INTO {_table}
                     ([CompanyId],[Code],[FullName],[Title],[Department],
                      [PinCode],[CardNo],[IsProductionOperator],[IsActive],
-                     [UserId],[Phone],[Email],[Notes],[BirthDate],[Created])
+                     [UserId],[LocationId],[Phone],[Email],[Notes],[BirthDate],[Created])
                 VALUES
                     (@CompanyId,@Code,@FullName,@Title,@Department,
                      @PinCode,@CardNo,@IsProductionOperator,@IsActive,
-                     @UserId,@Phone,@Email,@Notes,@BirthDate,SYSUTCDATETIME());
+                     @UserId,@LocationId,@Phone,@Email,@Notes,@BirthDate,SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
         else
@@ -101,7 +105,8 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                     [Title]=@Title, [Department]=@Department,
                     [PinCode]=@PinCode, [CardNo]=@CardNo,
                     [IsProductionOperator]=@IsProductionOperator, [IsActive]=@IsActive,
-                    [UserId]=@UserId, [Phone]=@Phone, [Email]=@Email, [Notes]=@Notes,
+                    [UserId]=@UserId, [LocationId]=@LocationId,
+                    [Phone]=@Phone, [Email]=@Email, [Notes]=@Notes,
                     [BirthDate]=@BirthDate, [Updated]=SYSUTCDATETIME()
                 WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;";
@@ -117,6 +122,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
         cmd.Parameters.AddWithValue("@IsProductionOperator", e.IsProductionOperator);
         cmd.Parameters.AddWithValue("@IsActive", e.IsActive);
         cmd.Parameters.AddWithValue("@UserId", (object?)e.UserId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@LocationId", (object?)e.LocationId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Phone", (object?)e.Phone ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Email", (object?)e.Email ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Notes", (object?)e.Notes ?? DBNull.Value);
@@ -176,9 +182,11 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                    p.[Id], p.[CompanyId], p.[Code], p.[FullName], p.[Title], p.[Department],
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
-                   p.[Phone], p.[Email], p.[Notes], p.[Created], p.[Updated]
+                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
             WHERE p.[CompanyId] = @CompanyId
               AND p.[IsActive] = 1
               AND p.[IsProductionOperator] = 1
@@ -231,6 +239,28 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<PersonnelDto?> GetByUserIdAsync(int userId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT TOP 1
+                   p.[Id], p.[CompanyId], p.[Code], p.[FullName], p.[Title], p.[Department],
+                   p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
+                   p.[UserId], u.[FullName] AS UserFullName,
+                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated],
+                   p.[LocationId], loc.[LocationName] AS PersonnelLocationName
+            FROM {_table} p
+            LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = p.[LocationId]
+            WHERE p.[CompanyId] = @CompanyId AND p.[UserId] = @UserId AND p.[IsActive] = 1;";
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@UserId", userId);
+        var list = await ReadListAsync(cmd, ct);
+        return list.FirstOrDefault();
+    }
+
     private static async Task<IReadOnlyCollection<PersonnelDto>> ReadListAsync(SqlCommand cmd, CancellationToken ct)
     {
         var list = new List<PersonnelDto>();
@@ -255,7 +285,9 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                 Notes: r.IsDBNull(14) ? null : r.GetString(14),
                 BirthDate: r.IsDBNull(15) ? null : r.GetDateTime(15),
                 Created: r.GetDateTime(16),
-                Updated: r.IsDBNull(17) ? null : r.GetDateTime(17)));
+                Updated: r.IsDBNull(17) ? null : r.GetDateTime(17),
+                LocationId: r.IsDBNull(18) ? null : r.GetInt32(18),
+                LocationName: r.IsDBNull(19) ? null : r.GetString(19)));
         }
         return list;
     }

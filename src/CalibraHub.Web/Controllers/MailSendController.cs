@@ -91,7 +91,7 @@ public sealed class MailSendController : Controller
         }
         catch (Exception ex)
         {
-            var msg = System.Net.WebUtility.HtmlEncode(ex.Message);
+            var msg = System.Net.WebUtility.HtmlEncode("İşlem sırasında bir hata oluştu.");
             return Content(
                 "<!doctype html><html><head><meta charset=\"utf-8\"><title>Önizleme Hatası</title>"
                 + "<style>body{font-family:system-ui,sans-serif;padding:40px;color:#dc2626;background:#fef2f2;}"
@@ -352,7 +352,7 @@ public sealed class MailSendController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = "View sorgusu hatası: " + ex.Message });
+            return Json(new { ok = false, error = "View sorgusu hatası: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -579,7 +579,7 @@ public sealed class MailSendController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, message = ex.Message });
+            return Json(new { ok = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -763,7 +763,7 @@ public sealed class MailSendController : Controller
             }
             catch (Exception ex)
             {
-                return Json(new { ok = false, message = "Belge PDF üretilemedi: " + ex.Message });
+                return Json(new { ok = false, message = "Belge PDF üretilemedi: " + "İşlem sırasında bir hata oluştu." });
             }
         }
 
@@ -844,7 +844,7 @@ public sealed class MailSendController : Controller
             catch (Exception ex)
             {
                 fail++;
-                errors.Add($"{rcp.Email}: LogItem olusturulamadi: {ex.Message}");
+                errors.Add($"{rcp.Email}: LogItem olusturulamadi: {"İşlem sırasında bir hata oluştu."}");
                 continue;
             }
 
@@ -906,8 +906,8 @@ public sealed class MailSendController : Controller
             catch (Exception ex)
             {
                 fail++;
-                errMsg = ex.Message;
-                errors.Add($"{rcp.Email}: {ex.Message}");
+                errMsg = "İşlem sırasında bir hata oluştu.";
+                errors.Add($"{rcp.Email}: {"İşlem sırasında bir hata oluştu."}");
             }
 
             // 4) LogItem status guncelle (Sent / Failed + sentAt + error)

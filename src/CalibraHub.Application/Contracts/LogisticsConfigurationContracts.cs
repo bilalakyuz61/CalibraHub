@@ -69,7 +69,8 @@ public sealed record ItemDto(
     bool Combinations = false,
     decimal TaxRate = 20m,
     int? CreatedById = null,
-    int? UpdatedById = null);
+    int? UpdatedById = null,
+    string? TrackingType = "None");
 
 public sealed record FeatureDto(
     int Id,
@@ -104,7 +105,8 @@ public sealed record CreateItemRequest(
     int? TypeId = null,
     int? UnitId = null,
     bool Combinations = false,
-    decimal TaxRate = 20m);
+    decimal TaxRate = 20m,
+    string? TrackingType = "None");
 
 public sealed record UpdateItemRequest(
     int ItemId,
@@ -113,7 +115,8 @@ public sealed record UpdateItemRequest(
     int? TypeId = null,
     int? UnitId = null,
     bool Combinations = false,
-    decimal TaxRate = 20m);
+    decimal TaxRate = 20m,
+    string? TrackingType = "None");
 
 public sealed record CreateFeatureRequest(
     string Name,
@@ -262,7 +265,7 @@ public sealed record SaveItemUnitItem(
 public sealed record ItemLocationDto(
     int Id,
     int ItemId,
-    int LocationId,
+    int? LocationId,
     string LocationCode,
     string? LocationName,
     string LocationTypeCode,

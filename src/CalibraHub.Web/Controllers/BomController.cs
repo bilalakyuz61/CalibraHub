@@ -148,7 +148,7 @@ public sealed class BomController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { error = ex.Message });
+            return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
 

@@ -450,6 +450,10 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
   const [autoMapping, setAutoMapping] = useState(false)
   const [collapsedGroups, setCollGr]  = useState(new Set())
   const [openLookups, setOpenLookups] = useState(new Set()) // expanded lookup-advanced rows
+  const [actionSlot, setActionSlot]   = useState(null)
+  useEffect(() => {
+    setActionSlot(document.getElementById('iw-step-actions-portal'))
+  }, [])
   const [guideViews, setGuideViews]   = useState([])      // [{ viewName, schemaName, columns:[] }]
   const [guideColumns, setGuideColumns] = useState({})    // viewName → columns[] (lazy-loaded)
   const [guideSchemas, setGuideSchemas] = useState({})    // viewName → { valueColumn, displayColumn }
@@ -804,52 +808,30 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
 
   return (
     <>
-      <h2 className="iw-step-title">Alan Eşleme</h2>
-      <p className="iw-step-help">
-        Hedef endpoint'in alanlarını grupları halinde eşleştir.
-        <strong> Üst (object)</strong> grupları tek satır kart olarak,
-        <strong> Kalem (array)</strong> grupları kalem tablosu olarak gösterilir —
-        gerçek belge formlarındaki gibi.
-      </p>
-
-      {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', maxWidth: 1700 }}>
-        <button className="iw-btn-secondary" onClick={autoMap}
-                disabled={!state.targetEndpointId || fields.length === 0 || autoMapping}>
-          {autoMapping ? <Loader2 className="iw-spin" size={13} /> : <Sparkles size={13} />}
-          Otomatik Eşle
-        </button>
-        {hiddenGroups.size > 0 && (
-          <button onClick={() => setShowHiddenGroups(s => !s)}
-                  title={showHiddenGroups ? 'Gizlileri tekrar gizle' : 'Gizlenen grupları göster'}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '5px 12px', borderRadius: 8,
-                    background: showHiddenGroups ? 'var(--iw-amber-color)' : 'transparent',
-                    color: showHiddenGroups ? '#fff' : 'var(--iw-muted)',
-                    border: '1px solid ' + (showHiddenGroups ? 'var(--iw-amber-color)' : 'var(--iw-border)'),
-                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  }}>
-            {showHiddenGroups ? <Eye size={12} /> : <EyeOff size={12} />}
-            {showHiddenGroups ? `${hiddenGroups.size} gizli görünür` : `${hiddenGroups.size} grup gizli`}
+      {actionSlot && createPortal(
+        <>
+          <button className="iw-btn-secondary" onClick={autoMap}
+                  disabled={!state.targetEndpointId || fields.length === 0 || autoMapping}>
+            {autoMapping ? <Loader2 className="iw-spin" size={13} /> : <Sparkles size={13} />}
+            Otomatik Eşle
           </button>
-        )}
-        {hiddenGroups.size > 0 && (
-          <button onClick={clearHiddenGroups} title="Tüm grup gizlemelerini sıfırla"
-                  style={{
-                    padding: '5px 10px', borderRadius: 8,
-                    background: 'transparent', color: 'var(--iw-muted)',
-                    border: '1px solid var(--iw-border)',
-                    fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                  }}>
-            Sıfırla
-          </button>
-        )}
-        <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: 'var(--iw-muted)' }}>
-          {groups.length} grup · {state.mappings.length} alan
-        </span>
-      </div>
+          {hiddenGroups.size > 0 && (
+            <button className="iw-btn-secondary"
+                    onClick={() => setShowHiddenGroups(s => !s)}
+                    title={showHiddenGroups ? 'Gizlileri tekrar gizle' : 'Gizlenen grupları göster'}>
+              {showHiddenGroups ? <Eye size={12} /> : <EyeOff size={12} />}
+              {showHiddenGroups ? `${hiddenGroups.size} gizli görünür` : `${hiddenGroups.size} grup gizli`}
+            </button>
+          )}
+          {hiddenGroups.size > 0 && (
+            <button className="iw-btn-secondary" onClick={clearHiddenGroups}
+                    title="Tüm grup gizlemelerini sıfırla">
+              Sıfırla
+            </button>
+          )}
+        </>,
+        actionSlot
+      )}
 
 
       {/* Grup yok — boş durum */}
@@ -993,6 +975,26 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                             <th style={{ ...cellHeader, textAlign: 'center' }} title="Zorunlu alan">Zor.</th>
                             <th style={{ ...cellHeader, textAlign: 'center' }}>Sil</th>
                           </tr>
+                          {/* Rehber sub-header — grup içinde en az bir Rehber (sourceType=3) satır varsa göster */}
+                          {group.rows.some(r => state.mappings[r._idx]?.sourceType === 3) && (() => {
+                            const lbl = { fontSize: 9, color: 'var(--iw-muted)', userSelect: 'none', paddingLeft: 2 }
+                            return (
+                              <tr style={{ background: 'var(--iw-bg)' }}>
+                                <td colSpan={group.kind === 'array' ? 4 : 3} />
+                                <td style={{ padding: '0 8px 4px' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.1fr 10px 1fr 10px 1.4fr', gap: 3 }}>
+                                    <span style={lbl}>Rehber</span>
+                                    <span style={lbl}>Form değeri</span>
+                                    <span />
+                                    <span style={lbl}>Eşleşme kolonu</span>
+                                    <span />
+                                    <span style={lbl}>Dönecek kolon</span>
+                                  </div>
+                                </td>
+                                <td colSpan={5} />
+                              </tr>
+                            )
+                          })()}
                         </thead>
                         <tbody>
                           {group.rows.map(r => {
@@ -1139,8 +1141,6 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                     return (
                                       <div style={{
                                         display: 'grid',
-                                        // [Rehber 2fr] [Form 1.1fr] [= 10px] [Kısıt 1fr] [↩ 10px] [Dönecek 1.4fr]
-                                        // Rehber + Dönecek genelde uzun isim (cbv_Guide_Contacts, AccountCode) → fazla yer
                                         gridTemplateColumns: '2fr 1.1fr 10px 1fr 10px 1.4fr',
                                         gap: 3, alignItems: 'center',
                                       }}>
@@ -1153,11 +1153,11 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                           }))}
                                           placeholder="cbv_Guide_..."
                                           monospace size="sm" />
-                                        {/* 2) Form Alanı */}
+                                        {/* 2) Form değeri — formdan gelen anahtar */}
                                         <select value={primary.sourceField || ''}
                                                 onChange={e => updatePrimary({ sourceField: e.target.value })}
                                                 style={{ ...cellInput, fontSize: 10 }}
-                                                title="Form alanından gelecek değer">
+                                                title="Formdan alınacak değer — rehberin eşleşme kolonuna karşılaştırılır">
                                           <option value="">— Form alanı —</option>
                                           {sectionFields.map(f => (
                                             <option key={`lk.${f.section || 'Header'}.${f.code}`} value={f.code}>
@@ -1166,15 +1166,15 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                           ))}
                                         </select>
                                         <span style={{ textAlign: 'center', fontSize: 11, color: 'var(--iw-muted)', fontWeight: 700 }}>=</span>
-                                        {/* 3) Kısıt Alanı (rehberin hangi kolonu) */}
+                                        {/* 3) Eşleşme kolonu — rehberde WHERE filtre kolonu */}
                                         <SearchableCombo
                                           value={primary.field || ''}
                                           onChange={v => updatePrimary({ field: v })}
                                           options={cols.map(c => ({ value: c }))}
-                                          placeholder={!m.sourceValue ? '↑ rehber seç' : `Kısıt (${valueCol})`}
+                                          placeholder={!m.sourceValue ? '↑ rehber seç' : `ör. ${valueCol}`}
                                           monospace size="sm" />
                                         <span style={{ textAlign: 'center', fontSize: 11, color: 'var(--iw-amber-color)', fontWeight: 700 }} title="Dönecek kolon">↩</span>
-                                        {/* 4) Dönecek Saha */}
+                                        {/* 4) Dönecek kolon — rehberden alınacak değer */}
                                         <SearchableCombo
                                           value={m.lookupReturnColumn || ''}
                                           onChange={v => updateRow(idx, { lookupReturnColumn: v || null })}
@@ -1182,7 +1182,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                           placeholder={
                                             !m.sourceValue ? '↑ rehber seç' :
                                             cols.length === 0 ? 'Yükleniyor…' :
-                                            `Dönecek (${displayCol})`
+                                            `ör. ${displayCol}`
                                           }
                                           monospace size="sm" />
                                       </div>
@@ -1272,26 +1272,44 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                     Diğer (Constant, Formula) için cascade anlamsız → disabled. */}
                                 <td style={cellBody}>
                                   {(m.sourceType === 0 || m.sourceType === 3 || m.sourceType === 4) ? (
-                                    <select
-                                      value={m.cascadeToIntegrationId ?? ''}
-                                      onChange={e => updateRow(idx, {
-                                        cascadeToIntegrationId: e.target.value ? parseInt(e.target.value, 10) : null
-                                      })}
-                                      style={{
-                                        ...cellInput,
-                                        background: m.cascadeToIntegrationId ? 'var(--iw-emerald-bg)' : 'var(--iw-bg)',
-                                        color: m.cascadeToIntegrationId ? 'var(--iw-emerald-color)' : 'var(--iw-text)',
-                                        fontWeight: m.cascadeToIntegrationId ? 600 : 400,
-                                      }}
-                                      title="ERP'de bu FK'nin işaret ettiği kayıt yoksa önce burada seçilen entegrasyon tetiklenir.">
-                                      <option value="">— Cascade yok —</option>
-                                      {cascadeTargets.length === 0 && (
-                                        <option value="" disabled>(önce başka integration tanımlayın)</option>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                      <select
+                                        value={m.cascadeToIntegrationId ?? ''}
+                                        onChange={e => updateRow(idx, {
+                                          cascadeToIntegrationId: e.target.value ? parseInt(e.target.value, 10) : null,
+                                          cascadeByValue: e.target.value ? m.cascadeByValue : false,
+                                        })}
+                                        style={{
+                                          ...cellInput,
+                                          background: m.cascadeToIntegrationId ? 'var(--iw-emerald-bg)' : 'var(--iw-bg)',
+                                          color: m.cascadeToIntegrationId ? 'var(--iw-emerald-color)' : 'var(--iw-text)',
+                                          fontWeight: m.cascadeToIntegrationId ? 600 : 400,
+                                        }}
+                                        title="ERP'de bu FK'nin işaret ettiği kayıt yoksa önce burada seçilen entegrasyon tetiklenir.">
+                                        <option value="">— Cascade yok —</option>
+                                        {cascadeTargets.length === 0 && (
+                                          <option value="" disabled>(önce başka integration tanımlayın)</option>
+                                        )}
+                                        {cascadeTargets.map(t => (
+                                          <option key={t.id} value={t.id}>{t.name}</option>
+                                        ))}
+                                      </select>
+                                      {/* Kod bazlı toggle — sadece FormField (sourceType=0) ve cascade seçiliyse */}
+                                      {m.sourceType === 0 && m.cascadeToIntegrationId && (
+                                        <label style={{
+                                          display: 'flex', alignItems: 'center', gap: 4,
+                                          fontSize: 10, color: m.cascadeByValue ? 'var(--iw-emerald-color)' : 'var(--iw-muted)',
+                                          cursor: 'pointer', userSelect: 'none', padding: '1px 2px',
+                                        }}
+                                        title="Alan değeri (kod) doğrudan cascade key olarak kullanılır. Hedef integrasyon 'Kod Kolonu' ayarıyla entity'yi bulur.">
+                                          <input type="checkbox"
+                                                 checked={!!m.cascadeByValue}
+                                                 onChange={e => updateRow(idx, { cascadeByValue: e.target.checked })}
+                                                 style={{ margin: 0 }} />
+                                          Değer bazlı
+                                        </label>
                                       )}
-                                      {cascadeTargets.map(t => (
-                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                      ))}
-                                    </select>
+                                    </div>
                                   ) : (
                                     <span style={{
                                       fontSize: 10, color: 'var(--iw-muted)', fontStyle: 'italic',

@@ -21,6 +21,24 @@ export function getAll() {
     })
 }
 
+// İçerik olmadan metadata listesi — ilk yükleme için hızlı
+export function getList() {
+  return fetch(BASE + '/GetListJson', { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.json()
+    })
+}
+
+// Tek notun içeriğini lazy-load ile çeker
+export function getContent(noteId) {
+  return fetch(BASE + '/GetContentJson?noteId=' + encodeURIComponent(noteId), { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.json()
+    })
+}
+
 export function saveNote(note) {
   return postJson(BASE + '/SaveJson', {
     id: note.id || null,

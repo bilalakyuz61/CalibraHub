@@ -366,7 +366,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -385,7 +385,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, ok = false, message = ex.Message });
+            return Json(new { success = false, ok = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -401,7 +401,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -479,7 +479,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -603,7 +603,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -629,7 +629,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -648,7 +648,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -665,7 +665,7 @@ public sealed class ApprovalFlowController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 

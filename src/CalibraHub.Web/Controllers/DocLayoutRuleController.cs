@@ -265,7 +265,7 @@ public sealed class DocLayoutRuleController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[DLR.SaveJson] Unexpected: {Msg}", ex.Message);
-            return Json(new { ok = false, error = "Kayıt sırasında beklenmeyen hata: " + ex.Message });
+            return Json(new { ok = false, error = "Kayıt sırasında beklenmeyen hata: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -310,7 +310,7 @@ public sealed class DocLayoutRuleController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 

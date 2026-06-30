@@ -101,7 +101,7 @@ public sealed class DocumentNumberRuleController : Controller
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { ok = false, error = ex.Message });
+            return StatusCode(500, new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -116,7 +116,7 @@ public sealed class DocumentNumberRuleController : Controller
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { ok = false, error = ex.Message });
+            return StatusCode(500, new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 

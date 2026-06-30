@@ -123,6 +123,56 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         return list;
     }
 
+    public Task<IReadOnlyCollection<IntegrationManualButtonInfo>> ListManualButtonsAsync(
+        string formCode, CancellationToken ct)
+        => ListManualButtonsCoreAsync(formCode, ct);
+
+    public Task<IReadOnlyCollection<IntegrationManualButtonInfo>> ListAllManualButtonsAsync(
+        CancellationToken ct)
+        => ListManualButtonsCoreAsync(null, ct);
+
+    private async Task<IReadOnlyCollection<IntegrationManualButtonInfo>> ListManualButtonsCoreAsync(
+        string? formCode, CancellationToken ct)
+    {
+        var list = new List<IntegrationManualButtonInfo>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var whereFormCode = formCode is not null ? "AND i.[SourceFormCode] = @FormCode" : string.Empty;
+        cmd.CommandText = $"""
+            SELECT i.[Id], i.[Name], i.[Description], i.[TargetEndpointId], i.[SourceFormCode], t.[Config]
+            FROM {_integrationTable} i
+            INNER JOIN {_triggerTable} t ON t.[IntegrationId] = i.[Id]
+            WHERE i.[IsActive] = 1
+              AND t.[IsActive] = 1
+              AND t.[TriggerType] = 'Manual'
+              {whereFormCode}
+            ORDER BY i.[Name];
+            """;
+        if (formCode is not null)
+            cmd.Parameters.Add(new SqlParameter("@FormCode", formCode));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var config = r.IsDBNull(5) ? null : r.GetString(5);
+            string? buttonLabel = null, buttonColor = null;
+            if (config is not null)
+                try {
+                    var doc = System.Text.Json.JsonDocument.Parse(config);
+                    if (doc.RootElement.TryGetProperty("buttonLabel", out var lbl)) buttonLabel = lbl.GetString();
+                    if (doc.RootElement.TryGetProperty("color", out var col)) buttonColor = col.GetString();
+                } catch { /* malformed JSON — skip */ }
+            list.Add(new IntegrationManualButtonInfo(
+                Id: r.GetInt32(0),
+                Name: r.GetString(1),
+                Description: r.IsDBNull(2) ? null : r.GetString(2),
+                ButtonLabel: buttonLabel,
+                ButtonColor: buttonColor,
+                TargetEndpointId: r.IsDBNull(3) ? null : r.GetInt32(3),
+                SourceFormCode: r.GetString(4)));
+        }
+        return list;
+    }
+
     public async Task<IReadOnlyCollection<Integration>> ListByTriggerTypeAsync(
         IntegrationTriggerType triggerType, CancellationToken ct)
     {
@@ -160,14 +210,14 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],[CreatedById],
                [PreProcedureName],[PreProcedureParamsJson],
                [PostProcedureName],[PostProcedureParamsJson],
-               [SourceFilterJson],[AllowAsCascadeTarget])
+               [SourceFilterJson],[AllowAsCascadeTarget],[SourceCodeColumn])
             OUTPUT INSERTED.[Id]
             VALUES
               (@Name,@Description,@SourceFormCode,@TargetEndpointId,
                @ErrorBehavior,@RetryCount,@IsActive,@VersionNo,@CreatedById,
                @PreProcedureName,@PreProcedureParamsJson,
                @PostProcedureName,@PostProcedureParamsJson,
-               @SourceFilterJson,@AllowAsCascadeTarget);
+               @SourceFilterJson,@AllowAsCascadeTarget,@SourceCodeColumn);
             """;
         AddIntegrationParameters(cmd, integration);
         var newId = (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
@@ -194,6 +244,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 [PostProcedureParamsJson] = @PostProcedureParamsJson,
                 [SourceFilterJson] = @SourceFilterJson,
                 [AllowAsCascadeTarget] = @AllowAsCascadeTarget,
+                [SourceCodeColumn] = @SourceCodeColumn,
                 [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
             WHERE [Id] = @Id;
@@ -296,12 +347,12 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                       ([IntegrationId],[TargetPath],[TargetDataType],[SourceType],[SourceValue],
                        [LookupSourceField],[DefaultValue],[FormatPattern],[IsRequired],[SortOrder],[GroupKey],
                        [SourceSection],[LookupFiltersJson],[LookupReturnColumn],[LookupParam],
-                       [CascadeToIntegrationId])
+                       [CascadeToIntegrationId],[CascadeByValue])
                     VALUES
                       (@IntegrationId,@TargetPath,@TargetDataType,@SourceType,@SourceValue,
                        @LookupSourceField,@DefaultValue,@FormatPattern,@IsRequired,@SortOrder,@GroupKey,
                        @SourceSection,@LookupFiltersJson,@LookupReturnColumn,@LookupParam,
-                       @CascadeToIntegrationId);
+                       @CascadeToIntegrationId,@CascadeByValue);
                     """;
                 ins.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
                 ins.Parameters.Add(new SqlParameter("@TargetPath", m.TargetPath));
@@ -321,6 +372,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 ins.Parameters.Add(new SqlParameter("@LookupParam",        (object?)m.LookupParam        ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CascadeToIntegrationId",
                     (object?)m.CascadeToIntegrationId ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@CascadeByValue", m.CascadeByValue));
                 await ins.ExecuteNonQueryAsync(ct);
             }
 
@@ -664,6 +716,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         PostProcedureParamsJson = SafeGetString(r, "PostProcedureParamsJson"),
         SourceFilterJson        = SafeGetString(r, "SourceFilterJson"),
         AllowAsCascadeTarget    = SafeGetBool(r, "AllowAsCascadeTarget", defaultValue: true),
+        SourceCodeColumn        = SafeGetString(r, "SourceCodeColumn"),
     };
 
     private static IntegrationMapping MapMapping(SqlDataReader r) => new()
@@ -685,6 +738,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         LookupReturnColumn = SafeGetString(r, "LookupReturnColumn"),
         LookupParam        = SafeGetString(r, "LookupParam"),
         CascadeToIntegrationId = SafeGetInt(r, "CascadeToIntegrationId"),
+        CascadeByValue         = SafeGetBool(r, "CascadeByValue", defaultValue: false),
     };
 
     private static string? SafeGetString(SqlDataReader r, string columnName)
@@ -796,6 +850,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.Parameters.Add(new SqlParameter("@SourceFilterJson",
             (object?)integration.SourceFilterJson ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@AllowAsCascadeTarget", integration.AllowAsCascadeTarget));
+        cmd.Parameters.Add(new SqlParameter("@SourceCodeColumn",
+            (object?)integration.SourceCodeColumn ?? DBNull.Value));
     }
 
     private static void AddEndpointParameters(SqlCommand cmd, IntegrationEndpoint endpoint)

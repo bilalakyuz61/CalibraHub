@@ -39,6 +39,14 @@ public sealed class ImportService : IImportService
     public IReadOnlyList<ImportTargetFieldDto> GetTargetFields(string targetEntity)
         => ResolveHandler(targetEntity)?.GetFields() ?? Array.Empty<ImportTargetFieldDto>();
 
+    public async Task<IReadOnlyList<ImportTargetFieldDto>> GetTargetFieldsAsync(string targetEntity, CancellationToken ct)
+    {
+        var handler = ResolveHandler(targetEntity);
+        if (handler is null) return Array.Empty<ImportTargetFieldDto>();
+        await handler.PreloadAsync(ct);   // widget/özel alanlar yüklenir → GetFields onları da içerir
+        return handler.GetFields();
+    }
+
     private IImportTargetHandler? ResolveHandler(string? entity)
     {
         var key = string.IsNullOrWhiteSpace(entity) ? "CONTACT" : entity.Trim().ToUpperInvariant();
@@ -85,9 +93,21 @@ public sealed class ImportService : IImportService
     // ── Boş şablon (indirilebilir Excel) ─────────────────────────────────
     public async Task<(byte[] Bytes, string FileName)> BuildBlankTemplateAsync(string entity, int? templateId, CancellationToken ct)
     {
-        var fields = GetTargetFields(entity);
+        var handler = ResolveHandler(entity);
+        // dinamik (DB lookup) izinli değerler — örn. Cari İletişim "Unvan" mevcut unvan listesi
+        var dynAllowed = handler is null
+            ? (IReadOnlyDictionary<string, IReadOnlyList<string>>)new Dictionary<string, IReadOnlyList<string>>()
+            : await handler.GetDynamicAllowedValuesAsync(ct);
+        // enum → statik AllowedValues; dinamik alan → lookup; bool → otomatik Evet/Hayır.
+        IReadOnlyList<string>? AllowedValuesFor(ImportTargetFieldDto f) =>
+            f.AllowedValues
+            ?? (dynAllowed.TryGetValue(f.Key, out var dvv) && dvv.Count > 0 ? dvv : null)
+            ?? (string.Equals(f.DataType, "bool", StringComparison.OrdinalIgnoreCase) ? new[] { "Evet", "Hayır" } : null);
+
+        if (handler is not null) await handler.PreloadAsync(ct);   // widget/özel alanları kataloğa kat
+        var fields = handler?.GetFields() ?? Array.Empty<ImportTargetFieldDto>();
         var cols = new List<ExcelTemplateColumn>();
-        var fileBase = ResolveHandler(entity)?.Label ?? "Veri";
+        var fileBase = handler?.Label ?? "Veri";
 
         if (templateId is > 0)
         {
@@ -97,14 +117,18 @@ public sealed class ImportService : IImportService
                 fileBase = t.Name;
                 foreach (var f in fields)
                 {
+                    // TÜM alanları dahil et — şablonda eşlenmemiş (sonradan eklenen) alanlar da görünsün + değerleri gelsin.
                     var c = t.Columns.FirstOrDefault(x => string.Equals(x.TargetKey, f.Key, StringComparison.OrdinalIgnoreCase));
-                    if (c is not null && !string.IsNullOrWhiteSpace(c.SourceColumn))
-                        cols.Add(new ExcelTemplateColumn(c.SourceColumn!, f.Hint, f.IsRequired));
+                    var header = c is not null && !string.IsNullOrWhiteSpace(c.SourceColumn) ? c.SourceColumn! : f.Label;
+                    cols.Add(new ExcelTemplateColumn(header, f.Hint, f.IsRequired, AllowedValuesFor(f), f.CanBeMatchKey));
                 }
             }
         }
         if (cols.Count == 0)
-            cols = fields.Select(f => new ExcelTemplateColumn(f.Label, f.Hint, f.IsRequired)).ToList();
+            cols = fields.Select(f => new ExcelTemplateColumn(f.Label, f.Hint, f.IsRequired, AllowedValuesFor(f), f.CanBeMatchKey)).ToList();
+
+        // Anahtar (eşleştirme) alanları Excel'de ilk kolon(lar)a al — kullanıcı önce kodu girsin (stable sort).
+        cols = cols.OrderByDescending(c => c.CanBeMatchKey).ToList();
 
         var bytes = _excel.WriteTemplate("Veri", cols);
         var safe = new string((fileBase ?? "Veri").Select(ch => char.IsLetterOrDigit(ch) ? ch : '_').ToArray()).Trim('_');
@@ -130,7 +154,8 @@ public sealed class ImportService : IImportService
     }
 
     // ── Önizleme / Commit — handler'a delege ─────────────────────────────
-    public async Task<ImportPreviewResultDto> PreviewAsync(SaveImportTemplateRequest spec, byte[] data, string fileName, CancellationToken ct)
+    public async Task<ImportPreviewResultDto> PreviewAsync(SaveImportTemplateRequest spec, byte[] data, string fileName,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>? overrides, CancellationToken ct)
     {
         var handler = ResolveHandler(spec.TargetEntity);
         if (handler is null)
@@ -144,10 +169,11 @@ public sealed class ImportService : IImportService
             return new ImportPreviewResultDto(false, $"Dosya okunamadı: {ex.Message}", 0, 0, 0, 0, 0,
                 Array.Empty<string>(), Array.Empty<string>(), Array.Empty<ImportPreviewRowDto>());
         }
-        return await handler.PreviewAsync(BuildRowSet(table, spec), ct);
+        return await handler.PreviewAsync(BuildRowSet(table, spec, overrides), ct);
     }
 
-    public async Task<ImportCommitResultDto> CommitAsync(SaveImportTemplateRequest spec, byte[] data, string fileName, int? userId, CancellationToken ct)
+    public async Task<ImportCommitResultDto> CommitAsync(SaveImportTemplateRequest spec, byte[] data, string fileName, int? userId,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>? overrides, IReadOnlyCollection<int>? excluded, CancellationToken ct)
     {
         var handler = ResolveHandler(spec.TargetEntity);
         if (handler is null)
@@ -159,15 +185,30 @@ public sealed class ImportService : IImportService
         {
             return new ImportCommitResultDto(false, $"Dosya okunamadı: {ex.Message}", 0, 0, 0, Array.Empty<ImportCommitRowDto>());
         }
-        return await handler.CommitAsync(BuildRowSet(table, spec), userId, ct);
+        return await handler.CommitAsync(BuildRowSet(table, spec, overrides, excluded), userId, ct);
     }
 
     // ── Yardımcılar ──────────────────────────────────────────────────────
-    private static ImportRowSet BuildRowSet(ExcelTable table, SaveImportTemplateRequest spec)
+    private static ImportRowSet BuildRowSet(ExcelTable table, SaveImportTemplateRequest spec,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>? overrides = null,
+        IReadOnlyCollection<int>? excluded = null)
     {
         var headerIndex = BuildHeaderIndex(table.Headers);
         var columns = NormalizeColumns(spec.Columns);
-        var rows = table.Rows.Select(r => (IReadOnlyDictionary<string, string?>)MapRow(r, headerIndex, columns)).ToList();
+        var rows = new List<IReadOnlyDictionary<string, string?>>(table.Rows.Count);
+        int rowNo = 0;
+        foreach (var r in table.Rows)
+        {
+            rowNo++;
+            // Kullanıcının önizlemede iptal ettiği (hariç tuttuğu) satırı aktarmadan atla.
+            if (excluded is not null && excluded.Contains(rowNo)) continue;
+            var d = MapRow(r, headerIndex, columns);
+            // Önizlemede elle düzeltilen hücreleri uygula (satır no, preview RowNumber ile birebir).
+            if (overrides is not null && overrides.TryGetValue(rowNo, out var ov))
+                foreach (var kv in ov)
+                    d[kv.Key] = string.IsNullOrWhiteSpace(kv.Value) ? null : kv.Value.Trim();
+            rows.Add(d);
+        }
         var mappedKeys = columns.Select(c => c.TargetKey).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         return new ImportRowSet(rows, mappedKeys, spec.MatchKeyField);
     }

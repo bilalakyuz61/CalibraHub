@@ -79,6 +79,59 @@ public sealed class SqlNoteRepository : INoteRepository
         return notes;
     }
 
+    public async Task<IReadOnlyCollection<Note>> GetListByUserAsync(int companyId, int userId, CancellationToken cancellationToken)
+    {
+        var notes = new List<Note>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT n.[Id], n.[CompanyId], n.[UserId], n.[Title], n.[Created], n.[Updated], n.[FolderId],
+                   n.[IsPinned], n.[IsFullyEncrypted], n.[EncryptionHint], n.[Tags],
+                   n.[linked_entity_type], n.[linked_entity_id], n.[linked_entity_label],
+                   n.[visibility], n.[share_token], n.[share_is_public], n.[share_include_attachments],
+                   n.[ocr_text]
+            FROM {_notesTable} n
+            WHERE n.[IsDeleted] = 0
+              AND n.[CompanyId] = @CompanyId
+              AND (n.[UserId] = @UserId
+                   OR n.[visibility] = 1
+                   OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[note_id] = n.[Id] AND s.[shared_with_user_id] = @UserId))
+            ORDER BY n.[Updated] DESC;
+            """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        command.Parameters.Add(new SqlParameter("@UserId", userId));
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            notes.Add(MapNoteMetadata(reader));
+
+        return notes;
+    }
+
+    public async Task<(string Content, string? OcrText)?> GetContentByIdAsync(Guid noteId, int userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT n.[Content], n.[ocr_text]
+            FROM {_notesTable} n
+            WHERE n.[Id] = @Id AND n.[IsDeleted] = 0
+              AND (n.[UserId] = @UserId
+                   OR n.[visibility] = 1
+                   OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[note_id] = n.[Id] AND s.[shared_with_user_id] = @UserId));
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", noteId));
+        command.Parameters.Add(new SqlParameter("@UserId", userId));
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        var rawContent = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+        var content = _encryption.Unprotect(rawContent) ?? string.Empty;
+        var ocrText = reader.IsDBNull(1) ? null : reader.GetString(1);
+        return (content, ocrText);
+    }
+
     public async Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -661,6 +714,34 @@ public sealed class SqlNoteRepository : INoteRepository
             """;
         command.Parameters.Add(new SqlParameter("@FolderId", folderId));
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // GetListByUserAsync için — [Content] sütunu YOK; ordinal sırası [Id,CompanyId,UserId,Title,Created,Updated,...]
+    private Note MapNoteMetadata(SqlDataReader reader)
+    {
+        return new Note
+        {
+            Id        = reader.GetGuid(0),
+            CompanyId = reader.GetInt32(1),
+            UserId    = reader.GetInt32(2),
+            Title     = reader.GetString(3),
+            Content   = string.Empty,  // Lazy-loaded via GetContentByIdAsync
+            CreatedAt = reader.GetDateTime(4),
+            UpdatedAt = reader.GetDateTime(5),
+            FolderId  = reader.IsDBNull(6) ? null : reader.GetGuid(6),
+            IsPinned  = !reader.IsDBNull(7) && reader.GetBoolean(7),
+            IsFullyEncrypted = reader.FieldCount > 8  && !reader.IsDBNull(8)  && reader.GetBoolean(8),
+            EncryptionHint   = reader.FieldCount > 9  && !reader.IsDBNull(9)  ? reader.GetString(9) : null,
+            Tags             = reader.FieldCount > 10 && !reader.IsDBNull(10) ? reader.GetString(10) : null,
+            LinkedEntityType  = reader.FieldCount > 11 && !reader.IsDBNull(11) ? reader.GetString(11) : null,
+            LinkedEntityId    = reader.FieldCount > 12 && !reader.IsDBNull(12) ? reader.GetInt32(12) : (int?)null,
+            LinkedEntityLabel = reader.FieldCount > 13 && !reader.IsDBNull(13) ? reader.GetString(13) : null,
+            Visibility        = reader.FieldCount > 14 && !reader.IsDBNull(14) ? reader.GetByte(14) : 0,
+            ShareToken               = reader.FieldCount > 15 && !reader.IsDBNull(15) ? reader.GetString(15) : null,
+            ShareIsPublic            = reader.FieldCount > 16 && !reader.IsDBNull(16) && reader.GetBoolean(16),
+            ShareIncludeAttachments  = reader.FieldCount > 17 && !reader.IsDBNull(17) && reader.GetBoolean(17),
+            OcrText                  = reader.FieldCount > 18 && !reader.IsDBNull(18) ? reader.GetString(18) : null,
+        };
     }
 
     private Note MapNote(SqlDataReader reader)

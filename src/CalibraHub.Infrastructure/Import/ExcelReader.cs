@@ -30,7 +30,7 @@ public sealed class ExcelReader : IExcelReader
 
     public ExcelTable Read(byte[] data, string fileName, string? sheetName, int headerRowIndex)
     {
-        if (headerRowIndex < 1) headerRowIndex = 1;
+        if (headerRowIndex < 0) headerRowIndex = 0;   // 0 = başlıksız (sentetik "Kolon{n}" adları)
 
         return IsCsv(fileName)
             ? ReadCsv(data, headerRowIndex)
@@ -43,6 +43,7 @@ public sealed class ExcelReader : IExcelReader
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add(string.IsNullOrWhiteSpace(sheetName) ? "Veri" : sheetName);
 
+        // 1) Veri sayfası başlıkları
         for (int i = 0; i < columns.Count; i++)
         {
             var col = columns[i];
@@ -59,18 +60,49 @@ public sealed class ExcelReader : IExcelReader
             ws.Range(1, 1, 1, columns.Count).SetAutoFilter();
         }
 
-        // İkinci sayfa: alan açıklamaları (zorunlu mu + ipucu)
+        // 2) TEK "Aciklama" sayfası — TRANSPOZE: her alan bir SÜTUN; A sütunu satır etiketleri
+        //    (Kolon / Açıklama / Zorunlu / Değerler). Sınırlı-değerli alanların değerleri
+        //    "Değerler" satırından itibaren AŞAĞI doğru, her biri ayrı hücre.
         var help = wb.Worksheets.Add("Aciklama");
+        const int valuesStartRow = 5;
         help.Cell(1, 1).Value = "Kolon";
-        help.Cell(1, 2).Value = "Zorunlu";
-        help.Cell(1, 3).Value = "Aciklama";
-        help.Row(1).Style.Font.Bold = true;
+        help.Cell(2, 1).Value = "Açıklama";
+        help.Cell(3, 1).Value = "Zorunlu";
+        help.Cell(4, 1).Value = "Anahtar";
+        help.Cell(valuesStartRow, 1).Value = "Değerler";
+        help.Range(1, 1, valuesStartRow, 1).Style.Font.Bold = true;
+        help.Column(1).Style.Fill.BackgroundColor = XLColor.FromHtml("#F1F5F9");
+
         for (int i = 0; i < columns.Count; i++)
         {
-            help.Cell(i + 2, 1).Value = columns[i].Header;
-            help.Cell(i + 2, 2).Value = columns[i].Required ? "Evet" : "Hayir";
-            help.Cell(i + 2, 3).Value = columns[i].Hint ?? "";
+            var col = columns[i];
+            int c = i + 2;   // A sütunu etiketler; alan sütunları B'den başlar
+
+            var head = help.Cell(1, c);
+            head.Value = col.Header;
+            head.Style.Font.Bold = true;
+            head.Style.Fill.BackgroundColor = XLColor.FromHtml(col.Required ? "#E0E7FF" : "#F1F5F9");
+            help.Cell(2, c).Value = col.Hint ?? "";
+            help.Cell(3, c).Value = col.Required ? "Evet" : "Hayır";
+            help.Cell(4, c).Value = col.CanBeMatchKey ? "Evet" : "Hayır";
+
+            if (col.AllowedValues is { Count: > 0 } av)
+            {
+                for (int r = 0; r < av.Count; r++)
+                    help.Cell(valuesStartRow + r, c).Value = av[r];
+
+                // Veri sayfasındaki kolona açılır liste — kısa → satır içi, uzun → bu sayfadaki değer aralığı
+                var dv = ws.Range(2, i + 1, 1001, i + 1).CreateDataValidation();
+                var inline = "\"" + string.Join(",", av) + "\"";
+                if (inline.Length <= 250)
+                    dv.List(inline, true);
+                else
+                    dv.List(help.Range(valuesStartRow, c, valuesStartRow + av.Count - 1, c), true);
+                dv.IgnoreBlanks = true;
+                dv.ErrorStyle = XLErrorStyle.Warning;   // liste dışına uyar ama engelleme (eş anlamlılar serbest)
+            }
         }
+        help.SheetView.FreezeColumns(1);   // etiket sütunu sabit kalsın
         help.Columns().AdjustToContents();
 
         using var ms = new MemoryStream();
@@ -94,19 +126,21 @@ public sealed class ExcelReader : IExcelReader
 
         int firstCol = used.FirstColumn().ColumnNumber();
         int lastCol  = used.LastColumn().ColumnNumber();
+        int firstRow = used.FirstRow().RowNumber();
         int lastRow  = used.LastRow().RowNumber();
+        bool hasHeader = headerRowIndex >= 1;
 
-        // Başlıklar
+        // Başlıklar — başlıksız modda (headerRowIndex=0) sentetik "Kolon{n}"
         var headers = new List<string>(lastCol - firstCol + 1);
         for (int c = firstCol; c <= lastCol; c++)
         {
-            var h = ws.Cell(headerRowIndex, c).GetFormattedString().Trim();
+            var h = hasHeader ? ws.Cell(headerRowIndex, c).GetFormattedString().Trim() : "";
             headers.Add(string.IsNullOrEmpty(h) ? $"Kolon{c}" : h);
         }
 
-        // Veri satırları
+        // Veri satırları — başlıklıysa header+1'den, başlıksızsa ilk dolu satırdan
         var rows = new List<IReadOnlyList<string>>();
-        for (int r = headerRowIndex + 1; r <= lastRow; r++)
+        for (int r = hasHeader ? headerRowIndex + 1 : firstRow; r <= lastRow; r++)
         {
             var cells = new List<string>(headers.Count);
             bool anyValue = false;
@@ -131,12 +165,13 @@ public sealed class ExcelReader : IExcelReader
         if (lines.Count == 0 || headerRowIndex > lines.Count)
             return new ExcelTable("Sheet1", Array.Empty<string>(), Array.Empty<IReadOnlyList<string>>());
 
-        var headers = lines[headerRowIndex - 1]
-            .Select((h, i) => string.IsNullOrWhiteSpace(h) ? $"Kolon{i + 1}" : h.Trim())
-            .ToList();
+        bool hasHeader = headerRowIndex >= 1;
+        var headers = hasHeader
+            ? lines[headerRowIndex - 1].Select((h, i) => string.IsNullOrWhiteSpace(h) ? $"Kolon{i + 1}" : h.Trim()).ToList()
+            : Enumerable.Range(1, lines.Max(l => l.Count)).Select(i => $"Kolon{i}").ToList();
 
         var rows = new List<IReadOnlyList<string>>();
-        for (int i = headerRowIndex; i < lines.Count; i++)
+        for (int i = hasHeader ? headerRowIndex : 0; i < lines.Count; i++)
         {
             var cells = lines[i];
             if (cells.All(string.IsNullOrWhiteSpace)) continue;

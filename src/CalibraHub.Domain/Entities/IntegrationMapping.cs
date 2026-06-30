@@ -100,4 +100,11 @@ public sealed class IntegrationMapping
     /// hem manuel/cron hem cascade ile çağrılabilir (tek tanım, çok yol).
     /// </summary>
     public int? CascadeToIntegrationId { get; set; }
+
+    /// <summary>
+    /// Kod bazlı cascade: TRUE ise bu mapping'in alan değeri (örn. "120-01-001") cascade key
+    /// olarak kullanılır; hedef integration'ın SourceCodeColumn'u ile entity ID'ye çevrilir.
+    /// FALSE (default) = mevcut davranış — SourceValue doğrudan FK entity ID içerir.
+    /// </summary>
+    public bool CascadeByValue { get; set; }
 }

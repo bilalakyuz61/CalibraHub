@@ -104,4 +104,5 @@ public sealed class SaveMaterialCardJsonInput
     public int? UnitId { get; set; }
     public bool Combinations { get; set; }
     public decimal TaxRate { get; set; } = 20m;
+    public string? TrackingType { get; set; } = "None";
 }

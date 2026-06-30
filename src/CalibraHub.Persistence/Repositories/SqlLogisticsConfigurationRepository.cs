@@ -83,7 +83,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    ISNULL([TaxRate], 20) AS [TaxRate],
                    [TypeId],
                    [UnitId],
-                   [CompanyId]
+                   [CompanyId],
+                   ISNULL([TrackingType], 'None') AS [TrackingType]
             FROM {_stockCardsTableName} sc
             WHERE sc.[CompanyId] = @CompanyId
             {dv.Sql}
@@ -106,7 +107,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 TaxRate = reader.IsDBNull(7) ? 20m : reader.GetDecimal(7),
                 TypeId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
                 UnitId = reader.IsDBNull(9) ? null : reader.GetInt32(9),
-                CompanyId = reader.GetInt32(10)
+                CompanyId = reader.GetInt32(10),
+                TrackingType = reader.IsDBNull(11) ? "None" : reader.GetString(11)
             };
 
             if (!reader.GetBoolean(3))
@@ -1345,9 +1347,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate])
+                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType])
             VALUES
-                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate);
+                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -1360,6 +1362,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@Created", (object?)stockCard.Created ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@Combinations", stockCard.Combinations ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@TaxRate", stockCard.TaxRate));
+        command.Parameters.Add(new SqlParameter("@TrackingType", (object?)stockCard.TrackingType ?? "None"));
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -1378,6 +1381,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [UnitId] = @UnitId,
                 [Combinations] = @Combinations,
                 [TaxRate] = @TaxRate,
+                [TrackingType] = @TrackingType,
                 [Updated] = @Updated
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
@@ -1391,6 +1395,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@Updated", (object?)stockCard.Updated ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@Combinations", stockCard.Combinations ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@TaxRate", stockCard.TaxRate));
+        command.Parameters.Add(new SqlParameter("@TrackingType", (object?)stockCard.TrackingType ?? "None"));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1994,17 +1999,27 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 (
                     [id]          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     [item_id]     INT NOT NULL,
-                    [location_id] INT NOT NULL,
+                    [location_id] INT NULL,
                     [is_default]  BIT NOT NULL DEFAULT(0),
                     [sort_order]  INT NOT NULL DEFAULT(0)
                 );
                 CREATE UNIQUE INDEX [ux_item_locations_item_location]
-                    ON [{s}].[item_locations]([item_id], [location_id]);
+                    ON [{s}].[item_locations]([item_id], [location_id])
+                    WHERE [location_id] IS NOT NULL;
                 CREATE UNIQUE INDEX [ux_item_locations_item_default]
                     ON [{s}].[item_locations]([item_id])
                     WHERE [is_default] = 1;
                 CREATE INDEX [ix_item_locations_location]
                     ON [{s}].[item_locations]([location_id]);
+            END;
+            IF COLUMNPROPERTY(OBJECT_ID(N'[{s}].[item_locations]'), N'location_id', 'AllowsNull') = 0
+            BEGIN
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE [object_id] = OBJECT_ID(N'[{s}].[item_locations]') AND [name] = N'ux_item_locations_item_location')
+                    DROP INDEX [ux_item_locations_item_location] ON [{s}].[item_locations];
+                ALTER TABLE [{s}].[item_locations] ALTER COLUMN [location_id] INT NULL;
+                CREATE UNIQUE INDEX [ux_item_locations_item_location]
+                    ON [{s}].[item_locations]([item_id], [location_id])
+                    WHERE [location_id] IS NOT NULL;
             END;
             """;
         await cmd.ExecuteNonQueryAsync(ct);
@@ -2030,12 +2045,37 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             {
                 Id = reader.GetInt32(0),
                 ItemId = reader.GetInt32(1),
-                LocationId = reader.GetInt32(2),
+                LocationId = reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2),
                 IsDefault = reader.GetBoolean(3),
                 SortOrder = reader.GetInt32(4),
             });
         }
         return results;
+    }
+
+    public async Task NullifyItemLocationsByLocationIdAsync(int locationId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {_itemLocationsTableName}               SET [location_id]        = NULL, [is_default] = 0  WHERE [location_id]        = @id;
+            UPDATE [{_schema}].[Asset]                     SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
+            UPDATE [{_schema}].[Document]                  SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
+            UPDATE [{_schema}].[DocumentLine]              SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
+            UPDATE [{_schema}].[WorkOrder]                 SET [WarehouseLocationId] = NULL                   WHERE [WarehouseLocationId] = @id;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@id", locationId));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task NullifyLocationHistoricalFkRefsAsync(int locationId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"UPDATE [{_schema}].[AssetAssignment] SET [LocationId] = NULL WHERE [LocationId] = @id;";
+        cmd.Parameters.Add(new SqlParameter("@id", locationId));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<ItemLocation> locations, CancellationToken cancellationToken)
@@ -2066,7 +2106,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 VALUES (@ItemId, @LocationId, @IsDefault, @SortOrder);
                 """;
             cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
-            cmd.Parameters.Add(new SqlParameter("@LocationId", l.LocationId));
+            cmd.Parameters.Add(new SqlParameter("@LocationId", (object?)l.LocationId ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@IsDefault", isDefault));
             cmd.Parameters.Add(new SqlParameter("@SortOrder", sortOrder++));
             await cmd.ExecuteNonQueryAsync(cancellationToken);

@@ -336,7 +336,7 @@ public sealed class MobileApiController : ControllerBase
         }
         catch (Exception ex)
         {
-            return Ok(new MobileSendResponse(false, null, $"Bridge hatasi: {ex.Message}"));
+            return Ok(new MobileSendResponse(false, null, $"Bridge hatasi: {"Islem sirasinda bir hata olustu."}"));
         }
     }
 

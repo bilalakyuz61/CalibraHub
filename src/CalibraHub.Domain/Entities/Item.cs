@@ -13,6 +13,9 @@ public sealed class Item
     public int? UnitId { get; init; }
     public bool Combinations { get; init; } = false;
     public decimal TaxRate { get; init; } = 20m;
+
+    /// <summary>Takip tipi: "None" (Yok) | "Lot" (Lot takibi) | "Serial" (Seri takibi). Varsayılan "None".</summary>
+    public string? TrackingType { get; init; } = "None";
     public bool IsActive { get; private set; } = true;
     // 2026-05-26: CLAUDE.md audit standardi — Created/Updated + CreatedBy/UpdatedBy NVARCHAR(120)
     public DateTime? Created { get; init; }

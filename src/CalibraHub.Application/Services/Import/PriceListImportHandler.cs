@@ -31,21 +31,35 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
     public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
         new ImportTargetFieldDto("ItemCode",  "Stok Kodu",            "string",  true,  false, "Fiyatı girilecek stok kartının kodu (zorunlu)"),
+        new ImportTargetFieldDto("Combination","Kombinasyon",         "string",  false, false, "Stok kombinasyon kodu — kombinasyon-takipli stoklarda ZORUNLU"),
         new ImportTargetFieldDto("GroupCode", "Fiyat Grubu",          "string",  true,  false, "Fiyat grubu kodu veya adı (zorunlu)"),
         new ImportTargetFieldDto("Currency",  "Döviz",                "string",  true,  false, "TRY / USD / EUR (zorunlu)"),
-        new ImportTargetFieldDto("PriceType", "Fiyat Tipi",           "string",  false, false, "Alış / Satış / Maliyet (boşsa Satış)"),
+        new ImportTargetFieldDto("PriceType", "Fiyat Tipi",           "string",  false, false, "Alış / Satış / Maliyet (boşsa Satış)", new[] { "Alış", "Satış", "Maliyet" }),
         new ImportTargetFieldDto("Price",     "Fiyat",                "decimal", true,  false, "Birim fiyat (zorunlu)"),
         new ImportTargetFieldDto("ValidFrom", "Geçerlilik Başlangıç", "date",    false, false, "gg.aa.yyyy (boşsa bugün)"),
         new ImportTargetFieldDto("ValidTo",   "Geçerlilik Bitiş",     "date",    false, false, "gg.aa.yyyy (opsiyonel)"),
     };
 
+    public override async Task<ImportPreviewResultDto> PreviewAsync(ImportRowSet set, CancellationToken ct)
+    {
+        await EnsureItemsAsync(ct);   // ValidateRow'daki kombinasyon-zorunlu kontrolü için items cache'le
+        return await base.PreviewAsync(set, ct);
+    }
+
     protected override IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> d)
     {
         var errs = new List<string>();
-        if (string.IsNullOrWhiteSpace(Get(d, "ItemCode"))) errs.Add("Stok Kodu boş.");
+        var itemCode = Get(d, "ItemCode");
+        if (string.IsNullOrWhiteSpace(itemCode)) errs.Add("Stok Kodu boş.");
         if (string.IsNullOrWhiteSpace(Get(d, "GroupCode"))) errs.Add("Fiyat Grubu boş.");
         if (string.IsNullOrWhiteSpace(Get(d, "Currency"))) errs.Add("Döviz boş.");
         if (ImportParse.ParseDecimal(Get(d, "Price")) is null) errs.Add("Fiyat sayı değil veya boş.");
+        // Kombinasyon-takipli stokta kombinasyon zorunlu. _items preview'da preload edilir (commit'te de doğrulanır).
+        if (_items is not null && !string.IsNullOrWhiteSpace(itemCode) && string.IsNullOrWhiteSpace(Get(d, "Combination")))
+        {
+            var it = _items.FirstOrDefault(i => string.Equals(i.Code?.Trim(), itemCode!.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (it is { Combinations: true }) errs.Add($"Kombinasyon zorunlu (stok kombinasyon-takipli): '{itemCode}'");
+        }
         return errs;
     }
 
@@ -61,6 +75,17 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
         var itemCode = Get(d, "ItemCode")!.Trim();
         var item = items.FirstOrDefault(i => string.Equals(i.Code?.Trim(), itemCode, StringComparison.OrdinalIgnoreCase));
         if (item is null) return (false, $"Stok bulunamadı: '{itemCode}'", null);
+
+        // Kombinasyon: takipli stokta zorunlu; verilmişse Id'ye çözülür (FK = ConfigId).
+        int? configId = null;
+        var combo = Get(d, "Combination")?.Trim();
+        if (item.Combinations && string.IsNullOrWhiteSpace(combo))
+            return (false, $"Kombinasyon zorunlu (stok kombinasyon-takipli): '{itemCode}'", null);
+        if (!string.IsNullOrWhiteSpace(combo))
+        {
+            configId = await ResolveConfigIdAsync(itemCode, combo, ct);
+            if (configId is null) return (false, $"Kombinasyon bulunamadı: '{combo}' ({itemCode})", null);
+        }
 
         var groups = await EnsureGroupsAsync(ct);
         var gKey = Get(d, "GroupCode")!.Trim();
@@ -80,7 +105,7 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
         var validTo = ImportParse.ParseDate(Get(d, "ValidTo"));
 
         var (ok, err, id) = await _priceService.SaveEntryAsync(
-            new SavePriceListRequest(null, group.Id, item.Id, null, currency.Id, priceType, price, validFrom, validTo, true), ct);
+            new SavePriceListRequest(null, group.Id, item.Id, configId, currency.Id, priceType, price, validFrom, validTo, true), ct);
         return (ok, err, id);
     }
 
@@ -94,5 +119,18 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
         if (v is "b" or "alış" or "alis" or "alım" or "alim" or "buying" or "buy") return "b";
         if (v is "m" or "maliyet" or "cost") return "m";
         return "s"; // satış default
+    }
+
+    // Kombinasyon kodu → ConfigId çözümü (stok kodu bazında cache). Bulunamazsa null.
+    private readonly Dictionary<string, int?> _configCache = new(StringComparer.OrdinalIgnoreCase);
+    private async Task<int?> ResolveConfigIdAsync(string itemCode, string comboCode, CancellationToken ct)
+    {
+        var k = itemCode + "||" + comboCode;
+        if (_configCache.TryGetValue(k, out var cached)) return cached;
+        var combos = await _itemRepo.GetCombinationsByMaterialCodeAsync(itemCode, ct);
+        var match = combos.FirstOrDefault(c => string.Equals(c.Code?.Trim(), comboCode.Trim(), StringComparison.OrdinalIgnoreCase));
+        var id = match?.ConfigId;
+        _configCache[k] = id;
+        return id;
     }
 }

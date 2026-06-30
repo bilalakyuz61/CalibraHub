@@ -71,7 +71,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -92,7 +92,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -113,7 +113,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -129,7 +129,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -157,7 +157,7 @@ public sealed class FieldSettingsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 }

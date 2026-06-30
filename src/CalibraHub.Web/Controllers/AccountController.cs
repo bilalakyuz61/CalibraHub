@@ -32,6 +32,8 @@ public sealed class AccountController : Controller
     private readonly IPermissionService _permissionService;
     private readonly IEmailSender _emailSender;
     private readonly IPasswordHashService _passwordHashService;
+    private readonly CalibraHub.Application.Services.LoginLockoutTracker _loginLockout;
+    private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         ICompanyRepository companyDefinitionRepository,
@@ -42,7 +44,9 @@ public sealed class AccountController : Controller
         IWebHostEnvironment env,
         IPermissionService permissionService,
         IEmailSender emailSender,
-        IPasswordHashService passwordHashService)
+        IPasswordHashService passwordHashService,
+        CalibraHub.Application.Services.LoginLockoutTracker loginLockout,
+        ILogger<AccountController> logger)
     {
         _companyDefinitionRepository = companyDefinitionRepository;
         _uiConfigurationService = uiConfigurationService;
@@ -53,6 +57,8 @@ public sealed class AccountController : Controller
         _permissionService = permissionService;
         _emailSender = emailSender;
         _passwordHashService = passwordHashService;
+        _loginLockout = loginLockout;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -95,7 +101,7 @@ public sealed class AccountController : Controller
         return Json(payload);
     }
 
-    // ── Şifremi Unuttum ──────────────────────────────────────────────────────
+    // ── �?ifremi Unuttum ──────────────────────────────────────────────────────
 
     [AllowAnonymous]
     [HttpGet]
@@ -134,14 +140,14 @@ public sealed class AccountController : Controller
 
             var body = $"""
                 <html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:480px;margin:auto;padding:32px">
-                <h2 style="color:#6366f1">Şifre Sıfırlama</h2>
+                <h2 style="color:#6366f1">�?ifre Sıfırlama</h2>
                 <p>Merhaba <strong>{user.FullName}</strong>,</p>
-                <p>Şifrenizi sıfırlamak için aşağıdaki butona tıklayın.
+                <p>�?ifrenizi sıfırlamak için aşağıdaki butona tıklayın.
                    Bu link <strong>1 saat</strong> süreyle geçerlidir.</p>
                 <p style="margin:28px 0">
                   <a href="{resetLink}"
                      style="background:#6366f1;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">
-                    Şifremi Sıfırla
+                    �?ifremi Sıfırla
                   </a>
                 </p>
                 <p style="color:#64748b;font-size:13px">
@@ -155,7 +161,7 @@ public sealed class AccountController : Controller
             await _emailSender.SendAsync(
                 user.CompanyId,
                 new[] { user.Email },
-                "Şifre Sıfırlama Talebi",
+                "�?ifre Sıfırlama Talebi",
                 body,
                 attachments: null,
                 cancellationToken,
@@ -187,7 +193,7 @@ public sealed class AccountController : Controller
         var (ok, strengthError) = CalibraHub.Application.Security.PasswordHasher.ValidateStrength(input.NewPassword);
         if (!ok)
         {
-            ModelState.AddModelError(nameof(input.NewPassword), strengthError ?? "Şifre yeterince güçlü değil.");
+            ModelState.AddModelError(nameof(input.NewPassword), strengthError ?? "�?ifre yeterince güçlü değil.");
             return View(input);
         }
 
@@ -238,6 +244,20 @@ public sealed class AccountController : Controller
             return View(input);
         }
 
+        // Brute-force koruması: hesap kilitli mi?
+        var lockedUntil = _loginLockout.CheckLocked(input.Email ?? "");
+        if (lockedUntil.HasValue)
+        {
+            var remaining = (int)Math.Ceiling((lockedUntil.Value - DateTime.UtcNow).TotalMinutes);
+            var lockMsg = $"Hesap geçici olarak kilitlendi. {remaining} dakika sonra tekrar deneyin.";
+            _logger.LogWarning("[Login] Kilitli hesaba giriş denemesi: {Email} IP={Ip}",
+                input.Email, HttpContext.Connection.RemoteIpAddress);
+            if (isAjax)
+                return Json(new { ok = false, error = "locked", message = lockMsg });
+            ModelState.AddModelError(string.Empty, lockMsg);
+            return View(input);
+        }
+
         var authenticatedUser = await _userAuthenticationService.AuthenticateAsync(
             input.Email,
             input.Password,
@@ -246,11 +266,35 @@ public sealed class AccountController : Controller
 
         if (authenticatedUser is null)
         {
+            var nowLocked = _loginLockout.RegisterFailure(input.Email ?? "");
+            var count = _loginLockout.GetCount(input.Email ?? "");
+            _logger.LogWarning("[Login] Başarısız giriş denemesi: {Email} IP={Ip} Deneme={Count}{Locked}",
+                input.Email,
+                HttpContext.Connection.RemoteIpAddress,
+                count,
+                nowLocked ? " → HESAP KİLİTLENDİ" : "");
+
+            if (nowLocked)
+            {
+                var lockMsg = $"Çok fazla başarısız deneme. Hesap {CalibraHub.Application.Services.LoginLockoutTracker.LockoutMinutes} dakika kilitlendi.";
+                if (isAjax)
+                    return Json(new { ok = false, error = "locked", message = lockMsg });
+                ModelState.AddModelError(string.Empty, lockMsg);
+                return View(input);
+            }
+
+            var remaining = CalibraHub.Application.Services.LoginLockoutTracker.MaxAttempts - count;
+            var credMsg = remaining > 0
+                ? $"�?irket, e-posta veya şifre hatalı. ({remaining} deneme hakkı kaldı)"
+                : "�?irket, e-posta veya şifre hatalı.";
             if (isAjax)
-                return Json(new { ok = false, error = "credentials" });
-            ModelState.AddModelError(string.Empty, "Sirket, e-posta veya sifre hatali.");
+                return Json(new { ok = false, error = "credentials", message = credMsg });
+            ModelState.AddModelError(string.Empty, credMsg);
             return View(input);
         }
+
+        // Başarılı giriş — sayacı sıfırla
+        _loginLockout.Reset(input.Email ?? "");
 
         var claims = new List<Claim>
         {
@@ -564,12 +608,31 @@ public sealed class AccountController : Controller
         return RedirectToAction(nameof(Login));
     }
 
-    // ── Veritabanı bağlantı ayarları (login ekranı, anonim) ──────────────────
+    // ── Veritabanı bağlantı ayarları (kurulum sihirbazı + sistem yönetimi) ──────────────────
+    // Kurulum tamamlanmamışsa (hiç şirket yok) → anonim erişime açık.
+    // Kurulum tamamsa → yalnızca giriş yapılmış kullanıcı erişebilir.
+
+    private async Task<bool> IsSetupCompleteAsync()
+    {
+        try
+        {
+            var companies = await _companyDefinitionRepository.GetAllAsync(HttpContext.RequestAborted);
+            return companies.Count > 0;
+        }
+        catch
+        {
+            // DB henüz erişilebilir değilse kurulum tamamlanmamış say → anonim geç
+            return false;
+        }
+    }
 
     [AllowAnonymous]
     [HttpGet("/Account/GetDbSettings")]
-    public IActionResult GetDbSettings()
+    public async Task<IActionResult> GetDbSettings()
     {
+        if (await IsSetupCompleteAsync() && !User.Identity!.IsAuthenticated)
+            return Json(new { success = false, message = "Yetkisiz erişim." });
+
         var appSettingsPath = Path.Combine(_env.ContentRootPath, "appsettings.json");
         try
         {
@@ -597,7 +660,7 @@ public sealed class AccountController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message, server = string.Empty, database = string.Empty, user = string.Empty });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu.", server = string.Empty, database = string.Empty, user = string.Empty });
         }
     }
 
@@ -606,6 +669,9 @@ public sealed class AccountController : Controller
     [HttpPost("/Account/TestDbSettings")]
     public async Task<IActionResult> TestDbSettings([FromBody] DbSettingsInput? input)
     {
+        if (await IsSetupCompleteAsync() && !User.Identity!.IsAuthenticated)
+            return Json(new { success = false, message = "Yetkisiz erişim." });
+
         try
         {
             if (input is null)
@@ -632,7 +698,7 @@ public sealed class AccountController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -641,6 +707,9 @@ public sealed class AccountController : Controller
     [HttpPost("/Account/SaveDbSettings")]
     public async Task<IActionResult> SaveDbSettings([FromBody] DbSettingsInput? input)
     {
+        if (await IsSetupCompleteAsync() && !User.Identity!.IsAuthenticated)
+            return Json(new { success = false, message = "Yetkisiz erişim." });
+
         try
         {
             if (input is null)
@@ -669,7 +738,7 @@ public sealed class AccountController : Controller
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Baglanti testi basarisiz: " + ex.Message + " Ayarlar kaydedilmedi." });
+                return Json(new { success = false, message = "Baglanti testi basarisiz: " + "Islem sirasinda bir hata olustu." + " Ayarlar kaydedilmedi." });
             }
 
             // Test başarılı — kaydet
@@ -694,13 +763,13 @@ public sealed class AccountController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Kayit hatasi: " + ex.Message });
+            return Json(new { success = false, message = "Kayit hatasi: " + "Islem sirasinda bir hata olustu." });
         }
     }
 
     /// <summary>
     /// Kaydedilmiş bağlantı dizesini okur, input'ta dolu olan alanları üzerine yazar.
-    /// Şifre alanı boş bırakıldığında mevcut şifre korunur.
+    /// �?ifre alanı boş bırakıldığında mevcut şifre korunur.
     /// </summary>
     private string MergeWithSaved(DbSettingsInput input)
     {

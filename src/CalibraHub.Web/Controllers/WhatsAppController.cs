@@ -290,7 +290,7 @@ public sealed class WhatsAppController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Bridge hatasi: {ex.Message}" });
+            return Json(new { success = false, message = $"Bridge hatasi: {"Islem sirasinda bir hata olustu."}" });
         }
     }
 
@@ -415,7 +415,7 @@ public sealed class WhatsAppController : Controller
             var msgId = doc.RootElement.TryGetProperty("messageId", out var mid) ? mid.GetString() : null;
             return Json(new { success = ok, messageId = msgId });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "Islem sirasinda bir hata olustu." }); }
     }
 
     /// <summary>Mesaja emoji reaksiyonu gönderir. Boş emoji = reaksiyonu kaldır.</summary>
@@ -452,7 +452,7 @@ public sealed class WhatsAppController : Controller
 
             return Json(new { success = resp.IsSuccessStatusCode });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "Islem sirasinda bir hata olustu." }); }
     }
 
     /// <summary>Mesajı her iki yönde siler. DB'de is_deleted=1 yapılır.</summary>
@@ -486,7 +486,7 @@ public sealed class WhatsAppController : Controller
             await inbox.MarkDeletedAsync(body.MessageId, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "Islem sirasinda bir hata olustu." }); }
     }
 
     /// <summary>Sohbet içi metin arama.</summary>
@@ -611,7 +611,7 @@ public sealed class WhatsAppController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 

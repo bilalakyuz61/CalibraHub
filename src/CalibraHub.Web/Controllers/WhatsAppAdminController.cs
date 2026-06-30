@@ -29,7 +29,7 @@ public sealed class WhatsAppAdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveWhatsApp(
         [FromServices] IWhatsAppService whatsAppService,
-        int provider, string? accessToken, string? phoneNumberId,
+        int provider, string? accessToken, string? appSecret, string? phoneNumberId,
         string? businessAccountId, string? webhookVerifyToken,
         string? webQrBridgeUrl, bool isEnabled, CancellationToken ct)
     {
@@ -57,6 +57,12 @@ public sealed class WhatsAppAdminController : Controller
         {
             try { cfg.AccessTokenEncrypted = CalibraHub.Application.Security.DpapiSecretDecryptor.Encrypt(accessToken.Trim()); }
             catch { cfg.AccessTokenEncrypted = accessToken.Trim(); }
+        }
+        // Yeni App Secret gelirse DPAPI ile şifrele
+        if (!string.IsNullOrWhiteSpace(appSecret))
+        {
+            try { cfg.AppSecretEncrypted = CalibraHub.Application.Security.DpapiSecretDecryptor.Encrypt(appSecret.Trim()); }
+            catch { cfg.AppSecretEncrypted = appSecret.Trim(); }
         }
         // Cloud API seçilip token henüz yoksa hata
         if (providerType == CalibraHub.Domain.Entities.WhatsAppProviderType.CloudApi
@@ -90,7 +96,7 @@ public sealed class WhatsAppAdminController : Controller
         [FromServices] IWhatsAppService whatsAppService,
         string toPhone, string message, CancellationToken ct)
     {
-        // 2026-05-23 fix: Şirket Ayarları "Test Mesajı Gönder" butonu kullanıcının elle
+        // 2026-05-23 fix: �?irket Ayarları "Test Mesajı Gönder" butonu kullanıcının elle
         // tetiklediği manuel bir çağrı — insan-benzeri 3-15sn rastgele gecikme uygulanmasın
         // (interactive=true). Aksi halde admin test ederken sebepsiz bekletme yaşar.
         var result = await whatsAppService.SendTextMessageAsync(toPhone ?? "", message ?? "", ct, interactive: true);
@@ -130,7 +136,7 @@ public sealed class WhatsAppAdminController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Bridge hatasi: {ex.Message}" });
+            return Json(new { success = false, message = $"Bridge hatasi: {"Islem sirasinda bir hata olustu."}" });
         }
     }
 

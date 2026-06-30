@@ -20,7 +20,7 @@ namespace CalibraHub.Web.Controllers;
 /// SetupUserController bu ekrana yonlendirilmis durumdadir; artik ayri ekran yok.
 /// </summary>
 [Authorize]
-// "Şirket ve Kullanıcı Tanımlamaları" formu — admin kullanıcı CRUD ekranı.
+// "�?irket ve Kullanıcı Tanımlamaları" formu — admin kullanıcı CRUD ekranı.
 [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SetupDefinitions)]
 public sealed class CompanyUserController : Controller
 {
@@ -161,10 +161,10 @@ public sealed class CompanyUserController : Controller
                 eb.AddExtraAction(
                     icon: "KeyRound",
                     color: "violet",
-                    tooltip: "Şifre Sıfırla",
+                    tooltip: "�?ifre Sıfırla",
                     type: "api-post",
                     apiUrl: $"/CompanyUser/ResetPassword?id={u.Id}",
-                    confirm: "Şifreyi 12345678 olarak sıfırlamak istediğinize emin misiniz?");
+                    confirm: "�?ifreyi 12345678 olarak sıfırlamak istediğinize emin misiniz?");
 
                 return eb;
             })
@@ -298,7 +298,7 @@ public sealed class CompanyUserController : Controller
         var companyId = GetCurrentCompanyId();
 
         if (companyId <= 0)
-            return Json(new { ok = false, error = "Şirket bilgisi bulunamadı." });
+            return Json(new { ok = false, error = "�?irket bilgisi bulunamadı." });
 
         if (!Enum.IsDefined(typeof(UserRole), dto.Role))
             return Json(new { ok = false, error = "Geçersiz yetki." });
@@ -381,7 +381,7 @@ public sealed class CompanyUserController : Controller
                     ? DefaultPassword
                     : dto.Password.Trim();
                 if (initialPassword.Length < 6)
-                    return Json(new { ok = false, error = "Şifre en az 6 karakter olmalı." });
+                    return Json(new { ok = false, error = "�?ifre en az 6 karakter olmalı." });
 
                 await _adminService.CreateUserAsync(new CreateUserRequest(
                     CompanyId: companyId,
@@ -436,7 +436,7 @@ public sealed class CompanyUserController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -470,7 +470,7 @@ public sealed class CompanyUserController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -488,11 +488,11 @@ public sealed class CompanyUserController : Controller
         {
             user.SetPasswordHash(_passwordHashService.HashPassword(DefaultPassword));
             await _userRepo.UpdateAsync(user, ct);
-            return Json(new { ok = true, message = $"Şifre sıfırlandı: {DefaultPassword}" });
+            return Json(new { ok = true, message = $"�?ifre sıfırlandı: {DefaultPassword}" });
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 }

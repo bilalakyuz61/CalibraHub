@@ -96,7 +96,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, message = ex.Message });
+            return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -206,7 +206,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, message = ex.Message });
+            return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -223,7 +223,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, message = ex.Message });
+            return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -250,7 +250,7 @@ public sealed class ContactPersonController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, message = ex.Message });
+            return Json(new { ok = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 

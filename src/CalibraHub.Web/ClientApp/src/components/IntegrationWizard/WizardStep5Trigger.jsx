@@ -170,6 +170,27 @@ export default function WizardStep5Trigger({ state, update, apiBase }) {
                 (örn. Sipariş entegrasyonu ItemId için bu Stok entegrasyonunu cascade eder).
                 Manuel/Cron/OnSave tetikleyicileriniz bu seçimden etkilenmez.
               </div>
+              {/* Kod bazlı cascade için kaynak kolon */}
+              {state.allowAsCascadeTarget !== false && (
+                <div style={{ marginTop: 8 }}>
+                  <label style={{ fontSize: 11, color: 'var(--iw-muted)', display: 'block', marginBottom: 3 }}>
+                    Kod Kolonu <span style={{ fontStyle: 'italic' }}>(kod bazlı cascade)</span>
+                  </label>
+                  <input
+                    value={state.sourceCodeColumn || ''}
+                    onChange={e => update({ sourceCodeColumn: e.target.value || null })}
+                    placeholder="örn. CariKod, StokKodu"
+                    style={{
+                      ...({ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: '1px solid var(--iw-border)',
+                           background: 'var(--iw-bg)', color: 'var(--iw-text)', width: 180 }),
+                    }}
+                    title="Bu entegrasyon 'Değer bazlı' cascade hedefi olarak çağrıldığında, gelen kod bu kolona göre CalibraHub'da entity ID'ye çevrilir."
+                  />
+                  <div style={{ fontSize: 10, color: 'var(--iw-muted)', marginTop: 3, lineHeight: 1.4 }}>
+                    Boş bırakılırsa ID bazlı cascade (varsayılan). Cari/Stok entegrasyonlarında kodu ID'ye çevirir.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

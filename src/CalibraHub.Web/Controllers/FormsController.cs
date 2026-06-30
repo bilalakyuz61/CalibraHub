@@ -80,7 +80,7 @@ public sealed class FormsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Form oluşturulurken hata: {FormCode}", request.FormCode);
-            return StatusCode(500, new { success = false, message = "Form oluşturulamadı: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "Form oluşturulamadı: " + "İşlem sırasında bir hata oluştu." });
         }
 
         // Flat View Regeneration — hata akışı engellemez
@@ -120,7 +120,7 @@ public sealed class FormsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Form güncellenirken hata: {Id}", id);
-            return StatusCode(500, new { success = false, message = "Form güncellenemedi: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "Form güncellenemedi: " + "İşlem sırasında bir hata oluştu." });
         }
 
         // Flat View Regeneration — hata akışı engellemez
@@ -148,7 +148,7 @@ public sealed class FormsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Form silinirken hata: {Id}", id);
-            return StatusCode(500, new { success = false, message = "Form silinemedi: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "Form silinemedi: " + "İşlem sırasında bir hata oluştu." });
         }
 
         return Ok(new { success = true });

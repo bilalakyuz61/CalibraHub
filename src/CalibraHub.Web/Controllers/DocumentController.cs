@@ -112,7 +112,7 @@ public sealed class DocumentController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Print{DocType}] id={Id} beklenmeyen hata.", docType, id);
-            return DocPrintErrorPage("Yazdirma hatasi: " + ex.Message);
+            return DocPrintErrorPage("Yazdirma hatasi: " + "İşlem sırasında bir hata oluştu.");
         }
     }
 

@@ -1266,11 +1266,15 @@ export default function NotesWorkspace() {
   var [folderCtxMenu, setFolderCtxMenu] = useState(null)
   var [tableCtxMenu, setTableCtxMenu] = useState(null) // { x, y }
   var [sortOrder, setSortOrder] = useState('updatedDesc') // updatedDesc | updatedAsc | titleAsc | titleDesc | createdDesc
+  var [contentLoadedTick, setContentLoadedTick] = useState(0) // not seçilince lazy-load tamamlandığında artar
+  var [contentLoading, setContentLoading] = useState(false)   // içerik yüklenirken editor read-only
+  var notesRef = useRef([])                                    // notes'un güncel değeri (stale closure önlemi)
   var contentTimerRef = useRef(null)
   var isSwitchingNoteRef = useRef(false)
   var isSwitchingResetRef = useRef(null)  // isSwitchingNoteRef'i async sıfırlamak için
   var selectedNoteIdRef = useRef(null)
   selectedNoteIdRef.current = selectedNoteId
+  notesRef.current = notes
   var importInputRef = useRef(null)
   var [isImporting, setIsImporting] = useState(false)
   var [importStatus, setImportStatus] = useState(null)   // { ok, msg }
@@ -1515,7 +1519,7 @@ export default function NotesWorkspace() {
           var existing = prev.find(function (n) { return n.id === noteId })
           // İçerik değişmediyse güncelleme yok — yalnızca görüntüleme amaçlı tetiklenen
           // onUpdate'lerin (atom node transaction, gapcursor vs.) neden olduğu sahte kayıtları engeller.
-          if (existing && existing.content === finalContent) return prev
+          if (existing && (existing.content === null || existing.content === finalContent)) return prev
           var updated = prev.map(function (n) {
             return n.id === noteId ? { ...n, content: finalContent, updatedAt: new Date() } : n
           })
@@ -1527,9 +1531,9 @@ export default function NotesWorkspace() {
     },
   })
 
-  /* Load data from backend */
+  /* Load data from backend — içerik olmadan hızlı liste; içerik not seçilince lazy-load edilir */
   useEffect(function () {
-    api.getAll()
+    api.getList()
       .then(function (data) {
         if (data.currentUserName) setCurrentUserName(data.currentUserName)
         if (data.companyId) setCurrentCompanyId(data.companyId)
@@ -1541,7 +1545,7 @@ export default function NotesWorkspace() {
             id: n.id,
             folderId: n.folderId || null,
             title: n.title || '',
-            content: n.content || '',
+            content: null,  // lazy-loaded — GetContentJson ile seçilince yüklenir
             createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
             updatedAt: new Date(n.updatedAt),
             isPinned: !!n.isPinned,
@@ -1562,32 +1566,6 @@ export default function NotesWorkspace() {
         })
         setFolders(flds)
         setNotes(nts)
-
-        // OCR olmayan ama görsel içeren notlar için arka planda re-OCR tetikle (max 5)
-        var ocrMissing = nts.filter(function (n) {
-          return !n.isFullyEncrypted && n.ocrText === null && n.content.indexOf('data:image/') !== -1
-        })
-        if (ocrMissing.length > 0) {
-          var toProcess = ocrMissing.slice(0, 5)
-          var token = (document.cookie.match(/XSRF-TOKEN=([^;]+)/) || [])[1] || ''
-          toProcess.forEach(function (n) {
-            fetch('/Notes/ReOcrNoteJson', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
-              body: JSON.stringify({ noteId: n.id }),
-            })
-              .then(function (r) { return r.ok ? r.json() : null })
-              .then(function (res) {
-                if (!res || !res.ok || !res.ocrText) return
-                setNotes(function (prev) {
-                  return prev.map(function (x) {
-                    return x.id === n.id ? Object.assign({}, x, { ocrText: res.ocrText }) : x
-                  })
-                })
-              })
-              .catch(function () {})
-          })
-        }
         var parentIds = new Set()
         flds.forEach(function (f) { if (f.parentId) parentIds.add(f.parentId) })
         setExpandedFolders(parentIds)
@@ -1606,6 +1584,58 @@ export default function NotesWorkspace() {
       .then(function (data) { setAttachments(data || []) })
       .catch(function () { setAttachments([]) })
       .finally(function () { setAttachmentsLoading(false) })
+  }, [selectedNoteId])
+
+  /* İçerik lazy-load — not seçilince content:null ise GetContentJson ile yükle */
+  useEffect(function () {
+    if (!selectedNoteId) return
+    var note = notesRef.current.find(function (n) { return n.id === selectedNoteId })
+    if (!note || note.content !== null) return  // zaten yüklü
+
+    var noteId = selectedNoteId
+    setContentLoading(true)
+    api.getContent(noteId)
+      .then(function (data) {
+        var loadedContent = data.content || ''
+        var loadedOcrText = data.ocrText || null
+        setNotes(function (prev) {
+          return prev.map(function (n) {
+            return n.id === noteId ? { ...n, content: loadedContent, ocrText: loadedOcrText } : n
+          })
+        })
+        setContentLoadedTick(function (t) { return t + 1 })
+
+        // OCR olmayan ama görsel içeren not ise arka planda tetikle
+        if (!note.isFullyEncrypted && loadedOcrText === null && loadedContent.indexOf('data:image/') !== -1) {
+          var token = (document.cookie.match(/XSRF-TOKEN=([^;]+)/) || [])[1] || ''
+          fetch('/Notes/ReOcrNoteJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+            body: JSON.stringify({ noteId: noteId }),
+          })
+            .then(function (r) { return r.ok ? r.json() : null })
+            .then(function (res) {
+              if (!res || !res.ok || !res.ocrText) return
+              setNotes(function (prev) {
+                return prev.map(function (x) {
+                  return x.id === noteId ? { ...x, ocrText: res.ocrText } : x
+                })
+              })
+            })
+            .catch(function () {})
+        }
+      })
+      .catch(function (e) {
+        console.error('[NotesWorkspace] content load error:', e)
+        // Hata durumunda boş içerikle işaretle — sonsuz retry önlemi
+        setNotes(function (prev) {
+          return prev.map(function (n) {
+            return n.id === noteId ? { ...n, content: '' } : n
+          })
+        })
+        setContentLoadedTick(function (t) { return t + 1 })
+      })
+      .finally(function () { setContentLoading(false) })
   }, [selectedNoteId])
 
   /* Çöp kutusu seçilince server'dan yükle */
@@ -1640,18 +1670,26 @@ export default function NotesWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFolderId])
 
-  /* Çöp kutusu veya başkasının notu seçilince editor read-only olsun */
+  /* Çöp kutusu / başkasının notu / içerik yükleniyor → editor read-only */
   useEffect(function () {
     if (editor) {
       var isTrash = selectedFolderId === '__trash'
       var isNotOwner = selectedNote ? selectedNote.isOwner === false : false
-      editor.setEditable(!isTrash && !isNotOwner)
+      editor.setEditable(!isTrash && !isNotOwner && !contentLoading)
     }
-  }, [selectedFolderId, editor, selectedNote])
+  }, [selectedFolderId, editor, selectedNote, contentLoading])
 
   /* Sync Tiptap editor when switching notes */
   useEffect(function () {
     if (editor && selectedNote) {
+      // İçerik henüz yüklenmedi — lazy load useEffect yükleyip contentLoadedTick'i artıracak
+      if (selectedNote.content === null && !selectedNote.isFullyEncrypted) {
+        isSwitchingNoteRef.current = true
+        editor.commands.setContent('', false)
+        clearTimeout(isSwitchingResetRef.current)
+        isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 300)
+        return
+      }
       // Mod 2: Sifreli not ise editor'a ciphertext yukleme; LockScreen gosterilecek.
       // Ama session'da zaten acilmissa (unlockedNoteIds) cache'den parola al ve decrypt et.
       if (selectedNote.isFullyEncrypted) {
@@ -1699,7 +1737,7 @@ export default function NotesWorkspace() {
       isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 300)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNoteId, editor, unlockedNoteIds])
+  }, [selectedNoteId, editor, unlockedNoteIds, contentLoadedTick])
 
   /* ── Handlers ─────────────────────────────────────── */
   var handleSelectFolder = useCallback(function (fid) { setSelectedFolderId(fid) }, [])
@@ -1747,15 +1785,15 @@ export default function NotesWorkspace() {
         }
         setImportStatus({ ok: true, msg: res.imported + ' not aktarıldı.' + (res.failed > 0 ? ' ' + res.failed + ' başarısız.' : '') + (res.skippedAttachments > 0 ? ' (' + res.skippedAttachments + ' ek 20 MB sınırı nedeniyle atlandı)' : '') })
         setTimeout(function () { setImportStatus(null) }, 5000)
-        // Klasörler ve notları yenile
-        api.getAll().then(function (data) {
+        // Klasörler ve notları yenile — mevcut notlardaki yüklü içeriği koru
+        api.getList().then(function (data) {
           var flds = (data.folders || []).map(function (f) {
             return { id: f.id, name: f.name, parentId: f.parentId || null }
           })
           var nts = (data.notes || []).map(function (n) {
             return {
               id: n.id, folderId: n.folderId || null, title: n.title || '',
-              content: n.content || '',
+              content: null,  // lazy-load; mevcut içerik aşağıda merge edilir
               createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
               updatedAt: new Date(n.updatedAt),
               isPinned: !!n.isPinned, isFullyEncrypted: !!n.isFullyEncrypted,
@@ -1769,7 +1807,15 @@ export default function NotesWorkspace() {
             }
           })
           setFolders(flds)
-          setNotes(nts)
+          // Mevcut yüklü içerikleri merge et (daha önce açılan notlar için tekrar fetch gerekmez)
+          setNotes(function (prev) {
+            return nts.map(function (newNote) {
+              var existing = prev.find(function (p) { return p.id === newNote.id })
+              return existing && existing.content !== null
+                ? { ...newNote, content: existing.content, ocrText: existing.ocrText }
+                : newNote
+            })
+          })
           if (res.folderId) {
             setSelectedFolderId(res.folderId)
             setExpandedFolders(function (prev) { var s = new Set(prev); s.add(res.folderId); return s })
@@ -2038,7 +2084,11 @@ export default function NotesWorkspace() {
         var newNote = {
           id: res.id,
           folderId: folderId,
+          // content: '' (boş string) — null değil; null = "henüz yüklenmedi", '' = "gerçekten boş"
           title: '', content: '', createdAt: new Date(), updatedAt: new Date(),
+          isPinned: false, isFullyEncrypted: false, encryptionHint: null,
+          reminderCount: 0, tags: [], visibility: 0, isOwner: true,
+          ocrText: null,
         }
         setNotes(function (prev) { return [newNote].concat(prev) })
         setSelectedNoteId(res.id)

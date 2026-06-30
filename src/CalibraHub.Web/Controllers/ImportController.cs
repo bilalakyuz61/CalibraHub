@@ -109,9 +109,9 @@ public sealed class ImportController : Controller
 
     // ── Hedef alan kataloğu ────────────────────────────────────────────
     [HttpGet("/Import/api/target-fields")]
-    public IActionResult TargetFields([FromQuery] string entity = "CONTACT")
+    public async Task<IActionResult> TargetFields([FromQuery] string entity = "CONTACT", CancellationToken ct = default)
     {
-        var fields = _service.GetTargetFields(string.IsNullOrWhiteSpace(entity) ? "CONTACT" : entity);
+        var fields = await _service.GetTargetFieldsAsync(string.IsNullOrWhiteSpace(entity) ? "CONTACT" : entity, ct);
         return Json(new { success = true, fields });
     }
 
@@ -135,7 +135,7 @@ public sealed class ImportController : Controller
             var items = await _service.ListTemplatesAsync(includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpGet("/Import/api/templates/{id:int}")]
@@ -148,7 +148,7 @@ public sealed class ImportController : Controller
                 ? Json(new { success = false, error = "Şablon bulunamadı." })
                 : Json(new { success = true, template = dto });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Import/api/templates/save")]
@@ -162,21 +162,21 @@ public sealed class ImportController : Controller
                 ? Json(new { success = true, id })
                 : Json(new { success = false, error });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Import/api/templates/delete/{id:int}")]
     public async Task<IActionResult> DeleteTemplate(int id, CancellationToken ct)
     {
         try { await _service.DeleteTemplateAsync(id, ct); return Json(new { success = true }); }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Import/api/templates/toggle/{id:int}")]
     public async Task<IActionResult> ToggleTemplate(int id, CancellationToken ct)
     {
         try { var active = await _service.ToggleTemplateAsync(id, ct); return Json(new { success = true, isActive = active }); }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     // ── Dosya işlemleri ────────────────────────────────────────────────
@@ -195,7 +195,7 @@ public sealed class ImportController : Controller
     }
 
     [HttpPost("/Import/api/preview")]
-    public async Task<IActionResult> Preview(IFormFile? file, [FromForm] string? spec, CancellationToken ct)
+    public async Task<IActionResult> Preview(IFormFile? file, [FromForm] string? spec, [FromForm] string? overrides, CancellationToken ct)
     {
         var (bytes, err) = await ReadUploadAsync(file, ct);
         if (err is not null) return Json(new { success = false, error = err });
@@ -203,12 +203,12 @@ public sealed class ImportController : Controller
         if (!TryParseSpec(spec, out var template, out var specErr))
             return Json(new { success = false, error = specErr });
 
-        var result = await _service.PreviewAsync(template!, bytes!, file!.FileName, ct);
+        var result = await _service.PreviewAsync(template!, bytes!, file!.FileName, ParseOverrides(overrides), ct);
         return Json(result);
     }
 
     [HttpPost("/Import/api/commit")]
-    public async Task<IActionResult> Commit(IFormFile? file, [FromForm] string? spec, CancellationToken ct)
+    public async Task<IActionResult> Commit(IFormFile? file, [FromForm] string? spec, [FromForm] string? overrides, [FromForm] string? excluded, CancellationToken ct)
     {
         var (bytes, err) = await ReadUploadAsync(file, ct);
         if (err is not null) return Json(new { success = false, error = err });
@@ -216,7 +216,7 @@ public sealed class ImportController : Controller
         if (!TryParseSpec(spec, out var template, out var specErr))
             return Json(new { success = false, error = specErr });
 
-        var result = await _service.CommitAsync(template!, bytes!, file!.FileName, CurrentUserId(), ct);
+        var result = await _service.CommitAsync(template!, bytes!, file!.FileName, CurrentUserId(), ParseOverrides(overrides), ParseExcluded(excluded), ct);
         return Json(result);
     }
 
@@ -241,7 +241,32 @@ public sealed class ImportController : Controller
             if (template is null) { error = "Şablon tanımı çözümlenemedi."; return false; }
             return true;
         }
-        catch (Exception ex) { error = "Şablon tanımı geçersiz: " + ex.Message; return false; }
+        catch (Exception ex) { error = "Şablon tanımı geçersiz: " + "İşlem sırasında bir hata oluştu."; return false; }
+    }
+
+    /// <summary>Önizlemede elle düzeltilen hücreler: { "satırNo": { "alanKey": "yeniDeğer" } }.</summary>
+    private static IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>? ParseOverrides(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "{}") return null;
+        try
+        {
+            var raw = JsonSerializer.Deserialize<Dictionary<int, Dictionary<string, string?>>>(json, Json);
+            if (raw is null || raw.Count == 0) return null;
+            return raw.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<string, string?>)kv.Value);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Önizlemede iptal edilen (hariç tutulan) satır no listesi: [3, 7, 12].</summary>
+    private static IReadOnlyCollection<int>? ParseExcluded(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return null;
+        try
+        {
+            var arr = JsonSerializer.Deserialize<int[]>(json, Json);
+            return arr is { Length: > 0 } ? new HashSet<int>(arr) : null;
+        }
+        catch { return null; }
     }
 
     private int? CurrentUserId()

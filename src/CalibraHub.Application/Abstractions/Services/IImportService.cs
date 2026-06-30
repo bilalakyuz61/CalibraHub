@@ -12,8 +12,11 @@ public interface IImportService
     /// <summary>İçe aktarım yapılabilen hedef entity'ler (Cari, Stok, Cari İletişim, ...).</summary>
     IReadOnlyList<ImportEntityDto> GetEntities();
 
-    /// <summary>Hedef entity için eşlenebilir alan kataloğu.</summary>
+    /// <summary>Hedef entity için eşlenebilir alan kataloğu (statik).</summary>
     IReadOnlyList<ImportTargetFieldDto> GetTargetFields(string targetEntity);
+
+    /// <summary>Statik + dinamik (form özel-alan/widget) birleşik alan kataloğu.</summary>
+    Task<IReadOnlyList<ImportTargetFieldDto>> GetTargetFieldsAsync(string targetEntity, CancellationToken ct);
 
     Task<IReadOnlyList<ImportTemplateDto>> ListTemplatesAsync(bool includeInactive, CancellationToken ct);
     Task<ImportTemplateDto?> GetTemplateAsync(int id, CancellationToken ct);
@@ -30,9 +33,14 @@ public interface IImportService
     /// </summary>
     Task<(byte[] Bytes, string FileName)> BuildBlankTemplateAsync(string entity, int? templateId, CancellationToken ct);
 
-    /// <summary>Şablonu dosyaya uygula, satır satır doğrula — kayıt YAZMAZ.</summary>
-    Task<ImportPreviewResultDto> PreviewAsync(SaveImportTemplateRequest spec, byte[] data, string fileName, CancellationToken ct);
+    /// <summary>Şablonu dosyaya uygula, satır satır doğrula — kayıt YAZMAZ.
+    /// <paramref name="overrides"/>: önizlemede elle düzeltilen hücreler (satırNo → alan → değer).</summary>
+    Task<ImportPreviewResultDto> PreviewAsync(SaveImportTemplateRequest spec, byte[] data, string fileName,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>? overrides, CancellationToken ct);
 
-    /// <summary>Şablonu dosyaya uygula ve geçerli satırları kaydet (insert/update).</summary>
-    Task<ImportCommitResultDto> CommitAsync(SaveImportTemplateRequest spec, byte[] data, string fileName, int? userId, CancellationToken ct);
+    /// <summary>Şablonu dosyaya uygula ve geçerli satırları kaydet (insert/update).
+    /// <paramref name="overrides"/>: önizlemede elle düzeltilen hücreler (satırNo → alan → değer).
+    /// <paramref name="excluded"/>: kullanıcının önizlemede iptal ettiği (hariç tuttuğu) satır no'ları.</summary>
+    Task<ImportCommitResultDto> CommitAsync(SaveImportTemplateRequest spec, byte[] data, string fileName, int? userId,
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>? overrides, IReadOnlyCollection<int>? excluded, CancellationToken ct);
 }

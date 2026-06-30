@@ -20,6 +20,7 @@ public sealed class WarehouseController : Controller
     private readonly IStockDocRepository _stockDocRepo;
     private readonly ILogisticsConfigurationService _logisticsService;
     private readonly IArgeProjectService _argeService;
+    private readonly IFieldSettingRepository _fieldSettings;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
 
@@ -34,12 +35,14 @@ public sealed class WarehouseController : Controller
         IStockDocRepository stockDocRepo,
         ILogisticsConfigurationService logisticsService,
         IArgeProjectService argeService,
+        IFieldSettingRepository fieldSettings,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
     {
         _stockDocRepo = stockDocRepo;
         _logisticsService = logisticsService;
         _argeService = argeService;
+        _fieldSettings = fieldSettings;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
@@ -80,19 +83,150 @@ public sealed class WarehouseController : Controller
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // SAYIM — 2026-05-22 iskeleti
+    // SAYIM
     // ═══════════════════════════════════════════════════════════════════════
 
-    [HttpGet("/Warehouse/Inventory")]
-    public IActionResult Inventory()
-        => View("_ComingSoon", new CalibraHub.Web.Models.ComingSoonViewModel
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> Inventory(CancellationToken ct)
+    {
+        var config = await BuildInventoryBoardConfigAsync(ct);
+        return View(new WarehouseBoardViewModel { BoardConfig = config });
+    }
+
+    [HttpGet("/Warehouse/InventoryBoardConfig")]
+    public async Task<IActionResult> InventoryBoardConfig(CancellationToken ct)
+        => Json(await BuildInventoryBoardConfigAsync(ct));
+
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> InventoryEdit(int? id, CancellationToken ct)
+    {
+        Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+        var bindings = await _fieldSettings.GetGuideBindingsForFormAsync("INVENTORY_COUNT_LINES", ct);
+        if (bindings.Count == 0)
+            bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
+        var gridConfig = BuildInventoryLineGridConfig(bindings);
+        var vm = new InventoryEditViewModel
         {
-            Title = "Sayım",
-            Description = "Depolarda fiziksel stok sayim planlama, terminal ile sayim girisi ve fark raporu yakinda.",
-        });
+            DocId              = id,
+            LineGridConfigJson = JsonSerializer.Serialize(gridConfig, BoardJsonOpts),
+        };
+        return View(vm);
+    }
+
+    // Sayım deposundaki beklenen stok miktarlarını döndürür (stok hareketleri üzerinden)
+    [HttpGet]
+    public async Task<IActionResult> GetLocationStockSnapshotJson(int locationId, string? date, CancellationToken ct)
+    {
+        if (locationId <= 0) return Json(Array.Empty<object>());
+        var upToDate   = DateTime.TryParse(date, System.Globalization.CultureInfo.InvariantCulture,
+                             System.Globalization.DateTimeStyles.None, out var d)
+                         ? d.Date : DateTime.Today;
+        var companyId  = _connectionFactory.ResolveCurrentCompanyId();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT
+                l.item_id,
+                i.Code             AS material_code,
+                i.Name             AS material_name,
+                l.unit_id,
+                u.Code             AS unit_code,
+                l.combination_id,
+                cfg.RecordCode     AS combination_code,
+                SUM(
+                    CASE
+                        WHEN d.doc_type = 'STOCK_IN'  AND l.to_location_id   = @LocId THEN  l.qty
+                        WHEN d.doc_type = 'STOCK_OUT' AND l.from_location_id = @LocId THEN -l.qty
+                        WHEN d.doc_type = 'TRANSFER'  AND l.to_location_id   = @LocId THEN  l.qty
+                        WHEN d.doc_type = 'TRANSFER'  AND l.from_location_id = @LocId THEN -l.qty
+                        ELSE 0
+                    END
+                ) AS expected_qty
+            FROM [{_schema}].[stock_doc] d
+            JOIN [{_schema}].[stock_doc_line] l ON l.doc_id = d.id
+            LEFT JOIN [{_schema}].[Items]             i   ON i.Id   = l.item_id
+            LEFT JOIN [{_schema}].[Unit]              u   ON u.Id   = l.unit_id
+            LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.Id = l.combination_id
+            WHERE d.company_id = @CompanyId
+              AND d.is_active  = 1
+              AND CONVERT(DATE, d.doc_date) <= @Date
+              AND d.doc_type IN ('STOCK_IN','STOCK_OUT','TRANSFER')
+              AND (l.from_location_id = @LocId OR l.to_location_id = @LocId)
+            GROUP BY l.item_id, i.Code, i.Name, l.unit_id, u.Code, l.combination_id, cfg.RecordCode
+            HAVING SUM(
+                CASE
+                    WHEN d.doc_type = 'STOCK_IN'  AND l.to_location_id   = @LocId THEN  l.qty
+                    WHEN d.doc_type = 'STOCK_OUT' AND l.from_location_id = @LocId THEN -l.qty
+                    WHEN d.doc_type = 'TRANSFER'  AND l.to_location_id   = @LocId THEN  l.qty
+                    WHEN d.doc_type = 'TRANSFER'  AND l.from_location_id = @LocId THEN -l.qty
+                    ELSE 0
+                END
+            ) > 0
+            ORDER BY i.Code;
+            """;
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@LocId",     locationId);
+        cmd.Parameters.AddWithValue("@Date",      upToDate);
+
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            result.Add(new
+            {
+                itemId          = r.GetInt32(0),
+                materialCode    = r.IsDBNull(1) ? null : r.GetString(1),
+                materialName    = r.IsDBNull(2) ? null : r.GetString(2),
+                unitId          = r.IsDBNull(3) ? (int?)null : r.GetInt32(3),
+                unitCode        = r.IsDBNull(4) ? null : r.GetString(4),
+                combinationId   = r.IsDBNull(5) ? (int?)null : r.GetInt32(5),
+                combinationCode = r.IsDBNull(6) ? null : r.GetString(6),
+                expectedQty     = r.GetDecimal(7),
+            });
+        }
+        return Json(result);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> SaveInventoryJson([FromBody] SaveStockDocRequest? request, CancellationToken ct)
+    {
+        if (request is null)
+            return Json(new { success = false, message = "Geçersiz istek." });
+        try
+        {
+            var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
+            return Json(new { success = true, id, docNo });
+        }
+        catch
+        {
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> DeleteInventoryJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            await _stockDocRepo.DeleteAsync(id, ct);
+            return Json(new { ok = true });
+        }
+        catch
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // AMBAR GİRİŞ / ÇIKIŞ
+    // AMBAR GİRİ�? / ÇIKI�?
     // ═══════════════════════════════════════════════════════════════════════
 
     [HttpGet]
@@ -159,7 +293,7 @@ public sealed class WarehouseController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -175,16 +309,21 @@ public sealed class WarehouseController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
     [HttpGet]
     public async Task<IActionResult> GetLocationsJson(CancellationToken ct)
     {
-        var locs = await _logisticsService.GetLocationsAsync(ct);
-        return Json(locs
-            .Where(l => l.IsActive)
+        var locs    = await _logisticsService.GetLocationsAsync(ct);
+        var active  = locs.Where(l => l.IsActive).ToList();
+        // Alt lokasyonu olan (parent) lokasyonlar seçilemez — yalnızca yaprak (leaf) lokasyonlar döner
+        var parentIds = active.Where(l => l.ParentId.HasValue)
+                              .Select(l => l.ParentId!.Value)
+                              .ToHashSet();
+        return Json(active
+            .Where(l => !parentIds.Contains(l.Id))
             .OrderBy(l => l.SortOrder).ThenBy(l => l.LocationName)
             .Select(l => new { l.Id, l.LocationCode, l.LocationName }));
     }
@@ -499,6 +638,169 @@ public sealed class WarehouseController : Controller
         {
             schemaVersion = "v1",
             columns = locationCols.Concat(baseCols).ToArray(),
+        };
+    }
+
+    private async Task<object> BuildInventoryBoardConfigAsync(CancellationToken ct)
+    {
+        var docs = await _stockDocRepo.GetByTypeAsync("INVENTORY_COUNT", ct);
+        var tr   = CultureInfo.GetCultureInfo("tr-TR");
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeStdWidget("w_depo",  "Depo",  "text"),
+            SmartBoardFilterHelpers.MakeStdWidget("w_kalem", "Kalem", "numeric"),
+        };
+
+        var entities = docs.Select(d => new
+        {
+            id          = d.Id,
+            title       = d.DocNo,
+            subtitle    = d.DocDate.ToString("dd.MM.yyyy", tr),
+            description = d.FromLocationName ?? "",
+            imageUrl    = (string?)null,
+            statusBadge = (object?)null,
+            widgets = new object[]
+            {
+                new { id = "w_depo",  type = "data", dataType = "text",    label = "Depo",
+                      value = d.FromLocationName ?? "-", detail = (string?)null, color = "violet" },
+                new { id = "w_kalem", type = "data", dataType = "numeric", label = "Kalem",
+                      value = d.LineCount.ToString(CultureInfo.InvariantCulture), detail = "kalem", color = "slate" },
+            },
+            primaryAction = new
+            {
+                label = "Düzenle", icon = "Edit", color = "amber",
+                url   = $"/Warehouse/InventoryEdit?id={d.Id}", hideButton = true,
+            },
+            secondaryAction = new
+            {
+                label     = "Sil", icon = "Trash2",
+                apiUrl    = $"/Warehouse/DeleteInventoryJson?id={d.Id}",
+                apiMethod = "POST",
+                confirm   = $"Bu sayım belgesini silmek istediğinizden emin misiniz? ({d.DocNo})",
+            },
+        }).ToList();
+
+        return new
+        {
+            boardKey          = "warehouse-inventory",
+            title             = "Stok Sayımı",
+            subtitle          = $"{entities.Count} belge",
+            icon              = "ClipboardCheck",
+            iconColor         = "violet",
+            refreshUrl        = "/Warehouse/InventoryBoardConfig",
+            searchPlaceholder = "Belge no, depo ara…",
+            emptyText         = "Henüz sayım belgesi oluşturulmamış",
+            actions = new object[]
+            {
+                new { id = "new", label = "Yeni Sayım", icon = "Plus", variant = "primary",
+                      url = "/Warehouse/InventoryEdit" },
+            },
+            masterWidgets,
+            entities,
+        };
+    }
+
+    private static object BuildInventoryLineGridConfig(IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
+    {
+        var bindingMap = (bindings ?? [])
+            .ToDictionary(b => b.FieldKey, b => b, StringComparer.OrdinalIgnoreCase);
+        bindingMap.TryGetValue("materialCode", out var matBinding);
+
+        return new
+        {
+            schemaVersion = "v1",
+            columns = new object[]
+            {
+            new
+            {
+                key            = "materialCode",
+                label          = "Malzeme Kodu",
+                type           = "text-lookup",
+                guideCode      = matBinding?.GuideCode,
+                filterJson     = matBinding?.FilterJson,
+                formCode       = "INVENTORY_COUNT_LINES",
+                formatJson     = matBinding?.FormatJson,
+                lookupUrl      = matBinding == null ? "/Warehouse/GetMaterialsJson" : (string?)null,
+                lookupValueKey = "materialCode",
+                lookupLabelKey = "materialName",
+                lookupFillMap  = new Dictionary<string, string>
+                {
+                    ["materialName"]      = "materialName",
+                    ["stockCardId"]       = "id",
+                    ["trackCombinations"] = "trackCombinations",
+                    ["unitId"]            = "unitId",
+                },
+                width    = 200,
+                required = matBinding?.IsRequired ?? false,
+                align    = "left",
+                icon     = "Hash",
+            },
+            new
+            {
+                key      = "materialName",
+                label    = "Malzeme Adı",
+                type     = "text",
+                width    = "flex",
+                @readonly = true,
+                align    = "left",
+                icon     = "FileText",
+            },
+            new
+            {
+                key            = "combinationCode",
+                label          = "Kombinasyon",
+                type           = "combination-lookup",
+                width          = 130,
+                align          = "center",
+                icon           = "CircleDot",
+                visibleWhenKey = "trackCombinations",
+            },
+            new
+            {
+                key             = "unitId",
+                label           = "Birim",
+                type            = "select",
+                optionsUrl      = "/Warehouse/GetMaterialUnitsJson?materialCode={materialCode}",
+                optionsValueKey = "id",
+                optionsLabelKey = "name",
+                autoSelectFirst = true,
+                width           = 80,
+                align           = "center",
+                icon            = "Ruler",
+            },
+            new
+            {
+                key       = "quantity",
+                label     = "Sayılan Miktar",
+                type      = "number",
+                width     = 130,
+                precision = 2,
+                min       = 0,
+                align     = "right",
+                icon      = "Sigma",
+            },
+            new
+            {
+                key             = "fromLocationId",
+                label           = "Lokasyon",
+                type            = "select",
+                optionsUrl      = "/Warehouse/GetLocationsJson",
+                optionsValueKey = "id",
+                optionsLabelKey = "locationName",
+                width           = 160,
+                align           = "left",
+                icon            = "Warehouse",
+            },
+            new
+            {
+                key   = "notes",
+                label = "Notlar",
+                type  = "text",
+                width = 180,
+                align = "left",
+                icon  = "MessageSquare",
+            },
+        },
         };
     }
 

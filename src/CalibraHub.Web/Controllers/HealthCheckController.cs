@@ -209,7 +209,7 @@ public sealed class HealthCheckController : Controller
             sw.Stop();
             result.DurationMs = (int)sw.ElapsedMilliseconds;
             result.Status = "exception";
-            result.ErrorSnippet = ex.Message;
+            result.ErrorSnippet = "İşlem sırasında bir hata oluştu.";
         }
         return result;
     }

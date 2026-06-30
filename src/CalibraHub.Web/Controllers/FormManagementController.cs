@@ -61,7 +61,7 @@ public sealed class FormManagementController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 

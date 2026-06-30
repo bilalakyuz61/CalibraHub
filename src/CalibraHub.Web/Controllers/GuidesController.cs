@@ -52,7 +52,7 @@ public sealed class GuidesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -77,7 +77,7 @@ public sealed class GuidesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -199,7 +199,7 @@ public sealed class GuidesController : ControllerBase
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[GuideDistinct] Hata: {ex}");
-            return StatusCode(500, new { success = false, message = ex.Message });
+            return StatusCode(500, new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -268,7 +268,7 @@ public sealed class GuidesController : ControllerBase
             return StatusCode(500, new
             {
                 success = false,
-                message = ex.Message,
+                message = "Islem sirasinda bir hata olustu.",
                 guide = guideCode,
                 type = ex.GetType().Name
             });

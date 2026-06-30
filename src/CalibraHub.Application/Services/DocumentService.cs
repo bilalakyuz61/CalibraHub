@@ -305,6 +305,7 @@ public sealed class DocumentService : IDocumentService
                 ContactAddress = request.ContactAddress,
                 SalesRepId = request.SalesRepId,
                 RequesterPersonnelId = request.RequesterPersonnelId,
+                LocationId = request.LocationId,
                 CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = request.DiscountRate,
@@ -339,6 +340,7 @@ public sealed class DocumentService : IDocumentService
             existing.ContactAddress = request.ContactAddress;
             existing.SalesRepId = request.SalesRepId;
             existing.RequesterPersonnelId = request.RequesterPersonnelId;
+            existing.LocationId = request.LocationId;
             existing.CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1;
             existing.SubTotal = Math.Round(subTotal, 4);
             existing.DiscountRate = request.DiscountRate;
@@ -522,7 +524,8 @@ public sealed class DocumentService : IDocumentService
         q.DeliveryDate,        // Faz M
         q.DeliveryDays,        // Faz M
         q.CurrencyCode, q.CurrencySymbol,
-        q.RequesterPersonnelId, q.RequesterPersonnelName);
+        q.RequesterPersonnelId, q.RequesterPersonnelName,
+        q.LocationId, q.LocationName);
 
     /// <summary>
     /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin

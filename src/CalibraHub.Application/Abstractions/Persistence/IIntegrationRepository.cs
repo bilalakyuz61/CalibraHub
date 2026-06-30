@@ -3,6 +3,16 @@ using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
 
+/// <summary>Form ekranı işlemler menüsü için entegrasyon buton metadata'sı.</summary>
+public sealed record IntegrationManualButtonInfo(
+    int Id,
+    string Name,
+    string? Description,
+    string? ButtonLabel,
+    string? ButtonColor,
+    int? TargetEndpointId,
+    string SourceFormCode);
+
 /// <summary>
 /// Integration aggregate ve ilişkili tablolar (Mapping, Trigger, Run, Endpoint) için
 /// veri erişim arayüzü. Sprint 1 kapsamında temel CRUD; ileride filter/pagination eklenir.
@@ -21,6 +31,15 @@ public interface IIntegrationRepository
 
     /// <summary>Form kodu için aktif entegrasyonları getirir. Manuel buton injection'da kullanılır.</summary>
     Task<IReadOnlyCollection<Integration>> ListByFormCodeAsync(string formCode, IntegrationTriggerType triggerType, CancellationToken ct);
+
+    /// <summary>
+    /// Form ekranı işlemler menüsüne enjekte edilecek manuel buton bilgilerini getirir.
+    /// Trigger Config'inden buttonLabel / buttonColor ayrıştırılır.
+    /// </summary>
+    Task<IReadOnlyCollection<IntegrationManualButtonInfo>> ListManualButtonsAsync(string formCode, CancellationToken ct);
+
+    /// <summary>Tüm formlardaki manuel buton bilgilerini döner — startup permission seeding için.</summary>
+    Task<IReadOnlyCollection<IntegrationManualButtonInfo>> ListAllManualButtonsAsync(CancellationToken ct);
 
     /// <summary>
     /// Belirli bir trigger tipinde aktif olan tum entegrasyonlari getirir (form filtresi yok).

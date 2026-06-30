@@ -1689,6 +1689,10 @@
                         </select>
                     </div>
                     <div class="mce-row">
+                        <label for="mceTaxRate">KDV Orani (%)</label>
+                        <input type="number" id="mceTaxRate" data-field-key="tax_rate" class="mce-input mce-no-negative" value="20" min="0" max="100" step="0.01" style="max-width:80px;text-align:center;" />
+                    </div>
+                    <div class="mce-row">
                         <label for="mceTrackCombinations">Kombinasyon Takibi</label>
                         <label class="mce-switch" for="mceTrackCombinations">
                             <input type="checkbox" id="mceTrackCombinations" data-field-key="combinations" />
@@ -1696,8 +1700,19 @@
                         </label>
                     </div>
                     <div class="mce-row">
-                        <label for="mceTaxRate">KDV Orani (%)</label>
-                        <input type="number" id="mceTaxRate" data-field-key="tax_rate" class="mce-input mce-no-negative" value="20" min="0" max="100" step="0.01" style="max-width:80px;text-align:center;" />
+                        <label for="mceTraceability">İzlenebilirlik</label>
+                        <label class="mce-switch" for="mceTraceability">
+                            <input type="checkbox" id="mceTraceability" onchange="document.getElementById('mceTrackingModeWrap').style.display = this.checked ? 'inline-flex' : 'none';" />
+                            <span class="mce-switch-track"></span>
+                        </label>
+                        <div id="mceTrackingModeWrap" style="display:none;align-items:center;gap:10px;margin-left:22px;">
+                            <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Lot</span>
+                            <label class="mce-switch" for="mceTrackingMode">
+                                <input type="checkbox" id="mceTrackingMode" />
+                                <span class="mce-switch-track"></span>
+                            </label>
+                            <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Seri</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2074,6 +2089,12 @@
             _setVal('mceMaterialTypeId',       data.materialTypeId != null ? String(data.materialTypeId) : '');
             _setChk('mceTrackCombinations',    !!data.trackCombinations);
             _setVal('mceTaxRate',              data.taxRate != null ? data.taxRate : 20);
+            (function (tt) {
+                var on = tt && tt !== 'None';
+                if ($('mceTraceability')) $('mceTraceability').checked = on;
+                if ($('mceTrackingMode')) $('mceTrackingMode').checked = (tt === 'Serial');
+                var w = document.getElementById('mceTrackingModeWrap'); if (w) w.style.display = on ? 'inline-flex' : 'none';
+            })(data.trackingType);
             _setDisp('mceDeleteBtn',           'inline-flex');
 
             // Ana Birim — dropdown options mceUnitLoad sirasinda dolduruluyor; secilenler
@@ -2599,7 +2620,8 @@
             typeId: $('mceMaterialTypeId').value ? parseInt($('mceMaterialTypeId').value) : null,
             unitId: unitIdRaw ? parseInt(unitIdRaw) : null,
             combinations: $('mceTrackCombinations').checked,
-            taxRate: parseFloat($('mceTaxRate').value || '20')
+            taxRate: parseFloat($('mceTaxRate').value || '20'),
+            trackingType: (($('mceTraceability') && $('mceTraceability').checked) ? (($('mceTrackingMode') && $('mceTrackingMode').checked) ? 'Serial' : 'Lot') : 'None')
         };
 
         $('mceSaveBtn').disabled = true;
@@ -2838,6 +2860,11 @@
             _setVal('mceMaterialTypeId', '');
             _setChk('mceTrackCombinations', false);
             _setVal('mceTaxRate', 20);
+            (function () {
+                if ($('mceTraceability')) $('mceTraceability').checked = false;
+                if ($('mceTrackingMode')) $('mceTrackingMode').checked = false;
+                var w = document.getElementById('mceTrackingModeWrap'); if (w) w.style.display = 'none';
+            })();
             _setDisp('mceDeleteBtn', 'none');
             var pendingUnitId = '';
             window._mceApplyUnitId = function() {

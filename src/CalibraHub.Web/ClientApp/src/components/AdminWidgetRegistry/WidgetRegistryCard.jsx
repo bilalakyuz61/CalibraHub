@@ -6,7 +6,7 @@
  *                  fieldKey · DataType   🔒 VIEW_KEY
  */
 import { motion } from 'framer-motion'
-import { Pencil, Trash2, Lock } from 'lucide-react'
+import { Pencil, Trash2, Lock, ToggleRight, ToggleLeft } from 'lucide-react'
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 import { DATA_TYPES } from './DataTypeDropdown'
 
@@ -221,37 +221,35 @@ export default function WidgetRegistryCard(props) {
           })()}
         </div>
 
-        {/* Sag: Actions */}
+        {/* Sag: Actions — üç buton eşit boyut (p-2 rounded-xl, 14px ikon) */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Toggle switch */}
+
+          {/* Aktif/Pasif toggle */}
           <button
             type="button"
             disabled={isSaving}
             onClick={function() { if (onToggle) onToggle(field) }}
             className={
-              'relative w-10 h-5 rounded-full transition-colors mr-1 ' +
-              (isActive ? 'bg-emerald-500/70' : 'bg-slate-300 dark:bg-white/10') +
-              (isSaving ? ' opacity-50 cursor-wait' : ' cursor-pointer')
+              'p-2 rounded-xl border border-transparent transition-all group disabled:opacity-50 disabled:cursor-wait ' +
+              (isActive
+                ? 'hover:bg-emerald-100 dark:hover:bg-emerald-500/15 hover:border-emerald-400/30'
+                : 'hover:bg-slate-100 dark:hover:bg-white/5')
             }
             title={isActive ? 'Pasife al' : 'Aktif et'}
           >
-            <motion.div
-              className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
-              animate={{ left: isActive ? 22 : 2 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-            />
+            {isActive
+              ? <ToggleRight size={14} className="text-emerald-500 dark:text-emerald-400/80 transition-colors" />
+              : <ToggleLeft  size={14} className="text-slate-400 dark:text-white/35 transition-colors" />
+            }
           </button>
 
-          {/* Plain field toggle kaldirildi — Baslik Stili (Standart/Modern)
-              seceneği ayni amaca hizmet ediyor; widget formu icinde secilir. */}
-
-          {/* Edit */}
+          {/* Düzenle */}
           <button
             type="button"
             disabled={isSaving}
             onClick={function() { if (onEdit) onEdit(field) }}
-            className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors group disabled:opacity-50"
-            title="Duzenle"
+            className="p-2 rounded-xl border border-transparent hover:bg-slate-100 dark:hover:bg-white/5 transition-colors group disabled:opacity-50"
+            title="Düzenle"
           >
             <Pencil
               size={14}
@@ -259,20 +257,20 @@ export default function WidgetRegistryCard(props) {
             />
           </button>
 
-          {/* Delete */}
+          {/* Sil */}
           {isSystem ? (
             <div
               className="p-2 rounded-xl text-slate-300 dark:text-white/40"
               title="Sistem alani korunuyor"
             >
-              <Lock size={13} />
+              <Lock size={14} />
             </div>
           ) : (
             <button
               type="button"
               disabled={isSaving}
               onClick={function() { if (onDelete) onDelete(field) }}
-              className="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-500/15 border border-transparent hover:border-red-400/30 transition-all group disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2 rounded-xl border border-transparent hover:bg-red-100 dark:hover:bg-red-500/15 hover:border-red-400/30 transition-all group disabled:opacity-30 disabled:cursor-not-allowed"
               title="Sil"
             >
               <Trash2

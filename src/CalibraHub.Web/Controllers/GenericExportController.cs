@@ -83,7 +83,7 @@ public sealed class GenericExportController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Export] Excel olusturma hatasi");
-            return StatusCode(500, new { success = false, message = "Excel olusturulamadi: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "Excel olusturulamadi: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -130,7 +130,7 @@ public sealed class GenericExportController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Export] Report Excel olusturma hatasi");
-            return StatusCode(500, new { success = false, message = "Excel olusturulamadi: " + ex.Message });
+            return StatusCode(500, new { success = false, message = "Excel olusturulamadi: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 

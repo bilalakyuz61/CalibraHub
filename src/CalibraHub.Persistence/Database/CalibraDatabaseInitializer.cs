@@ -1647,6 +1647,14 @@ END;";
                     ADD [CompanyId] INT NOT NULL CONSTRAINT [df_Items_Company] DEFAULT(0);
             END;
 
+            -- 2026-06-26: Takip tipi (None/Lot/Serial) — idempotent kolon ekle
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Items]', N'TrackingType') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
+                    ADD [TrackingType] NVARCHAR(20) NOT NULL CONSTRAINT [df_Items_TrackingType] DEFAULT(N'None');
+            END;
+
             -- Eski tek-kolonlu unique index'i (Code) drop et, (CompanyId, Code) ile degistir
             IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
                AND EXISTS (
@@ -4659,6 +4667,13 @@ END;";
                 BEGIN
                     ALTER TABLE [{s}].[note_attachments] ADD [binary_content] VARBINARY(MAX) NULL;
                 END;
+
+                -- Migration: IsActive kolonu — soft-delete desteği (NoteController company DB'e taşındı)
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[note_attachments]') AND name = N'IsActive')
+                BEGIN
+                    ALTER TABLE [{s}].[note_attachments] ADD [IsActive] BIT NOT NULL
+                        CONSTRAINT [DF_note_attachments_IsActive] DEFAULT 1;
+                END;
             END;
 
             -- Migration: notes.Tags kolonu — virgul ayirali etiketler (orn. "proje,toplanti").
@@ -6001,6 +6016,22 @@ END;";
                         REFERENCES [{s}].[Integration]([Id])
                         ON DELETE NO ACTION;
             END;
+
+            -- Kod bazlı cascade: CascadeByValue (mapping satırında toggle) +
+            -- SourceCodeColumn (hedef integration'da — hangi kolonla entity bulunacak).
+            IF OBJECT_ID(N'[{s}].[IntegrationMapping]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[IntegrationMapping]', N'CascadeByValue') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationMapping]
+                    ADD [CascadeByValue] BIT NOT NULL
+                        CONSTRAINT DF_IntegrationMapping_CascadeByValue DEFAULT 0;
+            END;
+            IF OBJECT_ID(N'[{s}].[Integration]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[Integration]', N'SourceCodeColumn') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[Integration]
+                    ADD [SourceCodeColumn] NVARCHAR(100) NULL;
+            END;
             """;
         await using (var cmd = connection.CreateCommand())
         {
@@ -7163,6 +7194,11 @@ END;";
             -- Diger belge tiplerinde NULL kalir.
             IF COL_LENGTH(N'[{s}].[Document]', N'RequesterPersonnelId') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [RequesterPersonnelId] INT NULL;
+
+            -- LocationId — Ihtiyac Kaydi baslik duzeyinde hedef depo (Location.Id INT FK).
+            -- Satir bazinda LocationId yoksa bu deger kullanilir. Diger belge tiplerinde NULL kalir.
+            IF COL_LENGTH(N'[{s}].[Document]', N'LocationId') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [LocationId] INT NULL;
 
             -- CompanyId FK kolonu — belgenin hangi sirkete ait oldugu.
             -- Mevcut kayitlar DefaultCompanyId (1) ile backfill edilir.
@@ -8802,6 +8838,8 @@ END;";
                 ALTER TABLE [{s}].[whatsapp_config] ADD [provider] INT NOT NULL DEFAULT(0);
             IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'web_qr_bridge_url') IS NULL
                 ALTER TABLE [{s}].[whatsapp_config] ADD [web_qr_bridge_url] NVARCHAR(256) NULL;
+            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'app_secret_encrypted') IS NULL
+                ALTER TABLE [{s}].[whatsapp_config] ADD [app_secret_encrypted] NVARCHAR(MAX) NULL;
 
             -- Safety rules — tek-row config
             IF OBJECT_ID(N'[{s}].[whatsapp_safety_rules]', N'U') IS NULL
@@ -10670,10 +10708,10 @@ END;";
         // Name    = sayfa tipi          (Liste, Düzenleme, Yeni — veya tek sayfalı formun adı)
         // IsWidgetForm = true  → Alan Rehberi dropdown'unda görünür (widget konfigürasyon hedefi)
         // IsWidgetForm = false → görünmez:
-        //   - Container formlar: SALES_QUOTE, SALES_ORDER, PURCHASE_* vb. (liste ekranı, edit değil)
         //   - _NEW formlar: sadece navigasyon, widget tanımlanamaz
-        //   - WORK_ORDERS, OPERATIONS, ROUTINGS, PERSONNEL, CONTACTS: liste formu,
-        //     edit versiyonu (WORK_ORDER_EDIT vb.) zaten aynı SubModule altında görünür
+        //   - Yönetim sayfaları: SETUP_DEFINITIONS, APPROVAL_FLOWS, SCHEDULER, COMPANY_SETTINGS vb.
+        //   - ORG_CHART, WHATSAPP, BULK_MAIL, SHOP_FLOOR: widget hedefi olmayan özel UI'lar
+        // IsWidgetForm = true → SmartBoard/C-Grid liste + tüm edit/detail formlar görünür
         var forms = new (string Code, string Name, string Module, string? SubModule, int Sort, bool IsWidgetForm)[]
         {
             // ── Genel ────────────────────────────────────────────────────────
@@ -10708,34 +10746,34 @@ END;";
             ("STOCK_IN_LINES",      "Kalem Bilgisi",                    "Lojistik",             "Ambar Giriş",              336,  true),
             ("STOCK_OUT",           "Üst Bilgi",                        "Lojistik",             "Ambar Çıkış",              340,  true),
             ("STOCK_OUT_LINES",     "Kalem Bilgisi",                    "Lojistik",             "Ambar Çıkış",              341,  true),
-            ("INVENTORY_COUNT",     "Sayım",                            "Lojistik",             null,                       345,  false),
+            ("INVENTORY_COUNT",     "Sayım",                            "Lojistik",             null,                       345,  true),
 
             // ── Satış ─────────────────────────────────────────────────────────
-            ("SALES_QUOTE",         "Satış Teklifi",                    "Satış",                "Satış Teklifi",            400,  false), // container — liste ekranı, _EDIT/_LINES edit hedefi
+            ("SALES_QUOTE",         "Satış Teklifi",                    "Satış",                "Satış Teklifi",            400,  true),  // SmartBoard liste
             ("SALES_QUOTE_NEW",     "Yeni",                             "Satış",                "Satış Teklifi",            405,  false), // navigasyon formu
             ("SALES_QUOTE_EDIT",    "Üst Bilgi",                        "Satış",                "Satış Teklifi",            410,  true),
             ("SALES_QUOTE_LINES",   "Kalem Bilgisi",                    "Satış",                "Satış Teklifi",            415,  true),
-            ("SALES_ORDER",         "Satış Siparişi",                   "Satış",                "Satış Siparişi",           420,  false), // container
+            ("SALES_ORDER",         "Satış Siparişi",                   "Satış",                "Satış Siparişi",           420,  true),  // SmartBoard liste
             ("SALES_ORDER_NEW",     "Yeni",                             "Satış",                "Satış Siparişi",           425,  false), // navigasyon formu
             ("SALES_ORDER_EDIT",    "Üst Bilgi",                        "Satış",                "Satış Siparişi",           430,  true),
             ("SALES_ORDER_LINES",   "Kalem Bilgisi",                    "Satış",                "Satış Siparişi",           435,  true),
 
             // ── Satın Alma (2026-05-22) — 3-asama akis, ayni dbo.Document tablosu ───
-            ("PURCHASE_REQUEST",       "İhtiyaç Kaydı",                 "Satın Alma",           "İhtiyaç Kaydı",            450,  false), // container
+            ("PURCHASE_REQUEST",       "İhtiyaç Kaydı",                 "Satın Alma",           "İhtiyaç Kaydı",            450,  true),  // SmartBoard liste
             ("PURCHASE_REQUEST_NEW",   "Yeni",                          "Satın Alma",           "İhtiyaç Kaydı",            451,  false), // navigasyon formu
             ("PURCHASE_REQUEST_EDIT",  "Üst Bilgi",                     "Satın Alma",           "İhtiyaç Kaydı",            452,  true),
             ("PURCHASE_REQUEST_LINES",  "Kalem Bilgisi",                 "Satın Alma",           "İhtiyaç Kaydı",            453,  true),
-            ("PURCHASE_FULFILLMENT",   "İhtiyaç Karşılama",             "Satın Alma",           "İhtiyaç Karşılama",        455,  false), // karşılama merkezi — ayrı yetki
-            ("PURCHASE_QUOTE",         "SA Teklifi",                    "Satın Alma",           "Satın Alma Teklif",        460,  false), // container
+            ("PURCHASE_FULFILLMENT",   "İhtiyaç Karşılama",             "Satın Alma",           "İhtiyaç Karşılama",        455,  true),  // SmartBoard karşılama merkezi
+            ("PURCHASE_QUOTE",         "SA Teklifi",                    "Satın Alma",           "Satın Alma Teklif",        460,  true),  // SmartBoard liste
             ("PURCHASE_QUOTE_NEW",     "Yeni",                          "Satın Alma",           "Satın Alma Teklif",        461,  false), // navigasyon formu
             ("PURCHASE_QUOTE_EDIT",    "Üst Bilgi",                     "Satın Alma",           "Satın Alma Teklif",        462,  true),
             ("PURCHASE_QUOTE_LINES",   "Kalem Bilgisi",                 "Satın Alma",           "Satın Alma Teklif",        463,  true),
-            ("PURCHASE_ORDER",         "SA Siparişi",                   "Satın Alma",           "Satın Alma Sipariş",       470,  false), // container
+            ("PURCHASE_ORDER",         "SA Siparişi",                   "Satın Alma",           "Satın Alma Sipariş",       470,  true),  // SmartBoard liste
             ("PURCHASE_ORDER_NEW",     "Yeni",                          "Satın Alma",           "Satın Alma Sipariş",       471,  false), // navigasyon formu
             ("PURCHASE_ORDER_EDIT",    "Üst Bilgi",                     "Satın Alma",           "Satın Alma Sipariş",       472,  true),
             ("PURCHASE_ORDER_LINES",   "Kalem Bilgisi",                 "Satın Alma",           "Satın Alma Sipariş",       473,  true),
             // 2026-06-12: Satın Alma Talebi — ihtiyac→talep→siparis zinciri ikinci halkasi.
-            ("PURCHASE_DEMAND",        "Satın Alma Talebi",             "Satın Alma",           "Satın Alma Talebi",        480,  false), // container
+            ("PURCHASE_DEMAND",        "Satın Alma Talebi",             "Satın Alma",           "Satın Alma Talebi",        480,  true),  // SmartBoard liste
             ("PURCHASE_DEMAND_NEW",    "Yeni",                          "Satın Alma",           "Satın Alma Talebi",        481,  false), // navigasyon formu
             ("PURCHASE_DEMAND_EDIT",   "Üst Bilgi",                     "Satın Alma",           "Satın Alma Talebi",        482,  true),
             ("PURCHASE_DEMAND_LINES",  "Kalem Bilgisi",                 "Satın Alma",           "Satın Alma Talebi",        483,  true),
@@ -10745,29 +10783,29 @@ END;";
             // PRODUCT_TREES seed'den kaldırıldı — hiçbir controller PermissionScope("PRODUCT_TREES") kullanmıyordu;
             // pasifleştirme EnsurePermissionTablesAsync içindeki migration bloğu tarafından yapılır.
             ("BOM_EDIT",            "Ürün Ağacı",                       "Üretim",               null,                       500,  true),
-            ("WORK_ORDERS",         "İş Emirleri",                      "Üretim",               "İş Emirleri",              510,  false), // container — WORK_ORDER_EDIT edit hedefi
+            ("WORK_ORDERS",         "İş Emirleri",                      "Üretim",               "İş Emirleri",              510,  true),  // SmartBoard liste
             ("WORK_ORDER_EDIT",     "Düzenleme",                        "Üretim",               "İş Emirleri",              515,  true),
             ("SHOP_FLOOR",          "Üretim Terminali",                  "Üretim",               null,                       518,  false),
             ("PRODUCTION_DEFS",     "Üretim Tanımlamaları",              "Üretim",               null,                       575,  false),
-            ("OPERATIONS",          "Operasyonlar",                     "Üretim",               "Operasyonlar",             520,  false), // container
+            ("OPERATIONS",          "Operasyonlar",                     "Üretim",               "Operasyonlar",             520,  true),  // SmartBoard liste
             ("OPERATION_EDIT",      "Düzenleme",                        "Üretim",               "Operasyonlar",             525,  true),
-            ("ROUTINGS",            "Rotalar",                          "Üretim",               "Rotalar",                  530,  false), // container
+            ("ROUTINGS",            "Rotalar",                          "Üretim",               "Rotalar",                  530,  true),  // SmartBoard liste
             ("ROUTING_EDIT",        "Düzenleme",                        "Üretim",               "Rotalar",                  535,  true),
             // ROUTING_OPERATION_EDIT: RoutingTree board config'de opFormCode olarak kullanılır;
             // widget engine bu form kodunu arar — seed'siz kalırsa WidgetMas tanımı yapılamaz.
             // Ayrı SubModule (null) → dropdown'da "Rota Operasyonu" adıyla bağımsız entity.
             ("ROUTING_OPERATION_EDIT", "Rota Operasyonu",              "Üretim",               null,                       537,  true),
-            ("PERSONNEL",           "Personel",                         "Üretim",               "Personel",                 540,  false), // container
+            ("PERSONNEL",           "Personel",                         "Üretim",               "Personel",                 540,  true),  // SmartBoard liste
             ("PERSONNEL_EDIT",      "Düzenleme",                        "Üretim",               "Personel",                 545,  true),
-            ("SHIFTS",              "Vardiyalar",                       "Üretim",               "Vardiyalar",               550,  false), // container
+            ("SHIFTS",              "Vardiyalar",                       "Üretim",               "Vardiyalar",               550,  true),  // SmartBoard liste
             ("SHIFT_EDIT",          "Düzenleme",                        "Üretim",               "Vardiyalar",               555,  true),
-            ("ACTIVITY_REASONS",    "Aktivite Sebepleri",               "Üretim",               "Aktivite Sebepleri",       560,  false), // container
+            ("ACTIVITY_REASONS",    "Aktivite Sebepleri",               "Üretim",               "Aktivite Sebepleri",       560,  true),  // SmartBoard liste
             ("ACTIVITY_REASON_EDIT","Düzenleme",                        "Üretim",               "Aktivite Sebepleri",       565,  true),
 
             // ── Finans ───────────────────────────────────────────────────────
             // 2026-06-13 — CONTACT_EDIT, CONTACTS ile birleştirildi (liste + düzenleme tek FormCode).
             // Eski CONTACT_EDIT seed'i kaldırıldı; mevcut DB'lerde migration pasifleştirir.
-            ("CONTACTS",            "Cari Hesaplar",                    "Finans",               "Cari Hesaplar",            600,  false), // liste + düzenleme
+            ("CONTACTS",            "Cari Hesaplar",                    "Finans",               "Cari Hesaplar",            600,  true),  // SmartBoard liste + düzenleme (birleşik FormCode)
 
             // ── Genel Tanımlamalar ────────────────────────────────────────────
             ("SALES_REPS",          "Satış Temsilcileri",               "Genel Tanımlamalar",   null,                       700,  true),
@@ -10786,6 +10824,9 @@ END;";
             // ASSETS: hem liste/edit ekranı PermissionScope'u hem de widget (Alan Rehberi)
             // hedef form kodu. Edit ekranındaki dinamik alanlar bu kod altında tanımlanır.
             ("ASSETS",              "Varlık Yönetimi",                  "Varlık Yönetimi",      null,                       780,  true),
+
+            // ── Döküman Yönetimi ──────────────────────────────────────────────
+            ("DOC_MANAGEMENT",      "Döküman Yönetimi",                 "Döküman Yönetimi",     null,                       785,  true),
 
             // ── Tasarım ──────────────────────────────────────────────────────
             ("DOC_TEMPLATES",       "Belge Şablonları",                 "Tasarım",              null,                       800,  true),
@@ -13530,6 +13571,12 @@ END;";
                     FOREIGN KEY ([UserId]) REFERENCES [{schemaForSql}].[Users]([Id]);
             END;
 
+            -- LocationId — Personelin varsayilan depo/lokasyonu (Location.Id INT FK).
+            -- Ihti­yac kaydinda otomatik dolar; NULL ise dropdown bos gelir.
+            IF OBJECT_ID(N'[{schemaForSql}].[Personnel]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Personnel]', N'LocationId') IS NULL
+                ALTER TABLE [{schemaForSql}].[Personnel] ADD [LocationId] INT NULL;
+
             -- ===== Faz 3a revize: User'dan PIN/Card/IsProductionOperator alanlarini KALDIR =====
             -- Bu alanlar Personnel'e tasindi. Idempotent rollback.
             IF EXISTS (
@@ -14460,6 +14507,10 @@ END;";
             IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[stock_doc_line]', N'unit_cost') IS NULL
                 ALTER TABLE [{s}].[stock_doc_line] ADD [unit_cost] DECIMAL(18,4) NULL;
+
+            IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[stock_doc_line]', N'lot_no') IS NULL
+                ALTER TABLE [{s}].[stock_doc_line] ADD [lot_no] NVARCHAR(50) NULL;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
@@ -15573,31 +15624,35 @@ END;";
             BEGIN
                 CREATE TABLE [dbo].[Attachment]
                 (
-                    [Id]            INT IDENTITY(1,1) NOT NULL
-                                        CONSTRAINT [PK_Attachment] PRIMARY KEY,
-                    [EntityType]    NVARCHAR(50)     NOT NULL,
-                    [EntityId]      NVARCHAR(50)     NOT NULL,
-                    [FileName]      NVARCHAR(255)    NOT NULL,
-                    [ContentType]   NVARCHAR(100)    NULL,
-                    [FileSize]      BIGINT           NOT NULL CONSTRAINT [DF_Attachment_FileSize]  DEFAULT 0,
-                    [Description]   NVARCHAR(500)    NULL,
-                    [BinaryContent] VARBINARY(MAX)   NULL,
-                    [IsActive]      BIT              NOT NULL CONSTRAINT [DF_Attachment_IsActive]  DEFAULT 1,
-                    [CreatedById]     INT    NULL,
-                    [Created]       DATETIME         NOT NULL CONSTRAINT [DF_Attachment_Created]   DEFAULT GETUTCDATE(),
-                    [UpdatedById]     INT    NULL,
-                    [Updated]       DATETIME         NULL
+                    [Id]             INT IDENTITY(1,1) NOT NULL
+                                         CONSTRAINT [PK_Attachment] PRIMARY KEY,
+                    [FormId]         INT              NOT NULL,
+                    [RefId]          INT              NOT NULL,
+                    [Title]          NVARCHAR(200)    NULL,
+                    [FileName]       NVARCHAR(255)    NOT NULL,
+                    [ContentType]    NVARCHAR(100)    NULL,
+                    [FileSize]       BIGINT           NOT NULL CONSTRAINT [DF_Attachment_FileSize]       DEFAULT 0,
+                    [Description]    NVARCHAR(500)    NULL,
+                    [RevisionNumber] SMALLINT         NOT NULL CONSTRAINT [DF_Attachment_RevisionNumber] DEFAULT 1,
+                    [OriginalId]     INT              NULL,
+                    [BinaryContent]  VARBINARY(MAX)   NULL,
+                    [IsActive]       BIT              NOT NULL CONSTRAINT [DF_Attachment_IsActive]       DEFAULT 1,
+                    [CreatedById]    INT              NULL,
+                    [Created]        DATETIME         NOT NULL CONSTRAINT [DF_Attachment_Created]        DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]    INT              NULL,
+                    [Updated]        DATETIME         NULL
                 );
-                CREATE INDEX [IX_Attachment_EntityType_EntityId]
-                    ON [dbo].[Attachment] ([EntityType], [EntityId]);
+                CREATE INDEX [IX_Attachment_FormId_RefId]
+                    ON [dbo].[Attachment] ([FormId], [RefId]);
             END;
             """;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 
-        // Migration: mevcut tablo GUID PK'ya sahipse INT IDENTITY'ye tasir
+        // Komut 1: Yapısal değişiklikler — column ekle/kaldır/yeniden adlandır.
+        // Veri referansı yok → parse-time column check yok.
         await using var migCmd = connection.CreateCommand();
         migCmd.CommandText = """
-            -- Mevcut tablo GUID PK'ya sahipse INT'e tasiyiz
+            -- Eski GUID PK → INT IDENTITY
             IF EXISTS (
                 SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment'
@@ -15613,44 +15668,82 @@ END;";
                     CONSTRAINT [PK_Attachment] PRIMARY KEY;
             END;
 
-            -- StoredName kolonu artik kullanilmiyor — varsa kaldir
-            IF EXISTS (
-                SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'StoredName'
-            )
+            -- StoredName kaldır
+            IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'StoredName')
                 ALTER TABLE [dbo].[Attachment] DROP COLUMN [StoredName];
 
-            -- CreatedById migration: NVARCHAR → INT
-            IF EXISTS (
-                SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'CreatedBy'
-            )
+            -- CreatedBy → CreatedById
+            IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'CreatedBy')
             BEGIN
                 ALTER TABLE [dbo].[Attachment] DROP COLUMN [CreatedBy];
                 ALTER TABLE [dbo].[Attachment] ADD [CreatedById] INT NULL;
             END
-            ELSE IF NOT EXISTS (
-                SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'CreatedById'
-            )
+            ELSE IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'CreatedById')
                 ALTER TABLE [dbo].[Attachment] ADD [CreatedById] INT NULL;
 
-            -- UpdatedById migration: NVARCHAR → INT
-            IF EXISTS (
-                SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'UpdatedBy'
-            )
+            -- UpdatedBy → UpdatedById
+            IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'UpdatedBy')
             BEGIN
                 ALTER TABLE [dbo].[Attachment] DROP COLUMN [UpdatedBy];
                 ALTER TABLE [dbo].[Attachment] ADD [UpdatedById] INT NULL;
             END
-            ELSE IF NOT EXISTS (
-                SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'UpdatedById'
-            )
+            ELSE IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'UpdatedById')
                 ALTER TABLE [dbo].[Attachment] ADD [UpdatedById] INT NULL;
+
+            -- FormId + RefId + Title + RevisionNumber + OriginalId ekle (sonraki batch data migrate eder)
+            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'FormId')
+                ALTER TABLE [dbo].[Attachment] ADD [FormId] INT NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'RefId')
+                ALTER TABLE [dbo].[Attachment] ADD [RefId] INT NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'Title')
+                ALTER TABLE [dbo].[Attachment] ADD [Title] NVARCHAR(200) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'RevisionNumber')
+                ALTER TABLE [dbo].[Attachment] ADD [RevisionNumber] SMALLINT NOT NULL
+                    CONSTRAINT [DF_Attachment_RevisionNumber] DEFAULT 1;
+
+            IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'OriginalId')
+                ALTER TABLE [dbo].[Attachment] ADD [OriginalId] INT NULL;
             """;
         await migCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Komut 2: Veri migration + eski kolonları temizle.
+        // EntityType/EntityId yeni tablolarda hiç olmayabilir → EXEC ile dynamic SQL, parse-time safe.
+        await using var migCmd2 = connection.CreateCommand();
+        migCmd2.CommandText = """
+            IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'EntityType')
+            BEGIN
+                EXEC(N'UPDATE [dbo].[Attachment] SET [FormId] = 1 WHERE [EntityType] = ''DocMgr''          AND [FormId] IS NULL;');
+                EXEC(N'UPDATE [dbo].[Attachment] SET [FormId] = 2 WHERE [EntityType] = ''Asset''           AND [FormId] IS NULL;');
+                EXEC(N'UPDATE [dbo].[Attachment] SET [FormId] = 3 WHERE [EntityType] = ''AssetImage''      AND [FormId] IS NULL;');
+                EXEC(N'UPDATE [dbo].[Attachment] SET [FormId] = 4 WHERE [EntityType] = ''AssetAssignment'' AND [FormId] IS NULL;');
+                EXEC(N'UPDATE [dbo].[Attachment] SET [IsActive] = 0 WHERE [EntityType] = ''Note'';');
+                EXEC(N'UPDATE [dbo].[Attachment] SET [FormId] = 1 WHERE [FormId] IS NULL AND [IsActive] = 1;');
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Attachment_EntityType_EntityId' AND object_id = OBJECT_ID(N'[dbo].[Attachment]'))
+                    DROP INDEX [IX_Attachment_EntityType_EntityId] ON [dbo].[Attachment];
+                ALTER TABLE [dbo].[Attachment] DROP COLUMN [EntityType];
+            END;
+
+            IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Attachment' AND COLUMN_NAME = 'EntityId')
+            BEGIN
+                EXEC(N'UPDATE [dbo].[Attachment] SET [RefId] = TRY_CAST([EntityId] AS INT) WHERE [RefId] IS NULL AND [IsActive] = 1 AND ISNUMERIC([EntityId]) = 1;');
+                EXEC(N'UPDATE [dbo].[Attachment] SET [RefId] = 0 WHERE [RefId] IS NULL AND [IsActive] = 1;');
+                ALTER TABLE [dbo].[Attachment] DROP COLUMN [EntityId];
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Attachment_FormId_RefId' AND object_id = OBJECT_ID(N'[dbo].[Attachment]'))
+                CREATE INDEX [IX_Attachment_FormId_RefId] ON [dbo].[Attachment] ([FormId], [RefId]);
+
+            -- 2026-06-27: Category + Tags kolonları (Döküman Yönetimi sınıflandırma)
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Attachment]') AND name = N'Category')
+                ALTER TABLE [dbo].[Attachment] ADD [Category] NVARCHAR(50) NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Attachment]') AND name = N'Tags')
+                ALTER TABLE [dbo].[Attachment] ADD [Tags] NVARCHAR(500) NULL;
+            """;
+        await migCmd2.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

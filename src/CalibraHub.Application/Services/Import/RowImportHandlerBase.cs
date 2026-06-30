@@ -29,8 +29,9 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
         IReadOnlyDictionary<string, string?> row, string action, int? existingId,
         int? userId, HashSet<string> usedCodes, CancellationToken ct);
 
-    public async Task<ImportPreviewResultDto> PreviewAsync(ImportRowSet set, CancellationToken ct)
+    public virtual async Task<ImportPreviewResultDto> PreviewAsync(ImportRowSet set, CancellationToken ct)
     {
+        await PreloadAsync(ct);
         var (keys, labels) = DisplayCols(set.MappedKeys);
         int total = 0, valid = 0, error = 0, ins = 0, upd = 0;
         var detail = new List<ImportPreviewRowDto>();
@@ -59,6 +60,7 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
 
     public async Task<ImportCommitResultDto> CommitAsync(ImportRowSet set, int? userId, CancellationToken ct)
     {
+        await PreloadAsync(ct);
         int inserted = 0, updated = 0, failed = 0, rowNo = 0;
         var results = new List<ImportCommitRowDto>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -80,6 +82,14 @@ public abstract class RowImportHandlerBase : IImportTargetHandler
         }
         return new ImportCommitResultDto(true, null, inserted, updated, failed, results);
     }
+
+    /// <summary>Varsayılan: dinamik izinli değer yok. Lookup'lu handler (ContactPerson) override eder.</summary>
+    public virtual Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetDynamicAllowedValuesAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(
+            new Dictionary<string, IReadOnlyList<string>>());
+
+    /// <summary>Dinamik durum yükleme (varsayılan no-op). Widget'lı handler override eder.</summary>
+    public virtual Task PreloadAsync(CancellationToken ct) => Task.CompletedTask;
 
     // ── Ortak yardımcılar ────────────────────────────────────────────────
     protected (IReadOnlyList<string> Keys, IReadOnlyList<string> Labels) DisplayCols(IReadOnlyList<string> mappedKeys)

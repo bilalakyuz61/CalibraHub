@@ -1,0 +1,144 @@
+@model CalibraHub.Domain.Entities.Attachment
+@{
+    var antiforgery = ViewContext.HttpContext.RequestServices
+        .GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
+    var tokens = antiforgery.GetAndStoreTokens(ViewContext.HttpContext);
+}
+<style>
+.dm-rv { font-family:inherit; }
+.dm-rv .dm-rv-info-box {
+    background:var(--app-surface-2,#f8fafc); border:1px solid var(--app-border,#e2e8f0);
+    border-radius:8px; padding:12px 14px; margin-bottom:16px;
+}
+.dm-rv .dm-rv-info-box strong { color:var(--bs-body-color,#0f172a); font-size:0.88rem; }
+.dm-rv .dm-rv-info-box span { font-size:0.78rem; color:var(--bs-secondary-color,#6c757d); }
+.dm-rv .dm-rv-badge {
+    display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.72rem;
+    font-weight:700; background:rgba(245,158,11,.15); color:#b45309; margin-left:8px;
+}
+.dm-rv .dm-rv-label { display:block; font-size:0.78rem; font-weight:600; color:var(--bs-secondary-color,#6c757d); margin-bottom:4px; }
+.dm-rv .dm-rv-drop {
+    border:2px dashed var(--app-border,#e2e8f0); border-radius:10px; padding:32px 20px;
+    text-align:center; cursor:pointer; transition:border-color .15s,background .15s;
+    margin-bottom:14px; position:relative;
+}
+.dm-rv .dm-rv-drop:hover, .dm-rv .dm-rv-drop.dragover {
+    border-color:#6366f1; background:rgba(99,102,241,.04);
+}
+.dm-rv .dm-rv-drop input[type=file] {
+    position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+}
+.dm-rv .dm-rv-drop-icon { font-size:2rem; margin-bottom:8px; color:#94a3b8; }
+.dm-rv .dm-rv-drop-text { font-size:0.88rem; color:var(--bs-secondary-color,#6c757d); }
+.dm-rv .dm-rv-selected { font-size:0.84rem; font-weight:600; color:#6366f1; margin-top:6px; }
+.dm-rv .dm-rv-input {
+    width:100%; padding:7px 10px; border-radius:6px; font-size:0.88rem;
+    border:1px solid var(--app-border,#e2e8f0); background:var(--app-input-bg,#fff);
+    color:var(--bs-body-color,#0f172a); outline:none; box-sizing:border-box;
+    transition:border-color .15s; resize:vertical;
+}
+.dm-rv .dm-rv-input:focus { border-color:#6366f1; box-shadow:0 0 0 2px rgba(99,102,241,.12); }
+.dm-rv .dm-rv-row { margin-bottom:14px; }
+.dm-rv .dm-rv-actions { display:flex; gap:8px; justify-content:flex-end; }
+.dm-rv .dm-rv-btn {
+    padding:7px 18px; border-radius:6px; font-size:0.88rem; font-weight:600;
+    border:none; cursor:pointer; transition:background .15s;
+}
+.dm-rv .dm-rv-btn--primary { background:#7c3aed; color:#fff; }
+.dm-rv .dm-rv-btn--primary:hover { background:#6d28d9; }
+.dm-rv .dm-rv-btn--primary:disabled { opacity:.5; cursor:default; }
+.dm-rv .dm-rv-btn--secondary { background:var(--app-surface-2,#f1f5f9); color:var(--bs-body-color,#0f172a); }
+.dm-rv .dm-rv-btn--secondary:hover { background:var(--app-border,#e2e8f0); }
+.dm-rv .dm-rv-status { font-size:0.8rem; margin-top:8px; text-align:center; min-height:18px; }
+.dm-rv .dm-rv-status--ok  { color:#22c55e; }
+.dm-rv .dm-rv-status--err { color:#ef4444; }
+body.app-theme-dark .dm-rv .dm-rv-info-box { background:#1e293b; border-color:#334155; }
+body.app-theme-dark .dm-rv .dm-rv-info-box strong { color:#e2e8f0; }
+body.app-theme-dark .dm-rv .dm-rv-input { background:#1e293b; border-color:#334155; color:#e2e8f0; }
+body.app-theme-dark .dm-rv .dm-rv-btn--secondary { background:#1e293b; color:#e2e8f0; }
+</style>
+
+<div class="dm-rv">
+    <div class="dm-rv-info-box">
+        <strong>@(string.IsNullOrEmpty(Model.Title) ? Model.FileName : Model.Title)</strong>
+        <span class="dm-rv-badge">v@Model.RevisionNumber mevcut</span>
+        <br><span>@Model.FileName &bull; @((Model.FileSize / 1024.0).ToString("F1")) KB</span>
+    </div>
+
+    <div class="dm-rv-row">
+        <label class="dm-rv-label">Yeni Dosya Seçin *</label>
+        <div class="dm-rv-drop" id="dmrv-drop">
+            <div class="dm-rv-drop-icon">↑</div>
+            <div class="dm-rv-drop-text">Dosyayı buraya sürükleyin veya tıklayın</div>
+            <div class="dm-rv-selected" id="dmrv-filename">Dosya seçilmedi</div>
+            <input type="file" id="dmrv-file" onchange="dmrvFileSelected(this)">
+        </div>
+    </div>
+    <div class="dm-rv-row">
+        <label class="dm-rv-label">Revizyon Notu</label>
+        <textarea id="dmrv-desc" class="dm-rv-input" rows="2" placeholder="Bu revizyonda yapılan değişiklikler…"></textarea>
+    </div>
+    <div class="dm-rv-actions">
+        <button class="dm-rv-btn dm-rv-btn--secondary" onclick="window._dmepCancel && window._dmepCancel()">Vazgeç</button>
+        <button id="dmrv-save-btn" class="dm-rv-btn dm-rv-btn--primary" onclick="dmrvSave(@Model.Id)" disabled>Revize Et → v@(Model.RevisionNumber + 1)</button>
+    </div>
+    <div id="dmrv-status" class="dm-rv-status"></div>
+</div>
+
+<script>
+function dmrvFileSelected(input) {
+    var btn = document.getElementById('dmrv-save-btn');
+    var fn  = document.getElementById('dmrv-filename');
+    if (input.files && input.files.length > 0) {
+        fn.textContent = input.files[0].name + ' (' + (input.files[0].size / 1024).toFixed(1) + ' KB)';
+        btn.disabled = false;
+    } else {
+        fn.textContent = 'Dosya seçilmedi';
+        btn.disabled = true;
+    }
+}
+(function() {
+    var drop = document.getElementById('dmrv-drop');
+    drop.addEventListener('dragover', function(e) { e.preventDefault(); drop.classList.add('dragover'); });
+    drop.addEventListener('dragleave', function() { drop.classList.remove('dragover'); });
+    drop.addEventListener('drop', function(e) {
+        e.preventDefault(); drop.classList.remove('dragover');
+        var fi = document.getElementById('dmrv-file');
+        fi.files = e.dataTransfer.files;
+        dmrvFileSelected(fi);
+    });
+})();
+function dmrvSave(originalId) {
+    var fileInput = document.getElementById('dmrv-file');
+    if (!fileInput.files || fileInput.files.length === 0) return;
+    var btn = document.getElementById('dmrv-save-btn');
+    btn.disabled = true;
+    var form = new FormData();
+    form.append('originalId',  originalId);
+    form.append('file',        fileInput.files[0]);
+    form.append('description', document.getElementById('dmrv-desc').value);
+    form.append('__RequestVerificationToken', '@tokens.RequestToken');
+    var statusEl = document.getElementById('dmrv-status');
+    fetch('/DocumentManagement/Revise', { method:'POST', body:form, credentials:'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+            if (d.ok) {
+                statusEl.className = 'dm-rv-status dm-rv-status--ok';
+                statusEl.textContent = 'Revizyon kaydedildi.';
+                setTimeout(function() {
+                    window.dispatchEvent(new CustomEvent('close-sc-modal', { detail: { refresh: true } }));
+                    if (window._dmBoardRefresh) window._dmBoardRefresh();
+                }, 800);
+            } else {
+                btn.disabled = false;
+                statusEl.className = 'dm-rv-status dm-rv-status--err';
+                statusEl.textContent = d.error || 'Hata oluştu.';
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            statusEl.className = 'dm-rv-status dm-rv-status--err';
+            statusEl.textContent = 'Bağlantı hatası.';
+        });
+}
+</script>

@@ -11,4 +11,7 @@ public interface IPersonnelService
     Task<PersonnelDto?> GetByPinOrCardAsync(string? pinCode, string? cardNo, CancellationToken ct);
     /// <summary>2026-05-22: Sicil + PIN ikilisi ile auth (Code zorunlu — brute-force koruması).</summary>
     Task<PersonnelDto?> GetByPinOrCardAsync(string? personnelCode, string? pinCode, string? cardNo, CancellationToken ct);
+
+    /// <summary>Giriş yapan sistem kullanıcısına bağlı personel kartını döner.</summary>
+    Task<PersonnelDto?> GetByUserIdAsync(int userId, CancellationToken ct);
 }

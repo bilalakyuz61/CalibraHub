@@ -16,7 +16,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors,
+  DndContext, closestCenter, pointerWithin, PointerSensor, TouchSensor, useSensor, useSensors,
 } from '@dnd-kit/core'
 import {
   arrayMove, SortableContext, verticalListSortingStrategy, useSortable,
@@ -36,21 +36,28 @@ function ActiveRow(props) {
 
   var sortable = useSortable({ id: widget.id })
   var style = {
-    transform: CSS.Transform.toString(sortable.transform),
-    transition: sortable.transition,
-    zIndex: sortable.isDragging ? 40 : 1,
+    transform: sortable.transform
+      ? CSS.Transform.toString({ ...sortable.transform, x: 0 })
+      : undefined,
+    // Sürüklenirken: transition yok (imleci anında takip etsin).
+    // Bırakıldıktan sonra: hızlı ease-out ile yerine otur (dnd-kit default'tan daha hızlı).
+    transition: sortable.isDragging ? 'none' : 'transform 180ms cubic-bezier(0.2, 0, 0, 1)',
+    zIndex: sortable.isDragging ? 40 : undefined,
+    // GPU katmanına al: titreme ve kayma hissini önler (layout recalc'ı engeller).
+    willChange: sortable.isDragging ? 'transform' : undefined,
+    boxShadow: sortable.isDragging ? '0 8px 24px rgba(0,0,0,0.35)' : undefined,
   }
 
   return (
-    <motion.div
+    <div
       ref={sortable.setNodeRef}
       style={style}
       {...sortable.attributes}
-      layout
-      className={'flex items-center gap-2 px-3 py-2.5 rounded-xl transition-colors ' +
+      className={'flex items-center gap-2 px-3 py-2.5 rounded-xl ' +
+        'border transition-all duration-[140ms] ' +
         (sortable.isDragging
-          ? 'bg-slate-200 dark:bg-white/10 shadow-lg'
-          : 'bg-slate-100 dark:bg-white/[0.03] hover:bg-slate-200/60 dark:hover:bg-white/[0.06]')
+          ? 'border-indigo-400/50 bg-[#16223c] dark:bg-[#16223c]'
+          : 'border-transparent bg-slate-100 dark:bg-white/[0.03] hover:bg-slate-200/60 dark:hover:bg-white/[0.06] hover:border-slate-200 dark:hover:border-white/[0.06]')
       }
     >
       <button
@@ -85,7 +92,7 @@ function ActiveRow(props) {
       >
         <X size={14} />
       </button>
-    </motion.div>
+    </div>
   )
 }
 
@@ -173,8 +180,8 @@ export default function SmartBoardConfigPanel(props) {
   }, [isOpen, boardKey, masterWidgets])
 
   var sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } })
   )
 
   // Aktif widget'lar — master listeden visibleIds + order uygulanmis
@@ -361,7 +368,14 @@ export default function SmartBoardConfigPanel(props) {
                         : 'Arama ile esleşen aktif widget yok.'}
                     </div>
                   ) : (
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={function(args) {
+                        var within = pointerWithin(args)
+                        return within.length ? within : closestCenter(args)
+                      }}
+                      onDragEnd={handleDragEnd}
+                    >
                       <SortableContext
                         items={activeWidgets.map(function(w) { return w.id })}
                         strategy={verticalListSortingStrategy}

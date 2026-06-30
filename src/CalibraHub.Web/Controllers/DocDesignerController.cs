@@ -108,7 +108,7 @@ public sealed class DocDesignerController : Controller
         }
         catch (Exception ex)
         {
-            var msg = System.Net.WebUtility.HtmlEncode(ex.Message);
+            var msg = System.Net.WebUtility.HtmlEncode("İşlem sırasında bir hata oluştu.");
             var errorHtml = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Önizleme Hatası</title>"
                           + "<style>body{font-family:system-ui,sans-serif;padding:40px;color:#dc2626;background:#fef2f2;}"
                           + "h1{font-size:18px;}pre{white-space:pre-wrap;background:#fff;padding:14px;border-radius:6px;border:1px solid #fca5a5;}</style>"
@@ -128,7 +128,7 @@ public sealed class DocDesignerController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -143,7 +143,7 @@ public sealed class DocDesignerController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 

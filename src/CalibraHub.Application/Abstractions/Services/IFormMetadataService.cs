@@ -28,4 +28,11 @@ public interface IFormMetadataService
     /// View yoksa veya kayit yoksa null doner.
     /// </summary>
     Task<IntegrationSampleRecordDto?> GetSampleRecordAsync(string formCode, string? recordId, CancellationToken ct);
+
+    /// <summary>
+    /// Kod bazlı cascade lookup: v_Flat_{formCode} view'inde fieldName = fieldValue olan
+    /// kaydın Id'sini döner. CascadeByValue=true olan mapping'lerde kod → entity ID çevirimi.
+    /// View veya kayıt bulunamazsa null döner.
+    /// </summary>
+    Task<string?> FindRecordIdByFieldValueAsync(string formCode, string fieldName, string fieldValue, CancellationToken ct);
 }

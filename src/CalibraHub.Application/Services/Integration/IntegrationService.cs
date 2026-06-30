@@ -131,7 +131,8 @@ public sealed class IntegrationService : IIntegrationService
                 LookupFiltersJson: m.LookupFiltersJson,
                 LookupReturnColumn: m.LookupReturnColumn,
                 LookupParam:        m.LookupParam,
-                CascadeToIntegrationId: m.CascadeToIntegrationId)).ToList(),
+                CascadeToIntegrationId: m.CascadeToIntegrationId,
+                CascadeByValue:     m.CascadeByValue)).ToList(),
             Triggers: integ.Triggers.Select(t => new IntegrationTriggerDto(
                 Id: t.Id,
                 TriggerType: t.TriggerType,
@@ -152,7 +153,8 @@ public sealed class IntegrationService : IIntegrationService
             PostProcedureName:       integ.PostProcedureName,
             PostProcedureParamsJson: integ.PostProcedureParamsJson,
             SourceFilterJson:        integ.SourceFilterJson,
-            AllowAsCascadeTarget:    integ.AllowAsCascadeTarget);
+            AllowAsCascadeTarget:    integ.AllowAsCascadeTarget,
+            SourceCodeColumn:        integ.SourceCodeColumn);
     }
 
     public async Task<int> SaveAsync(SaveIntegrationRequest request, int? currentUserId, CancellationToken ct)
@@ -180,6 +182,7 @@ public sealed class IntegrationService : IIntegrationService
                 PostProcedureParamsJson = string.IsNullOrWhiteSpace(request.PostProcedureParamsJson) ? null : request.PostProcedureParamsJson,
                 SourceFilterJson        = string.IsNullOrWhiteSpace(request.SourceFilterJson) ? null : request.SourceFilterJson,
                 AllowAsCascadeTarget    = request.AllowAsCascadeTarget,
+                SourceCodeColumn        = string.IsNullOrWhiteSpace(request.SourceCodeColumn) ? null : request.SourceCodeColumn.Trim(),
             };
             integrationId = await _repo.AddAsync(entity, ct);
         }
@@ -205,6 +208,7 @@ public sealed class IntegrationService : IIntegrationService
             existing.PostProcedureParamsJson = string.IsNullOrWhiteSpace(request.PostProcedureParamsJson) ? null : request.PostProcedureParamsJson;
             existing.SourceFilterJson        = string.IsNullOrWhiteSpace(request.SourceFilterJson) ? null : request.SourceFilterJson;
             existing.AllowAsCascadeTarget    = request.AllowAsCascadeTarget;
+            existing.SourceCodeColumn        = string.IsNullOrWhiteSpace(request.SourceCodeColumn) ? null : request.SourceCodeColumn.Trim();
             await _repo.UpdateAsync(existing, ct);
             integrationId = existing.Id;
         }
@@ -230,6 +234,7 @@ public sealed class IntegrationService : IIntegrationService
             LookupReturnColumn = m.LookupReturnColumn,
             LookupParam        = m.LookupParam,
             CascadeToIntegrationId = m.CascadeToIntegrationId,
+            CascadeByValue         = m.CascadeByValue,
         }).ToList();
         await _repo.ReplaceMappingsAsync(integrationId, mappings, ct);
 
@@ -376,6 +381,7 @@ public sealed class IntegrationService : IIntegrationService
                 LookupReturnColumn = m.LookupReturnColumn,
                 LookupParam        = m.LookupParam,
                 CascadeToIntegrationId = m.CascadeToIntegrationId,
+                CascadeByValue         = m.CascadeByValue,
             }).ToList(),
             Endpoint = endpoint,
         };

@@ -50,6 +50,8 @@ public interface ILogisticsConfigurationRepository
     Task SaveItemUnitsAsync(int itemId, IReadOnlyCollection<ItemUnit> conversions, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<ItemLocation>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken);
     Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<ItemLocation> locations, CancellationToken cancellationToken);
+    Task NullifyItemLocationsByLocationIdAsync(int locationId, CancellationToken cancellationToken);
+    Task NullifyLocationHistoricalFkRefsAsync(int locationId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken);
     Task<int> UpsertLocationTypeAsync(LocationType type, CancellationToken cancellationToken);
     Task DeleteLocationTypeAsync(int id, CancellationToken cancellationToken);

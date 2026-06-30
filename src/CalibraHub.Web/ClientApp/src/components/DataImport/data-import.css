@@ -131,6 +131,23 @@ body.app-theme-dark .di-root {
   background: var(--di-chip); color: var(--di-chip-text);
 }
 
+/* ── Şablon bilgisi: satır düzeni (etiket solda, kontrol sağda) ────────── */
+.di-rows { display: flex; flex-direction: column; }
+.di-row {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--di-border);
+}
+.di-row:last-child { border-bottom: none; }
+.di-row__label {
+  flex: 0 0 190px; width: 190px;
+  font-size: 12.5px; font-weight: 500; color: var(--di-text);
+}
+.di-row__control { flex: 1 1 auto; min-width: 0; max-width: 480px; }
+.di-switchline { display: flex; align-items: center; gap: 11px; min-height: 34px; }
+.di-switch__text { font-size: 12.5px; color: var(--di-muted); }
+.di-row__static { display: inline-flex; align-items: center; font-size: 12.5px; color: var(--di-muted); }
+
 /* ── Dosya seçici ─────────────────────────────────────────────────────── */
 .di-drop {
   border: 1.5px dashed var(--di-border); border-radius: 10px;
@@ -139,6 +156,24 @@ body.app-theme-dark .di-root {
 }
 .di-drop:hover { border-color: var(--di-primary); color: var(--di-text); }
 .di-drop__file { color: var(--di-text); font-weight: 600; }
+
+/* Dosya durum çubuğu + sürükle-bırak */
+.di-file-status {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border-radius: 9px; font-size: 12.5px;
+  background: var(--di-surface-2); border: 1px dashed var(--di-border); color: var(--di-muted);
+  margin-bottom: 12px;
+}
+.di-file-status--ok { border-style: solid; border-color: var(--di-ok); color: var(--di-text); }
+.di-file-status strong { color: var(--di-text); }
+.di-dropzone { position: relative; }
+.di-dropzone-overlay {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border: 2px dashed var(--di-primary); border-radius: 12px;
+  background: var(--di-chip); color: var(--di-primary);
+  font-size: 15px; font-weight: 600; pointer-events: none;
+}
 
 /* ── Eşleme tablosu ───────────────────────────────────────────────────── */
 .di-map { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -151,6 +186,25 @@ body.app-theme-dark .di-root {
 .di-req { color: var(--di-danger); margin-left: 3px; }
 .di-map__hint { color: var(--di-muted); font-size: 11px; }
 .di-map .di-input, .di-map .di-select { padding: 6px 8px; font-size: 12.5px; }
+
+/* Kaynak kolon seçici — özel açılır liste (native datalist yerine, kurumsal) */
+.di-combo { position: relative; }
+.di-combo-input { padding-right: 26px !important; cursor: pointer; }
+.di-combo-caret { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--di-muted); pointer-events: none; }
+.di-combo-menu {
+  position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 3px);
+  max-height: 240px; overflow-y: auto;
+  background: var(--di-surface); border: 1px solid var(--di-border); border-radius: 9px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.22); padding: 4px;
+}
+.di-combo-opt {
+  padding: 7px 9px; border-radius: 6px; cursor: pointer; font-size: 12.5px;
+  color: var(--di-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.di-combo-opt:hover { background: var(--di-surface-2); }
+.di-combo-opt--sel { background: var(--di-chip); color: var(--di-chip-text); font-weight: 500; }
+.di-combo-opt--clear { color: var(--di-muted); border-top: 1px solid var(--di-border); margin-top: 4px; }
+.di-combo-empty { padding: 10px 9px; color: var(--di-muted); font-size: 12px; text-align: center; }
 
 /* ── Butonlar ─────────────────────────────────────────────────────────── */
 .di-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -195,6 +249,28 @@ body.app-theme-dark .di-root {
 .di-tag--update { background: rgba(37,99,235,.14); color: var(--di-update); }
 .di-tag--error  { background: rgba(220,38,38,.14); color: var(--di-danger); }
 .di-rowerr { color: var(--di-danger); font-size: 11px; }
+
+/* Önizleme: düzenlenebilir hücre (inline düzeltme) + hatalı satır vurgusu */
+.di-cell-input {
+  width: 100%; min-width: 90px; box-sizing: border-box;
+  padding: 3px 6px; border: 1px solid transparent; border-radius: 5px;
+  background: transparent; color: var(--di-text); font-size: 12px; font-family: inherit;
+}
+.di-cell-input:hover { border-color: var(--di-border); }
+.di-cell-input:focus { outline: none; border-color: var(--di-primary); background: var(--di-surface); }
+.di-preview tr.di-row-err td { background: rgba(220,38,38,.07); }
+.di-preview tr.di-row-err .di-cell-input:focus { border-color: var(--di-danger); background: var(--di-surface); }
+
+/* Satır hariç tutma (iptal) */
+.di-row-no { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.di-row-x {
+  border: none; background: transparent; color: var(--di-muted); cursor: pointer;
+  padding: 2px; border-radius: 5px; display: inline-grid; place-items: center; line-height: 0;
+}
+.di-row-x:hover { color: var(--di-danger); background: var(--di-surface-2); }
+.di-preview tr.di-row-excluded td:not(.di-row-no) { opacity: .42; }
+.di-preview tr.di-row-excluded .di-row-x,
+.di-preview tr.di-row-excluded .di-row-x:hover { color: var(--di-ok); }
 
 /* ── Uyarı / hata satırı ──────────────────────────────────────────────── */
 .di-alert {

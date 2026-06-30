@@ -11,3 +11,9 @@ public sealed class StockDocEditViewModel
     public string DocType { get; init; } = "";
     public string LineGridConfigJson { get; init; } = "null";
 }
+
+public sealed class InventoryEditViewModel
+{
+    public int? DocId { get; init; }
+    public string LineGridConfigJson { get; init; } = "null";
+}

@@ -343,7 +343,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -358,7 +358,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -373,7 +373,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -388,7 +388,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -403,7 +403,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -566,7 +566,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -581,7 +581,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -833,7 +833,7 @@ public sealed class ProductionController : Controller
                 widgets.Add(new
                 {
                     id = "w_item", type = "data", dataType = "text",
-                    label = "Mamul", value = "Şablon", detail = "Item bağı yok",
+                    label = "Mamul", value = "�?ablon", detail = "Item bağı yok",
                     color = "slate"
                 });
             }
@@ -952,7 +952,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -967,7 +967,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -992,7 +992,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1008,7 +1008,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1031,7 +1031,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1046,7 +1046,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1150,6 +1150,15 @@ public sealed class ProductionController : Controller
             dto = await _personnel.GetAsync(id.Value, ct);
             if (dto is null) return NotFound();
         }
+
+        var locs = await _logisticsConfig.GetLocationsAsync(ct);
+        var locParentIds = locs.Where(l => l.ParentId.HasValue).Select(l => l.ParentId!.Value).ToHashSet();
+        ViewData["PersonnelLocationList"] = locs
+            .Where(l => l.IsActive && !locParentIds.Contains(l.Id))
+            .OrderBy(l => l.LocationName ?? l.LocationCode)
+            .Select(l => new { l.Id, Name = l.LocationName ?? l.LocationCode })
+            .ToList();
+
         return View(dto);
     }
 
@@ -1179,7 +1188,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1194,7 +1203,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1230,7 +1239,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1245,7 +1254,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1264,7 +1273,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1282,7 +1291,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1303,11 +1312,9 @@ public sealed class ProductionController : Controller
     // POST /Production/ShopFloor/PartialComplete              → kısmi miktar gir
     // POST /Production/ShopFloor/Complete                     → operasyonu bitir
     [HttpGet]
-    [AllowAnonymous]
     public IActionResult ShopFloor() => View();
 
     [HttpGet("Production/ShopFloor/Locations")]
-    [AllowAnonymous]
     public async Task<IActionResult> ShopFloorLocations(CancellationToken ct)
     {
         var locations = await _logisticsConfig.GetLocationsAsync(ct);
@@ -1335,7 +1342,6 @@ public sealed class ProductionController : Controller
     }
 
     [HttpGet("Production/ShopFloor/Machines")]
-    [AllowAnonymous]
     public async Task<IActionResult> ShopFloorMachines(int locationId, CancellationToken ct)
     {
         var allMachines = await _logisticsConfig.GetMachinesAsync(ct);
@@ -1365,7 +1371,6 @@ public sealed class ProductionController : Controller
     }
 
     [HttpGet("Production/ShopFloor/Queue")]
-    [AllowAnonymous]
     public async Task<IActionResult> ShopFloorQueue(int machineId, CancellationToken ct)
     {
         var queue = await _workOrderOperations.GetQueueByMachineAsync(machineId, ct);
@@ -1375,7 +1380,6 @@ public sealed class ProductionController : Controller
     public sealed record ShopFloorStartRequest(int WorkOrderOperationId, int OperatorPersonnelId);
 
     [HttpPost("Production/ShopFloor/Start")]
-    [AllowAnonymous]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ShopFloorStart([FromBody] ShopFloorStartRequest req, CancellationToken ct)
     {
@@ -1385,13 +1389,12 @@ public sealed class ProductionController : Controller
                 new StartOperationRequest(req.WorkOrderOperationId, req.OperatorPersonnelId), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     public sealed record ShopFloorPartialRequest(int WorkOrderOperationId, int OperatorPersonnelId, decimal Quantity, decimal? ScrapQuantity);
 
     [HttpPost("Production/ShopFloor/PartialComplete")]
-    [AllowAnonymous]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ShopFloorPartialComplete([FromBody] ShopFloorPartialRequest req, CancellationToken ct)
     {
@@ -1401,13 +1404,12 @@ public sealed class ProductionController : Controller
                 new PartialCompleteOperationRequest(req.WorkOrderOperationId, req.OperatorPersonnelId, req.Quantity, req.ScrapQuantity), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     public sealed record ShopFloorCompleteRequest(int WorkOrderOperationId, int OperatorPersonnelId, decimal? FinalQuantity);
 
     [HttpPost("Production/ShopFloor/Complete")]
-    [AllowAnonymous]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ShopFloorComplete([FromBody] ShopFloorCompleteRequest req, CancellationToken ct)
     {
@@ -1421,13 +1423,13 @@ public sealed class ProductionController : Controller
                 new EndActivityRequest(req.WorkOrderOperationId, req.OperatorPersonnelId, Notes: null), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     // ── Faz 1 MVP (2026-05-20): Üretim sahası aktivite log ────────────────────
-    // Saha tableti "Durum Değiştir" menüsünden tetikler. AllowAnonymous + AntiForgery —
-    // diğer ShopFloor endpoint'leri ile aynı kalıp (auth: PIN/Kart ile operatör çözümlendi,
-    // session değil personel id).
+    // Saha tableti "Durum Değiştir" menüsünden tetikler. İki katmanlı auth:
+    // 1. CalibraHub oturumu (cookie) — ShopFloor sayfasına erişim için zorunlu.
+    // 2. PIN/NFC kart (AuthOperator) — her operasyon için operatör kimlik doğrulaması.
 
     public sealed record ShopFloorStartActivityRequest(
         int WorkOrderOperationId,
@@ -1438,7 +1440,6 @@ public sealed class ProductionController : Controller
 
     /// <summary>Yeni aktivite başlatır (eski aktif aktivite otomatik kapatılır).</summary>
     [HttpPost("Production/ShopFloor/StartActivity")]
-    [AllowAnonymous]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ShopFloorStartActivity(
         [FromBody] ShopFloorStartActivityRequest req, CancellationToken ct)
@@ -1453,7 +1454,7 @@ public sealed class ProductionController : Controller
                 Notes:                req.Notes), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     public sealed record ShopFloorEndActivityRequest(
@@ -1463,7 +1464,6 @@ public sealed class ProductionController : Controller
 
     /// <summary>Aktif aktiviteyi yeni aktivite başlatmadan kapatır.</summary>
     [HttpPost("Production/ShopFloor/EndActivity")]
-    [AllowAnonymous]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ShopFloorEndActivity(
         [FromBody] ShopFloorEndActivityRequest req, CancellationToken ct)
@@ -1474,24 +1474,21 @@ public sealed class ProductionController : Controller
                 new EndActivityRequest(req.WorkOrderOperationId, req.OperatorPersonnelId, req.Notes), ct);
             return Json(new { ok = true, ended });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     /// <summary>Operasyonun aktif (an devam eden) aktivitesi — yoksa null döner.</summary>
     [HttpGet("Production/ShopFloor/ActiveActivity")]
-    [AllowAnonymous]
     public async Task<IActionResult> ShopFloorActiveActivity(int workOrderOperationId, CancellationToken ct)
         => Json(await _activities.GetActiveAsync(workOrderOperationId, ct));
 
     /// <summary>Operasyonun tüm hareket geçmişi (StartedAt DESC).</summary>
     [HttpGet("Production/ShopFloor/ActivityHistory")]
-    [AllowAnonymous]
     public async Task<IActionResult> ShopFloorActivityHistory(int workOrderOperationId, CancellationToken ct)
         => Json(await _activities.GetHistoryAsync(workOrderOperationId, ct));
 
     /// <summary>Frontend dropdown'u için aktivite tipi sözlüğü (id + label).</summary>
     [HttpGet("Production/ShopFloor/ActivityTypes")]
-    [AllowAnonymous]
     public IActionResult ShopFloorActivityTypes()
     {
         var types = Enum.GetValues<Domain.Enums.WorkOrderActivityType>()
@@ -1529,7 +1526,6 @@ public sealed class ProductionController : Controller
     public sealed record AuthOperatorRequest(string? PersonnelCode, string? PinCode, string? CardNo);
 
     [HttpPost]
-    [AllowAnonymous]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AuthOperator([FromBody] AuthOperatorRequest req, CancellationToken ct)
     {
@@ -1712,7 +1708,7 @@ public sealed class ProductionController : Controller
             var id = await _activityReasons.SaveAsync(req, CurrentUserId(), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     [HttpPost]
@@ -1724,7 +1720,7 @@ public sealed class ProductionController : Controller
             await _activityReasons.DeleteAsync(id, CurrentUserId(), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1874,7 +1870,7 @@ public sealed class ProductionController : Controller
             var id = await _shifts.SaveAsync(req, CurrentUserId(), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     [HttpPost]
@@ -1886,7 +1882,7 @@ public sealed class ProductionController : Controller
             await _shifts.DeleteAsync(id, CurrentUserId(), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     // ── Atama (matrix UI sayfası — tüm personel × 7 gün) ──
@@ -1919,7 +1915,7 @@ public sealed class ProductionController : Controller
             var id = await _shiftAssignments.SaveAsync(req, CurrentUserId(), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     [HttpPost]
@@ -1931,7 +1927,7 @@ public sealed class ProductionController : Controller
             await _shiftAssignments.DeleteAsync(id, CurrentUserId(), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     [HttpGet]

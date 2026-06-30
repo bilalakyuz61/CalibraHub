@@ -55,6 +55,12 @@ public sealed class Document
     /// <summary>Personnel.FullName — transient (JOIN ile doldurulur, persist edilmez).</summary>
     public string? RequesterPersonnelName { get; set; }
 
+    [Description("Hedef lokasyon/depo (Ihtiyac Kaydi icin). FK -> Location.Id. Satir LocationId yoksa bu deger kullanilir.")]
+    public int? LocationId { get; set; }
+
+    /// <summary>Location.LocationName — transient (JOIN ile doldurulur, persist edilmez).</summary>
+    public string? LocationName { get; set; }
+
     [Description("Belge para birimi. FK -> currencies.id. Varsayilan 1 (TRY). Display kodu (CurrencyCode) ve sembol (CurrencySymbol) repository JOIN ile transient olarak doldurulur, DB'de saklanmaz.")]
     public int CurrencyId { get; set; } = 1;
 

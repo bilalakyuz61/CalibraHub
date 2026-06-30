@@ -59,7 +59,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -77,7 +77,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -94,7 +94,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -112,7 +112,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -130,7 +130,7 @@ public sealed class ReportEngineController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 

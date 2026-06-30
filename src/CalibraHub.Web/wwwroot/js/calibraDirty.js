@@ -66,12 +66,32 @@
 
     // fetch() ile yapilan Save* cagrilarini dinle — basarili donuste dirty=false.
     // URL'de "/Save" geciyor VE HTTP 2xx VE (JSON ise) success !== false ise temizle.
+    // Ayni zamanda same-origin unsafe (POST/PUT/DELETE/PATCH) isteklerine antiforgery token inject eder.
     if (typeof window.fetch === 'function') {
         var _origFetch = window.fetch.bind(window);
         window.fetch = function (input, init) {
             var url = '';
             try { url = typeof input === 'string' ? input : (input && input.url) || ''; } catch (e) { /* ignore */ }
             var isSave = url && /\/Save/i.test(url);
+
+            // Antiforgery: same-origin unsafe metodlar icin token inject et
+            try {
+                var method = ((init && init.method) || 'GET').toUpperCase();
+                var unsafe = method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH';
+                var sameOrigin = !url || url[0] === '/' || url[0] === '#' || url.indexOf(location.origin + '/') === 0;
+                if (unsafe && sameOrigin) {
+                    var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+                    if (tokenEl && tokenEl.value) {
+                        init = init ? Object.assign({}, init) : {};
+                        var hdrs = new Headers(init.headers || {});
+                        if (!hdrs.has('RequestVerificationToken')) {
+                            hdrs.set('RequestVerificationToken', tokenEl.value);
+                        }
+                        init.headers = hdrs;
+                    }
+                }
+            } catch (e) { /* ignore */ }
+
             var p = _origFetch(input, init);
             if (!isSave) return p;
             return p.then(function (resp) {

@@ -374,6 +374,19 @@ public sealed class FormMetadataService : IFormMetadataService
         return new IntegrationSampleRecordDto(resolvedId, dict);
     }
 
+    public async Task<string?> FindRecordIdByFieldValueAsync(string formCode, string fieldName, string fieldValue, CancellationToken ct)
+    {
+        if (!FormCodeRegex.IsMatch(formCode) || !FormCodeRegex.IsMatch(fieldName)) return null;
+        var viewName = $"v_Flat_{formCode}";
+        var fieldEsc = fieldName.Replace("]", "]]");
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var row = await TryFetchRowAsync(conn, viewName, fieldEsc, fieldValue, ct);
+        if (row is null) return null;
+        return row.TryGetValue("Id", out var id) && id is not null and not DBNull
+            ? id.ToString()
+            : null;
+    }
+
     private async Task<Dictionary<string, object?>?> TryFetchRowAsync(
         Microsoft.Data.SqlClient.SqlConnection conn,
         string viewName,

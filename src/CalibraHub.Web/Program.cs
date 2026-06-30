@@ -146,6 +146,9 @@ builder.Services.AddSession(options =>
     options.Cookie.Name        = ".CalibraHub.Session";
     options.Cookie.HttpOnly    = true;
     options.Cookie.IsEssential = true;
+    options.Cookie.SameSite    = SameSiteMode.Strict;
+    // Development'ta HTTP çalıştığı için SameAsRequest; production IIS/Nginx HTTPS termination yapar
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     options.IdleTimeout        = TimeSpan.FromMinutes(60);
 });
 builder.Services.AddScoped<IScheduledTaskRepository, SqlScheduledTaskRepository>();
@@ -187,6 +190,7 @@ builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.OrgChartDomainService>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.ShopFloorLockoutTracker>();
+builder.Services.AddSingleton<CalibraHub.Application.Services.LoginLockoutTracker>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalFlowService,
                            CalibraHub.Application.Services.ApprovalFlowService>();
 builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IApprovalNotificationDispatcher,
@@ -337,6 +341,8 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
                            CalibraHub.Application.Services.Import.PriceListImportHandler>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.BomImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.InventoryCountImportHandler>();
 
 // 2026-06-06 Yetkilendirme (F1) — PermissionDef + UserPermission repository + service.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionDefRepository,
@@ -666,13 +672,25 @@ else
                                CalibraHub.Persistence.Repositories.SqlAttachmentRepository>();
 }
 
+builder.Services.AddAntiforgery(options =>
+{
+    options.Cookie.HttpOnly     = true;
+    options.Cookie.SameSite     = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.HeaderName          = "RequestVerificationToken"; // JS fetch'ten header ile kabul et
+});
+
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.LoginPath = "/Account/Login";
-        options.AccessDeniedPath = "/Account/Login";
-        options.SlidingExpiration = true;
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.LoginPath           = "/Account/Login";
+        options.AccessDeniedPath    = "/Account/Login";
+        options.SlidingExpiration   = true;
+        options.ExpireTimeSpan      = TimeSpan.FromHours(8);
+        options.Cookie.HttpOnly     = true;
+        options.Cookie.SameSite     = SameSiteMode.Strict;
+        // Development HTTP → SameAsRequest; production HTTPS termination → Secure gönderilir
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
 
 builder.Services.AddAuthorization(options =>
@@ -688,6 +706,9 @@ var mvcBuilder = builder.Services.AddControllersWithViews(opts =>
     // 2026-06-07 — Global izin kontrolü. Controller veya action [PermissionScope("...")]
     // attribute taşıyorsa filter çalışır; yoksa atlar (geriye dönük güvenli — opt-in).
     opts.Filters.Add<CalibraHub.Web.Authorization.PermissionEnforcementFilter>();
+    // 2026-06-27 — Tüm unsafe HTTP method'ları (POST/PUT/DELETE/PATCH) için CSRF token zorunlu.
+    // [IgnoreAntiforgeryToken] ile muaf tutulabilir (webhook/setup endpoint'leri).
+    opts.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
 });
 mvcBuilder.AddJsonOptions(options =>
 {
@@ -942,6 +963,31 @@ app.UseExceptionHandler("/Home/Error");
 // Sirasi: UseExceptionHandler'dan SONRA, UseRouting'ten ONCE.
 app.UseApiExceptionHandler();
 
+// Güvenlik başlıkları — pipeline başında kayıt, tüm yanıtlara (302 redirect dahil) uygulanır
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        var h = context.Response.Headers;
+        // Clickjacking — SAMEORIGIN: uygulama içi iframe'ler (ViewPayload A4 önizleme vb.) çalışır
+        h["X-Frame-Options"] = "SAMEORIGIN";
+        // MIME-type sniffing engelle
+        h["X-Content-Type-Options"] = "nosniff";
+        // Cross-origin isteklerde tam URL sızdırmayı engelle
+        h["Referrer-Policy"] = "strict-origin-when-cross-origin";
+        // Gereksiz tarayıcı API'larını kısıtla
+        h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()";
+        // HTML yanıtları için cache başlıkları
+        if (context.Response.ContentType?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            h["Cache-Control"] = "no-store, no-cache, must-revalidate";
+            h["Pragma"] = "no-cache";
+        }
+        return Task.CompletedTask;
+    });
+    await next();
+});
+
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
@@ -964,11 +1010,24 @@ app.Use(async (context, next) =>
 {
     context.Response.OnStarting(() =>
     {
+        var h = context.Response.Headers;
+
+        // Clickjacking — SAMEORIGIN: uygulama içi iframe'ler (ViewPayload A4 önizleme vb.) çalışır
+        h["X-Frame-Options"] = "SAMEORIGIN";
+        // MIME-type sniffing engelle (tarayıcı, Content-Type başlığına uysun)
+        h["X-Content-Type-Options"] = "nosniff";
+        // Cross-origin isteklerde yalnızca origin gönder, tam URL sızdırma
+        h["Referrer-Policy"] = "strict-origin-when-cross-origin";
+        // Gereksiz tarayıcı API'larını kısıtla
+        h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()";
+
+        // HTML yanıtları için cache başlıkları
         if (context.Response.ContentType?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true)
         {
-            context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
-            context.Response.Headers["Pragma"] = "no-cache";
+            h["Cache-Control"] = "no-store, no-cache, must-revalidate";
+            h["Pragma"] = "no-cache";
         }
+
         return Task.CompletedTask;
     });
     await next();

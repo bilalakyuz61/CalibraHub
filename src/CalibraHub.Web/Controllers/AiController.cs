@@ -88,7 +88,7 @@ public sealed class AiController : Controller
         catch (OperationCanceledException) { /* client kapadı */ }
         catch (Exception ex)
         {
-            await WriteSseAsync($"(AI hatası: {ex.Message})", ct);
+            await WriteSseAsync($"(AI hatası: {"İşlem sırasında bir hata oluştu."})", ct);
         }
         finally
         {
@@ -150,8 +150,8 @@ public sealed class AiController : Controller
         catch (Exception ex)
         {
             status = "error";
-            errorMsg = ex.Message;
-            result = new { success = false, error = "Calistirma hatasi: " + ex.Message };
+            errorMsg = "İşlem sırasında bir hata oluştu.";
+            result = new { success = false, error = "Calistirma hatasi: " + "İşlem sırasında bir hata oluştu." };
         }
 
         // 2026-05-24: Audit log — her execution DB'ye yazilir (basari ya da hata).

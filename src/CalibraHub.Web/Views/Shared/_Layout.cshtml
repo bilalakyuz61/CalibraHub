@@ -247,6 +247,10 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    @if (!string.IsNullOrEmpty(shellAntiforgeryToken))
+    {
+        <meta name="csrf-token" content="@shellAntiforgeryToken" />
+    }
     <title>@pageTitle - CalibraHub</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
@@ -260,6 +264,36 @@
            iframe tab'larinda ?workspace=1 flag'ini her navigasyona otomatik ekler.
            SmartCard, SmartBoard, vanilla JS, <a> linkleri hepsini kapser. *@
         <script src="~/js/workspace-frame-nav-guard.js" asp-append-version="true"></script>
+    }
+    @if (!string.IsNullOrEmpty(shellAntiforgeryToken))
+    {
+        <script>
+        (function () {
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            var token = meta ? meta.getAttribute('content') : null;
+            if (!token) return;
+            var orig = window.fetch.bind(window);
+            window.fetch = function (resource, init) {
+                init = init || {};
+                var method = ((init.method || (typeof resource === 'object' && resource.method) || 'GET')).toUpperCase();
+                if (method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH') {
+                    var url = typeof resource === 'string' ? resource : (resource.url || '');
+                    var isSameOrigin = !url || url[0] === '/' || url.indexOf(window.location.origin) === 0;
+                    if (isSameOrigin) {
+                        if (init.headers instanceof Headers) {
+                            if (!init.headers.has('RequestVerificationToken'))
+                                init.headers.set('RequestVerificationToken', token);
+                        } else {
+                            init.headers = init.headers || {};
+                            if (!init.headers['RequestVerificationToken'])
+                                init.headers['RequestVerificationToken'] = token;
+                        }
+                    }
+                }
+                return orig(resource, init);
+            };
+        })();
+        </script>
     }
 </head>
 <body class="@bodyClass"

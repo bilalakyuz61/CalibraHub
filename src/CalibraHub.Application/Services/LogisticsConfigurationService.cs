@@ -395,7 +395,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     x.Updated,
                     x.UnitId,
                     x.Combinations,
-                    x.TaxRate))
+                    x.TaxRate,
+                    TrackingType: x.TrackingType))
                 .ToArray(),
             Properties: properties
                 .Select(x => new FeatureDto(
@@ -1108,6 +1109,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             UnitId = request.UnitId,
             Combinations = request.Combinations,
             TaxRate = request.TaxRate,
+            TrackingType = NormalizeTrackingType(request.TrackingType) ?? "None",
             Created = DateTime.Now
         };
 
@@ -1157,6 +1159,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             UnitId = request.UnitId,
             Combinations = request.Combinations,
             TaxRate = request.TaxRate,
+            TrackingType = NormalizeTrackingType(request.TrackingType) ?? existing.TrackingType ?? "None",
             Created = existing.Created,
             Updated = DateTime.Now
         };
@@ -1227,6 +1230,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 };
                 await _repository.UpdateLocationAsync(clearedParent, cancellationToken);
             }
+            // Parent artik leaf degil — item_locations atamalarini temizle
+            await _repository.NullifyItemLocationsByLocationIdAsync(request.ParentId.Value, cancellationToken);
         }
 
         var location = new Location
@@ -1475,6 +1480,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 $"once makineleri baska bir lokasyona tasiyin. Ornek: {sample}{suffix}");
         }
 
+        await _repository.NullifyItemLocationsByLocationIdAsync(locationId, cancellationToken);
+        await _repository.NullifyLocationHistoricalFkRefsAsync(locationId, cancellationToken);
         await _repository.DeleteLocationAsync(locationId, cancellationToken);
     }
 
@@ -1717,7 +1724,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
         return links.Select(l =>
         {
-            locMap.TryGetValue(l.LocationId, out var loc);
+            var loc = l.LocationId.HasValue ? locMap.GetValueOrDefault(l.LocationId.Value) : null;
             return new ItemLocationDto(
                 l.Id, l.ItemId, l.LocationId,
                 loc?.LocationCode ?? "",

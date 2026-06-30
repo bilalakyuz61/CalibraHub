@@ -92,6 +92,32 @@
         body.app-theme-dark .login-card .text-muted { color: #94a3b8 !important; }
         body.app-theme-dark .login-card .border-top { border-color: rgba(148, 163, 184, 0.18) !important; }
 
+        .login-error-msg {
+            min-height: 46px;
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: .875rem;
+            font-weight: 500;
+            background: rgba(239,68,68,.10);
+            border: 1px solid rgba(239,68,68,.35);
+            color: #dc2626;
+            display: flex;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .18s;
+        }
+        .login-error-msg.is-visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        body.app-theme-dark .login-error-msg {
+            background: rgba(239,68,68,.14);
+            border-color: rgba(248,113,113,.35);
+            color: #f87171;
+        }
+
         @@keyframes loginShake {
             0%, 100% { transform: translateX(0); }
             15%  { transform: translateX(-7px); }
@@ -204,6 +230,8 @@
                     </label>
                     <span class="login-remember-label">Beni hatırla</span>
                 </div>
+
+                <div id="loginError" class="login-error-msg"></div>
 
                 <button type="submit" class="btn btn-primary w-100">@ui.Text("submit")</button>
 
@@ -372,20 +400,40 @@
                         return;
                     }
 
-                    if (json.error === "credentials" && pwWrap && pwInput) {
-                        pwInput.value = "";
-                        pwWrap.classList.add("login-pw-error");
-                        pwWrap.classList.remove("login-pw-shake");
-                        void pwWrap.offsetWidth; // force reflow
-                        pwWrap.classList.add("login-pw-shake");
-                        pwWrap.addEventListener("animationend", function () {
+                    var errorDiv = document.getElementById("loginError");
+                    function showError(msg) {
+                        if (errorDiv) { errorDiv.textContent = msg; errorDiv.classList.add("is-visible"); }
+                    }
+                    function clearError() {
+                        if (errorDiv) { errorDiv.classList.remove("is-visible"); errorDiv.textContent = ""; }
+                    }
+
+                    if (json.error === "credentials") {
+                        showError(json.message || "E-posta, şirket veya şifre hatalı.");
+                        if (pwWrap && pwInput) {
+                            pwInput.value = "";
+                            pwWrap.classList.add("login-pw-error");
                             pwWrap.classList.remove("login-pw-shake");
-                        }, { once: true });
-                        pwInput.focus();
-                        // Yazmaya başlayınca kırmızı çerçeve kalksın
-                        pwInput.addEventListener("input", function () {
-                            pwWrap.classList.remove("login-pw-error");
-                        }, { once: true });
+                            void pwWrap.offsetWidth;
+                            pwWrap.classList.add("login-pw-shake");
+                            pwWrap.addEventListener("animationend", function () {
+                                pwWrap.classList.remove("login-pw-shake");
+                            }, { once: true });
+                            pwInput.focus();
+                            pwInput.addEventListener("input", function () {
+                                pwWrap.classList.remove("login-pw-error");
+                                clearError();
+                            }, { once: true });
+                        }
+                    } else if (json.error === "locked") {
+                        showError(json.message || "Hesap geçici olarak kilitlendi. Lütfen daha sonra tekrar deneyin.");
+                        if (pwWrap && pwInput) {
+                            pwInput.value = "";
+                            pwInput.disabled = true;
+                            setTimeout(function () { pwInput.disabled = false; }, 5000);
+                        }
+                    } else if (json.error === "validation") {
+                        showError("Lütfen tüm alanları doldurun.");
                     }
                 } catch {
                     // Network hatası: normal submit

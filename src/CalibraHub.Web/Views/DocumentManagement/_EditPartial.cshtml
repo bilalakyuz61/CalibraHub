@@ -1,0 +1,104 @@
+@model CalibraHub.Domain.Entities.Attachment
+@{
+    var cats = (string[])ViewBag.Categories;
+    var antiforgery = ViewContext.HttpContext.RequestServices
+        .GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
+    var tokens = antiforgery.GetAndStoreTokens(ViewContext.HttpContext);
+}
+<style>
+.dm-ep { font-family: inherit; }
+.dm-ep .dm-ep-label { display:block; font-size:0.78rem; font-weight:600; color:var(--bs-secondary-color,#6c757d); margin-bottom:4px; }
+.dm-ep .dm-ep-input {
+    width:100%; padding:7px 10px; border-radius:6px; font-size:0.88rem;
+    border:1px solid var(--app-border,#e2e8f0); background:var(--app-input-bg,#fff);
+    color:var(--bs-body-color,#0f172a); outline:none; box-sizing:border-box;
+    transition:border-color .15s;
+}
+.dm-ep .dm-ep-input:focus { border-color:#6366f1; box-shadow:0 0 0 2px rgba(99,102,241,.12); }
+.dm-ep .dm-ep-row { margin-bottom:14px; }
+.dm-ep .dm-ep-info { font-size:0.76rem; color:var(--bs-secondary-color,#6c757d); margin-top:3px; }
+.dm-ep .dm-ep-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+.dm-ep .dm-ep-btn {
+    padding:7px 18px; border-radius:6px; font-size:0.88rem; font-weight:600;
+    border:none; cursor:pointer; transition:background .15s;
+}
+.dm-ep .dm-ep-btn--primary { background:#6366f1; color:#fff; }
+.dm-ep .dm-ep-btn--primary:hover { background:#4f46e5; }
+.dm-ep .dm-ep-btn--secondary { background:var(--app-surface-2,#f1f5f9); color:var(--bs-body-color,#0f172a); }
+.dm-ep .dm-ep-btn--secondary:hover { background:var(--app-border,#e2e8f0); }
+.dm-ep .dm-ep-status { font-size:0.8rem; margin-top:8px; text-align:center; min-height:18px; }
+.dm-ep .dm-ep-status--ok  { color:#22c55e; }
+.dm-ep .dm-ep-status--err { color:#ef4444; }
+body.app-theme-dark .dm-ep .dm-ep-input { background:var(--app-input-bg,#1e293b); border-color:var(--app-border,#334155); color:#e2e8f0; }
+body.app-theme-dark .dm-ep .dm-ep-btn--secondary { background:#1e293b; color:#e2e8f0; }
+</style>
+
+<div class="dm-ep">
+    <div class="dm-ep-row">
+        <label class="dm-ep-label">Başlık</label>
+        <input id="dmep-title" class="dm-ep-input" type="text" value="@Model.Title" placeholder="Belge başlığı (opsiyonel)">
+        <div class="dm-ep-info">Boş bırakılırsa dosya adı gösterilir.</div>
+    </div>
+    <div class="dm-ep-row">
+        <label class="dm-ep-label">Kategori</label>
+        <select id="dmep-category" class="dm-ep-input">
+            <option value="">— Seçiniz —</option>
+            @foreach (var c in cats)
+            {
+                if (Model.Category == c)
+                {
+                    <option value="@c" selected="selected">@c</option>
+                }
+                else
+                {
+                    <option value="@c">@c</option>
+                }
+            }
+        </select>
+    </div>
+    <div class="dm-ep-row">
+        <label class="dm-ep-label">Etiketler</label>
+        <input id="dmep-tags" class="dm-ep-input" type="text" value="@Model.Tags" placeholder="Virgülle ayırın: kalite, teknik, revize">
+    </div>
+    <div class="dm-ep-row">
+        <label class="dm-ep-label">Açıklama</label>
+        <textarea id="dmep-desc" class="dm-ep-input" rows="3" style="resize:vertical;" placeholder="Kısa açıklama">@Model.Description</textarea>
+    </div>
+    <div class="dm-ep-actions">
+        <button class="dm-ep-btn dm-ep-btn--secondary" onclick="window._dmepCancel && window._dmepCancel()">Vazgeç</button>
+        <button class="dm-ep-btn dm-ep-btn--primary" onclick="dmepSave(@Model.Id)">Kaydet</button>
+    </div>
+    <div id="dmep-status" class="dm-ep-status"></div>
+</div>
+
+<script>
+function dmepSave(id) {
+    var form = new FormData();
+    form.append('id',          id);
+    form.append('title',       document.getElementById('dmep-title').value);
+    form.append('category',    document.getElementById('dmep-category').value);
+    form.append('tags',        document.getElementById('dmep-tags').value);
+    form.append('description', document.getElementById('dmep-desc').value);
+    form.append('__RequestVerificationToken', '@tokens.RequestToken');
+    var statusEl = document.getElementById('dmep-status');
+    fetch('/DocumentManagement/UpdateMeta', { method:'POST', body:form, credentials:'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+            if (d.ok) {
+                statusEl.className = 'dm-ep-status dm-ep-status--ok';
+                statusEl.textContent = 'Kaydedildi.';
+                setTimeout(function() {
+                    window.dispatchEvent(new CustomEvent('close-sc-modal', { detail: { refresh: true } }));
+                    if (window._dmBoardRefresh) window._dmBoardRefresh();
+                }, 800);
+            } else {
+                statusEl.className = 'dm-ep-status dm-ep-status--err';
+                statusEl.textContent = d.error || 'Hata oluştu.';
+            }
+        })
+        .catch(function(e) {
+            statusEl.className = 'dm-ep-status dm-ep-status--err';
+            statusEl.textContent = 'Bağlantı hatası.';
+        });
+}
+</script>

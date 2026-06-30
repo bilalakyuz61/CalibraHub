@@ -145,6 +145,11 @@ public static class FormCodes
     public const string MachineTypes  = "MACHINE_TYPES";
 
     // ═══════════════════════════════════════════════════
+    // DÖKÜMAN YÖNETİMİ
+    // ═══════════════════════════════════════════════════
+    public const string DocumentManagement = "DOC_MANAGEMENT";
+
+    // ═══════════════════════════════════════════════════
     // VARLIK YÖNETİMİ
     // ═══════════════════════════════════════════════════
     public const string Assets = "ASSETS";

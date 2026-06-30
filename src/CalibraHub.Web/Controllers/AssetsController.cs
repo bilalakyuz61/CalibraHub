@@ -26,9 +26,9 @@ public sealed class AssetsController : Controller
     private readonly IPrintDispatcher _printDispatcher;
     private readonly IAttachmentRepository _attachments;
 
-    private const string AttEntityDoc = "Asset";        // evraklar (çoklu)
-    private const string AttEntityImage = "AssetImage";  // kapak görseli (tek)
-    private const string AttEntitySignature = "AssetAssignment"; // zimmet/iade imzası (hareket bazlı)
+    private const int AttFormDoc       = AttachmentFormIds.Asset;           // evraklar (çoklu)
+    private const int AttFormImage     = AttachmentFormIds.AssetImage;      // kapak görseli (tek)
+    private const int AttFormSignature = AttachmentFormIds.AssetAssignment; // zimmet/iade imzası
 
     public AssetsController(IAssetService assetService, IWidgetService widgetService, IPrintDispatcher printDispatcher, IAttachmentRepository attachments)
     {
@@ -85,7 +85,7 @@ public sealed class AssetsController : Controller
             : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
 
         // Kapak görseli olan varlıklar (kartta görsel göstermek için)
-        var imageSet = (await _attachments.GetEntityIdsWithAttachmentAsync(AttEntityImage, ct)).ToHashSet(StringComparer.Ordinal);
+        var imageSet = (await _attachments.GetRefIdsWithAttachmentAsync(AttFormImage, ct)).ToHashSet();
 
         return SmartBoard.For(cards)
             .WithBoardKey("assets-list")
@@ -104,7 +104,7 @@ public sealed class AssetsController : Controller
                     .WithStatusBadge(StatusText(c.Status), StatusColor(c.Status));
 
                 // Kapak görseli (varsa) — varlığı görsel olarak tanımlamak için kartta gösterilir
-                if (c.AssetId.HasValue && imageSet.Contains(c.AssetId.Value.ToString()))
+                if (c.AssetId.HasValue && imageSet.Contains(c.AssetId.Value))
                     eb.WithImageUrl($"/Assets/AssetImage?id={c.AssetId.Value}");
 
                 // Zimmet + departman + lokasyon karttan kaldırıldı — zimmetleme ekranından hareket olarak yönetilir.
@@ -313,13 +313,13 @@ public sealed class AssetsController : Controller
     {
         var list = await _assetService.GetAssignmentsAsync(assetId, ct);
         // İmza eki olan hareketleri işaretle (Zimmet Hareketleri'nde "imza" linki için)
-        var signed = (await _attachments.GetEntityIdsWithAttachmentAsync(AttEntitySignature, ct)).ToHashSet(StringComparer.Ordinal);
+        var signed = (await _attachments.GetRefIdsWithAttachmentAsync(AttFormSignature, ct)).ToHashSet();
         return Json(list.Select(a => new
         {
             a.Id, a.AssetId, a.PersonnelId, a.PersonnelName, a.DepartmentId, a.DepartmentName,
             a.LocationId, a.LocationName, a.AssignDate, a.ReturnDate, a.AssignNote, a.ReturnNote,
             a.DocumentNo, a.Created, a.CreatedById, a.IsActive,
-            hasSignature = signed.Contains(a.Id.ToString()),
+            hasSignature = signed.Contains(a.Id),
         }));
     }
 
@@ -374,8 +374,8 @@ public sealed class AssetsController : Controller
         var isReturn = string.Equals(input.Kind, "return", StringComparison.OrdinalIgnoreCase);
         await _attachments.AddAsync(new Attachment
         {
-            EntityType = AttEntitySignature,
-            EntityId = input.AssignmentId.ToString(),
+            FormId = AttFormSignature,
+            RefId = input.AssignmentId,
             FileName = isReturn ? "iade-imza.png" : "zimmet-imza.png",
             ContentType = "image/png",
             FileSize = bytes.LongLength,
@@ -391,7 +391,7 @@ public sealed class AssetsController : Controller
     public async Task<IActionResult> AssignmentSignatureImage(int assignmentId, CancellationToken ct)
     {
         if (assignmentId <= 0) return NotFound();
-        var sig = (await _attachments.GetByEntityAsync(AttEntitySignature, assignmentId.ToString(), ct)).LastOrDefault();
+        var sig = (await _attachments.GetByFormRefAsync(AttFormSignature, assignmentId, ct)).LastOrDefault();
         if (sig is null) return NotFound();
         var bytes = await _attachments.GetBinaryAsync(sig.Id, ct);
         if (bytes is null) return NotFound();
@@ -458,7 +458,7 @@ public sealed class AssetsController : Controller
     public async Task<IActionResult> AssetAttachments(int id, CancellationToken ct)
     {
         if (id <= 0) return Json(System.Array.Empty<object>());
-        var list = await _attachments.GetByEntityAsync(AttEntityDoc, id.ToString(), ct);
+        var list = await _attachments.GetByFormRefAsync(AttFormDoc, id, ct);
         return Json(list.Select(a => new
         {
             id = a.Id,
@@ -480,8 +480,8 @@ public sealed class AssetsController : Controller
         var bytes = await ReadFileAsync(file, ct);
         var newId = await _attachments.AddAsync(new Attachment
         {
-            EntityType = AttEntityDoc,
-            EntityId = assetId.ToString(),
+            FormId = AttFormDoc,
+            RefId = assetId,
             FileName = file.FileName ?? "dosya",
             ContentType = file.ContentType,
             FileSize = bytes.LongLength,
@@ -520,12 +520,12 @@ public sealed class AssetsController : Controller
         if (!(file.ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase))
             return Json(new { success = false, message = "Yalnızca görsel dosyası yüklenebilir (JPG/PNG vb.)." });
 
-        await _attachments.DeleteByEntityAsync(AttEntityImage, assetId.ToString(), ct);
+        await _attachments.DeleteByFormRefAsync(AttFormImage, assetId, ct);
         var bytes = await ReadFileAsync(file, ct);
         await _attachments.AddAsync(new Attachment
         {
-            EntityType = AttEntityImage,
-            EntityId = assetId.ToString(),
+            FormId = AttFormImage,
+            RefId = assetId,
             FileName = file.FileName ?? "gorsel",
             ContentType = file.ContentType,
             FileSize = bytes.LongLength,
@@ -540,7 +540,7 @@ public sealed class AssetsController : Controller
     public async Task<IActionResult> AssetImage(int id, CancellationToken ct)
     {
         if (id <= 0) return NotFound();
-        var img = (await _attachments.GetByEntityAsync(AttEntityImage, id.ToString(), ct)).FirstOrDefault();
+        var img = (await _attachments.GetByFormRefAsync(AttFormImage, id, ct)).FirstOrDefault();
         if (img is null) return NotFound();
         var bytes = await _attachments.GetBinaryAsync(img.Id, ct);
         if (bytes is null) return NotFound();
@@ -552,7 +552,7 @@ public sealed class AssetsController : Controller
     public async Task<IActionResult> DeleteAssetImageJson(int assetId, CancellationToken ct)
     {
         if (assetId <= 0) return Json(new { success = false, message = "Geçersiz istek." });
-        await _attachments.DeleteByEntityAsync(AttEntityImage, assetId.ToString(), ct);
+        await _attachments.DeleteByFormRefAsync(AttFormImage, assetId, ct);
         return Json(new { success = true });
     }
 
@@ -636,8 +636,8 @@ public sealed class AssetsController : Controller
         {
             await _assetService.DeleteAssetAsync(id, ct);
             // Bağlı evrak + kapak görselini de pasifle (merkezi Attachment tablosu)
-            await _attachments.DeleteByEntityAsync(AttEntityDoc, id.ToString(), ct);
-            await _attachments.DeleteByEntityAsync(AttEntityImage, id.ToString(), ct);
+            await _attachments.DeleteByFormRefAsync(AttFormDoc, id, ct);
+            await _attachments.DeleteByFormRefAsync(AttFormImage, id, ct);
             return Json(new { success = true });
         }
         catch (ArgumentException ex)

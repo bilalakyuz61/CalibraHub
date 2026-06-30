@@ -13,12 +13,13 @@
 // **Cache key versioning:** Yeni offline.html deploy'unda CACHE_VERSION arttırılır;
 // activate event eski cache'leri temizler.
 
-const CACHE_VERSION = 'calibra-offline-v18';
+const CACHE_VERSION = 'calibra-offline-v19';
 const OFFLINE_URL   = '/offline.html';
 
 // Sunucu cevap vermezse bu süre içinde abort edip offline.html'i göster.
-// Tarayıcının kendi "bağlantı yok" ekranı 1-2 sn flash etmesin diye agresif kısa.
-const FAST_FALLBACK_MS = 600;
+// NOT: Gerçek bağlantı yoksa TCP anında reddeder (fetch() hemen hata verir);
+// 3000ms yalnızca sunucu yavaş cevap verdiğinde (startup yükü, GC, vb.) devreye girer.
+const FAST_FALLBACK_MS = 3000;
 
 // Install — offline.html'i cache'e koy
 self.addEventListener('install', function (event) {

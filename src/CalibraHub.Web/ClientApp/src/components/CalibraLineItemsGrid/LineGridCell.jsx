@@ -646,8 +646,13 @@ function GuideLookupCell(props) {
     enrichMaterialPatch(patch, pickedVal)
     setDisplayVal(pickedVal)
     onChange(column.key, pickedVal, patch)
-    // Rehberden basarili secim → sessiz satir kaydi (KITT yok)
-    if (column.saveOnResolve !== false && typeof window !== 'undefined' && typeof window.sqSave === 'function') {
+    // Rehberden basarili secim → sessiz satir kaydi (KITT yok).
+    // trackCombinations=true ve henüz combinationId seçilmediyse kayit ertele;
+    // kombinasyon seçilince CombinationLookupCell.onApply zaten save triggerlar.
+    var _saveTracksComb = patch.trackCombinations === true
+    var _saveHasComb = patch.combinationId != null && patch.combinationId !== '' && parseInt(patch.combinationId, 10) > 0
+    if (column.saveOnResolve !== false && !(_saveTracksComb && !_saveHasComb) &&
+        typeof window !== 'undefined' && typeof window.sqSave === 'function') {
       setTimeout(function () {
         try { window.sqSave({ silent: true }) } catch (e) { /* ignore */ }
       }, 150)

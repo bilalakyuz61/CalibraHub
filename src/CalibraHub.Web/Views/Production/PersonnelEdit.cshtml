@@ -116,6 +116,24 @@
         </div>
 
         <div class="ux-field ux-field--wide">
+          <label for="pe-location">Varsayılan Depo</label>
+          <select id="pe-location" data-current="@(Model?.LocationId?.ToString() ?? "")">
+            <option value="">— Seçiniz —</option>
+            @{
+                var personnelLocs = ViewData["PersonnelLocationList"] as System.Collections.IEnumerable;
+                if (personnelLocs != null)
+                {
+                    foreach (dynamic loc in personnelLocs)
+                    {
+                        <option value="@loc.Id">@loc.Name</option>
+                    }
+                }
+            }
+          </select>
+          <span class="ux-hint">Personelin ihtiyaç kayıtlarında otomatik seçilecek depo. Değiştirilebilir.</span>
+        </div>
+
+        <div class="ux-field ux-field--wide">
           <label for="pe-notes">Notlar</label>
           <textarea id="pe-notes" maxlength="2000"
                     placeholder="Vardiya bilgileri, ekstra notlar...">@(Model?.Notes ?? "")</textarea>
@@ -277,6 +295,14 @@
         }
     })();
 
+    // ── Lokasyon seçimi (server-side render, data-current ile senkronize) ──
+    (function syncLocation() {
+        var sel = document.getElementById('pe-location');
+        if (!sel) return;
+        var current = sel.getAttribute('data-current') || '';
+        if (current) sel.value = current;
+    })();
+
     // ── Save handler ──
     var saveBtn = document.getElementById('pe-save');
     if (saveBtn) {
@@ -295,6 +321,7 @@
                 isProductionOperator: document.getElementById('pe-operator').checked,
                 isActive:             document.getElementById('pe-active').checked,
                 userId:               (function () { var v = document.getElementById('pe-user').value; return v ? parseInt(v, 10) : null; })(),
+                locationId:           (function () { var v = document.getElementById('pe-location').value; return v ? parseInt(v, 10) : null; })(),
                 phone:                document.getElementById('pe-phone').value.trim() || null,
                 email:                document.getElementById('pe-email').value.trim() || null,
                 notes:                document.getElementById('pe-notes').value.trim() || null,

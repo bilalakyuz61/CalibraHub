@@ -1,6 +1,9 @@
+using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Services.Import;
 
@@ -12,18 +15,28 @@ public sealed class ContactImportHandler : RowImportHandlerBase
 {
     private readonly IFinanceService _finance;
     private readonly IFinanceRepository _financeRepo;
+    private readonly ISalesRepresentativeService _salesRep;
+    private readonly ICariGroupService _cariGroup;
+    private readonly IWidgetService _widget;
+    private readonly IWidgetRepository _widgetRepo;
+    private List<SalesRepresentativeDto>? _reps;   // run-cache (satış temsilcileri)
+    private List<CariGroupDto>? _groups;           // run-cache (cari grupları)
+    private FormDefinition? _form;                  // CONTACTS form (widget değer kaydı)
+    private List<WidgetDefinition>? _widgets;       // Cari özel-alan (widget) tanımları
 
-    public ContactImportHandler(IFinanceService finance, IFinanceRepository financeRepo)
-    { _finance = finance; _financeRepo = financeRepo; }
+    public ContactImportHandler(IFinanceService finance, IFinanceRepository financeRepo, ISalesRepresentativeService salesRep, ICariGroupService cariGroup, IWidgetService widget, IWidgetRepository widgetRepo)
+    { _finance = finance; _financeRepo = financeRepo; _salesRep = salesRep; _cariGroup = cariGroup; _widget = widget; _widgetRepo = widgetRepo; }
 
     public override string Entity => "CONTACT";
     public override string Label => "Cari Hesap";
 
-    public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
+    public override IReadOnlyList<ImportTargetFieldDto> GetFields()
     {
+        var fields = new List<ImportTargetFieldDto>
+        {
         new ImportTargetFieldDto("AccountTitle",   "Cari Unvanı",   "string", true,  false, "Kurum veya kişi adı (zorunlu)"),
         new ImportTargetFieldDto("AccountCode",    "Cari Kodu",     "string", true,  true,  "Benzersiz cari kodu (zorunlu); eşleştirme anahtarı olabilir"),
-        new ImportTargetFieldDto("AccountType",    "Cari Tipi",     "type",   false, false, "Müşteri / Satıcı / Her İkisi (boşsa Müşteri)"),
+        new ImportTargetFieldDto("AccountType",    "Cari Tipi",     "type",   false, false, "Müşteri / Satıcı / Her İkisi (boşsa Müşteri)", new[] { "Müşteri", "Satıcı", "Her İkisi" }),
         new ImportTargetFieldDto("TaxNumber",      "Vergi No",      "string", false, false, "10 hane"),
         new ImportTargetFieldDto("TaxOffice",      "Vergi Dairesi", "string", false, false, null),
         new ImportTargetFieldDto("IdentityNumber", "TC Kimlik No",  "string", false, false, "11 hane"),
@@ -38,7 +51,13 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         new ImportTargetFieldDto("PostalCode",     "Posta Kodu",    "string", false, false, null),
         new ImportTargetFieldDto("CountryCode",    "Ülke Kodu",     "string", false, false, "TR, DE, US..."),
         new ImportTargetFieldDto("ContactPerson",  "İlgili Kişi",   "string", false, false, null),
-    };
+        new ImportTargetFieldDto("SalesRepresentative", "Satış Temsilcisi", "string", false, false, "Mevcut satış temsilcisi adı (opsiyonel; verilirse eşleşmeli)"),
+        new ImportTargetFieldDto("ContactGroup", "Cari Grubu", "string", false, false, "Cari grup KODU veya adı — Toptan/Perakende/VIP vb. (opsiyonel; verilirse eşleşmeli)"),
+        };
+        // Cari kartına admin'in eklediği özel (widget) alanlar — PreloadAsync ile yüklenir.
+        if (_widgets is not null) fields.AddRange(_widgets.Select(WidgetToField));
+        return fields;
+    }
 
     protected override IReadOnlyList<string> ValidateRow(IReadOnlyDictionary<string, string?> d)
     {
@@ -51,6 +70,22 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         if (idn.Length > 0 && idn.Length != 11) errs.Add($"TC kimlik 11 hane olmalı (girilen: {idn.Length}).");
         var email = Get(d, "Email");
         if (!string.IsNullOrWhiteSpace(email) && (!email.Contains('@') || !email.Contains('.'))) errs.Add("Geçersiz e-posta.");
+        // Satış temsilcisi verilmişse mevcut olmalı (_reps preview'da preload edilir; commit'te de doğrulanır).
+        if (_reps is not null)
+        {
+            var rep = Get(d, "SalesRepresentative")?.Trim();
+            if (!string.IsNullOrWhiteSpace(rep) && !_reps.Any(r => string.Equals(r.RepName?.Trim(), rep, StringComparison.OrdinalIgnoreCase)))
+                errs.Add($"Satış temsilcisi bulunamadı: '{rep}'");
+        }
+        // Cari grubu verilmişse mevcut olmalı (kod VEYA ad ile).
+        if (_groups is not null)
+        {
+            var grp = Get(d, "ContactGroup")?.Trim();
+            if (!string.IsNullOrWhiteSpace(grp) && !_groups.Any(g =>
+                    string.Equals(g.Code?.Trim(), grp, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(g.Name?.Trim(), grp, StringComparison.OrdinalIgnoreCase)))
+                errs.Add($"Cari grubu bulunamadı: '{grp}'");
+        }
         return errs;
     }
 
@@ -73,11 +108,48 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         IReadOnlyDictionary<string, string?> d, string action, int? existingId,
         int? userId, HashSet<string> usedCodes, CancellationToken ct)
     {
+        // Satış temsilcisi: verilmişse isimden Id'ye çöz (bulunamazsa satır hata); boşsa null/mevcut korunur.
+        int? repId = null;
+        var repName = Get(d, "SalesRepresentative")?.Trim();
+        if (!string.IsNullOrWhiteSpace(repName))
+        {
+            repId = await ResolveSalesRepIdAsync(repName, ct);
+            if (repId is null) return (false, $"Satış temsilcisi bulunamadı: '{repName}'", null);
+        }
+        // Cari grubu: verilmişse isimden Id'ye çöz (bulunamazsa satır hata).
+        int? groupId = null;
+        var groupName = Get(d, "ContactGroup")?.Trim();
+        if (!string.IsNullOrWhiteSpace(groupName))
+        {
+            groupId = await ResolveContactGroupIdAsync(groupName, ct);
+            if (groupId is null) return (false, $"Cari grubu bulunamadı: '{groupName}'", null);
+        }
+
         var request = action == "update" && existingId is > 0
             ? await BuildUpdateRequestAsync(d, existingId.Value, ct)
             : BuildInsertRequest(d, await DeriveUniqueCodeAsync(d, usedCodes, ct));
+        if (repId is > 0) request = request with { SalesRepresentativeId = repId };
+        if (groupId is > 0) request = request with { ContactGroupId = groupId };
         var (ok, err, dto) = await _finance.UpsertContactAsync(request, ct);
-        return (ok, err, dto?.Id);
+        if (!ok || dto is null) return (ok, err, dto?.Id);
+
+        // Özel (widget) alan değerlerini WidgetTra'ya yaz (RecordId = AccountCode).
+        if (_form is not null && _widgets is { Count: > 0 })
+        {
+            var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var w in _widgets)
+            {
+                var v = Get(d, w.WidgetCode);
+                if (!string.IsNullOrWhiteSpace(v)) values[w.WidgetCode] = v.Trim();
+            }
+            if (values.Count > 0)
+            {
+                // RecordId = Contact.Id (FinanceController batch render ile aynı konvansiyon; AccountCode DEĞİL).
+                try { await _widget.SaveValuesAsync(new SaveWidgetValuesRequest(_form.Id, dto.Id.ToString(), values), ct); }
+                catch (Exception ex) { return (false, $"Cari kaydedildi, özel alanlar kaydedilemedi: {ex.Message}", dto.Id); }
+            }
+        }
+        return (ok, err, dto.Id);
     }
 
     private static SaveContactRequest BuildInsertRequest(IReadOnlyDictionary<string, string?> d, string code) => new(
@@ -126,5 +198,93 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         if (v is "2" or "satıcı" or "satici" or "tedarikçi" or "tedarikci" or "supplier") return 2;
         if (v is "3" or "her ikisi" or "ikisi" or "both") return 3;
         return 1;
+    }
+
+    // Preview/Commit/katalog öncesi: satış temsilcisi + cari grup + özel-alan (widget) tanımlarını yükle.
+    public override async Task PreloadAsync(CancellationToken ct)
+    {
+        _reps ??= (await _salesRep.GetAllAsync(ct)).ToList();
+        _groups ??= (await _cariGroup.GetAllAsync(ct)).ToList();
+        if (_widgets is null)
+        {
+            _form = await _widgetRepo.GetFormByCodeAsync(FormCodes.Contacts, ct);
+            _widgets = _form is null
+                ? new List<WidgetDefinition>()
+                : (await _widgetRepo.GetWidgetsByFormAsync(_form.Id, ct))
+                    .Where(w => !w.IsSystemField && w.IsActive && !IsContainerType(w.DataType))
+                    .OrderBy(w => w.SortOrder).ToList();
+            System.Console.WriteLine($"[IMPORT-WIDGET] form={_form?.FormCode ?? "NULL"} id={_form?.Id} widgets={_widgets.Count} codes=[{string.Join(",", _widgets.Select(w => w.WidgetCode))}]");
+        }
+    }
+
+    // Satış temsilcisi adı → Id (run-cache). Bulunamazsa null.
+    private async Task<int?> ResolveSalesRepIdAsync(string name, CancellationToken ct)
+    {
+        _reps ??= (await _salesRep.GetAllAsync(ct)).ToList();
+        var match = _reps.FirstOrDefault(r => string.Equals(r.RepName?.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
+        return match?.Id;
+    }
+
+    // Cari grup kodu/adı → Id (run-cache). Önce kod, sonra ad. Bulunamazsa null.
+    private async Task<int?> ResolveContactGroupIdAsync(string codeOrName, CancellationToken ct)
+    {
+        _groups ??= (await _cariGroup.GetAllAsync(ct)).ToList();
+        var key = codeOrName.Trim();
+        var match = _groups.FirstOrDefault(g => g.IsActive && string.Equals(g.Code?.Trim(), key, StringComparison.OrdinalIgnoreCase))
+                 ?? _groups.FirstOrDefault(g => g.IsActive && string.Equals(g.Name?.Trim(), key, StringComparison.OrdinalIgnoreCase));
+        return match?.Id;
+    }
+
+    // Boş şablon + açılır liste için aktif satış temsilcisi + cari grup adları.
+    public override async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetDynamicAllowedValuesAsync(CancellationToken ct)
+    {
+        var reps = await _salesRep.GetAllAsync(ct);
+        var groups = await _cariGroup.GetAllAsync(ct);
+        return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SalesRepresentative"] = reps.Where(r => r.IsActive).Select(r => r.RepName).Where(n => !string.IsNullOrWhiteSpace(n)).ToList(),
+            // Cari grup: KOD listesi (isim boş olabilir; kullanıcı kodla doldurur) — tamamı + dropdown.
+            ["ContactGroup"]        = groups.Where(g => g.IsActive).Select(g => g.Code).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+        };
+    }
+
+    // ── Özel alan (widget) yardımcıları ──────────────────────────────
+    private static bool IsContainerType(string? dt) => dt is "group" or "grid" or "guide-list";
+
+    private static ImportTargetFieldDto WidgetToField(WidgetDefinition w) =>
+        new(w.WidgetCode, w.Label, MapWidgetType(w.DataType), w.IsRequired, false, $"Özel alan: {w.Label}", ParseOptions(w.OptionsJson));
+
+    private static string MapWidgetType(string? dt) => dt switch
+    {
+        "numeric" => "decimal",
+        "date" => "date",
+        "boolean" => "bool",
+        _ => "string",
+    };
+
+    // OptionsJson → açılır liste değerleri. ["A","B"] veya [{"l":"Label","k":"key"}] formatları.
+    private static IReadOnlyList<string>? ParseOptions(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return null;
+            var list = new List<string>();
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (el.ValueKind == JsonValueKind.String) { var s = el.GetString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!); }
+                else if (el.ValueKind == JsonValueKind.Object)
+                {
+                    string? pick = null;
+                    if (el.TryGetProperty("l", out var l) && l.ValueKind == JsonValueKind.String) pick = l.GetString();
+                    else if (el.TryGetProperty("label", out var lab) && lab.ValueKind == JsonValueKind.String) pick = lab.GetString();
+                    else if (el.TryGetProperty("k", out var k) && k.ValueKind == JsonValueKind.String) pick = k.GetString();
+                    if (!string.IsNullOrWhiteSpace(pick)) list.Add(pick!);
+                }
+            }
+            return list.Count > 0 ? list : null;
+        }
+        catch { return null; }
     }
 }

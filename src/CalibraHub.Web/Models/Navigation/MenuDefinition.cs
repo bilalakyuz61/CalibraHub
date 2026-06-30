@@ -203,6 +203,13 @@ public static class MenuDefinition
                     MatchPath: "/Assets", PermissionFormCode: FormCodes.Assets),
             }),
 
+            // ────────────── Döküman Yönetimi / Document Management ──────────────
+            new("docmgmt", isEn ? "Document Management" : "Döküman Yönetimi", "FileStack", null, new List<MenuNode>
+            {
+                new("docmgmt.list", isEn ? "All Documents" : "Tüm Dökümanlar", "Files", "/DocumentManagement", null,
+                    MatchPath: "/DocumentManagement", PermissionFormCode: FormCodes.DocumentManagement),
+            }),
+
             // ────────────── 6. Finans / Finance ──────────────
             // Grup: canView("CONTACTS")
             new("finance", isEn ? "Finance" : "Finans", "Coins", null, new List<MenuNode>

@@ -135,7 +135,7 @@ public sealed class IntegrationTestSeedController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 }

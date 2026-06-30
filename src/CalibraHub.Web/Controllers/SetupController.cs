@@ -19,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [AllowAnonymous]
 [GateProtected]
+[IgnoreAntiforgeryToken]
 public sealed class SetupController : Controller
 {
     private readonly ICompanyRepository _companyDefinitionRepository;
@@ -107,7 +108,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             return View(nameof(Index), model);
         }
     }
@@ -202,7 +203,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             var vm = await BuildDefinitionsViewModelAsync(
                 input, new SetupUserInput(), "companies",
                 companyPage, companyPageSize, userPage, userPageSize, cancellationToken);
@@ -256,7 +257,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             var vm = await BuildDefinitionsViewModelAsync(
                 new SetupCompanyInput(), input, "users",
                 companyPage, companyPageSize, userPage, userPageSize, cancellationToken);
@@ -303,7 +304,7 @@ public sealed class SetupController : Controller
         return RedirectToAction(nameof(Definitions), new { activeTab = "users" });
     }
 
-    // ── Şirket Tanımları ─────────────────────────────────────────────────────
+    // ── �?irket Tanımları ─────────────────────────────────────────────────────
 
     [HttpGet]
     public async Task<IActionResult> Companies(int? id, int? page, int? pageSize, CancellationToken cancellationToken)
@@ -361,7 +362,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             return View(nameof(Companies), await BuildSetupCompanyViewModelAsync(input, page, pageSize, cancellationToken));
         }
     }
@@ -381,7 +382,7 @@ public sealed class SetupController : Controller
         {
             string? password = request.SqlPassword;
 
-            // Şifre gönderilmemişse mevcut bağlantı dizesinden al
+            // �?ifre gönderilmemişse mevcut bağlantı dizesinden al
             if (string.IsNullOrWhiteSpace(password) && request.Id.HasValue)
             {
                 var existing = await _companyDefinitionRepository.GetByIdAsync(request.Id.Value, cancellationToken);
@@ -407,7 +408,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = $"Bağlantı kurulamadı: {ex.Message}" });
+            return Json(new { success = false, message = $"Bağlantı kurulamadı: {"Islem sirasinda bir hata olustu."}" });
         }
     }
 
@@ -464,7 +465,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            ModelState.AddModelError(string.Empty, "Islem sirasinda bir hata olustu.");
             return View(nameof(Users), await BuildSetupUserViewModelAsync(input, page, pageSize, cancellationToken));
         }
     }
@@ -574,7 +575,7 @@ public sealed class SetupController : Controller
         };
 
     /// <summary>
-    /// Şirket bazlı rol: CompanyRoles listesinde companyId varsa onu, yoksa globalRole'ü döner.
+    /// �?irket bazlı rol: CompanyRoles listesinde companyId varsa onu, yoksa globalRole'ü döner.
     /// </summary>
     private static (UserRole role, IReadOnlyCollection<CalibraHub.Domain.Enums.UserPermission> perms)
         GetRoleForCompany(SetupUserInput input, int companyId, UserRole globalRole)
@@ -677,7 +678,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -764,15 +765,15 @@ public sealed class SetupController : Controller
 
         var config = CalibraHub.Application.SmartBoard.SmartBoard.For(companies)
             .WithBoardKey("setup-companies")
-            .WithTitle("Şirket Tanımları", subtitle: $"{companies.Count} şirket")
+            .WithTitle("�?irket Tanımları", subtitle: $"{companies.Count} şirket")
             .WithIcon("Building2", "indigo")
             .WithRefreshUrl("/Setup/CompanyBoardConfig")
-            .WithSearchPlaceholder("Şirket adı…")
+            .WithSearchPlaceholder("�?irket adı…")
             .WithEmptyText("Henüz şirket tanımlanmamış")
-            .AddHeaderAction("new", "Yeni Şirket", "Plus", "#open-new-company-modal")
+            .AddHeaderAction("new", "Yeni �?irket", "Plus", "#open-new-company-modal")
             .MapEntities(c =>
             {
-                // Şirket bazlı DB özelliği kaldırıldı — kartta SQL bağlantı widget'ı gösterilmez.
+                // �?irket bazlı DB özelliği kaldırıldı — kartta SQL bağlantı widget'ı gösterilmez.
                 var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
                     .For(c.Id.ToString(), c.Name)
                     .WithStatusBadge(c.IsActive ? "Aktif" : "Pasif", c.IsActive ? "emerald" : "slate");
@@ -818,7 +819,7 @@ public sealed class SetupController : Controller
 
         var config = CalibraHub.Application.SmartBoard.SmartBoard.For(grouped)
             .WithBoardKey("setup-user-mapping")
-            .WithTitle("Kullanıcı-Şirket Eşleme", subtitle: $"{grouped.Count} kullanıcı")
+            .WithTitle("Kullanıcı-�?irket Eşleme", subtitle: $"{grouped.Count} kullanıcı")
             .WithIcon("UserCog", "violet")
             .WithRefreshUrl("/Setup/UserMappingBoardConfig")
             .WithSearchPlaceholder("Ad, e-posta…")
@@ -830,12 +831,12 @@ public sealed class SetupController : Controller
                     .For(item.Primary.Id.ToString(), item.Primary.FullName, subtitle: item.Primary.Email)
                     .WithDescription(item.Assignments.Count > 0
                         ? string.Join(" · ", item.Assignments.Select(a => $"{a.CompanyName} ({a.Role})"))
-                        : "Şirket atanmamış")
+                        : "�?irket atanmamış")
                     .WithStatusBadge(item.Primary.IsActive ? "Aktif" : "Pasif",
                         item.Primary.IsActive ? "emerald" : "slate");
 
                 for (int i = 0; i < item.Assignments.Count; i++)
-                    eb.AddTextWidget($"w_co_{i}", item.Assignments[i].CompanyName ?? "Şirket",
+                    eb.AddTextWidget($"w_co_{i}", item.Assignments[i].CompanyName ?? "�?irket",
                         item.Assignments[i].Role,
                         color: palette[i % palette.Length]);
 
@@ -869,7 +870,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -891,7 +892,7 @@ public sealed class SetupController : Controller
                 SqlServer   = server,
                 SqlDatabase = database,
                 SqlUsername = username,
-                // Şifre asla client'a gönderilmez — sadece var/yok bilgisi
+                // �?ifre asla client'a gönderilmez — sadece var/yok bilgisi
                 HasPassword = !string.IsNullOrEmpty(password)
             };
         }).ToArray();
@@ -928,7 +929,7 @@ public sealed class SetupController : Controller
                 taxNumber = $"TBD-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}";
             }
 
-            // Şifre alanı boş gelirse mevcut bağlantı dizesini koru
+            // �?ifre alanı boş gelirse mevcut bağlantı dizesini koru
             string? connectionString;
             if (string.IsNullOrWhiteSpace(input.SqlServer))
             {
@@ -936,7 +937,7 @@ public sealed class SetupController : Controller
             }
             else if (string.IsNullOrWhiteSpace(input.SqlPassword) && existingConnectionString != null)
             {
-                // Şifre değiştirilmedi — mevcut bağlantı dizesini koru, sadece sunucu/db/kullanıcı güncelle
+                // �?ifre değiştirilmedi — mevcut bağlantı dizesini koru, sadece sunucu/db/kullanıcı güncelle
                 var (_, _, _, existingPwd) = ParseConnectionString(existingConnectionString);
                 connectionString = BuildConnectionString(input.SqlServer, input.SqlDatabase, input.SqlUsername, existingPwd);
             }
@@ -956,7 +957,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -981,7 +982,7 @@ public sealed class SetupController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1059,7 +1060,7 @@ public sealed class SetupController : Controller
     {
         var snapshot = await _adminReadService.GetSnapshotAsync(ct);
 
-        // Şirket listesi
+        // �?irket listesi
         const int defaultPageSize = 10;
         var cPageSize = companyPageSize is > 0 ? companyPageSize.Value : defaultPageSize;
         var cTotal = snapshot.Companies.Count;

@@ -33,6 +33,7 @@ namespace CalibraHub.Web.Controllers;
 // pattern'iyle birebir.
 [AllowAnonymous]
 [GateProtected]
+[IgnoreAntiforgeryToken]
 public sealed class SetupUserController : Controller
 {
     private const string DefaultPassword = "12345678";
@@ -79,7 +80,7 @@ public sealed class SetupUserController : Controller
         Response.Headers["Pragma"] = "no-cache";
 
         var config = await BuildBoardConfigAsync(ct);
-        ViewData["Title"] = "Şirket ve Kullanıcı Tanımları";
+        ViewData["Title"] = "�?irket ve Kullanıcı Tanımları";
         ViewData["BoardConfigJson"] = JsonSerializer.Serialize(config,
             new JsonSerializerOptions
             {
@@ -119,7 +120,7 @@ public sealed class SetupUserController : Controller
 
         return CalibraHub.Application.SmartBoard.SmartBoard.For(allUsers)
             .WithBoardKey("setup-users")
-            .WithTitle("Şirket ve Kullanıcı Tanımları", subtitle: $"{allUsers.Count} kullanıcı")
+            .WithTitle("�?irket ve Kullanıcı Tanımları", subtitle: $"{allUsers.Count} kullanıcı")
             .WithIcon("UserCog", "indigo")
             .WithRefreshUrl("/SetupUser/BoardConfig")
             .WithSearchPlaceholder("Ad, e-posta, şirket…")
@@ -128,14 +129,14 @@ public sealed class SetupUserController : Controller
             .MapEntities(u =>
             {
                 var roleLabel = GetRoleLabel(u.Role);
-                var companyName = companies.TryGetValue(u.CompanyId, out var cn) ? cn : $"Şirket #{u.CompanyId}";
+                var companyName = companies.TryGetValue(u.CompanyId, out var cn) ? cn : $"�?irket #{u.CompanyId}";
                 var deptName = u.DepartmentId.HasValue && departments.TryGetValue(u.DepartmentId.Value, out var dn) ? dn : null;
 
                 var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
                     .For(u.Id.ToString(), u.FullName, subtitle: u.Email)
                     .WithDescription($"{companyName} • {roleLabel}")
                     .WithStatusBadge(u.IsActive ? "Aktif" : "Pasif", u.IsActive ? "emerald" : "slate")
-                    .AddTextWidget("w_company", "Şirket", companyName, color: "violet")
+                    .AddTextWidget("w_company", "�?irket", companyName, color: "violet")
                     .AddTextWidget("w_role", "Rol", roleLabel, color: "indigo");
 
                 if (!string.IsNullOrWhiteSpace(deptName))
@@ -164,10 +165,10 @@ public sealed class SetupUserController : Controller
                 eb.AddExtraAction(
                     icon: "KeyRound",
                     color: "violet",
-                    tooltip: "Şifre Sıfırla",
+                    tooltip: "�?ifre Sıfırla",
                     type: "api-post",
                     apiUrl: $"/SetupUser/ResetPassword?id={u.Id}",
-                    confirm: "Şifreyi 12345678 olarak sıfırlamak istediğinize emin misiniz?");
+                    confirm: "�?ifreyi 12345678 olarak sıfırlamak istediğinize emin misiniz?");
 
                 return eb;
             })
@@ -284,7 +285,7 @@ public sealed class SetupUserController : Controller
         if (dto is null)
             return Json(new { ok = false, error = "Geçersiz istek." });
         if (dto.CompanyId <= 0)
-            return Json(new { ok = false, error = "Şirket seçimi zorunludur." });
+            return Json(new { ok = false, error = "�?irket seçimi zorunludur." });
 
         if (!Enum.IsDefined(typeof(UserRole), dto.Role))
             return Json(new { ok = false, error = "Geçersiz yetki." });
@@ -357,7 +358,7 @@ public sealed class SetupUserController : Controller
                     ? DefaultPassword
                     : dto.Password.Trim();
                 if (initialPassword.Length < 6)
-                    return Json(new { ok = false, error = "Şifre en az 6 karakter olmalı." });
+                    return Json(new { ok = false, error = "�?ifre en az 6 karakter olmalı." });
 
                 await _adminService.CreateUserAsync(new CreateUserRequest(
                     CompanyId: dto.CompanyId,
@@ -411,7 +412,7 @@ public sealed class SetupUserController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -439,7 +440,7 @@ public sealed class SetupUserController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -459,11 +460,11 @@ public sealed class SetupUserController : Controller
         {
             user.SetPasswordHash(_passwordHashService.HashPassword(DefaultPassword));
             await _userRepo.UpdateAsync(user, ct);
-            return Json(new { ok = true, message = $"Şifre sıfırlandı: {DefaultPassword}" });
+            return Json(new { ok = true, message = $"�?ifre sıfırlandı: {DefaultPassword}" });
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 }

@@ -38,7 +38,8 @@ public sealed record StockDocLineDto(
     string? FromLocationName,
     int? ToLocationId,
     string? ToLocationName,
-    decimal? UnitCost);
+    decimal? UnitCost,
+    string? LotNo = null);
 
 // ── Kayıt istekleri ───────────────────────────────────────────────────────────
 public sealed record SaveStockDocRequest(
@@ -64,4 +65,5 @@ public sealed record SaveStockDocLineRequest(
     string? Notes,
     int? FromLocationId,
     int? ToLocationId,
-    decimal? UnitCost);
+    decimal? UnitCost,
+    string? LotNo = null);

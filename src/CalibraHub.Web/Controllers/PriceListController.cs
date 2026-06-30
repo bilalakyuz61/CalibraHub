@@ -124,7 +124,7 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { error = ex.Message });
+            return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -597,9 +597,9 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PriceList.GetPriceListEntries] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[PriceList.GetPriceListEntries] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {"Islem sirasinda bir hata olustu."}");
             Console.WriteLine(ex.StackTrace);
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -685,9 +685,9 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PriceList.ExportExcel] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"[PriceList.ExportExcel] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {"Islem sirasinda bir hata olustu."}");
             Console.WriteLine(ex.StackTrace);
-            return Content("Excel oluşturulamadı: " + ex.Message, "text/plain");
+            return Content("Excel oluşturulamadı: " + "Islem sirasinda bir hata olustu.", "text/plain");
         }
     }
 
@@ -717,7 +717,7 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Sunucu hatasi: " + ex.Message, inserted = 0, updated = 0 });
+            return Json(new { success = false, message = "Sunucu hatasi: " + "Islem sirasinda bir hata olustu.", inserted = 0, updated = 0 });
         }
     }
 
@@ -736,7 +736,7 @@ public sealed class PriceListController : Controller
         {
             // Eski silent-500: persist OLDU ama exception sonrasi UI "sunucu hatasi" diyordu.
             // Simdi exception'i yakaliyor + JSON donuyoruz; kayit yine de DB'de kayitli kalir.
-            return Json(new { success = false, message = "Sunucu hatasi: " + ex.Message });
+            return Json(new { success = false, message = "Sunucu hatasi: " + "Islem sirasinda bir hata olustu." });
         }
     }
 

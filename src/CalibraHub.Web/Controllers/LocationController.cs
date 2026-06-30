@@ -1,6 +1,8 @@
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Persistence.Database;
+using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Logistics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,16 +10,17 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
-/// LocationController — Lokasyon JSON endpoint'leri (rapor §2.3 split).
+/// LocationController â€" Lokasyon JSON endpoint'leri (rapor Â§2.3 split).
 ///
 /// Tasinmis endpoint'ler:
-///   - GET  /Logistics/GetAllLocations      → JSON liste (filtreli)
-///   - GET  /Logistics/GetLocation/{id}     → JSON tekil
-///   - POST /Logistics/SaveLocationJson     → JSON (insert/update)
-///   - POST /Logistics/DeleteLocationJson   → JSON soft delete (FK uyarisi)
+///   - GET  /Logistics/GetAllLocations      â†' JSON liste (filtreli)
+///   - GET  /Logistics/GetLocation/{id}     â†' JSON tekil
+///   - POST /Logistics/SaveLocationJson     â†' JSON (insert/update)
+///   - POST /Logistics/DeleteLocationJson   â†' JSON soft delete (FK uyarisi)
+///   - GET  /Logistics/GetLocationUsageJson â†' lokasyon kullanim ozeti (silme/parent uyarisi)
 ///
 /// LogisticsController'da kalan (sonraki split icin):
-///   - Locations(), LocationsTree() — view + tree config (200+ satir)
+///   - Locations(), LocationsTree() â€" view + tree config (200+ satir)
 ///   - LocationType + ItemLocation endpoint'leri (master-detail eslestirme)
 ///   - SaveLocation/DeleteLocation form-post (helper'a bagli)
 /// </summary>
@@ -27,10 +30,17 @@ namespace CalibraHub.Web.Controllers;
 public sealed class LocationController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
+    private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly string _schema;
 
-    public LocationController(ILogisticsConfigurationService logisticsConfigurationService)
+    public LocationController(
+        ILogisticsConfigurationService logisticsConfigurationService,
+        SqlServerConnectionFactory connectionFactory,
+        CalibraDatabaseOptions dbOptions)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
+        _connectionFactory = connectionFactory;
+        _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     [HttpGet]
@@ -153,11 +163,11 @@ public sealed class LocationController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Lokasyon silinemedi: " + ex.Message });
+            return Json(new { success = false, message = "Lokasyon silinemedi: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 
-    // ── Lokasyon Tipleri (dinamik) ──────────────────────────────────────────
+    // â"€â"€ Lokasyon Tipleri (dinamik) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     [HttpGet]
     public async Task<IActionResult> GetLocationTypes(CancellationToken ct)
     {
@@ -199,7 +209,84 @@ public sealed class LocationController : Controller
         return Json(new { success = ok, message = err });
     }
 
-    // ── Malzeme - Lokasyon eslestirmesi (cok-cogu + bir varsayilan) ─────────
+    // ── Lokasyon kullanım özeti (silme / parent uyarısı için) ──────────────
+    [HttpGet]
+    public async Task<IActionResult> GetLocationUsageJson(int id, CancellationToken ct)
+    {
+        if (id <= 0) return Json(new { hasUsage = false });
+
+        var s = _schema;
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+
+        // 1. Sayılar — tek sorguda
+        int stockDocCount, machineCount, assetCount, itemLocCount;
+        cmd.CommandText = $"""
+            SELECT
+                (SELECT COUNT(*) FROM [{s}].[stock_doc]     WHERE from_location_id = @id OR to_location_id = @id) AS StockDocCount,
+                (SELECT COUNT(*) FROM [{s}].[Machine]        WHERE LocationId = @id)                               AS MachineCount,
+                (SELECT COUNT(*) FROM [{s}].[Asset]          WHERE LocationId = @id)                               AS AssetCount,
+                (SELECT COUNT(*) FROM [{s}].[item_locations] WHERE location_id = @id)                              AS ItemLocCount
+            """;
+        cmd.Parameters.AddWithValue("@id", id);
+        {
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            await r.ReadAsync(ct);
+            stockDocCount = r.GetInt32(0);
+            machineCount  = r.GetInt32(1);
+            assetCount    = r.GetInt32(2);
+            itemLocCount  = r.GetInt32(3);
+        }
+
+        if (stockDocCount == 0 && machineCount == 0 && assetCount == 0 && itemLocCount == 0)
+            return Json(new { hasUsage = false });
+
+        // 2. Örnekler — yalnızca ilgili tablolar için
+        var stockDocSamples     = new List<string>();
+        var machineSamples      = new List<string>();
+        var assetSamples        = new List<string>();
+        var itemLocSamples      = new List<string>();
+
+        if (stockDocCount > 0)
+        {
+            cmd.CommandText = $"SELECT TOP 3 doc_no FROM [{s}].[stock_doc] WHERE (from_location_id = @id OR to_location_id = @id) ORDER BY id DESC";
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) stockDocSamples.Add(r.GetString(0));
+        }
+        if (machineCount > 0)
+        {
+            cmd.CommandText = $"SELECT TOP 3 ISNULL([Name],[Code]) FROM [{s}].[Machine] WHERE LocationId = @id ORDER BY Id DESC";
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) machineSamples.Add(r.IsDBNull(0) ? "" : r.GetString(0));
+        }
+        if (assetCount > 0)
+        {
+            cmd.CommandText = $"SELECT TOP 3 ISNULL([AssetName],[AssetCode]) FROM [{s}].[Asset] WHERE LocationId = @id ORDER BY Id DESC";
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) assetSamples.Add(r.IsDBNull(0) ? "" : r.GetString(0));
+        }
+        if (itemLocCount > 0)
+        {
+            cmd.CommandText = $"SELECT TOP 3 ISNULL(i.[Name], i.[Code]) FROM [{s}].[item_locations] il JOIN [{s}].[Items] i ON i.[Id] = il.[item_id] WHERE il.location_id = @id ORDER BY il.id DESC";
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) itemLocSamples.Add(r.IsDBNull(0) ? string.Empty : r.GetString(0));
+        }
+
+        return Json(new
+        {
+            hasUsage             = true,
+            stockDocCount,
+            stockDocSamples,
+            machineCount,
+            machineSamples,
+            assetCount,
+            assetSamples,
+            itemLocationCount    = itemLocCount,
+            itemLocationSamples  = itemLocSamples,
+        });
+    }
+
+    // â"€â"€ Malzeme - Lokasyon eslestirmesi (cok-cogu + bir varsayilan) â"€â"€â"€â"€â"€â"€â"€â"€â"€
     [HttpGet]
     public async Task<IActionResult> GetItemLocations(int itemId, CancellationToken ct)
     {
@@ -226,21 +313,23 @@ public sealed class LocationController : Controller
                 parts.Insert(0, label);
                 cur = node.ParentId;
             }
-            return string.Join(" › ", parts);
+            return string.Join(" â€º ", parts);
         }
 
         return Json(new
         {
-            links = links.Select(l => new
-            {
-                locationId = l.LocationId,
-                locationCode = l.LocationCode,
-                locationName = l.LocationName,
-                locationTypeCode = l.LocationTypeCode,
-                locationPath = buildPath(l.LocationId),
-                isDefault = l.IsDefault,
-                sortOrder = l.SortOrder
-            }),
+            links = links
+                .Where(l => l.LocationId.HasValue)
+                .Select(l => new
+                {
+                    locationId = l.LocationId!.Value,
+                    locationCode = l.LocationCode,
+                    locationName = l.LocationName,
+                    locationTypeCode = l.LocationTypeCode,
+                    locationPath = buildPath(l.LocationId.Value),
+                    isDefault = l.IsDefault,
+                    sortOrder = l.SortOrder
+                }),
             availableLocations = allLocations
                 .Where(x => x.IsActive && !parentIds.Contains(x.Id))
                 .OrderBy(x => x.SortOrder).ThenBy(x => x.LocationCode)
@@ -279,7 +368,7 @@ public sealed class LocationController : Controller
         return Json(new { success = true });
     }
 
-    // ── Helpers (LogisticsController'dakilerin kopyasi — sonraki refactor'da shared service'e) ──
+    // â"€â"€ Helpers (LogisticsController'dakilerin kopyasi â€" sonraki refactor'da shared service'e) â"€â"€
     private static string LocationTypeDisplayName(string? code) => code?.ToUpperInvariant() switch
     {
         "FACTORY" => "Fabrika",

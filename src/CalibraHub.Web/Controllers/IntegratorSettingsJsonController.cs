@@ -125,7 +125,7 @@ public sealed class IntegratorSettingsJsonController : Controller
             return Json(new { success = true, message = "Entegrator ayari kaydedildi.", id = savedId });
         }
         catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-        catch (Exception ex) { return Json(new { success = false, message = "Kayit hatasi: " + ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "Kayit hatasi: " + "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Admin/DeleteIntegratorSettingsJson")]
@@ -162,7 +162,7 @@ public sealed class IntegratorSettingsJsonController : Controller
             return Json(new { success = result.IsSuccess, message = result.Message });
         }
         catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-        catch (Exception ex) { return Json(new { success = false, message = "Baglanti hatasi: " + ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "Baglanti hatasi: " + "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Admin/PullIntegratorDataJson")]
@@ -175,6 +175,6 @@ public sealed class IntegratorSettingsJsonController : Controller
             if (result.Notes.Count > 0) msg += " " + string.Join(" ", result.Notes.Take(2));
             return Json(new { success = true, message = msg });
         }
-        catch (Exception ex) { return Json(new { success = false, message = $"Veri cekme islemi basarisiz: {ex.Message}" }); }
+        catch (Exception ex) { return Json(new { success = false, message = $"Veri cekme islemi basarisiz: {"İşlem sırasında bir hata oluştu."}" }); }
     }
 }

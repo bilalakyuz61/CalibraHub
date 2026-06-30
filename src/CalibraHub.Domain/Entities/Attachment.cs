@@ -2,27 +2,31 @@ namespace CalibraHub.Domain.Entities;
 
 /// <summary>
 /// Calibra master DB'deki merkezi ek tablosu.
-/// EntityType + EntityId polimorfik tasarim — not, teklif, uretim recetesi vb.
-/// tum entity turleri bu tek tabloda ek saklayabilir.
-/// Diger DB'lerden SYNONYM uzerinden erisim saglanir.
+/// FormId + RefId polimorfik tasarım — Varlık, Serbest Belge vb. tüm entity türleri
+/// bu tek tabloda ek saklayabilir. Not ekleri company DB'deki note_attachments tablosunda tutulur.
 /// </summary>
 public sealed class Attachment
 {
-    public int     Id            { get; set; }
-    public required string EntityType  { get; init; }
-    public required string EntityId    { get; init; }
-    public required string FileName    { get; init; }
+    public int Id                { get; set; }
+    public int FormId            { get; init; }
+    public int RefId             { get; init; }
+    public string? Title         { get; set; }
+    public string? Category      { get; set; }
+    public string? Tags          { get; set; }
+    public required string FileName   { get; init; }
     public string? ContentType   { get; init; }
-    public long    FileSize      { get; init; }
+    public long FileSize         { get; init; }
     public string? Description   { get; set; }
-    public bool    IsActive      { get; set; } = true;
-    public int?    CreatedById   { get; init; }
+    public short RevisionNumber  { get; set; } = 1;
+    public int? OriginalId       { get; set; }
+    public bool IsActive         { get; set; } = true;
+    public int? CreatedById      { get; init; }
     public DateTime Created      { get; init; } = DateTime.UtcNow;
-    public int?    UpdatedById   { get; set; }
+    public int? UpdatedById      { get; set; }
     public DateTime? Updated     { get; set; }
 
     /// <summary>
-    /// Liste sorgularinda NULL gelir — yalnizca download path'inde doldurulur.
+    /// Liste sorgularında NULL gelir — yalnızca download path'inde doldurulur.
     /// </summary>
     public byte[]? BinaryContent { get; set; }
 }

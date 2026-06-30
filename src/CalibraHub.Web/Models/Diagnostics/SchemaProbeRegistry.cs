@@ -110,6 +110,7 @@ public static class SchemaProbeRegistry
                 ("Title",     "N'HCTEST'"),
                 ("Created",   "SYSUTCDATETIME()"),
                 ("Updated",   "SYSUTCDATETIME()"),
+                ("IsPinned",  "0"),
             },
             ScreenPaths: new[]
             {

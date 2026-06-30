@@ -18,7 +18,7 @@
  *   }
  */
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download } from 'lucide-react'
+import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet } from 'lucide-react'
 import SmartCard from './SmartCard'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
 import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
@@ -321,6 +321,19 @@ export default function SmartBoard(props) {
       }
       return
     }
+    // Generic trigger: window.CalibraHub[trigger]() veya window[trigger]() cagrilir.
+    // Kullanim: board config'te action.trigger = 'fnName', sayfada window.fnName = function() {...}
+    if (action.trigger) {
+      var ch2 = (typeof window !== 'undefined') && window.CalibraHub
+      var fn = (ch2 && typeof ch2[action.trigger] === 'function')
+        ? ch2[action.trigger]
+        : (typeof window !== 'undefined' && typeof window[action.trigger] === 'function')
+          ? window[action.trigger]
+          : null
+      if (fn) fn()
+      else console.warn('[SmartBoard] trigger fonksiyon bulunamadi:', action.trigger)
+      return
+    }
     if (action.url) navigateInWorkspace(action.url)
   }, [])
 
@@ -335,6 +348,15 @@ export default function SmartBoard(props) {
         - Client-only mode: filteredEntities'i dogrudan kullanir
         Kolonlar: Kod (subtitle) + Ad (title) + tum widget alanlari. */
   var [exporting, setExporting] = useState(false)
+  var [showExportConfirm, setShowExportConfirm] = useState(false)
+
+  // Esc ile onay modalını kapat
+  useEffect(function() {
+    if (!showExportConfirm) return
+    function onKey(e) { if (e.key === 'Escape') setShowExportConfirm(false) }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+  }, [showExportConfirm])
 
   var handleExportCsv = useCallback(async function () {
     if (exporting) return
@@ -572,7 +594,7 @@ export default function SmartBoard(props) {
             UTF-8 BOM + CSV (Excel Tr lokali ile dogrudan acar). Master + sistem
             widget'lari kolon olarak yazilir. Export sirasinda spinner gosterilir. */}
         <button
-          onClick={function () { handleExportCsv() }}
+          onClick={function () { if (!exporting) setShowExportConfirm(true) }}
           disabled={exporting}
           className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
             (exporting
@@ -753,6 +775,89 @@ export default function SmartBoard(props) {
         filters={filters}
         onApply={function (next) { setFilters(next) }}
       />
+
+      {/* ── Excel Aktar Onay Modalı ─────────── */}
+      {showExportConfirm && (
+        <div
+          onClick={function(e) { if (e.target === e.currentTarget) setShowExportConfirm(false) }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div style={{
+            position: 'relative',
+            background: isDark ? '#1e293b' : '#ffffff',
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e2e8f0',
+            borderRadius: '16px',
+            padding: '28px 32px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+            textAlign: 'center',
+          }}>
+            {/* İkon */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+              <div style={{
+                width: '52px', height: '52px', borderRadius: '50%',
+                background: 'rgba(16,185,129,0.12)',
+                border: '2px solid rgba(16,185,129,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <FileSpreadsheet size={24} style={{ color: '#10b981' }} />
+              </div>
+            </div>
+
+            {/* Başlık */}
+            <h3 style={{
+              fontSize: '16px', fontWeight: 700, marginBottom: '8px',
+              color: isDark ? '#f1f5f9' : '#0f172a',
+            }}>
+              Excel'e Aktar
+            </h3>
+
+            {/* Açıklama */}
+            <p style={{
+              fontSize: '13px', lineHeight: 1.65, marginBottom: '24px',
+              color: isDark ? '#94a3b8' : '#64748b',
+            }}>
+              <strong style={{ color: isDark ? '#cbd5e1' : '#334155' }}>{title}</strong> listesi
+              Excel dosyası olarak dışa aktarılacak.
+            </p>
+
+            {/* Butonlar */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={function() { setShowExportConfirm(false) }}
+                style={{
+                  padding: '9px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 600,
+                  cursor: 'pointer', transition: 'background 0.15s',
+                  background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+                  color: isDark ? '#94a3b8' : '#475569',
+                  border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
+                }}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={function() { setShowExportConfirm(false); handleExportCsv() }}
+                style={{
+                  padding: '9px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 600,
+                  cursor: 'pointer', transition: 'background 0.15s',
+                  background: '#10b981', color: '#ffffff', border: 'none',
+                }}
+              >
+                Aktar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -25,7 +25,7 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
         cmd.CommandText = $"""
             SELECT [id],[provider],[access_token_encrypted],[phone_number_id],[business_account_id],
                    [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[is_enabled],
-                   [last_successful_send_at],[last_error],[Created],[Updated]
+                   [last_successful_send_at],[last_error],[Created],[Updated],[app_secret_encrypted]
               FROM {_table}
              WHERE [id] = 1;
             """;
@@ -46,6 +46,7 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
             LastError             = r.IsDBNull(10) ? null : r.GetString(10),
             CreatedAt             = r.GetDateTime(11),
             UpdatedAt             = r.GetDateTime(12),
+            AppSecretEncrypted    = r.IsDBNull(13) ? null : r.GetString(13),
         };
     }
 
@@ -59,6 +60,7 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
                 UPDATE {_table}
                    SET [provider]                 = @Provider,
                        [access_token_encrypted]   = @Token,
+                       [app_secret_encrypted]     = @AppSecret,
                        [phone_number_id]          = @PhoneNumberId,
                        [business_account_id]      = @BusinessAccountId,
                        [display_phone_number]     = @DisplayPhoneNumber,
@@ -73,16 +75,17 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
             ELSE
             BEGIN
                 INSERT INTO {_table}
-                    ([id],[provider],[access_token_encrypted],[phone_number_id],[business_account_id],
+                    ([id],[provider],[access_token_encrypted],[app_secret_encrypted],[phone_number_id],[business_account_id],
                      [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[is_enabled],
                      [last_successful_send_at],[last_error],[Created],[Updated])
                 VALUES
-                    (1,@Provider,@Token,@PhoneNumberId,@BusinessAccountId,@DisplayPhoneNumber,@WebhookToken,@BridgeUrl,@IsEnabled,
+                    (1,@Provider,@Token,@AppSecret,@PhoneNumberId,@BusinessAccountId,@DisplayPhoneNumber,@WebhookToken,@BridgeUrl,@IsEnabled,
                      @LastSuccessfulSendAt,@LastError,GETUTCDATE(),GETUTCDATE());
             END;
             """;
         cmd.Parameters.Add(new SqlParameter("@Provider",              (int)config.Provider));
         cmd.Parameters.Add(new SqlParameter("@Token",                 (object?)config.AccessTokenEncrypted ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@AppSecret",             (object?)config.AppSecretEncrypted   ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PhoneNumberId",         (object?)config.PhoneNumberId        ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@BusinessAccountId",     (object?)config.BusinessAccountId    ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DisplayPhoneNumber",    (object?)config.DisplayPhoneNumber   ?? DBNull.Value));

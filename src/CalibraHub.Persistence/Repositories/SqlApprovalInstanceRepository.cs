@@ -734,7 +734,7 @@ WHERE sr.[Status] = N'Pending'
         {
             sCmd.CommandText = $"""
                 SELECT [Id],[InstanceId],[StepOrder],[StepName],[Status],[ApproverId],[ApproverName],[Note],[ActionDate],
-                       [DueDate],[SlaWarnedAt],[SlaActionAt],[SlaActionType]
+                       [DueDate],[SlaWarnedAt],[SlaActionAt],[SlaActionType],[Created]
                 FROM [{_s}].[ApprovalStepRecord]
                 WHERE [InstanceId]=@Iid
                 ORDER BY [StepOrder];
@@ -753,7 +753,8 @@ WHERE sr.[Status] = N'Pending'
                     sr.IsDBNull(9)  ? null : sr.GetDateTime(9),
                     sr.IsDBNull(10) ? null : sr.GetDateTime(10),
                     sr.IsDBNull(11) ? null : sr.GetDateTime(11),
-                    sr.IsDBNull(12) ? null : sr.GetString(12)));
+                    sr.IsDBNull(12) ? null : sr.GetString(12),
+                    EnteredAt: sr.IsDBNull(13) ? null : sr.GetDateTime(13)));
             }
         }
 

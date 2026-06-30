@@ -306,7 +306,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Content($"Fatura görseli oluşturulamadı: {ex.Message}", "text/plain", Encoding.UTF8);
+            return Content($"Fatura görseli oluşturulamadı: {"İşlem sırasında bir hata oluştu."}", "text/plain", Encoding.UTF8);
         }
     }
 
@@ -384,7 +384,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            TempData["AdminError"] = $"Portal guncellemesi sirasinda hata: {ex.Message}";
+            TempData["AdminError"] = $"Portal guncellemesi sirasinda hata: {"İşlem sırasında bir hata oluştu."}";
         }
 
         var normalizedKind = NormalizeKind(kind);
@@ -647,7 +647,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -720,7 +720,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { found = false, error = ex.Message });
+            return Json(new { found = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -742,7 +742,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { matched = false, error = ex.Message });
+            return Json(new { matched = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -787,7 +787,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -815,7 +815,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -836,7 +836,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -853,7 +853,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 }

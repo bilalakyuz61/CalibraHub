@@ -100,6 +100,14 @@ public sealed class Integration
     /// </summary>
     public bool AllowAsCascadeTarget { get; set; } = true;
 
+    /// <summary>
+    /// Kod bazlı cascade: bu integration cascade hedefi olarak bir KOD değeriyle çağrıldığında
+    /// (SourceCodeColumn dolu + mapping'de CascadeByValue=true), bu kolon üzerinden entity bulunur.
+    /// Örnek: "CariKod" → v_Flat_CONTACTS WHERE CariKod = @code → Id alınır.
+    /// NULL = ID bazlı cascade (default davranış, geriye uyumlu).
+    /// </summary>
+    public string? SourceCodeColumn { get; set; }
+
     public int? CreatedById { get; set; }
     public DateTime Created { get; init; } = DateTime.UtcNow;
     public int? UpdatedById { get; set; }

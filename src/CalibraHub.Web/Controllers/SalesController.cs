@@ -753,6 +753,28 @@ public sealed class SalesController : Controller
             ViewData["CanCreateOnBehalf"]      = canOnBehalf;
             ViewData["RequesterLocked"]        = !canOnBehalf;
             ViewData["CurrentUserPersonnelId"] = effectivePersonnelId;
+
+            // Hedef Depo dropdown � Location listesi.
+            var locs = await _logisticsService.GetLocationsAsync(ct);
+            var locParentIds = locs.Where(l => l.ParentId.HasValue).Select(l => l.ParentId!.Value).ToHashSet();
+            ViewData["LocationList"] = locs
+                .Where(l => l.IsActive && !locParentIds.Contains(l.Id))
+                .OrderBy(l => l.LocationName ?? l.LocationCode)
+                .Select(l => new { l.Id, LocationName = l.LocationName ?? l.LocationCode })
+                .ToList();
+            // Mevcut belgede kayıtlı lokasyon varsa onu kullan;
+            // yeni belgede login kullanıcının personel kartındaki varsayılan lokasyonu getir.
+            int? defaultLocId = existingDoc?.LocationId;
+            if (defaultLocId == null)
+            {
+                var uid = CurrentUserId();
+                if (uid.HasValue)
+                {
+                    var userPersonnel = await _personnelService.GetByUserIdAsync(uid.Value, ct);
+                    defaultLocId = userPersonnel?.LocationId;
+                }
+            }
+            ViewData["CurrentLocationId"] = defaultLocId;
         }
 
         return View("DocumentEdit", vm);
@@ -1172,7 +1194,7 @@ public sealed class SalesController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Sunucu hatası: " + ex.Message });
+            return Json(new { success = false, message = "Sunucu hatası: " + "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1254,7 +1276,8 @@ public sealed class SalesController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Kayit hatasi: " + ex.Message });
+            _logger.LogError(ex, "[SaveQuote] belge kaydedilemedi.");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1305,7 +1328,7 @@ public sealed class SalesController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1366,7 +1389,7 @@ public sealed class SalesController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Revize hatasi: " + ex.Message });
+            return Json(new { success = false, message = "Revize hatasi: " + "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1593,7 +1616,7 @@ public sealed class SalesController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[PrintQuote] id={Id} beklenmeyen hata.", id);
-            return PrintErrorPage("Yazdırma hatası: " + ex.Message);
+            return PrintErrorPage("Yazdırma hatası: " + "Islem sirasinda bir hata olustu.");
         }
     }
 

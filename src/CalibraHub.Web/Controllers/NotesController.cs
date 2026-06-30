@@ -1,7 +1,7 @@
-using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Security;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -21,18 +21,15 @@ namespace CalibraHub.Web.Controllers;
 public sealed class NotesController : Controller
 {
     private readonly INoteRepository _noteRepository;
-    private readonly IAttachmentRepository _attachmentRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly INoteEncryptionService _noteEncryption;
     private readonly INoteOcrService _noteOcr;
     private readonly string _schema;
     private const long MaxAttachmentBytes = 20L * 1024 * 1024; // 20 MB
-    private const string NoteEntityType = "Note";
 
     public NotesController(
         INoteRepository noteRepository,
-        IAttachmentRepository attachmentRepository,
         IUserProfileRepository userProfileRepository,
         SqlServerConnectionFactory connectionFactory,
         INoteEncryptionService noteEncryption,
@@ -40,7 +37,6 @@ public sealed class NotesController : Controller
         CalibraDatabaseOptions dbOptions)
     {
         _noteRepository = noteRepository;
-        _attachmentRepository = attachmentRepository;
         _userProfileRepository = userProfileRepository;
         _connectionFactory = connectionFactory;
         _noteEncryption = noteEncryption;
@@ -48,105 +44,108 @@ public sealed class NotesController : Controller
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Index(Guid? id, Guid? folderId, bool trash = false, CancellationToken cancellationToken = default)
+    // -- Not ekleri � note_attachments (company DB) -----------------------------
+    // Merkezi dbo.Attachment (master DB) yerine per-company note_attachments kullanilir.
+    // FormId+RefId INT semasiyla uyumlu; not ekleri merkezi tabloya yazilmaz.
+
+    private async Task<List<object>> GetNoteAttachmentsAsync(Guid noteId, CancellationToken ct)
     {
-        var (companyId, userId) = GetCurrentUser();
-        var notes = await _noteRepository.GetByUserAsync(companyId, userId, null, cancellationToken);
-        var allUsers = await _userProfileRepository.GetAllAsync(cancellationToken);
-        var folders = await _noteRepository.GetFoldersAsync(companyId, userId, cancellationToken);
-        var trashCount = await _noteRepository.GetTrashedCountAsync(companyId, userId, cancellationToken);
-
-        NoteEditorModel editor;
-        if (id.HasValue)
+        var list = new List<object>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [id],[FileName],[FileSize],[content_type],[description],[UploadedAt]
+            FROM [{_schema}].[note_attachments]
+            WHERE [note_id] = @NoteId AND ([IsActive] IS NULL OR [IsActive] = 1)
+            ORDER BY [UploadedAt];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@NoteId", noteId));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
         {
-            var note = await _noteRepository.GetByIdAsync(id.Value, cancellationToken);
-            if (note is not null)
+            list.Add(new
             {
-                var reminders = await _noteRepository.GetRemindersAsync(note.Id, cancellationToken);
-                var shares = await _noteRepository.GetSharesAsync(note.Id, cancellationToken);
-
-                editor = new NoteEditorModel
-                {
-                    Id = note.Id,
-                    FolderId = note.FolderId,
-                    Title = note.Title,
-                    Content = note.Content,
-                    IsOwn = note.UserId == userId,
-                    Reminders = reminders.Select(r => new NoteReminderItem
-                    {
-                        Id = r.Id,
-                        RemindAt = r.RemindAt,
-                        IsSent = r.IsSent,
-                        RecurrenceType = r.RecurrenceType,
-                        RecurrenceData = r.RecurrenceData
-                    }).ToList(),
-                    Shares = shares.Select(s =>
-                    {
-                        var sharedUser = allUsers.FirstOrDefault(u => u.Id == s.SharedWithUserId);
-                        return new NoteShareItem
-                        {
-                            Id = s.Id,
-                            SharedWithUserId = s.SharedWithUserId,
-                            SharedWithUserName = sharedUser?.FullName ?? s.SharedWithUserId.ToString(),
-                            SharedAt = s.SharedAt
-                        };
-                    }).ToList()
-                };
-            }
-            else
-            {
-                editor = new NoteEditorModel { FolderId = folderId };
-            }
+                id          = r.GetGuid(0).ToString(),
+                fileName    = r.GetString(1),
+                fileSize    = r.GetInt64(2),
+                contentType = r.IsDBNull(3) ? null : r.GetString(3),
+                description = r.IsDBNull(4) ? null : r.GetString(4),
+                uploadedAt  = r.GetDateTime(5).ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+            });
         }
-        else
-        {
-            editor = new NoteEditorModel { FolderId = folderId };
-        }
+        return list;
+    }
 
-        var shareableUsers = allUsers
-            .Where(u => u.Id != userId && u.IsActive)
-            .Select(u => new SelectListItem(u.FullName, u.Id.ToString()))
-            .ToList();
+    private async Task<(Guid AttachmentId, string FileName, string? ContentType, byte[]? Content)?> GetNoteAttachmentBinaryAsync(Guid attachmentId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [FileName],[content_type],[binary_content]
+            FROM [{_schema}].[note_attachments]
+            WHERE [id] = @Id AND ([IsActive] IS NULL OR [IsActive] = 1);
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Id", attachmentId));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        var bytes = r.IsDBNull(2) ? null : (byte[])r[2];
+        return (attachmentId, r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1), bytes);
+    }
 
-        var noteListItems = notes.Select(n => new NoteListItem
-        {
-            Id = n.Id,
-            Title = n.Title,
-            ContentPreview = n.Content.Length > 80 ? n.Content[..80] + "…" : n.Content,
-            UpdatedAt = n.UpdatedAt,
-            IsOwn = n.UserId == userId,
-            FolderId = n.FolderId
-        }).ToList();
+    private async Task<Guid?> GetNoteAttachmentOwnerAsync(Guid attachmentId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT [note_id] FROM [{_schema}].[note_attachments] WHERE [id] = @Id AND ([IsActive] IS NULL OR [IsActive] = 1);";
+        cmd.Parameters.Add(new SqlParameter("@Id", attachmentId));
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : (Guid)result;
+    }
 
-        IReadOnlyCollection<NoteListItem> trashItems = [];
-        if (trash)
-        {
-            var trashed = await _noteRepository.GetTrashedAsync(companyId, userId, cancellationToken);
-            trashItems = trashed.Select(n => new NoteListItem
-            {
-                Id = n.Id,
-                Title = n.Title,
-                ContentPreview = n.Content.Length > 80 ? n.Content[..80] + "…" : n.Content,
-                UpdatedAt = n.UpdatedAt,
-                IsOwn = true,
-                FolderId = n.FolderId
-            }).ToList();
-        }
+    private async Task SoftDeleteNoteAttachmentAsync(Guid attachmentId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"UPDATE [{_schema}].[note_attachments] SET [IsActive] = 0 WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", attachmentId));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 
-        var viewModel = new NotesViewModel
-        {
-            Notes = noteListItems,
-            Editor = editor,
-            ShareableUsers = shareableUsers,
-            Folders = FlattenFolders(folders),
-            SelectedFolderId = folderId,
-            ShowTrash = trash,
-            TrashNotes = trashItems,
-            TrashCount = trashCount
-        };
+    private async Task SoftDeleteNoteAttachmentsByNoteAsync(Guid noteId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"UPDATE [{_schema}].[note_attachments] SET [IsActive] = 0 WHERE [note_id] = @NoteId;";
+        cmd.Parameters.Add(new SqlParameter("@NoteId", noteId));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 
-        return View(viewModel);
+    private async Task InsertNoteAttachmentAsync(Guid noteId, string fileName, string? contentType, long fileSize, string? description, byte[] content, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            INSERT INTO [{_schema}].[note_attachments]
+                ([id],[note_id],[FileName],[stored_name],[content_type],[FileSize],[UploadedAt],[description],[binary_content],[IsActive])
+            VALUES
+                (@Id,@NoteId,@FileName,'',@ContentType,@FileSize,SYSUTCDATETIME(),@Description,@Content,1);
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Id",          Guid.NewGuid()));
+        cmd.Parameters.Add(new SqlParameter("@NoteId",      noteId));
+        cmd.Parameters.Add(new SqlParameter("@FileName",    fileName));
+        cmd.Parameters.Add(new SqlParameter("@ContentType", (object?)contentType ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@FileSize",    fileSize));
+        cmd.Parameters.Add(new SqlParameter("@Description", (object?)description ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Content",     (object)content) { SqlDbType = System.Data.SqlDbType.VarBinary });
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    [HttpGet]
+    public IActionResult Index()
+    {
+        // View tamamen React tarafından render edilir (mountNotesWorkspace).
+        // Veri GetAllJson endpoint'i üzerinden yüklenir — burada DB çağrısı gerekmez.
+        return View();
     }
 
 
@@ -212,7 +211,7 @@ public sealed class NotesController : Controller
     {
         var (_, userId) = GetCurrentUser();
         await _noteRepository.PermanentDeleteNoteAsync(id, userId, cancellationToken);
-        await _attachmentRepository.DeleteByEntityAsync(NoteEntityType, id.ToString(), cancellationToken);
+        await SoftDeleteNoteAttachmentsByNoteAsync(id, cancellationToken);
         return RedirectToAction(nameof(Index), new { trash = true });
     }
 
@@ -347,16 +346,8 @@ public sealed class NotesController : Controller
         var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
         if (!IsOwner(note, companyId, userId)) return Forbid();
 
-        var attachments = await _attachmentRepository.GetByEntityAsync(NoteEntityType, noteId.ToString(), cancellationToken);
-        return Json(attachments.Select(a => new
-        {
-            id          = a.Id,
-            fileName    = a.FileName,
-            fileSize    = a.FileSize,
-            contentType = a.ContentType,
-            uploadedAt  = a.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
-            description = a.Description
-        }));
+        var attachments = await GetNoteAttachmentsAsync(noteId, cancellationToken);
+        return Json(attachments);
     }
 
     [HttpPost]
@@ -381,71 +372,56 @@ public sealed class NotesController : Controller
             bytes = ms.ToArray();
         }
 
-        var attachment = new Attachment
-        {
-            EntityType    = NoteEntityType,
-            EntityId      = noteId.ToString(),
-            FileName      = Path.GetFileName(file.FileName),
-            ContentType   = file.ContentType,
-            FileSize      = file.Length,
-            Description   = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
-            BinaryContent = bytes
-        };
-
-        await _attachmentRepository.AddAsync(attachment, cancellationToken);
+        var fileName = Path.GetFileName(file.FileName);
+        var desc     = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        await InsertNoteAttachmentAsync(noteId, fileName, file.ContentType, file.Length, desc, bytes, cancellationToken);
         return Json(new
         {
             success    = true,
             attachment = new
             {
-                id          = attachment.Id,
-                fileName    = attachment.FileName,
-                fileSize    = attachment.FileSize,
-                uploadedAt  = attachment.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
-                description = attachment.Description
+                fileName   = fileName,
+                fileSize   = file.Length,
+                uploadedAt = DateTime.UtcNow.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                description = desc,
             }
         });
     }
 
     [HttpGet]
-    public async Task<IActionResult> DownloadAttachment(int id, bool inline = false, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> DownloadAttachment(Guid id, bool inline = false, CancellationToken cancellationToken = default)
     {
         var (companyId, userId) = GetCurrentUser();
-        var attachment = await _attachmentRepository.GetByIdAsync(id, cancellationToken);
-        if (attachment is null || attachment.EntityType != NoteEntityType) return NotFound();
-
-        if (!Guid.TryParse(attachment.EntityId, out var noteId)) return NotFound();
-        var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
+        var noteId = await GetNoteAttachmentOwnerAsync(id, cancellationToken);
+        if (noteId is null) return NotFound();
+        var note = await _noteRepository.GetByIdAsync(noteId.Value, cancellationToken);
         if (!IsOwner(note, companyId, userId)) return Forbid();
 
-        var bytes = await _attachmentRepository.GetBinaryAsync(id, cancellationToken);
-        if (bytes is not { Length: > 0 }) return NotFound();
+        var att = await GetNoteAttachmentBinaryAsync(id, cancellationToken);
+        if (att is null || att.Value.Content is not { Length: > 0 }) return NotFound();
 
-        var contentType = attachment.ContentType ?? "application/octet-stream";
+        var contentType = att.Value.ContentType ?? "application/octet-stream";
         if (inline)
         {
-            Response.Headers.Append("Content-Disposition", $"inline; filename*=UTF-8''{Uri.EscapeDataString(attachment.FileName)}");
-            return File(bytes, contentType);
+            Response.Headers.Append("Content-Disposition", $"inline; filename*=UTF-8''{Uri.EscapeDataString(att.Value.FileName)}");
+            return File(att.Value.Content, contentType);
         }
-        return File(bytes, contentType, attachment.FileName);
+        return File(att.Value.Content, contentType, att.Value.FileName);
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeleteAttachment(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteAttachment(Guid id, CancellationToken cancellationToken)
     {
         var (companyId, userId) = GetCurrentUser();
-        var attachment = await _attachmentRepository.GetByIdAsync(id, cancellationToken);
-        if (attachment is null || attachment.EntityType != NoteEntityType)
-            return Json(new { success = false, error = "Dosya bulunamadı." });
+        var noteId = await GetNoteAttachmentOwnerAsync(id, cancellationToken);
+        if (noteId is null)
+            return Json(new { success = false, error = "Dosya bulunamadi." });
 
-        if (!Guid.TryParse(attachment.EntityId, out var noteId))
-            return Json(new { success = false, error = "Dosya bulunamadı." });
-
-        var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
+        var note = await _noteRepository.GetByIdAsync(noteId.Value, cancellationToken);
         if (!IsOwner(note, companyId, userId))
-            return Json(new { success = false, error = "Erişim reddedildi." });
+            return Json(new { success = false, error = "Erisim reddedildi." });
 
-        await _attachmentRepository.DeleteAsync(id, cancellationToken);
+        await SoftDeleteNoteAttachmentAsync(id, cancellationToken);
         return Json(new { success = true });
     }
 
@@ -530,6 +506,59 @@ public sealed class NotesController : Controller
     }
 
     // ── React JSON API ─────────────────────────────────────────────────────
+
+    /// <summary>İçerik olmadan not metadata listesi döner — React ilk yükleme için hızlı endpoint.</summary>
+    [HttpGet]
+    public async Task<IActionResult> GetListJson(CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var notes = await _noteRepository.GetListByUserAsync(companyId, userId, cancellationToken);
+        var folders = await _noteRepository.GetFoldersAsync(companyId, userId, cancellationToken);
+        var currentUser = await _userProfileRepository.GetByIdAsync(userId, cancellationToken);
+
+        var noteIds = notes.Select(n => n.Id).ToArray();
+        var reminderCounts = await _noteRepository.GetActiveReminderCountsAsync(noteIds, cancellationToken);
+
+        return Json(new
+        {
+            currentUserName = currentUser?.FullName ?? string.Empty,
+            companyId = companyId,
+            folders = folders.Select(f => new { id = f.Id, name = f.Name, parentId = f.ParentFolderId }),
+            notes = notes.Select(n => new
+            {
+                id = n.Id,
+                folderId = n.FolderId,
+                title = n.Title,
+                // content intentionally omitted — fetched on demand via GetContentJson
+                createdAt = n.CreatedAt,
+                updatedAt = n.UpdatedAt,
+                isPinned = n.IsPinned,
+                isFullyEncrypted = n.IsFullyEncrypted,
+                encryptionHint = n.EncryptionHint,
+                tags = n.Tags,
+                linkedEntityType  = n.LinkedEntityType,
+                linkedEntityId    = n.LinkedEntityId,
+                linkedEntityLabel = n.LinkedEntityLabel,
+                visibility        = n.Visibility,
+                isOwner           = n.UserId == userId,
+                reminderCount = reminderCounts.TryGetValue(n.Id, out var c) ? c : 0,
+                shareToken               = n.ShareToken,
+                shareIsPublic            = n.ShareIsPublic,
+                shareIncludeAttachments  = n.ShareIncludeAttachments,
+                ocrText                  = n.OcrText,
+            }),
+        });
+    }
+
+    /// <summary>Tek bir notun şifresi çözülmüş içeriğini döner — lazy load için.</summary>
+    [HttpGet]
+    public async Task<IActionResult> GetContentJson(Guid noteId, CancellationToken cancellationToken)
+    {
+        var (_, userId) = GetCurrentUser();
+        var result = await _noteRepository.GetContentByIdAsync(noteId, userId, cancellationToken);
+        if (result is null) return NotFound();
+        return Json(new { content = result.Value.Content, ocrText = result.Value.OcrText });
+    }
 
     /// <summary>Tum klasor ve notlari JSON olarak doner (React bilesenine ilk yukleme icin).</summary>
     [HttpGet]
@@ -995,7 +1024,7 @@ public sealed class NotesController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = $"Dosya okunamadı: {ex.Message}" });
+            return Json(new { success = false, error = $"Dosya okunamadı: {"Islem sirasinda bir hata olustu."}" });
         }
 
         if (enexNotes.Count == 0)
@@ -1049,16 +1078,7 @@ public sealed class NotesController : Controller
                 // EnexImporter zaten 20 MB üstünü atladı; buradaki liste temiz
                 foreach (var res in enexNote.Attachments)
                 {
-                    var attachment = new Attachment
-                    {
-                        EntityType    = NoteEntityType,
-                        EntityId      = note.Id.ToString(),
-                        FileName      = res.FileName,
-                        ContentType   = res.Mime,
-                        FileSize      = res.Data.Length,
-                        BinaryContent = res.Data
-                    };
-                    await _attachmentRepository.AddAsync(attachment, cancellationToken);
+                    await InsertNoteAttachmentAsync(note.Id, res.FileName, res.Mime, res.Data.Length, null, res.Data, cancellationToken);
                 }
 
                 totalSkippedAttachments += enexNote.SkippedAttachmentCount;
@@ -1107,7 +1127,7 @@ public sealed class NotesController : Controller
     {
         var (_, userId) = GetCurrentUser();
         await _noteRepository.PermanentDeleteNoteAsync(input.Id, userId, cancellationToken);
-        await _attachmentRepository.DeleteByEntityAsync(NoteEntityType, input.Id.ToString(), cancellationToken);
+        await SoftDeleteNoteAttachmentsByNoteAsync(input.Id, cancellationToken);
         return Json(new { success = true });
     }
 
@@ -1199,11 +1219,7 @@ public sealed class NotesController : Controller
         // Ekler — sadece share_include_attachments = 1 ise yükle
         if (note.ShareIncludeAttachments)
         {
-            var attachments = await _attachmentRepository.GetByEntityAsync(NoteEntityType, note.Id.ToString(), cancellationToken);
-            ViewBag.Attachments = attachments
-                .Where(a => a.IsActive)
-                .Select(a => new { a.Id, a.FileName, a.FileSize, a.ContentType, a.Description })
-                .ToList();
+            ViewBag.Attachments = await GetNoteAttachmentsAsync(note.Id, cancellationToken);
         }
 
         return View("Public", note);
@@ -1212,9 +1228,9 @@ public sealed class NotesController : Controller
     /// <summary>Herkese açık notta paylaşılan eki indir — login gerektirmez; share token + ek sahipliği doğrulanır.</summary>
     [AllowAnonymous]
     [HttpGet("/Notes/PublicAttachment")]
-    public async Task<IActionResult> PublicAttachment(int cid, string t, int aid, CancellationToken cancellationToken)
+    public async Task<IActionResult> PublicAttachment(int cid, string t, Guid aid, CancellationToken cancellationToken)
     {
-        if (cid <= 0 || string.IsNullOrWhiteSpace(t) || t.Length > 40 || aid <= 0)
+        if (cid <= 0 || string.IsNullOrWhiteSpace(t) || t.Length > 40 || aid == Guid.Empty)
             return NotFound();
 
         // Token doğrula + share_include_attachments kontrolü
@@ -1231,17 +1247,16 @@ public sealed class NotesController : Controller
         if (noteIdObj is null) return NotFound();
         var noteId = (Guid)noteIdObj;
 
-        // Ek bu nota ait mi?
-        var attachment = await _attachmentRepository.GetByIdAsync(aid, cancellationToken);
-        if (attachment is null || !attachment.IsActive) return NotFound();
-        if (attachment.EntityType != NoteEntityType || attachment.EntityId != noteId.ToString()) return NotFound();
+        // Ek bu nota ait mi? (note_attachments company DB'de)
+        var ownerNoteId = await GetNoteAttachmentOwnerAsync(aid, cancellationToken);
+        if (ownerNoteId is null || ownerNoteId.Value != noteId) return NotFound();
 
-        var bytes = await _attachmentRepository.GetBinaryAsync(aid, cancellationToken);
-        if (bytes is null || bytes.Length == 0) return NotFound();
+        var att = await GetNoteAttachmentBinaryAsync(aid, cancellationToken);
+        if (att is null || att.Value.Content is not { Length: > 0 }) return NotFound();
 
-        var contentType = attachment.ContentType ?? "application/octet-stream";
-        Response.Headers.Append("Content-Disposition", $"attachment; filename*=UTF-8''{Uri.EscapeDataString(attachment.FileName)}");
-        return File(bytes, contentType);
+        var contentType = att.Value.ContentType ?? "application/octet-stream";
+        Response.Headers.Append("Content-Disposition", $"attachment; filename*=UTF-8''{Uri.EscapeDataString(att.Value.FileName)}");
+        return File(att.Value.Content, contentType);
     }
 
     /// <summary>Mevcut notu kopyalar — aynı başlık + " (Kopya)", aynı içerik/klasör, isPinned=false, isFullyEncrypted=false.</summary>
@@ -1288,7 +1303,7 @@ public sealed class NotesController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 

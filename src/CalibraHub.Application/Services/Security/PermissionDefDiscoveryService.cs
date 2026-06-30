@@ -24,6 +24,7 @@ public sealed class PermissionDefDiscoveryService
     private readonly IWidgetRepository _widgetRepo;
     private readonly IPermissionService _permService;
     private readonly IReportDesignRepository _designRepo;
+    private readonly IIntegrationRepository _integrationRepo;
     private readonly ILogger<PermissionDefDiscoveryService> _logger;
 
     public PermissionDefDiscoveryService(
@@ -32,14 +33,16 @@ public sealed class PermissionDefDiscoveryService
         IWidgetRepository widgetRepo,
         IPermissionService permService,
         IReportDesignRepository designRepo,
+        IIntegrationRepository integrationRepo,
         ILogger<PermissionDefDiscoveryService> logger)
     {
-        _formRepo    = formRepo;
-        _permRepo    = permRepo;
-        _widgetRepo  = widgetRepo;
-        _permService = permService;
-        _designRepo  = designRepo;
-        _logger      = logger;
+        _formRepo        = formRepo;
+        _permRepo        = permRepo;
+        _widgetRepo      = widgetRepo;
+        _permService     = permService;
+        _designRepo      = designRepo;
+        _integrationRepo = integrationRepo;
+        _logger          = logger;
     }
 
     /// <summary>Field permission action prefix — <c>FIELD:&lt;WidgetCode&gt;</c>.</summary>
@@ -284,7 +287,41 @@ public sealed class PermissionDefDiscoveryService
         var crudDefCount = defs.Count - btnDefCount - fieldDefCount - dashDefCount;
         _logger.LogInformation("[PERM DISCOVERY] {Count} izin tanımı upsert edildi (CRUD: {Crud}, Buton: {Btn}, Alan: {Field}, Pano: {Dash}; {Skipped} master-detail alt form atlandı).",
             defs.Count, crudDefCount, btnDefCount, fieldDefCount, dashDefCount, skippedCount);
-        return defs.Count;
+
+        // ── BUTTON:INT_{id} — Manuel tetikleyicili entegrasyon butonları ──
+        // Her integration.SourceFormCode altında bir aksiyon tanımı — Yetki Yönetimi'nde görünür.
+        var intBtnDefCount = 0;
+        try
+        {
+            var allManual = await _integrationRepo.ListAllManualButtonsAsync(ct);
+            if (allManual.Count > 0)
+            {
+                var formNameMap = forms.ToDictionary(f => f.FormCode, f => f.FormName, StringComparer.OrdinalIgnoreCase);
+                var intDefs = allManual.Select(btn =>
+                {
+                    var formDisplayName = formNameMap.TryGetValue(btn.SourceFormCode, out var fn) ? fn : btn.SourceFormCode;
+                    var label = string.IsNullOrWhiteSpace(btn.ButtonLabel) ? btn.Name : btn.ButtonLabel;
+                    return new PermissionDef
+                    {
+                        FormCode   = btn.SourceFormCode,
+                        ActionCode = BuildIntegrationButtonActionCode(btn.Id),
+                        Label      = $"{formDisplayName} — {label} (Entegrasyon)",
+                        Category   = PermissionDef.Categories.Action,
+                        SortOrder  = 400 + btn.Id,
+                        IsActive   = true,
+                    };
+                }).ToList();
+                await _permRepo.BulkUpsertAsync(intDefs, ct);
+                intBtnDefCount = intDefs.Count;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[PERM DISCOVERY] Entegrasyon buton permission seed atlandı.");
+        }
+
+        _logger.LogInformation("[PERM DISCOVERY] {Count} entegrasyon buton tanımı upsert edildi.", intBtnDefCount);
+        return defs.Count + intBtnDefCount;
     }
 
     /// <summary>
@@ -353,6 +390,48 @@ public sealed class PermissionDefDiscoveryService
         await _permRepo.BulkUpsertAsync([def], ct);
 
         // Defs cache'ini anında temizle — 60sn TTL'yi bekleme.
+        _permService.InvalidateDefsCache();
+    }
+
+    /// <summary>Entegrasyon manuel buton yetki aksiyon kodu prefix'i: <c>BUTTON:INT_{id}</c>.</summary>
+    public const string IntegrationButtonActionPrefix = "BUTTON:INT_";
+    public static string BuildIntegrationButtonActionCode(int integrationId) => IntegrationButtonActionPrefix + integrationId;
+
+    /// <summary>
+    /// Entegrasyon kaydedilince veya silinince çağrılır — form üzerindeki
+    /// <c>BUTTON:INT_{id}</c> PermissionDef'ini oluşturur/günceller/pasifleştirir.
+    /// Yetki Yönetimi'nde ilgili form altında görünür; admin buradan rollere verir.
+    /// </summary>
+    public async Task SyncIntegrationButtonPermissionAsync(
+        int integrationId,
+        string sourceFormCode,
+        string integrationName,
+        string? buttonLabel,
+        bool isActive,
+        CancellationToken ct)
+    {
+        if (integrationId <= 0 || string.IsNullOrWhiteSpace(sourceFormCode)) return;
+
+        // Form adını lookup et — Yetki Yönetimi label'ı için
+        string formDisplayName;
+        try {
+            var forms = await _formRepo.GetAllAsync(ct);
+            formDisplayName = forms.FirstOrDefault(f =>
+                string.Equals(f.FormCode, sourceFormCode, StringComparison.OrdinalIgnoreCase))
+                ?.FormName ?? sourceFormCode;
+        } catch { formDisplayName = sourceFormCode; }
+
+        var label = string.IsNullOrWhiteSpace(buttonLabel) ? integrationName : buttonLabel;
+        var def = new PermissionDef
+        {
+            FormCode   = sourceFormCode,
+            ActionCode = BuildIntegrationButtonActionCode(integrationId),
+            Label      = $"{formDisplayName} — {label} (Entegrasyon)",
+            Category   = PermissionDef.Categories.Action,
+            SortOrder  = 400 + integrationId,
+            IsActive   = isActive,
+        };
+        await _permRepo.BulkUpsertAsync([def], ct);
         _permService.InvalidateDefsCache();
     }
 

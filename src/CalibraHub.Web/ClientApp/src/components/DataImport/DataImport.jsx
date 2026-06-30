@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   Upload, Save, Play, AlertTriangle, Loader2, CheckCircle2,
-  FileDown, ArrowLeft, ArrowRight,
+  FileDown, ArrowLeft, ArrowRight, RefreshCw, X, RotateCcw, Search, ChevronDown, FileSpreadsheet,
 } from 'lucide-react'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import './data-import.css'
@@ -44,7 +44,7 @@ function csrf() {
   return ''
 }
 async function apiGet(url) {
-  const r = await fetch(url, { credentials: 'same-origin' })
+  const r = await fetch(url, { credentials: 'same-origin', cache: 'no-store' })
   return r.json()
 }
 async function apiPostJson(url, body) {
@@ -82,7 +82,7 @@ export default function DataImport() {
   const [fields, setFields] = useState([])
   const [name, setName] = useState('')
   const [matchKey, setMatchKey] = useState('')
-  const [headerRow, setHeaderRow] = useState(1)
+  const [firstRowHeader, setFirstRowHeader] = useState(true)
   const [sheetName, setSheetName] = useState('')
   const [mapping, setMapping] = useState({})
 
@@ -96,6 +96,10 @@ export default function DataImport() {
   const [error, setError] = useState('')
   const [confirm, setConfirm] = useState(null)
   const [step, setStep] = useState(1)
+  const [overrides, setOverrides] = useState({})   // { [rowNumber]: { [targetKey]: value } } — önizlemede elle düzeltmeler
+  const [excluded, setExcluded] = useState({})     // { [rowNumber]: true } — aktarımdan hariç tutulan (iptal) satırlar
+  const [search, setSearch] = useState('')         // önizleme tablosu arama
+  const [dragging, setDragging] = useState(false)  // sürükle-bırak dosya alanı
 
   const fileRef = useRef(null)
 
@@ -110,7 +114,7 @@ export default function DataImport() {
     const t = d.template
     setSelId(t.id); setName(t.name); setMatchKey(t.matchKeyField || '')
     setEntity(t.targetEntity || 'CONTACT'); loadFields(t.targetEntity || 'CONTACT')
-    setHeaderRow(t.headerRowIndex || 1); setSheetName(t.sheetName || '')
+    setFirstRowHeader((t.headerRowIndex ?? 1) >= 1); setSheetName(t.sheetName || '')
     const m = {}
     for (const c of (t.columns || [])) {
       m[c.targetKey] = { source: c.sourceColumn || '', transform: c.transform || '', def: c.defaultValue || '' }
@@ -146,11 +150,12 @@ export default function DataImport() {
     for (const f of fields) if (f.canBeMatchKey) opts.push({ value: f.key, label: `${f.label} — varsa güncelle, yoksa ekle` })
     return opts
   }, [fields])
+  const matchKeyFields = useMemo(() => fields.filter(f => f.canBeMatchKey), [fields])
   const entityLabel = useCallback((code) => (entities.find(e => e.entity === code)?.label) || code || 'Cari', [entities])
 
   function onEntityChange(ent) {
     setEntity(ent); loadFields(ent)
-    setMatchKey(''); setMapping({}); setPreview(null); setResult(null); setError('')
+    setMatchKey(''); setMapping({}); setPreview(null); setResult(null); setError(''); setOverrides({}); setExcluded({}); setSearch('')
   }
 
   function downloadBlank() {
@@ -162,8 +167,8 @@ export default function DataImport() {
 
   async function onPickFile(f) {
     if (!f) return
-    setFile(f); setError(''); setPreview(null); setResult(null)
-    await readHeaders(f, sheetName, headerRow)
+    setFile(f); setError(''); setPreview(null); setResult(null); setOverrides({}); setExcluded({}); setSearch('')
+    await readHeaders(f, sheetName, firstRowHeader ? 1 : 0)
   }
   async function readHeaders(f, sheet, hRow) {
     if (!f) return
@@ -199,6 +204,16 @@ export default function DataImport() {
   function setMap(key, patch) {
     setMapping(prev => ({ ...prev, [key]: { source: '', transform: '', def: '', ...prev[key], ...patch } }))
   }
+  function setOverride(rowNumber, key, value) {
+    setOverrides(prev => ({ ...prev, [rowNumber]: { ...prev[rowNumber], [key]: value } }))
+  }
+  function toggleExclude(rowNumber) {
+    setExcluded(prev => {
+      const n = { ...prev }
+      if (n[rowNumber]) delete n[rowNumber]; else n[rowNumber] = true
+      return n
+    })
+  }
 
   function buildSpec() {
     const columns = Object.entries(mapping)
@@ -206,7 +221,7 @@ export default function DataImport() {
       .map(([k, v]) => ({ targetKey: k, sourceColumn: v.source || null, transform: v.transform || null, defaultValue: v.def || null }))
     return {
       id: selId || 0, name: name.trim(), targetEntity: entity || 'CONTACT',
-      sheetName: sheetName || null, headerRowIndex: Number(headerRow) || 1,
+      sheetName: sheetName || null, headerRowIndex: firstRowHeader ? 1 : 0,
       matchKeyField: matchKey || null, columns, isActive: true,
     }
   }
@@ -226,6 +241,7 @@ export default function DataImport() {
     try {
       const fd = new FormData()
       fd.append('file', file); fd.append('spec', JSON.stringify(buildSpec()))
+      fd.append('overrides', JSON.stringify(overrides))
       const d = await apiPostForm(`${API}/preview`, fd)
       if (!d || !d.success) { setError(d?.error || 'Önizleme başarısız.'); return }
       setPreview(d)
@@ -233,14 +249,19 @@ export default function DataImport() {
   }
   function askImport() {
     if (!file) { setError('Önce bir Excel/CSV dosyası seçin.'); return }
-    const n = preview ? preview.validRows : '?'
-    setConfirm({ message: `${n} geçerli satır işlenecek (ekle/güncelle). Devam edilsin mi?`, onOk: runImport })
+    const exCount = Object.keys(excluded).length
+    const exValid = preview ? preview.rows.filter(r => excluded[r.rowNumber] && r.action !== 'error').length : 0
+    const n = preview ? Math.max(0, preview.validRows - exValid) : '?'
+    const extra = exCount > 0 ? ` (${exCount} satır hariç tutuldu)` : ''
+    setConfirm({ message: `${n} geçerli satır işlenecek (ekle/güncelle)${extra}. Devam edilsin mi?`, onOk: runImport })
   }
   async function runImport() {
     setConfirm(null); setBusy('commit'); setError(''); setResult(null)
     try {
       const fd = new FormData()
       fd.append('file', file); fd.append('spec', JSON.stringify(buildSpec()))
+      fd.append('overrides', JSON.stringify(overrides))
+      fd.append('excluded', JSON.stringify(Object.keys(excluded).map(Number)))
       const d = await apiPostForm(`${API}/commit`, fd)
       if (!d || !d.success) { setError(d?.error || 'İçe aktarım başarısız.'); return }
       setResult(d)
@@ -290,60 +311,89 @@ export default function DataImport() {
           {step === 1 && (
             <section className="di-card">
               <div className="di-card__title">Şablon Bilgisi</div>
-              <div className="di-grid">
-                <div className="di-field">
-                  <label className="di-label">Şablon Adı</label>
-                  <input className="di-input" value={name} onChange={e => setName(e.target.value)} placeholder="Örn. Müşteri Listesi İçe Aktarım" />
+              <div className="di-rows">
+                <div className="di-row">
+                  <label className="di-row__label">Şablon Adı</label>
+                  <div className="di-row__control">
+                    <input className="di-input" value={name} onChange={e => setName(e.target.value)} placeholder="Örn. Müşteri Listesi İçe Aktarım" />
+                  </div>
                 </div>
-                <div className="di-field">
-                  <label className="di-label">Hedef Kayıt Türü</label>
-                  <select className="di-select" value={entity} onChange={e => onEntityChange(e.target.value)} disabled={selId > 0}>
-                    {entities.map(en => <option key={en.entity} value={en.entity}>{en.label}</option>)}
-                  </select>
+                <div className="di-row">
+                  <label className="di-row__label">Hedef Kayıt Türü</label>
+                  <div className="di-row__control">
+                    <select className="di-select" value={entity} onChange={e => onEntityChange(e.target.value)} disabled={selId > 0}>
+                      {entities.map(en => <option key={en.entity} value={en.entity}>{en.label}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <div className="di-field">
-                  <label className="di-label">Eşleştirme Anahtarı</label>
-                  <select className="di-select" value={matchKey} onChange={e => setMatchKey(e.target.value)}>
-                    {matchOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                <div className="di-row">
+                  <label className="di-row__label">Eşleştirme Anahtarı</label>
+                  <div className="di-row__control">
+                    {matchKeyFields.length === 0 ? (
+                      <span className="di-row__static">Her zaman yeni kayıt eklenir</span>
+                    ) : matchKeyFields.length === 1 ? (
+                      <div className="di-switchline">
+                        <label className="di-switch">
+                          <input type="checkbox" checked={!!matchKey}
+                            onChange={e => setMatchKey(e.target.checked ? matchKeyFields[0].key : '')} />
+                          <span className="di-switch__track"><span className="di-switch__thumb" /></span>
+                        </label>
+                        <span className="di-switch__text">
+                          {matchKey
+                            ? `${matchKeyFields[0].label} ile eşleştir — varsa güncelle, yoksa ekle`
+                            : 'Kapalı — her zaman yeni kayıt ekle'}
+                        </span>
+                      </div>
+                    ) : (
+                      <select className="di-select" value={matchKey} onChange={e => setMatchKey(e.target.value)}>
+                        {matchOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    )}
+                  </div>
                 </div>
-                <div className="di-field">
-                  <label className="di-label">Başlık Satırı</label>
-                  <input className="di-input" type="number" min={1} value={headerRow}
-                    onChange={e => setHeaderRow(e.target.value)}
-                    onBlur={() => file && readHeaders(file, sheetName, headerRow)} />
+                <div className="di-row">
+                  <label className="di-row__label">İlk Satır Başlık</label>
+                  <div className="di-row__control">
+                    <div className="di-switchline">
+                      <label className="di-switch">
+                        <input type="checkbox" checked={firstRowHeader}
+                          onChange={e => { setFirstRowHeader(e.target.checked); if (file) readHeaders(file, sheetName, e.target.checked ? 1 : 0) }} />
+                        <span className="di-switch__track"><span className="di-switch__thumb" /></span>
+                      </label>
+                      <span className="di-switch__text">
+                        {firstRowHeader ? 'Evet — ilk satır kolon başlıkları' : 'Hayır — başlıksız (Kolon1, Kolon2…)'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
           )}
 
           {step === 2 && (
-            <section className="di-card">
+            <section className="di-card di-dropzone"
+              onDragOver={e => { e.preventDefault(); if (!dragging) setDragging(true) }}
+              onDragLeave={e => { if (e.currentTarget.contains(e.relatedTarget)) return; setDragging(false) }}
+              onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) onPickFile(f) }}>
+              {dragging && <div className="di-dropzone-overlay"><Upload size={30} /> Bırak — Excel/CSV yükle</div>}
               <div className="di-card__title">Dosya ve Kolon Eşleme</div>
-              <div className="di-actions" style={{ marginBottom: 12 }}>
-                <button className="di-btn" onClick={downloadBlank}><FileDown size={15} /> Boş Excel Şablonu İndir</button>
-                <span className="di-map__hint">{selId ? 'Bu şablonun kolonlarıyla' : `Tüm ${entityLabel(entity)} alanlarıyla`} boş Excel — kullanıcı doldurup geri yükler</span>
-              </div>
-
               <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }}
                 onChange={e => { onPickFile(e.target.files?.[0]); e.target.value = '' }} />
-              <div className="di-drop" onClick={() => fileRef.current?.click()}>
-                {busy === 'read' ? <span><Loader2 size={16} className="di-spin" /> Okunuyor…</span>
-                  : file ? <span><span className="di-drop__file">{file.name}</span> — değiştirmek için tıkla</span>
-                  : <span><Upload size={16} /> Excel (.xlsx) veya CSV dosyası seç</span>}
+              <div className={'di-file-status' + (file ? ' di-file-status--ok' : '')}>
+                {busy === 'read' ? <><Loader2 size={15} className="di-spin" /> Okunuyor…</>
+                  : file ? <><FileSpreadsheet size={15} /> <strong>{file.name}</strong> — değiştirmek için altta "Dosya Yükle" ya da buraya sürükle-bırak</>
+                  : <><Upload size={15} /> Excel/CSV'yi buraya <strong>sürükle-bırak</strong> ya da altta <strong>"Dosya Yükle"</strong> ile seç</>}
               </div>
 
               {sheets.length > 1 && (
                 <div className="di-field" style={{ maxWidth: 260, marginTop: 12 }}>
                   <label className="di-label">Sayfa</label>
                   <select className="di-select" value={sheetName}
-                    onChange={e => { setSheetName(e.target.value); readHeaders(file, e.target.value, headerRow) }}>
+                    onChange={e => { setSheetName(e.target.value); readHeaders(file, e.target.value, firstRowHeader ? 1 : 0) }}>
                     {sheets.map(s => <option key={s.name} value={s.name}>{s.name} ({s.rowCount} satır)</option>)}
                   </select>
                 </div>
               )}
-
-              <datalist id="di-headers">{headers.map((h, i) => <option key={i} value={h} />)}</datalist>
 
               <table className="di-map" style={{ marginTop: 14 }}>
                 <thead>
@@ -364,9 +414,9 @@ export default function DataImport() {
                           {f.hint && <div className="di-map__hint">{f.hint}</div>}
                         </td>
                         <td>
-                          <input className="di-input" list="di-headers" value={m.source || ''}
-                            placeholder={headers.length ? 'Kolon seç / yaz' : 'Önce dosya yükleyin'}
-                            onChange={e => setMap(f.key, { source: e.target.value })} />
+                          <HeaderSelect value={m.source || ''} headers={headers}
+                            placeholder={headers.length ? 'Kolon seç' : 'Önce dosya yükleyin'}
+                            onChange={v => setMap(f.key, { source: v })} />
                         </td>
                         <td>
                           {f.dataType === 'type'
@@ -403,8 +453,22 @@ export default function DataImport() {
                     <div className="di-stat di-stat--ok"><div className="di-stat__n">{preview.validRows}</div><div className="di-stat__l">Geçerli</div></div>
                     <div className="di-stat di-stat--upd"><div className="di-stat__n">{preview.insertCount}/{preview.updateCount}</div><div className="di-stat__l">Yeni / Güncelle</div></div>
                     <div className="di-stat di-stat--err"><div className="di-stat__n">{preview.errorRows}</div><div className="di-stat__l">Hatalı</div></div>
+                    {Object.keys(excluded).length > 0 && (
+                      <div className="di-stat"><div className="di-stat__n">{Object.keys(excluded).length}</div><div className="di-stat__l">Hariç</div></div>
+                    )}
                   </div>
-                  <PreviewTable preview={preview} />
+                  <div className="di-actions" style={{ margin: '2px 0 8px' }}>
+                    <button className="di-btn" onClick={runPreview} disabled={busy === 'preview'}>
+                      {busy === 'preview' ? <Loader2 size={15} className="di-spin" /> : <RefreshCw size={15} />} Yeniden Doğrula
+                    </button>
+                    <div className="di-search" style={{ marginLeft: 'auto' }}>
+                      <Search size={14} />
+                      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Satırlarda ara…" />
+                    </div>
+                  </div>
+                  <div className="di-map__hint" style={{ marginBottom: 8 }}>Hatalı hücreleri düzeltin, gereksiz satırları <strong>×</strong> ile hariç tutun, sonra "Yeniden Doğrula" / "İçe Aktar".</div>
+                  <PreviewTable preview={preview} overrides={overrides} onEdit={setOverride}
+                    excluded={excluded} onToggleExclude={toggleExclude} search={search} />
                 </>
               )}
             </section>
@@ -463,6 +527,16 @@ export default function DataImport() {
           <button className="di-btn" onClick={saveTemplate} disabled={busy === 'save' || !name.trim()}>
             {busy === 'save' ? <Loader2 size={15} className="di-spin" /> : <Save size={15} />} Şablonu Kaydet
           </button>
+          {step === 2 && (
+            <button className="di-btn" onClick={() => fileRef.current?.click()} title="Excel/CSV dosyası seç">
+              <Upload size={15} /> Dosya Yükle
+            </button>
+          )}
+          {step <= 2 && (
+            <button className="di-btn" onClick={downloadBlank} title="Seçili türün tüm alanlarıyla boş Excel indir">
+              <FileDown size={15} /> Boş Şablon İndir
+            </button>
+          )}
           <div className="di-spacer" />
           {step < 4
             ? <button className="di-btn di-btn--primary" onClick={onNext} disabled={busy === 'preview' || busy === 'read'}>İleri <ArrowRight size={15} /></button>
@@ -491,9 +565,56 @@ export default function DataImport() {
   )
 }
 
-function PreviewTable({ preview }) {
+// Kaynak kolon seçici — native datalist yerine tema-uyumlu özel açılır liste.
+// Açılınca TÜM Excel başlıklarını gösterir (yazınca Türkçe-duyarlı filtreler).
+function HeaderSelect({ value = '', headers = [], placeholder, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+  const nq = norm(q)
+  const filtered = nq ? headers.filter(h => norm(h).includes(nq)) : headers
+  function pick(h) { onChange(h); setOpen(false); setQ('') }
+  return (
+    <div className="di-combo" ref={ref}>
+      <input className="di-input di-combo-input"
+        value={open ? q : value}
+        placeholder={value || placeholder || 'Kolon seç'}
+        onChange={e => { setQ(e.target.value); if (!open) setOpen(true) }}
+        onFocus={() => { setQ(''); setOpen(true) }} />
+      <ChevronDown size={14} className="di-combo-caret" />
+      {open && (
+        <div className="di-combo-menu">
+          {filtered.length === 0
+            ? <div className="di-combo-empty">{headers.length ? 'Eşleşen kolon yok' : 'Önce dosya yükleyin'}</div>
+            : filtered.map((h, i) => (
+                <div key={i} className={'di-combo-opt' + (h === value ? ' di-combo-opt--sel' : '')}
+                  onMouseDown={() => pick(h)}>{h}</div>
+              ))}
+          {value && (
+            <div className="di-combo-opt di-combo-opt--clear" onMouseDown={() => pick('')}>Eşleştirmeyi kaldır</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PreviewTable({ preview, overrides = {}, onEdit, excluded = {}, onToggleExclude, search = '' }) {
   const labels = preview.columnLabels || []
   const keys = preview.columnKeys || []
+  const q = norm(search)
+  const rows = !q ? preview.rows : preview.rows.filter(r => {
+    const ov = overrides[r.rowNumber] || {}
+    const cellHit = r.cells.some(c => norm(((c.target in ov) ? ov[c.target] : c.value) || '').includes(q))
+    const errHit = (r.errors || []).some(e => norm(e).includes(q))
+    return cellHit || errHit || String(r.rowNumber).includes(search.trim())
+  })
   return (
     <div className="di-preview-wrap">
       <table className="di-preview">
@@ -505,17 +626,34 @@ function PreviewTable({ preview }) {
           </tr>
         </thead>
         <tbody>
-          {preview.rows.map(r => {
+          {rows.map(r => {
             const cellMap = {}
             for (const c of r.cells) cellMap[c.target] = c.value
+            const ov = overrides[r.rowNumber] || {}
+            const isEx = !!excluded[r.rowNumber]
+            const cls = (r.action === 'error' ? 'di-row-err' : '') + (isEx ? ' di-row-excluded' : '')
             return (
-              <tr key={r.rowNumber}>
-                <td>{r.rowNumber}</td>
-                <td><span className={'di-tag di-tag--' + r.action}>
-                  {r.action === 'insert' ? 'Yeni' : r.action === 'update' ? 'Güncelle' : 'Hata'}
+              <tr key={r.rowNumber} className={cls.trim()}>
+                <td className="di-row-no">
+                  <span>{r.rowNumber}</span>
+                  <button type="button" className="di-row-x" title={isEx ? 'Geri al (aktarıma dahil et)' : 'Bu satırı aktarımdan çıkar'}
+                    onClick={() => onToggleExclude && onToggleExclude(r.rowNumber)}>
+                    {isEx ? <RotateCcw size={13} /> : <X size={13} />}
+                  </button>
+                </td>
+                <td><span className={'di-tag di-tag--' + (isEx ? 'error' : r.action)}>
+                  {isEx ? 'Hariç' : r.action === 'insert' ? 'Yeni' : r.action === 'update' ? 'Güncelle' : 'Hata'}
                 </span></td>
-                {keys.map(k => <td key={k}>{cellMap[k] ?? ''}</td>)}
-                <td className="di-rowerr">{(r.errors || []).join('; ')}</td>
+                {keys.map(k => {
+                  const val = (k in ov) ? ov[k] : (cellMap[k] ?? '')
+                  return (
+                    <td key={k}>
+                      <input className="di-cell-input" value={val ?? ''} disabled={isEx}
+                        onChange={e => onEdit && onEdit(r.rowNumber, k, e.target.value)} />
+                    </td>
+                  )
+                })}
+                <td className="di-rowerr">{isEx ? 'Aktarımdan çıkarıldı' : (r.errors || []).join('; ')}</td>
               </tr>
             )
           })}

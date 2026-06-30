@@ -41,7 +41,7 @@ public class HomeController : Controller
         if (ex != null)
         {
             model.ExceptionType = ex.GetType().Name;
-            model.Message = ex.Message;
+            model.Message = _env.IsDevelopment() ? ex.Message : null;
             model.StackTrace = ex.ToString();
             model.Hint = GetHint(ex);
         }

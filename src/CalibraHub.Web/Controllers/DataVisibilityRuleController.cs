@@ -188,7 +188,7 @@ public sealed class DataVisibilityRuleController : Controller
         ["SortOrder"]           = ("Sıra",                    "Sort Order"),
         ["Notes"]               = ("Notlar",                  "Notes"),
         ["ParentId"]            = ("Üst Kayıt",               "Parent"),
-        ["CompanyId"]           = ("Şirket",                  "Company"),
+        ["CompanyId"]           = ("�?irket",                  "Company"),
         ["Guid"]                = ("GUID",                    "GUID"),
         ["Tags"]                = ("Etiketler",               "Tags"),
         ["Version"]             = ("Versiyon",                "Version"),
@@ -260,7 +260,7 @@ public sealed class DataVisibilityRuleController : Controller
         ["Mobile"]              = ("Cep Telefonu",            "Mobile"),
         ["Email"]               = ("E-posta",                 "Email"),
         ["Address"]             = ("Adres",                   "Address"),
-        ["City"]                = ("Şehir",                   "City"),
+        ["City"]                = ("�?ehir",                   "City"),
         ["Country"]             = ("Ülke",                    "Country"),
         ["PostalCode"]          = ("Posta Kodu",              "Postal Code"),
         ["CreditLimit"]         = ("Kredi Limiti",            "Credit Limit"),
@@ -479,7 +479,7 @@ public sealed class DataVisibilityRuleController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 

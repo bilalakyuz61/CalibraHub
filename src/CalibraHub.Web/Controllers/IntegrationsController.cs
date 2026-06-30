@@ -1,7 +1,11 @@
 ﻿using System.Security.Claims;
+using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
+using CalibraHub.Application.Services.Security;
+using CalibraHub.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -41,19 +45,28 @@ public sealed class IntegrationsController : Controller
     private readonly IIntegrationApiProfileRepository _apiProfileRepo;
     private readonly IFormMetadataService _formMeta;
     private readonly IIntegrationLookupFunctionRegistry _functionRegistry;
+    private readonly IPermissionService _permService;
+    private readonly IPermissionDefRepository _permDefRepo;
+    private readonly PermissionDefDiscoveryService _permDiscovery;
 
     public IntegrationsController(
         IIntegrationService service,
         IIntegrationRepository repo,
         IIntegrationApiProfileRepository apiProfileRepo,
         IFormMetadataService formMeta,
-        IIntegrationLookupFunctionRegistry functionRegistry)
+        IIntegrationLookupFunctionRegistry functionRegistry,
+        IPermissionService permService,
+        IPermissionDefRepository permDefRepo,
+        PermissionDefDiscoveryService permDiscovery)
     {
         _service = service;
         _repo = repo;
         _apiProfileRepo = apiProfileRepo;
         _formMeta = formMeta;
         _functionRegistry = functionRegistry;
+        _permService = permService;
+        _permDefRepo = permDefRepo;
+        _permDiscovery = permDiscovery;
     }
 
     // ── Razor sayfalari ────────────────────────────────────────────────
@@ -95,7 +108,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -112,7 +125,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -127,6 +140,29 @@ public sealed class IntegrationsController : Controller
         try
         {
             var id = await _service.SaveAsync(request, CurrentUserId(), ct);
+
+            // Manuel buton trigger varsa permission def'ini güncelle
+            var manualTrigger = request.Triggers.FirstOrDefault(t =>
+                t.TriggerType == IntegrationTriggerType.Manual && t.IsActive);
+            if (manualTrigger is not null && request.IsActive)
+            {
+                string? buttonLabel = null;
+                if (manualTrigger.Config is not null)
+                    try {
+                        using var doc = JsonDocument.Parse(manualTrigger.Config);
+                        if (doc.RootElement.TryGetProperty("buttonLabel", out var lbl))
+                            buttonLabel = lbl.GetString();
+                    } catch { /* malformed JSON */ }
+                _ = _permDiscovery.SyncIntegrationButtonPermissionAsync(
+                    id, request.SourceFormCode, request.Name, buttonLabel, isActive: true, CancellationToken.None);
+            }
+            else
+            {
+                // Pasifleştirildi veya manual trigger kaldırıldı — perm def'i pasifleştir
+                _ = _permDiscovery.SyncIntegrationButtonPermissionAsync(
+                    id, request.SourceFormCode, request.Name, null, isActive: false, CancellationToken.None);
+            }
+
             return Json(new { success = true, id });
         }
         catch (ArgumentException ex)
@@ -135,7 +171,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = $"Beklenmedik hata: {ex.Message}" });
+            return Json(new { success = false, error = $"Beklenmedik hata: {"İşlem sırasında bir hata oluştu."}" });
         }
     }
 
@@ -146,12 +182,16 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
+            var integration = await _repo.GetByIdAsync(id, ct);
             await _service.DeleteAsync(id, ct);
+            if (integration is not null)
+                _ = _permDiscovery.SyncIntegrationButtonPermissionAsync(
+                    id, integration.SourceFormCode, integration.Name, null, isActive: false, CancellationToken.None);
             return Json(new { success = true });
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -167,7 +207,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -183,7 +223,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -208,7 +248,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = $"Beklenmedik hata: {ex.Message}" });
+            return Json(new { success = false, error = $"Beklenmedik hata: {"İşlem sırasında bir hata oluştu."}" });
         }
     }
 
@@ -224,7 +264,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -259,7 +299,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -277,7 +317,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -296,7 +336,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -310,7 +350,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -334,7 +374,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -368,7 +408,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -395,7 +435,7 @@ public sealed class IntegrationsController : Controller
             if (!string.IsNullOrWhiteSpace(req.AuthConfigJson))
             {
                 try { System.Text.Json.JsonDocument.Parse(req.AuthConfigJson); }
-                catch (Exception jex) { return Json(new { success = false, error = "AuthConfigJson geçerli JSON değil: " + jex.Message }); }
+                catch (Exception jex) { _ = jex; return Json(new { success = false, error = "AuthConfigJson geçerli JSON formatında değil." }); }
             }
 
             var profile = new Domain.Entities.IntegrationApiProfile
@@ -414,7 +454,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -429,11 +469,11 @@ public sealed class IntegrationsController : Controller
         catch (Exception ex)
         {
             // FK violation muhtemel — bu profile'a bağlı endpoint varsa
-            var msg = ex.Message ?? "";
+            var msg = "İşlem sırasında bir hata oluştu." ?? "";
             string friendly = msg.Contains("FK_", StringComparison.OrdinalIgnoreCase) ||
                               msg.Contains("REFERENCE", StringComparison.OrdinalIgnoreCase)
                 ? "Bu profile'a bağlı endpoint(ler) var; önce onları silin veya başka profile'a taşıyın."
-                : ex.Message;
+                : "İşlem sırasında bir hata oluştu.";
             return Json(new { success = false, error = friendly });
         }
     }
@@ -452,7 +492,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -499,13 +539,13 @@ public sealed class IntegrationsController : Controller
                 {
                     success = false,
                     authType = p.AuthType,
-                    error = authEx.Message,
+                    error = "İşlem sırasında bir hata oluştu.",
                 });
             }
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -611,7 +651,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -667,10 +707,10 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[SaveEndpointApi] {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+            Console.Error.WriteLine($"[SaveEndpointApi] {ex.GetType().Name}: {"İşlem sırasında bir hata oluştu."}\n{ex.StackTrace}");
             if (ex.InnerException != null)
                 Console.Error.WriteLine($"[SaveEndpointApi INNER] {ex.InnerException.Message}");
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -685,10 +725,10 @@ public sealed class IntegrationsController : Controller
         catch (Exception ex)
         {
             // FK violation muhtemel — bu endpoint'i kullanan Integration varsa silinemez
-            var msg = ex.Message ?? "";
+            var msg = "İşlem sırasında bir hata oluştu." ?? "";
             string friendly = msg.Contains("FK_Integration_Endpoint", StringComparison.OrdinalIgnoreCase)
                 ? "Bu endpoint'i kullanan en az 1 entegrasyon var; once o entegrasyonu silin veya baska endpoint'e tasiyin."
-                : ex.Message;
+                : "İşlem sırasında bir hata oluştu.";
             return Json(new { success = false, error = friendly });
         }
     }
@@ -708,7 +748,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -758,7 +798,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -787,7 +827,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -887,7 +927,7 @@ public sealed class IntegrationsController : Controller
             var items = await catalog.ListProvidersAsync(includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/providers/save")]
@@ -901,7 +941,7 @@ public sealed class IntegrationsController : Controller
             var id = await catalog.SaveProviderAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/providers/delete/{id:int}")]
@@ -914,7 +954,7 @@ public sealed class IntegrationsController : Controller
             await catalog.DeleteProviderAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     /// <summary>
@@ -973,7 +1013,7 @@ public sealed class IntegrationsController : Controller
 
             return Json(new { success = true, suggestions });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     /// <summary>Recursive JSON traverse — leaf'lerde "a.b.c" ve dizi icin "a.b[].c" emit.</summary>
@@ -1028,7 +1068,7 @@ public sealed class IntegrationsController : Controller
             var items = await catalog.ListEnumsAsync(providerId, includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpGet("/Integrations/api/doc-catalog/enums/{id:int}")]
@@ -1042,7 +1082,7 @@ public sealed class IntegrationsController : Controller
             if (item is null) return Json(new { success = false, error = "Bulunamadi" });
             return Json(new { success = true, item });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/enums/save")]
@@ -1056,7 +1096,7 @@ public sealed class IntegrationsController : Controller
             var id = await catalog.SaveEnumAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/enums/delete/{id:int}")]
@@ -1069,7 +1109,7 @@ public sealed class IntegrationsController : Controller
             await catalog.DeleteEnumAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpGet("/Integrations/api/doc-catalog/field-docs")]
@@ -1085,7 +1125,7 @@ public sealed class IntegrationsController : Controller
             var items = await catalog.ListFieldDocsAsync(providerId, resource, includeInactive, ct);
             return Json(new { success = true, items });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpGet("/Integrations/api/doc-catalog/field-docs/{id:int}")]
@@ -1099,7 +1139,7 @@ public sealed class IntegrationsController : Controller
             if (item is null) return Json(new { success = false, error = "Bulunamadi" });
             return Json(new { success = true, item });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/field-docs/save")]
@@ -1113,7 +1153,7 @@ public sealed class IntegrationsController : Controller
             var id = await catalog.SaveFieldDocAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost("/Integrations/api/doc-catalog/field-docs/delete/{id:int}")]
@@ -1126,7 +1166,7 @@ public sealed class IntegrationsController : Controller
             await catalog.DeleteFieldDocAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." }); }
     }
 
     // ── JSON API — Form bazli aktif Manual entegrasyonlar ──────────────
@@ -1142,30 +1182,49 @@ public sealed class IntegrationsController : Controller
             return Json(new { success = false, error = "formCode zorunlu" });
         try
         {
-            // Manual trigger'a sahip aktif entegrasyonlar
-            var integrations = await _repo.ListByFormCodeAsync(
-                formCode.Trim(), Domain.Enums.IntegrationTriggerType.Manual, ct);
+            var buttons = await _repo.ListManualButtonsAsync(formCode.Trim(), ct);
+
+            // Kullanıcı bilgileri — per-button permission check için
+            var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            UserAuthorizationCatalog.TryParseRole(roleStr, out var role);
+            var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? (int?)uid : null;
+            int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
 
             var items = new List<object>();
-            foreach (var i in integrations.Where(x => x.IsActive))
+            foreach (var btn in buttons)
             {
-                var ep = i.TargetEndpointId is > 0
-                    ? await _repo.GetEndpointByIdAsync(i.TargetEndpointId.Value, ct)
+                // PermissionDef yoksa → serbest (geriye uyumluluk).
+                // Varsa → kullanıcı yetkisi kontrol et (SystemAdmin daima geçer).
+                if (role != UserRole.SystemAdmin)
+                {
+                    var actionCode = PermissionDefDiscoveryService.BuildIntegrationButtonActionCode(btn.Id);
+                    var def = await _permDefRepo.GetByFormAndActionAsync(btn.SourceFormCode, actionCode, ct);
+                    if (def is { IsActive: true })
+                    {
+                        if (userId is null) continue;
+                        var canRun = await _permService.CheckAsync(userId.Value, role, deptId, btn.SourceFormCode, actionCode, ct);
+                        if (!canRun) continue;
+                    }
+                }
+
+                var ep = btn.TargetEndpointId is > 0
+                    ? await _repo.GetEndpointByIdAsync(btn.TargetEndpointId.Value, ct)
                     : null;
                 items.Add(new
                 {
-                    id = i.Id,
-                    name = i.Name,
-                    description = i.Description,
+                    id          = btn.Id,
+                    name        = btn.Name,
+                    buttonLabel = btn.ButtonLabel,
+                    description = btn.Description,
                     endpointName = ep?.Name,
-                    httpMethod = ep?.HttpMethod,
+                    httpMethod   = ep?.HttpMethod,
                 });
             }
             return Json(new { success = true, items });
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1220,7 +1279,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1258,7 +1317,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1376,7 +1435,7 @@ public sealed class IntegrationsController : Controller
                 catch (Exception ex)
                 {
                     errors++;
-                    if (errorMessages.Count < 5) errorMessages.Add(ex.Message);
+                    if (errorMessages.Count < 5) errorMessages.Add("İşlem sırasında bir hata oluştu.");
                 }
             }
 
@@ -1393,7 +1452,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1515,7 +1574,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1540,7 +1599,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1559,7 +1618,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1587,7 +1646,7 @@ public sealed class IntegrationsController : Controller
 
         // Body geçerli JSON mu kontrol et
         try { System.Text.Json.JsonDocument.Parse(req.BodyJson); }
-        catch (Exception ex) { return Json(new { success = false, error = "BodyJson gecerli JSON degil: " + ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, error = "BodyJson gecerli JSON degil: " + "İşlem sırasında bir hata oluştu." }); }
 
         try
         {
@@ -1611,7 +1670,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1632,7 +1691,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1654,7 +1713,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1679,7 +1738,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1716,7 +1775,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1766,7 +1825,7 @@ public sealed class IntegrationsController : Controller
                     success      = false,
                     runId        = (long?)null,
                     httpStatus   = (int?)null,
-                    errorMessage = ex.Message,
+                    errorMessage = "İşlem sırasında bir hata oluştu.",
                 });
             }
         }
@@ -1792,7 +1851,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1814,7 +1873,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1869,7 +1928,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, error = ex.Message });
+            return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -1894,7 +1953,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, status = "Failed", error = ex.Message });
+            return Json(new { success = false, status = "Failed", error = "İşlem sırasında bir hata oluştu." });
         }
     }
 

@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Security;
@@ -25,6 +27,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [ApiController]
 [AllowAnonymous]
+[IgnoreAntiforgeryToken]
 [Route("api/whatsapp/webhook")]
 public sealed class WhatsAppWebhookController : ControllerBase
 {
@@ -94,6 +97,36 @@ public sealed class WhatsAppWebhookController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(raw)) return Ok();
 
+        // ── Güvenlik doğrulaması (provider'a göre) ──────────────────────────────────
+        var cfg = await _cfgRepo.GetAsync(ct);
+        if (cfg is not null)
+        {
+            if (cfg.Provider == WhatsAppProviderType.WebQr)
+            {
+                // Web QR: Bridge her zaman aynı sunucuda — sadece localhost kabul
+                var remoteIp = HttpContext.Connection.RemoteIpAddress;
+                var isLocalhost = remoteIp is not null
+                    && (remoteIp.Equals(System.Net.IPAddress.Loopback)
+                        || remoteIp.Equals(System.Net.IPAddress.IPv6Loopback)
+                        || remoteIp.ToString() == "127.0.0.1");
+                if (!isLocalhost)
+                {
+                    _logger.LogWarning("[WaWebhook] WebQR isteği localhost dışından reddedildi — IP: {ip}", remoteIp);
+                    return Forbid();
+                }
+            }
+            else if (cfg.Provider == WhatsAppProviderType.CloudApi)
+            {
+                // Cloud API: Meta'nın X-Hub-Signature-256 imzasını doğrula
+                if (!VerifyCloudApiSignature(raw, cfg))
+                {
+                    _logger.LogWarning("[WaWebhook] CloudAPI imza doğrulaması başarısız");
+                    return Forbid();
+                }
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────────────
+
         try
         {
             using var doc = JsonDocument.Parse(raw);
@@ -102,9 +135,6 @@ public sealed class WhatsAppWebhookController : ControllerBase
             // entry[].changes[].value.messages[]
             if (!root.TryGetProperty("entry", out var entries) || entries.ValueKind != JsonValueKind.Array)
                 return Ok();
-
-            // Cloud API medya indirme için cfg'yi bir kez çek
-            var cfg = await _cfgRepo.GetAsync(ct);
 
             var now = DateTime.UtcNow;
             foreach (var entry in entries.EnumerateArray())
@@ -321,6 +351,29 @@ public sealed class WhatsAppWebhookController : ControllerBase
             _logger.LogWarning(ex, "[WaWebhook] medya indirilemedi: {id}", mediaId);
             return (null, null, knownMime);
         }
+    }
+
+    private bool VerifyCloudApiSignature(string payload, WhatsAppConfig cfg)
+    {
+        var signatureHeader = Request.Headers["X-Hub-Signature-256"].FirstOrDefault();
+        if (string.IsNullOrEmpty(signatureHeader) || !signatureHeader.StartsWith("sha256=", StringComparison.Ordinal))
+            return false;
+
+        if (string.IsNullOrEmpty(cfg.AppSecretEncrypted))
+        {
+            // App Secret henüz girilmemiş — webhook imzası doğrulanamaz; isteği reddet.
+            _logger.LogWarning("[WaWebhook] CloudAPI App Secret yapılandırılmamış — webhook reddedildi");
+            return false;
+        }
+
+        var appSecret = DpapiSecretDecryptor.DecryptIfNeeded(cfg.AppSecretEncrypted);
+        if (string.IsNullOrEmpty(appSecret)) return false;
+
+        var expected = "sha256=" + Convert.ToHexString(
+            HMACSHA256.HashData(Encoding.UTF8.GetBytes(appSecret), Encoding.UTF8.GetBytes(payload))
+        ).ToLowerInvariant();
+
+        return string.Equals(signatureHeader, expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string MimeToExt(string? mime) => mime switch

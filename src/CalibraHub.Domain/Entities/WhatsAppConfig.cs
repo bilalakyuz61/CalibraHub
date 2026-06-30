@@ -21,6 +21,7 @@ public sealed class WhatsAppConfig
 
     // Cloud API alanları
     public string?              AccessTokenEncrypted     { get; set; }       // Meta token (DPAPI)
+    public string?              AppSecretEncrypted       { get; set; }       // Meta App Secret — webhook imza doğrulaması (DPAPI)
     public string?              PhoneNumberId            { get; set; }
     public string?              BusinessAccountId        { get; set; }
     public string?              WebhookVerifyToken       { get; set; }

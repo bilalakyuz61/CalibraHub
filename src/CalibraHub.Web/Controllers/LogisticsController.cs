@@ -53,7 +53,7 @@ public sealed class LogisticsController : Controller
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> MaterialCards(CancellationToken cancellationToken)
     {
-        // 2026-05-24: Iframe cache'lenmesi sorununu onle — her zaman fresh HTML.
+        // 2026-05-24: Iframe cache'lenmesi sorununu onle � her zaman fresh HTML.
         Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
         Response.Headers["Pragma"] = "no-cache";
         var boardConfig = await BuildMaterialCardsBoardConfigAsync(cancellationToken);
@@ -91,13 +91,13 @@ public sealed class LogisticsController : Controller
     {
         var (cards, totalCount) = await _logisticsConfigurationService.GetItemsPagedAsync(null, 0, MaterialCardPageSize, ct);
         // 2026-05-24: Schema'yi bir kez cek, hem master widget list hem de "admin'in
-        // zaten cover ettigi plain field" set'ini cikar — boylece w_kod/w_ad sistem
+        // zaten cover ettigi plain field" set'ini cikar � boylece w_kod/w_ad sistem
         // widget'lari admin'in mevcut widget'lariyla cakistirmaz (cift gozukmez).
         var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
         // 2026-05-24: Multi-select filter alanlari:
-        //   - 5 ayri Grup slotu (Grup 1..5) — her birinin kendi MaterialGroups kategorisi
-        //   - Olcu Birimi — Units tanim listesi
-        //   - Her aktif Ozellik (ItemFeature) — kendi degerleri (FeatureValue) ile ayri widget
+        //   - 5 ayri Grup slotu (Grup 1..5) � her birinin kendi MaterialGroups kategorisi
+        //   - Olcu Birimi � Units tanim listesi
+        //   - Her aktif Ozellik (ItemFeature) � kendi degerleri (FeatureValue) ile ayri widget
         var allMatGroups = await _logisticsConfigurationService.GetMaterialGroupsAsync(null, ct);
         var groupsByCat = allMatGroups.GroupBy(g => g.GroupCategory).ToDictionary(g => g.Key, g => g.ToList());
         var allUnits = await _logisticsConfigurationService.GetUnitsAsync(ct);
@@ -111,7 +111,7 @@ public sealed class LogisticsController : Controller
         var handledColumns = ExtractHandledEntityColumns(itemsSchema);
 
         var masterWidgets = BuildItemsMasterWidgetsFromSchema(itemsSchema);
-        // 2026-05-24: System.Text.Json List<object> + heterojen anonymous type sorunu —
+        // 2026-05-24: System.Text.Json List<object> + heterojen anonymous type sorunu �
         // bazi properties dropped olabiliyor. Dictionary kullanarak her zaman tum key'lerin
         // serialize edildigini garantiliyoruz.
 
@@ -120,7 +120,7 @@ public sealed class LogisticsController : Controller
         const string GRP_GROUP = "gruplamalar";
         const string GRP_LBL   = "Gruplamalar";
         const string FEAT_GROUP = "ozellikler";
-        const string FEAT_LBL   = "Özellikler ve Kombinasyonlar";
+        const string FEAT_LBL   = "�zellikler ve Kombinasyonlar";
 
         Dictionary<string, object?> MakeWidget(
             string id, string label, string dataType,
@@ -143,38 +143,38 @@ public sealed class LogisticsController : Controller
             return d;
         }
 
-        // Sistem alanlari — "Standart Alanlar" grubunda collapsible.
+        // Sistem alanlari � "Standart Alanlar" grubunda collapsible.
         // w_kod / w_ad sadece admin ITEMS formuna mapleyen widget tanimlanmamissa eklenir.
         if (!handledColumns.Contains("Code"))
             masterWidgets.Add(MakeWidget("w_kod", "Stok Kodu", "text", STD_GROUP, STD_LBL));
         if (!handledColumns.Contains("Name"))
-            masterWidgets.Add(MakeWidget("w_ad", "Stok Adı", "text", STD_GROUP, STD_LBL));
+            masterWidgets.Add(MakeWidget("w_ad", "Stok Adi", "text", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_aktif",       "Durum",              "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_kombinasyon", "Kombinasyon Takibi", "boolean", STD_GROUP, STD_LBL));
-        masterWidgets.Add(MakeWidget("w_vergi",       "KDV Oranı",          "percent", STD_GROUP, STD_LBL));
+        masterWidgets.Add(MakeWidget("w_vergi",       "KDV Orani",          "percent", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_olusturma",   "Olusturma Tarihi",   "date",    STD_GROUP, STD_LBL));
 
-        // Olcu Birimi — Standart Alanlar grubunda
+        // Olcu Birimi � Standart Alanlar grubunda
         var unitOptions = allUnits.Select(u => (object)new Dictionary<string, object?>
         {
             ["value"] = u.Code,
-            ["label"] = string.IsNullOrWhiteSpace(u.Name) ? u.Code : $"{u.Code} — {u.Name}",
+            ["label"] = string.IsNullOrWhiteSpace(u.Name) ? u.Code : $"{u.Code} � {u.Name}",
         }).ToList();
-        masterWidgets.Add(MakeWidget("w_unit", "Ölçü Birimi", "options", STD_GROUP, STD_LBL, unitOptions));
+        masterWidgets.Add(MakeWidget("w_unit", "�l�� Birimi", "options", STD_GROUP, STD_LBL, unitOptions));
 
-        // 5 Grup slot'u — "Gruplamalar" grubunda collapsible
+        // 5 Grup slot'u � "Gruplamalar" grubunda collapsible
         for (int cat = 1; cat <= 5; cat++)
         {
             var groupsForCat = groupsByCat.TryGetValue(cat, out var l) ? l : new List<CalibraHub.Application.Contracts.MaterialGroupDto>();
             var options = groupsForCat.Select(g => (object)new Dictionary<string, object?>
             {
                 ["value"] = g.GroupCode,
-                ["label"] = string.IsNullOrWhiteSpace(g.GroupDescription) ? g.GroupCode : $"{g.GroupCode} — {g.GroupDescription}",
+                ["label"] = string.IsNullOrWhiteSpace(g.GroupDescription) ? g.GroupCode : $"{g.GroupCode} � {g.GroupDescription}",
             }).ToList();
             masterWidgets.Add(MakeWidget($"w_grup{cat}", $"Grup {cat}", "options", GRP_GROUP, GRP_LBL, options));
         }
 
-        // Aktif Ozellik widget'lari — "Özellikler ve Kombinasyonlar" grubunda
+        // Aktif Ozellik widget'lari � "�zellikler ve Kombinasyonlar" grubunda
         foreach (var feat in activeFeatures)
         {
             var values = valuesByFeature.TryGetValue(feat.Id, out var vl) ? vl : new List<CalibraHub.Application.Contracts.ProductConfigurationValueDto>();
@@ -239,7 +239,7 @@ public sealed class LogisticsController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { error = ex.Message });
+            return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -277,7 +277,7 @@ public sealed class LogisticsController : Controller
                 ["type"]         = "data",
                 ["dataType"]     = dt,
                 ["label"]        = w.Label,
-                // Admin Form Tasarimi'ndan tanimlanmis widget — filtre panelinde
+                // Admin Form Tasarimi'ndan tanimlanmis widget � filtre panelinde
                 // "Widget Alanlari" grubunda gosterilsin (default 'standard' degil).
                 ["source"]       = "widget",
             };
@@ -291,7 +291,7 @@ public sealed class LogisticsController : Controller
     /// 2026-05-24: Admin'in ITEMS formuna tanimladigi widget'lar arasinda IsSystemField=true
     /// olanlarin EntityColumn'larini (Pascal-case) tespit eder. Bu kolonlar zaten admin
     /// widget'iyla cover edildigi icin biz ayrica w_kod/w_ad/w_grup sistem widget'i
-    /// EKLEMEYIZ — yoksa filtre panelinde duplikat alan gozukur ("Stok Adi" + ayni isim).
+    /// EKLEMEYIZ � yoksa filtre panelinde duplikat alan gozukur ("Stok Adi" + ayni isim).
     /// </summary>
     private static HashSet<string> ExtractHandledEntityColumns(
         CalibraHub.Application.Contracts.WidgetFormSchemaDto? itemsSchema)
@@ -329,7 +329,7 @@ public sealed class LogisticsController : Controller
         var featMappings = itemIds.Length > 0
             ? await _logisticsConfigurationService.GetItemFeatureMappingsBatchAsync(itemIds, ct)
             : new Dictionary<int, IReadOnlyList<CalibraHub.Domain.Entities.ItemFeatureMapping>>();
-        // UnitId → UnitCode cevirici — ItemUnit.UnitId int, filter UnitCode string match yapar.
+        // UnitId ? UnitCode cevirici � ItemUnit.UnitId int, filter UnitCode string match yapar.
         var allUnitsLookup = (await _logisticsConfigurationService.GetUnitsAsync(ct))
             .ToDictionary(u => u.Id, u => u.Code, EqualityComparer<int>.Default);
 
@@ -341,11 +341,11 @@ public sealed class LogisticsController : Controller
             var cardWidgets = new List<object>();
             var recordId = card.Id.ToString();
 
-            // 2026-05-24: Plain field sistem widget'lari (Kod / Ad / Grup) — FilterPanel
+            // 2026-05-24: Plain field sistem widget'lari (Kod / Ad / Grup) � FilterPanel
             // entities[0].widgets'tan auto-discover edip "Standart Alanlar" grubunda gosterir.
             // Bu sayede kullanici Stok Adi / Kodu / Grubu uzerinden direkt filtreleyebilir.
             // ANCAK: admin ITEMS formuna IsSystemField+EntityColumn ile widget tanimlamissa
-            // o kolonu cover ediyor → cift gozukmemesi icin atla. (handledPlainColumns set'i.)
+            // o kolonu cover ediyor ? cift gozukmemesi icin atla. (handledPlainColumns set'i.)
             if (!handledPlainColumns.Contains("Code"))
             {
                 cardWidgets.Add(new {
@@ -359,14 +359,14 @@ public sealed class LogisticsController : Controller
             if (!handledPlainColumns.Contains("Name"))
             {
                 cardWidgets.Add(new {
-                    id = "w_ad", type = "data", dataType = "text", label = "Stok Adı",
+                    id = "w_ad", type = "data", dataType = "text", label = "Stok Adi",
                     value = (string?)card.Name,
                     detail = (string?)null,
                     color = "slate",
                     alwaysVisible = false,
                 });
             }
-            // 2026-05-24: 5 ayri Grup slot'u — her biri kendi MaterialGroup kategorisinden
+            // 2026-05-24: 5 ayri Grup slot'u � her biri kendi MaterialGroup kategorisinden
             // multi-select filtre alani. Filter panel "options" dataType'inda chip-toggle UI uretir.
             // Card'da gosterim icin de description varsa onu, yoksa kodu yaziyoruz (detail field).
             IReadOnlyList<CalibraHub.Application.Contracts.MaterialGroupMappingDto>? cardMappings = null;
@@ -388,7 +388,7 @@ public sealed class LogisticsController : Controller
                 });
             }
 
-            // 2026-05-24: Olcu Birimi (multi-value) — default UnitId + ItemUnits hepsi.
+            // 2026-05-24: Olcu Birimi (multi-value) � default UnitId + ItemUnits hepsi.
             // value = "KG,ADT,M" comma-separated, frontend parseOptionsValue ile parser.
             var unitCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (card.UnitId.HasValue && allUnitsLookup.TryGetValue(card.UnitId.Value, out var defUC) && !string.IsNullOrEmpty(defUC))
@@ -405,14 +405,14 @@ public sealed class LogisticsController : Controller
                 id = "w_unit",
                 type = "data",
                 dataType = "options",
-                label = "Ölçü Birimi",
+                label = "�l�� Birimi",
                 value = (string?)(unitCodes.Count == 0 ? null : string.Join(",", unitCodes)),
                 detail = (string?)null,
                 color = "blue",
                 alwaysVisible = false,
             });
 
-            // 2026-05-24: Her aktif Ozellik icin widget — bu kart icin secili FeatureValueId
+            // 2026-05-24: Her aktif Ozellik icin widget � bu kart icin secili FeatureValueId
             // listesi. Multi-value (bir item ayni feature'a birden cok degerle bagli olabilir).
             IReadOnlyList<CalibraHub.Domain.Entities.ItemFeatureMapping>? itemFeatList = null;
             featMappings.TryGetValue(card.Id, out itemFeatList);
@@ -437,7 +437,7 @@ public sealed class LogisticsController : Controller
                 });
             }
 
-            // 2026-05-23: Sistem widget'lari — İhtiyaç Kaydı pattern'i ile ozdes.
+            // 2026-05-23: Sistem widget'lari � Ihtiya� Kaydi pattern'i ile ozdes.
             // FilterPanel entity.widgets'tan auto-discover ettigi icin "standart" alanlar
             // olarak filtrelenebilir hale gelir. Kart ekraninda chip olarak da gorunurler.
             cardWidgets.Add(new {
@@ -483,7 +483,7 @@ public sealed class LogisticsController : Controller
                         dataType       = w.DataType.ToLowerInvariant(),
                         label          = w.Label,
                         value          = w.Value,
-                        // Metadata — guide-list / lookup widget'lari icin guideCode + guideConfig.
+                        // Metadata � guide-list / lookup widget'lari icin guideCode + guideConfig.
                         // SmartWidget guide-list popup'inda metadata.guideCode ile rehber acar.
                         metadata       = w.Metadata,
                         isPlainField   = w.IsPlainField,
@@ -498,7 +498,7 @@ public sealed class LogisticsController : Controller
                 }
             }
 
-            // Record values — Items tablosu kolon adlariyla (snake_case). SmartCard
+            // Record values � Items tablosu kolon adlariyla (snake_case). SmartCard
             // widget'larina (ozellikle guide-list popup'una) dogrudan erisim icin.
             // Token resolve liste sayfasinda DOM olmadigi icin bu dictionary'yi kullanir.
             var recordValues = new Dictionary<string, object?>
@@ -552,12 +552,12 @@ public sealed class LogisticsController : Controller
         return View();
     }
 
-    // NOT: BOM (Urun Agaci/Recete) endpoint'leri BomController'a tasindi (rapor §2.3).
+    // NOT: BOM (Urun Agaci/Recete) endpoint'leri BomController'a tasindi (rapor �2.3).
     // Tasinmis: BOMs, BOMEdit, GetBOMsPage, GetBOM, GetBOMById, DeleteBOMJson, SaveBOM.
     // GetMaterialCost burada kaldi (PriceListService + CurrencyService + CardGroupRepo bagimliligi).
 
     /// <summary>
-    /// Standart Maliyet Goruntuleme endpoint'i — bir malzemenin recetesindeki bilesenleri
+    /// Standart Maliyet Goruntuleme endpoint'i � bir malzemenin recetesindeki bilesenleri
     /// secilen fiyat grubundan fiyatlandirir, satir ve toplam maliyetleri doner.
     ///
     /// Request: materialCode (zorunlu), configCode (ops.), priceGroupId (zorunlu),
@@ -575,7 +575,7 @@ public sealed class LogisticsController : Controller
         string? priceType,
         decimal quantity = 1m,
         // validOn: ISO 'yyyy-MM-dd'. Bos ise bugunun tarihi (UtcNow). Geriye doniik
-        // tekliflerde frontend BELGE TARIHINI gonderir → gecmis fiyatlar dogru lookup.
+        // tekliflerde frontend BELGE TARIHINI gonderir ? gecmis fiyatlar dogru lookup.
         string? validOn = null,
         CancellationToken cancellationToken = default)
     {
@@ -597,7 +597,7 @@ public sealed class LogisticsController : Controller
             return Ok(new { found = false, message = "Bu malzeme icin recete tanimli degil." });
 
         // BOMLineWithName artik dogrudan ItemId/ConfigId tasiyor (FK-based BOM refactor sonrasi)
-        // — ekstra Items.code lookup gerekmiyor.
+        // � ekstra Items.code lookup gerekmiyor.
         var keys = new List<PriceEntryKey>();
         var compMeta = new List<(string Code, string Name, string? CfgCode, decimal Qty, decimal Scrap, int ItemId, int? ConfigId)>();
         foreach (var l in bom.Lines)
@@ -623,7 +623,7 @@ public sealed class LogisticsController : Controller
         var currencies = await _currencyService.GetAllAsync(cancellationToken);
         var currency = currencies.FirstOrDefault(c => c.Id == currencyId);
 
-        // Stok grup kodlari (card_group_mappings — entityType=1=Item) — paralel batch.
+        // Stok grup kodlari (card_group_mappings � entityType=1=Item) � paralel batch.
         // Her bilesen icin level=1 ve level=2 grup kodlari eklenir; UI'da
         // gruplama opsiyonu ile bu kodlara gore kirilim yapar.
         var groupTasks = compMeta
@@ -649,11 +649,11 @@ public sealed class LogisticsController : Controller
         var components = compMeta.Select(c =>
         {
             decimal price = priceByKey.TryGetValue((c.ItemId, c.ConfigId), out var p) ? p : 0m;
-            // Fire ratio dahil edilmis efektif miktar — recete bileseninin gercek tuketim adedi
+            // Fire ratio dahil edilmis efektif miktar � recete bileseninin gercek tuketim adedi
             decimal effQty = c.Qty * quantity * (1m + c.Scrap);
             decimal lineCost = effQty * price;
             total += lineCost;
-            // Grup kodlari — tum seviyeler (level 1, 2, 3, ...) dinamik olarak doner.
+            // Grup kodlari � tum seviyeler (level 1, 2, 3, ...) dinamik olarak doner.
             // Frontend her bilesen icin gormekte oldugu seviyeleri toplar ve checkbox
             // listesini ona gore uretir; sabit g1/g2 sayisi kalmadi.
             var groupsObj = new Dictionary<string, object>();
@@ -703,7 +703,7 @@ public sealed class LogisticsController : Controller
         });
     }
 
-    // NOT: SaveBOM endpoint'i BomController'a tasindi (rapor §2.3).
+    // NOT: SaveBOM endpoint'i BomController'a tasindi (rapor �2.3).
 
     [HttpGet]
     public async Task<IActionResult> StockLookup(string? q, CancellationToken cancellationToken)
@@ -718,14 +718,14 @@ public sealed class LogisticsController : Controller
         if (!string.IsNullOrEmpty(query))
             filtered = filtered.Take(50);
 
-        // Unit lookup — UnitId varsa UnitCode'u resolve et (single fetch + dictionary)
+        // Unit lookup � UnitId varsa UnitCode'u resolve et (single fetch + dictionary)
         var units = await _logisticsConfigurationService.GetUnitsAsync(cancellationToken);
         var unitMap = units.ToDictionary(u => u.Id, u => u.Code);
 
         var results = filtered
             .Select(s => new
             {
-                id        = s.Id,                    // Items.Id — frontend itemId hidden alana yazar
+                id        = s.Id,                    // Items.Id � frontend itemId hidden alana yazar
                 code      = s.Code.Trim(),
                 name      = s.Name,
                 hasConfig = s.Combinations,
@@ -754,7 +754,7 @@ public sealed class LogisticsController : Controller
     [HttpGet]
     public IActionResult Locations() => View();
 
-    // ── Olcu Birimi + Lokasyon (rapor §2.3 split) ─────────────────────
+    // -- Olcu Birimi + Lokasyon (rapor �2.3 split) ---------------------
     // Units, UnitsBoardEntities, UnitToggle, UnitEdit + JSON endpoint'leri
     // UnitController'a tasindi.
     // GetAllLocations, GetLocation, SaveLocationJson, DeleteLocationJson
@@ -762,13 +762,13 @@ public sealed class LogisticsController : Controller
     // SaveUnit/DeleteUnit/SaveLocation/DeleteLocation form-post endpoint'leri
     // kaldirildi (modern stack JSON kullanir, kullanilmiyordu).
 
-    /* â"€â"€ Lokasyon JSON Endpoint'leri â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
+    /* �"��"� Lokasyon JSON Endpoint'leri �"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"� */
 
     // NOT: Lokasyon JSON endpoint'leri (GetAllLocations, GetLocation, SaveLocationJson,
     // DeleteLocationJson) LocationController'a tasindi.
 
     /// <summary>
-    /// LocationTree React component'i icin tree config — nested location agaci
+    /// LocationTree React component'i icin tree config � nested location agaci
     /// + types lookup + widget'lar (CalibraSmartBoard standardi).
     /// Hiyerarsinin tum seviyeleri ayni widget setini kullanir (formCode = LOCATIONS).
     /// </summary>
@@ -780,27 +780,27 @@ public sealed class LogisticsController : Controller
         var types = await _logisticsConfigurationService.GetLocationTypesAsync(ct);
         var typeMap = types.ToDictionary(t => t.Code, t => t.Name, StringComparer.OrdinalIgnoreCase);
 
-        // ── Master widget şablonu (admin SmartBoardConfigPanel + filter panel için) ──
+        // -- Master widget sablonu (admin SmartBoardConfigPanel + filter panel i�in) --
         var schema = await _widgetService.GetFormSchemaByCodeAsync(formCode, ct);
         var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(schema);
         var typeOptions  = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(types.Select(t => t.Name));
         var usageOptions = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(new[] { "Makine", "Depo", "Makine + Depo" });
         masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_type",     "Tip",       typeOptions));
         masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_status",   "Durum",     "boolean"));
-        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_usage",    "Kullanım",  usageOptions));
-        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_children", "Alt Sayı",  "numeric"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_usage",    "Kullanim",  usageOptions));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_children", "Alt Sayi",  "numeric"));
         masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_depth",    "Seviye",    "numeric"));
 
-        // ── Batch widget değerleri — tüm lokasyonlar için tek seferde ──
+        // -- Batch widget degerleri � t�m lokasyonlar i�in tek seferde --
         var recordIds = all.Select(l => l.Id.ToString()).ToArray();
         var batchWidgets = (schema != null && recordIds.Length > 0)
             ? await _widgetService.GetBatchRenderModelsAsync(formCode, recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
 
-        // ── Child sayilarini bir kerede hesapla ──
+        // -- Child sayilarini bir kerede hesapla --
         var childCount = all.GroupBy(l => l.ParentId ?? 0)
                            .ToDictionary(g => g.Key, g => g.Count());
-        // ── Derinlik (seviye) hesapla ──
+        // -- Derinlik (seviye) hesapla --
         int ComputeDepth(int locId)
         {
             var depth = 1; var guard = 0;
@@ -811,7 +811,7 @@ public sealed class LogisticsController : Controller
             return depth;
         }
 
-        // Nested tree olustur — Dictionary<string,object?> kullaniyoruz cunku
+        // Nested tree olustur � Dictionary<string,object?> kullaniyoruz cunku
         // anonim type'lar immutable; widget'lari sonradan eklemek icin mutable lazim.
         var nodes = new List<Dictionary<string, object?>>();
         foreach (var l in all.OrderBy(x => x.SortOrder).ThenBy(x => x.LocationCode))
@@ -822,9 +822,9 @@ public sealed class LogisticsController : Controller
             var typeName = !string.IsNullOrEmpty(l.LocationTypeCode) && typeMap.TryGetValue(l.LocationTypeCode, out var tn)
                 ? tn : GetLocationTypeDisplayName(l.LocationTypeCode);
 
-            // ── Widget değerleri ──
+            // -- Widget degerleri --
             var widgets = new List<object>();
-            // Sistem widget'ları (her zaman dolu)
+            // Sistem widget'lari (her zaman dolu)
             widgets.Add(new { id = "w_type",   type = "data", dataType = "options", label = "Tip", value = typeName, color = "indigo" });
             widgets.Add(new { id = "w_status", type = "data", dataType = "text", label = "Durum",
                 value = l.IsActive ? "Aktif" : "Pasif", color = l.IsActive ? "emerald" : "slate" });
@@ -834,7 +834,7 @@ public sealed class LogisticsController : Controller
             else if (l.IsMachinePark)                { usageLabel = "Makine"; usageColor = "indigo"; }
             else if (l.IsStorageArea)                { usageLabel = "Depo";   usageColor = "emerald"; }
             if (usageLabel != null)
-                widgets.Add(new { id = "w_usage", type = "data", dataType = "text", label = "Kullanım", value = usageLabel, color = usageColor });
+                widgets.Add(new { id = "w_usage", type = "data", dataType = "text", label = "Kullanim", value = usageLabel, color = usageColor });
 
             var nChild = childCount.TryGetValue(l.Id, out var c) ? c : 0;
             if (nChild > 0)
@@ -892,21 +892,22 @@ public sealed class LogisticsController : Controller
         {
             boardKey   = "logistics-locations-tree",
             formCode,
-            title      = "Lokasyon Tanımlamaları",
+            title      = "Lokasyon Tanimlamalari",
             icon       = "MapPin",
             iconColor  = "indigo",
             roots,
             types = types.Select(t => new { code = t.Code, name = t.Name, sortOrder = t.SortOrder })
                          .OrderBy(t => t.sortOrder).ThenBy(t => t.code).ToArray(),
             masterWidgets,
-            saveUrl    = "/Logistics/SaveLocationJson",
-            deleteUrl  = "/Logistics/DeleteLocationJson",
-            refreshUrl = "/Logistics/LocationsTree",
-            maxDepth   = 7,
+            saveUrl         = "/Logistics/SaveLocationJson",
+            deleteUrl       = "/Logistics/DeleteLocationJson",
+            usageCheckUrl   = "/Logistics/GetLocationUsageJson",
+            refreshUrl      = "/Logistics/LocationsTree",
+            maxDepth        = 7,
         });
     }
 
-    // ── Makine Tanımlamaları (rapor §2.3 — pilot split) ─────────────────
+    // -- Makine Tanimlamalari (rapor �2.3 � pilot split) -----------------
     // Makine aggregate'i icin tum endpoint'ler MachineController'a tasindi.
     // URL preservation: /Logistics/Machines, /Logistics/MachineEdit gibi rotalar
     // MachineController'da [Route("Logistics/[action]")] ile aynen calisir.
@@ -914,9 +915,9 @@ public sealed class LogisticsController : Controller
     //   GET  /Logistics/Machines, /Logistics/MachineEdit, /Logistics/GetAllMachines
     //   POST /Logistics/SaveMachineJson, /Logistics/DeleteMachineJson
 
-    /* â"€â"€ Malzeme GruplarÄ± â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
+    /* �"��"� Malzeme Grupları �"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"� */
 
-    // NOT: Malzeme Grubu endpoint'leri MaterialGroupController'a tasindi (rapor §2.3 split).
+    // NOT: Malzeme Grubu endpoint'leri MaterialGroupController'a tasindi (rapor �2.3 split).
     // Tasinmis: MaterialGroups, MaterialGroupEdit, SaveMaterialGroupJson, DeleteMaterialGroupJson,
     // GetAllMaterialGroups, UpsertMaterialGroup, DeleteMaterialGroupInline, MaterialGroupLookup,
     // GetMaterialGroupMappings, SaveMaterialGroupMappings
@@ -1092,12 +1093,12 @@ public sealed class LogisticsController : Controller
         return View(new ProductConfigurationViewModel { BoardConfig = boardConfig });
     }
 
-    // ════════════════════════════════════════════════════════════════════
-    // "Tanımlı Kombinasyonlar" liste ekranı — Lojistik > Özellik ve Kombinasyon altı.
-    // Tüm aktif kombinasyonların kart listesi (kombinasyon kodu + parent stok +
-    // özellik/değer chip'leri). Kartı tıklayınca parent stoğun kombinasyon tab'ına
-    // navigate eder (matchPath ile MaterialCard tab'ı reuse).
-    // ════════════════════════════════════════════════════════════════════
+    // --------------------------------------------------------------------
+    // "Tanimli Kombinasyonlar" liste ekrani � Lojistik > �zellik ve Kombinasyon alti.
+    // T�m aktif kombinasyonlarin kart listesi (kombinasyon kodu + parent stok +
+    // �zellik/deger chip'leri). Karti tiklayinca parent stogun kombinasyon tab'ina
+    // navigate eder (matchPath ile MaterialCard tab'i reuse).
+    // --------------------------------------------------------------------
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ProductCombinations)]
     public async Task<IActionResult> Combinations(CancellationToken cancellationToken)
@@ -1113,7 +1114,7 @@ public sealed class LogisticsController : Controller
         return Json(board);
     }
 
-    // NOT: DeleteCombinationJson CombinationController'a tasindi (rapor §2.3 split).
+    // NOT: DeleteCombinationJson CombinationController'a tasindi (rapor �2.3 split).
 
     private async Task<object> BuildCombinationsBoardConfigAsync(CancellationToken ct)
     {
@@ -1122,7 +1123,7 @@ public sealed class LogisticsController : Controller
         {
             CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_status",        "Durum",   "boolean"),
             CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_item",          "Mamul",   "text"),
-            CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_feature_count", "Özellik", "numeric"),
+            CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_feature_count", "�zellik", "numeric"),
         };
 
         var entities = new List<object>();
@@ -1146,14 +1147,14 @@ public sealed class LogisticsController : Controller
                 },
                 new {
                     id = "w_feature_count", type = "data", dataType = "numeric",
-                    label = "Özellik",
+                    label = "�zellik",
                     value = c.FeatureValues.Count.ToString(),
                     detail = "adet",
                     color = "indigo"
                 },
             };
 
-            // Her özellik/değer ciftini ayri widget olarak ekle
+            // Her �zellik/deger ciftini ayri widget olarak ekle
             int idx = 1;
             foreach (var fv in c.FeatureValues)
             {
@@ -1174,22 +1175,22 @@ public sealed class LogisticsController : Controller
             {
                 id            = c.ConfigId,
                 title         = c.Code,
-                subtitle      = c.ItemCode is null ? null : $"{c.ItemCode} · {c.ItemName}",
+                subtitle      = c.ItemCode is null ? null : $"{c.ItemCode} � {c.ItemName}",
                 description   = c.Name,
                 imageUrl      = (string?)null,
                 statusBadge   = (object?)null,
                 widgets,
                 primaryAction = new
                 {
-                    label      = "Stok Kartında Aç",
+                    label      = "Stok Kartinda A�",
                     icon       = "ExternalLink",
                     color      = "amber",
-                    // Kombinasyon parent stok kartının kombinasyon tab'ına yönlenir.
+                    // Kombinasyon parent stok kartinin kombinasyon tab'ina y�nlenir.
                     url        = c.ItemId.HasValue ? $"/Logistics/MaterialCardEdit?id={c.ItemId.Value}#combinations" : "#",
                     hideButton = true,
-                    // YENİ SEKMEDE aç — "Tanımlı Kombinasyonlar" listesi açık kalır,
-                    // mevcut Malzeme Kartları tab'ı varsa onu reuse eder (matchPath).
-                    openInTab  = new { title = "Malzeme Kartları", matchPath = "/Logistics/MaterialCard" },
+                    // YENI SEKMEDE a� � "Tanimli Kombinasyonlar" listesi a�ik kalir,
+                    // mevcut Malzeme Kartlari tab'i varsa onu reuse eder (matchPath).
+                    openInTab  = new { title = "Malzeme Kartlari", matchPath = "/Logistics/MaterialCard" },
                 },
                 secondaryAction = new
                 {
@@ -1197,7 +1198,7 @@ public sealed class LogisticsController : Controller
                     icon      = "Trash2",
                     apiUrl    = $"/Logistics/DeleteCombinationJson?id={c.ConfigId}",
                     apiMethod = "POST",
-                    confirm   = $"Bu kombinasyonu silmek istediğinize emin misiniz? ({c.Code})",
+                    confirm   = $"Bu kombinasyonu silmek istediginize emin misiniz? ({c.Code})",
                 },
             });
         }
@@ -1205,20 +1206,20 @@ public sealed class LogisticsController : Controller
         return new
         {
             boardKey          = "logistics-combinations",
-            title             = "Tanımlı Kombinasyonlar",
+            title             = "Tanimli Kombinasyonlar",
             subtitle          = $"{entities.Count} kombinasyon",
             icon              = "Grid3X3",
             iconColor         = "violet",
             refreshUrl        = "/Logistics/CombinationsBoardConfig",
-            searchPlaceholder = "Kombinasyon kodu, mamul veya değer ara…",
-            emptyText         = "Henüz tanımlı kombinasyon yok",
+            searchPlaceholder = "Kombinasyon kodu, mamul veya deger ara�",
+            emptyText         = "Hen�z tanimli kombinasyon yok",
             actions           = Array.Empty<object>(),
             masterWidgets,
             entities,
         };
     }
 
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ════════════════════════════════════════════════════════════════
     // BuildProductConfigurationBoardConfigAsync
     //
     // Urun Konfigurasyonu (Features/Ozellikler) icin SmartBoard kart config'i
@@ -1226,7 +1227,7 @@ public sealed class LogisticsController : Controller
     // degerler, bagli stok sayisi, aktif/pasif durumu widget'lari. Admin
     // panelden sales_quotes/contact_accounts gibi dynamic widget tanimlamak
     // icin "product_configuration" screenCode'u ile schema cagrisi yapilir.
-    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // ════════════════════════════════════════════════════════════════
     private async Task<object> BuildProductConfigurationBoardConfigAsync(CancellationToken ct)
     {
         var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
@@ -1266,7 +1267,7 @@ public sealed class LogisticsController : Controller
 
             var widgets = new List<object>();
 
-            // â"€â"€ Sistem widget'lari â"€â"€
+            // �"��"� Sistem widget'lari �"��"�
             widgets.Add(new
             {
                 id = "sys_datatype",
@@ -1361,7 +1362,7 @@ public sealed class LogisticsController : Controller
             });
         }
 
-        // â"€â"€ Master widget sablonu (âš™ SmartBoardConfigPanel icin) â"€â"€
+        // �"��"� Master widget sablonu (⚙ SmartBoardConfigPanel icin) �"��"�
         // Sistem widget'lari sabit; PRODUCT_CONFIG form kodundaki admin widget'lar ekleniyor.
         var pcSchema = await _widgetService.GetFormSchemaByCodeAsync("PRODUCT_CONFIG", ct);
         var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(pcSchema);
@@ -1404,7 +1405,7 @@ public sealed class LogisticsController : Controller
         };
     }
 
-    /// <summary>ConfigurationFieldDataType (enum) â†’ Turkce etiket</summary>
+    /// <summary>ConfigurationFieldDataType (enum) → Turkce etiket</summary>
     private static string TranslateDataType(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return "Metin";
@@ -1419,7 +1420,7 @@ public sealed class LogisticsController : Controller
         };
     }
 
-    /// <summary>DataType â†’ SmartBoard color palette</summary>
+    /// <summary>DataType → SmartBoard color palette</summary>
     private static string DataTypeColor(string? raw) => raw?.ToLowerInvariant() switch
     {
         "text"    => "blue",
@@ -1432,7 +1433,7 @@ public sealed class LogisticsController : Controller
 
     // NOT: ProductFeatureEdit, GetProductFeature, SaveProductFeatureJson, DeleteProductFeatureJson,
     // SaveProductValueJson, DeleteProductValueJson, UpdateProductValueJson, SaveProductFeatureStocksJson
-    // ProductFeatureController'a tasindi (rapor §2.3 split). DTO record'lar oraya tasindi.
+    // ProductFeatureController'a tasindi (rapor �2.3 split). DTO record'lar oraya tasindi.
 
     // NOT: Legacy form-post cluster (SaveProductFeature, SaveProductValue, SaveProductConfig, UpdateProductFeature, DeleteProductFeature, SaveProductFeatureStocks, DeleteProductValue, DeleteProductConfig) kaldirildi - UI artik *Json variantlarini cagiriyor (rapor 2.3 split + temizlik).
 
@@ -1576,7 +1577,7 @@ public sealed class LogisticsController : Controller
             .Where(x => string.Equals(x.RelatedMaterialCode, resolvedStockCode, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        // TÃ¼m eski konfigurasyonlari sil (yeniden uretecegiz)
+        // Tüm eski konfigurasyonlari sil (yeniden uretecegiz)
         foreach (var exist in existingConfigs)
         {
             await _logisticsConfigurationService.DeleteProductConfigurationItemAsync(exist.Id, cancellationToken);
@@ -2333,7 +2334,7 @@ public sealed class LogisticsController : Controller
             .Replace("stok", "malzeme");
     }
 
-    // â"€â"€ Grid kolon yonetimi â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+    // �"��"� Grid kolon yonetimi �"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"�
 
     private static readonly GridColumnDefinition[] MaterialCardGridColumns =
     [
@@ -2361,7 +2362,7 @@ public sealed class LogisticsController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
-    // â"€â"€ AJAX JSON Endpoint'leri (MaterialCards) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+    // �"��"� AJAX JSON Endpoint'leri (MaterialCards) �"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"�
 
     [HttpGet]
     public async Task<IActionResult> GetMaterialCards(
@@ -2420,11 +2421,11 @@ public sealed class LogisticsController : Controller
         });
     }
 
-    // NOT: GetMaterialCard MaterialController'a tasindi (rapor §2.3 split).
+    // NOT: GetMaterialCard MaterialController'a tasindi (rapor �2.3 split).
 
-    // NOT: UpdateFeatureVisibilityJson + UpdateValueAciklamaJson ProductFeatureController'a tasindi (rapor §2.3 split).
+    // NOT: UpdateFeatureVisibilityJson + UpdateValueAciklamaJson ProductFeatureController'a tasindi (rapor �2.3 split).
 
-    // NOT: SaveMaterialCardJson + DeleteMaterialCardJson MaterialController'a tasindi (rapor §2.3 split).
+    // NOT: SaveMaterialCardJson + DeleteMaterialCardJson MaterialController'a tasindi (rapor �2.3 split).
 
     [HttpPost]
     public async Task<IActionResult> SaveMaterialCardGridColumns([FromBody] string[] columns, CancellationToken ct)
@@ -2435,7 +2436,7 @@ public sealed class LogisticsController : Controller
         return Ok(new { success = true });
     }
 
-    // ── Ölçü Birimi Dönüşümleri (Stok Kartı bazlı) ──
+    // -- �l�� Birimi D�n�s�mleri (Stok Karti bazli) --
 
     [HttpGet]
     public async Task<IActionResult> GetItemUnits(int itemId, CancellationToken ct)
@@ -2444,15 +2445,15 @@ public sealed class LogisticsController : Controller
         var units = await _logisticsConfigurationService.GetUnitsAsync(ct);
         return Json(new
         {
-            // Master birim Items.UnitId'de — bu liste sadece alternat birimler (lineNo>=1).
+            // Master birim Items.UnitId'de � bu liste sadece alternat birimler (lineNo>=1).
             conversions = items.Where(x => x.LineNo >= 1).Select(x => new { x.LineNo, x.UnitId, x.Multiplier }),
-            // Tum birimler donulur — inactive olanlar frontend'de strikethrough/disabled gosterilir
+            // Tum birimler donulur � inactive olanlar frontend'de strikethrough/disabled gosterilir
             // ki mevcut secimini koruyup pasif olanlar kullaniciya belli olsun.
             availableUnits = units
                 .OrderBy(u => u.IsActive ? 0 : 1)
                 .ThenBy(u => u.SortOrder)
                 .ThenBy(u => u.Code)
-                .Select(u => new { u.Id, Code = u.Code, Name = u.Name, u.IsActive }),
+                .Select(u => new { u.Id, unitCode = u.Code, unitName = u.Name, u.IsActive }),
         });
     }
 
@@ -2467,7 +2468,7 @@ public sealed class LogisticsController : Controller
             .Select(x => new Application.Contracts.SaveItemUnitItem(x.UnitId, x.Multiplier))
             .ToList();
 
-        // Tekrar eden birim kontrolü
+        // Tekrar eden birim kontrol�
         var ids = items.Select(x => x.UnitId).ToList();
         if (ids.Distinct().Count() != ids.Count)
             return Json(new { success = false, message = "Ayni olcu birimi birden fazla tanimlanamaz." });

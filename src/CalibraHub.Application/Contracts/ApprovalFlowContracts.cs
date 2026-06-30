@@ -148,7 +148,8 @@ public sealed record ApprovalStepRecordDto(
     DateTime? DueDate = null,
     DateTime? SlaWarnedAt = null,
     DateTime? SlaActionAt = null,
-    string? SlaActionType = null);
+    string? SlaActionType = null,
+    DateTime? EnteredAt = null);
 
 // ── SLA tarama icin worker DTO'su ──────────────────────────────────────────
 // Adım NodeData JSON'undaki SLA ayarları repository tarafında parse edilip

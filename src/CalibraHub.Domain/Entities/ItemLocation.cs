@@ -9,7 +9,7 @@ public sealed class ItemLocation
 {
     public int Id { get; init; }
     public int ItemId { get; init; }
-    public int LocationId { get; init; }
+    public int? LocationId { get; init; }
     public bool IsDefault { get; init; }
     public int SortOrder { get; init; }
 }

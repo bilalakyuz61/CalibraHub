@@ -16,9 +16,6 @@
  */
 
 export var ENTITY_REGISTRY = [
-  // === GENEL ===
-  { code: 'notlar', label: 'Notlar', icon: 'StickyNote', color: 'amber', formCode: 'NOTES' },
-
   // === ONAY ISLEMLERI (e-Belgeler) ===
   { code: 'e-fatura',    label: 'e-Fatura',    icon: 'FileText', color: 'blue',  formCode: 'EINVOICE' },
   { code: 'e-arsiv',     label: 'e-Arşiv',     icon: 'Archive',  color: 'slate', formCode: 'EARCHIVE' },
@@ -141,7 +138,6 @@ export var ENTITY_REGISTRY = [
   // === TANIMLAMALAR ===
   { code: 'departman',      label: 'Departmanlar',        icon: 'Building2', color: 'cyan',    formCode: 'DEPARTMENTS' },
   { code: 'sales-rep',      label: 'Satış Temsilcileri', icon: 'Users',     color: 'cyan',    formCode: 'SALES_REPS' },
-  { code: 'doviz',          label: 'Döviz Tanımlamaları', icon: 'Coins',    color: 'amber',   formCode: 'CURRENCIES' },
   { code: 'lokasyon',       label: 'Lokasyonlar',        icon: 'MapPin',    color: 'rose',    formCode: 'LOCATIONS' },
   { code: 'olcu-birimi',    label: 'Ölçü Birimleri',     icon: 'Ruler',     color: 'slate',   formCode: 'MEASURE_UNITS' },
   { code: 'malzeme-grup',   label: 'Malzeme Grupları',   icon: 'Layers',    color: 'indigo',  formCode: 'MATERIAL_GROUPS' },
@@ -256,38 +252,39 @@ export function buildEntitiesFromForms(formDtoList) {
       if (filtered.length > 0) variants = filtered
     }
 
-    // Çok-variant grup: yalnızca TÜM formlar "görünüm-tipi" adlara sahipse
-    // grup toggle olarak gösterilir. Aksi hâlde her form kendi entity satırı olur.
-    // Kural: "Üst Bilgi", "Kalem Bilgisi", "Düzenleme" → view-type → grupla.
-    //        "e-Fatura", "e-Arşiv", "Özellik Düzenleme" vb. → entity-type → ayrı göster.
+    // Çok-variant grup: view-type adlara sahip form varsa bunlar toggle'da gösterilir,
+    // diğerleri (ana form adı olan "Satış Teklifi", "İhtiyaç Kaydı" vb.) gizlenir.
+    // Kural: "Üst Bilgi", "Kalem Bilgisi", "Düzenleme" → view-type → toggle'a al.
+    //        "e-Fatura", "e-Arşiv", "Özellik Düzenleme" vb. → entity-type → ayrı satır.
     if (variants.length > 1) {
-      var allViewType = variants.every(function(v) {
+      var viewTypeVariants = variants.filter(function(v) {
         return _VARIANT_NAMES_LC.indexOf(String(v.label).trim().toLowerCase()) !== -1
       })
 
-      if (!allViewType) {
-        // Entity adları → her form kendi satırı
-        variants.forEach(function(v) {
-          result.push({
-            key: v.formCode,
-            label: v.label,
-            icon: e.icon,
-            color: e.color,
-            formCode: v.formCode,
-            variants: [],
-          })
+      if (viewTypeVariants.length > 0) {
+        // En az bir view-type variant var → sadece onları toggle'da göster;
+        // ana form adı (Satış Teklifi, İhtiyaç Kaydı vb.) entity label olur, toggle'a girmez.
+        result.push({
+          key: e.key,
+          label: e.label,
+          icon: e.icon,
+          color: e.color,
+          formCode: null,
+          variants: viewTypeVariants,
         })
-        return  // bu SubModule grubunun işlemini bitir
+        return
       }
 
-      // View-type grup → grouped entity (toggle aşağıda gösterilir)
-      result.push({
-        key: e.key,
-        label: e.label,
-        icon: e.icon,
-        color: e.color,
-        formCode: null,
-        variants: variants,
+      // Hiçbiri view-type değil → her form kendi entity satırı
+      variants.forEach(function(v) {
+        result.push({
+          key: v.formCode,
+          label: v.label,
+          icon: e.icon,
+          color: e.color,
+          formCode: v.formCode,
+          variants: [],
+        })
       })
       return
     }

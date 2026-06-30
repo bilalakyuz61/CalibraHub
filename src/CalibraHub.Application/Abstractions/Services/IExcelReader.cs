@@ -10,7 +10,7 @@ public sealed record ExcelTable(
     IReadOnlyList<IReadOnlyList<string>> Rows);
 
 /// <summary>İndirilebilir boş şablon (Excel) için tek bir kolon tanımı.</summary>
-public sealed record ExcelTemplateColumn(string Header, string? Hint, bool Required);
+public sealed record ExcelTemplateColumn(string Header, string? Hint, bool Required, IReadOnlyList<string>? AllowedValues = null, bool CanBeMatchKey = false);
 
 /// <summary>
 /// Excel (.xlsx) ve CSV dosyalarını salt-okunur ayrıştırır. ClosedXML tabanlı (Infrastructure).

@@ -1,4 +1,4 @@
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
-/// Faz D Adim 1 — Legacy dinamik alan → yeni EAV tablolarina tek seferlik
+/// Faz D Adim 1 â€” Legacy dinamik alan â†’ yeni EAV tablolarina tek seferlik
 /// migration endpoint'i.
 ///
 /// Endpoint idempotent: tekrar calistirilmasi guvenli (mevcut kayitlar
@@ -52,7 +52,7 @@ public sealed class LegacyMigrationController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { success = false, message = ex.Message, stack = ex.StackTrace });
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu.", stack = ex.StackTrace });
         }
     }
 }

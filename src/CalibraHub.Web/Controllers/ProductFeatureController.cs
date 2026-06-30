@@ -147,7 +147,7 @@ public sealed class ProductFeatureController : Controller
             }
             return Json(new { success = true, id = savedId });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost]
@@ -158,7 +158,7 @@ public sealed class ProductFeatureController : Controller
             await _logisticsConfigurationService.DeleteProductConfigurationFeatureAsync(id, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     // ── Value JSON CRUD ─────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ public sealed class ProductFeatureController : Controller
                 ct);
             return Json(new { success = true, id, code });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost]
@@ -190,7 +190,7 @@ public sealed class ProductFeatureController : Controller
             await _logisticsConfigurationService.DeleteProductConfigurationValueAsync(id, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     [HttpPost]
@@ -204,7 +204,7 @@ public sealed class ProductFeatureController : Controller
             await _logisticsConfigurationService.UpdateProductConfigurationValueAsync(input.Id, input.Description, input.Aciklama, ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     // ── Feature-Stok baglama ────────────────────────────────────────────────
@@ -238,7 +238,7 @@ public sealed class ProductFeatureController : Controller
                 ct);
             return Json(new { success = true });
         }
-        catch (Exception ex) { return Json(new { success = false, message = ex.Message }); }
+        catch (Exception ex) { return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." }); }
     }
 
     // ── Kombinasyon popup inline edit ──────────────────────────────────────
@@ -444,7 +444,7 @@ public sealed class ProductFeatureController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Sunucu hatasi: " + ex.Message });
+            return Json(new { success = false, message = "Sunucu hatasi: " + "İşlem sırasında bir hata oluştu." });
         }
     }
 }

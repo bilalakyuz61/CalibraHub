@@ -104,7 +104,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                    l.notes,
                    l.from_location_id, fl.LocationName AS from_location_name,
                    l.to_location_id,   tl.LocationName AS to_location_name,
-                   l.unit_cost
+                   l.unit_cost,
+                   l.lot_no
             FROM {T("stock_doc_line")} l
             LEFT JOIN {T("Items")} i ON i.Id = l.item_id
             LEFT JOIN {T("Unit")} u ON u.Id = l.unit_id
@@ -137,7 +138,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 FromLocationName: r.IsDBNull(13) ? null : r.GetString(13),
                 ToLocationId:     r.IsDBNull(14) ? null : r.GetInt32(14),
                 ToLocationName:   r.IsDBNull(15) ? null : r.GetString(15),
-                UnitCost:         r.IsDBNull(16) ? null : r.GetDecimal(16)));
+                UnitCost:         r.IsDBNull(16) ? null : r.GetDecimal(16),
+                LotNo:            r.IsDBNull(17) ? null : r.GetString(17)));
         }
         return result;
     }
@@ -226,14 +228,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.CommandText = $"""
                     INSERT INTO {T("stock_doc_line")}
                         (doc_id, line_no, item_id, unit_id, qty, combination_id, notes,
-                         from_location_id, to_location_id, unit_cost)
+                         from_location_id, to_location_id, unit_cost, lot_no)
                     VALUES
                         (@DocId, @LineNo, @ItemId, @UnitId, @Qty, @CombId, @Notes,
                          @FromLoc, @ToLoc,
                          COALESCE(@UnitCost, (SELECT TOP 1 pl.[Price] FROM {T("PriceList")} pl
                                               WHERE pl.[ItemId] = @ItemId AND pl.[PriceType] = N'm' AND pl.[IsActive] = 1
                                                 AND pl.[ValidFrom] <= @DocDate AND (pl.[ValidTo] IS NULL OR pl.[ValidTo] >= @DocDate)
-                                              ORDER BY pl.[ValidFrom] DESC)));
+                                              ORDER BY pl.[ValidFrom] DESC)), @LotNo);
                     """;
                 lineIns.Parameters.AddWithValue("@DocId",   docId);
                 lineIns.Parameters.AddWithValue("@LineNo",  lineNo++);
@@ -245,6 +247,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@FromLoc", (object?)line.FromLocationId ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@ToLoc",   (object?)line.ToLocationId   ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@UnitCost", (object?)line.UnitCost      ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@LotNo",    (object?)line.LotNo         ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@DocDate", request.DocDate.Date);
                 await lineIns.ExecuteNonQueryAsync(ct);
             }
@@ -295,10 +298,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     {
         var prefix = docType switch
         {
-            "TRANSFER" => "TRF",
-            "STOCK_IN" => "GRS",
-            "STOCK_OUT" => "CKS",
-            _ => "WH",
+            "TRANSFER"        => "TRF",
+            "STOCK_IN"        => "GRS",
+            "STOCK_OUT"       => "CKS",
+            "INVENTORY_COUNT" => "SAY",
+            _                 => "WH",
         };
         var year = DateTime.Now.Year;
 

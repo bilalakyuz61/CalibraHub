@@ -60,6 +60,7 @@ public sealed class DocumentAttachmentController : Controller
     }
 
     [HttpPost("/Sales/UploadDocumentAttachment")]
+    [ValidateAntiForgeryToken]
     [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB per dosya
     public async Task<IActionResult> UploadDocumentAttachment(
         [FromForm] int documentId,
@@ -118,6 +119,7 @@ public sealed class DocumentAttachmentController : Controller
     }
 
     [HttpPost("/Sales/DeleteDocumentAttachment")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteDocumentAttachment([FromBody] DeleteAttachmentBody body, CancellationToken ct)
     {
         if (body == null || body.Id <= 0)

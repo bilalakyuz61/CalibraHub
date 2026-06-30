@@ -388,6 +388,81 @@ function DeleteModal({ node, onCancel, onConfirm, loading }) {
   )
 }
 
+// ── Kullanım özeti — stok belge, makine, varlık, malzeme sayıları ─────────
+function UsageSummary({ data }) {
+  const rows = [
+    { label: 'Stok Belgeleri',       count: data.stockDocCount,       samples: data.stockDocSamples,    url: null },
+    { label: 'Makineler',            count: data.machineCount,         samples: data.machineSamples,     url: '/Logistics/Machines' },
+    { label: 'Varlıklar',            count: data.assetCount,           samples: data.assetSamples,       url: '/Assets/Index' },
+    { label: 'Malzeme Lokasyonları', count: data.itemLocationCount,    samples: data.itemLocationSamples, url: '/Logistics/MaterialCards' },
+  ].filter(r => r.count > 0)
+  if (rows.length === 0) return null
+  return (
+    <div className="lt-usage-list">
+      {rows.map(r => (
+        <div key={r.label} className="lt-usage-row">
+          {r.url ? (
+            <a className="lt-usage-link" href={r.url} target="_blank" rel="noreferrer">
+              <span className="lt-usage-label">{r.label}</span>
+              <span className="lt-usage-count">{r.count} kayıt</span>
+              <span className="lt-usage-arrow">↗</span>
+            </a>
+          ) : (
+            <span className="lt-usage-navi">
+              <span className="lt-usage-label">{r.label}</span>
+              <span className="lt-usage-count">{r.count} kayıt</span>
+            </span>
+          )}
+          {r.samples?.length > 0 && (
+            <span className="lt-usage-samples">({r.samples.filter(Boolean).join(', ')})</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Kullanım uyarı modal — silme veya alt-lokasyon ekleme öncesi ──────────
+function UsageWarningModal({ type, node, data, onConfirm, onCancel }) {
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onCancel])
+
+  const isDelete = type === 'delete'
+  return (
+    <div className="lt-modal-bd" onClick={onCancel}>
+      <div className="lt-modal lt-modal--usage" onClick={e => e.stopPropagation()}>
+        <div className={'lt-modal-icon' + (isDelete ? '' : ' lt-modal-icon--warn')}>
+          <AlertTriangle size={32} />
+        </div>
+        <div className="lt-modal-title">
+          {isDelete ? 'Lokasyon Kullanımda' : 'Üst Lokasyon Kullanımda'}
+        </div>
+        {node && (
+          <div className="lt-modal-subtitle">
+            <strong>{node.code}</strong>{node.name ? ` — ${node.name}` : ''}
+          </div>
+        )}
+        <div className="lt-modal-msg lt-modal-msg--usage">
+          {isDelete
+            ? 'Bu lokasyon aşağıdaki kayıtlarda kullanılmaktadır. Lokasyonu silmek bu kayıtlardaki lokasyon bilgisini değiştirmez; yalnızca lokasyon tanımı silinir.'
+            : 'Bu lokasyon stok belgelerinde veya diğer kayıtlarda kullanılmaktadır. Alt lokasyon eklendiğinde bu lokasyon artık bir "üst kırılım" konumuna gelecek ve depo / stok seçim listelerinden otomatik olarak kaldırılacaktır.'
+          }
+        </div>
+        <UsageSummary data={data} />
+        <div className="lt-modal-actions">
+          <button className="lt-modal-cancel" onClick={onCancel}>Vazgeç</button>
+          <button className={isDelete ? 'lt-modal-del' : 'lt-modal-ok'} onClick={onConfirm}>
+            {isDelete ? 'Yine de Sil' : 'Devam Et'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Single tree node ──────────────────────────────────────────────────────
 function TreeNode({ node, depth, search, types, handlers, recentIds, maxDepth, parentTypeSortOrder = null, userCfg = null }) {
   const [expanded, setExpanded] = useState(true)
@@ -529,6 +604,8 @@ export default function LocationTree({ config }) {
   const [deleting, setDeleting]         = useState(false)
   const [recentIds, setRecentIds]       = useState(() => new Set())
   const [showTypesModal, setShowTypes]  = useState(false)
+  const [usageWarning, setUsageWarning]         = useState(null) // { type:'delete'|'addChild', node?, data }
+  const [pendingSavePayload, setPendingSavePayload] = useState(null)
 
   // ── C-Grid standart: widget config + filter + excel ───────────────────────
   const boardKey       = config.boardKey || 'logistics-locations-tree'
@@ -554,7 +631,21 @@ export default function LocationTree({ config }) {
     } catch { /* sessiz */ }
   }, [config.refreshUrl])
 
-  const saveNode = useCallback(async (payload) => {
+  const saveNode = useCallback(async (payload, opts = {}) => {
+    // Yeni child eklenirken üst lokasyonun kullanım kaydı varsa uyar
+    if (!opts.skipUsageCheck && payload.id === 0 && payload.parentId != null && config.usageCheckUrl) {
+      try {
+        const ur = await fetch(`${config.usageCheckUrl}?id=${payload.parentId}`, { credentials: 'same-origin' })
+        if (ur.ok) {
+          const usage = await ur.json()
+          if (usage?.hasUsage) {
+            setPendingSavePayload(payload)
+            setUsageWarning({ type: 'addChild', data: usage })
+            return
+          }
+        }
+      } catch { /* ağ hatası → uyarı atla, kaydet */ }
+    }
     const body = {
       id:               payload.id || 0,
       parentId:         payload.parentId ?? null,
@@ -581,7 +672,7 @@ export default function LocationTree({ config }) {
     toast('Kaydedildi.', 'ok')
     setEditingId(null); setAddingFor(null)
     await refreshTree(payload.id || null)
-  }, [config.saveUrl, refreshTree])
+  }, [config.saveUrl, config.usageCheckUrl, refreshTree])
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return
@@ -598,6 +689,24 @@ export default function LocationTree({ config }) {
     finally { setDeleting(false) }
   }, [deleteTarget, config.deleteUrl, refreshTree])
 
+  const confirmAfterUsageWarning = useCallback(async () => {
+    if (!usageWarning) return
+    const { type, node } = usageWarning
+    setUsageWarning(null)
+    if (type === 'delete') {
+      setDeleteTarget(node)
+    } else if (type === 'addChild' && pendingSavePayload) {
+      const p = pendingSavePayload
+      setPendingSavePayload(null)
+      await saveNode(p, { skipUsageCheck: true })
+    }
+  }, [usageWarning, pendingSavePayload, saveNode])
+
+  const cancelUsageWarning = useCallback(() => {
+    setUsageWarning(null)
+    setPendingSavePayload(null)
+  }, [])
+
   const handlers = useMemo(() => ({
     editingId, addingFor,
     saveNode,
@@ -605,8 +714,19 @@ export default function LocationTree({ config }) {
     cancelEdit:  ()   => setEditingId(null),
     startAdd:    spec => { setEditingId(null); setAddingFor(spec) },
     cancelAdd:   ()   => setAddingFor(null),
-    startDelete: node => setDeleteTarget(node),
-  }), [editingId, addingFor, saveNode])
+    startDelete: async (node) => {
+      if (config.usageCheckUrl) {
+        try {
+          const r = await fetch(`${config.usageCheckUrl}?id=${node.id}`, { credentials: 'same-origin' })
+          if (r.ok) {
+            const d = await r.json()
+            if (d?.hasUsage) { setUsageWarning({ type: 'delete', node, data: d }); return }
+          }
+        } catch { /* ağ hatası → doğrudan sil modalı */ }
+      }
+      setDeleteTarget(node)
+    },
+  }), [editingId, addingFor, saveNode, config.usageCheckUrl])
 
   // Tum dugumleri duz listeye cevir — filter eslestirmesi + excel export icin
   const flatNodes = useMemo(() => {
@@ -797,6 +917,16 @@ export default function LocationTree({ config }) {
           ))
         )}
       </div>
+
+      {usageWarning && (
+        <UsageWarningModal
+          type={usageWarning.type}
+          node={usageWarning.node}
+          data={usageWarning.data}
+          onConfirm={confirmAfterUsageWarning}
+          onCancel={cancelUsageWarning}
+        />
+      )}
 
       {deleteTarget && (
         <DeleteModal

@@ -262,7 +262,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { error = ex.Message });
+            return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -415,7 +415,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { error = ex.Message });
+            return Json(new { error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -436,7 +436,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Sunucu hatası: " + ex.Message });
+            return Json(new { success = false, message = "Sunucu hatası: " + "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -457,7 +457,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Sunucu hatası: " + ex.Message });
+            return Json(new { success = false, message = "Sunucu hatası: " + "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -476,7 +476,7 @@ public sealed class FinanceController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
 }

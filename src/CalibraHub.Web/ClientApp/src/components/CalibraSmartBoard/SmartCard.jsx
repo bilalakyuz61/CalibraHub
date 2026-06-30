@@ -239,6 +239,19 @@ export default function SmartCard(props) {
     document.addEventListener('keydown', onKey)
     return function() { document.removeEventListener('keydown', onKey) }
   }, [confirmOpen])
+
+  // 'close-sc-modal' custom event'i — partial view'lar kaydet+kapat sonrasi gonderir.
+  // window.dispatchEvent(new CustomEvent('close-sc-modal', { detail: { refresh: true } }))
+  useEffect(function () {
+    if (!modalOpen) return
+    function onClose(e) {
+      setModalOpen(false)
+      var refresh = e && e.detail && e.detail.refresh
+      if (refresh && props.onRefresh) props.onRefresh(null)
+    }
+    window.addEventListener('close-sc-modal', onClose)
+    return function () { window.removeEventListener('close-sc-modal', onClose) }
+  }, [modalOpen, props.onRefresh])
   function handleConfirmYes() {
     setConfirmOpen(false)
     if (confirmCallbackRef.current) { confirmCallbackRef.current(); confirmCallbackRef.current = null }

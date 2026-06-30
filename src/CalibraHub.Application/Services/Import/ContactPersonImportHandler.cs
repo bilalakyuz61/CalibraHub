@@ -80,4 +80,15 @@ public sealed class ContactPersonImportHandler : RowImportHandlerBase
         var id = await _personRepo.AddAsync(person, ct);
         return (true, null, id);
     }
+
+    // Unvan statik enum değil — mevcut unvan tanımlarını boş şablona dinamik aktar (açılır liste + yardımcı sayfa).
+    public override async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetDynamicAllowedValuesAsync(CancellationToken ct)
+    {
+        var titles = await _titleRepo.GetAllActiveAsync(ct);
+        var names = titles.Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+        return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Title"] = names,
+        };
+    }
 }

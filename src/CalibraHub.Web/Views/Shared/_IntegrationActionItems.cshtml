@@ -92,8 +92,9 @@
             // Onay diyaloğu + sticky "Gönderiliyor…" toast birleşimi.
             // CalibraAlert.confirm her sayfada hazır (Layout'tan yuklenir).
             async function confirmAndDispatch(integration, rid) {
+                var displayLabel = integration.buttonLabel || integration.name || 'Entegrasyon';
                 var ok = await CalibraAlert.confirm(
-                    '"' + (integration.name || 'Entegrasyon') + '" calistirilacak — devam edilsin mi?',
+                    '"' + displayLabel + '" calistirilacak — devam edilsin mi?',
                     {
                         title: 'ERP\'ye Aktar',
                         okText: 'Evet, Gonder',
@@ -107,7 +108,7 @@
                 var pendingHandle = null;
                 if (window.CalibraHub && window.CalibraHub.toast) {
                     pendingHandle = window.CalibraHub.toast(
-                        '⌛ ' + (integration.name || 'Entegrasyon') + ' — ERP\'ye gonderiliyor…',
+                        '⌛ ' + displayLabel + ' — ERP\'ye gonderiliyor…',
                         'info',
                         { ttl: 0 });
                 }
@@ -122,9 +123,9 @@
                     var d = await r.json();
                     if (pendingHandle && pendingHandle.dismiss) pendingHandle.dismiss();
                     if (d.success) {
-                        toast('✓ ' + integration.name + ' basarili (HTTP ' + (d.statusCode || '?') + ')', 'ok');
+                        toast('✓ ' + displayLabel + ' basarili (HTTP ' + (d.statusCode || '?') + ')', 'ok');
                     } else {
-                        toast('✗ ' + integration.name + ': ' + (d.error || 'Hata'), 'err');
+                        toast('✗ ' + displayLabel + ': ' + (d.error || 'Hata'), 'err');
                     }
                 } catch (e) {
                     if (pendingHandle && pendingHandle.dismiss) pendingHandle.dismiss();
@@ -143,7 +144,7 @@
                     '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
                     'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
                     '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>' +
-                    '<span>' + escapeHtml(integration.name || 'Entegrasyon') + '</span>';
+                    '<span>' + escapeHtml(integration.buttonLabel || integration.name || 'Entegrasyon') + '</span>';
 
                 btn.onclick = function () {
                     if (btn.disabled) return;

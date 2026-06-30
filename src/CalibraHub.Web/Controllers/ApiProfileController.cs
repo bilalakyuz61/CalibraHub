@@ -56,7 +56,7 @@ public sealed class ApiProfileController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { error = true, message = ex.Message });
+            return Json(new { error = true, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -117,11 +117,11 @@ public sealed class ApiProfileController : Controller
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[SaveApiProfileJson ERROR] {ex.GetType().Name}: {ex.Message}");
+            Console.Error.WriteLine($"[SaveApiProfileJson ERROR] {ex.GetType().Name}: {"İşlem sırasında bir hata oluştu."}");
             Console.Error.WriteLine($"[SaveApiProfileJson STACK] {ex.StackTrace}");
             if (ex.InnerException != null)
                 Console.Error.WriteLine($"[SaveApiProfileJson INNER] {ex.InnerException.Message}\n{ex.InnerException.StackTrace}");
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -135,7 +135,7 @@ public sealed class ApiProfileController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = ex.Message });
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 }

@@ -1,4 +1,8 @@
-﻿using CalibraHub.Application.Abstractions.Services;
+﻿using System.Security.Claims;
+using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Security;
+using CalibraHub.Application.Services.Security;
 using CalibraHub.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -34,6 +38,9 @@ public sealed class IntegrationController : Controller
         int integrationId,
         [FromQuery] string? recordId,
         [FromServices] IIntegrationRunner runner,
+        [FromServices] IPermissionService permService,
+        [FromServices] IPermissionDefRepository permDefRepo,
+        [FromServices] IIntegrationRepository integrationRepo,
         CancellationToken ct)
     {
         if (integrationId <= 0)
@@ -41,6 +48,29 @@ public sealed class IntegrationController : Controller
 
         try
         {
+            // Per-button permission check (PermissionDef varsa zorunlu, yoksa serbest)
+            var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            UserAuthorizationCatalog.TryParseRole(roleStr, out var role);
+            if (role != UserRole.SystemAdmin)
+            {
+                // Integration'ın SourceFormCode'unu bul
+                var integration = await integrationRepo.GetByIdAsync(integrationId, ct);
+                if (integration is null)
+                    return Json(new { success = false, error = "Entegrasyon bulunamadı." });
+
+                var actionCode = PermissionDefDiscoveryService.BuildIntegrationButtonActionCode(integrationId);
+                var def = await permDefRepo.GetByFormAndActionAsync(integration.SourceFormCode, actionCode, ct);
+                if (def is { IsActive: true })
+                {
+                    if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) || userId <= 0)
+                        return Json(new { success = false, error = "Yetki yetersiz." });
+                    int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+                    var canRun = await permService.CheckAsync(userId, role, deptId, integration.SourceFormCode, actionCode, ct);
+                    if (!canRun)
+                        return Json(new { success = false, error = "Bu entegrasyonu çalıştırma yetkiniz bulunmuyor." });
+                }
+            }
+
             var userName = User?.Identity?.Name ?? "system";
             var result = await runner.RunAsync(
                 integrationId,
@@ -70,7 +100,7 @@ public sealed class IntegrationController : Controller
                 success = false,
                 runId = 0L,
                 statusCode = (int?)null,
-                error = $"Beklenmedik hata: {ex.Message}",
+                error = $"Beklenmedik hata: {"İşlem sırasında bir hata oluştu."}",
                 requestBody = (string?)null,
                 responseBody = (string?)null,
             });

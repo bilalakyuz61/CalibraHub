@@ -925,7 +925,7 @@ public sealed class AdminController : Controller
         }
         catch (Exception ex)
         {
-            TempData["AdminError"] = $"Veri cekme islemi basarisiz: {ex.Message}";
+            TempData["AdminError"] = $"Veri cekme islemi basarisiz: {"Islem sirasinda bir hata olustu."}";
         }
 
         return RedirectToAction(nameof(IntegratorSettings), new { page, pageSize });

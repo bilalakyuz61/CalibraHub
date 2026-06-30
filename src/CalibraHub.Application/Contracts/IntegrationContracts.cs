@@ -49,7 +49,10 @@ public sealed record IntegrationDetailDto(
     // 2026-05-22 Pre-flight Filter — JSON kural listesi (bkz. Integration.SourceFilterJson)
     string? SourceFilterJson = null,
     // 2026-05-22 Cascade target flag — Wizard Step 2 dropdown'ında görünür mü? Default true.
-    bool AllowAsCascadeTarget = true);
+    bool AllowAsCascadeTarget = true,
+    // Kod bazlı cascade: bu integration cascade hedefi olarak CODE ile çağrıldığında
+    // hangi kolona göre entity bulunacak (orn. "CariKod", "StokKodu"). NULL = ID bazlı (default).
+    string? SourceCodeColumn = null);
 
 public sealed record IntegrationMappingDto(
     int Id,
@@ -67,7 +70,8 @@ public sealed record IntegrationMappingDto(
     string? LookupFiltersJson = null,      // Lookup için çoklu WHERE filtre (GuideConstraint[] JSON)
     string? LookupReturnColumn = null,     // Lookup için hangi guide kolonu döner (null = DisplayColumn)
     string? LookupParam = null,            // SourceType=Function + SqlFn modu icin manuel @P3
-    int? CascadeToIntegrationId = null);   // 2026-05-22: FK alanı için cascade hedef integration (null = cascade yok)
+    int? CascadeToIntegrationId = null,    // 2026-05-22: FK alanı için cascade hedef integration (null = cascade yok)
+    bool CascadeByValue = false);          // Değer bazlı cascade: alan değerini (kod) ID'ye çevirip cascade et
 
 public sealed record IntegrationTriggerDto(
     int Id,
@@ -108,7 +112,9 @@ public sealed record SaveIntegrationRequest(
     // 2026-05-22 Pre-flight Filter — JSON kural listesi
     string? SourceFilterJson = null,
     // 2026-05-22 Cascade target flag — bu integration başka biri tarafından cascade edilebilir mi
-    bool AllowAsCascadeTarget = true);
+    bool AllowAsCascadeTarget = true,
+    // Kod bazlı cascade: NULL = ID bazlı (default). "CariKod" gibi set edilirse kod→ID çevirimi yapılır.
+    string? SourceCodeColumn = null);
 
 public sealed record SaveIntegrationMappingDto(
     string TargetPath,
@@ -125,7 +131,8 @@ public sealed record SaveIntegrationMappingDto(
     string? LookupFiltersJson = null,      // Lookup çoklu WHERE filtre (GuideConstraint[] JSON)
     string? LookupReturnColumn = null,     // Lookup hangi guide kolonu döner
     string? LookupParam = null,            // SourceType=Function + SqlFn modu icin manuel @P3
-    int? CascadeToIntegrationId = null);   // 2026-05-22: FK alanı için cascade hedef integration ID'si
+    int? CascadeToIntegrationId = null,    // 2026-05-22: FK alanı için cascade hedef integration ID'si
+    bool CascadeByValue = false);          // Değer bazlı cascade: alan değerini (kod) ID'ye çevirip cascade et
 
 public sealed record SaveIntegrationTriggerDto(
     IntegrationTriggerType TriggerType,

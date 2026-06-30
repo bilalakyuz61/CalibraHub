@@ -50,7 +50,7 @@ public sealed class AiAccountController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "AiUserKey save hatası");
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -67,7 +67,7 @@ public sealed class AiAccountController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
