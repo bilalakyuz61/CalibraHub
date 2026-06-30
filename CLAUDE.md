@@ -43,6 +43,38 @@ Metadata-driven engine motoru (`engine.Entity` + `engine.Field` + dynamic DDL) v
 - **YAPMA:** `engine.Entity` benzeri "dynamic DDL" sistemleri, runtime-defined motor yapıları, `DynamicDdlService` ALTER TABLE servisleri. Eğer ihtiyaç doğarsa, **önce CLAUDE.md güncelleyip ardından mimar tartışması yap** — direkt kodlama yasak.
 - **Yeniden değerlendirme şartı:** 12+ ay canlıda çalıştıktan sonra eğer 5+ farklı müşteri "kendi form/motor tasarlamak" talebinde bulunursa, engine vizyonu yeniden gündeme alınabilir. O zamana kadar konu kapalı.
 
+## Güvenlik Kararları — KALIN UYULMASI GEREKEN
+
+### Genel yetkilendirme katmanı
+
+CalibraHub cookie tabanlı kimlik doğrulama kullanır. Tüm controller'lar varsayılan olarak `[Authorize]` gerektirir; `[AllowAnonymous]` yalnızca aşağıdaki özel gerekçelerle kullanılır.
+
+### DB Ayarları Endpoint'leri — Kurulum Koruması (2026-06-26)
+
+`AccountController`'daki üç endpoint (`GetDbSettings`, `TestDbSettings`, `SaveDbSettings`) kurulum sihirbazı ve Sistem Yönetimi sayfası için kullanılır.
+
+**Erişim kuralı:**
+- **Kurulum tamamlanmamışsa** (DB'de hiç şirket kaydı yok) → Anonim erişime açık. Gerekçe: İlk kurulumda henüz giriş yapabilecek kullanıcı yoktur.
+- **Kurulum tamamsa** (en az bir şirket kaydı var) → Yalnızca giriş yapmış kullanıcı erişebilir.
+- **Ek katman:** Sistem Yönetimi sayfasına zaten ayrıca şifreli giriş gerektirilmektedir.
+
+**Uygulama:** Her üç endpoint'in başında `IsSetupCompleteAsync()` private helper kontrolü yapılır. Bu helper DB'ye erişemiyorsa (kurulum başlangıcı) `false` döner → anonim geçer.
+
+**YAPILMAMASI GEREKEN:** Bu endpoint'leri tekrar `[AllowAnonymous]` bırakmak. Kurulum koruması kaldırılırsa uygulama bağlantı dizesi dışarıdan değiştirilebilir hale gelir.
+
+**Sistem Yönetimi şifre katmanı:** Mevcut ayrı şifre koruması korunmalı; bu guard onun yerine geçmez, ek bir savunma katmanıdır.
+
+### ShopFloor (Fabrika Katı) Endpoint'leri — İki Katmanlı Auth (2026-06-26)
+
+ShopFloor, üretim operatörlerinin iş emri operasyonlarını başlatıp tamamladığı tablet/kiosk ekranıdır. Erişim **iki katmanlıdır**:
+
+1. **CalibraHub oturumu (cookie)** — `/Production/ShopFloor` sayfasına erişmek için standart kullanıcı girişi gerekir. Tüm ShopFloor endpoint'leri `[Authorize]` kapsamındadır (eski `[AllowAnonymous]` kaldırıldı).
+2. **Operatör PIN / NFC kart** — Her operasyon başlatma/tamamlama işleminde `AuthOperator` endpoint'i üzerinden personel kimliği doğrulanır. Hatalı deneme sayısı aşılınca personel deaktifleştirilir (`ShopFloorLockoutTracker`).
+
+**Oturum süresi:** Henüz tanımlanmamış. Kiosk tablette oturum süresi dolduğunda ekran login sayfasına düşer; tekrar giriş gerekir. İleride uzun süreli oturum veya otomatik yenileme kararı alınırsa burayı güncelle.
+
+**YAPILMAMASI GEREKEN:** ShopFloor endpoint'lerine tekrar `[AllowAnonymous]` eklemek.
+
 ## Diğer kurallar
 
 - DB tasarımında kısa tablo/kolon isimleri, INT PK/FK kullan; SQL entegrasyonu önceliklidir.
@@ -467,6 +499,48 @@ return new {
 Tree/master-detail için ek alanlar: `routingMasterWidgets`, `opMasterWidgets`, `routingFormCode`, `opFormCode`.
 
 **Referans (custom kart, full standart):** `ClientApp/src/components/RoutingTree/RoutingTree.jsx` — SmartBoard değil ama header standardı + filter/export/widget paneli + iki seviyeli widget yönetimi içerir. Custom liste ekranı yazarken bu örneği kopyala.
+
+## React / Frontend — API'den Enum Yükleme Kuralı
+
+Backend, `Program.cs`'de `JsonStringEnumConverter` kullanır. Bu nedenle API'den gelen tüm C# enum değerleri **sayı değil string** olarak gelir:
+
+```
+SourceType: "Lookup"     // integer 3 değil
+TriggerType: "OnSave"   // integer 2 değil
+ErrorBehavior: "Stop"   // integer 0 değil
+```
+
+React bileşenlerinde enum değerleri integer olarak karşılaştırılır (`m.sourceType === 3`, `m.triggerType === 2`). API'den yüklenen state bu haliyle kullanılırsa karşılaştırmalar **her zaman false** döner — UI yanlış seçili gösterir veya hiç seçili olmaz.
+
+### Zorunlu pattern: normalize fonksiyonu
+
+API'den gelen enum içeren her alan için **yükleme sırasında** integer'a çevrilmelidir:
+
+```js
+// 1) Mapping objesi tanımla (string → integer)
+const SOURCE_TYPE_NUM = { FormField: 0, Constant: 1, Formula: 2, Lookup: 3, Function: 4 }
+
+// 2) Normalize fonksiyonu — hem string hem integer input'u güvenle işler
+function normalizeSourceType(t) {
+  if (typeof t === 'number') return t
+  if (typeof t === 'string' && t in SOURCE_TYPE_NUM) return SOURCE_TYPE_NUM[t]
+  return 0  // bilinmeyen → varsayılan
+}
+
+// 3) Load akışında kullan
+mappings: (it.mappings || []).map(m => ({
+  sourceType: normalizeSourceType(m.sourceType),  // ← normalize
+  ...
+}))
+```
+
+**Kaydetme tarafında sorun yok** — backend `allowIntegerValues: true` ile hem integer hem string kabul eder. Sadece load/render tarafı normalize edilmeli.
+
+### Mevcut örnekler (referans)
+- `IntegrationWizard.jsx` → `normalizeTriggerType` + `normalizeSourceType`
+- Yeni wizard/form bileşeni yazarken aynı pattern'i uygula.
+
+---
 
 ## Standart rehber kuralı
 

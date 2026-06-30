@@ -1,7 +1,19 @@
 @using System.Text.Json
 @model CalibraHub.Web.Models.Sales.DocumentsViewModel
 @{
-    ViewData["Title"] = "Satın Alma Talepleri";
+    ViewData["Title"]  = "Satın Alma Talepleri";
+    ViewData["DbInfo"] =
+        "<table class='cb-dbinfo-table'>" +
+        "<thead><tr><th colspan='3'>Document.Status — Durum Enum Değerleri</th></tr>" +
+        "<tr><th>Değer</th><th>Tamsayı</th><th>Açıklama</th></tr></thead><tbody>" +
+        "<tr><td><code>Draft</code></td><td>0</td><td>Taslak — hazırlanıyor, henüz gönderilmemiş</td></tr>" +
+        "<tr><td><code>Sent</code></td><td>1</td><td>Onay Bekliyor — onay akışına düşürüldü</td></tr>" +
+        "<tr><td><code>Approved</code></td><td>2</td><td>Onaylı — onaylandı veya onay akışı gerektirmiyor</td></tr>" +
+        "<tr><td><code>Rejected</code></td><td>3</td><td>Reddedildi — onay akışı veya kullanıcı reddetti</td></tr>" +
+        "<tr><td><code>Revised</code></td><td>4</td><td>Revize edildi — yeni versiyon oluşturuldu</td></tr>" +
+        "<tr><td><code>Cancelled</code></td><td>5</td><td>Kapatıldı / İptal</td></tr>" +
+        "<tr><td><code>Converted</code></td><td>6</td><td>Başka belgeye dönüştürüldü (sistem dahili)</td></tr>" +
+        "</tbody></table>";
     var boardConfigJson = JsonSerializer.Serialize(Model.BoardConfig,
         new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 }

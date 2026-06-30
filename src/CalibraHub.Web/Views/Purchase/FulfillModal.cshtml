@@ -18,11 +18,10 @@
     string TranslateStatus(string s) => s switch
     {
         "Draft"     => "Taslak",
-        "Sent"      => "Gönderildi",
-        "Approved"  => "Onaylandı",
+        "Sent"      => "Onay Bekliyor",
+        "Approved"  => "Onaylı",
         "Rejected"  => "Reddedildi",
-        "Cancelled" => "İptal",
-        "Closed"    => "Kapalı",
+        "Cancelled" => "Kapatıldı / İptal",
         "Converted" => "Dönüştürüldü",
         _           => s,
     };
