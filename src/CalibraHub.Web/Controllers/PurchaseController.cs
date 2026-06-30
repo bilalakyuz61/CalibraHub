@@ -304,21 +304,11 @@ public sealed class PurchaseController : Controller
                 cardTitle = string.IsNullOrWhiteSpace(doc.ContactName) ? "(tedarikcisiz)" : doc.ContactName!;
             }
 
-            // İhtiyaç kartlarında "Karşıla" extra aksiyon (fetch-modal) — diğer tiplerde yok.
-            // Modal: GET /Purchase/FulfillModal?requestId={id} — SmartCard {id}→doc.Id replace eder.
+            // İhtiyaç kartlarında "Onaya Gönder" extra aksiyon — diğer tiplerde yok.
+            // Karşılama işlemi artık header "Karşılama Merkezi" butonu → FulfillmentCenter ekranından yapılır.
             var extraActionsList = new List<object>();
             if (string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase))
             {
-                extraActionsList.Add(new
-                {
-                    type       = "fetch-modal",
-                    label      = "Karşıla",
-                    icon       = "Layers",
-                    color      = "indigo",
-                    fetchUrl   = "/Purchase/FulfillModal?requestId={id}",
-                    modalTitle = $"İhtiyaç Karşılama — {doc.DocumentNumber}",
-                });
-
                 // "Onaya Gönder" — Draft belgeler için aktif, diğerleri için pasif (disabled).
                 var isDraft = string.Equals(doc.Status, "Draft", StringComparison.OrdinalIgnoreCase);
                 extraActionsList.Add(new
@@ -446,7 +436,7 @@ public sealed class PurchaseController : Controller
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseFulfillment)]
     public async Task<IActionResult> FulfillmentCenter(CancellationToken ct)
     {
-        var requests  = await _documentService.GetByTypeAsync("alis_talebi", search: null, status: null, ct);
+        var requests = await _documentService.GetByTypeAsync("alis_talebi", search: null, status: null, ct);
         var locations = await _logisticsService.GetLocationsAsync(ct);
 
         var contactIds = requests
@@ -770,7 +760,7 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { error = true, message = ex.Message });
+            return Json(new { error = true, message = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -786,25 +776,87 @@ public sealed class PurchaseController : Controller
         if (itemIds == null || itemIds.Length == 0)
             return Json(Array.Empty<object>());
 
-        var s         = _schema.Replace("]", "]]");
-        var paramList = string.Join(",", itemIds.Select((_, i) => $"@i{i}"));
+        var s          = _schema.Replace("]", "]]");
+        var paramList  = string.Join(",", itemIds.Select((_, i) => $"@i{i}"));
+        var companyId  = _connectionFactory.ResolveCurrentCompanyId();
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
+        // İki stok kaynağını birleştir:
+        //   1) StockMovement — ERP entegrasyon tablosu (Faz 4 önce boş olabilir)
+        //   2) stock_doc_line — CalibraHub native depo modülü (STOCK_IN / STOCK_OUT / TRANSFER)
         cmd.CommandText = $"""
-            SELECT sm.ItemId, sm.LocationId, loc.LocationName,
-                   SUM(CASE WHEN sm.MovementType = 2 THEN sm.Quantity ELSE 0 END) -
-                   SUM(CASE WHEN sm.MovementType = 1 THEN sm.Quantity ELSE 0 END) AS Balance
-            FROM [{s}].[StockMovement] sm
-            LEFT JOIN [{s}].[Location] loc ON loc.Id = sm.LocationId
-            WHERE sm.ItemId IN ({paramList})
-            GROUP BY sm.ItemId, sm.LocationId, loc.LocationName
-            HAVING (SUM(CASE WHEN sm.MovementType = 2 THEN sm.Quantity ELSE 0 END) -
-                    SUM(CASE WHEN sm.MovementType = 1 THEN sm.Quantity ELSE 0 END)) > 0
-            ORDER BY sm.ItemId, Balance DESC;
+            WITH Combined AS (
+                -- Kaynak 1: StockMovement (ERP entegrasyon)
+                SELECT sm.ItemId, sm.LocationId,
+                       SUM(CASE WHEN sm.MovementType = 2 THEN sm.Quantity ELSE 0 END)
+                     - SUM(CASE WHEN sm.MovementType = 1 THEN sm.Quantity ELSE 0 END) AS Bal
+                FROM [{s}].[StockMovement] sm
+                WHERE sm.ItemId IN ({paramList})
+                GROUP BY sm.ItemId, sm.LocationId
+
+                UNION ALL
+
+                -- Kaynak 2a: stock_doc STOCK_IN → hedef lokasyona +miktar
+                SELECT sdl.item_id,
+                       COALESCE(sdl.to_location_id, sd.to_location_id),
+                       SUM(sdl.qty)
+                FROM [{s}].[stock_doc_line] sdl
+                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
+                WHERE sdl.item_id IN ({paramList})
+                  AND sd.company_id = @CompanyId AND sd.is_active = 1
+                  AND sd.doc_type = 'STOCK_IN'
+                GROUP BY sdl.item_id, COALESCE(sdl.to_location_id, sd.to_location_id)
+
+                UNION ALL
+
+                -- Kaynak 2b: stock_doc STOCK_OUT → kaynak lokasyondan -miktar
+                SELECT sdl.item_id,
+                       COALESCE(sdl.from_location_id, sd.from_location_id),
+                       -SUM(sdl.qty)
+                FROM [{s}].[stock_doc_line] sdl
+                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
+                WHERE sdl.item_id IN ({paramList})
+                  AND sd.company_id = @CompanyId AND sd.is_active = 1
+                  AND sd.doc_type = 'STOCK_OUT'
+                GROUP BY sdl.item_id, COALESCE(sdl.from_location_id, sd.from_location_id)
+
+                UNION ALL
+
+                -- Kaynak 2c: TRANSFER — kaynak -miktar
+                SELECT sdl.item_id,
+                       COALESCE(sdl.from_location_id, sd.from_location_id),
+                       -SUM(sdl.qty)
+                FROM [{s}].[stock_doc_line] sdl
+                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
+                WHERE sdl.item_id IN ({paramList})
+                  AND sd.company_id = @CompanyId AND sd.is_active = 1
+                  AND sd.doc_type = 'TRANSFER'
+                GROUP BY sdl.item_id, COALESCE(sdl.from_location_id, sd.from_location_id)
+
+                UNION ALL
+
+                -- Kaynak 2d: TRANSFER — hedef +miktar
+                SELECT sdl.item_id,
+                       COALESCE(sdl.to_location_id, sd.to_location_id),
+                       SUM(sdl.qty)
+                FROM [{s}].[stock_doc_line] sdl
+                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
+                WHERE sdl.item_id IN ({paramList})
+                  AND sd.company_id = @CompanyId AND sd.is_active = 1
+                  AND sd.doc_type = 'TRANSFER'
+                GROUP BY sdl.item_id, COALESCE(sdl.to_location_id, sd.to_location_id)
+            )
+            SELECT c.ItemId, c.LocationId, loc.LocationName, SUM(c.Bal) AS Balance
+            FROM Combined c
+            LEFT JOIN [{s}].[Location] loc ON loc.Id = c.LocationId
+            GROUP BY c.ItemId, c.LocationId, loc.LocationName
+            HAVING SUM(c.Bal) > 0
+            ORDER BY c.ItemId, SUM(c.Bal) DESC;
             """;
         for (var i = 0; i < itemIds.Length; i++)
             cmd.Parameters.Add(new SqlParameter($"@i{i}", itemIds[i]));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         var result = new List<object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -910,7 +962,7 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -998,7 +1050,7 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1024,7 +1076,7 @@ public sealed class PurchaseController : Controller
     /// Seçili ihtiyaç kalemlerini FIFO stok dağıtımıyla otomatik olarak depoden karşılar.
     /// POST /Purchase/FulfillFromStock
     /// Mantık:
-    ///   1. Şirket parametresinden karşılama deposu/modunu oku.
+    ///   1. �?irket parametresinden karşılama deposu/modunu oku.
     ///   2. Seçili satırların kalan miktarlarını çek.
     ///   3. Belge tarihine göre FIFO sırala (eski talep önce karşılanır).
     ///   4. Her kalem için uygun depolardan stok al, bakiyeyi düş.
@@ -1047,7 +1099,7 @@ public sealed class PurchaseController : Controller
                                      .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
                                      .Select(int.Parse).ToList();
             if (configuredLocIds.Count == 0)
-                return Json(new { ok = false, error = "Karşılama deposu tanımlanmamış. Şirket Ayarları → Satın Alma bölümünden depo seçin." });
+                return Json(new { ok = false, error = "Karşılama deposu tanımlanmamış. �?irket Ayarları → Satın Alma bölümünden depo seçin." });
         }
 
         var s         = _schema.Replace("]", "]]");
@@ -1364,7 +1416,7 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
@@ -1382,7 +1434,7 @@ public sealed class PurchaseController : Controller
         var errors = new List<string>();
         foreach (var id in req.RequestIds)
         {
-            var (ok, err) = await _documentService.ChangeStatusAsync(id, "Converted", ct);
+            var (ok, err) = await _documentService.ChangeStatusAsync(id, "Cancelled", ct);
             if (ok) closed.Add(id);
             else    errors.Add($"#{id}: {err}");
         }
@@ -1625,7 +1677,7 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message });
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
 
