@@ -19,26 +19,34 @@
         flex: 0 0 auto;
     }
     .pa-title { font-size: 20px; font-weight: 700; margin: 0; }
-    /* Görünüm radio-pill grubu */
+    /* Kapsam radio-pill grubu (kenar çubuğu alt kısmı) */
     .pa-scope-radio {
-        margin-left: auto; display: flex; align-items: center;
+        display: flex; align-items: center;
         background: rgba(148,163,184,.12); border-radius: 8px; padding: 2px; gap: 1px;
+        width: 100%;
     }
     body.app-theme-dark .pa-scope-radio { background: rgba(255,255,255,.07); }
-    .pa-scope-opt { display: flex; align-items: center; cursor: pointer; }
+    .pa-scope-opt { display: flex; align-items: center; cursor: pointer; flex: 1; }
     .pa-scope-opt input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
     .pa-scope-opt span {
-        padding: 5px 13px; border-radius: 6px;
-        font-size: 12px; font-weight: 500; color: #64748b;
+        padding: 5px 8px; border-radius: 6px;
+        font-size: 11px; font-weight: 500; color: #64748b;
         cursor: pointer; white-space: nowrap; user-select: none;
         transition: background .12s, color .12s;
+        flex: 1; text-align: center;
     }
     .pa-scope-opt input[type="radio"]:checked + span { background: #6366f1; color: #fff; }
     body.app-theme-dark .pa-scope-opt span { color: #94a3b8; }
     body.app-theme-dark .pa-scope-opt input[type="radio"]:checked + span { background: #6366f1; color: #fff; }
-    /* Arama kutusu */
+
+    /* ── Liste başlık üç sütun ── */
+    .pa-list-header-left  { flex: 1 1 auto; min-width: 0; }
+    .pa-list-header-mid   { flex: 0 0 auto; display: flex; align-items: center; }
+    .pa-list-header-right { flex: 1 1 auto; display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+
+    /* Arama kutusu — ortada sabit genişlik */
     .pa-search-wrap {
-        flex: 1 1 auto; max-width: 210px; position: relative; display: flex; align-items: center;
+        width: 280px; position: relative; display: flex; align-items: center;
     }
     .pa-search-input {
         width: 100%; height: 30px; padding: 0 8px 0 30px;
@@ -472,50 +480,81 @@
 
 <div class="pa-wrap">
     <div class="pa-header">
+        <button type="button" class="pa-sidebar-toggle-btn" id="paSidebarToggle" onclick="paToggleSidebar()" title="Menüyü Gizle / Göster">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+        </button>
         <h1 class="pa-title">Onayda Bekleyenler</h1>
-        <div class="pa-scope-radio" id="paScopeGroup">
-            @foreach (var s in scopes)
-            {
-                var label = s switch
-                {
-                    "mine" => "Sadece benim",
-                    "department" => "Departmanım",
-                    "all" => "Tümü",
-                    _ => s
-                };
-                var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
-                <label class="pa-scope-opt">
-                    <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
-                    <span>@label</span>
-                </label>
-            }
-        </div>
     </div>
 
     <div class="pa-body">
-        <div class="pa-groups" id="paGroups">
-            <div class="pa-group empty">Yükleniyor…</div>
+        <div class="pa-sidebar" id="paSidebar">
+            <div class="pa-groups" id="paGroups">
+                <div class="pa-group empty">Yükleniyor…</div>
+            </div>
+            @if (scopes.Count > 1)
+            {
+            <div class="pa-scope-footer">
+                <div class="pa-scope-radio" id="paScopeGroup">
+                    @foreach (var s in scopes)
+                    {
+                        var label = s switch
+                        {
+                            "mine" => "Sadece Benim",
+                            "department" => "Departmanım",
+                            "all" => "Tümü",
+                            _ => s
+                        };
+                        var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
+                        <label class="pa-scope-opt">
+                            <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
+                            <span>@label</span>
+                        </label>
+                    }
+                </div>
+            </div>
+            }
+            else
+            {
+            <div class="pa-scope-footer" style="display:none;">
+                <div class="pa-scope-radio" id="paScopeGroup">
+                    @foreach (var s in scopes)
+                    {
+                        var isDefault = string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase);
+                        <label class="pa-scope-opt">
+                            <input type="radio" name="paScope" value="@s" @(isDefault ? "checked" : "")>
+                            <span>@s</span>
+                        </label>
+                    }
+                </div>
+            </div>
+            }
         </div>
         <div class="pa-list-wrap">
             <div class="pa-list-header">
-                <div style="flex-shrink:0">
+                <div class="pa-list-header-left">
                     <div class="pa-list-title" id="paListTitle">Tüm belge türleri</div>
                     <div class="pa-list-count" id="paListCount"></div>
                 </div>
-                <div class="pa-search-wrap" data-nodirty>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input type="text" id="paSearch" class="pa-search-input" placeholder="Hızlı ara…" autocomplete="off">
+                <div class="pa-list-header-mid">
+                    <div class="pa-search-wrap" data-nodirty>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="paSearch" class="pa-search-input" placeholder="Hızlı ara…" autocomplete="off">
+                    </div>
                 </div>
-                <button type="button" class="pa-col-btn" id="paColBtn" onclick="paToggleColPanel(event)" title="Sütun Ayarları">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="21" y1="4"  x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>
-                        <line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>
-                        <line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>
-                        <line x1="14" y1="2"  x2="14" y2="6"/>
-                        <line x1="8"  y1="10" x2="8"  y2="14"/>
-                        <line x1="16" y1="18" x2="16" y2="22"/>
-                    </svg>
-                </button>
+                <div class="pa-list-header-right">
+                    <button type="button" class="pa-col-btn" id="paColBtn" onclick="paToggleColPanel(event)" title="Sütun Ayarları">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="21" y1="4"  x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>
+                            <line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>
+                            <line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>
+                            <line x1="14" y1="2"  x2="14" y2="6"/>
+                            <line x1="8"  y1="10" x2="8"  y2="14"/>
+                            <line x1="16" y1="18" x2="16" y2="22"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <!-- Sütun ayarları paneli (JS tarafından doldurulur) -->
             <div class="pa-col-panel" id="paColPanel" data-nodirty>
@@ -1202,6 +1241,63 @@
     noteSubmitEl.addEventListener('click', submitNote);
     noteCancelEl.addEventListener('click', hideNotePanel);
 
+    // ── Kenar çubuğu toggle ─────────────────────────────────────────────────
+    (function() {
+        var sidebar = document.getElementById('paSidebar');
+        var toggleBtn = document.getElementById('paSidebarToggle');
+        var SIDEBAR_KEY = 'pa-sidebar-collapsed';
+        if (sidebar && localStorage.getItem(SIDEBAR_KEY) === '1') {
+            sidebar.classList.add('collapsed');
+            if (toggleBtn) toggleBtn.classList.add('collapsed');
+        }
+    })();
+
+    window.paToggleSidebar = function() {
+        var sidebar = document.getElementById('paSidebar');
+        var toggleBtn = document.getElementById('paSidebarToggle');
+        if (!sidebar) return;
+        var isCollapsed = sidebar.classList.toggle('collapsed');
+        if (toggleBtn) toggleBtn.classList.toggle('collapsed', isCollapsed);
+        try { localStorage.setItem('pa-sidebar-collapsed', isCollapsed ? '1' : '0'); } catch(e) {}
+    };
+
     window.paToggleColPanel = function(e) {
         e.stopPropagation();
-        var panel = docu
+        var panel = document.getElementById('paColPanel');
+        var btn   = document.getElementById('paColBtn');
+        if (!panel) return;
+        var isOpen = panel.classList.contains('open');
+        if (!isOpen) {
+            _renderColPanel();
+            var rect = btn ? btn.getBoundingClientRect() : { right: 0, bottom: 0 };
+            panel.style.top  = (rect.bottom + 4) + 'px';
+            panel.style.left = Math.max(4, rect.right - 300) + 'px';
+        }
+        panel.classList.toggle('open', !isOpen);
+        if (btn) btn.classList.toggle('active', !isOpen);
+    };
+
+    document.addEventListener('click', function(e) {
+        var panel = document.getElementById('paColPanel');
+        if (panel && panel.classList.contains('open') && !panel.contains(e.target)) {
+            panel.classList.remove('open');
+            var btn = document.getElementById('paColBtn');
+            if (btn) btn.classList.remove('active');
+        }
+    });
+
+    // Kullanıcı bazlı sütun config'ini sunucudan yükle, ardından grupları çek
+    try {
+        const cfgResp = await fetch('/PendingApproval/GetColConfig', { credentials: 'same-origin' });
+        const cfgData = await cfgResp.json();
+        if (cfgData && cfgData.config) {
+            _applyServerConfig(cfgData.config);
+            // Sunucu config'i localStorage'a da yaz (soğuk yükleme için cache)
+            try { localStorage.setItem(COL_STORAGE_KEY, cfgData.config); } catch(e) {}
+        }
+    } catch(e) { /* sunucuya ulaşılamazsa localStorage ile devam */ }
+
+    loadGroups();
+})();
+</script>
+}
