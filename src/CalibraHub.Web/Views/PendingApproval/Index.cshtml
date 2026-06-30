@@ -401,53 +401,65 @@
         color: #94a3b8; text-transform: uppercase;
         margin-bottom: 14px;
     }
-    .pa-flow { display: flex; flex-direction: column; gap: 0; }
+    /* ── Yatay onay süreci zaman çizelgesi ── */
+    .pa-htl {
+        display: flex; flex-direction: row;
+        overflow-x: auto; padding: 4px 4px 12px;
+    }
+    .pa-htl::-webkit-scrollbar { height: 4px; }
+    .pa-htl::-webkit-scrollbar-thumb { background: rgba(148,163,184,.3); border-radius: 2px; }
 
-    .pa-flow-step {
-        display: flex; gap: 14px; position: relative;
+    .pa-htl-node {
+        display: flex; flex-direction: column; align-items: center;
+        flex: 1; min-width: 130px; max-width: 210px;
     }
-    /* Dikey bağlantı çizgisi — son adım hariç */
-    .pa-flow-step:not(:last-child) .pa-flow-line {
-        position: absolute; left: 17px; top: 36px;
-        width: 2px; bottom: -2px;
-        background: #e2e8f0;
-    }
-    body.app-theme-dark .pa-flow-step:not(:last-child) .pa-flow-line { background: rgba(255,255,255,.1); }
-    .pa-flow-step.sf-approved:not(:last-child) .pa-flow-line { background: #10b981; }
 
-    /* Sol: ikon halkası */
-    .pa-flow-icon-wrap {
-        flex: 0 0 36px; display: flex; flex-direction: column; align-items: center;
+    .pa-htl-spine {
+        display: flex; align-items: center; width: 100%; height: 36px;
     }
-    .pa-flow-dot {
-        width: 36px; height: 36px; border-radius: 50%;
+
+    .pa-htl-line {
+        flex: 1; height: 2px; background: #e2e8f0;
+    }
+    body.app-theme-dark .pa-htl-line { background: rgba(255,255,255,.12); }
+    .pa-htl-line.htl-done { background: #10b981; }
+    .pa-htl-node:first-child .pa-htl-spine .pa-htl-line:first-child { visibility: hidden; }
+    .pa-htl-node:last-child  .pa-htl-spine .pa-htl-line:last-child  { visibility: hidden; }
+
+    .pa-htl-dot {
+        width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
         display: flex; align-items: center; justify-content: center;
-        font-size: 15px; font-weight: 700; flex-shrink: 0;
+        font-size: 15px; font-weight: 700;
         border: 2px solid #e2e8f0;
         background: var(--app-surface, #fff); color: #94a3b8;
         position: relative; z-index: 1;
     }
-    body.app-theme-dark .pa-flow-dot { background: #1e293b; border-color: rgba(255,255,255,.15); color: #64748b; }
-    .pa-flow-step.sf-approved .pa-flow-dot { border-color: #10b981; background: #ecfdf5; color: #059669; }
-    .pa-flow-step.sf-pending  .pa-flow-dot { border-color: #f59e0b; background: #fffbeb; color: #b45309; }
-    .pa-flow-step.sf-rejected .pa-flow-dot { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
-    body.app-theme-dark .pa-flow-step.sf-approved .pa-flow-dot { background: rgba(16,185,129,.15); }
-    body.app-theme-dark .pa-flow-step.sf-pending  .pa-flow-dot { background: rgba(245,158,11,.12); }
-    body.app-theme-dark .pa-flow-step.sf-rejected .pa-flow-dot { background: rgba(239,68,68,.12); }
+    body.app-theme-dark .pa-htl-dot { background: #1e293b; border-color: rgba(255,255,255,.15); color: #64748b; }
+    .pa-htl-node.sf-approved .pa-htl-dot { border-color: #10b981; background: #ecfdf5; color: #059669; }
+    .pa-htl-node.sf-pending  .pa-htl-dot { border-color: #f59e0b; background: #fffbeb; color: #b45309; }
+    .pa-htl-node.sf-rejected .pa-htl-dot { border-color: #ef4444; background: #fef2f2; color: #dc2626; }
+    body.app-theme-dark .pa-htl-node.sf-approved .pa-htl-dot { background: rgba(16,185,129,.15); }
+    body.app-theme-dark .pa-htl-node.sf-pending  .pa-htl-dot { background: rgba(245,158,11,.12); }
+    body.app-theme-dark .pa-htl-node.sf-rejected .pa-htl-dot { background: rgba(239,68,68,.12); }
 
-    /* Sağ: içerik */
-    .pa-flow-content {
-        flex: 1; padding-bottom: 20px;
+    .pa-htl-card {
+        margin-top: 10px; width: 100%; padding: 6px 8px; text-align: center;
     }
-    .pa-flow-step:last-child .pa-flow-content { padding-bottom: 4px; }
+    .pa-htl-node.sf-current .pa-htl-card {
+        background: rgba(99,102,241,.04); border: 1px solid rgba(99,102,241,.18);
+        border-radius: 10px;
+    }
+    body.app-theme-dark .pa-htl-node.sf-current .pa-htl-card { background: rgba(99,102,241,.09); }
 
-    .pa-flow-top {
-        display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;
+    .pa-htl-name {
+        font-size: 12px; font-weight: 600; color: var(--app-text, #0f172a); margin-bottom: 3px;
     }
-    .pa-flow-name { font-size: 13px; font-weight: 600; }
-    .pa-flow-badge {
-        font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
-        letter-spacing: .03em; white-space: nowrap;
+    body.app-theme-dark .pa-htl-name { color: #e2e8f0; }
+
+    .pa-htl-badge {
+        display: inline-block; font-size: 10px; font-weight: 700;
+        padding: 2px 8px; border-radius: 20px;
+        letter-spacing: .03em; white-space: nowrap; margin-bottom: 4px;
     }
     .badge-approved { background: #d1fae5; color: #065f46; }
     .badge-pending  { background: #fef3c7; color: #92400e; }
@@ -458,20 +470,20 @@
     body.app-theme-dark .badge-rejected { background: rgba(239,68,68,.18); color: #fca5a5; }
     body.app-theme-dark .badge-waiting  { background: rgba(148,163,184,.1); color: #94a3b8; }
 
-    .pa-flow-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
-    .pa-flow-meta-times { display: flex; flex-wrap: wrap; gap: 4px 14px; }
-    .pa-flow-meta-lbl { font-weight: 600; color: #94a3b8; }
-    .pa-flow-note {
-        margin-top: 5px; font-size: 12px; padding: 5px 10px;
+    .pa-htl-approver { font-size: 11px; color: #64748b; margin-bottom: 3px; }
+
+    .pa-htl-times {
+        display: flex; flex-direction: column; align-items: center;
+        gap: 1px; font-size: 10px; color: #94a3b8;
+    }
+    .pa-htl-time-lbl { font-weight: 600; color: #94a3b8; }
+
+    .pa-htl-note {
+        margin-top: 5px; font-size: 11px; padding: 4px 8px; text-align: left;
         border-left: 3px solid #e2e8f0; color: #64748b; border-radius: 0 4px 4px 0;
         background: rgba(148,163,184,.06);
     }
-    body.app-theme-dark .pa-flow-note { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
-    .pa-flow-step.sf-current .pa-flow-content {
-        background: rgba(99,102,241,.04); border: 1px solid rgba(99,102,241,.18);
-        border-radius: 10px; padding: 10px 12px 10px;
-    }
-    body.app-theme-dark .pa-flow-step.sf-current .pa-flow-content { background: rgba(99,102,241,.09); }
+    body.app-theme-dark .pa-htl-note { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.04); }
 
     /* ── Bekleyen / Tamamlanan tab ── */
     .pa-mode-tabs {
@@ -1130,9 +1142,24 @@
 
         if (d.steps && d.steps.length > 0) {
             html += '<div class="pa-flow-section-title">Onay Süreci</div>';
-            html += '<div class="pa-flow">';
-            // Tamamlanmış (Approved/Rejected) akışlarda hiç devreye girmemiş
-            // (Pending + actionDate yok) adımları gizle.
+            html += '<div class="pa-htl">';
+
+            // İlk düğüm: belge oluşturma (daima tamamlanmış)
+            html += '<div class="pa-htl-node sf-approved">' +
+                    '<div class="pa-htl-spine">' +
+                    '<div class="pa-htl-line"></div>' +
+                    '<div class="pa-htl-dot">✓</div>' +
+                    '<div class="pa-htl-line htl-done"></div>' +
+                    '</div>' +
+                    '<div class="pa-htl-card">' +
+                    '<div class="pa-htl-name">Belge Oluşturma</div>' +
+                    '<span class="pa-htl-badge badge-approved">Tamamlandı</span>' +
+                    '<div class="pa-htl-times">' +
+                    '<span><span class="pa-htl-time-lbl">Tarih:</span> ' + fmtDate(h.documentDate) + '</span>' +
+                    '</div>' +
+                    '</div>' +
+                    '</div>';
+
             const instanceDone = h.instanceStatus === 'Approved' || h.instanceStatus === 'Rejected';
             const visibleSteps = d.steps.filter(s =>
                 !instanceDone || s.status !== 'Pending' || s.actionDate != null
@@ -1145,35 +1172,31 @@
                 const icon      = STATUS_ICON[status]  || '○';
                 const labelTr   = STATUS_TR[status]    || status;
 
-                // Adıma giriş zamanı: ilk adım için instance başlangıcı,
-                // sonraki adımlar için önceki adımın aksiyon tarihi.
+                // Giriş zamanı: ilk adım için instance başlangıcı, sonrakiler için önceki adımın çıkış tarihi
                 const entryTime = idx === 0
-                    ? (d.header.instanceStarted || s.enteredAt)
-                    : (visibleSteps[idx - 1].actionDate || d.header.instanceStarted);
+                    ? (h.instanceStarted || s.enteredAt)
+                    : (visibleSteps[idx - 1].actionDate || h.instanceStarted);
 
-                let metaHtml = '';
-                if (s.approverName) {
-                    metaHtml += '<div class="pa-flow-meta">' + escapeHtml(s.approverName) + '</div>';
-                }
-                metaHtml += '<div class="pa-flow-meta pa-flow-meta-times">' +
-                            '<span><span class="pa-flow-meta-lbl">Giriş:</span> ' + fmtDate(entryTime) + '</span>';
-                if (s.actionDate) {
-                    metaHtml += '<span><span class="pa-flow-meta-lbl">İşlem:</span> ' + fmtDate(s.actionDate) + '</span>';
-                }
-                metaHtml += '</div>';
+                // Sol bağlantı çizgisi: önceki düğüm tamamlandıysa yeşil
+                const lineBeforeDone = idx === 0 || visibleSteps[idx - 1].status === 'Approved';
+                // Sağ bağlantı çizgisi: bu adım tamamlandıysa yeşil
+                const lineAfterDone  = status === 'Approved';
 
-                html += '<div class="pa-flow-step ' + cssClass + (isCurrent ? ' sf-current' : '') + '">' +
-                        '<div class="pa-flow-icon-wrap">' +
-                        '<div class="pa-flow-dot">' + icon + '</div>' +
-                        '<div class="pa-flow-line"></div>' +
+                html += '<div class="pa-htl-node ' + cssClass + (isCurrent ? ' sf-current' : '') + '">' +
+                        '<div class="pa-htl-spine">' +
+                        '<div class="pa-htl-line' + (lineBeforeDone ? ' htl-done' : '') + '"></div>' +
+                        '<div class="pa-htl-dot">' + icon + '</div>' +
+                        '<div class="pa-htl-line' + (lineAfterDone ? ' htl-done' : '') + '"></div>' +
                         '</div>' +
-                        '<div class="pa-flow-content">' +
-                        '<div class="pa-flow-top">' +
-                        '<span class="pa-flow-name">' + escapeHtml(s.stepName || ('Adım ' + (idx + 1))) + '</span>' +
-                        '<span class="pa-flow-badge ' + badge + '">' + labelTr + '</span>' +
+                        '<div class="pa-htl-card">' +
+                        '<div class="pa-htl-name">' + escapeHtml(s.stepName || ('Adım ' + (idx + 1))) + '</div>' +
+                        '<span class="pa-htl-badge ' + badge + '">' + labelTr + '</span>' +
+                        (s.approverName ? '<div class="pa-htl-approver">' + escapeHtml(s.approverName) + '</div>' : '') +
+                        '<div class="pa-htl-times">' +
+                        '<span><span class="pa-htl-time-lbl">G:</span> ' + fmtDate(entryTime) + '</span>' +
+                        (s.actionDate ? '<span><span class="pa-htl-time-lbl">Ç:</span> ' + fmtDate(s.actionDate) + '</span>' : '') +
                         '</div>' +
-                        metaHtml +
-                        (s.note ? '<div class="pa-flow-note">' + escapeHtml(s.note) + '</div>' : '') +
+                        (s.note ? '<div class="pa-htl-note">' + escapeHtml(s.note) + '</div>' : '') +
                         '</div>' +
                         '</div>';
             });
