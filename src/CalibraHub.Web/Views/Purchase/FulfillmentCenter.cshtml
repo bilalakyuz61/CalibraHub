@@ -488,7 +488,7 @@
     .fc3-ftbl tr:last-child { border-bottom:none; }
     .fc3-ftbl td { vertical-align:middle; }
     .fc3-fl { padding:7px 8px 7px 14px; font-size:.78rem; color:#64748b; text-align:right; white-space:nowrap; width:90px; }
-    .fc3-fop-c { padding:5px 4px; width:108px; }
+    .fc3-fop-c { padding:5px 4px; width:128px; }
     .fc3-fop {
         width:100%; padding:5px 6px;
         background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
@@ -506,10 +506,8 @@
     .fc3-fv:focus { border-color:rgba(99,102,241,.4); }
     .fc3-fv::placeholder { color:#334155; }
 
-    /* Tarih arasında — ikinci input */
-    .fc3-date-wrap { display:flex; align-items:center; gap:4px; }
-    .fc3-date-wrap .fc3-fv { flex:1; }
-    .fc3-date-sep { color:#475569; font-size:.7rem; white-space:nowrap; flex-shrink:0; }
+    /* Tarih — alt alta layout (arasında seçilince ikinci input görünür) */
+    .fc3-date-wrap { display:flex; flex-direction:column; gap:3px; }
 
     /* ── Çoklu seçim bölümleri ── */
     .fc3-filt-sect { padding:10px 14px 11px; border-top:1px solid rgba(255,255,255,.04); }
@@ -762,8 +760,6 @@
     }
     body.app-theme-light .fc3-fv:focus { border-color:rgba(99,102,241,0.5); }
     body.app-theme-light .fc3-fv::placeholder { color:#94a3b8; }
-    body.app-theme-light .fc3-date-sep { color:#64748b; }
-
     body.app-theme-light .fc3-filt-sect { border-top-color:#e2e8f0; }
     body.app-theme-light .fc3-filt-sect-lbl { color:#475569; }
     body.app-theme-light .fc3-filt-sect-lbl small { color:#94a3b8; }
@@ -1255,28 +1251,27 @@
                     <td class="fc3-fl">Belge No</td>
                     <td class="fc3-fop-c">
                         <select class="fc3-fop">
-                            <option value="contains">şunu içeren</option>
-                            <option value="startsWith">ile başlayan</option>
-                            <option value="eq">eşittir</option>
+                            <option value="contains">~ İçerir</option>
+                            <option value="startsWith">⊏ Başlar</option>
+                            <option value="eq">= Eşittir</option>
                         </select>
                     </td>
-                    <td class="fc3-fv-c"><input type="text" class="fc3-fv" placeholder="Belge numarası..." maxlength="30"></td>
+                    <td class="fc3-fv-c"><input type="text" class="fc3-fv" placeholder="Belge numarası..." maxlength="30" oninput="applyFilters()"></td>
                 </tr>
                 <tr data-field="date">
                     <td class="fc3-fl">Tarih</td>
                     <td class="fc3-fop-c">
                         <select class="fc3-fop" onchange="fc3DateOpChange(this)">
-                            <option value="gte">≥</option>
-                            <option value="lte">≤</option>
-                            <option value="eq">eşittir</option>
-                            <option value="between">arasında</option>
+                            <option value="gte">≥ Sonra</option>
+                            <option value="lte">≤ Önce</option>
+                            <option value="eq">= Eşit</option>
+                            <option value="between">↔ Arasında</option>
                         </select>
                     </td>
                     <td class="fc3-fv-c">
                         <div class="fc3-date-wrap">
-                            <input type="date" class="fc3-fv fc3-date-1">
-                            <span class="fc3-date-sep" style="visibility:hidden;">—</span>
-                            <input type="date" class="fc3-fv fc3-date-2" style="visibility:hidden;">
+                            <input type="date" class="fc3-fv fc3-date-1" onchange="applyFilters()">
+                            <input type="date" class="fc3-fv fc3-date-2" style="display:none;" onchange="applyFilters()">
                         </div>
                     </td>
                 </tr>
@@ -1454,12 +1449,9 @@
     // ── Tarih operatör değişimi ───────────────────────────────────────────────
     window.fc3DateOpChange = function(sel) {
         var row = sel.closest('tr');
-        var sep = row.querySelector('.fc3-date-sep');
         var d2  = row.querySelector('.fc3-date-2');
         var between = sel.value === 'between';
-        if (sep) sep.style.visibility = between ? 'visible' : 'hidden';
-        if (d2)  d2.style.visibility  = between ? 'visible' : 'hidden';
-        if (!between && d2) d2.value = '';
+        if (d2) { d2.style.display = between ? '' : 'none'; if (!between) d2.value = ''; }
         applyFilters();
     };
 
@@ -1749,8 +1741,7 @@
         // Metin/sayı/tarih temizle
         document.querySelectorAll('.fc3-ftbl .fc3-fv').forEach(function(el) { el.value = ''; });
         document.querySelectorAll('.fc3-ftbl .fc3-fop').forEach(function(el) { el.selectedIndex = 0; });
-        document.querySelectorAll('.fc3-date-sep').forEach(function(el) { el.style.visibility = 'hidden'; });
-        document.querySelectorAll('.fc3-date-2').forEach(function(el) { el.style.visibility = 'hidden'; el.value = ''; });
+        document.querySelectorAll('.fc3-date-2').forEach(function(el) { el.style.display = 'none'; el.value = ''; });
         // Durum → Tümü'ye sıfırla
         renderStatList([]);
         _updateStatLbl();
