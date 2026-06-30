@@ -1646,8 +1646,15 @@
             },
             refreshModalList() {
                 render();
+            },
+            openTab(url, title) {
+                const tab = upsertTab({ url, title: title || "Sayfa" });
+                if (tab) setActiveTab(tab.key);
             }
         };
+
+        // iframe'lerden çağrılabilen cross-frame API
+        window.calibraOpenWorkspaceTab = (url, title) => _workspaceTabsApi?.openTab?.(url, title);
 
         render();
         if (activeKey) {

@@ -1938,7 +1938,7 @@
                 var al = c.align || 'left';
                 switch(c.key) {
                     case 'num':
-                        return '<a class="fc3-flat-num fc3-num-link" href="/Purchase/Edit?type=purchase_request&id=' + r.id + '" style="text-align:' + al + '" onclick="event.stopPropagation()">' + esc(r.documentNumber || '') + '</a>';
+                        return '<a class="fc3-flat-num fc3-num-link" href="/Purchase/Edit?type=purchase_request&id=' + r.id + '" style="text-align:' + al + '" onclick="fc3OpenDocTab(event,\'/Purchase/Edit?type=purchase_request&id=' + r.id + '\');return false;">' + esc(r.documentNumber || '') + '</a>';
                     case 'who':
                         return '<span class="fc3-flat-who" style="flex:' + (c.flexWeight||1) + ';text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
                     case 'dt':
@@ -2960,6 +2960,19 @@
     function esc(s) {
         return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
+
+    // Belge numarasına tıklanınca parent shell'de yeni workspace sekmesi açar.
+    // Aynı URL için zaten açık sekme varsa ona geçiş yapar (upsert davranışı).
+    window.fc3OpenDocTab = function(event, url) {
+        event.preventDefault();
+        event.stopPropagation();
+        var parent = window.parent;
+        if (parent && parent !== window && typeof parent.calibraOpenWorkspaceTab === 'function') {
+            parent.calibraOpenWorkspaceTab(url, 'İhtiyaç Kaydı');
+        } else {
+            window.location.href = url;
+        }
+    };
 
     // ── Widget labelId haritası (reset için) ─────────────────────────────────
     var _wdgLblIds = {};  // { widgetId → lblElementId }
