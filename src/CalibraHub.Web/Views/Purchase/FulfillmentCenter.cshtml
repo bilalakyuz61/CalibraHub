@@ -395,6 +395,11 @@
     body.app-theme-light .fm-fst--draft     { background:rgba(100,116,139,.1);  color:#64748b; }
     body.app-theme-light .fm-fst--rejected  { background:rgba(220,38,38,.1);    color:#dc2626; }
     body.app-theme-light .fm-fst--cancelled { background:rgba(71,85,105,.1);    color:#334155; }
+    .fc3-num-link { color:#818cf8; text-decoration:none; }
+    .fc3-num-link:hover { color:#a5b4fc; text-decoration:underline; }
+    body.app-theme-light .fc3-num-link { color:#4f46e5; }
+    body.app-theme-light .fc3-num-link:hover { color:#3730a3; }
+
     .fc3-sub-cb:disabled { opacity:.4; cursor:not-allowed; }
     .fc3-sub-suf { font-size:.8rem; flex-shrink:0; min-width:18px; text-align:center; }
     .fc3-sub-loading { padding:8px 48px; font-size:.76rem; color:#475569; font-style:italic; }
@@ -1933,7 +1938,7 @@
                 var al = c.align || 'left';
                 switch(c.key) {
                     case 'num':
-                        return '<span class="fc3-flat-num" style="text-align:' + al + '">' + esc(r.documentNumber || '') + '</span>';
+                        return '<a class="fc3-flat-num fc3-num-link" href="/Purchase/Edit?type=purchase_request&id=' + r.id + '" style="text-align:' + al + '" onclick="event.stopPropagation()">' + esc(r.documentNumber || '') + '</a>';
                     case 'who':
                         return '<span class="fc3-flat-who" style="flex:' + (c.flexWeight||1) + ';text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
                     case 'dt':
