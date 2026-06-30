@@ -445,11 +445,22 @@
     .pa-htl-card {
         margin-top: 10px; width: 100%; padding: 6px 8px; text-align: center;
     }
+    /* Aktif adım (sf-current) — daha canlı görünüm */
+    .pa-htl-node.sf-current .pa-htl-dot {
+        box-shadow: 0 0 0 4px rgba(245,158,11,.22), 0 0 12px rgba(245,158,11,.18);
+    }
+    body.app-theme-dark .pa-htl-node.sf-current .pa-htl-dot {
+        box-shadow: 0 0 0 4px rgba(245,158,11,.3), 0 0 14px rgba(245,158,11,.22);
+    }
     .pa-htl-node.sf-current .pa-htl-card {
-        background: rgba(99,102,241,.04); border: 1px solid rgba(99,102,241,.18);
+        background: rgba(245,158,11,.07); border: 1.5px solid rgba(245,158,11,.28);
         border-radius: 10px;
     }
-    body.app-theme-dark .pa-htl-node.sf-current .pa-htl-card { background: rgba(99,102,241,.09); }
+    body.app-theme-dark .pa-htl-node.sf-current .pa-htl-card {
+        background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.38);
+    }
+    /* Sırada (queued) adım — soluk */
+    .pa-htl-node.sf-queued { opacity: .55; }
 
     .pa-htl-name {
         font-size: 12px; font-weight: 600; color: var(--app-text, #0f172a); margin-bottom: 3px;
@@ -1164,18 +1175,28 @@
             const visibleSteps = d.steps.filter(s =>
                 !instanceDone || s.status !== 'Pending' || s.actionDate != null
             );
+            // Sıradaki aktif adım: visibleSteps içinde Pending durumundaki ilk adım
+            const firstPendingIdx = visibleSteps.findIndex(s => (s.status || 'Waiting') === 'Pending');
             visibleSteps.forEach((s, idx) => {
-                const status    = s.status || 'Waiting';
-                const isCurrent = status === 'Pending';
-                const cssClass  = STATUS_CSS[status]   || 'sf-waiting';
-                const badge     = STATUS_BADGE[status] || 'badge-waiting';
-                const icon      = STATUS_ICON[status]  || '○';
-                const labelTr   = STATUS_TR[status]    || status;
+                const status = s.status || 'Waiting';
 
-                // Giriş zamanı: ilk adım için instance başlangıcı, sonrakiler için önceki adımın çıkış tarihi
-                const entryTime = idx === 0
-                    ? (h.instanceStarted || s.enteredAt)
-                    : (visibleSteps[idx - 1].actionDate || h.instanceStarted);
+                // Sırası gelmeyen Pending adımlar (birden fazla Pending varsa 2. ve sonrası)
+                const isQueued  = status === 'Pending' && idx !== firstPendingIdx;
+                const isCurrent = status === 'Pending' && idx === firstPendingIdx;
+
+                // Görsel sınıf: sıradakiler için sf-waiting
+                const cssClass = isQueued ? 'sf-waiting sf-queued' : (STATUS_CSS[status] || 'sf-waiting');
+                const badge    = isQueued ? 'badge-waiting'        : (STATUS_BADGE[status] || 'badge-waiting');
+                const icon     = isQueued ? '○'                    : (STATUS_ICON[status]  || '○');
+                const labelTr  = isQueued ? 'Sırada'               : (STATUS_TR[status]    || status);
+
+                // Giriş zamanı: yalnızca aktif veya tamamlanan adımlarda göster
+                const hasStarted = status === 'Approved' || status === 'Rejected' || isCurrent;
+                const entryTime = hasStarted
+                    ? (idx === 0
+                        ? (h.instanceStarted || s.enteredAt)
+                        : (visibleSteps[idx - 1].actionDate || h.instanceStarted))
+                    : null;
 
                 // Sol bağlantı çizgisi: önceki düğüm tamamlandıysa yeşil
                 const lineBeforeDone = idx === 0 || visibleSteps[idx - 1].status === 'Approved';
@@ -1192,10 +1213,12 @@
                         '<div class="pa-htl-name">' + escapeHtml(s.stepName || ('Adım ' + (idx + 1))) + '</div>' +
                         '<span class="pa-htl-badge ' + badge + '">' + labelTr + '</span>' +
                         (s.approverName ? '<div class="pa-htl-approver">' + escapeHtml(s.approverName) + '</div>' : '') +
-                        '<div class="pa-htl-times">' +
-                        '<span><span class="pa-htl-time-lbl">G:</span> ' + fmtDate(entryTime) + '</span>' +
-                        (s.actionDate ? '<span><span class="pa-htl-time-lbl">Ç:</span> ' + fmtDate(s.actionDate) + '</span>' : '') +
-                        '</div>' +
+                        (entryTime || s.actionDate
+                            ? '<div class="pa-htl-times">' +
+                              (entryTime ? '<span><span class="pa-htl-time-lbl">G:</span> ' + fmtDate(entryTime) + '</span>' : '') +
+                              (s.actionDate ? '<span><span class="pa-htl-time-lbl">Ç:</span> ' + fmtDate(s.actionDate) + '</span>' : '') +
+                              '</div>'
+                            : '') +
                         (s.note ? '<div class="pa-htl-note">' + escapeHtml(s.note) + '</div>' : '') +
                         '</div>' +
                         '</div>';
