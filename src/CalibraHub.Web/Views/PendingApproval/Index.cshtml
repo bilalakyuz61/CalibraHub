@@ -1277,19 +1277,19 @@
                    (it.stepName        || '').toLowerCase().includes(_searchQuery);
         });
     }
-    modalCloseEl.addEventListener('click', closeModal);
-    modalCancelEl.addEventListener('click', closeModal);
-    backdropEl.addEventListener('click', e => { if (e.target === backdropEl) closeModal(); });
+    if (modalCloseEl)  modalCloseEl.addEventListener('click', closeModal);
+    if (modalCancelEl) modalCancelEl.addEventListener('click', closeModal);
+    if (backdropEl)    backdropEl.addEventListener('click', e => { if (e.target === backdropEl) closeModal(); });
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && backdropEl.classList.contains('show')) {
+        if (e.key === 'Escape' && backdropEl?.classList.contains('show')) {
             if (_noteAction) hideNotePanel(); else closeModal();
         }
         if (e.key === 'Enter' && e.ctrlKey && _noteAction) submitNote();
     });
-    modalApproveEl.addEventListener('click', approveCurrent);
-    modalRejectEl.addEventListener('click', rejectCurrent);
-    noteSubmitEl.addEventListener('click', submitNote);
-    noteCancelEl.addEventListener('click', hideNotePanel);
+    if (modalApproveEl) modalApproveEl.addEventListener('click', approveCurrent);
+    if (modalRejectEl)  modalRejectEl.addEventListener('click', rejectCurrent);
+    if (noteSubmitEl)   noteSubmitEl.addEventListener('click', submitNote);
+    if (noteCancelEl)   noteCancelEl.addEventListener('click', hideNotePanel);
 
     // ── Kenar çubuğu toggle ─────────────────────────────────────────────────
     (function() {

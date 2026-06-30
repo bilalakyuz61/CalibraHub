@@ -832,6 +832,14 @@ public sealed class ApprovalController : Controller
             var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
             var instance = await _approvalFlowService.RejectAsync(
                 new RejectStepRequest(instanceId, userId, userName, note), cancellationToken);
+
+            // Onay reddedildiyse Document.Status = Rejected yap
+            if (string.Equals(instance.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+            {
+                if (instance.DocumentId.HasValue)
+                    await _documentService.ChangeStatusAsync(instance.DocumentId.Value, "Rejected", cancellationToken);
+            }
+
             return Json(new { ok = true, status = instance.Status });
         }
         catch (Exception ex)

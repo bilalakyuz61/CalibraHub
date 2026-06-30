@@ -496,15 +496,10 @@ public sealed class DocumentService : IDocumentService
 
     public async Task<(bool Success, string? Error)> ChangeStatusAsync(int id, string newStatus, CancellationToken ct)
     {
-        var quote = await _repo.GetByIdAsync(id, ct);
-        if (quote == null) return (false, "Teklif bulunamadi.");
-
-        if (!Enum.TryParse<DocumentStatus>(newStatus, out var status))
+        if (!Enum.TryParse<DocumentStatus>(newStatus, out _))
             return (false, "Gecersiz durum.");
 
-        quote.Status = status;
-        quote.UpdatedAt = DateTime.Now;
-        await _repo.UpsertAsync(quote, ct);
+        await _repo.UpdateStatusAsync(id, newStatus, ct);
         return (true, null);
     }
 

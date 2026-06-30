@@ -26,7 +26,6 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("HomeDashboard/[action]")]
-[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Dashboards)]
 public sealed class HomeDashboardController : Controller
 {
     private readonly IDashboardService _dashboard;
