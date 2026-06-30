@@ -272,6 +272,8 @@
     .fc3-step-dots { display:flex; gap:4px; flex:1; justify-content:center; align-items:center; }
     .fc3-step-dot { width:7px; height:7px; border-radius:50%; background:rgba(148,163,184,.25); transition:background .15s; }
     .fc3-step-dot.on { background:#6366f1; }
+    .fc3-step-dot.auto-mark { background:rgba(99,102,241,.15); border:1px solid rgba(99,102,241,.35); box-sizing:border-box; }
+    .fc3-step-dot.auto-mark.on { background:#6366f1; border:none; }
     /* Grup başlık satırı */
     .fc3-group-hdr {
         display:flex; align-items:center; gap:8px;
@@ -1819,6 +1821,20 @@
     // ── Flat liste render ─────────────────────────────────────────────────────
     var FC3_EXTRA_COLS = @Html.Raw(extraColsJson);
 
+    // widthStep (1-5, 3=Otomatik) → inline CSS genişlik stilini döner
+    function getWidthStyle(c) {
+        var ws = c.widthStep || 3;
+        var fw = c.flexWeight || 0;
+        switch (ws) {
+            case 1: return 'flex:none;min-width:0;width:auto;max-width:58px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;';
+            case 2: return 'flex:none;min-width:0;width:auto;max-width:96px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;';
+            case 3: return fw > 0 ? 'flex:' + fw + ';' : '';          // Otomatik — CSS class doğal genişliği
+            case 4: return 'flex:' + Math.max(fw + 1, 1) + ';min-width:0;width:auto;max-width:none;';
+            case 5: return 'flex:' + Math.max(fw + 2, 2) + ';min-width:0;width:auto;max-width:none;';
+            default: return fw > 0 ? 'flex:' + fw + ';' : '';
+        }
+    }
+
     function renderFlatColHdr() {
         var el = document.getElementById('fc3FlatColHdr');
         if (!el) return;
@@ -1826,7 +1842,7 @@
         var h = '<span class="fc3-fhdr__cb"></span>';
         visCols.forEach(function(c) {
             var align = c.align || 'left';
-            var hStyle = (c.flexWeight > 0 ? 'flex:' + c.flexWeight + ';' : '') + 'text-align:' + align;
+            var hStyle = getWidthStyle(c) + 'text-align:' + align;
             if (c.fontSize)   hStyle += ';font-size:'   + c.fontSize   + 'px';
             if (c.fontWeight) hStyle += ';font-weight:' + c.fontWeight;
             if (c.key === 'qty') {
@@ -1977,30 +1993,30 @@
                 var al = c.align || 'left';
                 switch(c.key) {
                     case 'num':
-                        return '<a class="fc3-flat-num fc3-num-link" href="/Purchase/Edit?type=purchase_request&id=' + r.id + '" style="text-align:' + al + '" onclick="fc3OpenDocTab(event,\'/Purchase/Edit?type=purchase_request&id=' + r.id + '\');return false;">' + esc(r.documentNumber || '') + '</a>';
+                        return '<a class="fc3-flat-num fc3-num-link" href="/Purchase/Edit?type=purchase_request&id=' + r.id + '" style="' + getWidthStyle(c) + 'text-align:' + al + '" onclick="fc3OpenDocTab(event,\'/Purchase/Edit?type=purchase_request&id=' + r.id + '\');return false;">' + esc(r.documentNumber || '') + '</a>';
                     case 'who':
-                        return '<span class="fc3-flat-who" style="flex:' + (c.flexWeight||1) + ';text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
+                        return '<span class="fc3-flat-who" style="' + getWidthStyle(c) + 'text-align:' + al + '" title="' + esc(who) + '">' + esc(who) + '</span>';
                     case 'dt':
-                        return '<span class="fc3-flat-dt" style="text-align:' + al + '">' + fmtDate(r.documentDate) + '</span>';
+                        return '<span class="fc3-flat-dt" style="' + getWidthStyle(c) + 'text-align:' + al + '">' + fmtDate(r.documentDate) + '</span>';
                     case 'mat':
-                        return '<span class="fc3-sub-mat" style="flex:' + (c.flexWeight||1) + ';text-align:' + al + '" title="' + esc(l.materialName || l.materialCode || '') + '">'
+                        return '<span class="fc3-sub-mat" style="' + getWidthStyle(c) + 'text-align:' + al + '" title="' + esc(l.materialName || l.materialCode || '') + '">'
                             + esc(l.materialName || l.materialCode || '—') + '</span>';
                     case 'qty':
-                        return '<span class="fc3-sub-qty" style="text-align:' + al + '">' + fmtN(qty) + '</span>'
+                        return '<span class="fc3-sub-qty" style="' + getWidthStyle(c) + 'text-align:' + al + '">' + fmtN(qty) + '</span>'
                             + '<span class="fc3-sub-unit">' + esc(l.unitCode || '') + '</span>';
                     case 'stk':
-                        return '<span class="fc3-sub-stk" style="flex:' + (c.flexWeight||1) + '">' + stkHtml + '</span>';
+                        return '<span class="fc3-sub-stk" style="' + getWidthStyle(c) + '">' + stkHtml + '</span>';
                     case 'remain':
-                        return '<span class="fc3-sub-remain" style="color:' + remainColor + ';text-align:' + al + '" title="Kalan: ' + fmtN(remain) + '">'
+                        return '<span class="fc3-sub-remain" style="' + getWidthStyle(c) + 'color:' + remainColor + ';text-align:' + al + '" title="Kalan: ' + fmtN(remain) + '">'
                             + fmtN(Math.max(0, remain)) + '</span>';
                     case 'fst':
-                        return '<span class="fc3-sub-fst ' + fstClass + '" style="text-align:' + al + '">' + fstLabel + '</span>';
+                        return '<span class="fc3-sub-fst ' + fstClass + '" style="' + getWidthStyle(c) + 'text-align:' + al + '">' + fstLabel + '</span>';
                     default:
                         if (c.key.indexOf('ext_') === 0) {
                             var extKey   = c.key.slice(4);
                             var extLabel = (FC3_EXTRA_COLS.find(function(ec) { return ec.key === extKey; }) || {}).label || '';
                             var val = (l.extras && l.extras[extLabel] != null) ? l.extras[extLabel] : '';
-                            return '<span class="fc3-sub-ext fc3-sub-ext-' + extKey + '" style="flex:' + (c.flexWeight||1) + '" title="' + esc(val) + '">' + esc(val) + '</span>';
+                            return '<span class="fc3-sub-ext fc3-sub-ext-' + extKey + '" style="' + getWidthStyle(c) + '" title="' + esc(val) + '">' + esc(val) + '</span>';
                         }
                         return '';
                 }
@@ -2089,26 +2105,26 @@
                         case 'num':
                             return '<span class="fc3-flat-num" style="text-align:' + al + '"></span>';
                         case 'who':
-                            return '<span class="fc3-flat-who" style="flex:' + (c.flexWeight||1) + ';text-align:' + al + '"></span>';
+                            return '<span class="fc3-flat-who" style="' + getWidthStyle(c) + 'text-align:' + al + '"></span>';
                         case 'dt':
-                            return '<span class="fc3-flat-dt"></span>';
+                            return '<span class="fc3-flat-dt" style="' + getWidthStyle(c) + '"></span>';
                         case 'mat':
-                            return '<span class="fc3-sub-mat" style="flex:' + (c.flexWeight||1) + '"></span>';
+                            return '<span class="fc3-sub-mat" style="' + getWidthStyle(c) + '"></span>';
                         case 'qty':
-                            return '<span class="fc3-sub-qty" style="text-align:right">'
+                            return '<span class="fc3-sub-qty" style="' + getWidthStyle(c) + 'text-align:right">'
                                 + (hasV ? fmtN(aggMap[c.key]) : '') + '</span>'
                                 + '<span class="fc3-sub-unit"></span>';
                         case 'stk':
-                            return '<span class="fc3-sub-stk" style="flex:' + (c.flexWeight||1) + '"></span>';
+                            return '<span class="fc3-sub-stk" style="' + getWidthStyle(c) + '"></span>';
                         case 'remain':
-                            return '<span class="fc3-sub-remain" style="text-align:right">'
+                            return '<span class="fc3-sub-remain" style="' + getWidthStyle(c) + 'text-align:right">'
                                 + (hasV ? fmtN(aggMap[c.key]) : '') + '</span>';
                         case 'fst':
-                            return '<span class="fc3-sub-fst"></span>'
+                            return '<span class="fc3-sub-fst" style="' + getWidthStyle(c) + '"></span>'
                                 + '<span class="fc3-sub-suf"></span>';
                         default:
                             if (c.key.indexOf('ext_') === 0) {
-                                return '<span class="fc3-sub-ext" style="flex:' + (c.flexWeight||1) + '"></span>';
+                                return '<span class="fc3-sub-ext" style="' + getWidthStyle(c) + '"></span>';
                             }
                             return '';
                     }
@@ -2168,10 +2184,10 @@
                             var hasV = aggMapHdr.hasOwnProperty(vc.key);
                             switch(vc.key) {
                                 case 'qty':    return '<span class="fc3-sub-qty" style="text-align:right">' + (hasV ? fmtN(aggMapHdr[vc.key]) : '') + '</span><span class="fc3-sub-unit"></span>';
-                                case 'stk':    return '<span class="fc3-sub-stk" style="flex:' + (vc.flexWeight||1) + '"></span>';
-                                case 'remain': return '<span class="fc3-sub-remain" style="text-align:right">' + (hasV ? fmtN(aggMapHdr[vc.key]) : '') + '</span>';
-                                case 'fst':    return '<span class="fc3-sub-fst"></span><span class="fc3-sub-suf"></span>';
-                                default:       return vc.key.indexOf('ext_') === 0 ? '<span class="fc3-sub-ext" style="flex:' + (vc.flexWeight||1) + '"></span>' : '';
+                                case 'stk':    return '<span class="fc3-sub-stk" style="' + getWidthStyle(vc) + '"></span>';
+                                case 'remain': return '<span class="fc3-sub-remain" style="' + getWidthStyle(vc) + 'text-align:right">' + (hasV ? fmtN(aggMapHdr[vc.key]) : '') + '</span>';
+                                case 'fst':    return '<span class="fc3-sub-fst" style="' + getWidthStyle(vc) + '"></span><span class="fc3-sub-suf"></span>';
+                                default:       return vc.key.indexOf('ext_') === 0 ? '<span class="fc3-sub-ext" style="' + getWidthStyle(vc) + '"></span>' : '';
                             }
                         }).join('');
 
@@ -2348,20 +2364,20 @@
 
     // ── Sütun yapılandırması ──────────────────────────────────────────────────
     var DEFAULT_DEFS = [
-        { key: 'num',    label: 'Belge No',    visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, aggregateFunc: '' },
-        { key: 'who',    label: 'Talep Eden',  visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, aggregateFunc: '' },
-        { key: 'dt',     label: 'Tarih',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, aggregateFunc: '' },
-        { key: 'mat',    label: 'Malzeme',     visible: true, align: 'left',   fixed: true,  fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, aggregateFunc: '' },
-        { key: 'qty',    label: 'Miktar',      visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, aggregateFunc: 'sum' },
-        { key: 'stk',    label: 'Stok',        visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, aggregateFunc: '' },
-        { key: 'remain', label: 'Kalan',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, aggregateFunc: 'sum' },
-        { key: 'fst',    label: 'Karşılama',   visible: true, align: 'center', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, aggregateFunc: '' },
+        { key: 'num',    label: 'Belge No',    visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, widthStep: 3, aggregateFunc: '' },
+        { key: 'who',    label: 'Talep Eden',  visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, widthStep: 3, aggregateFunc: '' },
+        { key: 'dt',     label: 'Tarih',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, widthStep: 3, aggregateFunc: '' },
+        { key: 'mat',    label: 'Malzeme',     visible: true, align: 'left',   fixed: true,  fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, widthStep: 3, aggregateFunc: '' },
+        { key: 'qty',    label: 'Miktar',      visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, widthStep: 3, aggregateFunc: 'sum' },
+        { key: 'stk',    label: 'Stok',        visible: true, align: 'left',   fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, widthStep: 3, aggregateFunc: '' },
+        { key: 'remain', label: 'Kalan',       visible: true, align: 'right',  fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, widthStep: 3, aggregateFunc: 'sum' },
+        { key: 'fst',    label: 'Karşılama',   visible: true, align: 'center', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 0, widthStep: 3, aggregateFunc: '' },
     ];
 
     function _makeDefaultDefs() {
         var d = DEFAULT_DEFS.map(function(x) { return Object.assign({}, x); });
         FC3_EXTRA_COLS.forEach(function(c) {
-            d.push({ key: 'ext_' + c.key, label: c.label, visible: true, align: 'left', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, aggregateFunc: '' });
+            d.push({ key: 'ext_' + c.key, label: c.label, visible: true, align: 'left', fixed: false, fontSize: 0, fontWeight: 0, groupBy: false, groupOrder: 0, flexWeight: 2, widthStep: 3, aggregateFunc: '' });
         });
         return d;
     }
@@ -2381,6 +2397,11 @@
             if (s.groupBy       !== undefined) def.groupBy       = !!s.groupBy;
             if (s.groupOrder    !== undefined) def.groupOrder    = s.groupOrder || 0;
             if (s.flexWeight    !== undefined && def.flexWeight > 0) def.flexWeight = Math.max(1, Math.min(4, s.flexWeight || 2));
+            if (s.widthStep     !== undefined) def.widthStep = Math.max(1, Math.min(5, s.widthStep || 3));
+            else if (s.flexWeight !== undefined && def.flexWeight > 0) {
+                // Eski kayıt migrasyonu: flexWeight 1-4 → widthStep 2-5 (eski default 2 → yeni default 3)
+                def.widthStep = Math.max(1, Math.min(5, s.flexWeight + 1));
+            }
             if (s.aggregateFunc !== undefined) def.aggregateFunc = s.aggregateFunc || '';
         });
         var order = saved.map(function(s) { return s.key; });
@@ -2400,7 +2421,7 @@
 
     function _serializeDefs() {
         return JSON.stringify(_colDefs.map(function(c) {
-            return { key: c.key, visible: c.visible, align: c.align, label: c.label, fontSize: c.fontSize || 0, fontWeight: c.fontWeight || 0, groupBy: c.groupBy || false, groupOrder: c.groupOrder || 0, flexWeight: c.flexWeight || 0, aggregateFunc: c.aggregateFunc || '' };
+            return { key: c.key, visible: c.visible, align: c.align, label: c.label, fontSize: c.fontSize || 0, fontWeight: c.fontWeight || 0, groupBy: c.groupBy || false, groupOrder: c.groupOrder || 0, flexWeight: c.flexWeight || 0, widthStep: c.widthStep || 3, aggregateFunc: c.aggregateFunc || '' };
         }));
     }
     function _saveColDefs() {
@@ -2506,18 +2527,23 @@
                             '<button type="button" class="fc3-cfg-chip' + (c.aggregateFunc==='max'  ? ' active' : '') + '" data-key="' + c.key + '" data-field="aggregateFunc" data-val="max" title="Maksimum">'   + _AGG_ICONS['max'] + '</button>' +
                         '</span>' +
                     '</div>' +
-                    (c.flexWeight > 0 ?
-                    '<div class="fc3-cfg-field-row">' +
-                        '<span class="fc3-cfg-field-label">Genişlik</span>' +
-                        '<span class="fc3-cfg-stepper">' +
-                            '<button type="button" class="fc3-cfg-step-btn" data-key="' + c.key + '" data-dir="-1"' + (c.flexWeight <= 1 ? ' disabled' : '') + '>−</button>' +
-                            '<span class="fc3-step-dots">' +
-                                [1,2,3,4].map(function(i) { return '<span class="fc3-step-dot' + (i <= c.flexWeight ? ' on' : '') + '"></span>'; }).join('') +
+                    (function() {
+                        var ws = c.widthStep || 3;
+                        return '<div class="fc3-cfg-field-row">' +
+                            '<span class="fc3-cfg-field-label">Genişlik</span>' +
+                            '<span class="fc3-cfg-stepper">' +
+                                '<button type="button" class="fc3-cfg-step-btn" data-key="' + c.key + '" data-dir="-1"' + (ws <= 1 ? ' disabled' : '') + '>−</button>' +
+                                '<span class="fc3-step-dots">' +
+                                    [1,2,3,4,5].map(function(i) {
+                                        var active = i === ws;
+                                        var isAuto = i === 3;
+                                        return '<span class="fc3-step-dot' + (active ? ' on' : '') + (isAuto ? ' auto-mark' : '') + '" title="' + (i===1?'Çok Dar':i===2?'Dar':i===3?'Otomatik':i===4?'Geniş':'Çok Geniş') + '"></span>';
+                                    }).join('') +
+                                '</span>' +
+                                '<button type="button" class="fc3-cfg-step-btn" data-key="' + c.key + '" data-dir="1"' + (ws >= 5 ? ' disabled' : '') + '>+</button>' +
                             '</span>' +
-                            '<button type="button" class="fc3-cfg-step-btn" data-key="' + c.key + '" data-dir="1"' + (c.flexWeight >= 4 ? ' disabled' : '') + '>+</button>' +
-                        '</span>' +
-                    '</div>'
-                    : '') +
+                        '</div>';
+                    })() +
                 '</div>';
         });
         rowsEl.innerHTML = html;
@@ -2590,8 +2616,8 @@
                 var key = btn.getAttribute('data-key');
                 var dir = parseInt(btn.getAttribute('data-dir'), 10);
                 var def = _colDefs.find(function(d) { return d.key === key; });
-                if (!def || def.flexWeight <= 0) return;
-                def.flexWeight = Math.max(1, Math.min(4, def.flexWeight + dir));
+                if (!def) return;
+                def.widthStep = Math.max(1, Math.min(5, (def.widthStep || 3) + dir));
                 _saveColDefs();
                 _renderColPanel();
                 renderList();
