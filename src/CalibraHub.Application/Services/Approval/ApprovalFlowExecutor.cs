@@ -6,6 +6,8 @@ using CalibraHub.Domain.Enums;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Globalization;
+using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 
 namespace CalibraHub.Application.Services.Approval;
@@ -62,6 +64,12 @@ public interface IApprovalFlowExecutor
     /// graph tabanlı timeout işlendi — SlaCheckerWorker legacy switch'i atlar.
     /// </summary>
     Task<int> AfterTimeoutAsync(int instanceId, int currentStepOrder, CancellationToken ct);
+
+    /// <summary>
+    /// Timer node bekleme süresi doldu: ilgili node'dan çıkan "out" edge'ini takip eder.
+    /// SlaCheckerWorker'dan çağrılır. Return: işlenen node sayısı.
+    /// </summary>
+    Task<int> AfterTimerElapsedAsync(int instanceId, int timerNodeId, CancellationToken ct);
 }
 
 public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
@@ -75,6 +83,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
     private readonly IApprovalNotificationDispatcher _notifDispatcher;
     private readonly IIntegrationRunner _integrationRunner;
     private readonly IApprovalSqlQueryService _sqlQueryService;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ApprovalFlowExecutor> _logger;
     private readonly IApprovalNodeLogger? _nodeLogger;
 
@@ -86,18 +95,20 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         IApprovalNotificationDispatcher notifDispatcher,
         IIntegrationRunner integrationRunner,
         IApprovalSqlQueryService sqlQueryService,
+        IHttpClientFactory httpClientFactory,
         ILogger<ApprovalFlowExecutor> logger,
         IApprovalNodeLogger? nodeLogger = null)
     {
-        _flowRepo          = flowRepo;
-        _instRepo          = instRepo;
-        _decisionEval      = decisionEval;
-        _entityRegistry    = entityRegistry;
-        _notifDispatcher   = notifDispatcher;
-        _integrationRunner = integrationRunner;
-        _sqlQueryService   = sqlQueryService;
-        _logger            = logger;
-        _nodeLogger        = nodeLogger;
+        _flowRepo           = flowRepo;
+        _instRepo           = instRepo;
+        _decisionEval       = decisionEval;
+        _entityRegistry     = entityRegistry;
+        _notifDispatcher    = notifDispatcher;
+        _integrationRunner  = integrationRunner;
+        _sqlQueryService    = sqlQueryService;
+        _httpClientFactory  = httpClientFactory;
+        _logger             = logger;
+        _nodeLogger         = nodeLogger;
     }
 
     private async Task TryLogAsync(int instanceId, int flowId, int? nodeId, string? nodeType, string? nodeName,
@@ -205,6 +216,35 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         }
         _logger.LogInformation("Timeout graph traversal: instance={Iid}, step={Ord}, nodesProcessed={N}",
             instanceId, currentStepOrder, processed);
+        return processed;
+    }
+
+    public async Task<int> AfterTimerElapsedAsync(int instanceId, int timerNodeId, CancellationToken ct)
+    {
+        var inst = await _instRepo.GetByIdAsync(instanceId, ct);
+        if (inst is null) return 0;
+        var flow = await _flowRepo.GetByIdAsync(inst.FlowId, ct);
+        if (flow is null) return 0;
+
+        var timerNode = flow.Steps.FirstOrDefault(s => s.Id == timerNodeId);
+        if (timerNode is null) return 0;
+
+        var ctx = await SafeBuildContextAsync(flow.DocumentKind, inst.DocumentId, ct);
+        EnrichCtx(ctx, flow, inst);
+
+        var outEdges = flow.Edges
+            .Where(e => e.SourceStepId == timerNodeId)
+            .OrderBy(e => e.SortOrder)
+            .ToList();
+
+        int processed = 0;
+        foreach (var edge in outEdges)
+        {
+            var target = flow.Steps.FirstOrDefault(s => s.Id == edge.TargetStepId);
+            if (target is null) continue;
+            processed += await TraverseAsync(flow, target, ctx, instanceId, depth: 0, ct);
+        }
+        _logger.LogInformation("Timer node {NId} elapsed: instance={Iid}, nodesProcessed={N}", timerNodeId, instanceId, processed);
         return processed;
     }
 
@@ -513,10 +553,213 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
                 return 1;
             }
 
+            case "timer":
+            {
+                // NodeData: { waitValue, waitUnit: 'minutes'|'hours'|'days'|'businessDays' }
+                int waitValue = 1;
+                string waitUnit = "hours";
+                if (!string.IsNullOrWhiteSpace(node.NodeData))
+                {
+                    try
+                    {
+                        using var jd = JsonDocument.Parse(node.NodeData);
+                        var r = jd.RootElement;
+                        if (r.TryGetProperty("waitValue", out var wv) && wv.ValueKind == JsonValueKind.Number)
+                            waitValue = Math.Max(1, wv.GetInt32());
+                        if (r.TryGetProperty("waitUnit", out var wu) && wu.ValueKind == JsonValueKind.String)
+                            waitUnit = wu.GetString() ?? "hours";
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Timer node {Id} nodeData parse hatası.", node.Id);
+                    }
+                }
+
+                var fireAt = CalculateTimerFireAt(waitValue, waitUnit);
+                await _instRepo.CreateTimerNodeRecordAsync(instanceId, node.Id, node.StepOrder, node.StepName ?? "Bekleme", fireAt, ct);
+                await TryLogAsync(instanceId, flow.Id, node.Id, "timer", node.StepName,
+                    "TimerScheduled", $"Zamanlayıcı kuruldu: {waitValue} {waitUnit}, tetikleme: {fireAt:dd.MM.yyyy HH:mm} UTC", 0, ct);
+                _logger.LogInformation("Timer node {Id} scheduled for {FireAt} (instance={Iid})", node.Id, fireAt, instanceId);
+                // Traversal durur — SlaCheckerWorker süre dolunca AfterTimerElapsedAsync çağırır.
+                return 1;
+            }
+
+            case "vote":
+            {
+                // MVP: Oylama kaydı açılır, consensus logic sonraki sürümde.
+                await TryLogAsync(instanceId, flow.Id, node.Id, "vote", node.StepName,
+                    "VoteNode", "Oylama düğümü — oy kayıtları henüz desteklenmiyor, akış devam ediyor", 0, ct);
+                _logger.LogWarning("Vote node {Id} — tam oylama mantığı desteklenmiyor, akış ilk edge'e devam etti.", node.Id);
+                var voteEdges = flow.Edges.Where(e => e.SourceStepId == node.Id).OrderBy(e => e.SortOrder).ToList();
+                var pickedV   = voteEdges.FirstOrDefault(e => string.Equals((e.EdgeKind ?? "accept").Trim(), "accept", StringComparison.OrdinalIgnoreCase))
+                             ?? voteEdges.FirstOrDefault();
+                if (pickedV is null) return 1;
+                var nextV = flow.Steps.FirstOrDefault(s => s.Id == pickedV.TargetStepId);
+                if (nextV is null) return 1;
+                return 1 + await TraverseAsync(flow, nextV, ctx, instanceId, depth + 1, ct, visitedStepIds);
+            }
+
+            case "subprocess":
+            {
+                // Alt akış fire-and-forget: kayıt loglanır; tam bekleme sonraki sürümde.
+                int subFlowId = 0;
+                if (!string.IsNullOrWhiteSpace(node.NodeData))
+                {
+                    try
+                    {
+                        using var jd = JsonDocument.Parse(node.NodeData);
+                        var r = jd.RootElement;
+                        if (r.TryGetProperty("subFlowId", out var sfid) && sfid.ValueKind == JsonValueKind.Number)
+                            subFlowId = sfid.GetInt32();
+                        else if (r.TryGetProperty("subFlowId", out var sfidStr) && sfidStr.ValueKind == JsonValueKind.String)
+                            int.TryParse(sfidStr.GetString(), out subFlowId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "SubProcess node {Id} nodeData parse hatası.", node.Id);
+                    }
+                }
+                await TryLogAsync(instanceId, flow.Id, node.Id, "subprocess", node.StepName,
+                    "SubProcess", subFlowId > 0 ? $"Alt akış referansı: FlowId={subFlowId} (fire-and-forget)" : "subFlowId tanımlanmamış — atlandı", 0, ct);
+                _logger.LogInformation("SubProcess node {Id} — subFlowId={Sfid} (instance={Iid})", node.Id, subFlowId, instanceId);
+                var spEdges = flow.Edges.Where(e => e.SourceStepId == node.Id).OrderBy(e => e.SortOrder).ToList();
+                var pickedSP = spEdges.FirstOrDefault();
+                if (pickedSP is null) return 1;
+                var nextSP = flow.Steps.FirstOrDefault(s => s.Id == pickedSP.TargetStepId);
+                if (nextSP is null) return 1;
+                return 1 + await TraverseAsync(flow, nextSP, ctx, instanceId, depth + 1, ct, visitedStepIds);
+            }
+
+            case "webhook":
+            {
+                // NodeData: { url, method, headersJson, bodyTemplate, successStatusCodes, timeoutSeconds }
+                string? webhookUrl   = null;
+                string  httpMethod   = "POST";
+                string? headersJson  = null;
+                string? bodyTemplate = null;
+                string  successCodes = "200,201,204";
+                int     timeoutSec   = 30;
+                if (!string.IsNullOrWhiteSpace(node.NodeData))
+                {
+                    try
+                    {
+                        using var jd = JsonDocument.Parse(node.NodeData);
+                        var r = jd.RootElement;
+                        if (r.TryGetProperty("url",                out var u)   && u.ValueKind  == JsonValueKind.String) webhookUrl   = u.GetString();
+                        if (r.TryGetProperty("method",             out var m)   && m.ValueKind  == JsonValueKind.String) httpMethod   = (m.GetString() ?? "POST").ToUpperInvariant();
+                        if (r.TryGetProperty("headersJson",        out var h)   && h.ValueKind  == JsonValueKind.String) headersJson  = h.GetString();
+                        if (r.TryGetProperty("bodyTemplate",       out var b)   && b.ValueKind  == JsonValueKind.String) bodyTemplate = b.GetString();
+                        if (r.TryGetProperty("successStatusCodes", out var sc)  && sc.ValueKind == JsonValueKind.String) successCodes = sc.GetString() ?? "200,201,204";
+                        if (r.TryGetProperty("timeoutSeconds",     out var ts)  && ts.ValueKind == JsonValueKind.Number) timeoutSec   = ts.GetInt32();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Webhook node {Id} nodeData parse hatası.", node.Id);
+                    }
+                }
+
+                bool webhookOk = false;
+                if (string.IsNullOrWhiteSpace(webhookUrl))
+                {
+                    _logger.LogWarning("Webhook node {Id} — URL tanımlanmamış, hata kolu seçilecek.", node.Id);
+                    await TryLogAsync(instanceId, flow.Id, node.Id, "webhook", node.StepName, "WebhookSkip", "URL tanımlanmamış", 0, ct);
+                }
+                else
+                {
+                    var successCodeSet = (successCodes).Split(',')
+                        .Select(s => int.TryParse(s.Trim(), out var c) ? c : 0)
+                        .Where(c => c > 0).ToHashSet();
+
+                    var body = ApplyWebhookTokens(bodyTemplate ?? "", ctx);
+                    var sw   = Stopwatch.StartNew();
+                    try
+                    {
+                        var client  = _httpClientFactory.CreateClient("approval-webhook");
+                        using var req = new HttpRequestMessage(new HttpMethod(httpMethod), webhookUrl);
+                        if (!string.IsNullOrWhiteSpace(headersJson))
+                        {
+                            try
+                            {
+                                using var hDoc = JsonDocument.Parse(headersJson);
+                                foreach (var prop in hDoc.RootElement.EnumerateObject())
+                                    req.Headers.TryAddWithoutValidation(prop.Name, prop.Value.GetString() ?? "");
+                            }
+                            catch { /* bozuk JSON — geç */ }
+                        }
+                        if (!string.IsNullOrEmpty(body) && !string.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+                            req.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+                        using var cts    = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(1, timeoutSec)));
+                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, cts.Token);
+                        var resp = await client.SendAsync(req, linked.Token);
+                        sw.Stop();
+                        webhookOk = successCodeSet.Contains((int)resp.StatusCode);
+                        _logger.LogInformation("Webhook node {Id} → HTTP {Status} success={Ok}", node.Id, (int)resp.StatusCode, webhookOk);
+                        await TryLogAsync(instanceId, flow.Id, node.Id, "webhook", node.StepName,
+                            webhookOk ? "WebhookOk" : "WebhookFail",
+                            $"HTTP {(int)resp.StatusCode} — {(webhookOk ? "başarılı" : "başarısız")}", (int)sw.ElapsedMilliseconds, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        sw.Stop();
+                        _logger.LogError(ex, "Webhook node {Id} HTTP çağrı hatası.", node.Id);
+                        await TryLogAsync(instanceId, flow.Id, node.Id, "webhook", node.StepName,
+                            "WebhookError", $"İstek hatası: {ex.Message}", (int)sw.ElapsedMilliseconds, ct);
+                    }
+                }
+
+                var wEdges = flow.Edges.Where(e => e.SourceStepId == node.Id).OrderBy(e => e.SortOrder).ToList();
+                var pickedW = wEdges.FirstOrDefault(e =>
+                    string.Equals(e.SourceHandle, webhookOk ? "success" : "error", StringComparison.OrdinalIgnoreCase))
+                    ?? wEdges.FirstOrDefault(e =>
+                        string.Equals(e.EdgeKind, webhookOk ? "true" : "false", StringComparison.OrdinalIgnoreCase))
+                    ?? wEdges.FirstOrDefault();
+                if (pickedW is null) return 1;
+                var nextW = flow.Steps.FirstOrDefault(s => s.Id == pickedW.TargetStepId);
+                if (nextW is null) return 1;
+                return 1 + await TraverseAsync(flow, nextW, ctx, instanceId, depth + 1, ct, visitedStepIds);
+            }
+
             default:
                 _logger.LogWarning("Bilinmeyen nodeType='{Type}' (id={Id}) — atlandı.", kind, node.Id);
                 return 0;
         }
+    }
+
+    private static DateTime CalculateTimerFireAt(int value, string unit)
+    {
+        var now = DateTime.UtcNow;
+        return unit switch
+        {
+            "minutes"     => now.AddMinutes(value),
+            "days"        => now.AddDays(value),
+            "businessDays" => AddBusinessDays(now, value),
+            _             => now.AddHours(value),  // "hours" default
+        };
+    }
+
+    private static DateTime AddBusinessDays(DateTime start, int days)
+    {
+        var result = start;
+        var added  = 0;
+        while (added < days)
+        {
+            result = result.AddDays(1);
+            if (result.DayOfWeek != DayOfWeek.Saturday && result.DayOfWeek != DayOfWeek.Sunday)
+                added++;
+        }
+        return result;
+    }
+
+    private static string ApplyWebhookTokens(string template, ApprovalEntityContext ctx)
+    {
+        if (string.IsNullOrEmpty(template)) return template;
+        return template
+            .Replace("{entityId}",         ctx.EntityId)
+            .Replace("{entityTypeCode}",   ctx.EntityTypeCode)
+            .Replace("{requesterName}",    ctx.RequesterName ?? "")
+            .Replace("{flowName}",         ctx.FlowName ?? "")
+            .Replace("{approvalInstanceId}", ctx.ApprovalInstanceId?.ToString() ?? "");
     }
 
     /// <summary>

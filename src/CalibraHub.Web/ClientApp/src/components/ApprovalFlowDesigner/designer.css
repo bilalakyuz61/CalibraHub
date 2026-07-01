@@ -528,6 +528,75 @@ body.app-theme-dark .afd-node--setvar .afd-node__head { color: #cbd5e1; backgrou
 /* Palette item rengi */
 .afd-palette__item--integration { border-left: 3px solid #8b5cf6; }
 
+/* ── Timer node — amber "bekleme" ── */
+.afd-node--timer {
+    border-radius: 10px;
+    min-width: 180px;
+    background: var(--afd-surface);
+    border-color: #f59e0b;
+}
+.afd-node--timer .afd-node__head {
+    color: #b45309;
+    background: rgba(245,158,11,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--timer .afd-node__head { color: #fbbf24; background: rgba(245,158,11,.20); }
+.afd-palette__item--timer { border-left: 3px solid #f59e0b; }
+
+/* ── Vote node — teal "oylama" ── */
+.afd-node--vote {
+    border-radius: 10px;
+    min-width: 190px;
+    background: var(--afd-surface);
+    border-color: #0d9488;
+}
+.afd-node--vote .afd-node__head {
+    color: #0f766e;
+    background: rgba(13,148,136,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--vote .afd-node__head { color: #2dd4bf; background: rgba(20,184,166,.20); }
+.afd-palette__item--vote { border-left: 3px solid #0d9488; }
+
+/* ── SubProcess node — indigo-deep "alt süreç" ── */
+.afd-node--subprocess {
+    border-radius: 10px;
+    min-width: 190px;
+    background: var(--afd-surface);
+    border-color: #4f46e5;
+    border-style: dashed;
+}
+.afd-node--subprocess .afd-node__head {
+    color: #4338ca;
+    background: rgba(79,70,229,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--subprocess .afd-node__head { color: #a5b4fc; background: rgba(99,102,241,.20); }
+.afd-palette__item--subprocess { border-left: 3px solid #4f46e5; }
+
+/* ── Webhook node — rose "dış çağrı" ── */
+.afd-node--webhook {
+    border-radius: 10px;
+    min-width: 190px;
+    background: var(--afd-surface);
+    border-color: #e11d48;
+}
+.afd-node--webhook .afd-node__head {
+    color: #be123c;
+    background: rgba(225,29,72,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--webhook .afd-node__head { color: #fda4af; background: rgba(244,63,94,.20); }
+.afd-palette__item--webhook { border-left: 3px solid #e11d48; }
+
 /* ── Handles ──
    Sabit görsel handle 14px — büyütme/scale YAPMAYIZ çünkü React Flow handle'ları
    inline `transform: translate(-50%, ...)` ile konumlandırıyor; scale o translate'i

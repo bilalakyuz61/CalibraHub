@@ -1563,6 +1563,229 @@ export default function NodePropertiesPanel({
     )
   }
 
+  /* ── TIMER node ── */
+  if (selected.kind === 'node' && selected.type === 'timer') {
+    var tData    = selected.data || {}
+    var tName    = tData.stepName || ''
+    var tValue   = tData.waitValue == null ? '' : String(tData.waitValue)
+    var tUnit    = tData.waitUnit  || 'hours'
+    function commitTimer(patch) {
+      if (typeof onChange === 'function') onChange(patch)
+    }
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: '#f59e0b', color: '#fff' }}>Bekleme</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil"><Trash2 size={14} /></button>
+        </div>
+        <div className="afd-props__hint">
+          Akışı belirtilen süre bekletir. Süre dolunca otomatik olarak devam eder.
+        </div>
+        <label className="afd-props__label">Düğüm Adı</label>
+        <input className="afd-props__input" type="text" value={tName} maxLength={80}
+          placeholder="örn. 24 Saat Bekleme"
+          onChange={function (e) { commitTimer({ stepName: e.target.value }) }} />
+        <label className="afd-props__label">Bekleme Süresi</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input className="afd-props__input" type="number" min="1" style={{ flex: '0 0 80px' }}
+            value={tValue} placeholder="örn. 24"
+            onChange={function (e) {
+              var v = parseInt(e.target.value, 10) || 1
+              commitTimer({ waitValue: v })
+            }} />
+          <select className="afd-props__input" style={{ flex: 1 }} value={tUnit}
+            onChange={function (e) { commitTimer({ waitUnit: e.target.value }) }}>
+            <option value="minutes">Dakika</option>
+            <option value="hours">Saat</option>
+            <option value="days">Gün (24 sa)</option>
+            <option value="businessDays">İş Günü (Pzt–Cum)</option>
+          </select>
+        </div>
+        <ExtraInputsToggleBlock node={selected} onChange={commitTimer} />
+      </div>
+    )
+  }
+
+  /* ── VOTE node ── */
+  if (selected.kind === 'node' && selected.type === 'vote') {
+    var vData       = selected.data || {}
+    var vName       = vData.stepName || ''
+    var vType       = vData.votingType || 'majority'
+    var vApprIds    = Array.isArray(vData.approverIds)    ? vData.approverIds    : []
+    var vApprLabels = Array.isArray(vData.approverLabels) ? vData.approverLabels : []
+    function commitVote(patch) {
+      if (typeof onChange === 'function') onChange(patch)
+    }
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: '#0d9488', color: '#fff' }}>Oylama</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil"><Trash2 size={14} /></button>
+        </div>
+        <div className="afd-props__hint">
+          Birden fazla kişi oy kullanır. Sonuca göre <em>Kabul</em> veya <em>Red</em> koluna gidilir.
+        </div>
+        <label className="afd-props__label">Düğüm Adı</label>
+        <input className="afd-props__input" type="text" value={vName} maxLength={80}
+          placeholder="örn. Yönetim Kurulu Oylaması"
+          onChange={function (e) { commitVote({ stepName: e.target.value }) }} />
+        <label className="afd-props__label">Oylama Türü</label>
+        <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--afd-border, #e2e8f0)', marginBottom: 4 }}>
+          {[
+            { key: 'any',        label: 'İlk Oy',   hint: 'Herhangi biri onaylarsa kabul' },
+            { key: 'majority',   label: 'Çoğunluk', hint: '>50% oranında onay gerekir' },
+            { key: 'unanimous',  label: 'Tüm Oylar',hint: 'Herkes onaylamalı' },
+          ].map(function (vk, vi, arr) {
+            var on = vType === vk.key
+            return (
+              <button key={vk.key} type="button" title={vk.hint}
+                onClick={function () { commitVote({ votingType: vk.key }) }}
+                style={{
+                  flex: '1 1 0', padding: '5px 0', fontSize: 11, fontWeight: on ? 700 : 500,
+                  border: 'none',
+                  borderRight: vi < arr.length - 1 ? '1px solid var(--afd-border, #e2e8f0)' : 'none',
+                  background: on ? '#0d9488' : 'var(--afd-bg, transparent)',
+                  color: on ? '#fff' : 'var(--afd-muted, #64748b)',
+                  cursor: 'pointer', transition: 'all .12s',
+                }}>{vk.label}</button>
+            )
+          })}
+        </div>
+        <label className="afd-props__label" style={{ marginTop: 8 }}>Oylayıcılar</label>
+        {(users || []).length === 0 ? (
+          <div style={{ fontSize: 11.5, color: 'var(--afd-muted, #64748b)', padding: '6px 0' }}>
+            Kullanıcı listesi yükleniyor…
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto', padding: '2px 0' }}>
+            {(users || []).map(function (u) {
+              var uid = String(u.id)
+              var checked = vApprIds.indexOf(uid) !== -1
+              return (
+                <label key={uid} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '3px 0' }}>
+                  <input type="checkbox" checked={checked}
+                    onChange={function (e) {
+                      var next = checked
+                        ? vApprIds.filter(function (x) { return x !== uid })
+                        : vApprIds.concat([uid])
+                      var nextLabels = checked
+                        ? vApprLabels.filter(function (x) { return x !== u.fullName })
+                        : vApprLabels.concat([u.fullName])
+                      commitVote({ approverIds: next, approverLabels: nextLabels })
+                    }} />
+                  <span style={{ fontSize: 12, color: 'var(--afd-text, #334155)' }}>{u.fullName}</span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+        <ExtraInputsToggleBlock node={selected} onChange={commitVote} />
+      </div>
+    )
+  }
+
+  /* ── SUBPROCESS node ── */
+  if (selected.kind === 'node' && selected.type === 'subprocess') {
+    var spData     = selected.data || {}
+    var spName     = spData.stepName   || ''
+    var spFlowId   = spData.subFlowId  || ''
+    var spFlowName = spData.subFlowName|| ''
+    function commitSP(patch) {
+      if (typeof onChange === 'function') onChange(patch)
+    }
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: '#4f46e5', color: '#fff' }}>Alt Süreç</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil"><Trash2 size={14} /></button>
+        </div>
+        <div className="afd-props__hint">
+          Başka bir onay akışını alt süreç olarak başlatır. Alt süreç tamamlandıktan sonra akış devam eder.
+        </div>
+        <label className="afd-props__label">Düğüm Adı</label>
+        <input className="afd-props__input" type="text" value={spName} maxLength={80}
+          placeholder="örn. Fatura Onayı Alt Süreci"
+          onChange={function (e) { commitSP({ stepName: e.target.value }) }} />
+        <label className="afd-props__label">Alt Akış ID</label>
+        <input className="afd-props__input" type="number" min="1" value={spFlowId}
+          placeholder="Onay akışının ID numarası (ör. 3)"
+          onChange={function (e) { commitSP({ subFlowId: e.target.value }) }} />
+        <label className="afd-props__label">Alt Akış Adı (gösterim)</label>
+        <input className="afd-props__input" type="text" value={spFlowName}
+          placeholder="ör. Fatura Onayı"
+          onChange={function (e) { commitSP({ subFlowName: e.target.value }) }} />
+        <ExtraInputsToggleBlock node={selected} onChange={commitSP} />
+      </div>
+    )
+  }
+
+  /* ── WEBHOOK node ── */
+  if (selected.kind === 'node' && selected.type === 'webhook') {
+    var whData    = selected.data || {}
+    var whName    = whData.stepName          || ''
+    var whUrl     = whData.url               || ''
+    var whMethod  = whData.method            || 'POST'
+    var whHeaders = whData.headersJson       || ''
+    var whBody    = whData.bodyTemplate      || ''
+    var whCodes   = whData.successStatusCodes|| '200,201,204'
+    var whTimeout = whData.timeoutSeconds == null ? '30' : String(whData.timeoutSeconds)
+    function commitWH(patch) {
+      if (typeof onChange === 'function') onChange(patch)
+    }
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: '#e11d48', color: '#fff' }}>Webhook</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil"><Trash2 size={14} /></button>
+        </div>
+        <div className="afd-props__hint">
+          Dış sisteme HTTP isteği gönderir. Yanıt koduna göre <em>Başarı</em> veya <em>Hata</em> koluna gidilir.
+        </div>
+        <label className="afd-props__label">Düğüm Adı</label>
+        <input className="afd-props__input" type="text" value={whName} maxLength={80}
+          placeholder="örn. ERP Bildir"
+          onChange={function (e) { commitWH({ stepName: e.target.value }) }} />
+        <label className="afd-props__label">URL</label>
+        <input className="afd-props__input" type="text" value={whUrl}
+          placeholder="https://api.example.com/approval-callback"
+          onChange={function (e) { commitWH({ url: e.target.value }) }} />
+        <label className="afd-props__label">Yöntem</label>
+        <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--afd-border, #e2e8f0)', marginBottom: 4 }}>
+          {['POST', 'PUT', 'PATCH', 'GET'].map(function (m, mi, arr) {
+            var on = whMethod === m
+            return (
+              <button key={m} type="button" onClick={function () { commitWH({ method: m }) }}
+                style={{
+                  flex: '1 1 0', padding: '5px 0', fontSize: 11, fontWeight: on ? 700 : 500,
+                  border: 'none',
+                  borderRight: mi < arr.length - 1 ? '1px solid var(--afd-border, #e2e8f0)' : 'none',
+                  background: on ? '#e11d48' : 'var(--afd-bg, transparent)',
+                  color: on ? '#fff' : 'var(--afd-muted, #64748b)',
+                  cursor: 'pointer', transition: 'all .12s',
+                }}>{m}</button>
+            )
+          })}
+        </div>
+        <label className="afd-props__label">Başarı Durum Kodları</label>
+        <input className="afd-props__input" type="text" value={whCodes}
+          placeholder="200,201,204"
+          onChange={function (e) { commitWH({ successStatusCodes: e.target.value }) }} />
+        <label className="afd-props__label">Zaman Aşımı (saniye)</label>
+        <input className="afd-props__input" type="number" min="1" max="300" value={whTimeout}
+          onChange={function (e) { commitWH({ timeoutSeconds: parseInt(e.target.value, 10) || 30 }) }} />
+        <label className="afd-props__label">İstek Gövdesi (JSON şablon, token destekli)</label>
+        <textarea className="afd-props__input afd-props__input--ta" rows={4} value={whBody}
+          placeholder={'{\n  "entityId": "{entityId}",\n  "requester": "{requesterName}"\n}'}
+          onChange={function (e) { commitWH({ bodyTemplate: e.target.value }) }} />
+        <label className="afd-props__label">İstek Başlıkları (JSON, opsiyonel)</label>
+        <textarea className="afd-props__input afd-props__input--ta" rows={2} value={whHeaders}
+          placeholder={'{"Authorization":"Bearer TOKEN","X-Source":"CalibraHub"}'}
+          onChange={function (e) { commitWH({ headersJson: e.target.value }) }} />
+        <ExtraInputsToggleBlock node={selected} onChange={commitWH} />
+      </div>
+    )
+  }
+
   return null
 }
 

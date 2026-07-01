@@ -97,6 +97,27 @@ public sealed class SlaCheckerWorker : BackgroundService
 
         int handled = 0;
 
+        // 0) Fired timers — Timer node bekleme süresi doldu
+        if (executor is not null)
+        {
+            var firedTimers = await repo.GetFiredTimersAsync(now, ct);
+            foreach (var t in firedTimers)
+            {
+                try
+                {
+                    await repo.MarkTimerFiredAsync(t.RecordId, ct);
+                    var timerNodes = await executor.AfterTimerElapsedAsync(t.InstanceId, t.TimerNodeId, ct);
+                    _logger.LogInformation("Timer tetiklendi: instance={Iid}, nodeId={Nid}, nodesProcessed={N}",
+                        t.InstanceId, t.TimerNodeId, timerNodes);
+                    handled++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Timer işleme hatası (record={Id}).", t.RecordId);
+                }
+            }
+        }
+
         // 1) Pre-warning
         var warnings = await repo.GetPendingWarningsAsync(now, ct);
         foreach (var w in warnings)

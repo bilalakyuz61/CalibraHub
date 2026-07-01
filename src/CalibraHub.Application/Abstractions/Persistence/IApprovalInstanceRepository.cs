@@ -68,6 +68,19 @@ public interface IApprovalInstanceRepository
     /// </summary>
     Task<int> CreateEscalatedStepAsync(int sourceRecordId, string newApproverId, string newApproverName, CancellationToken ct);
 
+    // ── Timer node işlemleri ──────────────────────────────────────────────────
+    /// <summary>
+    /// Timer node için bekleme kaydı yarat: Status='WaitingTimer', DueDate=fireAt.
+    /// SlaCheckerWorker bu kaydı pollayarak AfterTimerElapsedAsync çağırır.
+    /// </summary>
+    Task CreateTimerNodeRecordAsync(int instanceId, int timerNodeId, int stepOrder, string stepName, DateTime fireAt, CancellationToken ct);
+
+    /// <summary>Tetiklenme zamanı geçmiş ve henüz işlenmemiş Timer kayıtlarını döner.</summary>
+    Task<IReadOnlyList<PendingTimerRecord>> GetFiredTimersAsync(DateTime nowUtc, CancellationToken ct);
+
+    /// <summary>Timer kaydını 'TimerFired' olarak işaretle (tekrar tetiklenmesin).</summary>
+    Task MarkTimerFiredAsync(int recordId, CancellationToken ct);
+
     Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct);
 
     /// <summary>

@@ -1145,4 +1145,64 @@ WHERE inst.[Status] IN (N'Approved',N'Rejected')
         }
         return result;
     }
+
+    // ── Timer node işlemleri ────────────────────────────────────────────────
+
+    public async Task CreateTimerNodeRecordAsync(
+        int instanceId, int timerNodeId, int stepOrder, string stepName, DateTime fireAt, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"""
+            INSERT INTO [{_s}].[ApprovalStepRecord]
+                ([InstanceId],[StepOrder],[StepName],[Status],[ApproverId],[ApproverName],[DueDate],[Created])
+            VALUES
+                (@InstanceId, @StepOrder, @StepName, N'WaitingTimer', @NodeId, NULL, @FireAt, SYSUTCDATETIME())
+            """;
+        cmd.Parameters.Add(new SqlParameter("@InstanceId", instanceId));
+        cmd.Parameters.Add(new SqlParameter("@StepOrder", stepOrder));
+        cmd.Parameters.Add(new SqlParameter("@StepName", stepName));
+        // NodeId'yi ApproverId kolonuna geçici olarak saklıyoruz (timer node'unu tanımlamak için).
+        cmd.Parameters.Add(new SqlParameter("@NodeId", timerNodeId.ToString()));
+        cmd.Parameters.Add(new SqlParameter("@FireAt", fireAt));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<PendingTimerRecord>> GetFiredTimersAsync(DateTime nowUtc, CancellationToken ct)
+    {
+        var result = new List<PendingTimerRecord>();
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [Id], [InstanceId], [ApproverId], [DueDate]
+            FROM [{_s}].[ApprovalStepRecord]
+            WHERE [Status] = N'WaitingTimer'
+              AND [DueDate] <= @Now
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Now", nowUtc));
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var recordId    = rdr.GetInt32(0);
+            var instanceId  = rdr.GetInt32(1);
+            var nodeIdStr   = rdr.IsDBNull(2) ? "0" : rdr.GetString(2);
+            var fireAt      = rdr.IsDBNull(3) ? nowUtc : rdr.GetDateTime(3);
+            if (!int.TryParse(nodeIdStr, out var timerNodeId)) timerNodeId = 0;
+            result.Add(new PendingTimerRecord(recordId, instanceId, timerNodeId, fireAt));
+        }
+        return result;
+    }
+
+    public async Task MarkTimerFiredAsync(int recordId, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE [{_s}].[ApprovalStepRecord]
+            SET [Status] = N'TimerFired', [Updated] = SYSUTCDATETIME()
+            WHERE [Id] = @Id AND [Status] = N'WaitingTimer'
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Id", recordId));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }

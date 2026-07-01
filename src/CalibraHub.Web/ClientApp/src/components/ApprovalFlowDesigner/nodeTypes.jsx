@@ -8,7 +8,7 @@
  */
 import React, { useCallback, useEffect } from 'react'
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { Play, Square, GitBranch, CheckSquare, Bell, GitMerge, Zap, Variable } from 'lucide-react'
+import { Play, Square, GitBranch, CheckSquare, Bell, GitMerge, Zap, Variable, Clock, Users, Layers, Globe } from 'lucide-react'
 import DraggableHandle from './DraggableHandle.jsx'
 import { useUpdateNodeData } from './nodeDataContext.js'
 
@@ -395,6 +395,147 @@ export function EndNode({ id, data, selected }) {
   )
 }
 
+/* ──────────────────────────────────────────────────────────────
+   TimerNode — akışı belirtilen süre bekletir, sonra devam eder.
+   Top: target, Bottom: single output.
+   ────────────────────────────────────────────────────────────── */
+var TIMER_DEFAULTS = { in: { side: 'top', offset: 0.5 }, out: { side: 'bottom', offset: 0.5 } }
+function unitShort(u) {
+  return u === 'minutes' ? 'dk' : u === 'hours' ? 'sa' : u === 'days' ? 'gün' : u === 'businessDays' ? 'iş g.' : 'sa'
+}
+export function TimerNode({ id, data, selected }) {
+  var h = useNodeHandles(id, data, TIMER_DEFAULTS)
+  var durSummary = data.waitValue ? (data.waitValue + ' ' + unitShort(data.waitUnit || 'hours')) : 'Süre belirlenmemiş'
+  return (
+    <div className={'afd-node afd-node--timer' + (selected ? ' is-selected' : '')}>
+      <DraggableHandle id="in" type="target" nodeId={id}
+        defaultSide={TIMER_DEFAULTS.in.side} defaultOffset={TIMER_DEFAULTS.in.offset}
+        pos={h.resolved.in} siblings={[]}
+        onPositionChange={function (s, o) { h.commit('in', s, o) }} />
+      <div className="afd-node__head">
+        <Clock size={13} strokeWidth={2.4} />
+        <span className="afd-node__title">{data.stepName || 'Bekleme'}</span>
+      </div>
+      <div className="afd-node__meta">{durSummary}</div>
+      <DraggableHandle id="out" type="source" nodeId={id}
+        defaultSide={TIMER_DEFAULTS.out.side} defaultOffset={TIMER_DEFAULTS.out.offset}
+        pos={h.resolved.out} siblings={[]}
+        onPositionChange={function (s, o) { h.commit('out', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────
+   VoteNode — birden fazla kişi oy kullanır; sonuca göre Kabul/Red kolu.
+   Top: target, Bottom-left: "Kabul", Bottom-right: "Red".
+   ────────────────────────────────────────────────────────────── */
+var VOTE_DEFAULTS = {
+  in:     { side: 'top',    offset: 0.5 },
+  accept: { side: 'bottom', offset: 0.30 },
+  reject: { side: 'bottom', offset: 0.70 },
+}
+export function VoteNode({ id, data, selected }) {
+  var h = useNodeHandles(id, data, VOTE_DEFAULTS)
+  var approvers = Array.isArray(data.approverIds) ? data.approverIds : []
+  var typeLabel = data.votingType === 'unanimous' ? 'Tüm oylar'
+                : data.votingType === 'any' ? 'İlk oy' : 'Çoğunluk'
+  var summary = approvers.length > 0
+    ? (approvers.length + ' oylayıcı · ' + typeLabel)
+    : 'Oylayıcı seçilmemiş'
+  var srcSib = function (selfKey) { return h.siblings(selfKey).filter(function (s) { return s.id !== 'in' }) }
+  return (
+    <div className={'afd-node afd-node--vote' + (selected ? ' is-selected' : '')}>
+      <DraggableHandle id="in" type="target" nodeId={id}
+        defaultSide={VOTE_DEFAULTS.in.side} defaultOffset={VOTE_DEFAULTS.in.offset}
+        pos={h.resolved.in} siblings={[]}
+        onPositionChange={function (s, o) { h.commit('in', s, o) }} />
+      <div className="afd-node__head">
+        <Users size={13} strokeWidth={2.4} />
+        <span className="afd-node__title">{data.stepName || 'Oylama'}</span>
+      </div>
+      <div className="afd-node__meta">{summary}</div>
+      <DraggableHandle id="accept" type="source" nodeId={id}
+        defaultSide={VOTE_DEFAULTS.accept.side} defaultOffset={VOTE_DEFAULTS.accept.offset}
+        pos={h.resolved.accept} siblings={srcSib('accept')}
+        className="afd-handle--approve" label="Kabul" labelClassName="afd-foot--ok"
+        onPositionChange={function (s, o) { h.commit('accept', s, o) }} />
+      <DraggableHandle id="reject" type="source" nodeId={id}
+        defaultSide={VOTE_DEFAULTS.reject.side} defaultOffset={VOTE_DEFAULTS.reject.offset}
+        pos={h.resolved.reject} siblings={srcSib('reject')}
+        className="afd-handle--reject" label="Red" labelClassName="afd-foot--no"
+        onPositionChange={function (s, o) { h.commit('reject', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────
+   SubProcessNode — başka bir onay akışını alt süreç olarak çalıştırır.
+   Top: target, Bottom: single output (tamamlandı).
+   ────────────────────────────────────────────────────────────── */
+var SUBPROCESS_DEFAULTS = { in: { side: 'top', offset: 0.5 }, out: { side: 'bottom', offset: 0.5 } }
+export function SubProcessNode({ id, data, selected }) {
+  var h = useNodeHandles(id, data, SUBPROCESS_DEFAULTS)
+  return (
+    <div className={'afd-node afd-node--subprocess' + (selected ? ' is-selected' : '')}>
+      <DraggableHandle id="in" type="target" nodeId={id}
+        defaultSide={SUBPROCESS_DEFAULTS.in.side} defaultOffset={SUBPROCESS_DEFAULTS.in.offset}
+        pos={h.resolved.in} siblings={[]}
+        onPositionChange={function (s, o) { h.commit('in', s, o) }} />
+      <div className="afd-node__head">
+        <Layers size={13} strokeWidth={2.4} />
+        <span className="afd-node__title">{data.stepName || 'Alt Süreç'}</span>
+      </div>
+      <div className="afd-node__meta">{data.subFlowName || 'Akış seçilmemiş'}</div>
+      <DraggableHandle id="out" type="source" nodeId={id}
+        defaultSide={SUBPROCESS_DEFAULTS.out.side} defaultOffset={SUBPROCESS_DEFAULTS.out.offset}
+        pos={h.resolved.out} siblings={[]}
+        onPositionChange={function (s, o) { h.commit('out', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────
+   WebhookNode — dış sisteme HTTP çağrısı; başarı/hata kolları.
+   Top: target, Bottom-left: "Başarı", Bottom-right: "Hata".
+   ────────────────────────────────────────────────────────────── */
+var WEBHOOK_DEFAULTS = {
+  in:      { side: 'top',    offset: 0.5 },
+  success: { side: 'bottom', offset: 0.30 },
+  error:   { side: 'bottom', offset: 0.70 },
+}
+export function WebhookNode({ id, data, selected }) {
+  var h = useNodeHandles(id, data, WEBHOOK_DEFAULTS)
+  var urlShort = data.url ? (data.url.length > 32 ? data.url.slice(0, 32) + '…' : data.url) : 'URL belirlenmemiş'
+  var srcSib = function (selfKey) { return h.siblings(selfKey).filter(function (s) { return s.id !== 'in' }) }
+  return (
+    <div className={'afd-node afd-node--webhook' + (selected ? ' is-selected' : '')}>
+      <DraggableHandle id="in" type="target" nodeId={id}
+        defaultSide={WEBHOOK_DEFAULTS.in.side} defaultOffset={WEBHOOK_DEFAULTS.in.offset}
+        pos={h.resolved.in} siblings={[]}
+        onPositionChange={function (s, o) { h.commit('in', s, o) }} />
+      <div className="afd-node__head">
+        <Globe size={13} strokeWidth={2.4} />
+        <span className="afd-node__title">{data.stepName || 'Webhook'}</span>
+      </div>
+      <div className="afd-node__meta" style={{ fontFamily: 'ui-monospace,Menlo,Consolas,monospace', fontSize: 10 }}>{urlShort}</div>
+      <DraggableHandle id="success" type="source" nodeId={id}
+        defaultSide={WEBHOOK_DEFAULTS.success.side} defaultOffset={WEBHOOK_DEFAULTS.success.offset}
+        pos={h.resolved.success} siblings={srcSib('success')}
+        className="afd-handle--approve" label="Başarı" labelClassName="afd-foot--ok"
+        onPositionChange={function (s, o) { h.commit('success', s, o) }} />
+      <DraggableHandle id="error" type="source" nodeId={id}
+        defaultSide={WEBHOOK_DEFAULTS.error.side} defaultOffset={WEBHOOK_DEFAULTS.error.offset}
+        pos={h.resolved.error} siblings={srcSib('error')}
+        className="afd-handle--reject" label="Hata" labelClassName="afd-foot--no"
+        onPositionChange={function (s, o) { h.commit('error', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
+    </div>
+  )
+}
+
 export var nodeTypes = {
   start: StartNode,
   step: StepNode,
@@ -403,5 +544,9 @@ export var nodeTypes = {
   notification: NotificationNode,
   integration: IntegrationNode,
   setVariable: SetVariableNode,
+  timer: TimerNode,
+  vote: VoteNode,
+  subprocess: SubProcessNode,
+  webhook: WebhookNode,
   end: EndNode,
 }

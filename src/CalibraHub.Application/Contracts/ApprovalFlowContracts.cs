@@ -176,6 +176,13 @@ public sealed record OverdueStepRecord(
     string? SlaMessageTemplate,
     string? SlaRejectReason);
 
+// Timer node bekleme kaydı — SlaCheckerWorker tarafından pollanan pending timer.
+public sealed record PendingTimerRecord(
+    int RecordId,
+    int InstanceId,
+    int TimerNodeId,
+    DateTime FireAt);
+
 // ── Onay/Red isteği ───────────────────────────────────────────────────────────
 public sealed record StartApprovalRequest(
     int? DocumentId,

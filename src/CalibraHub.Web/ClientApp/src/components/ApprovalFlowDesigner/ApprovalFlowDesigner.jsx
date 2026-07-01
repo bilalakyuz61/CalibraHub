@@ -83,6 +83,18 @@ function defaultDataForType(type) {
       haltOnError:     true,    // entegrasyon başarısız olursa akışı durdur
     }
   }
+  if (type === 'timer') {
+    return { stepName: 'Bekleme', waitValue: 1, waitUnit: 'hours' }
+  }
+  if (type === 'vote') {
+    return { stepName: 'Oylama', votingType: 'majority', approverIds: [], approverLabels: [] }
+  }
+  if (type === 'subprocess') {
+    return { stepName: 'Alt Süreç', subFlowId: '', subFlowName: '' }
+  }
+  if (type === 'webhook') {
+    return { stepName: 'Webhook', url: '', method: 'POST', successStatusCodes: '200,201,204', timeoutSeconds: 30, bodyTemplate: '', headersJson: '' }
+  }
   if (type === 'setVariable') {
     return {
       variableName: null,        // hangi değişken (VariablesPanel'de tanımlı)

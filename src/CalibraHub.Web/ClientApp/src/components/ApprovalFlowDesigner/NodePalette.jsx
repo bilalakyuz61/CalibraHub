@@ -6,7 +6,7 @@
  * `application/reactflow` tipiyle node tip ismi yazılır.
  */
 import React from 'react'
-import { Play, Square, GitBranch, CheckSquare, Bell, GitMerge, Zap, Variable } from 'lucide-react'
+import { Play, Square, GitBranch, CheckSquare, Bell, GitMerge, Zap, Variable, Clock, Users, Layers, Globe } from 'lucide-react'
 
 var PALETTE = [
   { type: 'start',        label: 'Başla',         icon: Play,        kind: 'start' },
@@ -16,6 +16,10 @@ var PALETTE = [
   { type: 'notification', label: 'Bildirim',      icon: Bell,        kind: 'notification' },
   { type: 'integration',  label: 'Entegrasyon',   icon: Zap,         kind: 'integration' },
   { type: 'setVariable',  label: 'Değişken Ata',  icon: Variable,    kind: 'setvar' },
+  { type: 'timer',        label: 'Bekleme',       icon: Clock,       kind: 'timer' },
+  { type: 'vote',         label: 'Oylama',        icon: Users,       kind: 'vote' },
+  { type: 'subprocess',   label: 'Alt Süreç',     icon: Layers,      kind: 'subprocess' },
+  { type: 'webhook',      label: 'Webhook',       icon: Globe,       kind: 'webhook' },
   { type: 'end',          label: 'Bitir',         icon: Square,      kind: 'end' },
 ]
 
