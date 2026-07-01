@@ -860,7 +860,6 @@ export default function NodePropertiesPanel({
           Tüm koşullar sağlanırsa <em>Evet</em> kolu, aksi halde <em>Hayır</em> kolu işlenir.
           Her dal sonraki <em>Adım</em> node'una yönlendirilir; onay/red kararını orada atanan kullanıcı verir.
         </div>
-        <ExtraInputsToggleBlock node={selected} onChange={commitNode} />
       </div>
     )
   }
@@ -888,7 +887,6 @@ export default function NodePropertiesPanel({
           sahibi paralel onaylar" gibi senaryolarda. Paralel Split sonrası her dala bir Adım node'u
           bağlayın, sonra Paralel Join'de birleştirip Bitir'e gidin.
         </div>
-        <ExtraInputsToggleBlock node={selected} onChange={commitNode} />
       </div>
     )
   }
@@ -1079,7 +1077,6 @@ export default function NodePropertiesPanel({
           <strong>@ token:</strong> Mesaj veya Konu alanında <code>@</code> yazın — Türkçe ismiyle seçin, token otomatik eklenir.
           Bildirim node'u akışı durdurmaz.
         </div>
-        <ExtraInputsToggleBlock node={selected} onChange={commitNode} />
       </div>
     )
   }
@@ -1162,7 +1159,6 @@ export default function NodePropertiesPanel({
           Başarılıysa veya <em>"hata durdur"</em> kapalıysa akış sonraki
           düğümle devam eder.
         </div>
-        <ExtraInputsToggleBlock node={selected} onChange={commitNode} />
       </div>
     )
   }
@@ -1229,8 +1225,6 @@ export default function NodePropertiesPanel({
             </div>
           </>
         )}
-
-        <ExtraInputsToggleBlock node={selected} onChange={commitNode} />
       </div>
     )
   }
@@ -1252,7 +1246,6 @@ export default function NodePropertiesPanel({
           <div className="afd-props__hint">
             Akışın bitiş noktası. Tüm dallar nihayetinde bir Bitir düğümüne ulaşmalıdır.
           </div>
-          <ExtraInputsToggleBlock node={selected} onChange={commitNode} />
         </div>
       )
     }
