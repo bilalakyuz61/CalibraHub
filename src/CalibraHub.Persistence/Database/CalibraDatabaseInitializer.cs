@@ -7426,6 +7426,59 @@ END;";
                 ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]') AND name = N'UpdatedById')
                     ALTER TABLE [{s}].[DocumentLineFulfillment] ADD [UpdatedById] INT NULL;
             END
+
+            -- 2026-07-01: FK_DocumentLine_Document → ON DELETE CASCADE
+            -- Document silinince ilgili DocumentLine satirlari da otomatik silinir.
+            -- Idempotent: zaten CASCADE ise no-op; yoksa olustur; var ama NO_ACTION ise yeniden yap.
+            IF EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_DocumentLine_Document'
+                  AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLine]')
+                  AND delete_referential_action = 0
+            )
+            BEGIN
+                ALTER TABLE [{s}].[DocumentLine] DROP CONSTRAINT [FK_DocumentLine_Document];
+                ALTER TABLE [{s}].[DocumentLine] ADD CONSTRAINT [FK_DocumentLine_Document]
+                    FOREIGN KEY ([DocumentId]) REFERENCES [{s}].[Document]([id])
+                    ON DELETE CASCADE;
+            END
+            ELSE IF NOT EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_DocumentLine_Document'
+                  AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLine]')
+            )
+            BEGIN
+                IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD CONSTRAINT [FK_DocumentLine_Document]
+                        FOREIGN KEY ([DocumentId]) REFERENCES [{s}].[Document]([id])
+                        ON DELETE CASCADE;
+            END
+
+            -- 2026-07-01: FK_DLF_RequestLine → ON DELETE CASCADE
+            -- DocumentLine silinince ilgili DocumentLineFulfillment satirlari da otomatik silinir.
+            IF EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_DLF_RequestLine'
+                  AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]')
+                  AND delete_referential_action = 0
+            )
+            BEGIN
+                ALTER TABLE [{s}].[DocumentLineFulfillment] DROP CONSTRAINT [FK_DLF_RequestLine];
+                ALTER TABLE [{s}].[DocumentLineFulfillment] ADD CONSTRAINT [FK_DLF_RequestLine]
+                    FOREIGN KEY ([RequestLineId]) REFERENCES [{s}].[DocumentLine]([Id])
+                    ON DELETE CASCADE;
+            END
+            ELSE IF NOT EXISTS (
+                SELECT 1 FROM sys.foreign_keys
+                WHERE name = N'FK_DLF_RequestLine'
+                  AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]')
+            )
+            BEGIN
+                IF OBJECT_ID(N'[{s}].[DocumentLineFulfillment]', N'U') IS NOT NULL
+                    ALTER TABLE [{s}].[DocumentLineFulfillment] ADD CONSTRAINT [FK_DLF_RequestLine]
+                        FOREIGN KEY ([RequestLineId]) REFERENCES [{s}].[DocumentLine]([Id])
+                        ON DELETE CASCADE;
+            END
             """;
 
         await using var cmd = connection.CreateCommand();

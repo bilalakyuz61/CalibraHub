@@ -362,6 +362,7 @@
     .pa-btn-primary { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
     .pa-btn-danger  { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
     .pa-btn-ghost   { background: rgba(148,163,184,.15); color: #64748b; }
+    .pa-btn-route   { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; }
     /* Not girişi paneli */
     .pa-note-panel {
         padding: 12px 20px 14px;
@@ -1248,7 +1249,7 @@
         arms.forEach(function (a) {
             var btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'pa-btn pa-btn-danger';
+            btn.className = 'pa-btn pa-btn-route';
             btn.textContent = a.label;
             btn.addEventListener('click', function () {
                 _currentChoiceArmId = a.armId;
