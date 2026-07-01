@@ -1246,10 +1246,21 @@
         // Çoklu seçim: Onayla + Reddet korunur, özel kollar ek seçenek olarak eklenir
         modalRejectEl.style.display = '';
         modalApproveEl.style.display = '';
+        var COLOR_MAP = {
+            indigo:  'linear-gradient(135deg,#6366f1,#4f46e5)',
+            emerald: 'linear-gradient(135deg,#10b981,#059669)',
+            rose:    'linear-gradient(135deg,#ef4444,#dc2626)',
+            amber:   'linear-gradient(135deg,#f59e0b,#d97706)',
+            blue:    'linear-gradient(135deg,#3b82f6,#2563eb)',
+            violet:  'linear-gradient(135deg,#8b5cf6,#7c3aed)',
+            slate:   'linear-gradient(135deg,#64748b,#475569)',
+        };
         arms.forEach(function (a) {
             var btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'pa-btn pa-btn-route';
+            btn.className = 'pa-btn';
+            btn.style.background = COLOR_MAP[a.color] || COLOR_MAP.indigo;
+            btn.style.color = '#fff';
             btn.textContent = a.label;
             btn.addEventListener('click', function () {
                 _currentChoiceArmId = a.armId;

@@ -31,7 +31,7 @@ function normalizeExtraInputs(raw) {
       .filter(function (it) { return it && typeof it.side === 'string' })
       .map(function (it) {
         var kind = (it.kind === 'out') ? 'out' : 'in'
-        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label }
+        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label, color: it.color }
       })
   }
   if (raw && typeof raw === 'object') {

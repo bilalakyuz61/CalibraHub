@@ -1719,7 +1719,7 @@ function normalizeExtraInputsArray(raw) {
       .filter(function (it) { return it && typeof it.side === 'string' })
       .map(function (it) {
         var kind = (it.kind === 'out') ? 'out' : 'in'
-        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label }
+        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label, color: it.color }
       })
   }
   if (raw && typeof raw === 'object') {
@@ -1864,24 +1864,58 @@ function ExtraInputsToggleBlock({ node, onChange }) {
                   }}>×</button>
                 </div>
                 {isOut && (
-                  <input
-                    type="text"
-                    value={it.label || ''}
-                    placeholder="Buton etiketi (ör. Onayla / Acil Onayla)…"
-                    maxLength={60}
-                    onChange={function (e) {
-                      commit(items.map(function (x) {
-                        return x.id === it.id ? Object.assign({}, x, { label: e.target.value }) : x
-                      }))
-                    }}
-                    style={{
-                      width: '100%', fontSize: 11.5,
-                      padding: '4px 8px', borderRadius: 4,
-                      border: '1px solid var(--afd-border, #e2e8f0)',
-                      background: 'var(--afd-bg, transparent)',
-                      color: 'var(--afd-text, #334155)',
-                    }}
-                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <input
+                      type="text"
+                      value={it.label || ''}
+                      placeholder="Buton etiketi (ör. Onayla / Acil Onayla)…"
+                      maxLength={60}
+                      onChange={function (e) {
+                        commit(items.map(function (x) {
+                          return x.id === it.id ? Object.assign({}, x, { label: e.target.value }) : x
+                        }))
+                      }}
+                      style={{
+                        width: '100%', fontSize: 11.5,
+                        padding: '4px 8px', borderRadius: 4,
+                        border: '1px solid var(--afd-border, #e2e8f0)',
+                        background: 'var(--afd-bg, transparent)',
+                        color: 'var(--afd-text, #334155)',
+                      }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ fontSize: 10.5, color: 'var(--afd-muted, #64748b)', marginRight: 2 }}>Renk:</span>
+                      {[
+                        { key: 'indigo',  bg: '#6366f1' },
+                        { key: 'emerald', bg: '#10b981' },
+                        { key: 'rose',    bg: '#ef4444' },
+                        { key: 'amber',   bg: '#f59e0b' },
+                        { key: 'blue',    bg: '#3b82f6' },
+                        { key: 'violet',  bg: '#8b5cf6' },
+                        { key: 'slate',   bg: '#64748b' },
+                      ].map(function (c) {
+                        var active = (it.color || 'indigo') === c.key
+                        return (
+                          <button key={c.key} type="button"
+                            title={c.key}
+                            onClick={function () {
+                              commit(items.map(function (x) {
+                                return x.id === it.id ? Object.assign({}, x, { color: c.key }) : x
+                              }))
+                            }}
+                            style={{
+                              width: active ? 20 : 16, height: active ? 20 : 16,
+                              borderRadius: '50%', background: c.bg, border: 'none',
+                              cursor: 'pointer', padding: 0, flexShrink: 0,
+                              outline: active ? '2px solid ' + c.bg : 'none',
+                              outlineOffset: 2,
+                              transition: 'all .15s',
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             )

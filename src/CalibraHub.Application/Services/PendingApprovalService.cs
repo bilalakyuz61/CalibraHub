@@ -98,7 +98,8 @@ public sealed class PendingApprovalService : IPendingApprovalService
                 if (!el.TryGetProperty("id", out var id)) continue;
                 var armId = id.GetString();
                 if (string.IsNullOrWhiteSpace(armId)) continue;
-                arms.Add(new ChoiceArmDto(armId, labelStr));
+                var colorStr = el.TryGetProperty("color", out var color) ? color.GetString() : null;
+                arms.Add(new ChoiceArmDto(armId, labelStr, colorStr));
             }
             return arms.Count > 0 ? arms : null;
         }

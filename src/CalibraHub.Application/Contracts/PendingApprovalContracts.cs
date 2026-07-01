@@ -58,7 +58,7 @@ public sealed record ExtraColumnMetaDto(
 );
 
 /// <summary>Çoklu onay seçeneği: adımın ek 'out' kollarından türetilir.</summary>
-public sealed record ChoiceArmDto(string ArmId, string Label);
+public sealed record ChoiceArmDto(string ArmId, string Label, string? Color = null);
 
 /// <summary>Modal detayi (belge baslik + tum adimlar).</summary>
 public sealed record PendingApprovalDetailDto(
