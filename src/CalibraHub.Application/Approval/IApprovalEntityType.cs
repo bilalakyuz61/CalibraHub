@@ -137,6 +137,12 @@ public sealed class ApprovalEntityContext
     /// HTTP context canlıyken (ApprovalFlowService) bir kez yakalar ve burada saklar.
     /// </summary>
     public string? BaseUrl { get; set; }
+
+    /// <summary>Bir önceki adımda onaylayan/reddeden kullanıcının girdiği not — {previousStepNote} token'ı için.</summary>
+    public string? PreviousStepNote { get; set; }
+
+    /// <summary>Bir önceki adımı onaylayan/reddeden kullanıcının adı — {previousStepApproverName} token'ı için.</summary>
+    public string? PreviousStepApproverName { get; set; }
 }
 
 /// <summary>

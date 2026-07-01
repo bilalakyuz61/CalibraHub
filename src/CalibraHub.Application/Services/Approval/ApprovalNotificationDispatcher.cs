@@ -465,11 +465,13 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
             .Replace("{amount}",         Get("amount"))
             .Replace("{contactName}",    Get("contactName"))
             .Replace("{taxNo}",          Get("taxNo"))
-            .Replace("{approverName}",   recipientName ?? "")
-            .Replace("{recipientName}",  recipientName ?? "")
-            .Replace("{requesterName}",  ctx.RequesterName ?? "")
-            .Replace("{flowName}",       ctx.FlowName ?? "")
-            .Replace("{currentStepName}", "");
+            .Replace("{approverName}",          recipientName ?? "")
+            .Replace("{recipientName}",         recipientName ?? "")
+            .Replace("{requesterName}",         ctx.RequesterName ?? "")
+            .Replace("{flowName}",              ctx.FlowName ?? "")
+            .Replace("{currentStepName}",       "")
+            .Replace("{previousStepNote}",      ctx.PreviousStepNote ?? "")
+            .Replace("{previousStepApproverName}", ctx.PreviousStepApproverName ?? "");
 
         // {var.degiskenAdi} — FlowVariables'dan resolve et.
         // Header token'larla çakışmayan, akışa özel dinamik değerler için.

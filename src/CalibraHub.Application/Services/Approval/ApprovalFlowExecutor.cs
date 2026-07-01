@@ -131,6 +131,11 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         var ctx = await SafeBuildContextAsync(flow.DocumentKind, inst.DocumentId, ct);
         EnrichCtx(ctx, flow, inst);
         ctx.BaseUrl = capturedBaseUrl;
+
+        var prevRecord = inst.StepRecords.FirstOrDefault(s => s.StepOrder == currentStepOrder);
+        ctx.PreviousStepNote         = prevRecord?.Note;
+        ctx.PreviousStepApproverName = prevRecord?.ApproverName;
+
         var processed = 0;
 
         foreach (var edge in SelectEdges(flow, currentNode.Id, isApproved, choiceArmId))
