@@ -1568,21 +1568,6 @@ export default function NodePropertiesPanel({
           </div>
         )}
 
-        {!isTimeout && (
-          <>
-            <label className="afd-props__label">Koşul (opsiyonel)</label>
-            <textarea
-              className="afd-props__input afd-props__input--ta"
-              rows={2}
-              value={condition}
-              onChange={function (e) {
-                setCondition(e.target.value)
-                commitNode({ condition: e.target.value })
-              }}
-              placeholder="amount > 100000"
-            />
-          </>
-        )}
       </div>
     )
   }
