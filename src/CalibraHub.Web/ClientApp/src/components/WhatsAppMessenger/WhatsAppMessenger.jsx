@@ -277,11 +277,12 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         }
     }, [selectedPhone, loadConversations, loadMessages])
 
-    // ── Kişi değişince bir sonraki scroll anlık olsun ───────────────────
+    // ── Kişi değişince bir sonraki scroll anlık olsun + input'a focus ───
     useEffect(() => {
         scrollInstantRef.current = true
         awaitingMediaScrollRef.current = true
         const t = setTimeout(() => { awaitingMediaScrollRef.current = false }, 3000)
+        if (selectedPhone) setTimeout(() => textareaRef.current?.focus(), 50)
         return () => clearTimeout(t)
     }, [selectedPhone])
 
