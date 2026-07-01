@@ -11278,42 +11278,6 @@ END;";
     {
         var s = _schema.Replace("]", "]]");
 
-        // 1) GuideMas tablo
-        var createTableSql = $"""
-            IF OBJECT_ID(N'[{s}].[GuideMas]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[GuideMas]
-                (
-                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_GuideMas] PRIMARY KEY,
-                    [GuideCode]         NVARCHAR(60)   NOT NULL,
-                    [GuideLabel]        NVARCHAR(200)  NOT NULL,
-                    [ViewName]          NVARCHAR(200)  NOT NULL,
-                    [ValueColumn]       NVARCHAR(60)   NOT NULL,
-                    [DisplayColumn]     NVARCHAR(60)   NOT NULL,
-                    [GridColumnsJson]   NVARCHAR(MAX)  NOT NULL,
-                    [DefaultSortColumn] NVARCHAR(60)   NULL,
-                    [IsActive]          BIT            NOT NULL CONSTRAINT [df_GuideMas_Active] DEFAULT(1),
-                    [CreatedAt]         DATETIME   NOT NULL CONSTRAINT [df_GuideMas_Created] DEFAULT(SYSUTCDATETIME()),
-                    [UpdatedAt]         DATETIME   NOT NULL CONSTRAINT [df_GuideMas_Updated] DEFAULT(SYSUTCDATETIME())
-                );
-                CREATE UNIQUE INDEX [ux_GuideMas_GuideCode] ON [{s}].[GuideMas]([GuideCode]);
-            END;
-
-            -- Rehber bazli varsayilan filtre (SQL WHERE fragment) — idempotent ALTER.
-            -- Bu rehberi kullanan tum form alanlarinda otomatik uygulanir.
-            IF OBJECT_ID(N'[{s}].[GuideMas]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[GuideMas]', N'DefaultFilterJson') IS NULL
-            BEGIN
-                ALTER TABLE [{s}].[GuideMas] ADD [DefaultFilterJson] NVARCHAR(MAX) NULL;
-            END;
-            """;
-
-        await using (var cmd1 = connection.CreateCommand())
-        {
-            cmd1.CommandText = createTableSql;
-            await cmd1.ExecuteNonQueryAsync(cancellationToken);
-        }
-
         // 2) View'lar — CREATE OR ALTER ayri batch (SQL Server syntax gereği)
         // Naming standardı: cbv_Guide_{EntityName}
         // cbv = CalibraHub View, Guide = Rehber tipi, _ ayirici
@@ -11433,8 +11397,6 @@ END;";
 
         // 2026-05-22: View 2d/2e/2f — Personnel / Machines / Locations standart rehber view'lari.
         // WorkOrderEdit "Planlama & Makine" tab'inda Tip 1 rehber kullanilabilmesi icin.
-        // DiscoverAndRegisterGuidesAsync startup'ta otomatik GuideMas'a register edecek
-        // (PERSONNEL, MACHINES, LOCATIONS GuideCode'lari ile).
         // Tum view'lar Id + Code + Name + ek display kolonlari (yardimci icin) icerir.
 
         var v2d = $"""
@@ -11649,107 +11611,6 @@ END;";
             await cmd4b.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        // 3) Seed satirlar — idempotent
-        var seedSql = $"""
-            IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'CUSTOMERS')
-                INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
-                VALUES (N'CUSTOMERS', N'Cari Hesap Rehberi', N'cbv_Guide_Contacts',
-                        N'AccountCode', N'AccountTitle',
-                        N'["AccountCode","AccountTitle","Phone","City","TaxNumber","SalesRepId"]',
-                        N'AccountCode');
-            ELSE
-                UPDATE [{s}].[GuideMas]
-                SET [GridColumnsJson] = N'["AccountCode","AccountTitle","Phone","City","TaxNumber","SalesRepId"]'
-                WHERE [GuideCode] = N'CUSTOMERS';
-
-            -- 2026-05-23: Tedarikci Rehberi — Satin Alma Teklif/Siparis Cari Kod alaninda kullanilir.
-            -- View: cbv_Guide_Suppliers (AccountType IN (Supplier=2, Both=3)).
-            IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'SUPPLIERS')
-                INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
-                VALUES (N'SUPPLIERS', N'Tedarikci Rehberi', N'cbv_Guide_Suppliers',
-                        N'AccountCode', N'AccountTitle',
-                        N'["AccountCode","AccountTitle","Phone","City","TaxNumber"]',
-                        N'AccountCode');
-            ELSE
-                UPDATE [{s}].[GuideMas]
-                SET [GridColumnsJson] = N'["AccountCode","AccountTitle","Phone","City","TaxNumber"]'
-                WHERE [GuideCode] = N'SUPPLIERS';
-
-            -- ITEMS: cbv_Guide_Items view'inda sadece Id, MaterialCode, MaterialName var
-            -- (Description sutunu kaldirildi — line 6279). GridColumnsJson view ile uyumlu
-            -- olmali yoksa search query 207 'Invalid column name' verir.
-            IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'ITEMS')
-                INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
-                VALUES (N'ITEMS', N'Malzeme Karti Rehberi', N'cbv_Guide_Items',
-                        N'MaterialCode', N'MaterialName',
-                        N'["Id","MaterialCode","MaterialName"]',
-                        N'MaterialCode');
-
-            -- ViewName bazli normalize: cbv_Guide_Items'a baglanan TUM GuideMas
-            -- kayitlari (auto-discovery dahil) ayni GridColumnsJson + value/display'a
-            -- sahip olur. Boylece duplikat satirlardan herhangi birine resolve edilse
-            -- de schema dogru kolon listesini doner.
-            UPDATE [{s}].[GuideMas]
-            SET [GridColumnsJson] = N'["Id","MaterialCode","MaterialName"]',
-                [ValueColumn]     = N'MaterialCode',
-                [DisplayColumn]   = N'MaterialName',
-                [DefaultSortColumn] = N'MaterialCode'
-            WHERE [ViewName] = N'cbv_Guide_Items';
-
-            -- ITEMS_FINISHED: Mamul rehberi (TypeId=1) — is emri / uretim ekranlari icin
-            IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'ITEMS_FINISHED')
-                INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
-                VALUES (N'ITEMS_FINISHED', N'Mamul Rehberi', N'cbv_Guide_Items_Finished',
-                        N'MaterialCode', N'MaterialName',
-                        N'["Id","MaterialCode","MaterialName"]',
-                        N'MaterialCode');
-
-            -- ROUTING: Rota rehberi (2026-05-20) — BOM tanimlama ekraninda rota secimi.
-            -- Standart kurallara uygun: ValueColumn=Code, DisplayColumn=Name.
-            -- GridColumnsJson view ile birebir uyumlu (kolon eklenirse buraya da eklenir).
-            IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'ROUTING')
-                INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
-                VALUES (N'ROUTING', N'Rota Rehberi', N'cbv_Guide_Routing',
-                        N'Code', N'Name',
-                        N'["Code","Name","Description","ItemCode","ItemName"]',
-                        N'Code');
-
-            -- Legacy view v_GuideItems varsa kolon adlari icin tazele (material_* → code/name/description)
-            IF OBJECT_ID(N'[{s}].[v_GuideItems]', N'V') IS NOT NULL
-            BEGIN
-                EXEC(N'
-                    CREATE OR ALTER VIEW [{s}].[v_GuideItems] AS
-                    SELECT
-                        [Id]                                AS [Id],
-                        CAST([Code] AS NVARCHAR(100))       AS [MaterialCode],
-                        CAST([Name] AS NVARCHAR(300))       AS [MaterialName]
-                    FROM [{s}].[Items]
-                    WHERE [IsActive] = 1;
-                ');
-            END;
-
-            IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'SALES_QUOTES')
-                INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
-                VALUES (N'SALES_QUOTES', N'Satis Teklifi Rehberi', N'cbv_Guide_Documents',
-                        N'DocumentNumber', N'CustomerName',
-                        N'["DocumentNumber","CustomerName","DocumentDate","GrandTotal","Status"]',
-                        N'DocumentDate');
-
-            -- SALES_ORDERS: Tekliften olusturulmus satis siparisleri rehberi.
-            -- ValueColumn=Code, DisplayColumn=Name standart kurallarina uygun.
-            IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'SALES_ORDERS')
-                INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
-                VALUES (N'SALES_ORDERS', N'Satis Siparisi Rehberi (Tekliften)', N'cbv_Guide_SalesOrders',
-                        N'Code', N'Name',
-                        N'["Code","Name","DocumentDate","GrandTotal","Status"]',
-                        N'DocumentDate');
-            """;
-
-        await using (var cmd5 = connection.CreateCommand())
-        {
-            cmd5.CommandText = seedSql;
-            await cmd5.ExecuteNonQueryAsync(cancellationToken);
-        }
     }
 
     /// <summary>
@@ -12604,51 +12465,6 @@ END;";
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
-
-        // ── Migration: GuideMas → FldSet defaults backfill (idempotent) ──
-        // Sadece ViewName/FormatJson NULL ise GuideMas'tan kopyalar — kullanici override'lari korunur.
-        // GuideMas tablosu PR 3'te dusurulecek; bu blok o zaman no-op olur (IF OBJECT_ID kontrolu).
-        var migrateSql = $$"""
-            IF OBJECT_ID(N'[{{s}}].[GuideMas]', N'U') IS NOT NULL
-            BEGIN
-                -- 1) ViewName backfill: GuideCode dolu, ViewName bos olanlara GuideMas.ViewName yaz
-                UPDATE f
-                SET    f.[ViewName] = gm.[ViewName]
-                FROM   [{{s}}].[FldSet] f
-                INNER  JOIN [{{s}}].[GuideMas] gm ON gm.[GuideCode] = f.[GuideCode]
-                WHERE  f.[ViewName] IS NULL AND f.[GuideCode] IS NOT NULL;
-
-                -- 2) FormatJson icine valueColumn ekle (eksikse) — GuideMas.ValueColumn'dan
-                UPDATE f
-                SET    f.[FormatJson] = JSON_MODIFY(
-                                            ISNULL(f.[FormatJson], N'{}'),
-                                            '$.valueColumn',
-                                            gm.[ValueColumn]
-                                        )
-                FROM   [{{s}}].[FldSet] f
-                INNER  JOIN [{{s}}].[GuideMas] gm ON gm.[GuideCode] = f.[GuideCode]
-                WHERE  f.[GuideCode] IS NOT NULL
-                  AND  ISNULL(NULLIF(LTRIM(RTRIM(gm.[ValueColumn])), N''), N'') <> N''
-                  AND  (f.[FormatJson] IS NULL OR JSON_VALUE(f.[FormatJson], '$.valueColumn') IS NULL);
-
-                -- 3) FormatJson icine displayColumn ekle (eksikse) — GuideMas.DisplayColumn'dan
-                UPDATE f
-                SET    f.[FormatJson] = JSON_MODIFY(
-                                            ISNULL(f.[FormatJson], N'{}'),
-                                            '$.displayColumn',
-                                            gm.[DisplayColumn]
-                                        )
-                FROM   [{{s}}].[FldSet] f
-                INNER  JOIN [{{s}}].[GuideMas] gm ON gm.[GuideCode] = f.[GuideCode]
-                WHERE  f.[GuideCode] IS NOT NULL
-                  AND  ISNULL(NULLIF(LTRIM(RTRIM(gm.[DisplayColumn])), N''), N'') <> N''
-                  AND  (f.[FormatJson] IS NULL OR JSON_VALUE(f.[FormatJson], '$.displayColumn') IS NULL);
-            END;
-            """;
-
-        await using var migrateCmd = connection.CreateCommand();
-        migrateCmd.CommandText = migrateSql;
-        await migrateCmd.ExecuteNonQueryAsync(cancellationToken);
 
         // ── Seed: bilinen rehber-uyumlu alanlar ──────────────────────────────
         // Her form icin: otomatik kesfedilmis istenmeyen kayitlari temizle,

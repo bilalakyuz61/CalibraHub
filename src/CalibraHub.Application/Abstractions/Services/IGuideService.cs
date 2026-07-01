@@ -39,10 +39,4 @@ public interface IGuideService
         CancellationToken ct,
         IReadOnlyCollection<GuideConstraintDto>? constraints = null);
 
-    /// <summary>
-    /// Rehber bazli varsayilan WHERE filter fragment'ini guncelle.
-    /// Bu rehberin kullanildigi tum form alanlarinda runtime'da otomatik AND ile uygulanir.
-    /// filterJson NULL veya bos ise filtre kaldirilir. Donus: etkilenen kayit sayisi.
-    /// </summary>
-    Task<int> SetDefaultFilterAsync(string guideCode, string? filterJson, CancellationToken ct);
 }

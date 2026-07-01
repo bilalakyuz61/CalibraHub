@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.RegularExpressions;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
@@ -13,25 +13,23 @@ namespace CalibraHub.Persistence.Repositories;
 /// SQL View tabanli jenerik Rehber (Lookup) persistence katmani.
 ///
 /// Proje mevcut raw ADO.NET pattern'ini koruyor; yalnizca bu repository icin
-/// Dapper kullaniliyor — dinamik kolonlu sorgu satirlarini dynamic dictionary
+/// Dapper kullaniliyor â€” dinamik kolonlu sorgu satirlarini dynamic dictionary
 /// olarak almayi kolaylastiriyor, GetAll / Resolve icin de strongly-typed
 /// mapping'i tek satirda veriyor.
 ///
-/// ═══ SQL INJECTION SAVUNMA KATMANI ═══
+/// â•â•â• SQL INJECTION SAVUNMA KATMANI â•â•â•
 ///   - ViewName, ValueColumn, DisplayColumn, GridColumnsJson icindeki tum
-///     kolonlar, sortColumn — hepsi IdentifierRegex allowlist'ten geciyor.
+///     kolonlar, sortColumn â€” hepsi IdentifierRegex allowlist'ten geciyor.
 ///   - sortDirection yalnizca 'ASC' veya 'DESC'.
 ///   - search parametresi @Search olarak Dapper DynamicParameters ile
 ///     parametreli, LIKE karakterleri (% _ [) escape ediliyor.
-///   - ViewName cok parcali olabilir ('schema.view') — parcalar ayri ayri
+///   - ViewName cok parcali olabilir ('schema.view') â€” parcalar ayri ayri
 ///     validate edilip [bracket] ile birlestiriliyor.
 /// </summary>
 public sealed class SqlGuideRepository : IGuideRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schemaName;
-    private readonly string _guideMasTable;
-
     // Identifier allowlist: harfle basla, harf/rakam/altcizgi; max 64 karakter.
     private static readonly Regex IdentifierRegex =
         new(@"^[A-Za-z_][A-Za-z0-9_]{0,63}$", RegexOptions.Compiled);
@@ -40,62 +38,92 @@ public sealed class SqlGuideRepository : IGuideRepository
     {
         _connectionFactory = connectionFactory;
         _schemaName = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _guideMasTable = $"[{_schemaName.Replace("]", "]]")}].[GuideMas]";
     }
 
-    // ══════════════════════════════════════════════════════════
-    // GuideMas runtime resolve API
-    // (PR 3: GetAllAsync admin metodu kaldirildi — UI artik /api/guides/views
-    //  uzerinden fiziksel view'lari listeliyor; GuideMas kaydi sadece runtime
-    //  resolve sirasinda GetByCodeAsync ile teker teker okunuyor.)
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // PR 4: GuideMas kaldÄ±rÄ±ldÄ±. View metadata INFORMATION_SCHEMA'dan dinamik olarak
+    // alÄ±nÄ±r; ValueColumn/DisplayColumn Code/Name adlandÄ±rma kuralÄ±na gÃ¶re sezilir.
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     public async Task<GuideDefinition?> GetByCodeAsync(string guideCode, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(guideCode)) return null;
+
+        // "schema.view" veya tek parÃ§a â€” her iki format desteklenir.
+        guideCode = guideCode.Trim();
+        string schema, view;
+        var dot = guideCode.IndexOf('.');
+        if (dot > 0)
+        {
+            schema = guideCode[..dot].Trim('[', ']', ' ');
+            view   = guideCode[(dot + 1)..].Trim('[', ']', ' ');
+        }
+        else
+        {
+            schema = _schemaName;
+            view   = guideCode;
+        }
+
+        if (!IdentifierRegex.IsMatch(schema) || !IdentifierRegex.IsMatch(view)) return null;
+
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        // Hem GuideCode hem ViewName ile eslestirme: PR 2+'da raw view'lar (cbv_Guide_*)
-        // direkt secilebiliyor — bu durumda guideCode yerine viewName geliyor. SQL Server
-        // default CI collation case-insensitive eslestirmeyi otomatik halleder.
-        // Duplikat ViewName varsa (legacy data) ORDER BY Id DESC ile son giren kazanir
-        // (kullanici feedback'i: "en alttakinin icerigi dogru").
-        cmd.CommandText = $@"
-            SELECT TOP(1) [Id],[GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],
-                          [GridColumnsJson],[DefaultSortColumn],[DefaultFilterJson],
-                          [IsActive],[CreatedAt],[UpdatedAt]
-            FROM {_guideMasTable}
-            WHERE ([GuideCode] = @Code OR [ViewName] = @Code) AND [IsActive] = 1
-            ORDER BY [Id] DESC;";
-        cmd.Parameters.AddWithValue("@Code", guideCode);
+        cmd.CommandText = @"
+            SELECT [COLUMN_NAME] FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE [TABLE_SCHEMA] = @Schema AND [TABLE_NAME] = @View
+            ORDER BY [ORDINAL_POSITION];";
+        cmd.Parameters.AddWithValue("@Schema", schema);
+        cmd.Parameters.AddWithValue("@View", view);
 
+        var cols = new List<string>();
         await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct))
         {
-            if (await reader.ReadAsync(ct))
+            while (await reader.ReadAsync(ct))
             {
-                return new GuideDefinition
-                {
-                    Id = reader.GetInt32(0),
-                    GuideCode = reader.GetString(1),
-                    GuideLabel = reader.GetString(2),
-                    ViewName = reader.GetString(3),
-                    ValueColumn = reader.GetString(4),
-                    DisplayColumn = reader.GetString(5),
-                    GridColumnsJson = reader.GetString(6),
-                    DefaultSortColumn = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    DefaultFilterJson = reader.IsDBNull(8) ? null : reader.GetString(8),
-                    IsActive = reader.GetBoolean(9),
-                    CreatedAt = reader.GetDateTime(10),
-                    UpdatedAt = reader.GetDateTime(11)
-                };
+                var col = reader.GetString(0);
+                if (IdentifierRegex.IsMatch(col)) cols.Add(col);
             }
         }
-        return null;
+
+        if (cols.Count == 0) return null;
+
+        // Standart kolon sezme: Code/Name > *Code/*Name/*Title > konum bazlÄ±
+        var valueCol =
+            cols.FirstOrDefault(c => c.Equals("Code", StringComparison.OrdinalIgnoreCase))
+            ?? cols.FirstOrDefault(c => c.EndsWith("Code", StringComparison.OrdinalIgnoreCase)
+                                        && !c.Equals("Id", StringComparison.OrdinalIgnoreCase))
+            ?? cols.FirstOrDefault(c => !c.Equals("Id", StringComparison.OrdinalIgnoreCase))
+            ?? cols[0];
+
+        var displayCol =
+            cols.FirstOrDefault(c => c.Equals("Name", StringComparison.OrdinalIgnoreCase))
+            ?? cols.FirstOrDefault(c => c.EndsWith("Name", StringComparison.OrdinalIgnoreCase)
+                                        && !c.Equals(valueCol, StringComparison.OrdinalIgnoreCase))
+            ?? cols.FirstOrDefault(c => c.EndsWith("Title", StringComparison.OrdinalIgnoreCase))
+            ?? cols.FirstOrDefault(c => !c.Equals("Id", StringComparison.OrdinalIgnoreCase)
+                                        && !c.Equals(valueCol, StringComparison.OrdinalIgnoreCase))
+            ?? valueCol;
+
+        return new GuideDefinition
+        {
+            Id                = 0,
+            GuideCode         = guideCode,
+            GuideLabel        = guideCode,
+            ViewName          = guideCode,
+            ValueColumn       = valueCol,
+            DisplayColumn     = displayCol,
+            GridColumnsJson   = JsonSerializer.Serialize(cols),
+            DefaultSortColumn = valueCol,
+            DefaultFilterJson = null,
+            IsActive          = true,
+            CreatedAt         = DateTime.UtcNow,
+            UpdatedAt         = DateTime.UtcNow,
+        };
     }
 
-    // ══════════════════════════════════════════════════════════
-    // Arama — dinamik SQL (guvenli)
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Arama â€” dinamik SQL (guvenli)
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     public async Task<GuideSearchResultDto> SearchAsync(
         GuideDefinition guide,
@@ -125,7 +153,7 @@ public sealed class SqlGuideRepository : IGuideRepository
 
         // 2b) Defensive: GuideMas.GridColumnsJson view ile drift edebilir (stale seed,
         // view kolon rename/drop). View'in gercek kolonlarini INFORMATION_SCHEMA'dan
-        // cek, kesisimi al — boylece olmayan kolon SELECT'e girmez (207 hatasi yok).
+        // cek, kesisimi al â€” boylece olmayan kolon SELECT'e girmez (207 hatasi yok).
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         var actualCols = await GetActualViewColumnsAsync(conn, guide.ViewName, ct);
         if (actualCols.Count == 0)
@@ -159,7 +187,7 @@ public sealed class SqlGuideRepository : IGuideRepository
             ? "DESC"
             : "ASC";
 
-        // 4) SELECT kolon listesi — Value + Display + grid kolonlari (benzersiz)
+        // 4) SELECT kolon listesi â€” Value + Display + grid kolonlari (benzersiz)
         var selectColumns = new List<string>(columns.Length + 2);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var c in new[] { valueCol, displayCol }.Concat(columns))
@@ -171,7 +199,7 @@ public sealed class SqlGuideRepository : IGuideRepository
 
         var view = BracketView(guide.ViewName);
 
-        // 5) WHERE — tokenized arama: her kelime ayri ayri tum kolonlarda aranir (AND)
+        // 5) WHERE â€” tokenized arama: her kelime ayri ayri tum kolonlarda aranir (AND)
         var whereParts = new List<string>();
         var searchTerms = Array.Empty<string>();
         if (!string.IsNullOrWhiteSpace(search))
@@ -189,16 +217,16 @@ public sealed class SqlGuideRepository : IGuideRepository
             }
         }
 
-        // 5b) Dinamik kisitlar (constraints) — SQL Injection korumalı
+        // 5b) Dinamik kisitlar (constraints) â€” SQL Injection korumalÄ±
         // Her kisit AND veya OR ile birlestirilir (Logic property).
         // Gruplama: ardisik AND'ler parantez icinde, OR ile ayrilir.
         //
-        // GuideMas.DefaultFilterJson — rehber bazli varsayilan WHERE fragment.
+        // GuideMas.DefaultFilterJson â€” rehber bazli varsayilan WHERE fragment.
         // FldSet field-level filtresinden BAGIMSIZ olarak her arama cagrisinda
         // otomatik prepend edilir (AND ile birlesir). Boylece bir rehbere bir
         // kez verilen kisit (orn. cbv_Guide_Items: TYPID IN (2,3)) bu rehberin
-        // kullanildigi tum form alanlarinda — BOM mamul, is emri mamul, satir
-        // grid'i, vs. — otomatik gecerli olur. Token desteklenmiyor (global, form-bagimsiz).
+        // kullanildigi tum form alanlarinda â€” BOM mamul, is emri mamul, satir
+        // grid'i, vs. â€” otomatik gecerli olur. Token desteklenmiyor (global, form-bagimsiz).
         var effectiveConstraints = new List<GuideConstraintDto>();
         if (!string.IsNullOrWhiteSpace(guide.DefaultFilterJson))
         {
@@ -219,7 +247,7 @@ public sealed class SqlGuideRepository : IGuideRepository
             var pIdx = 0;
             foreach (var c in constraints)
             {
-                // Logic: yalnizca "and" veya "or" — diger degerler "and" olarak davranir (raw SQL icin de gecerli)
+                // Logic: yalnizca "and" veya "or" â€” diger degerler "and" olarak davranir (raw SQL icin de gecerli)
                 var rawLogic = (c.Logic ?? "and").Trim().ToLowerInvariant();
                 if (rawLogic != "or") rawLogic = "and";
 
@@ -235,14 +263,14 @@ public sealed class SqlGuideRepository : IGuideRepository
 
                 if (string.IsNullOrWhiteSpace(c.Field) || string.IsNullOrWhiteSpace(c.Value)) continue;
 
-                // Güvenlik 1: kolon adi allowlist'ten gecmeli
+                // GÃ¼venlik 1: kolon adi allowlist'ten gecmeli
                 var safeField = ValidateIdentifier(c.Field.Trim(), "ConstraintField");
 
-                // Logic: yalnizca "and" veya "or" — diger degerler "and" olarak davranir
+                // Logic: yalnizca "and" veya "or" â€” diger degerler "and" olarak davranir
                 var logic = (c.Logic ?? "and").Trim().ToLowerInvariant();
                 if (logic != "or") logic = "and";
 
-                // Güvenlik 2: operatör switch-case ile — asla kullanicidan gelen string SQL'e yazilmaz
+                // GÃ¼venlik 2: operatÃ¶r switch-case ile â€” asla kullanicidan gelen string SQL'e yazilmaz
                 string? sqlFragment = null;
                 var op = (c.Operator ?? "eq").Trim().ToLowerInvariant();
                 switch (op)
@@ -275,7 +303,7 @@ public sealed class SqlGuideRepository : IGuideRepository
                         pIdx++;
                         break;
                     case "in":
-                        // IN operatörü: virgülle ayrılmış değerler → ayrı parametreler
+                        // IN operatÃ¶rÃ¼: virgÃ¼lle ayrÄ±lmÄ±ÅŸ deÄŸerler â†’ ayrÄ± parametreler
                         var inVals = c.Value.Split(',')
                             .Select(v => v.Trim())
                             .Where(v => v.Length > 0)
@@ -293,7 +321,7 @@ public sealed class SqlGuideRepository : IGuideRepository
                         }
                         break;
                     default:
-                        // Bilinmeyen operatör sessizce atlanır — güvenlik
+                        // Bilinmeyen operatÃ¶r sessizce atlanÄ±r â€” gÃ¼venlik
                         break;
                 }
 
@@ -319,7 +347,7 @@ public sealed class SqlGuideRepository : IGuideRepository
             ? "WHERE " + string.Join(" AND ", whereParts)
             : string.Empty;
 
-        // 6) OFFSET / FETCH — hasMore hesabi icin pageSize + 1 satir cek
+        // 6) OFFSET / FETCH â€” hasMore hesabi icin pageSize + 1 satir cek
         var offset = (page - 1) * pageSize;
         var sql = $@"
             SELECT {selectClause}
@@ -328,7 +356,7 @@ public sealed class SqlGuideRepository : IGuideRepository
             ORDER BY [{actualSort}] {direction}
             OFFSET @Offset ROWS FETCH NEXT @Fetch ROWS ONLY;";
 
-        // 7) Execute — raw ADO.NET SqlDataReader (conn step 2b'de acildi)
+        // 7) Execute â€” raw ADO.NET SqlDataReader (conn step 2b'de acildi)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.Parameters.AddWithValue("@Offset", offset);
@@ -344,7 +372,7 @@ public sealed class SqlGuideRepository : IGuideRepository
             cmd.Parameters.AddWithValue($"@Search{t}", "%" + escaped + "%");
         }
 
-        // Constraint parametreleri — her biri güvenli parametrize
+        // Constraint parametreleri â€” her biri gÃ¼venli parametrize
         foreach (var (paramName, paramValue) in constraintParams)
         {
             cmd.Parameters.AddWithValue(paramName, paramValue);
@@ -372,7 +400,7 @@ public sealed class SqlGuideRepository : IGuideRepository
             }
         }
 
-        // 8) hasMore — fazla satir varsa son satiri at
+        // 8) hasMore â€” fazla satir varsa son satiri at
         var hasMore = rows.Count > pageSize;
         if (hasMore && rows.Count > 0)
             rows.RemoveAt(rows.Count - 1);
@@ -380,9 +408,9 @@ public sealed class SqlGuideRepository : IGuideRepository
         return new GuideSearchResultDto(rows, columns.AsReadOnly(), page, pageSize, hasMore);
     }
 
-    // ══════════════════════════════════════════════════════════
-    // Tek value → display cozumleme
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Tek value â†’ display cozumleme
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     public async Task<GuideResolveDto?> ResolveAsync(GuideDefinition guide, string value, CancellationToken ct)
     {
@@ -423,9 +451,9 @@ public sealed class SqlGuideRepository : IGuideRepository
         return null;
     }
 
-    // ══════════════════════════════════════════════════════════
-    // Distinct degerler — filtre cipleri icin
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Distinct degerler â€” filtre cipleri icin
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     public async Task<IReadOnlyCollection<string>> GetDistinctValuesAsync(
         GuideDefinition guide, string column, string? search, CancellationToken ct,
@@ -452,20 +480,20 @@ public sealed class SqlGuideRepository : IGuideRepository
                 $"Kolon '{safeColumn}' view '{guide.ViewName}' kolonlarinda yok. " +
                 $"View kolonlari: [{string.Join(", ", actualCols)}].");
 
-        // 2) DISTINCT sorgu — NULL/bos atilir, alfabetik siralanir, max 200 satir.
-        //    Veri kalitesi normalize: NBSP (NCHAR(160)) → bosluk; LTRIM/RTRIM ile
+        // 2) DISTINCT sorgu â€” NULL/bos atilir, alfabetik siralanir, max 200 satir.
+        //    Veri kalitesi normalize: NBSP (NCHAR(160)) â†’ bosluk; LTRIM/RTRIM ile
         //    bas/son bosluklar kirpilir; Turkish_CI_AI collation ile case+accent
         //    farklari ayni distinct'e dusurulur. Boylece "TRABZON", "TRABZON ",
-        //    "trabzon", "TRABZON " varyantlari popover'da TEK satir gozukur.
+        //    "trabzon", "TRABZONÂ " varyantlari popover'da TEK satir gozukur.
         //    search non-empty ise ayni normalize'li ifade uzerinde LIKE @Search.
         var normalizedExpr = "LTRIM(RTRIM(REPLACE(CAST([" + safeColumn + "] AS NVARCHAR(400)), NCHAR(160), N' '))) COLLATE Turkish_CI_AI";
 
         var hasSearch = !string.IsNullOrWhiteSpace(search);
 
-        // 3) Constraint WHERE building — SearchAsync ile birebir mantik.
+        // 3) Constraint WHERE building â€” SearchAsync ile birebir mantik.
         //    guide.DefaultFilterJson her zaman AND ile prepend edilir; ardindan
         //    caller'in constraint'leri eklenir (rawSql/eq/in/...). Distinct popover
-        //    listede gosterilen satirlardan turetilir → "view'a verilen filtrelere
+        //    listede gosterilen satirlardan turetilir â†’ "view'a verilen filtrelere
         //    gore dolar" (rapor: kullanici geri bildirimi 2026-05-18).
         var (constraintClause, constraintParams) =
             BuildConstraintWhereFragment(guide, constraints);
@@ -519,12 +547,12 @@ public sealed class SqlGuideRepository : IGuideRepository
         return values.AsReadOnly();
     }
 
-    // ══════════════════════════════════════════════════════════
-    // Constraint helper — SearchAsync + GetDistinctValuesAsync paylasir
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Constraint helper â€” SearchAsync + GetDistinctValuesAsync paylasir
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     /// <summary>
-    /// SearchAsync icindeki constraint→WHERE fragment olusturma mantiginin
+    /// SearchAsync icindeki constraintâ†’WHERE fragment olusturma mantiginin
     /// extracted hali (GetDistinctValuesAsync ile paylasilir). guide.DefaultFilterJson
     /// her cagrida AND ile prepend edilir; ardindan caller'in constraint listesi gelir.
     /// Donus: (WHERE fragment, parametre listesi). Fragment bos olabilir (constraint
@@ -617,9 +645,9 @@ public sealed class SqlGuideRepository : IGuideRepository
         return ("(" + clause + ")", paramList);
     }
 
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // Guvenlik helper'lari
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     private static string ValidateIdentifier(string raw, string role)
     {
@@ -629,9 +657,9 @@ public sealed class SqlGuideRepository : IGuideRepository
         return raw;
     }
 
-    // ══════════════════════════════════════════════════════════
-    // Admin CRUD — ListViews, GetViewColumns, Upsert, Delete
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Admin CRUD â€” ListViews, GetViewColumns, Upsert, Delete
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     public async Task<IReadOnlyCollection<GuideViewInfoDto>> ListGuideViewsAsync(CancellationToken ct)
     {
@@ -734,18 +762,14 @@ public sealed class SqlGuideRepository : IGuideRepository
         return types;
     }
 
-    // PR 3: UpsertAsync ve DeleteAsync admin metodlari kaldirildi — UI artik
-    // /api/guides/views uzerinden fiziksel view'lari direkt kullaniyor.
-    // GuideMas kayitlari startup auto-discovery (DiscoverAndRegisterGuidesAsync)
-    // ile yonetiliyor; manuel CRUD gereksiz.
 
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // Guvenlik helper'lari
-    // ══════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     /// <summary>
-    /// "cbv_Guide_Items" → "[dbo].[cbv_Guide_Items]"
-    /// "customSchema.cbv_Guide_Items" → "[customSchema].[cbv_Guide_Items]"
+    /// "cbv_Guide_Items" â†’ "[dbo].[cbv_Guide_Items]"
+    /// "customSchema.cbv_Guide_Items" â†’ "[customSchema].[cbv_Guide_Items]"
     /// Her parca ayri ayri validate edilir.
     /// </summary>
     private string BracketView(string viewName)
@@ -800,310 +824,4 @@ public sealed class SqlGuideRepository : IGuideRepository
         return cols;
     }
 
-    // ══════════════════════════════════════════════════════════
-    // Faz F+ — Auto-Discovery (startup hook)
-    // ══════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// sys.views uzerinden v_Guide% pattern'ine uyan tum view'lari bulup
-    /// GuideMas'ta olmayanlari otomatik kaydeder.
-    ///
-    /// Heuristic (user karari):
-    ///   1. kolon  → ValueColumn
-    ///   2. kolon  → DisplayColumn (yoksa 1. kolonla ayni)
-    ///   Tumu → GridColumnsJson
-    ///   GuideCode → view adindan 'v_Guide' prefix'i atilmis hali (uppercase)
-    ///
-    /// Idempotent: ayni GuideCode zaten varsa atlanir. Kullanici sonradan SQL ile
-    /// duzeltme yapabilir, sistem uzerine yazmaz.
-    /// </summary>
-    public async Task<int> DiscoverAndRegisterGuidesAsync(CancellationToken ct)
-    {
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-
-        // 1) cbv_Guide_% pattern'ine uyan tum view'lari bul (schema + name)
-        var viewList = new List<(string SchemaName, string ViewName)>();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = @"
-                SELECT s.[name] AS SchemaName, v.[name] AS ViewName
-                FROM sys.views v
-                INNER JOIN sys.schemas s ON s.schema_id = v.schema_id
-                WHERE v.[name] LIKE 'cbv[_]Guide[_]%'
-                ORDER BY s.[name], v.[name];";
-
-            await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct))
-            {
-                while (await reader.ReadAsync(ct))
-                {
-                    viewList.Add((reader.GetString(0), reader.GetString(1)));
-                }
-            }
-        }
-
-        if (viewList.Count == 0) return 0;
-
-        // 2) GuideMas'taki mevcut GuideCode'lar — caseinsensitive set
-        var existingSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $"SELECT [GuideCode] FROM {_guideMasTable};";
-            await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct))
-            {
-                while (await reader.ReadAsync(ct))
-                {
-                    existingSet.Add(reader.GetString(0));
-                }
-            }
-        }
-
-        // 3) Mevcut GuideMas.ViewName listesi — ikinci bir dedup filtresi
-        var existingViewSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $"SELECT [ViewName] FROM {_guideMasTable};";
-            await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct))
-            {
-                while (await reader.ReadAsync(ct))
-                {
-                    var vn = reader.GetString(0);
-                    existingViewSet.Add((vn ?? string.Empty).Trim().ToLowerInvariant());
-                }
-            }
-        }
-
-        int added = 0;
-
-        foreach (var (schemaName, viewName) in viewList)
-        {
-            // View adi regex check (defensive — sys.views'dan gelse bile)
-            if (!IdentifierRegex.IsMatch(viewName))
-            {
-                Console.Error.WriteLine($"[Guide Discovery] Atlandi: gecersiz view adi '{viewName}'");
-                continue;
-            }
-
-            // Heuristic: GuideCode = view_adi - 'cbv_Guide_' prefix + uppercase
-            // cbv_Guide_Contacts → CONTACTACCOUNTS
-            var bareName = viewName;
-            if (bareName.StartsWith("cbv_Guide_", StringComparison.OrdinalIgnoreCase))
-                bareName = bareName.Substring("cbv_Guide_".Length);
-            else if (bareName.StartsWith("cbv_Guide", StringComparison.OrdinalIgnoreCase))
-                bareName = bareName.Substring("cbv_Guide".Length);
-            else if (bareName.StartsWith("cbv_", StringComparison.OrdinalIgnoreCase))
-                bareName = bareName.Substring("cbv_".Length);
-            if (string.IsNullOrWhiteSpace(bareName)) continue;
-
-            var guideCode = bareName.ToUpperInvariant();
-
-            // Zaten kayitli mi? (GuideCode veya ViewName bazinda)
-            if (existingSet.Contains(guideCode)) continue;
-            if (existingViewSet.Contains(viewName.ToLowerInvariant())) continue;
-
-            // 4) View'in kolonlarini cek (ORDINAL_POSITION sirasinda)
-            var cols = new List<string>();
-            await using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = @"
-                    SELECT [COLUMN_NAME]
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE [TABLE_SCHEMA] = @Schema AND [TABLE_NAME] = @View
-                    ORDER BY [ORDINAL_POSITION];";
-                cmd.Parameters.AddWithValue("@Schema", schemaName);
-                cmd.Parameters.AddWithValue("@View", viewName);
-
-                await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct))
-                {
-                    while (await reader.ReadAsync(ct))
-                    {
-                        cols.Add(reader.GetString(0));
-                    }
-                }
-            }
-
-            if (cols.Count == 0)
-            {
-                Console.Error.WriteLine($"[Guide Discovery] Atlandi: view '{viewName}' kolon okunamadi");
-                continue;
-            }
-
-            // Tum kolonlar regex'ten geciyor mu? Defensive check.
-            if (cols.Any(c => !IdentifierRegex.IsMatch(c)))
-            {
-                Console.Error.WriteLine($"[Guide Discovery] Atlandi: '{viewName}' gecersiz kolon adi iceriyor");
-                continue;
-            }
-
-            // Standart rehber kurali: Code kolonu varsa value, Name kolonu varsa display.
-            // Aksi halde 1./2. kolon (geriye donuk uyumluluk).
-            var codeCol = cols.FirstOrDefault(c => string.Equals(c, "Code", StringComparison.OrdinalIgnoreCase));
-            var nameCol = cols.FirstOrDefault(c => string.Equals(c, "Name", StringComparison.OrdinalIgnoreCase));
-            var valueCol = codeCol ?? cols[0];
-            var displayCol = nameCol ?? (cols.Count >= 2 ? cols[1] : cols[0]);
-            var gridColumnsJson = JsonSerializer.Serialize(cols);
-
-            // Human-readable label — CamelCase'i bosluklara bol
-            var label = HumanizeCamelCase(bareName) + " Rehberi";
-
-            // 5) INSERT — GuideMas'a yeni satir
-            try
-            {
-                await using (var cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = $@"
-                        INSERT INTO {_guideMasTable}
-                            ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],
-                             [GridColumnsJson],[DefaultSortColumn],[IsActive])
-                        VALUES
-                            (@GuideCode, @GuideLabel, @ViewName, @ValueColumn, @DisplayColumn,
-                             @GridColumnsJson, @DefaultSort, 1);";
-                    cmd.Parameters.AddWithValue("@GuideCode", guideCode);
-                    cmd.Parameters.AddWithValue("@GuideLabel", label);
-                    cmd.Parameters.AddWithValue("@ViewName", viewName);
-                    cmd.Parameters.AddWithValue("@ValueColumn", valueCol);
-                    cmd.Parameters.AddWithValue("@DisplayColumn", displayCol);
-                    cmd.Parameters.AddWithValue("@GridColumnsJson", gridColumnsJson);
-                    cmd.Parameters.AddWithValue("@DefaultSort", valueCol);
-
-                    await cmd.ExecuteNonQueryAsync(cancellationToken: ct);
-                }
-
-                existingSet.Add(guideCode);
-                existingViewSet.Add(viewName.ToLowerInvariant());
-                added++;
-
-                Console.WriteLine(
-                    $"[Guide Discovery] Eklendi: {guideCode} → {viewName} " +
-                    $"(Value={valueCol}, Display={displayCol}, {cols.Count} kolon)");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[Guide Discovery] INSERT hatasi '{viewName}': {ex.Message}");
-            }
-        }
-
-        return added;
-    }
-
-    public async Task<int> NormalizeStandardColumnsAsync(CancellationToken ct)
-    {
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-
-        // 1) Tum aktif GuideMas kayitlarini cek
-        var rows = new List<(int Id, string ViewName, string ValueColumn, string DisplayColumn)>();
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $@"
-                SELECT [Id],[ViewName],[ValueColumn],[DisplayColumn]
-                FROM {_guideMasTable}
-                WHERE [IsActive] = 1;";
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct);
-            while (await reader.ReadAsync(ct))
-            {
-                rows.Add((reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
-            }
-        }
-
-        if (rows.Count == 0) return 0;
-
-        int updated = 0;
-        foreach (var row in rows)
-        {
-            // ViewName "schema.view" olabilir — parcalara bol
-            string schemaName = _schemaName;
-            string viewName = row.ViewName;
-            var dotIdx = viewName.IndexOf('.');
-            if (dotIdx > 0)
-            {
-                schemaName = viewName.Substring(0, dotIdx);
-                viewName = viewName.Substring(dotIdx + 1);
-            }
-            if (!IdentifierRegex.IsMatch(schemaName) || !IdentifierRegex.IsMatch(viewName)) continue;
-
-            // 2) View kolonlarini cek
-            var cols = new List<string>();
-            await using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = @"
-                    SELECT [COLUMN_NAME]
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE [TABLE_SCHEMA] = @Schema AND [TABLE_NAME] = @View
-                    ORDER BY [ORDINAL_POSITION];";
-                cmd.Parameters.AddWithValue("@Schema", schemaName);
-                cmd.Parameters.AddWithValue("@View", viewName);
-                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct);
-                while (await reader.ReadAsync(ct)) cols.Add(reader.GetString(0));
-            }
-            if (cols.Count == 0) continue;
-
-            // 3) Standart kural: Code → ValueColumn, Name → DisplayColumn
-            var codeCol = cols.FirstOrDefault(c => string.Equals(c, "Code", StringComparison.OrdinalIgnoreCase));
-            var nameCol = cols.FirstOrDefault(c => string.Equals(c, "Name", StringComparison.OrdinalIgnoreCase));
-            var newValue = codeCol ?? row.ValueColumn;
-            var newDisplay = nameCol ?? row.DisplayColumn;
-
-            // 4) Degisiklik var mi? (case-sensitive — view kolon adlari aynen yazilsin)
-            if (string.Equals(newValue, row.ValueColumn, StringComparison.Ordinal) &&
-                string.Equals(newDisplay, row.DisplayColumn, StringComparison.Ordinal))
-                continue;
-
-            await using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $@"
-                    UPDATE {_guideMasTable}
-                    SET [ValueColumn] = @Value, [DisplayColumn] = @Display, [UpdatedAt] = SYSUTCDATETIME()
-                    WHERE [Id] = @Id;";
-                cmd.Parameters.AddWithValue("@Value", newValue);
-                cmd.Parameters.AddWithValue("@Display", newDisplay);
-                cmd.Parameters.AddWithValue("@Id", row.Id);
-                await cmd.ExecuteNonQueryAsync(cancellationToken: ct);
-            }
-            updated++;
-            Console.WriteLine(
-                $"[Guide Normalize] {row.ViewName}: Value '{row.ValueColumn}'→'{newValue}', " +
-                $"Display '{row.DisplayColumn}'→'{newDisplay}'");
-        }
-
-        return updated;
-    }
-
-    public async Task<int> SetDefaultFilterAsync(string guideCode, string? filterJson, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(guideCode)) return 0;
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        // GetByCodeAsync ile ayni eslesme: hem GuideCode hem ViewName.
-        // Birden fazla satir varsa hepsi ayni filtreye guncellenir (legacy data drift).
-        cmd.CommandText = $@"
-            UPDATE {_guideMasTable}
-            SET [DefaultFilterJson] = @Filter,
-                [UpdatedAt] = SYSUTCDATETIME()
-            WHERE [GuideCode] = @Code OR [ViewName] = @Code;";
-        cmd.Parameters.AddWithValue("@Code", guideCode);
-        var trimmed = filterJson?.Trim();
-        cmd.Parameters.AddWithValue(
-            "@Filter",
-            string.IsNullOrWhiteSpace(trimmed) ? (object)DBNull.Value : trimmed!);
-        var affected = await cmd.ExecuteNonQueryAsync(ct);
-        return affected;
-    }
-
-    /// <summary>
-    /// "Contacts" → "Contact Accounts"
-    /// "CurrencyRates" → "Currency Rates"
-    /// CamelCase'i bosluklara boler. Admin UI'da guide label olarak kullanilir.
-    /// </summary>
-    private static string HumanizeCamelCase(string s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return s;
-        var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < s.Length; i++)
-        {
-            var c = s[i];
-            if (i > 0 && char.IsUpper(c) && !char.IsUpper(s[i - 1]))
-                sb.Append(' ');
-            sb.Append(c);
-        }
-        return sb.ToString();
-    }
 }

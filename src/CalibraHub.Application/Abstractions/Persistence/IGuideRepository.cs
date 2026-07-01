@@ -89,49 +89,4 @@ public interface IGuideRepository
     /// </summary>
     Task<IReadOnlyDictionary<string, string>> GetViewColumnTypesAsync(string viewName, CancellationToken ct);
 
-    // PR 3: UpsertAsync ve DeleteAsync kaldirildi — admin GuideMas CRUD UI
-    // gereksiz; GuideMas startup auto-discovery ile besleniyor (DiscoverAndRegisterGuidesAsync).
-
-    /// <summary>
-    /// Startup auto-discovery — sys.views uzerinden 'cbv_Guide_%' pattern'ine uyan
-    /// SQL view'larini tarar, GuideMas'ta kaydi olmayanlari otomatik ekler.
-    ///
-    /// Heuristic:
-    ///   - GuideCode: view adinin 'v_Guide' prefix'i cikarildiktan sonra uppercased
-    ///     (orn. 'v_GuideContacts' → 'CONTACTACCOUNTS')
-    ///   - GuideLabel: view adindan cikarilip bosluklu hali
-    ///   - ValueColumn: view'in 1. kolonu (ORDINAL_POSITION=1)
-    ///   - DisplayColumn: view'in 2. kolonu varsa, yoksa 1. kolonla ayni
-    ///   - GridColumnsJson: view'in tum kolonlari JSON array olarak
-    ///   - DefaultSortColumn: 1. kolon
-    ///
-    /// Idempotent: GuideMas'ta ayni GuideCode varsa atlanir. Bir kere eklendikten
-    /// sonra admin elle SQL ile GuideMas satirini duzenleyebilir; startup bir daha
-    /// uzerine yazmaz.
-    ///
-    /// Donus: otomatik eklenmis yeni guide sayisi (log icin).
-    /// </summary>
-    Task<int> DiscoverAndRegisterGuidesAsync(CancellationToken ct);
-
-    /// <summary>
-    /// Standart rehber kuralini tum GuideMas kayitlarina uygular: view'da
-    /// 'Code' kolonu varsa ValueColumn=Code, 'Name' kolonu varsa DisplayColumn=Name
-    /// olarak guncellenir. Idempotent — degisiklik yoksa UPDATE yazilmaz.
-    ///
-    /// Standart rehberlerde zorunlu kolonlar (Id/Code/Name+) oldugu icin tum
-    /// ekranlarda ayni davranis: rehberden secim → input'a Code, gorunume Name.
-    /// Discovery heuristic'i de yeni kayitlari ayni kurala uyarak ekler.
-    ///
-    /// Donus: guncellenen GuideMas kayit sayisi.
-    /// </summary>
-    Task<int> NormalizeStandardColumnsAsync(CancellationToken ct);
-
-    /// <summary>
-    /// Rehber bazli varsayilan WHERE filter fragment'ini guncelle.
-    /// Bu rehberin kullanildigi tum form alanlarinda runtime'da otomatik AND ile uygulanir.
-    /// guideCode hem GuideCode hem ViewName ile eslesir (GetByCodeAsync ile ayni mantik).
-    /// filterJson NULL veya bos ise filtre kaldirilir.
-    /// Donus: etkilenen kayit sayisi (0 = guide bulunamadi).
-    /// </summary>
-    Task<int> SetDefaultFilterAsync(string guideCode, string? filterJson, CancellationToken ct);
 }

@@ -818,31 +818,6 @@ using (var scope = app.Services.CreateScope())
             app.Logger.LogWarning(ex, "[FlatView] Startup regen failed — view'lar widget degisikliginde tetiklenecek");
         }
 
-        // Faz F+ — Guide auto-discovery: sys.views uzerinden v_Guide% pattern'ine
-        // uyan view'lari GuideMas'a otomatik kaydet. Yeni bir rehber eklemek icin
-        // admin'in sadece SSMS'te 'CREATE VIEW v_GuideXxx ...' yapmasi + restart
-        // yetiyor. Heuristic: Code/Name kolonlari ValueColumn/DisplayColumn olarak
-        // oncelikli; aksi halde 1./2. kolon. Kullanici elle GuideMas'i duzenleyerek
-        // override edebilir, ancak NormalizeStandardColumnsAsync her startup'ta
-        // standart kurali yeniden uygular (Code/Name → Value/Display).
-        try
-        {
-            var guideRepo = scope.ServiceProvider.GetRequiredService<IGuideRepository>();
-            var addedGuides = await guideRepo.DiscoverAndRegisterGuidesAsync(CancellationToken.None);
-            if (addedGuides > 0)
-                app.Logger.LogInformation("[Guide Discovery] Otomatik {Count} yeni rehber kaydedildi", addedGuides);
-
-            // Standart kural: tum mevcut kayitlarda Code/Name kolonlari varsa
-            // ValueColumn=Code, DisplayColumn=Name olarak normalize edilir.
-            var normalized = await guideRepo.NormalizeStandardColumnsAsync(CancellationToken.None);
-            if (normalized > 0)
-                app.Logger.LogInformation("[Guide Normalize] {Count} kayit standart kolon kurali ile guncellendi", normalized);
-        }
-        catch (Exception ex)
-        {
-            app.Logger.LogWarning(ex, "[Guide Discovery] Startup tarama basarisiz — rehberler manuel eklenebilir");
-        }
-
         // Sprint 1 — Universal Form Engine: Item entity → ITEMS form sistem alan'lari seed.
         // Idempotent; mevcut IsSystemField satirlari atlanir. Hata olursa server engellenmez.
         try

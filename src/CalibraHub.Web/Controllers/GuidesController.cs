@@ -96,35 +96,6 @@ public sealed class GuidesController : ControllerBase
         return Ok(schema);
     }
 
-    public sealed record SetGuideDefaultFilterRequest(string? Filter);
-
-    /// <summary>
-    /// Rehber bazli varsayilan WHERE filter — bu rehberin kullanildigi tum form
-    /// alanlarinda runtime'da otomatik AND ile uygulanir. Filter NULL/bos ise filtre
-    /// kaldirilir.
-    /// PUT /api/guides/{guideCode}/default-filter   body: { "filter": "TYPID IN (2,3)" }
-    /// </summary>
-    [HttpPut("{guideCode}/default-filter")]
-    public async Task<IActionResult> SetDefaultFilter(
-        string guideCode,
-        [FromBody] SetGuideDefaultFilterRequest body,
-        CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(guideCode))
-            return BadRequest(new { success = false, message = "Rehber kodu bos olamaz." });
-        try
-        {
-            var affected = await _guideService.SetDefaultFilterAsync(guideCode, body?.Filter, ct);
-            if (affected == 0)
-                return NotFound(new { success = false, message = $"Rehber bulunamadi: '{guideCode}'" });
-            return Ok(new { success = true, affected });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
-
     [HttpGet("{guideCode}/resolve")]
     public async Task<IActionResult> Resolve(
         string guideCode,

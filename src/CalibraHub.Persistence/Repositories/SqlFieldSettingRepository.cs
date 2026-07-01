@@ -112,18 +112,9 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         {
             await using var cmd = conn.CreateCommand();
 
-            // MERGE: varsa guncelle, yoksa ekle. ViewName'i GuideMas'tan resolve eder
-            // (subquery ile). GuideMas yoksa NULL kalir; migration startup'ta backfill eder.
+            // PR 4: GuideMas kaldırıldı. @GuideCode artık doğrudan ViewName (cbv_Guide_*).
+            // GuideCode ve ViewName kolonuna aynı değer yazılır.
             cmd.CommandText = $@"
-                DECLARE @ResolvedViewName NVARCHAR(128) = NULL;
-                IF @Mapped = 1 AND OBJECT_ID(N'[{s}].[GuideMas]', N'U') IS NOT NULL
-                BEGIN
-                    SELECT TOP 1 @ResolvedViewName = [ViewName]
-                    FROM   [{s}].[GuideMas]
-                    WHERE  [GuideCode] = @GuideCode
-                    ORDER  BY [Id] DESC; -- duplikat varsa son kayit (kullanici feedback'i)
-                END;
-
                 MERGE {_fldSetTable} AS T
                 USING (SELECT @FormId AS FormId, @FieldKey AS FieldKey) AS S
                 ON T.[FormId] = S.FormId AND T.[FieldKey] = S.FieldKey
@@ -131,7 +122,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
                     UPDATE SET
                         [FieldLabel]  = @FieldLabel,
                         [GuideCode]   = CASE WHEN @Mapped = 1 THEN @GuideCode ELSE NULL END,
-                        [ViewName]    = CASE WHEN @Mapped = 1 THEN @ResolvedViewName ELSE NULL END,
+                        [ViewName]    = CASE WHEN @Mapped = 1 THEN @GuideCode ELSE NULL END,
                         [FilterJson]  = @FilterJson,
                         [IsRequired]  = @IsRequired,
                         [IsActive]    = 1,
@@ -140,7 +131,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
                     INSERT ([FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],[IsRequired],[IsActive])
                     VALUES (@FormId, @FieldKey, @FieldLabel,
                             CASE WHEN @Mapped = 1 THEN @GuideCode ELSE NULL END,
-                            CASE WHEN @Mapped = 1 THEN @ResolvedViewName ELSE NULL END,
+                            CASE WHEN @Mapped = 1 THEN @GuideCode ELSE NULL END,
                             @FilterJson, @IsRequired, 1);";
 
             cmd.Parameters.AddWithValue("@FormId", request.FormId);
@@ -209,10 +200,10 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         var s = _schemaName.Replace("]", "]]");
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        // PR 1: GuideCode VEYA ViewName dolu olanlari bagli sayar (co-existence)
+        // PR 4: ViewName oncelikli; yoksa GuideCode fallback (geri-uyumluluk).
         cmd.CommandText = $@"
             SELECT fs.[FieldKey], fs.[FieldLabel],
-                   ISNULL(fs.[GuideCode], N'') AS [GuideCode],
+                   ISNULL(fs.[ViewName], fs.[GuideCode]) AS [GuideCode],
                    fs.[ViewName],
                    fs.[FilterJson], fs.[IsRequired], fs.[FormatJson]
             FROM [{s}].[FldSet] fs

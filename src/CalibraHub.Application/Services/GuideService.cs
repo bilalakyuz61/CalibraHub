@@ -96,14 +96,6 @@ public sealed class GuideService : IGuideService
         return await _repository.GetDistinctValuesAsync(guide, column, search, ct, constraints);
     }
 
-    public Task<int> SetDefaultFilterAsync(string guideCode, string? filterJson, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(guideCode))
-            throw new ArgumentException("Rehber kodu boş olamaz.", nameof(guideCode));
-        // Normalize sadece arama icin — UPDATE'te orijinal kod da geçerli (ViewName eslestirmesi var).
-        return _repository.SetDefaultFilterAsync(Normalize(guideCode), filterJson, ct);
-    }
-
     private static string Normalize(string? code) =>
         (code ?? string.Empty).Trim().ToUpperInvariant();
 
