@@ -1850,7 +1850,7 @@ function ExtraInputsToggleBlock({ node, onChange }) {
                   }}>×</button>
                 </div>
                 {isOut && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <input
                       type="text"
                       value={it.label || ''}
@@ -1869,7 +1869,7 @@ function ExtraInputsToggleBlock({ node, onChange }) {
                         color: 'var(--afd-text, #334155)',
                       }}
                     />
-                    <div style={{ display: 'grid', gridTemplateColumns: '38px 1fr', alignItems: 'center', gap: '5px 8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '38px 1fr', alignItems: 'center', gap: '8px 8px' }}>
                       <span style={{ fontSize: 10.5, color: 'var(--afd-muted, #64748b)', fontWeight: 600 }}>Renk:</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         {[
