@@ -665,26 +665,33 @@ public sealed class SqlGuideRepository : IGuideRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
 
-        // 1) cbv_Guide_% view listesi
-        var viewList = new List<(string SchemaName, string ViewName)>();
+        // 1) cbv_Guide_% view listesi — ViewMeta'dan IsStandard + Tags bilgisi alınır
+        var viewList = new List<(string SchemaName, string ViewName, bool IsStandard, string? Tags)>();
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = @"
-                SELECT s.[name] AS SchemaName, v.[name] AS ViewName
+                SELECT s.[name] AS SchemaName, v.[name] AS ViewName,
+                       ISNULL(vm.[IsStandard], 0) AS IsStandard,
+                       vm.[Tags]
                 FROM sys.views v
                 INNER JOIN sys.schemas s ON s.schema_id = v.schema_id
+                LEFT JOIN dbo.[ViewMeta] vm ON vm.[ViewName] = v.[name]
                 WHERE v.[name] LIKE 'cbv[_]Guide[_]%'
                 ORDER BY s.[name], v.[name];";
             await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct))
             {
                 while (await reader.ReadAsync(ct))
-                    viewList.Add((reader.GetString(0), reader.GetString(1)));
+                    viewList.Add((
+                        reader.GetString(0),
+                        reader.GetString(1),
+                        reader.GetBoolean(2),
+                        reader.IsDBNull(3) ? null : reader.GetString(3)));
             }
         }
 
         // 2) Her view icin kolon listesi
         var result = new List<GuideViewInfoDto>(viewList.Count);
-        foreach (var (schemaName, viewName) in viewList)
+        foreach (var (schemaName, viewName, isStandard, tags) in viewList)
         {
             if (!IdentifierRegex.IsMatch(viewName) || !IdentifierRegex.IsMatch(schemaName))
                 continue;
@@ -708,7 +715,7 @@ public sealed class SqlGuideRepository : IGuideRepository
                     }
                 }
             }
-            result.Add(new GuideViewInfoDto(viewName, schemaName, cols.AsReadOnly()));
+            result.Add(new GuideViewInfoDto(viewName, schemaName, cols.AsReadOnly(), isStandard, tags));
         }
         return result;
     }

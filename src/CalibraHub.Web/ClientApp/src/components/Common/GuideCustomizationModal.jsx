@@ -44,20 +44,10 @@ function useThemeIsLight() {
   return light
 }
 
-// Standart rehber view'lari — sistem-tanimli (Tip 1). GÖRÜNÜŞ toggle gizlenir,
-// sadece DÖNÜŞ (valueColumn) sorulur — Code/Name varsayilanlari yeterli.
-// Tip 2 (ozel rehber): DÖNÜŞ + GÖRÜNÜŞ ayri secilir.
-// PR 5 ViewMeta.IsStandard ile API uzerinden donecek; simdilik hardcoded.
-const STANDARD_VIEWS = new Set([
-  // View adlari (eski seed)
-  'cbv_Guide_Items',
-  'cbv_Guide_Contacts',
-  'cbv_Guide_Suppliers',
-  'cbv_Guide_Documents',
-  'cbv_Guide_SalesQuotes',
-  // 2026-06-02: GuideCode'lar (Tip 1 standart rehber, GuideMas'ta seed'li).
-  // openGuideLookup'tan gelen `viewCode` aslinda GuideMas.Code ('CUSTOMERS') olur;
-  // view adi olmadigindan bu set'e koduyla da bakarak Tip 1 algilanır.
+// PR 5: IsStandard artik /api/guides/views endpoint'inden geliyor (ViewMeta.IsStandard).
+// Bu set yalnizca geriye-uyumluluk icin korunur — eski GuideCode'lar (CUSTOMERS gibi)
+// openGuideLookup'tan gelebildiginde ve cbv_Guide_* prefix'i yoksa buradan alinir.
+const LEGACY_STANDARD_CODES = new Set([
   'CUSTOMERS',
   'SUPPLIERS',
   'MATERIALS',
@@ -103,6 +93,9 @@ export default function GuideCustomizationModal(props) {
   const initialConfig = props.initialConfig || null
   const externalSaving = !!props.saving
   const externalError  = props.error || null
+  // requiredTags: caller saglar — bu alanin gerektirdigi rehber tag'leri (JSON array string).
+  // Ornegin SALES_QUOTE_LINES.materialCode icin '["material"]'. NULL ise kontrol yok.
+  const requiredTagsProp = props.requiredTags || null
   // extraFieldOptions: caller saglar — kalem grid kolonlari, kombinasyon attributes,
   // ek sahalar gibi DOM'dan tarananin disindaki token kaynaklari.
   // Format: [{ token: 'row.fieldKey', label: 'Malzeme Kodu', secondary: 'row.materialCode', group: 'Kalem Bilgileri' }]
@@ -363,6 +356,9 @@ export default function GuideCustomizationModal(props) {
           // Name/Title/Description benzeri varsa display, yoksa ikinci kolon.
           valueColumn:   pickValueColumn(g.columns),
           displayColumn: pickDisplayColumn(g.columns),
+          // PR 5: ViewMeta'dan gelen standart rehber işareti ve tag'ler
+          isStandard:    !!g.isStandard,
+          tags:          g.tags || null,  // JSON string: '["stock","material"]' veya null
         }))
         setGuides(normalized)
       })
@@ -526,13 +522,23 @@ export default function GuideCustomizationModal(props) {
   // (widget tanim formu — admin override).
   // hideValueDisplayColumns=true ise hem DÖNÜŞ hem GÖRÜNÜŞ tamamen gizlenir
   // (guide-list — salt okunur liste, satir secimi yok).
-  // 2026-06-02: Hardcoded view set yerine prefix-based algilama —
-  // CalibraHub konvansiyonu: TUM standart (Tip 1) view'lari `cbv_Guide_*` ile
-  // baslar. Tip 2 (admin-defined ozel rehber) bu prefix'i kullanmaz.
-  // STANDARD_VIEWS set'i artik backward-compat icin GuideCode kısayollarını da
-  // kabul ediyor (örn. openGuideLookup'tan 'CUSTOMERS' geçtiğinde).
-  const isStandardView    = (typeof viewCode === 'string' && /^cbv_Guide_/i.test(viewCode))
-                            || STANDARD_VIEWS.has(viewCode)
+  // PR 5: IsStandard API'den geliyor (ViewMeta); prefix + legacy set geriye-uyumluluk.
+  const selectedGuide     = guides.find(g => g.guideCode === viewCode)
+  const isStandardView    = (selectedGuide?.isStandard === true)
+                            || (typeof viewCode === 'string' && /^cbv_Guide_/i.test(viewCode))
+                            || LEGACY_STANDARD_CODES.has(viewCode)
+
+  // PR 5: Tag uyumluluk uyarisi — requiredTags prop varsa ve secili rehberin tag'leri varsa
+  let tagWarning = null
+  if (requiredTagsProp && selectedGuide?.tags) {
+    try {
+      const required  = JSON.parse(requiredTagsProp)
+      const available = JSON.parse(selectedGuide.tags)
+      const missing   = required.filter(t => !available.includes(t))
+      if (missing.length > 0)
+        tagWarning = `Bu rehber bu alan için önerilen tipi karşılamıyor (eksik: ${missing.join(', ')})`
+    } catch (_) {}
+  }
   const hideValueColumn   = hideValueDisplayColumns
   const hideDisplayColumn = hideValueDisplayColumns || (isStandardView && !forceShowDisplayColumn)
   // Sutun sirasi icin ek 44px (↑/↓ butonlari)
@@ -626,13 +632,26 @@ export default function GuideCustomizationModal(props) {
                 <option value="" style={{ background: isLight ? '#fff' : '#0d1117', color: iClr }}>— Seçiniz —</option>
                 {guides.map(g => (
                   <option key={g.viewName} value={g.viewName} style={{ background: isLight ? '#fff' : '#0d1117', color: iClr }}>
-                    {g.viewName}
+                    {g.viewName}{g.isStandard ? ' ★' : ''}
                   </option>
                 ))}
               </select>
             )}
           </div>
 
+          {/* PR 5: Tag uyumluluk uyarisi — RequiredTags prop varsa ve uyumsuzsa */}
+          {tagWarning && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 6,
+              padding: '7px 10px', borderRadius: 6, marginBottom: 4,
+              background: isLight ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.15)',
+              border: '1px solid rgba(245,158,11,0.4)',
+              fontSize: 11, color: isLight ? '#92400e' : '#fbbf24',
+            }}>
+              <span style={{ flexShrink: 0, marginTop: 1 }}>⚠</span>
+              <span>{tagWarning}</span>
+            </div>
+          )}
 
           {/* Görünür Kolonlar & Etiketler + Distinct toggle */}
           <div>

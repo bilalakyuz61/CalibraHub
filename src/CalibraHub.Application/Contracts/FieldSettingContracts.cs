@@ -69,7 +69,8 @@ public sealed record FieldGuideBindingDto(
     string? ViewName,
     string? FilterJson,
     bool IsRequired,
-    string? FormatJson);
+    string? FormatJson,
+    string? RequiredTags = null);
 
 /// <summary>
 /// GuideLookupCell Ayarlar panelinden gelen upsert istegi.

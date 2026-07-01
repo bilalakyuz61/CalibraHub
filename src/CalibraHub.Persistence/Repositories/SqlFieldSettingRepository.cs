@@ -200,12 +200,13 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         var s = _schemaName.Replace("]", "]]");
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        // PR 4: ViewName oncelikli; yoksa GuideCode fallback (geri-uyumluluk).
+        // PR 4: ViewName öncelikli. PR 5: RequiredTags eklendi.
         cmd.CommandText = $@"
             SELECT fs.[FieldKey], fs.[FieldLabel],
                    ISNULL(fs.[ViewName], fs.[GuideCode]) AS [GuideCode],
                    fs.[ViewName],
-                   fs.[FilterJson], fs.[IsRequired], fs.[FormatJson]
+                   fs.[FilterJson], fs.[IsRequired], fs.[FormatJson],
+                   fs.[RequiredTags]
             FROM [{s}].[FldSet] fs
             INNER JOIN [dbo].[Forms] f ON f.[Id] = fs.[FormId]
             WHERE f.[FormCode] = @FormCode
@@ -219,13 +220,14 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         while (await reader.ReadAsync(ct))
         {
             result.Add(new FieldGuideBindingDto(
-                FieldKey:   reader.GetString(0),
-                FieldLabel: reader.GetString(1),
-                GuideCode:  reader.GetString(2),
-                ViewName:   reader.IsDBNull(3) ? null : reader.GetString(3),
-                FilterJson: reader.IsDBNull(4) ? null : reader.GetString(4),
-                IsRequired: reader.GetBoolean(5),
-                FormatJson: reader.IsDBNull(6) ? null : reader.GetString(6)));
+                FieldKey:     reader.GetString(0),
+                FieldLabel:   reader.GetString(1),
+                GuideCode:    reader.GetString(2),
+                ViewName:     reader.IsDBNull(3) ? null : reader.GetString(3),
+                FilterJson:   reader.IsDBNull(4) ? null : reader.GetString(4),
+                IsRequired:   reader.GetBoolean(5),
+                FormatJson:   reader.IsDBNull(6) ? null : reader.GetString(6),
+                RequiredTags: reader.IsDBNull(7) ? null : reader.GetString(7)));
         }
         return result;
     }

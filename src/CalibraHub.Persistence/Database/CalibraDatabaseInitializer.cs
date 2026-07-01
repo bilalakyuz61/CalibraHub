@@ -749,19 +749,53 @@ END;";
     /// </summary>
     private async Task EnsureViewMetaTableAsync(SqlConnection connection, CancellationToken ct)
     {
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            IF OBJECT_ID(N'dbo.ViewMeta', N'U') IS NULL
-            BEGIN
-                CREATE TABLE dbo.[ViewMeta] (
-                    [ViewName]    NVARCHAR(200)  NOT NULL CONSTRAINT PK_ViewMeta PRIMARY KEY,
-                    [Description] NVARCHAR(1000) NULL,
-                    [UpdatedBy]   NVARCHAR(120)  NULL,
-                    [Updated]     DATETIME       NULL
-                );
-            END
-            """;
-        await cmd.ExecuteNonQueryAsync(ct);
+        // Batch 1: CREATE TABLE + ALTER TABLE — kolonları oluştur.
+        // MERGE aynı batch'te yeni kolonları parse edemez (SQL Server deferred-name-check);
+        // bu yüzden ikinci ayrı komutta çalışır.
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                IF OBJECT_ID(N'dbo.ViewMeta', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.[ViewMeta] (
+                        [ViewName]    NVARCHAR(200)  NOT NULL CONSTRAINT PK_ViewMeta PRIMARY KEY,
+                        [Description] NVARCHAR(1000) NULL,
+                        [UpdatedBy]   NVARCHAR(120)  NULL,
+                        [Updated]     DATETIME       NULL
+                    );
+                END;
+
+                -- ── Migration: PR5 — IsStandard + Tags kolonları (idempotent) ──
+                IF COL_LENGTH(N'dbo.ViewMeta', N'IsStandard') IS NULL
+                    ALTER TABLE dbo.[ViewMeta] ADD [IsStandard] BIT NOT NULL CONSTRAINT [DF_ViewMeta_IsStandard] DEFAULT(0);
+
+                IF COL_LENGTH(N'dbo.ViewMeta', N'Tags') IS NULL
+                    ALTER TABLE dbo.[ViewMeta] ADD [Tags] NVARCHAR(MAX) NULL;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        // Batch 2: MERGE seed — kolonlar artık mevcut, parser hatası olmaz.
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                MERGE dbo.[ViewMeta] AS T
+                USING (VALUES
+                    ('cbv_Guide_Items',       '["stock","material"]'),
+                    ('cbv_Guide_Contacts',    '["customer","contact"]'),
+                    ('cbv_Guide_Suppliers',   '["supplier","contact"]'),
+                    ('cbv_Guide_Documents',   '["document","sales"]'),
+                    ('cbv_Guide_SalesQuotes', '["sales-quote","document"]')
+                ) AS S ([ViewName], [Tags])
+                ON T.[ViewName] = S.[ViewName]
+                WHEN MATCHED THEN
+                    UPDATE SET T.[IsStandard] = 1, T.[Tags] = S.[Tags]
+                WHEN NOT MATCHED THEN
+                    INSERT ([ViewName], [IsStandard], [Tags])
+                    VALUES (S.[ViewName], 1, S.[Tags]);
+                """;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
     }
 
     /// <summary>
@@ -12460,6 +12494,13 @@ END;";
                 WHERE name = N'ix_FldSet_View' AND object_id = OBJECT_ID(N'[{s}].[FldSet]')
             )
                 EXEC sp_executesql N'CREATE INDEX [ix_FldSet_View] ON [{s}].[FldSet]([ViewName]) WHERE [ViewName] IS NOT NULL';
+
+            -- ── Migration: PR5 — RequiredTags kolonu (idempotent) ──
+            IF NOT EXISTS (
+                SELECT 1 FROM sys.columns
+                WHERE object_id = OBJECT_ID(N'[{s}].[FldSet]') AND name = N'RequiredTags'
+            )
+                EXEC sp_executesql N'ALTER TABLE [{s}].[FldSet] ADD [RequiredTags] NVARCHAR(MAX) NULL';
             """;
 
         await using var cmd = connection.CreateCommand();

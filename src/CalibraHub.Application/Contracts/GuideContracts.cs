@@ -57,7 +57,9 @@ public sealed record GuideResolveDto(string Value, string? Display, Dictionary<s
 public sealed record GuideViewInfoDto(
     string ViewName,
     string SchemaName,
-    IReadOnlyCollection<string> Columns);
+    IReadOnlyCollection<string> Columns,
+    bool IsStandard = false,
+    string? Tags = null);
 
 /// <summary>
 /// Dinamik kisit — rehber aramasinda cascading filtre.
