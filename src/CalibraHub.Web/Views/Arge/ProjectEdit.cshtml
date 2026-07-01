@@ -51,6 +51,13 @@
         <span>Prototipler</span>
       </button>
       }
+      @if (!isNew)
+      {
+      <button type="button" class="ux-edit-nav__tab" data-tab="cost">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Maliyet</span>
+      </button>
+      }
       <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="apNavWidgets" style="display:none;">
         <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
         <span>Ek Alanlar</span>
@@ -167,6 +174,65 @@
       </div>
       }
 
+      @if (!isNew)
+      {
+      <div class="ux-edit-pane" data-tab="cost">
+        <h2>Maliyet Özeti</h2>
+        <div class="ux-edit-hint">Proje kapsamındaki ambar çıkışları ve iş emirleri. Birim maliyet bilgisi girilmemiş satırlar ₺0 olarak hesaplanır.</div>
+        <div id="ap-cost-loading" style="color:var(--app-text-muted,#94a3b8);font-size:13px;">Yükleniyor…</div>
+        <div id="ap-cost-content" style="display:none;">
+          <div class="apc-section">
+            <div class="apc-section__head">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><path d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><circle cx="12" cy="12" r="1"/></svg>
+              <span>Malzeme Maliyeti</span>
+            </div>
+            <div class="apc-row">
+              <span class="apc-lbl">Toplam Malzeme Maliyeti</span>
+              <span class="apc-val apc-val--hi" id="apc-mat-cost">—</span>
+            </div>
+            <div class="apc-row">
+              <span class="apc-lbl">Çıkış Belgesi Sayısı</span>
+              <span class="apc-val" id="apc-doc-count">—</span>
+            </div>
+            <div class="apc-row">
+              <span class="apc-lbl">Kalem Sayısı</span>
+              <span class="apc-val" id="apc-line-count">—</span>
+            </div>
+          </div>
+          <div class="apc-section">
+            <div class="apc-section__head">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span>İşçilik Maliyeti</span>
+            </div>
+            <div class="apc-row">
+              <span class="apc-lbl">Toplam İşçilik Maliyeti</span>
+              <span class="apc-val apc-val--hi" id="apc-labor-cost">—</span>
+            </div>
+            <div class="apc-row">
+              <span class="apc-lbl">Toplam İşçilik Süresi</span>
+              <span class="apc-val" id="apc-labor-hours">—</span>
+            </div>
+            <div class="apc-row">
+              <span class="apc-lbl">İş Emri Sayısı</span>
+              <span class="apc-val" id="apc-wo-count">—</span>
+            </div>
+            <div class="apc-row">
+              <span class="apc-lbl">Operasyon Sayısı</span>
+              <span class="apc-val" id="apc-op-count">—</span>
+            </div>
+          </div>
+          <div class="apc-total">
+            <span>Toplam Proje Maliyeti</span>
+            <span id="apc-total-cost">—</span>
+          </div>
+          <div style="margin-top:12px;">
+            <button type="button" class="ux-edit-bar__btn" id="apc-refresh">Yenile</button>
+          </div>
+        </div>
+        <div id="ap-cost-err" style="display:none;" class="ux-err"></div>
+      </div>
+      }
+
       <div class="ux-edit-pane" data-tab="widgets">
         <h2>Ek Alanlar</h2>
         <div class="ux-edit-hint">Admin → Widget Tanımları → ARGE_PROJECT_EDIT'te tanımlanan ek alanlar.</div>
@@ -228,6 +294,17 @@
   .proto-act.is-on{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.4);color:#d97706;}
   .proto-act--del{color:var(--danger,#ef4444);border-color:rgba(239,68,68,.35);}
   .proto-act--del:hover{background:rgba(239,68,68,.1);}
+  .apc-section{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:14px 16px;margin-bottom:14px;background:var(--app-surface,#fff);}
+  .apc-section__head{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;color:var(--app-text,#0f172a);margin-bottom:10px;}
+  .apc-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--app-border,#e2e8f0);font-size:13px;}
+  .apc-row:last-child{border-bottom:none;}
+  .apc-lbl{color:var(--app-text-muted,#64748b);}
+  .apc-val{font-variant-numeric:tabular-nums;font-weight:500;}
+  .apc-val--hi{color:#4f46e5;font-size:15px;}
+  .apc-total{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:10px;background:rgba(79,70,229,.08);font-weight:700;font-size:15px;color:#4f46e5;margin-bottom:4px;}
+  body.app-theme-dark .apc-section{background:var(--app-surface,#1e293b);}
+  body.app-theme-dark .apc-val--hi,body.app-theme-dark .apc-total{color:#818cf8;}
+  body.app-theme-dark .apc-total{background:rgba(99,102,241,.15);}
 </style>
 
 @Html.AntiForgeryToken()
@@ -631,5 +708,48 @@ function protoCloseDelModal() {
             .catch(function () { listEl.innerHTML = '<div class="ux-err">Prototipler yüklenemedi.</div>'; });
     }
     load();
+})();
+</script>
+<script>
+(function () {
+    var pid = @(Model?.DocumentId ?? 0);
+    if (!pid) return;
+    var loaded = false;
+    var fmt = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', minimumFractionDigits: 2 });
+    function fmtN(n) { return new Intl.NumberFormat('tr-TR').format(n); }
+
+    function loadCost() {
+        var loading = document.getElementById('ap-cost-loading');
+        var content = document.getElementById('ap-cost-content');
+        var errEl   = document.getElementById('ap-cost-err');
+        if (!loading) return;
+        loading.style.display = ''; content.style.display = 'none'; errEl.style.display = 'none';
+        fetch('/Arge/ProjectCost?id=' + pid, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+            .then(function (d) {
+                function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+                set('apc-mat-cost',    fmt.format(d.materialCost  || 0));
+                set('apc-doc-count',   fmtN(d.docCount           || 0));
+                set('apc-line-count',  fmtN(d.lineCount          || 0));
+                set('apc-labor-cost',  fmt.format(d.laborCost     || 0));
+                set('apc-labor-hours', fmtN(d.laborHours         || 0));
+                set('apc-wo-count',    fmtN(d.workOrderCount     || 0));
+                set('apc-op-count',    fmtN(d.operationCount     || 0));
+                set('apc-total-cost',  fmt.format(d.totalCost    || 0));
+                loading.style.display = 'none'; content.style.display = '';
+                loaded = true;
+            })
+            .catch(function () {
+                loading.style.display = 'none'; errEl.style.display = '';
+            });
+    }
+
+    document.addEventListener('click', function (e) {
+        var tab = e.target.closest ? e.target.closest('[data-tab]') : null;
+        if (tab && tab.getAttribute('data-tab') === 'cost' && !loaded) loadCost();
+    });
+
+    var refreshBtn = document.getElementById('apc-refresh');
+    if (refreshBtn) refreshBtn.addEventListener('click', function () { loaded = false; loadCost(); });
 })();
 </script>

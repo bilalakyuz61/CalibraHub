@@ -62,4 +62,7 @@ public interface IArgeProjectRepository
 
     /// <summary>Projeye bagli is emirlerinin (WorkOrder.ArgeProjectId) isçilik maliyeti rollup'i.</summary>
     Task<ArgeProjectLaborDto> GetProjectLaborAsync(int projectId, CancellationToken ct);
+
+    /// <summary>Projeye bağlı STOCK_OUT hareketlerinin malzeme maliyeti rollup'u (Faz 4).</summary>
+    Task<ArgeProjectMaterialDto> GetProjectMaterialAsync(int projectId, CancellationToken ct);
 }

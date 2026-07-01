@@ -165,18 +165,23 @@ public sealed class ArgeController : Controller
         return Json(new { ok, error });
     }
 
-    // GET /Arge/ProjectCost?id= → proje maliyet rollup (Faz 3: isçilik; Faz 4: + malzeme)
+    // GET /Arge/ProjectCost?id= → proje maliyet rollup (işçilik + malzeme)
     [HttpGet]
     public async Task<IActionResult> ProjectCost(int id, CancellationToken ct)
     {
-        var labor = await _arge.GetProjectLaborAsync(id, ct);
+        var labor    = await _arge.GetProjectLaborAsync(id, ct);
+        var material = await _arge.GetProjectMaterialAsync(id, ct);
         return Json(new
         {
             projectId      = id,
             laborCost      = labor.LaborCost,
             laborHours     = labor.LaborHours,
             workOrderCount = labor.WorkOrderCount,
-            operationCount = labor.OperationCount
+            operationCount = labor.OperationCount,
+            materialCost   = material.MaterialCost,
+            docCount       = material.DocCount,
+            lineCount      = material.LineCount,
+            totalCost      = labor.LaborCost + material.MaterialCost,
         });
     }
 

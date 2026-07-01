@@ -27,6 +27,8 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
     private readonly string _woTable;
     private readonly string _woOpTable;
     private readonly string _operationTable;
+    private readonly string _stockDocTable;
+    private readonly string _stockDocLineTable;
 
     public SqlArgeProjectRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
     {
@@ -44,6 +46,8 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         _woTable = $"[{s}].[WorkOrder]";
         _woOpTable = $"[{s}].[WorkOrderOperation]";
         _operationTable = $"[{s}].[Operation]";
+        _stockDocTable = $"[{s}].[stock_doc]";
+        _stockDocLineTable = $"[{s}].[stock_doc_line]";
     }
 
     public async Task<IReadOnlyCollection<ArgeProjectListItem>> ListAsync(string? search, byte? status, CancellationToken ct)
@@ -413,5 +417,32 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
             LaborHours: r.IsDBNull(2) ? 0m : Convert.ToDecimal(r.GetValue(2)),
             WorkOrderCount: r.GetInt32(0),
             OperationCount: r.GetInt32(1));
+    }
+
+    public async Task<ArgeProjectMaterialDto> GetProjectMaterialAsync(int projectId, CancellationToken ct)
+    {
+        var sql = $"""
+            SELECT
+                COUNT(DISTINCT sd.[id]) AS DocCount,
+                COUNT(sdl.[id])         AS LineCount,
+                ISNULL(SUM(sdl.[qty] * ISNULL(sdl.[unit_cost], 0)), 0) AS MaterialCost
+            FROM {_stockDocTable} sd
+            INNER JOIN {_stockDocLineTable} sdl ON sdl.[stock_doc_id] = sd.[id]
+            WHERE sd.[arge_project_id] = @Proj
+              AND sd.[doc_type] = 'STOCK_OUT'
+              AND sd.[is_active] = 1
+              AND sdl.[is_active] = 1;
+            """;
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@Proj", projectId));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct))
+            return new ArgeProjectMaterialDto(0m, 0, 0);
+        return new ArgeProjectMaterialDto(
+            MaterialCost: r.IsDBNull(2) ? 0m : Convert.ToDecimal(r.GetValue(2)),
+            DocCount: r.GetInt32(0),
+            LineCount: r.GetInt32(1));
     }
 }

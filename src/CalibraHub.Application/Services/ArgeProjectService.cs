@@ -320,6 +320,9 @@ public sealed class ArgeProjectService : IArgeProjectService
     public Task<ArgeProjectLaborDto> GetProjectLaborAsync(int projectId, CancellationToken ct)
         => _arge.GetProjectLaborAsync(projectId, ct);
 
+    public Task<ArgeProjectMaterialDto> GetProjectMaterialAsync(int projectId, CancellationToken ct)
+        => _arge.GetProjectMaterialAsync(projectId, ct);
+
     /// <summary>
     /// AR-GE yasam dongusu gecis whitelist'i (WorkOrderService.ValidateTransition deseni).
     /// Iptal yalnizca onaylanmamis/aktarilmamis/reddedilmemis durumlardan alinir

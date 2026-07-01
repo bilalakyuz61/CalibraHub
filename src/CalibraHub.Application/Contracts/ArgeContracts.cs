@@ -79,3 +79,12 @@ public sealed record ArgeProjectLaborDto(
     decimal LaborHours,
     int WorkOrderCount,
     int OperationCount);
+
+/// <summary>
+/// Projeye bağlı depo çıkışlarının (stock_doc.arge_project_id) malzeme maliyeti rollup'u (Faz 4).
+/// MaterialCost = Σ(qty × unit_cost); yalnızca STOCK_OUT türü hareketler.
+/// </summary>
+public sealed record ArgeProjectMaterialDto(
+    decimal MaterialCost,
+    int DocCount,
+    int LineCount);
