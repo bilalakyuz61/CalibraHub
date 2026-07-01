@@ -188,7 +188,8 @@ public sealed record ApproveStepRequest(
     int InstanceId,
     string ApproverId,
     string ApproverName,
-    string? Note);
+    string? Note,
+    string? ChoiceArmId = null);
 
 public sealed record RejectStepRequest(
     int InstanceId,

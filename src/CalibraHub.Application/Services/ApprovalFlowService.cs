@@ -259,7 +259,7 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         if (_executor is not null)
         {
             var capturedBaseUrl = _companyProvider?.GetBaseUrl();
-            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: true, ct, capturedBaseUrl); }
+            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: true, ct, capturedBaseUrl, request.ChoiceArmId); }
             catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync hatası (instance={Iid}, step={St}).", request.InstanceId, stepBefore); }
         }
 

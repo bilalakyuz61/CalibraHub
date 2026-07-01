@@ -31,13 +31,13 @@ function normalizeExtraInputs(raw) {
       .filter(function (it) { return it && typeof it.side === 'string' })
       .map(function (it) {
         var kind = (it.kind === 'out') ? 'out' : 'in'
-        return { id: it.id, side: it.side, offset: it.offset, kind: kind }
+        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label }
       })
   }
   if (raw && typeof raw === 'object') {
     var out = []
     ;['right', 'bottom', 'left'].forEach(function (s) {
-      if (raw[s] === true) out.push({ id: 'x' + s, side: s, offset: 0.5, kind: 'in' })
+      if (raw[s] === true) out.push({ id: 'x' + s, side: s, offset: 0.5, kind: 'in', label: undefined })
     })
     return out
   }

@@ -47,7 +47,7 @@ public interface IApprovalFlowExecutor
     /// Step approve/reject sonrası: sonraki yolda decision/notification node'ları
     /// varsa onları çalıştırır. Return: işlenen non-step node sayısı (info amaçlı).
     /// </summary>
-    Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct, string? capturedBaseUrl = null);
+    Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct, string? capturedBaseUrl = null, string? choiceArmId = null);
 
     /// <summary>
     /// Instance start: Start node'dan ilk node'a kadar pass-through (decision/notif).
@@ -115,7 +115,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
             && !IsStepKind(s.NodeType));
     }
 
-    public async Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct, string? capturedBaseUrl = null)
+    public async Task<int> AfterStepActionAsync(int instanceId, int currentStepOrder, bool isApproved, CancellationToken ct, string? capturedBaseUrl = null, string? choiceArmId = null)
     {
         var inst = await _instRepo.GetByIdAsync(instanceId, ct);
         if (inst is null) return 0;
@@ -133,7 +133,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         ctx.BaseUrl = capturedBaseUrl;
         var processed = 0;
 
-        foreach (var edge in SelectEdges(flow, currentNode.Id, isApproved))
+        foreach (var edge in SelectEdges(flow, currentNode.Id, isApproved, choiceArmId))
         {
             var target = flow.Steps.FirstOrDefault(s => s.Id == edge.TargetStepId);
             if (target is null) continue;
@@ -515,9 +515,11 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
     }
 
     /// <summary>
-    /// Step node sonrası izlenecek edge'leri seç. true/default → approve, false → reject.
+    /// Step node sonrası izlenecek edge'leri seç.
+    /// choiceArmId varsa: yalnızca SourceHandle == choiceArmId olan edge izlenir.
+    /// choiceArmId yoksa: true/default → approve, false → reject standart mantığı.
     /// </summary>
-    private static IEnumerable<ApprovalFlowEdgeDto> SelectEdges(ApprovalFlowDto flow, int sourceStepId, bool isApproved)
+    private static IEnumerable<ApprovalFlowEdgeDto> SelectEdges(ApprovalFlowDto flow, int sourceStepId, bool isApproved, string? choiceArmId = null)
     {
         var all = flow.Edges
             .Where(e => e.SourceStepId == sourceStepId)
@@ -525,7 +527,15 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
             .ToList();
         if (all.Count == 0) yield break;
 
-        // Edge kind filtreleme:
+        // Çoklu seçim kolu: belirli bir SourceHandle ile onaylama
+        if (!string.IsNullOrWhiteSpace(choiceArmId))
+        {
+            foreach (var e in all.Where(e => e.SourceHandle == choiceArmId))
+                yield return e;
+            yield break;
+        }
+
+        // Standart edge kind filtreleme:
         //   true / default / approve / info  → onay akışında tetiklenir
         //   false / reject                   → red akışında tetiklenir
         //   timeout                          → SLA timeout iş kuralı tarafından ayrı tetiklenir

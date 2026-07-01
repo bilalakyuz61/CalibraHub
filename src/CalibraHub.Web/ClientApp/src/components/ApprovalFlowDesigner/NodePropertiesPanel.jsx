@@ -1719,7 +1719,7 @@ function normalizeExtraInputsArray(raw) {
       .filter(function (it) { return it && typeof it.side === 'string' })
       .map(function (it) {
         var kind = (it.kind === 'out') ? 'out' : 'in'
-        return { id: it.id, side: it.side, offset: it.offset, kind: kind }
+        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label }
       })
   }
   if (raw && typeof raw === 'object') {
@@ -1830,37 +1830,59 @@ function ExtraInputsToggleBlock({ node, onChange }) {
             var kindBg = isOut ? 'rgba(16,185,129,.15)' : 'rgba(99,102,241,.15)'
             return (
               <div key={it.id} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '5px 8px', borderRadius: 6,
+                display: 'flex', flexDirection: 'column', gap: 4,
+                padding: '6px 8px', borderRadius: 6,
                 background: 'var(--afd-bg-s, rgba(148,163,184,.08))',
                 border: '1px solid var(--afd-border, #e2e8f0)',
               }}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  width: 22, height: 22, borderRadius: 4,
-                  background: kindBg, color: kindColor,
-                  fontSize: 11, fontWeight: 700,
-                }}>{idx + 1}</span>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3,
-                  padding: '2px 6px', borderRadius: 10,
-                  background: kindBg, color: kindColor,
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em',
-                }}>{kindLabel}</span>
-                <span style={{
-                  flex: '1 1 auto',
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: 11.5, color: 'var(--afd-text, #334155)', fontWeight: 600,
-                }} title={'Şu an ' + meta.label + ' kenarında. Alt+sürükle ile taşıyın.'}>
-                  <span style={{ fontSize: 14, color: kindColor }}>{meta.icon}</span>
-                  <span style={{ color: 'var(--afd-muted, #64748b)', fontWeight: 500 }}>{meta.label}</span>
-                </span>
-                <button type="button" onClick={function () { remove(it.id) }} title="Bu kolu sil" style={{
-                  padding: '4px 8px', borderRadius: 4,
-                  border: '1px solid var(--afd-danger, #ef4444)',
-                  background: 'transparent', color: 'var(--afd-danger, #ef4444)',
-                  fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
-                }}>×</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 22, height: 22, borderRadius: 4,
+                    background: kindBg, color: kindColor,
+                    fontSize: 11, fontWeight: 700,
+                  }}>{idx + 1}</span>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    padding: '2px 6px', borderRadius: 10,
+                    background: kindBg, color: kindColor,
+                    fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em',
+                  }}>{kindLabel}</span>
+                  <span style={{
+                    flex: '1 1 auto',
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontSize: 11.5, color: 'var(--afd-text, #334155)', fontWeight: 600,
+                  }} title={'Şu an ' + meta.label + ' kenarında. Alt+sürükle ile taşıyın.'}>
+                    <span style={{ fontSize: 14, color: kindColor }}>{meta.icon}</span>
+                    <span style={{ color: 'var(--afd-muted, #64748b)', fontWeight: 500 }}>{meta.label}</span>
+                  </span>
+                  <button type="button" onClick={function () { remove(it.id) }} title="Bu kolu sil" style={{
+                    padding: '4px 8px', borderRadius: 4,
+                    border: '1px solid var(--afd-danger, #ef4444)',
+                    background: 'transparent', color: 'var(--afd-danger, #ef4444)',
+                    fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                  }}>×</button>
+                </div>
+                {isOut && (
+                  <input
+                    type="text"
+                    value={it.label || ''}
+                    placeholder="Buton etiketi (ör. Onayla / Acil Onayla)…"
+                    maxLength={60}
+                    onChange={function (e) {
+                      commit(items.map(function (x) {
+                        return x.id === it.id ? Object.assign({}, x, { label: e.target.value }) : x
+                      }))
+                    }}
+                    style={{
+                      width: '100%', fontSize: 11.5,
+                      padding: '4px 8px', borderRadius: 4,
+                      border: '1px solid var(--afd-border, #e2e8f0)',
+                      background: 'var(--afd-bg, transparent)',
+                      color: 'var(--afd-text, #334155)',
+                    }}
+                  />
+                )}
               </div>
             )
           })}

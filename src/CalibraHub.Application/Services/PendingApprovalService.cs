@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -15,13 +16,16 @@ public sealed class PendingApprovalService : IPendingApprovalService
 {
     private readonly IApprovalInstanceRepository _repo;
     private readonly IPendingApprovalAuthority _authority;
+    private readonly IApprovalFlowRepository _flowRepo;
 
     public PendingApprovalService(
         IApprovalInstanceRepository repo,
-        IPendingApprovalAuthority authority)
+        IPendingApprovalAuthority authority,
+        IApprovalFlowRepository flowRepo)
     {
         _repo = repo;
         _authority = authority;
+        _flowRepo = flowRepo;
     }
 
     public async Task<IReadOnlyList<PendingApprovalGroupDto>> GetGroupsAsync(string scope, CancellationToken ct)
@@ -66,7 +70,39 @@ public sealed class PendingApprovalService : IPendingApprovalService
         // Repository'den adim listesi al, header'i zengin (belge bilgili) item ile degistir
         var detail = await _repo.GetPendingDetailAsync(instanceId, ct);
         if (detail is null) return null;
-        return detail with { Header = item };
+
+        var choiceArms = await GetChoiceArmsAsync(item.FlowId, item.StepOrder, ct);
+        return detail with { Header = item, ChoiceArms = choiceArms };
+    }
+
+    private async Task<IReadOnlyList<ChoiceArmDto>?> GetChoiceArmsAsync(int flowId, int stepOrder, CancellationToken ct)
+    {
+        try
+        {
+            var flow = await _flowRepo.GetByIdAsync(flowId, ct);
+            if (flow is null) return null;
+            var step = flow.Steps.FirstOrDefault(s => s.StepOrder == stepOrder
+                && (string.IsNullOrEmpty(s.NodeType) || string.Equals(s.NodeType, "step", StringComparison.OrdinalIgnoreCase)));
+            if (step?.NodeData is null) return null;
+
+            using var doc = JsonDocument.Parse(step.NodeData);
+            if (!doc.RootElement.TryGetProperty("extraInputs", out var arr)) return null;
+
+            var arms = new List<ChoiceArmDto>();
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (!el.TryGetProperty("kind", out var kind) || kind.GetString() != "out") continue;
+                if (!el.TryGetProperty("label", out var label)) continue;
+                var labelStr = label.GetString();
+                if (string.IsNullOrWhiteSpace(labelStr)) continue;
+                if (!el.TryGetProperty("id", out var id)) continue;
+                var armId = id.GetString();
+                if (string.IsNullOrWhiteSpace(armId)) continue;
+                arms.Add(new ChoiceArmDto(armId, labelStr));
+            }
+            return arms.Count > 0 ? arms : null;
+        }
+        catch { return null; }
     }
 
     public Task<IReadOnlyList<string>> GetAvailableScopesAsync(CancellationToken ct)

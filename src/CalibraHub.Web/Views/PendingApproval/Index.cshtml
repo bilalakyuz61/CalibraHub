@@ -638,6 +638,7 @@
         </div>
         <div class="pa-modal-footer" id="paModalFooter">
             <button type="button" class="pa-btn pa-btn-danger"  id="paBtnReject">Reddet</button>
+            <span id="paChoiceArms" style="display:contents;"></span>
             <button type="button" class="pa-btn pa-btn-primary" id="paBtnApprove">Onayla</button>
             <button type="button" class="pa-btn pa-btn-ghost"   id="paBtnCancel">Kapat</button>
         </div>
@@ -666,12 +667,14 @@
     const modalTitleEl = document.getElementById('paModalTitle');
     const modalSubEl = document.getElementById('paModalSub');
     const modalFooterEl = document.getElementById('paModalFooter');
+    const choiceArmsEl  = document.getElementById('paChoiceArms');
     const notePanelEl = document.getElementById('paNotePanel');
     const noteLabelEl = document.getElementById('paNoteLabel');
     const noteTextEl = document.getElementById('paNoteText');
     const noteSubmitEl = document.getElementById('paNoteSubmit');
     const noteCancelEl = document.getElementById('paNoteCancel');
     let _noteAction = null; // 'approve' | 'reject'
+    let _currentChoiceArmId = null; // seçim kolu ile onayda set edilir
     let _currentMode = 'pending'; // 'pending' | 'completed'
 
     // ── Sütun yapılandırması ─────────────────────────────────────────────────
@@ -1101,6 +1104,7 @@
             const data = await resp.json();
             if (!data.ok) throw new Error(data.error || 'Hata');
             renderDetail(data.detail);
+            renderChoiceArms(data.detail.choiceArms);
         } catch (err) {
             modalBodyEl.innerHTML = '<div style="color:#ef4444;padding:20px;">Hata: ' + escapeHtml(err.message) + '</div>';
         }
@@ -1229,21 +1233,47 @@
         modalBodyEl.innerHTML = html;
     }
 
+    function renderChoiceArms(arms) {
+        _currentChoiceArmId = null;
+        if (!choiceArmsEl) return;
+        choiceArmsEl.innerHTML = '';
+        if (_currentMode === 'completed' || !arms || arms.length === 0) {
+            modalApproveEl.style.display = _currentMode === 'completed' ? 'none' : '';
+            modalRejectEl.style.display  = _currentMode === 'completed' ? 'none' : '';
+            return;
+        }
+        // Çoklu seçim: Onayla + Reddet korunur, özel kollar ek seçenek olarak eklenir
+        modalRejectEl.style.display = '';
+        modalApproveEl.style.display = '';
+        arms.forEach(function (a) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'pa-btn pa-btn-danger';
+            btn.textContent = a.label;
+            btn.addEventListener('click', function () {
+                _currentChoiceArmId = a.armId;
+                showNotePanel('approve', a.label);
+            });
+            choiceArmsEl.appendChild(btn);
+        });
+    }
+
     function closeModal() {
         backdropEl.classList.remove('show');
         currentInstanceId = null;
         hideNotePanel();
     }
 
-    function showNotePanel(action) {
+    function showNotePanel(action, actionLabel) {
         _noteAction = action;
         notePanelEl.className = 'pa-note-panel pa-note-panel--' + action;
         noteTextEl.value = '';
         if (action === 'approve') {
-            noteLabelEl.textContent = 'Onay Notu (opsiyonel)';
+            var lbl = actionLabel || 'Onayla';
+            noteLabelEl.textContent = lbl + ' — Not (opsiyonel)';
             noteTextEl.placeholder = 'Onay notu eklemek isterseniz girin…';
             noteSubmitEl.className = 'pa-btn pa-btn-primary';
-            noteSubmitEl.textContent = 'Onayla';
+            noteSubmitEl.textContent = lbl;
         } else {
             noteLabelEl.textContent = 'Ret Gerekçesi';
             noteTextEl.placeholder = 'Ret gerekçesini girin…';
@@ -1259,6 +1289,7 @@
         notePanelEl.style.display = 'none';
         modalFooterEl.style.display = '';
         _noteAction = null;
+        _currentChoiceArmId = null;
     }
 
     async function submitNote() {
@@ -1275,6 +1306,7 @@
             const fd = new FormData();
             fd.set('instanceId', currentInstanceId);
             if (note) fd.set('note', note);
+            if (_noteAction === 'approve' && _currentChoiceArmId) fd.set('choiceArmId', _currentChoiceArmId);
             const url = _noteAction === 'approve' ? '/Approval/ApproveStep' : '/Approval/RejectApproval';
             const resp = await fetch(url, {
                 method: 'POST', credentials: 'same-origin',

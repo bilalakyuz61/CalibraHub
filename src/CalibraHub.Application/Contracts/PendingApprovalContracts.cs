@@ -57,10 +57,14 @@ public sealed record ExtraColumnMetaDto(
     string DataType    // 'text' | 'numeric' | 'date'
 );
 
+/// <summary>Çoklu onay seçeneği: adımın ek 'out' kollarından türetilir.</summary>
+public sealed record ChoiceArmDto(string ArmId, string Label);
+
 /// <summary>Modal detayi (belge baslik + tum adimlar).</summary>
 public sealed record PendingApprovalDetailDto(
     PendingApprovalItemDto Header,
-    System.Collections.Generic.IReadOnlyList<ApprovalStepRecordDto> Steps
+    System.Collections.Generic.IReadOnlyList<ApprovalStepRecordDto> Steps,
+    System.Collections.Generic.IReadOnlyList<ChoiceArmDto>? ChoiceArms = null
 );
 
 /// <summary>Yetki scope enum'u — string'le tasiniyor, kontrolu service'de.</summary>

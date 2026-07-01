@@ -794,14 +794,14 @@ public sealed class ApprovalController : Controller
     // ── Mevcut adımı onayla ───────────────────────────────────────────────────
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ApproveStep(int instanceId, string? note, CancellationToken cancellationToken)
+    public async Task<IActionResult> ApproveStep(int instanceId, string? note, string? choiceArmId, CancellationToken cancellationToken)
     {
         try
         {
             var userId   = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
             var instance = await _approvalFlowService.ApproveStepAsync(
-                new ApproveStepRequest(instanceId, userId, userName, note), cancellationToken);
+                new ApproveStepRequest(instanceId, userId, userName, note, choiceArmId), cancellationToken);
 
             // Onay tamamlandıysa Document.Status = Approved yap (alis_talebi için)
             if (string.Equals(instance.Status, "Approved", StringComparison.OrdinalIgnoreCase))
