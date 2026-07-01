@@ -235,32 +235,59 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         if (instance.Status != "Pending")
             throw new InvalidOperationException($"Onay örneği işlem yapılabilir durumda değil: {instance.Status}");
 
-        // Graph-aware branching: o anki step'in flow'daki karsiligini bul,
-        // out-edges varsa "default"/"true" dali ile sonraki step record'unu sec.
-        // Edge yoksa veya end node'a ulasildigi tespit edilirse instance repo
-        // mevcut linear logic ile sonu belirler (StepOrder > current ile next pending).
-        // Bu MVP: graph-aware decision degerlendirilmesi yapmaz, branch'ler
-        // "default"/"true" oncelik sirasiyla cozulur.
         var stepBefore = instance.CurrentStep;
-        var approvingStepRecord = instance.StepRecords.FirstOrDefault(s => s.StepOrder == stepBefore);
-        await _instanceRepo.ApproveStepAsync(
-            request.InstanceId,
-            stepBefore,
-            request.ApproverId,
-            request.ApproverName,
-            request.Note,
-            ct);
+        var stepRecord = instance.StepRecords.FirstOrDefault(s => s.StepOrder == stepBefore);
 
-        // Execution log: adım onaylandı
-        await TryLogAsync(request.InstanceId, instance.FlowId, "step", approvingStepRecord?.StepName,
-            "StepApproved", $"{request.ApproverName} onayladı{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" — {request.Note}")}", ct);
+        // Oylama adımı tespiti: flow tanımında bu StepOrder'da "vote" nodeType var mı?
+        var flow         = _executor is not null ? await _flowRepo.GetByIdAsync(instance.FlowId, ct) : null;
+        var currentNode  = flow?.Steps.FirstOrDefault(s => s.StepOrder == stepBefore);
+        var isVoteStep   = string.Equals(currentNode?.NodeType, "vote", StringComparison.OrdinalIgnoreCase);
 
-        // Faz 4 — Graph executor: sonraki yolda decision/notification node'larını işle.
-        if (_executor is not null)
+        if (isVoteStep)
         {
-            var capturedBaseUrl = _companyProvider?.GetBaseUrl();
-            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: true, ct, capturedBaseUrl, request.ChoiceArmId); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync hatası (instance={Iid}, step={St}).", request.InstanceId, stepBefore); }
+            // Oylama: sadece bu oylayıcının kaydını güncelle, consensus kontrolü yap
+            var voteConsensusType = ParseVoteConsensusType(currentNode?.NodeData);
+            var vr = await _instanceRepo.VoteOnStepAsync(
+                request.InstanceId, stepBefore,
+                request.ApproverId, request.ApproverName, request.Note,
+                isApprove: true, voteConsensusType, ct);
+
+            if (!vr.Voted)
+                throw new InvalidOperationException("Oy kullanılamadı — bu kullanıcıya ait bekleyen oy kaydı bulunamadı.");
+
+            if (vr.ConsensusReached)
+            {
+                await TryLogAsync(request.InstanceId, instance.FlowId, "vote", stepRecord?.StepName,
+                    "VoteConsensus", $"Consensus: {(vr.ConsensusApproved ? "Kabul" : "Red")} ({vr.ApprovedCount}/{vr.TotalVoters})", ct);
+                if (_executor is not null)
+                {
+                    var capturedBaseUrl = _companyProvider?.GetBaseUrl();
+                    try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: vr.ConsensusApproved, ct, capturedBaseUrl, request.ChoiceArmId); }
+                    catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync (vote) hatası (instance={Iid}).", request.InstanceId); }
+                }
+            }
+            else
+            {
+                await TryLogAsync(request.InstanceId, instance.FlowId, "vote", stepRecord?.StepName,
+                    "VoteCast", $"{request.ApproverName} oy kullandı: Kabul ({vr.ApprovedCount}/{vr.TotalVoters}, {vr.PendingCount} bekliyor)", ct);
+            }
+        }
+        else
+        {
+            // Normal onay adımı
+            await _instanceRepo.ApproveStepAsync(
+                request.InstanceId, stepBefore,
+                request.ApproverId, request.ApproverName, request.Note, ct);
+
+            await TryLogAsync(request.InstanceId, instance.FlowId, "step", stepRecord?.StepName,
+                "StepApproved", $"{request.ApproverName} onayladı{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" — {request.Note}")}", ct);
+
+            if (_executor is not null)
+            {
+                var capturedBaseUrl = _companyProvider?.GetBaseUrl();
+                try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: true, ct, capturedBaseUrl, request.ChoiceArmId); }
+                catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync hatası (instance={Iid}, step={St}).", request.InstanceId, stepBefore); }
+            }
         }
 
         return await _instanceRepo.GetByIdAsync(request.InstanceId, ct)
@@ -276,26 +303,55 @@ public sealed class ApprovalFlowService : IApprovalFlowService
             throw new InvalidOperationException($"Onay örneği işlem yapılabilir durumda değil: {instance.Status}");
 
         var stepBefore = instance.CurrentStep;
-        var rejectingStepRecord = instance.StepRecords.FirstOrDefault(s => s.StepOrder == stepBefore);
-        await _instanceRepo.RejectAsync(
-            request.InstanceId,
-            stepBefore,
-            request.ApproverId,
-            request.ApproverName,
-            request.Note,
-            ct);
+        var stepRecord = instance.StepRecords.FirstOrDefault(s => s.StepOrder == stepBefore);
 
-        // Execution log: adım reddedildi
-        await TryLogAsync(request.InstanceId, instance.FlowId, "step", rejectingStepRecord?.StepName,
-            "StepRejected", $"{request.ApproverName} reddetti — {request.Note}", ct);
+        var flow        = _executor is not null ? await _flowRepo.GetByIdAsync(instance.FlowId, ct) : null;
+        var currentNode = flow?.Steps.FirstOrDefault(s => s.StepOrder == stepBefore);
+        var isVoteStep  = string.Equals(currentNode?.NodeType, "vote", StringComparison.OrdinalIgnoreCase);
 
-        // Faz 4 — Graph executor: reject yolundaki notification node'larını işle.
-        // (Reject sonrası instance zaten Rejected; sadece notification side-effect.)
-        if (_executor is not null)
+        if (isVoteStep)
         {
-            var capturedBaseUrl = _companyProvider?.GetBaseUrl();
-            try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: false, ct, capturedBaseUrl); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync (reject) hatası (instance={Iid}, step={St}).", request.InstanceId, stepBefore); }
+            var voteConsensusType = ParseVoteConsensusType(currentNode?.NodeData);
+            var vr = await _instanceRepo.VoteOnStepAsync(
+                request.InstanceId, stepBefore,
+                request.ApproverId, request.ApproverName, request.Note,
+                isApprove: false, voteConsensusType, ct);
+
+            if (!vr.Voted)
+                throw new InvalidOperationException("Oy kullanılamadı — bu kullanıcıya ait bekleyen oy kaydı bulunamadı.");
+
+            if (vr.ConsensusReached)
+            {
+                await TryLogAsync(request.InstanceId, instance.FlowId, "vote", stepRecord?.StepName,
+                    "VoteConsensus", $"Consensus: {(vr.ConsensusApproved ? "Kabul" : "Red")} ({vr.RejectedCount}/{vr.TotalVoters})", ct);
+                if (_executor is not null)
+                {
+                    var capturedBaseUrl = _companyProvider?.GetBaseUrl();
+                    try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: vr.ConsensusApproved, ct, capturedBaseUrl); }
+                    catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync (vote-reject) hatası (instance={Iid}).", request.InstanceId); }
+                }
+            }
+            else
+            {
+                await TryLogAsync(request.InstanceId, instance.FlowId, "vote", stepRecord?.StepName,
+                    "VoteCast", $"{request.ApproverName} oy kullandı: Red ({vr.RejectedCount}/{vr.TotalVoters}, {vr.PendingCount} bekliyor)", ct);
+            }
+        }
+        else
+        {
+            await _instanceRepo.RejectAsync(
+                request.InstanceId, stepBefore,
+                request.ApproverId, request.ApproverName, request.Note, ct);
+
+            await TryLogAsync(request.InstanceId, instance.FlowId, "step", stepRecord?.StepName,
+                "StepRejected", $"{request.ApproverName} reddetti — {request.Note}", ct);
+
+            if (_executor is not null)
+            {
+                var capturedBaseUrl = _companyProvider?.GetBaseUrl();
+                try { await _executor.AfterStepActionAsync(request.InstanceId, stepBefore, isApproved: false, ct, capturedBaseUrl); }
+                catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStepActionAsync (reject) hatası (instance={Iid}, step={St}).", request.InstanceId, stepBefore); }
+            }
         }
 
         return await _instanceRepo.GetByIdAsync(request.InstanceId, ct)
@@ -397,5 +453,18 @@ public sealed class ApprovalFlowService : IApprovalFlowService
     {
         public decimal Min { get; set; }
         public decimal Max { get; set; }
+    }
+
+    private static string ParseVoteConsensusType(string? nodeData)
+    {
+        if (string.IsNullOrWhiteSpace(nodeData)) return "majority";
+        try
+        {
+            using var jd = JsonDocument.Parse(nodeData);
+            if (jd.RootElement.TryGetProperty("votingType", out var vt) && vt.ValueKind == JsonValueKind.String)
+                return vt.GetString() ?? "majority";
+        }
+        catch { /* ignore */ }
+        return "majority";
     }
 }

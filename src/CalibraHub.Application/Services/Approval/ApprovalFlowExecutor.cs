@@ -3,6 +3,7 @@ using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Approval;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Enums;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Globalization;
@@ -84,6 +85,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
     private readonly IIntegrationRunner _integrationRunner;
     private readonly IApprovalSqlQueryService _sqlQueryService;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IServiceScopeFactory? _scopeFactory;
     private readonly ILogger<ApprovalFlowExecutor> _logger;
     private readonly IApprovalNodeLogger? _nodeLogger;
 
@@ -97,7 +99,8 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         IApprovalSqlQueryService sqlQueryService,
         IHttpClientFactory httpClientFactory,
         ILogger<ApprovalFlowExecutor> logger,
-        IApprovalNodeLogger? nodeLogger = null)
+        IApprovalNodeLogger? nodeLogger = null,
+        IServiceScopeFactory? scopeFactory = null)
     {
         _flowRepo           = flowRepo;
         _instRepo           = instRepo;
@@ -107,6 +110,7 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         _integrationRunner  = integrationRunner;
         _sqlQueryService    = sqlQueryService;
         _httpClientFactory  = httpClientFactory;
+        _scopeFactory       = scopeFactory;
         _logger             = logger;
         _nodeLogger         = nodeLogger;
     }
@@ -133,10 +137,10 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
         var flow = await _flowRepo.GetByIdAsync(inst.FlowId, ct);
         if (flow is null || !IsGraphBased(flow)) return 0;
 
-        // currentStepOrder -> ApprovalFlowStep eşle (StepOrder + nodeType=step)
+        // currentStepOrder -> ApprovalFlowStep eşle (step veya vote nodeType)
         var currentNode = flow.Steps
             .OrderBy(s => s.StepOrder)
-            .FirstOrDefault(s => s.StepOrder == currentStepOrder && IsStepKind(s.NodeType));
+            .FirstOrDefault(s => s.StepOrder == currentStepOrder && (IsStepKind(s.NodeType) || IsVoteKind(s.NodeType)));
         if (currentNode is null) return 0;
 
         var ctx = await SafeBuildContextAsync(flow.DocumentKind, inst.DocumentId, ct);
@@ -586,22 +590,63 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
 
             case "vote":
             {
-                // MVP: Oylama kaydı açılır, consensus logic sonraki sürümde.
+                // Oylama node: oylayıcı listesinden step record'ları yarat, consensus'u bekle.
+                string voteConsensusType = "majority";
+                var voters = new List<(string Id, string Name)>();
+                if (!string.IsNullOrWhiteSpace(node.NodeData))
+                {
+                    try
+                    {
+                        using var jd = JsonDocument.Parse(node.NodeData);
+                        var r = jd.RootElement;
+                        if (r.TryGetProperty("votingType", out var vt) && vt.ValueKind == JsonValueKind.String)
+                            voteConsensusType = vt.GetString() ?? "majority";
+                        if (r.TryGetProperty("approverIds", out var ids) && ids.ValueKind == JsonValueKind.Array)
+                        {
+                            var labelsOk = r.TryGetProperty("approverLabels", out var lblEl) && lblEl.ValueKind == JsonValueKind.Array;
+                            var idArr  = ids.EnumerateArray().ToArray();
+                            var lblArr = labelsOk ? lblEl.EnumerateArray().ToArray() : Array.Empty<JsonElement>();
+                            for (int i = 0; i < idArr.Length; i++)
+                            {
+                                var vid   = idArr[i].GetString() ?? "";
+                                var vname = (i < lblArr.Length ? lblArr[i].GetString() : null) ?? vid;
+                                if (!string.IsNullOrWhiteSpace(vid))
+                                    voters.Add((vid, vname));
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Vote node {Id} nodeData parse hatası.", node.Id);
+                    }
+                }
+
+                if (voters.Count == 0)
+                {
+                    _logger.LogWarning("Vote node {Id} '{Name}' — oylayıcı tanımlanmamış, akış ilk edge'e devam etti.", node.Id, node.StepName);
+                    await TryLogAsync(instanceId, flow.Id, node.Id, "vote", node.StepName,
+                        "VoteNode", "Oylayıcı tanımlanmamış — atlandı", 0, ct);
+                    var fbEdge = flow.Edges.Where(e => e.SourceStepId == node.Id).OrderBy(e => e.SortOrder).FirstOrDefault();
+                    if (fbEdge is null) return 1;
+                    var fbNext = flow.Steps.FirstOrDefault(s => s.Id == fbEdge.TargetStepId);
+                    if (fbNext is null) return 1;
+                    return 1 + await TraverseAsync(flow, fbNext, ctx, instanceId, depth + 1, ct, visitedStepIds);
+                }
+
+                await _instRepo.CreateVoteStepRecordsAsync(
+                    instanceId, node.StepOrder, node.StepName ?? "Oylama",
+                    voters.AsReadOnly(), node.NodeData, ct);
                 await TryLogAsync(instanceId, flow.Id, node.Id, "vote", node.StepName,
-                    "VoteNode", "Oylama düğümü — oy kayıtları henüz desteklenmiyor, akış devam ediyor", 0, ct);
-                _logger.LogWarning("Vote node {Id} — tam oylama mantığı desteklenmiyor, akış ilk edge'e devam etti.", node.Id);
-                var voteEdges = flow.Edges.Where(e => e.SourceStepId == node.Id).OrderBy(e => e.SortOrder).ToList();
-                var pickedV   = voteEdges.FirstOrDefault(e => string.Equals((e.EdgeKind ?? "accept").Trim(), "accept", StringComparison.OrdinalIgnoreCase))
-                             ?? voteEdges.FirstOrDefault();
-                if (pickedV is null) return 1;
-                var nextV = flow.Steps.FirstOrDefault(s => s.Id == pickedV.TargetStepId);
-                if (nextV is null) return 1;
-                return 1 + await TraverseAsync(flow, nextV, ctx, instanceId, depth + 1, ct, visitedStepIds);
+                    "VoteStarted", $"Oylama başlatıldı: {voters.Count} oy kullanıcı, tür: {voteConsensusType}", 0, ct);
+                _logger.LogInformation("Vote node {Id} — {N} oylayıcı eklendi (consensus={Type}, instance={Iid})",
+                    node.Id, voters.Count, voteConsensusType, instanceId);
+                return 1; // Traversal durur — oylar bekleniyor
             }
 
             case "subprocess":
             {
-                // Alt akış fire-and-forget: kayıt loglanır; tam bekleme sonraki sürümde.
+                // Alt akış: IApprovalFlowService.StartAsync ile bağımsız instance başlatır (fire-and-forget).
+                // Üst akış hemen devam eder — alt akışın tamamlanması beklenmez.
                 int subFlowId = 0;
                 if (!string.IsNullOrWhiteSpace(node.NodeData))
                 {
@@ -609,20 +654,64 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
                     {
                         using var jd = JsonDocument.Parse(node.NodeData);
                         var r = jd.RootElement;
-                        if (r.TryGetProperty("subFlowId", out var sfid) && sfid.ValueKind == JsonValueKind.Number)
-                            subFlowId = sfid.GetInt32();
-                        else if (r.TryGetProperty("subFlowId", out var sfidStr) && sfidStr.ValueKind == JsonValueKind.String)
-                            int.TryParse(sfidStr.GetString(), out subFlowId);
+                        if (r.TryGetProperty("subFlowId", out var sfid))
+                        {
+                            if (sfid.ValueKind == JsonValueKind.Number)
+                                subFlowId = sfid.GetInt32();
+                            else if (sfid.ValueKind == JsonValueKind.String)
+                                int.TryParse(sfid.GetString(), out subFlowId);
+                        }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "SubProcess node {Id} nodeData parse hatası.", node.Id);
                     }
                 }
-                await TryLogAsync(instanceId, flow.Id, node.Id, "subprocess", node.StepName,
-                    "SubProcess", subFlowId > 0 ? $"Alt akış referansı: FlowId={subFlowId} (fire-and-forget)" : "subFlowId tanımlanmamış — atlandı", 0, ct);
-                _logger.LogInformation("SubProcess node {Id} — subFlowId={Sfid} (instance={Iid})", node.Id, subFlowId, instanceId);
-                var spEdges = flow.Edges.Where(e => e.SourceStepId == node.Id).OrderBy(e => e.SortOrder).ToList();
+
+                if (subFlowId > 0 && _scopeFactory is not null)
+                {
+                    var capturedSubFlowId  = subFlowId;
+                    var capturedDocId      = int.TryParse(ctx.EntityId, out var eid) ? (int?)eid : null;
+                    var capturedEntityKind = flow.DocumentKind ?? "Document";
+                    var capturedBy         = ctx.RequesterName ?? "SubProcess";
+                    var capturedBaseUrl    = ctx.BaseUrl;
+                    var capturedParentId   = instanceId;
+                    var factory = _scopeFactory;
+                    var log     = _logger;
+                    _ = Task.Run(async () =>
+                    {
+                        await using var scope = factory.CreateAsyncScope();
+                        var svc = scope.ServiceProvider.GetRequiredService<IApprovalFlowService>();
+                        try
+                        {
+                            await svc.StartAsync(new StartApprovalRequest(
+                                DocumentId:      capturedDocId,
+                                FlowId:          capturedSubFlowId,
+                                StartedBy:       capturedBy,
+                                StartedByUserId: null,
+                                EntityKind:      capturedEntityKind), CancellationToken.None);
+                        }
+                        catch (Exception ex)
+                        {
+                            log?.LogWarning(ex, "SubProcess start hatası (parentInstance={Pid}, subFlow={Sfid}).",
+                                capturedParentId, capturedSubFlowId);
+                        }
+                    });
+                    await TryLogAsync(instanceId, flow.Id, node.Id, "subprocess", node.StepName,
+                        "SubProcessStarted", $"Alt akış başlatıldı: FlowId={subFlowId} (fire-and-forget)", 0, ct);
+                    _logger.LogInformation("SubProcess node {Id} — alt akış FlowId={Sfid} başlatıldı (instance={Iid})",
+                        node.Id, subFlowId, instanceId);
+                }
+                else
+                {
+                    var reason = subFlowId <= 0 ? "subFlowId tanımlanmamış" : "scopeFactory null (DI eksik)";
+                    await TryLogAsync(instanceId, flow.Id, node.Id, "subprocess", node.StepName,
+                        "SubProcess", $"{reason} — atlandı", 0, ct);
+                    _logger.LogWarning("SubProcess node {Id} — {Reason} (instance={Iid})", node.Id, reason, instanceId);
+                }
+
+                // Üst akış hemen devam et
+                var spEdges  = flow.Edges.Where(e => e.SourceStepId == node.Id).OrderBy(e => e.SortOrder).ToList();
                 var pickedSP = spEdges.FirstOrDefault();
                 if (pickedSP is null) return 1;
                 var nextSP = flow.Steps.FirstOrDefault(s => s.Id == pickedSP.TargetStepId);
@@ -801,6 +890,9 @@ public sealed class ApprovalFlowExecutor : IApprovalFlowExecutor
     private static bool IsStepKind(string? nodeType)
         => string.IsNullOrWhiteSpace(nodeType)
         || string.Equals(nodeType, "step", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsVoteKind(string? nodeType)
+        => string.Equals(nodeType, "vote", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// SetVariable expression değerlendirme.

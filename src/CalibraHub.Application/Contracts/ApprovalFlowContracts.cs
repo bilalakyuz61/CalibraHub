@@ -183,6 +183,17 @@ public sealed record PendingTimerRecord(
     int TimerNodeId,
     DateTime FireAt);
 
+// Vote node oylama sonucu — VoteOnStepAsync dönüş tipi.
+public sealed record VoteConsensusResult(
+    bool Voted,
+    bool ConsensusReached,
+    bool ConsensusApproved,
+    int TotalVoters,
+    int ApprovedCount,
+    int RejectedCount,
+    int PendingCount,
+    string ConsensusType);
+
 // ── Onay/Red isteği ───────────────────────────────────────────────────────────
 public sealed record StartApprovalRequest(
     int? DocumentId,

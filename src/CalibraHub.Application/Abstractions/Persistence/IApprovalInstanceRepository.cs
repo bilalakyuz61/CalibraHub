@@ -81,6 +81,23 @@ public interface IApprovalInstanceRepository
     /// <summary>Timer kaydını 'TimerFired' olarak işaretle (tekrar tetiklenmesin).</summary>
     Task MarkTimerFiredAsync(int recordId, CancellationToken ct);
 
+    // ── Vote node işlemleri ───────────────────────────────────────────────────
+    /// <summary>
+    /// Vote node karşılaşıldığında her oylayıcı için bir ApprovalStepRecord yarat (Status='Pending').
+    /// CurrentStep, voteStepOrder'a çekilir.
+    /// </summary>
+    Task CreateVoteStepRecordsAsync(int instanceId, int stepOrder, string stepName,
+        IReadOnlyList<(string VoterId, string VoterName)> voters, string? nodeData, CancellationToken ct);
+
+    /// <summary>
+    /// Belirtilen oylayıcının oyunu kaydet. Yalnızca o oylayıcının kaydını günceller.
+    /// consensusType: "unanimous" | "majority" | "any"
+    /// Consensus sağlandıysa CurrentStep ilerletilir (onay) veya instance Rejected yapılır (red).
+    /// </summary>
+    Task<VoteConsensusResult> VoteOnStepAsync(int instanceId, int stepOrder,
+        string approverId, string approverName, string? note, bool isApprove,
+        string consensusType, CancellationToken ct);
+
     Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct);
 
     /// <summary>

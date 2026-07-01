@@ -1205,4 +1205,224 @@ WHERE inst.[Status] IN (N'Approved',N'Rejected')
         cmd.Parameters.Add(new SqlParameter("@Id", recordId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    // ── Vote node ─────────────────────────────────────────────────────────────
+
+    public async Task CreateVoteStepRecordsAsync(
+        int instanceId, int stepOrder, string stepName,
+        IReadOnlyList<(string VoterId, string VoterName)> voters,
+        string? nodeData, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var dueDate = ComputeDueDateFromNodeData(nodeData, now);
+
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = con.BeginTransaction();
+        try
+        {
+            foreach (var (voterId, voterName) in voters)
+            {
+                await using var ins = con.CreateCommand();
+                ins.Transaction = tx;
+                ins.CommandText = $"""
+                    INSERT INTO [{_s}].[ApprovalStepRecord]
+                        ([InstanceId],[StepOrder],[StepName],[Status],[ApproverId],[ApproverName],[DueDate],[CreatedById],[Created])
+                    VALUES
+                        (@Iid,@Ord,@Name,N'Pending',@VId,@VName,@Due,NULL,SYSUTCDATETIME());
+                    """;
+                ins.Parameters.Add(new SqlParameter("@Iid",   instanceId));
+                ins.Parameters.Add(new SqlParameter("@Ord",   stepOrder));
+                ins.Parameters.Add(new SqlParameter("@Name",  stepName));
+                ins.Parameters.Add(new SqlParameter("@VId",   voterId));
+                ins.Parameters.Add(new SqlParameter("@VName", voterName));
+                ins.Parameters.Add(new SqlParameter("@Due",   (object?)dueDate ?? DBNull.Value));
+                await ins.ExecuteNonQueryAsync(ct);
+            }
+
+            // Ensure CurrentStep is set to the vote node's StepOrder
+            await using var upd = con.CreateCommand();
+            upd.Transaction = tx;
+            upd.CommandText = $"""
+                UPDATE [{_s}].[ApprovalInstance]
+                SET [CurrentStep]=@Ord,[Updated]=SYSUTCDATETIME()
+                WHERE [Id]=@Iid;
+                """;
+            upd.Parameters.Add(new SqlParameter("@Iid", instanceId));
+            upd.Parameters.Add(new SqlParameter("@Ord", stepOrder));
+            await upd.ExecuteNonQueryAsync(ct);
+
+            tx.Commit();
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
+
+    public async Task<VoteConsensusResult> VoteOnStepAsync(
+        int instanceId, int stepOrder,
+        string approverId, string approverName, string? note, bool isApprove,
+        string consensusType, CancellationToken ct)
+    {
+        var status = isApprove ? "Approved" : "Rejected";
+
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = con.BeginTransaction();
+        try
+        {
+            // Update only this voter's Pending record
+            await using var updVote = con.CreateCommand();
+            updVote.Transaction = tx;
+            updVote.CommandText = $"""
+                UPDATE [{_s}].[ApprovalStepRecord]
+                SET [Status]=@Status,[ApproverName]=@AName,[Note]=@Note,
+                    [ActionDate]=SYSUTCDATETIME(),[Updated]=SYSUTCDATETIME()
+                WHERE [InstanceId]=@Iid AND [StepOrder]=@Ord
+                  AND [ApproverId]=@Aid AND [Status]=N'Pending';
+                """;
+            updVote.Parameters.Add(new SqlParameter("@Status", status));
+            updVote.Parameters.Add(new SqlParameter("@AName",  approverName));
+            updVote.Parameters.Add(new SqlParameter("@Note",   (object?)note ?? DBNull.Value));
+            updVote.Parameters.Add(new SqlParameter("@Iid",    instanceId));
+            updVote.Parameters.Add(new SqlParameter("@Ord",    stepOrder));
+            updVote.Parameters.Add(new SqlParameter("@Aid",    approverId));
+            var affected = await updVote.ExecuteNonQueryAsync(ct);
+            if (affected == 0)
+            {
+                tx.Commit();
+                return new VoteConsensusResult(Voted: false, ConsensusReached: false, ConsensusApproved: false,
+                    TotalVoters: 0, ApprovedCount: 0, RejectedCount: 0, PendingCount: 0, ConsensusType: consensusType);
+            }
+
+            // Read current vote tally
+            await using var tally = con.CreateCommand();
+            tally.Transaction = tx;
+            tally.CommandText = $"""
+                SELECT
+                    COUNT(*) AS Total,
+                    SUM(CASE WHEN [Status]=N'Approved' THEN 1 ELSE 0 END) AS Approved,
+                    SUM(CASE WHEN [Status]=N'Rejected' THEN 1 ELSE 0 END) AS Rejected,
+                    SUM(CASE WHEN [Status]=N'Pending'  THEN 1 ELSE 0 END) AS Pending
+                FROM [{_s}].[ApprovalStepRecord]
+                WHERE [InstanceId]=@Iid AND [StepOrder]=@Ord;
+                """;
+            tally.Parameters.Add(new SqlParameter("@Iid", instanceId));
+            tally.Parameters.Add(new SqlParameter("@Ord", stepOrder));
+            await using var rdr = await tally.ExecuteReaderAsync(ct);
+            int total = 0, approved = 0, rejected = 0, pending = 0;
+            if (await rdr.ReadAsync(ct))
+            {
+                total    = rdr.GetInt32(0);
+                approved = rdr.GetInt32(1);
+                rejected = rdr.GetInt32(2);
+                pending  = rdr.GetInt32(3);
+            }
+            await rdr.CloseAsync();
+
+            // Determine consensus
+            bool consensusReached;
+            bool consensusApproved;
+            var ct2 = consensusType.Trim().ToLowerInvariant();
+            switch (ct2)
+            {
+                case "any":
+                    consensusReached  = true;
+                    consensusApproved = isApprove;
+                    break;
+                case "unanimous":
+                    consensusReached  = (pending == 0);
+                    consensusApproved = (pending == 0 && rejected == 0);
+                    break;
+                default: // "majority"
+                    var half = total / 2.0;
+                    consensusReached  = approved > half || rejected > half;
+                    consensusApproved = approved > half;
+                    break;
+            }
+
+            if (consensusReached)
+            {
+                if (consensusApproved)
+                {
+                    // Mark remaining Pending records as Skipped (vote concluded)
+                    await using var skipCmd = con.CreateCommand();
+                    skipCmd.Transaction = tx;
+                    skipCmd.CommandText = $"""
+                        UPDATE [{_s}].[ApprovalStepRecord]
+                        SET [Status]=N'Skipped',[Updated]=SYSUTCDATETIME()
+                        WHERE [InstanceId]=@Iid AND [StepOrder]=@Ord AND [Status]=N'Pending';
+                        """;
+                    skipCmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
+                    skipCmd.Parameters.Add(new SqlParameter("@Ord", stepOrder));
+                    await skipCmd.ExecuteNonQueryAsync(ct);
+
+                    // Advance CurrentStep
+                    await using var nextCmd = con.CreateCommand();
+                    nextCmd.Transaction = tx;
+                    nextCmd.CommandText = $"""
+                        SELECT MIN([StepOrder]) FROM [{_s}].[ApprovalStepRecord]
+                        WHERE [InstanceId]=@Iid AND [StepOrder]>@Ord AND [Status]=N'Pending';
+                        """;
+                    nextCmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
+                    nextCmd.Parameters.Add(new SqlParameter("@Ord", stepOrder));
+                    var nextRaw = await nextCmd.ExecuteScalarAsync(ct);
+                    var nextStep = nextRaw == DBNull.Value ? (int?)null : Convert.ToInt32(nextRaw);
+
+                    await using var updInst = con.CreateCommand();
+                    updInst.Transaction = tx;
+                    if (nextStep.HasValue)
+                    {
+                        updInst.CommandText = $"""
+                            UPDATE [{_s}].[ApprovalInstance]
+                            SET [CurrentStep]=@Next,[Updated]=SYSUTCDATETIME()
+                            WHERE [Id]=@Iid;
+                            """;
+                        updInst.Parameters.Add(new SqlParameter("@Next", nextStep.Value));
+                    }
+                    else
+                    {
+                        updInst.CommandText = $"""
+                            UPDATE [{_s}].[ApprovalInstance]
+                            SET [Status]=N'Approved',[CompletedAt]=SYSUTCDATETIME(),[Updated]=SYSUTCDATETIME()
+                            WHERE [Id]=@Iid;
+                            """;
+                    }
+                    updInst.Parameters.Add(new SqlParameter("@Iid", instanceId));
+                    await updInst.ExecuteNonQueryAsync(ct);
+                }
+                else
+                {
+                    // Red oylaması consensus'a ulaştı — instance'ı Rejected yap
+                    await using var rejInst = con.CreateCommand();
+                    rejInst.Transaction = tx;
+                    rejInst.CommandText = $"""
+                        UPDATE [{_s}].[ApprovalInstance]
+                        SET [Status]=N'Rejected',[CompletedAt]=SYSUTCDATETIME(),
+                            [RejectNote]=@Note,[Updated]=SYSUTCDATETIME()
+                        WHERE [Id]=@Iid;
+                        """;
+                    rejInst.Parameters.Add(new SqlParameter("@Iid",  instanceId));
+                    rejInst.Parameters.Add(new SqlParameter("@Note", (object?)note ?? DBNull.Value));
+                    await rejInst.ExecuteNonQueryAsync(ct);
+                }
+            }
+
+            tx.Commit();
+            return new VoteConsensusResult(
+                Voted: true,
+                ConsensusReached:  consensusReached,
+                ConsensusApproved: consensusApproved,
+                TotalVoters:    total,
+                ApprovedCount:  approved,
+                RejectedCount:  rejected,
+                PendingCount:   pending,
+                ConsensusType:  consensusType);
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
 }
