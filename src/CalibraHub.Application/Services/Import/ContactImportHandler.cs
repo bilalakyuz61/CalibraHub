@@ -37,7 +37,7 @@ public sealed class ContactImportHandler : RowImportHandlerBase
         new ImportTargetFieldDto("AccountTitle",   "Cari Unvanı",   "string", true,  false, "Kurum veya kişi adı (zorunlu)"),
         new ImportTargetFieldDto("AccountCode",    "Cari Kodu",     "string", true,  true,  "Benzersiz cari kodu (zorunlu); eşleştirme anahtarı olabilir"),
         new ImportTargetFieldDto("AccountType",    "Cari Tipi",     "type",   false, false, "Müşteri / Satıcı / Her İkisi (boşsa Müşteri)", new[] { "Müşteri", "Satıcı", "Her İkisi" }),
-        new ImportTargetFieldDto("TaxNumber",      "Vergi No",      "string", false, false, "10 hane"),
+        new ImportTargetFieldDto("TaxNumber",      "Vergi No",      "string", false, true,  "10 hane; eşleştirme anahtarı olabilir"),
         new ImportTargetFieldDto("TaxOffice",      "Vergi Dairesi", "string", false, false, null),
         new ImportTargetFieldDto("IdentityNumber", "TC Kimlik No",  "string", false, false, "11 hane"),
         new ImportTargetFieldDto("Phone",          "Telefon",       "string", false, false, null),
@@ -98,6 +98,15 @@ public sealed class ContactImportHandler : RowImportHandlerBase
             if (!string.IsNullOrWhiteSpace(code))
             {
                 var existing = await _financeRepo.GetContactByCodeAsync(code.Trim(), ct);
+                if (existing is not null) return ("update", existing.Id);
+            }
+        }
+        else if (string.Equals(matchKeyField, "TaxNumber", StringComparison.OrdinalIgnoreCase))
+        {
+            var tax = DigitsOnly(Get(d, "TaxNumber") ?? "");
+            if (tax.Length == 10)
+            {
+                var existing = await _financeRepo.GetContactByTaxNumberAsync(tax, ct);
                 if (existing is not null) return ("update", existing.Id);
             }
         }

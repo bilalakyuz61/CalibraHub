@@ -9,6 +9,8 @@ public interface IFinanceRepository
     Task<Contact?> GetContactByIdAsync(int id, CancellationToken cancellationToken);
     /// <summary>AccountCode ile cari bul (case-insensitive). Bulunamazsa null doner.</summary>
     Task<Contact?> GetContactByCodeAsync(string code, CancellationToken cancellationToken);
+    /// <summary>TaxNumber ile cari bul (yalnızca rakamlar, 10 hane). Bulunamazsa null doner.</summary>
+    Task<Contact?> GetContactByTaxNumberAsync(string taxNumber, CancellationToken cancellationToken);
     Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken cancellationToken);
     Task<int> AddContactAsync(Contact account, CancellationToken cancellationToken);
     Task UpdateContactAsync(Contact account, CancellationToken cancellationToken);

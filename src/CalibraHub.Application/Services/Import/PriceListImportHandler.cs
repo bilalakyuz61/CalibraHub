@@ -42,7 +42,10 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
 
     public override async Task<ImportPreviewResultDto> PreviewAsync(ImportRowSet set, CancellationToken ct)
     {
-        await EnsureItemsAsync(ct);   // ValidateRow'daki kombinasyon-zorunlu kontrolü için items cache'le
+        // ValidateRow'da FK soft-check için tüm referans listelerini cache'le.
+        await EnsureItemsAsync(ct);
+        await EnsureGroupsAsync(ct);
+        await EnsureCurrenciesAsync(ct);
         return await base.PreviewAsync(set, ct);
     }
 
@@ -50,15 +53,31 @@ public sealed class PriceListImportHandler : RowImportHandlerBase
     {
         var errs = new List<string>();
         var itemCode = Get(d, "ItemCode");
+        var groupCode = Get(d, "GroupCode");
+        var currency = Get(d, "Currency");
         if (string.IsNullOrWhiteSpace(itemCode)) errs.Add("Stok Kodu boş.");
-        if (string.IsNullOrWhiteSpace(Get(d, "GroupCode"))) errs.Add("Fiyat Grubu boş.");
-        if (string.IsNullOrWhiteSpace(Get(d, "Currency"))) errs.Add("Döviz boş.");
+        if (string.IsNullOrWhiteSpace(groupCode)) errs.Add("Fiyat Grubu boş.");
+        if (string.IsNullOrWhiteSpace(currency)) errs.Add("Döviz boş.");
         if (ImportParse.ParseDecimal(Get(d, "Price")) is null) errs.Add("Fiyat sayı değil veya boş.");
-        // Kombinasyon-takipli stokta kombinasyon zorunlu. _items preview'da preload edilir (commit'te de doğrulanır).
-        if (_items is not null && !string.IsNullOrWhiteSpace(itemCode) && string.IsNullOrWhiteSpace(Get(d, "Combination")))
+
+        if (_items is not null && !string.IsNullOrWhiteSpace(itemCode))
         {
-            var it = _items.FirstOrDefault(i => string.Equals(i.Code?.Trim(), itemCode!.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (it is { Combinations: true }) errs.Add($"Kombinasyon zorunlu (stok kombinasyon-takipli): '{itemCode}'");
+            var it = _items.FirstOrDefault(i => string.Equals(i.Code?.Trim(), itemCode.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (it is null) errs.Add($"Stok bulunamadı: '{itemCode}'");
+            else if (it.Combinations && string.IsNullOrWhiteSpace(Get(d, "Combination")))
+                errs.Add($"Kombinasyon zorunlu (stok kombinasyon-takipli): '{itemCode}'");
+        }
+        if (_groups is not null && !string.IsNullOrWhiteSpace(groupCode))
+        {
+            var g = _groups.FirstOrDefault(gr => string.Equals(gr.Code?.Trim(), groupCode.Trim(), StringComparison.OrdinalIgnoreCase)
+                                              || string.Equals(gr.Name?.Trim(), groupCode.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (g is null) errs.Add($"Fiyat grubu bulunamadı: '{groupCode}'");
+        }
+        if (_currencies is not null && !string.IsNullOrWhiteSpace(currency))
+        {
+            var c = _currencies.FirstOrDefault(cu => string.Equals(cu.Code?.Trim(), currency.Trim(), StringComparison.OrdinalIgnoreCase)
+                                                  || string.Equals(cu.Name?.Trim(), currency.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (c is null) errs.Add($"Döviz bulunamadı: '{currency}'");
         }
         return errs;
     }

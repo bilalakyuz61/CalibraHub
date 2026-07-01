@@ -174,6 +174,22 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         return await reader.ReadAsync(cancellationToken) ? MapRow(reader) : null;
     }
 
+    public async Task<Contact?> GetContactByTaxNumberAsync(string taxNumber, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(taxNumber)) return null;
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP 1 [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],[ContactGroupId]
+            FROM {_tableName}
+            WHERE [TaxNumber] = @TaxNumber;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@TaxNumber", taxNumber.Trim()));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? MapRow(reader) : null;
+    }
+
     public async Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken cancellationToken)
     {
         // AccountCode globalde unique — tum sirketlerde kontrol edilir (UNIQUE constraint global).

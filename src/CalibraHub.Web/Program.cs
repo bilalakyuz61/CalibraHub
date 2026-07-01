@@ -344,6 +344,8 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportT
                            CalibraHub.Application.Services.Import.BomImportHandler>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
                            CalibraHub.Application.Services.Import.InventoryCountImportHandler>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IImportTargetHandler,
+                           CalibraHub.Application.Services.Import.RoutingImportHandler>();
 
 // 2026-06-06 Yetkilendirme (F1) — PermissionDef + UserPermission repository + service.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionDefRepository,
