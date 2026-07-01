@@ -425,6 +425,13 @@ function DesignerInner(props) {
       kind = 'false'; label = params.sourceHandle === 'false' ? 'Hayır' : 'Red'
     } else if (params.sourceHandle === 'timeout') {
       kind = 'timeout'; label = 'Gecikme'
+    } else if (params.sourceHandle && params.sourceHandle.startsWith('out-')) {
+      var armId = params.sourceHandle.slice(4)
+      var srcNode = nodesRef.current.find(function (n) { return n.id === params.source })
+      var arm = srcNode && Array.isArray(((srcNode.data || {}).extraInputs))
+        ? srcNode.data.extraInputs.find(function (a) { return a.id === armId })
+        : null
+      if (arm) { kind = arm.edgeKind || 'default'; label = arm.label || '' }
     }
     setEdges(function (es) {
       var next = addEdge(Object.assign({}, params, {

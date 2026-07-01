@@ -1492,8 +1492,6 @@ export default function NodePropertiesPanel({
               { id: 'default', label: 'Varsayılan', color: '#94a3b8', dashed: false, hint: 'Koşulsuz geçiş' },
               { id: 'true',    label: 'Onay / Evet',color: '#10b981', dashed: false, hint: 'Onaylandı / Decision true' },
               { id: 'false',   label: 'Red / Hayır',color: '#ef4444', dashed: false, hint: 'Reddedildi / Decision false' },
-              { id: 'info',    label: 'Bilgi',     color: '#3b82f6', dashed: false, hint: 'Bildirim / yan akış' },
-              { id: 'error',   label: 'Hata',      color: '#a855f7', dashed: true,  hint: 'Entegrasyon / hata akışı' },
             ]
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1704,7 +1702,7 @@ function normalizeExtraInputsArray(raw) {
       .filter(function (it) { return it && typeof it.side === 'string' })
       .map(function (it) {
         var kind = (it.kind === 'out') ? 'out' : 'in'
-        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label, color: it.color }
+        return { id: it.id, side: it.side, offset: it.offset, kind: kind, label: it.label, color: it.color, edgeKind: it.edgeKind || null }
       })
   }
   if (raw && typeof raw === 'object') {
@@ -1813,12 +1811,15 @@ function ExtraInputsToggleBlock({ node, onChange }) {
             var kindLabel = isOut ? 'Çıkış' : 'Giriş'
             var kindColor = isOut ? 'var(--afd-success, #10b981)' : 'var(--afd-accent, #6366f1)'
             var kindBg = isOut ? 'rgba(16,185,129,.15)' : 'rgba(99,102,241,.15)'
+            var EK_COLOR = { default: '#94a3b8', true: '#10b981', false: '#ef4444' }
+            var accentColor = isOut ? (EK_COLOR[it.edgeKind || 'default'] || '#94a3b8') : '#6366f1'
             return (
               <div key={it.id} style={{
-                display: 'flex', flexDirection: 'column', gap: 4,
-                padding: '6px 8px', borderRadius: 6,
-                background: 'var(--afd-bg-s, rgba(148,163,184,.08))',
+                display: 'flex', flexDirection: 'column', gap: 6,
+                padding: '8px 10px 8px 12px', borderRadius: 8,
+                background: 'var(--afd-bg-s, rgba(148,163,184,.06))',
                 border: '1px solid var(--afd-border, #e2e8f0)',
+                borderLeft: '3px solid ' + accentColor,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{
@@ -1868,37 +1869,69 @@ function ExtraInputsToggleBlock({ node, onChange }) {
                         color: 'var(--afd-text, #334155)',
                       }}
                     />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ fontSize: 10.5, color: 'var(--afd-muted, #64748b)', marginRight: 2 }}>Renk:</span>
-                      {[
-                        { key: 'indigo',  bg: '#6366f1' },
-                        { key: 'emerald', bg: '#10b981' },
-                        { key: 'rose',    bg: '#ef4444' },
-                        { key: 'amber',   bg: '#f59e0b' },
-                        { key: 'blue',    bg: '#3b82f6' },
-                        { key: 'violet',  bg: '#8b5cf6' },
-                        { key: 'slate',   bg: '#64748b' },
-                      ].map(function (c) {
-                        var active = (it.color || 'indigo') === c.key
-                        return (
-                          <button key={c.key} type="button"
-                            title={c.key}
-                            onClick={function () {
-                              commit(items.map(function (x) {
-                                return x.id === it.id ? Object.assign({}, x, { color: c.key }) : x
-                              }))
-                            }}
-                            style={{
-                              width: active ? 20 : 16, height: active ? 20 : 16,
-                              borderRadius: '50%', background: c.bg, border: 'none',
-                              cursor: 'pointer', padding: 0, flexShrink: 0,
-                              outline: active ? '2px solid ' + c.bg : 'none',
-                              outlineOffset: 2,
-                              transition: 'all .15s',
-                            }}
-                          />
-                        )
-                      })}
+                    <div style={{ display: 'grid', gridTemplateColumns: '38px 1fr', alignItems: 'center', gap: '5px 8px' }}>
+                      <span style={{ fontSize: 10.5, color: 'var(--afd-muted, #64748b)', fontWeight: 600 }}>Renk:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {[
+                          { key: 'indigo',  bg: '#6366f1' },
+                          { key: 'emerald', bg: '#10b981' },
+                          { key: 'rose',    bg: '#ef4444' },
+                          { key: 'amber',   bg: '#f59e0b' },
+                          { key: 'blue',    bg: '#3b82f6' },
+                          { key: 'violet',  bg: '#8b5cf6' },
+                          { key: 'slate',   bg: '#64748b' },
+                        ].map(function (c) {
+                          var active = (it.color || 'indigo') === c.key
+                          return (
+                            <button key={c.key} type="button" title={c.key}
+                              onClick={function () {
+                                commit(items.map(function (x) {
+                                  return x.id === it.id ? Object.assign({}, x, { color: c.key }) : x
+                                }))
+                              }}
+                              style={{
+                                width: 18, height: 18,
+                                borderRadius: '50%', background: c.bg, border: 'none',
+                                cursor: 'pointer', padding: 0, flexShrink: 0,
+                                boxShadow: active ? '0 0 0 2px var(--afd-surface,#fff), 0 0 0 4px ' + c.bg : 'none',
+                                transition: 'box-shadow .15s',
+                              }}
+                            />
+                          )
+                        })}
+                      </div>
+                      {node.type === 'step' && (
+                        <div style={{ display: 'contents' }}>
+                          <span style={{ fontSize: 10.5, color: 'var(--afd-muted, #64748b)', fontWeight: 600 }}>Tür:</span>
+                          <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--afd-border, #e2e8f0)' }}>
+                            {[
+                              { key: 'default', label: 'Varsayılan', color: '#94a3b8' },
+                              { key: 'true',    label: 'Onay',       color: '#10b981' },
+                              { key: 'false',   label: 'Red',        color: '#ef4444' },
+                            ].map(function (ek, ei, arr) {
+                              var active = (it.edgeKind || 'default') === ek.key
+                              return (
+                                <button key={ek.key} type="button" title={ek.label}
+                                  onClick={function () {
+                                    commit(items.map(function (x) {
+                                      return x.id === it.id ? Object.assign({}, x, { edgeKind: ek.key }) : x
+                                    }))
+                                  }}
+                                  style={{
+                                    flex: '1 1 0', padding: '4px 0', fontSize: 10.5,
+                                    fontWeight: active ? 700 : 500,
+                                    border: 'none',
+                                    borderRight: ei < arr.length - 1 ? '1px solid var(--afd-border, #e2e8f0)' : 'none',
+                                    background: active ? ek.color : 'var(--afd-bg, transparent)',
+                                    color: active ? '#fff' : 'var(--afd-muted, #64748b)',
+                                    cursor: 'pointer', transition: 'all .12s',
+                                  }}
+                                >{ek.label}</button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
