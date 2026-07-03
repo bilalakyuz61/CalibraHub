@@ -6,11 +6,13 @@ using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Persistence.Database;
 using CalibraHub.Web.Models.Diagnostics;
 using CalibraHub.Web.Models.Navigation;
 using CalibraHub.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -30,6 +32,8 @@ public sealed class HealthCheckController : Controller
     private readonly IAdminManagementService _adminManagement;
     private readonly ICompanyRepository _companyRepository;
     private readonly IDepartmentRepository _departmentRepository;
+    private readonly CalibraDatabaseInitializer _dbInitializer;
+    private readonly SqlServerConnectionFactory _connectionFactory;
 
     public HealthCheckController(
         IHttpClientFactory httpFactory,
@@ -38,7 +42,9 @@ public sealed class HealthCheckController : Controller
         SchemaProbeService schemaProbe,
         IAdminManagementService adminManagement,
         ICompanyRepository companyRepository,
-        IDepartmentRepository departmentRepository)
+        IDepartmentRepository departmentRepository,
+        CalibraDatabaseInitializer dbInitializer,
+        SqlServerConnectionFactory connectionFactory)
     {
         _httpFactory = httpFactory;
         _httpContextAccessor = httpContextAccessor;
@@ -47,6 +53,8 @@ public sealed class HealthCheckController : Controller
         _adminManagement = adminManagement;
         _companyRepository = companyRepository;
         _departmentRepository = departmentRepository;
+        _dbInitializer = dbInitializer;
+        _connectionFactory = connectionFactory;
     }
 
     [HttpGet("/Admin/HealthCheck")]
@@ -238,7 +246,7 @@ public sealed class HealthCheckController : Controller
     /// </summary>
     [HttpPost("/Admin/HealthCheck/StreamTestCompany")]
     [ValidateAntiForgeryToken]
-    public async Task StreamTestCompany(CancellationToken ct)
+    public async Task StreamTestCompany([FromQuery] bool createNewDb = false, CancellationToken ct = default)
     {
         Response.ContentType = "application/x-ndjson; charset=utf-8";
         Response.Headers.CacheControl = "no-cache";
@@ -251,27 +259,57 @@ public sealed class HealthCheckController : Controller
         var testEmail       = $"test.hc.{now:ddMMyyHHmm}@calibra.test";
         var testPassword    = $"Hc!{Guid.NewGuid().ToString("N")[..8]}";
 
-        await WriteFrameAsync(new { type = "setup_start", total = 3 }, ct);
+        // Adım listesi: createNewDb true ise DB oluşturma 1. adım olarak eklenir
+        var stepTotal = createNewDb ? 4 : 3;
+        var stepLabels = createNewDb
+            ? new[] { "Veritabanı oluşturuluyor", "Test şirketi oluşturuluyor", "Test kullanıcısı oluşturuluyor", "Test oturumu başlatılıyor" }
+            : new[] { "Test şirketi oluşturuluyor", "Test kullanıcısı oluşturuluyor", "Test oturumu başlatılıyor" };
 
-        // Mevcut şirketin DB bağlantısını al (test şirketi aynı DB'yi paylaşır)
+        await WriteFrameAsync(new { type = "setup_start", total = stepTotal, labels = stepLabels }, ct);
+
+        // Mevcut şirketin DB bağlantısını al (template olarak kullanılır)
         int.TryParse(User.FindFirst("company_id")?.Value, out var currentCompanyId);
         var currentCompany  = currentCompanyId > 0
             ? await _companyRepository.GetByIdAsync(currentCompanyId, ct)
             : null;
         var connectionString = currentCompany?.DatabaseConnectionString;
 
+        // Admin kullanıcısının company_id claim'i olmayabilir; createNewDb modunda
+        // SQL Server adresi gerekiyor → şifre çözülmüş sistem DB connection string'ini kullan
+        if (createNewDb && string.IsNullOrWhiteSpace(connectionString))
+            connectionString = _connectionFactory.ResolveConnectionStringForCompany(0);
+
+        // Adım offset: createNewDb'de ilk adım DB oluşturma
+        var stepOffset = createNewDb ? 1 : 0;
+
         int testCompanyId;
         try
         {
-            // Adım 1: Test şirketi oluştur
-            await WriteFrameAsync(new { type = "setup_step", step = 1, total = 3, message = $"Test şirketi oluşturuluyor: {testCompanyName}" }, ct);
+            // [Opsiyonel] Adım 1: Yeni test veritabanı oluştur ve şemayı init et
+            if (createNewDb)
+            {
+                await WriteFrameAsync(new { type = "setup_step", step = 1, total = stepTotal, message = stepLabels[0] }, ct);
+                var newDbName = $"CalibraTest_{now:ddMMyyHHmm}";
+                var (newConnStr, dbError) = await CreateTestDatabaseAsync(connectionString, newDbName, ct);
+                if (dbError != null)
+                {
+                    await WriteFrameAsync(new { type = "setup_error", message = $"Veritabanı oluşturulamadı: {dbError}" }, ct);
+                    return;
+                }
+                // Tam şema init (tüm Ensure* + Seed* metodları)
+                await _dbInitializer.InitializeForConnectionAsync(newConnStr, ct);
+                connectionString = newConnStr;
+            }
+
+            // Adım stepOffset+1: Test şirketi oluştur
+            await WriteFrameAsync(new { type = "setup_step", step = 1 + stepOffset, total = stepTotal, message = stepLabels[stepOffset] }, ct);
             var taxNumber = $"TST-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
             testCompanyId = await _adminManagement.SaveCompanyAsync(
                 new SaveCompanyRequest(null, testCompanyName, testCompanyName, "-", null, null, null, "-", taxNumber, false, true, connectionString),
                 ct);
 
-            // Adım 2: Test departmanı + kullanıcısı oluştur
-            await WriteFrameAsync(new { type = "setup_step", step = 2, total = 3, message = "Test kullanıcısı oluşturuluyor..." }, ct);
+            // Adım stepOffset+2: Test departmanı + kullanıcısı oluştur
+            await WriteFrameAsync(new { type = "setup_step", step = 2 + stepOffset, total = stepTotal, message = stepLabels[1 + stepOffset] }, ct);
             await _adminManagement.CreateDepartmentAsync(new CreateDepartmentRequest(testCompanyId, "Yönetim"), ct);
             var allDepts = await _departmentRepository.GetAllAsync(ct);
             var dept = allDepts.First(x => x.CompanyId == testCompanyId);
@@ -288,10 +326,10 @@ public sealed class HealthCheckController : Controller
             return;
         }
 
-        // Adım 3: Test oturumu başlat (programmatic login)
+        // Adım son: Test oturumu başlat (programmatic login)
         try
         {
-            await WriteFrameAsync(new { type = "setup_step", step = 3, total = 3, message = "Test oturumu başlatılıyor..." }, ct);
+            await WriteFrameAsync(new { type = "setup_step", step = stepTotal, total = stepTotal, message = stepLabels[^1] }, ct);
             var req     = _httpContextAccessor.HttpContext!.Request;
             var baseUrl = $"{req.Scheme}://{req.Host}";
 
@@ -405,6 +443,42 @@ public sealed class HealthCheckController : Controller
         catch (Exception ex)
         {
             return (null, $"Login hatası: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Mevcut connection string'in gösterdiği sunucuda yeni bir test DB'si oluşturur.
+    /// DB adı alphanumerik+alt_çizgi olduğundan doğrudan identifier olarak kullanılabilir.
+    /// </summary>
+    private static async Task<(string NewConnectionString, string? Error)> CreateTestDatabaseAsync(
+        string? templateConnectionString, string dbName, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(templateConnectionString))
+            return (string.Empty, "Kaynak şirketin bağlantı bilgisi bulunamadı");
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(templateConnectionString);
+            builder.InitialCatalog = "master";
+
+            await using var masterConn = new SqlConnection(builder.ConnectionString);
+            await masterConn.OpenAsync(ct);
+            await using var cmd = masterConn.CreateCommand();
+            // dbName: CalibraTest_DDMMYYHHII — yalnızca alfanümerik ve alt çizgi, injection riski yok
+            cmd.CommandText = $"""
+                IF NOT EXISTS (SELECT name FROM master.sys.databases WHERE name = N'{dbName}')
+                    CREATE DATABASE [{dbName}];
+                """;
+            await cmd.ExecuteNonQueryAsync(ct);
+
+            var newBuilder = new SqlConnectionStringBuilder(templateConnectionString)
+            {
+                InitialCatalog = dbName
+            };
+            return (newBuilder.ConnectionString, null);
+        }
+        catch (Exception ex)
+        {
+            return (string.Empty, ex.Message);
         }
     }
 

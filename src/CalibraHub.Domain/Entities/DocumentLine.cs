@@ -57,6 +57,23 @@ public sealed class DocumentLine
     /// <summary>Karşılama durumu: 0=Pending, 1=Partial, 2=Full, 3=Cancelled.</summary>
     public int FulfillmentStatus { get; set; }
 
+    // ── Stok hareketi alanları (2026-07-02 konsolidasyonu) ──
+    // Bu satır fiilen stok hareketi yaratıyorsa dolar; ticari satırlarda NULL kalır.
+    [Description("Stok hareket yönü — StockMovementType enum (Issue=1/Receipt=2/Transfer=3/Adjust=4). NULL = ticari/stok-etkilemez satır.")]
+    public byte? MovementType { get; set; }
+
+    [Description("Transfer/sarf kaynağı lokasyon. FK -> Location.Id. Mevcut LocationId hedef/tekil lokasyon olarak kullanılır.")]
+    public int? FromLocationId { get; set; }
+
+    [Description("Stok hareketinin birim maliyet snapshot'ı (fiyat listesinden veya manuel).")]
+    public decimal? UnitCost { get; set; }
+
+    [Description("Parti/lot takibi.")]
+    public string? LotNo { get; set; }
+
+    public string? FromLocationCode { get; set; }
+    public string? FromLocationName { get; set; }
+
     // ── Transient display fields (Item + Unit + ProductConfiguration + Location JOIN ile okunur; tabloya yazilmaz) ──
     public string? MaterialCode { get; set; }
     public string? MaterialName { get; set; }

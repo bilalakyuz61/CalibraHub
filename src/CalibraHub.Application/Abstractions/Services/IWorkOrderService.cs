@@ -39,4 +39,10 @@ public interface IWorkOrderService
 
     /// <summary>İş emrinin patlatılmış bileşen listesi.</summary>
     Task<IReadOnlyCollection<WorkOrderComponentDto>> GetComponentsAsync(int workOrderId, CancellationToken ct);
+
+    /// <summary>
+    /// Malzeme Sarf Et (2026-07-02) — ShopFloor'da manuel bileşen çıkışı. IssuedQuantity
+    /// artırılır ve DocumentLine'a Issue satırı atomik yazılır.
+    /// </summary>
+    Task IssueComponentAsync(IssueWorkOrderComponentRequest request, CancellationToken ct);
 }

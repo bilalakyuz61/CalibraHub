@@ -51,4 +51,12 @@ public interface IDocumentRepository
     /// Parent bulunamazsa null doner.
     /// </summary>
     Task<int?> ReviseLineAsync(int parentLineId, string? description, CancellationToken ct);
+
+    /// <summary>
+    /// Append-only: DocumentLine'a TEK yeni stok hareketi satırı ekler (LineNo = mevcut
+    /// max+1, UPDLOCK+HOLDLOCK ile concurrent-safe). SaveLinesAsync'in upsert-all/replace
+    /// davranışından FARKLIDIR — mevcut satırları etkilemez, sadece INSERT yapar. WorkOrder
+    /// üretim olayları ve Sayım "Yansıt" fark satırları için kullanılır. Yeni satırın Id'sini döner.
+    /// </summary>
+    Task<int> AppendStockLineAsync(int documentId, DocumentLine line, CancellationToken ct);
 }

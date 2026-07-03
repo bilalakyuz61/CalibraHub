@@ -1407,6 +1407,25 @@ public sealed class ProductionController : Controller
         catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
+    public sealed record ShopFloorIssueComponentRequest(int WorkOrderComponentId, decimal Quantity, int OperatorPersonnelId);
+
+    /// <summary>
+    /// Malzeme Sarf Et (2026-07-02) — otomatik BOM oranından türetilmez, operatör gerçek
+    /// sarfı manuel girer. IssuedQuantity artırılır + DocumentLine'a Issue satırı atomik yazılır.
+    /// </summary>
+    [HttpPost("Production/ShopFloor/IssueComponent")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ShopFloorIssueComponent([FromBody] ShopFloorIssueComponentRequest req, CancellationToken ct)
+    {
+        try
+        {
+            await _service.IssueComponentAsync(
+                new IssueWorkOrderComponentRequest(req.WorkOrderComponentId, req.Quantity, req.OperatorPersonnelId), ct);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+    }
+
     public sealed record ShopFloorCompleteRequest(int WorkOrderOperationId, int OperatorPersonnelId, decimal? FinalQuantity);
 
     [HttpPost("Production/ShopFloor/Complete")]

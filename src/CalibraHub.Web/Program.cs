@@ -443,9 +443,12 @@ builder.Services.AddScoped<IGuideService, GuideService>();
 // Form Yöneticisi (dbo.Forms CRUD)
 builder.Services.AddScoped<IFormRepository, SqlFormRepository>();
 
-// Depo İşlemleri (Transfer + Ambar Giriş/Çıkış)
+// Depo İşlemleri (Transfer + Ambar Giriş/Çıkış + Sayım taslak) — arka planda Document/DocumentLine
+// ve InventoryCount/InventoryCountLine'a baglanir (2026-07-02 stok hareketi konsolidasyonu).
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IStockDocRepository,
                            CalibraHub.Persistence.Repositories.SqlStockDocRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IInventoryCountRepository,
+                           CalibraHub.Persistence.Repositories.SqlInventoryCountRepository>();
 
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();

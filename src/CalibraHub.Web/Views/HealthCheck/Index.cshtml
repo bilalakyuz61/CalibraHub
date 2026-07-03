@@ -38,6 +38,25 @@
     .hc-pill.warn     { background: rgba(245,158,11,.18); color: #f59e0b; }
     .hc-pill.redirect { background: rgba(59,130,246,.18); color: #3b82f6; }
 
+    /* Switch */
+    .hc-switch-label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+    .hc-switch-track {
+        position: relative; width: 36px; height: 20px;
+        border-radius: 10px; background: rgba(148,163,184,.3);
+        transition: background .18s; flex-shrink: 0;
+    }
+    .hc-switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .hc-switch-thumb {
+        position: absolute; top: 3px; left: 3px;
+        width: 14px; height: 14px; border-radius: 50%;
+        background: #fff; transition: transform .18s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .hc-switch-input:checked ~ .hc-switch-thumb { transform: translateX(16px); }
+    .hc-switch-label:has(.hc-switch-input:checked) .hc-switch-track { background: #6366f1; }
+    .hc-switch-text { font-size: 13px; color: #475569; }
+    body.app-theme-dark .hc-switch-text { color: #94a3b8; }
+
     /* Spinner */
     .hc-spinner {
         width: 14px; height: 14px;
@@ -207,10 +226,17 @@
     </p>
 
     <div class="hc-toolbar">
-        <button id="hcRunBtn" class="hc-btn" type="button" title="TEST_DDMMYYHHII şirketi oluşturur, tüm formları o şirket bağlamında test eder">
+        <button id="hcRunBtn" class="hc-btn" type="button">
             <span id="hcRunIcon">▶</span>
             <span id="hcRunLabel">Kontrolleri Çalıştır</span>
         </button>
+        <label class="hc-switch-label" title="Etkinleştirilirse mevcut sunucuda yeni bir test DB'si oluşturulur, içi sıfırdan doldurulur">
+            <span class="hc-switch-track">
+                <input type="checkbox" id="hcNewDb" class="hc-switch-input">
+                <span class="hc-switch-thumb"></span>
+            </span>
+            <span class="hc-switch-text">Yeni veritabanı oluştur</span>
+        </label>
         <div id="hcSummary" class="hc-summary"></div>
     </div>
 
@@ -385,9 +411,10 @@
     // ── Setup alt adımları HTML'i ────────────────────────────────────────
     const SETUP_LABELS = ['Test şirketi oluşturuluyor', 'Test kullanıcısı oluşturuluyor', 'Test oturumu başlatılıyor'];
 
-    function setupBodyHtml(currentStep, errorMsg) {
+    function setupBodyHtml(currentStep, errorMsg, labels) {
+        const list = labels || SETUP_LABELS;
         let h = '<div class="hc-substep-list">';
-        SETUP_LABELS.forEach((lbl, i) => {
+        list.forEach((lbl, i) => {
             const n = i + 1;
             let cls = 'pending', sym = '·';
             if (errorMsg && n === currentStep) { cls = 'error';   sym = '✗'; }
@@ -414,26 +441,27 @@
         switch (frame.type) {
             case 'setup_start':
                 tst.setupStep = 1;
-                stepStatus('setup', 'running', 'Adım 1/3');
+                tst.setupLabels = frame.labels || SETUP_LABELS;
+                stepStatus('setup', 'running', tst.setupLabels[0]);
                 stepExpand('setup', true);
-                stepBody('setup', setupBodyHtml(1));
+                stepBody('setup', setupBodyHtml(1, null, tst.setupLabels));
                 break;
             case 'setup_step':
                 tst.setupStep = frame.step;
-                stepStatus('setup', 'running', SETUP_LABELS[frame.step - 1] || ('Adım ' + frame.step + '/3'));
-                stepBody('setup', setupBodyHtml(frame.step));
+                stepStatus('setup', 'running', frame.message || ((tst.setupLabels || SETUP_LABELS)[frame.step - 1]) || ('Adım ' + frame.step));
+                stepBody('setup', setupBodyHtml(frame.step, null, tst.setupLabels));
                 break;
             case 'setup_done':
                 tst.companyName = frame.companyName;
                 stepStatus('setup', 'ok', frame.companyName + ' · ' + frame.userEmail);
                 stepBody('setup',
-                    setupBodyHtml(4)
+                    setupBodyHtml((tst.setupLabels || SETUP_LABELS).length + 1, null, tst.setupLabels)
                   + '<div class="hc-substep-info">Şirket: <b>' + escapeHtml(frame.companyName) + '</b> · Kullanıcı: <b>' + escapeHtml(frame.userEmail) + '</b></div>');
                 stepExpand('setup', false);
                 break;
             case 'setup_error':
                 stepStatus('setup', 'error', 'Hata');
-                stepBody('setup', setupBodyHtml(tst.setupStep, frame.message));
+                stepBody('setup', setupBodyHtml(tst.setupStep, frame.message, tst.setupLabels));
                 break;
 
             // Form test frameleri
@@ -474,9 +502,10 @@
         // Tüm adımlar baştan görünür — durum güncellemeleri yerinde yapılır
         createStep('setup', 'Test Ortamı Hazırlama', 'pending');
         createStep('forms', 'Form Kontrolleri', 'pending');
-        tst.results = []; tst.setupStep = 0;
+        tst.results = []; tst.setupStep = 0; tst.setupLabels = null;
+        const createNewDb = document.getElementById('hcNewDb')?.checked ? 'true' : 'false';
         try {
-            const resp = await fetch('/Admin/HealthCheck/StreamTestCompany', { method:'POST', credentials:'same-origin', headers:{ 'RequestVerificationToken': getCsrf() } });
+            const resp = await fetch('/Admin/HealthCheck/StreamTestCompany?createNewDb=' + createNewDb, { method:'POST', credentials:'same-origin', headers:{ 'RequestVerificationToken': getCsrf() } });
             if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
             await readStream(resp.body, handleTestFrame);
         } catch (err) {

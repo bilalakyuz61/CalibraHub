@@ -40,9 +40,9 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
 
             INSERT INTO {_table}
                 ([bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                 [body],[media_type],[has_media],[received_at],[Created],[read_at],
+                 [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
                  [media_path],[media_mime],[media_filename],[media_size],[is_lid],[wa_contact_id],
-                 [group_jid],[sender_jid],[sender_name])
+                 [group_jid],[sender_jid],[SenderName])
             OUTPUT INSERTED.[id]
             VALUES (@BridgeMsgId,@Direction,@Phone,@ContactId,@Name,
                     @Body,@MediaType,@HasMedia,@ReceivedAt,@CreatedAt,NULL,
@@ -120,7 +120,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
             unread AS (
                 SELECT [contact_phone], COUNT(1) AS unread_count
                 FROM {_table}
-                WHERE [direction] = 0 AND [read_at] IS NULL
+                WHERE [direction] = 0 AND [ReadAt] IS NULL
                 GROUP BY [contact_phone]
             )
             SELECT TOP (@N)
@@ -230,11 +230,11 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
             ;WITH recent AS (
                 SELECT TOP (@N)
                     [id],[bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                    [body],[media_type],[has_media],[received_at],[Created],[read_at],
+                    [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
                     [media_path],[media_mime],[media_filename],[media_size],
                     ISNULL([is_deleted],0) AS [is_deleted],
                     [quoted_msg_id],[reaction_emoji],[delivery_status],
-                    [group_jid],[sender_jid],[sender_name]
+                    [group_jid],[sender_jid],[SenderName]
                 FROM {_table}
                 WHERE [contact_phone] = @Phone
                 ORDER BY [received_at] DESC, [id] DESC
@@ -284,10 +284,10 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_table}
-               SET [read_at] = @ReadAt
+               SET [ReadAt] = @ReadAt
              WHERE [contact_phone] = @Phone
                AND [direction] = 0
-               AND [read_at] IS NULL;
+               AND [ReadAt] IS NULL;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone",  contactPhone));
         cmd.Parameters.Add(new SqlParameter("@ReadAt", readAt));
@@ -363,7 +363,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [id],[bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                   [body],[media_type],[has_media],[received_at],[Created],[read_at],
+                   [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
                    [media_path],[media_mime],[media_filename],[media_size],
                    ISNULL([is_deleted],0),[quoted_msg_id],[reaction_emoji],[delivery_status]
             FROM {_table}
@@ -446,7 +446,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             SELECT TOP (@N)
                 [id],[bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                [body],[media_type],[has_media],[received_at],[Created],[read_at],
+                [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
                 [media_path],[media_mime],[media_filename],[media_size],
                 ISNULL([is_deleted],0),[quoted_msg_id],[reaction_emoji],[delivery_status]
             FROM {_table}
@@ -497,7 +497,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         // Son gelen mesajın read_at'ını NULL yap
         cmd.CommandText = $"""
             UPDATE {_table}
-               SET [read_at] = NULL
+               SET [ReadAt] = NULL
              WHERE [id] = (
                  SELECT TOP 1 [id]
                    FROM {_table}

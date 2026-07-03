@@ -109,11 +109,12 @@ public sealed class SqlCalendarRepository : ICalendarRepository
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
                 SELECT wo.Id,
-                       wo.OrderNumber + ISNULL(N' — ' + i.Name, N'') AS Title,
+                       d.DocumentNumber + ISNULL(N' — ' + i.Name, N'') AS Title,
                        CONVERT(nvarchar(10), wo.PlannedStartDate, 120) AS StartDate,
                        CASE WHEN wo.PlannedEndDate IS NULL THEN NULL
                             ELSE CONVERT(nvarchar(10), wo.PlannedEndDate, 120) END AS EndDate
                 FROM dbo.WorkOrder wo
+                INNER JOIN dbo.Document d ON d.id = wo.DocumentId
                 LEFT JOIN dbo.Items i ON i.Id = wo.ItemId
                 WHERE wo.CompanyId = @CompanyId
                   AND wo.IsActive = 1

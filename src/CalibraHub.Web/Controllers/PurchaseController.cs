@@ -656,10 +656,18 @@ public sealed class PurchaseController : Controller
             FROM [{s}].[DocumentLine] dl
             INNER JOIN [{s}].[Items] i ON i.[Id] = dl.[ItemId]
             LEFT JOIN (
-                SELECT [ItemId],
-                       SUM(CASE WHEN [MovementType] = 2 THEN [Quantity] ELSE -[Quantity] END) AS [Balance]
-                FROM [{s}].[StockMovement]
-                GROUP BY [ItemId]
+                SELECT sdl.[ItemId],
+                       SUM(CASE
+                           WHEN sdl.[MovementType] IN (2,3) AND sdl.[LocationId]     IS NOT NULL THEN  sdl.[Quantity]
+                           WHEN sdl.[MovementType] IN (1,3) AND sdl.[FromLocationId] IS NOT NULL THEN -sdl.[Quantity]
+                           WHEN sdl.[MovementType] = 4 AND sdl.[LocationId]     IS NOT NULL THEN  sdl.[Quantity]
+                           WHEN sdl.[MovementType] = 4 AND sdl.[FromLocationId] IS NOT NULL THEN -sdl.[Quantity]
+                           ELSE 0
+                       END) AS [Balance]
+                FROM [{s}].[DocumentLine] sdl
+                INNER JOIN [{s}].[Document] sd ON sd.[id] = sdl.[DocumentId]
+                WHERE sdl.[MovementType] IS NOT NULL AND sd.[IsActive] = 1
+                GROUP BY sdl.[ItemId]
             ) sm ON sm.[ItemId] = dl.[ItemId]
             WHERE dl.[DocumentId] IN ({paramList})
               AND dl.[ItemId] IS NOT NULL;
@@ -782,70 +790,66 @@ public sealed class PurchaseController : Controller
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        // İki stok kaynağını birleştir:
-        //   1) StockMovement — ERP entegrasyon tablosu (Faz 4 önce boş olabilir)
-        //   2) stock_doc_line — CalibraHub native depo modülü (STOCK_IN / STOCK_OUT / TRANSFER)
+        // 2026-07-02: Tek kaynak — DocumentLine (MovementType: 1=Issue/2=Receipt/3=Transfer/4=Adjust).
+        // MovementType IS NULL = ticari/henuz kesinlesmemis satir (Transfer/Giris/Cikis Draft'ta
+        // duzenlenirken MovementType bos kalir — SaveLinesAsync ile serbestce degistirilebilir;
+        // "Kesinlestir" aninda tek UPDATE ile set edilir). WorkOrder/Sayim append-only yazdigi anda
+        // zaten MovementType dolu gelir — ayrica Document.status kontrolüne gerek yok (companion
+        // pattern'de Document.Status sabit Draft kalabilir, otorite companion'in kendi status'undedir
+        // — bkz. ArgeProjectService).
         cmd.CommandText = $"""
             WITH Combined AS (
-                -- Kaynak 1: StockMovement (ERP entegrasyon)
-                SELECT sm.ItemId, sm.LocationId,
-                       SUM(CASE WHEN sm.MovementType = 2 THEN sm.Quantity ELSE 0 END)
-                     - SUM(CASE WHEN sm.MovementType = 1 THEN sm.Quantity ELSE 0 END) AS Bal
-                FROM [{s}].[StockMovement] sm
-                WHERE sm.ItemId IN ({paramList})
-                GROUP BY sm.ItemId, sm.LocationId
+                -- Receipt: hedef lokasyona +miktar
+                SELECT dl.ItemId, dl.LocationId, dl.Quantity AS Bal
+                FROM [{s}].[DocumentLine] dl
+                JOIN [{s}].[Document] d ON d.id = dl.DocumentId
+                WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 2
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
 
                 UNION ALL
 
-                -- Kaynak 2a: stock_doc STOCK_IN → hedef lokasyona +miktar
-                SELECT sdl.item_id,
-                       COALESCE(sdl.to_location_id, sd.to_location_id),
-                       SUM(sdl.qty)
-                FROM [{s}].[stock_doc_line] sdl
-                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
-                WHERE sdl.item_id IN ({paramList})
-                  AND sd.company_id = @CompanyId AND sd.is_active = 1
-                  AND sd.doc_type = 'STOCK_IN'
-                GROUP BY sdl.item_id, COALESCE(sdl.to_location_id, sd.to_location_id)
+                -- Issue: kaynak lokasyondan -miktar
+                SELECT dl.ItemId, dl.FromLocationId, -dl.Quantity
+                FROM [{s}].[DocumentLine] dl
+                JOIN [{s}].[Document] d ON d.id = dl.DocumentId
+                WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 1
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
 
                 UNION ALL
 
-                -- Kaynak 2b: stock_doc STOCK_OUT → kaynak lokasyondan -miktar
-                SELECT sdl.item_id,
-                       COALESCE(sdl.from_location_id, sd.from_location_id),
-                       -SUM(sdl.qty)
-                FROM [{s}].[stock_doc_line] sdl
-                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
-                WHERE sdl.item_id IN ({paramList})
-                  AND sd.company_id = @CompanyId AND sd.is_active = 1
-                  AND sd.doc_type = 'STOCK_OUT'
-                GROUP BY sdl.item_id, COALESCE(sdl.from_location_id, sd.from_location_id)
+                -- Transfer: hedef +miktar
+                SELECT dl.ItemId, dl.LocationId, dl.Quantity
+                FROM [{s}].[DocumentLine] dl
+                JOIN [{s}].[Document] d ON d.id = dl.DocumentId
+                WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 3 AND dl.LocationId IS NOT NULL
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
 
                 UNION ALL
 
-                -- Kaynak 2c: TRANSFER — kaynak -miktar
-                SELECT sdl.item_id,
-                       COALESCE(sdl.from_location_id, sd.from_location_id),
-                       -SUM(sdl.qty)
-                FROM [{s}].[stock_doc_line] sdl
-                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
-                WHERE sdl.item_id IN ({paramList})
-                  AND sd.company_id = @CompanyId AND sd.is_active = 1
-                  AND sd.doc_type = 'TRANSFER'
-                GROUP BY sdl.item_id, COALESCE(sdl.from_location_id, sd.from_location_id)
+                -- Transfer: kaynak -miktar
+                SELECT dl.ItemId, dl.FromLocationId, -dl.Quantity
+                FROM [{s}].[DocumentLine] dl
+                JOIN [{s}].[Document] d ON d.id = dl.DocumentId
+                WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 3 AND dl.FromLocationId IS NOT NULL
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
 
                 UNION ALL
 
-                -- Kaynak 2d: TRANSFER — hedef +miktar
-                SELECT sdl.item_id,
-                       COALESCE(sdl.to_location_id, sd.to_location_id),
-                       SUM(sdl.qty)
-                FROM [{s}].[stock_doc_line] sdl
-                JOIN [{s}].[stock_doc] sd ON sd.id = sdl.doc_id
-                WHERE sdl.item_id IN ({paramList})
-                  AND sd.company_id = @CompanyId AND sd.is_active = 1
-                  AND sd.doc_type = 'TRANSFER'
-                GROUP BY sdl.item_id, COALESCE(sdl.to_location_id, sd.to_location_id)
+                -- Adjust (Sayim farki): LocationId doluysa +miktar (fazla cikti)
+                SELECT dl.ItemId, dl.LocationId, dl.Quantity
+                FROM [{s}].[DocumentLine] dl
+                JOIN [{s}].[Document] d ON d.id = dl.DocumentId
+                WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 4 AND dl.LocationId IS NOT NULL
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
+
+                UNION ALL
+
+                -- Adjust (Sayim farki): FromLocationId doluysa -miktar (eksik cikti)
+                SELECT dl.ItemId, dl.FromLocationId, -dl.Quantity
+                FROM [{s}].[DocumentLine] dl
+                JOIN [{s}].[Document] d ON d.id = dl.DocumentId
+                WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 4 AND dl.FromLocationId IS NOT NULL
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
             )
             SELECT c.ItemId, c.LocationId, loc.LocationName, SUM(c.Bal) AS Balance
             FROM Combined c
@@ -1168,20 +1172,32 @@ public sealed class PurchaseController : Controller
         if (string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase) && configuredLocIds != null)
         {
             var lParamList = string.Join(",", configuredLocIds.Select((_, i) => $"@loc{i}"));
-            locFilter = $"AND sm.[LocationId] IN ({lParamList})";
+            locFilter = $"AND c.[LocId] IN ({lParamList})";
         }
 
         await using (var cmd2 = conn.CreateCommand())
         {
             cmd2.CommandText = $"""
-                SELECT sm.[ItemId], sm.[LocationId],
-                       SUM(CASE WHEN sm.[MovementType] = 2 THEN sm.[Quantity] ELSE 0 END) -
-                       SUM(CASE WHEN sm.[MovementType] = 1 THEN sm.[Quantity] ELSE 0 END) AS [Balance]
-                FROM [{s}].[StockMovement] sm
-                WHERE sm.[ItemId] IN ({iParamList}) {locFilter}
-                GROUP BY sm.[ItemId], sm.[LocationId]
-                HAVING (SUM(CASE WHEN sm.[MovementType] = 2 THEN sm.[Quantity] ELSE 0 END) -
-                        SUM(CASE WHEN sm.[MovementType] = 1 THEN sm.[Quantity] ELSE 0 END)) > 0;
+                WITH Combined AS (
+                    SELECT sm.[ItemId], sm.[LocationId] AS [LocId], sm.[Quantity] AS [Bal]
+                    FROM [{s}].[DocumentLine] sm
+                    INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
+                    WHERE sm.[ItemId] IN ({iParamList}) AND smd.[IsActive] = 1
+                      AND (sm.[MovementType] = 2 OR (sm.[MovementType] IN (3,4) AND sm.[LocationId] IS NOT NULL))
+
+                    UNION ALL
+
+                    SELECT sm.[ItemId], sm.[FromLocationId] AS [LocId], -sm.[Quantity]
+                    FROM [{s}].[DocumentLine] sm
+                    INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
+                    WHERE sm.[ItemId] IN ({iParamList}) AND smd.[IsActive] = 1
+                      AND (sm.[MovementType] = 1 OR (sm.[MovementType] IN (3,4) AND sm.[FromLocationId] IS NOT NULL))
+                )
+                SELECT c.[ItemId], c.[LocId] AS [LocationId], SUM(c.[Bal]) AS [Balance]
+                FROM Combined c
+                WHERE 1=1 {locFilter}
+                GROUP BY c.[ItemId], c.[LocId]
+                HAVING SUM(c.[Bal]) > 0;
                 """;
             for (var i = 0; i < distinctItemIds.Count; i++)
                 cmd2.Parameters.Add(new SqlParameter($"@i{i}", distinctItemIds[i]));
@@ -1493,9 +1509,16 @@ public sealed class PurchaseController : Controller
             LEFT  JOIN [{s}].[MeasureUnits]   mu  ON mu.[Id] = dl.[UnitId]
             LEFT  JOIN (
                 SELECT sm.[ItemId],
-                       SUM(CASE WHEN sm.[MovementType] = 2 THEN sm.[Quantity] ELSE 0 END) -
-                       SUM(CASE WHEN sm.[MovementType] = 1 THEN sm.[Quantity] ELSE 0 END) AS Balance
-                FROM [{s}].[StockMovement] sm
+                       SUM(CASE
+                           WHEN sm.[MovementType] IN (2,3) AND sm.[LocationId]     IS NOT NULL THEN  sm.[Quantity]
+                           WHEN sm.[MovementType] IN (1,3) AND sm.[FromLocationId] IS NOT NULL THEN -sm.[Quantity]
+                           WHEN sm.[MovementType] = 4 AND sm.[LocationId]     IS NOT NULL THEN  sm.[Quantity]
+                           WHEN sm.[MovementType] = 4 AND sm.[FromLocationId] IS NOT NULL THEN -sm.[Quantity]
+                           ELSE 0
+                       END) AS Balance
+                FROM [{s}].[DocumentLine] sm
+                INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
+                WHERE sm.[MovementType] IS NOT NULL AND smd.[IsActive] = 1
                 GROUP BY sm.[ItemId]
             ) stk ON stk.[ItemId] = i.[Id]
             WHERE dt.[code] = N'alis_talebi'

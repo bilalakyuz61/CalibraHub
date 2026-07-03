@@ -9,8 +9,9 @@ public sealed class WorkOrder
 {
     public int Id { get; init; }
     public int CompanyId { get; init; }
-    public required string OrderNumber { get; init; }
-    public DateTime OrderDate { get; init; }
+
+    /// <summary>Document companion FK (UNIQUE) — belge kimligi (numara/tarih/revizyon/notlar) Document'ta tutulur.</summary>
+    public int DocumentId { get; init; }
 
     public int ItemId { get; init; }
     public int? ConfigId { get; init; }
@@ -59,17 +60,12 @@ public sealed class WorkOrder
     /// </summary>
     public int? DefaultMachineId { get; init; }
 
-    public int RevisionNo { get; init; }
-    public int? ParentWorkOrderId { get; init; }
-    public int? RevisedFromId { get; init; }
-
     /// <summary>
     /// Opsiyonel AR-GE/ÜR-GE proje baglantisi (Document.id). AR-GE seri/prototip mamulu icin
     /// WO acildiginda WorkOrderService otomatik turetir; manuel de secilebilir. Maliyet rollup'ta kullanilir.
     /// </summary>
     public int? ArgeProjectId { get; init; }
 
-    public string? Notes { get; init; }
     public int? CreatedById { get; init; }
     public DateTime Created { get; init; }
     public int? UpdatedById { get; init; }

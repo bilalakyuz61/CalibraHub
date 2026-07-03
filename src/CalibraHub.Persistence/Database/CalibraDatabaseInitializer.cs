@@ -622,6 +622,111 @@ END;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>
+    /// Belirli bir connection string üzerinde tam şema oluşturur.
+    /// InitializeAsync() ile aynı adımları çalıştırır; factory yerine doğrudan bağlantı kullanır.
+    /// Health check test DB'si gibi runtime'da oluşturulan veritabanları için tasarlanmıştır.
+    /// </summary>
+    public async Task InitializeForConnectionAsync(string connectionString, CancellationToken cancellationToken)
+    {
+        await using var connection = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        try
+        {
+            await EnsureSchemaAndTablesAsync(connection, cancellationToken);
+            await EnsureIntegratorLoginColumnsAsync(connection, cancellationToken);
+            await EnsureCompanySchemaAsync(connection, cancellationToken);
+            await EnsurePltSystemLogTableAsync(connection, cancellationToken);
+            await EnsureNotesTablesAsync(connection, cancellationToken);
+            await EnsureNoteExtensionsAsync(connection, cancellationToken);
+            await EnsureBOMTablesAsync(connection, cancellationToken);
+            await EnsureMaterialGroupTablesAsync(connection, cancellationToken);
+            await EnsureFinanceTablesAsync(connection, cancellationToken);
+            await EnsureAddressTablesAsync(connection, cancellationToken);
+            await EnsureContactItemTableAsync(connection, cancellationToken);
+            await EnsureContactPersonTitleTableAsync(connection, cancellationToken);
+            await EnsureContactPersonTableAsync(connection, cancellationToken);
+            await EnsureMailSendBatchTableAsync(connection, cancellationToken);
+            await EnsureMailSendLogItemTableAsync(connection, cancellationToken);
+            await EnsureDesignTemplatesTableAsync(connection, cancellationToken);
+            await EnsureIntegrationApiProfilesTableAsync(connection, cancellationToken);
+            await EnsureIntegrationTablesAsync(connection, cancellationToken);
+            await EnsureIntegrationRecordStatusTableAsync(connection, cancellationToken);
+            await EnsureIntegrationLookupFunctionTablesAsync(connection, cancellationToken);
+            await EnsureIntegrationDocCatalogTablesAsync(connection, cancellationToken);
+            await EnsureAiTablesAsync(connection, cancellationToken);
+            await EnsureImportTablesAsync(connection, cancellationToken);
+            await EnsureDynamicFieldValuesTableAsync(connection, cancellationToken);
+            await EnsureDocumentTablesAsync(connection, cancellationToken);
+            await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
+            await EnsureDocumentTypesTableAsync(connection, cancellationToken);
+            await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
+            await EnsureCodeRuleTablesAsync(connection, cancellationToken);
+            await EnsureArgeTablesAsync(connection, cancellationToken);
+            await EnsureReportTemplatesTableAsync(connection, cancellationToken);
+            await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
+            await EnsureScheduledTasksTableAsync(connection, cancellationToken);
+            await EnsureLicenseConfigTableAsync(connection, cancellationToken);
+            await EnsureGateCredentialsTableAsync(connection, cancellationToken);
+            await EnsureWhatsAppConfigTableAsync(connection, cancellationToken);
+            await SeedDocumentTypesAsync(connection, cancellationToken);
+            await SeedArgeNumberRuleAsync(connection, cancellationToken);
+            await EnsureCurrencyTablesAsync(connection, cancellationToken);
+            await SeedCurrenciesAsync(connection, cancellationToken);
+            await EnsureReportDataViewsAsync(connection, cancellationToken);
+            await EnsureUserSettingsTableAsync(connection, cancellationToken);
+            await EnsureSalesRepresentativeTableAsync(connection, cancellationToken);
+            await EnsureDocumentLineDetailsTableAsync(connection, cancellationToken);
+            await EnsurePriceListTablesAsync(connection, cancellationToken);
+            await SeedFieldsAsync(connection, cancellationToken);
+            await SeedScreenDesignLayoutsAsync(connection, cancellationToken);
+            await SeedDepartmentsAsync(connection, cancellationToken);
+            await SeedAdminUserAsync(connection, cancellationToken);
+            await EnsureDocLayoutTableAsync(connection, cancellationToken);
+            await EnsureDocLayoutDsTableAsync(connection, cancellationToken);
+            await EnsureDocLayoutRuleTableAsync(connection, cancellationToken);
+            await SeedDefaultDocLayoutsAsync(connection, cancellationToken);
+            await EnsureFormsTableAsync(connection, cancellationToken);
+            await SeedFormsAsync(connection, cancellationToken);
+            await EnsureWidgetEavTablesAsync(connection, cancellationToken);
+            await EnsureDataVisibilityTablesAsync(connection, cancellationToken);
+            await DropEngineSchemaIfExistsAsync(connection, cancellationToken);
+            await EnsureGuideTablesAsync(connection, cancellationToken);
+            await EnsureFieldSettingsTableAsync(connection, cancellationToken);
+            await EnsureContactColumnsAsync(connection, cancellationToken);
+            await EnsureOrgChartTablesAsync(connection, cancellationToken);
+            await EnsureOrgChartV2MigrationAsync(connection, cancellationToken);
+            await EnsureRptViewTableAsync(connection, cancellationToken);
+            await EnsureRptViewColumnTableAsync(connection, cancellationToken);
+            await EnsureRptDefinitionTableAsync(connection, cancellationToken);
+            await EnsureRptDefinitionRoleTableAsync(connection, cancellationToken);
+            await EnsureRptViewRoleTableAsync(connection, cancellationToken);
+            await EnsureRptRunLogTableAsync(connection, cancellationToken);
+            await SeedRptViewRegistryAsync(connection, cancellationToken);
+            await EnsureProductionInfrastructureAsync(connection, cancellationToken);
+            await EnsureAssetTablesAsync(connection, cancellationToken);
+            await EnsureInventoryCountTablesAsync(connection, cancellationToken);
+            await EnsureGlobalLockTableAsync(connection, cancellationToken);
+            await EnsureApprovalFlowTablesAsync(connection, cancellationToken);
+            await EnsureApprovalSqlQueryTablesAsync(connection, cancellationToken);
+            await EnsureWorkflowTablesAsync(connection, cancellationToken);
+            await EnsureWorkflowInstanceTablesAsync(connection, cancellationToken);
+            await EnsureAttachmentTableAsync(cancellationToken); // system DB'ye yazar (idempotent)
+            await EnsurePermissionTablesAsync(connection, cancellationToken);
+            await MigrateDateTime2ToDateTimeAsync(connection, cancellationToken);
+            await EnsureCalendarTablesAsync(connection, cancellationToken);
+            await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
+            await EnsureReportEngineTablesAsync(connection, cancellationToken);
+            await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
+            await EnsureViewMetaTableAsync(connection, cancellationToken);
+        }
+        catch (Microsoft.Data.SqlClient.SqlException sqlEx)
+        {
+            Console.Error.WriteLine($"[DB INIT FOR CONN ERROR] SqlException {sqlEx.Number}: {sqlEx.Message}");
+            throw;
+        }
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         if (_autoCreateDatabaseOnStartup)
@@ -692,6 +797,11 @@ END;";
             await SeedAdminUserAsync(connection, cancellationToken);
             // 2026-06-03 — Varsayılan DocLayout seed'i Admin User'dan SONRA çalışır;
             // OwnerUserId FK Users tablosuna bağlı, admin id'sini kullanır.
+            // 2026-07-02 FIX (sıfır-DB order bug): DocLayout tabloları seed'DEN ÖNCE oluşturulmalı;
+            // yoksa fresh DB'de SeedDefaultDocLayoutsAsync "Invalid object name (DocLayout)" ile patlar.
+            await EnsureDocLayoutTableAsync(connection, cancellationToken);
+            await EnsureDocLayoutDsTableAsync(connection, cancellationToken);
+            await EnsureDocLayoutRuleTableAsync(connection, cancellationToken);
             await SeedDefaultDocLayoutsAsync(connection, cancellationToken);
             await EnsureFormsTableAsync(connection, cancellationToken);
             await SeedFormsAsync(connection, cancellationToken);
@@ -717,10 +827,8 @@ END;";
             await SeedRptViewRegistryAsync(connection, cancellationToken);
             await EnsureProductionInfrastructureAsync(connection, cancellationToken);
             await EnsureAssetTablesAsync(connection, cancellationToken);
-            await EnsureDocLayoutTableAsync(connection, cancellationToken);
-            await EnsureDocLayoutDsTableAsync(connection, cancellationToken);
-            await EnsureDocLayoutRuleTableAsync(connection, cancellationToken);
-            await EnsureStockDocTablesAsync(connection, cancellationToken);
+            // DocLayout tabloları yukarı taşındı (SeedDefaultDocLayoutsAsync'ten önce — sıfır-DB order fix).
+            await EnsureInventoryCountTablesAsync(connection, cancellationToken);
             await EnsureGlobalLockTableAsync(connection, cancellationToken);
             await EnsureApprovalFlowTablesAsync(connection, cancellationToken);
             await EnsureApprovalSqlQueryTablesAsync(connection, cancellationToken);
@@ -4523,6 +4631,23 @@ END;";
                 ALTER TABLE [{s}].[notes] ADD [EncryptionHint] NVARCHAR(300) NULL;
             END;
 
+            -- 2026-07-02: Yarim kalmis PascalCase migration guvencesi. Notes ekosistemi PascalCase'e
+            -- gecirilirken bazi DB'lerde rename (MigrateColumnRenamesAsync) uygulanmadan kalmis; repo
+            -- bu kolonlari PascalCase sorguladigi icin "Invalid column name" veriyor. Tablo kesin var
+            -- oldugu bu noktada snake kalan kolonlari veriyi koruyarak yeniden adlandiriyoruz. Idempotent:
+            -- yalniz snake varsa + Pascal yoksa rename; zaten Pascal ise no-op. Index/DF constraint'ler
+            -- sp_rename ile otomatik takip eder.
+            IF COL_LENGTH(N'[{s}].[notes]', N'CompanyId') IS NULL AND COL_LENGTH(N'[{s}].[notes]', N'company_id') IS NOT NULL
+                EXEC sp_rename N'[{s}].[notes].[company_id]', N'CompanyId', N'COLUMN';
+            IF COL_LENGTH(N'[{s}].[notes]', N'UserId') IS NULL AND COL_LENGTH(N'[{s}].[notes]', N'user_id') IS NOT NULL
+                EXEC sp_rename N'[{s}].[notes].[user_id]', N'UserId', N'COLUMN';
+            IF COL_LENGTH(N'[{s}].[notes]', N'IsDeleted') IS NULL AND COL_LENGTH(N'[{s}].[notes]', N'is_deleted') IS NOT NULL
+                EXEC sp_rename N'[{s}].[notes].[is_deleted]', N'IsDeleted', N'COLUMN';
+            IF COL_LENGTH(N'[{s}].[notes]', N'IsFullyEncrypted') IS NULL AND COL_LENGTH(N'[{s}].[notes]', N'is_fully_encrypted') IS NOT NULL
+                EXEC sp_rename N'[{s}].[notes].[is_fully_encrypted]', N'IsFullyEncrypted', N'COLUMN';
+            IF COL_LENGTH(N'[{s}].[notes]', N'EncryptionHint') IS NULL AND COL_LENGTH(N'[{s}].[notes]', N'encryption_hint') IS NOT NULL
+                EXEC sp_rename N'[{s}].[notes].[encryption_hint]', N'EncryptionHint', N'COLUMN';
+
             IF OBJECT_ID(N'[{s}].[note_reminders]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[note_reminders]
@@ -7417,6 +7542,33 @@ END;";
                 ALTER TABLE [{s}].[DocumentLine] ADD [FulfillmentStatus] TINYINT NOT NULL
                     CONSTRAINT [DF_DocumentLine_FulfillmentStatus] DEFAULT(0);
 
+            -- 2026-07-02: Stok hareketi konsolidasyonu — DocumentLine artik fiilen stok
+            -- hareketi yaratan satirlari da tasir (StockMovementType enum reuse: 1=Issue,
+            -- 2=Receipt, 3=Transfer, 4=Adjust; NULL = ticari/stok-etkilemez satir).
+            -- FromLocationId: transfer/sarf kaynagi (mevcut LocationId hedef/tekil lokasyon
+            -- olarak kalir). UnitCost/LotNo: stock_doc_line'dan tasinan deger/parti takibi.
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'MovementType') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [MovementType] TINYINT NULL;
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'FromLocationId') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [FromLocationId] INT NULL;
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'UnitCost') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [UnitCost] DECIMAL(18,4) NULL;
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'LotNo') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [LotNo] NVARCHAR(50) NULL;
+
+            -- Stok bakiyesi sorgusu (StockBalances) ItemId+LocationId+MovementType bazinda
+            -- filtreli calisir — veri boskken index olusturmak ucuz, sonradan pahali.
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DocumentLine_Stock'
+                               AND object_id = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                CREATE INDEX [IX_DocumentLine_Stock]
+                    ON [{s}].[DocumentLine]([ItemId], [LocationId], [MovementType])
+                    INCLUDE ([Quantity], [FromLocationId]);
+
             -- 2026-05-23: DocumentLineFulfillment — bag tablosu.
             -- Talep satiri (RequestLineId) → karsilama satiri (RefDocLineId, StockDocLine.Id
             -- veya DocumentLine.Id) eslemesi. Bir talep satiri birden cok karsilama satirina
@@ -8927,6 +9079,25 @@ END;";
                 ALTER TABLE [{s}].[whatsapp_config] ADD [web_qr_bridge_url] NVARCHAR(256) NULL;
             IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'app_secret_encrypted') IS NULL
                 ALTER TABLE [{s}].[whatsapp_config] ADD [app_secret_encrypted] NVARCHAR(MAX) NULL;
+            -- Migration: IsEnabled / LastError PascalCase olmali (repository boyle sorgular; bu tablonun
+            -- Created/Updated'i de PascalCase — proje snake→Pascal gecisinde). Tablo yanlis snake_case
+            -- (is_enabled/last_error) ile olusmus veya oyle yeniden adlandirilmis olabilir → veriyi
+            -- koruyarak Pascal'a cevir; hic yoksa ekle. (COL_LENGTH underscore'u gercek karakter sayar;
+            -- 'IsEnabled' ile 'is_enabled' eslesmez, IS NULL kontrolu dogru calisir.)
+            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'IsEnabled') IS NULL
+            BEGIN
+                IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'is_enabled') IS NOT NULL
+                    EXEC sp_rename N'[{s}].[whatsapp_config].[is_enabled]', N'IsEnabled', N'COLUMN';
+                ELSE
+                    ALTER TABLE [{s}].[whatsapp_config] ADD [IsEnabled] BIT NOT NULL DEFAULT(0);
+            END;
+            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'LastError') IS NULL
+            BEGIN
+                IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'last_error') IS NOT NULL
+                    EXEC sp_rename N'[{s}].[whatsapp_config].[last_error]', N'LastError', N'COLUMN';
+                ELSE
+                    ALTER TABLE [{s}].[whatsapp_config] ADD [LastError] NVARCHAR(500) NULL;
+            END;
 
             -- Safety rules — tek-row config
             IF OBJECT_ID(N'[{s}].[whatsapp_safety_rules]', N'U') IS NULL
@@ -9297,6 +9468,12 @@ END;";
         // Numara kurali SeedArgeNumberRuleAsync ile seed edilir (PRJ-yyyy######). Print view'i
         // ileride eklenince SqlViewName doldurulur; numara kurali icin gerekli degil.
         ("arge_proje",    "AR-GE Projesi", null,                "BelgeId", "AR-GE proje belgesi — prototip/test yasam dongusu"),
+        // 2026-07-02: Stok hareketi konsolidasyonu — stock_doc/stock_doc_line yerine
+        // Document/DocumentLine tabanli depo belgeleri. Print sablonu ileride eklenebilir.
+        ("depo_transfer", "Depo Transferi",     null, "BelgeId", "Lokasyonlar arasi stok transferi"),
+        ("depo_giris",    "Depo Giris Fisi",    null, "BelgeId", "Depoya dogrudan stok girisi"),
+        ("depo_cikis",    "Depo Cikis Fisi",    null, "BelgeId", "Depodan dogrudan stok cikisi (AR-GE malzeme tuketimi dahil)"),
+        ("sayim",         "Sayim Fisi",         null, "BelgeId", "Envanter sayim belgesi — InventoryCount companion, taslak/yansit akisi"),
     ];
 
     private async Task SeedDocumentTypesAsync(SqlConnection connection, CancellationToken cancellationToken)
@@ -11510,12 +11687,13 @@ END;";
                     CREATE OR ALTER VIEW [{s}].[cbv_Guide_WorkOrders] AS
                     SELECT
                         w.[Id]                                          AS [Id],
-                        CAST(w.[OrderNumber] AS NVARCHAR(60))           AS [Code],
+                        CAST(d.[DocumentNumber] AS NVARCHAR(60))        AS [Code],
                         CAST(ISNULL(i.[Code], '''') + '' '' + ISNULL(i.[Name], '''') AS NVARCHAR(300)) AS [Name],
-                        CAST(w.[OrderDate] AS DATE)                     AS [OrderDate],
+                        CAST(d.[DocumentDate] AS DATE)                  AS [OrderDate],
                         CAST(w.[PlannedQuantity] AS DECIMAL(18,4))      AS [PlannedQuantity],
                         CAST(w.[Status]      AS TINYINT)                AS [Status]
                     FROM [{s}].[WorkOrder] w
+                    INNER JOIN [{s}].[Document] d ON d.[id] = w.[DocumentId]
                     LEFT JOIN [{s}].[Items] i ON i.[Id] = w.[ItemId]
                     WHERE w.[IsActive] = 1;
                 ');
@@ -12554,6 +12732,11 @@ END;";
             END;
 
             -- PRODUCT_TREES: 'parentCode' (Mamul Kodu) -> ITEMS rehberi
+            -- Form permission'dan kaldirildi (IsActive=0) ama FldSet FK icin satir olmasi gerekir.
+            -- Fresh DB'de satir yoksa IsActive=0 ile olusturulur; mevcut DB'de hicbir sey degismez.
+            IF NOT EXISTS (SELECT 1 FROM dbo.Forms WHERE [FormCode] = N'PRODUCT_TREES')
+                INSERT INTO dbo.Forms ([FormCode], [FormName], [Module], [IsActive])
+                VALUES (N'PRODUCT_TREES', N'Ürün Ağacı Formu', N'Üretim', 0);
             SELECT @FormId = [Id] FROM dbo.Forms WHERE [FormCode] = N'PRODUCT_TREES';
             IF @FormId IS NOT NULL
             BEGIN
@@ -13100,65 +13283,24 @@ END;";
                     ON [{schemaForSql}].[Numerator]([CompanyId], [EntityType]);
             END;
 
-            -- ===== StockMovement (cekirdek; rezervasyon/lot Faz 4'te) =====
-            IF OBJECT_ID(N'[{schemaForSql}].[StockMovement]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{schemaForSql}].[StockMovement]
-                (
-                    [Id]           INT NOT NULL IDENTITY(1,1) CONSTRAINT [PK_StockMovement] PRIMARY KEY,
-                    [CompanyId]    INT NOT NULL,
-                    [MovementType] TINYINT NOT NULL,
-                    [ItemId]       INT NOT NULL,
-                    [ConfigId]     INT NULL,
-                    [Quantity]     DECIMAL(18,4) NOT NULL CONSTRAINT [df_StockMovement_Quantity] DEFAULT(0),
-                    [UnitId]       INT NULL,
-                    [LocationId]   INT NULL,
-                    [RefType]      VARCHAR(20) NOT NULL CONSTRAINT [df_StockMovement_RefType] DEFAULT('MANUAL'),
-                    [RefId]        INT NULL,
-                    [RefLineId]    INT NULL,
-                    [MovementDate] DATETIME NOT NULL CONSTRAINT [df_StockMovement_Date] DEFAULT(SYSUTCDATETIME()),
-                    [BatchNo]      NVARCHAR(50) NULL,
-                    [LotNo]        NVARCHAR(50) NULL,
-                    [CreatedById]    INT NULL,
-                    [Created]      DATETIME NOT NULL CONSTRAINT [df_StockMovement_Created] DEFAULT SYSUTCDATETIME(),
-                    [UpdatedById]    INT NULL,
-                    [Updated]      DATETIME NULL,
-                    CONSTRAINT [CK_StockMovement_Type] CHECK ([MovementType] BETWEEN 1 AND 4)
-                );
-                CREATE INDEX [ix_StockMovement_Comp_Item]
-                    ON [{schemaForSql}].[StockMovement]([CompanyId],[ItemId]);
-                CREATE INDEX [ix_StockMovement_Ref]
-                    ON [{schemaForSql}].[StockMovement]([RefType],[RefId]);
-            END;
-
-            -- Migration: [CreatedBy]/[UpdatedBy] NVARCHAR -> [CreatedById]/[UpdatedById] INT
+            -- ===== StockMovement — 2026-07-02 emekliye ayrildi =====
+            -- Stok hareketi konsolidasyonu: hicbir yerden INSERT almiyordu (sifir veri,
+            -- ERP entegrasyon icin tasarlanmis ama hic bagli degildi). Yerini DocumentLine
+            -- (MovementType/FromLocationId/UnitCost/LotNo kolonlari) aldi.
             IF OBJECT_ID(N'[{schemaForSql}].[StockMovement]', N'U') IS NOT NULL
-            BEGIN
-                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[StockMovement]') AND name = N'CreatedBy')
-                BEGIN
-                    ALTER TABLE [{schemaForSql}].[StockMovement] DROP COLUMN [CreatedBy];
-                    ALTER TABLE [{schemaForSql}].[StockMovement] ADD [CreatedById] INT NULL;
-                END
-                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[StockMovement]') AND name = N'CreatedById')
-                    ALTER TABLE [{schemaForSql}].[StockMovement] ADD [CreatedById] INT NULL;
-                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[StockMovement]') AND name = N'UpdatedBy')
-                BEGIN
-                    ALTER TABLE [{schemaForSql}].[StockMovement] DROP COLUMN [UpdatedBy];
-                    ALTER TABLE [{schemaForSql}].[StockMovement] ADD [UpdatedById] INT NULL;
-                END
-                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[StockMovement]') AND name = N'UpdatedById')
-                    ALTER TABLE [{schemaForSql}].[StockMovement] ADD [UpdatedById] INT NULL;
-            END
+                DROP TABLE [{schemaForSql}].[StockMovement];
 
             -- ===== WorkOrder (Faz 1: 1 mamul/emir) =====
+            -- 2026-07-02: Document companion modeli (ArgeProject deseni). Belge kimligi
+            -- (numara/tarih/revizyon/notlar) Document'ta tutulur; WorkOrder sadece
+            -- production-specific alanlari + DocumentId (UNIQUE FK) tasir.
             IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{schemaForSql}].[WorkOrder]
                 (
                     [Id]                  INT NOT NULL IDENTITY(1,1) CONSTRAINT [PK_WorkOrder] PRIMARY KEY,
                     [CompanyId]           INT NOT NULL,
-                    [OrderNumber]         NVARCHAR(50) NOT NULL,
-                    [OrderDate]           DATETIME NOT NULL CONSTRAINT [df_WorkOrder_OrderDate] DEFAULT(SYSUTCDATETIME()),
+                    [DocumentId]          INT NOT NULL,
                     [ItemId]              INT NOT NULL,
                     [ConfigId]            INT NULL,
                     [PlannedQuantity]     DECIMAL(18,4) NOT NULL CONSTRAINT [df_WorkOrder_PlannedQty] DEFAULT(0),
@@ -13173,24 +13315,80 @@ END;";
                     [Priority]            TINYINT NOT NULL CONSTRAINT [df_WorkOrder_Priority] DEFAULT(1),
                     [AssignedUserId]      INT NULL,
                     [WarehouseLocationId] INT NULL,
-                    [RevisionNo]          INT NOT NULL CONSTRAINT [df_WorkOrder_RevisionNo] DEFAULT(0),
-                    [ParentWorkOrderId]   INT NULL,
-                    [RevisedFromId]       INT NULL,
-                    [Notes]               NVARCHAR(MAX) NULL,
                     [CreatedById]           INT NULL,
                     [Created]             DATETIME NOT NULL CONSTRAINT [df_WorkOrder_Created] DEFAULT SYSUTCDATETIME(),
                     [UpdatedById]           INT NULL,
                     [Updated]             DATETIME NULL,
                     [IsActive]            BIT NOT NULL CONSTRAINT [df_WorkOrder_IsActive] DEFAULT(1),
                     CONSTRAINT [CK_WorkOrder_Status]   CHECK ([Status] BETWEEN 0 AND 5),
-                    CONSTRAINT [CK_WorkOrder_Priority] CHECK ([Priority] BETWEEN 0 AND 2)
+                    CONSTRAINT [CK_WorkOrder_Priority] CHECK ([Priority] BETWEEN 0 AND 2),
+                    CONSTRAINT [UX_WorkOrder_Document] UNIQUE ([DocumentId]),
+                    CONSTRAINT [FK_WorkOrder_Document] FOREIGN KEY ([DocumentId])
+                        REFERENCES [{schemaForSql}].[Document]([id])
                 );
-                CREATE UNIQUE INDEX [ux_WorkOrder_Comp_Number]
-                    ON [{schemaForSql}].[WorkOrder]([CompanyId], [OrderNumber]);
                 CREATE INDEX [ix_WorkOrder_Status]
                     ON [{schemaForSql}].[WorkOrder]([CompanyId], [Status]);
                 CREATE INDEX [ix_WorkOrder_Item]
                     ON [{schemaForSql}].[WorkOrder]([CompanyId], [ItemId]);
+            END;
+
+            -- Migration: eski WorkOrder semasi (OrderNumber/OrderDate/RevisionNo/
+            -- ParentWorkOrderId/RevisedFromId/Notes) -> Document companion modeli.
+            -- Canli veri yok (2026-07-02 karari) — mevcut satirlar (varsa) test/gelistirme
+            -- kalintisi sayilip silinir (Document karsiligi uretilemeyecegi icin backfill
+            -- yapilmiyor); bagimli WorkOrderOperation/WorkOrderComponent/WorkOrderSource
+            -- satirlari da temizlenir. Adim 1: kolon yoksa nullable ekle (ayri IF — yarim
+            -- kalan onceki calistirmadan sonra kolon zaten eklenmis olabilir, batch icindeki
+            -- her DDL statement kendi basina commit olur, bu yuzden adimlar birbirinden
+            -- bagimsiz idempotent kontrol edilir).
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'DocumentId') IS NULL
+                ALTER TABLE [{schemaForSql}].[WorkOrder] ADD [DocumentId] INT NULL;
+
+            -- Adim 2: kolon hala nullable ise (donusum tamamlanmamis — ilk kez ya da onceki
+            -- calistirma bu noktadan once patladiysa) temizle + NOT NULL'a cevir.
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND EXISTS (SELECT 1 FROM sys.columns
+                           WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]')
+                             AND name = N'DocumentId' AND is_nullable = 1)
+            BEGIN
+                IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderComponent]', N'U') IS NOT NULL
+                    DELETE FROM [{schemaForSql}].[WorkOrderComponent];
+                IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderOperationActivity]', N'U') IS NOT NULL
+                    DELETE FROM [{schemaForSql}].[WorkOrderOperationActivity];
+                IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderOperation]', N'U') IS NOT NULL
+                    DELETE FROM [{schemaForSql}].[WorkOrderOperation];
+                IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderSource]', N'U') IS NOT NULL
+                    DELETE FROM [{schemaForSql}].[WorkOrderSource];
+                DELETE FROM [{schemaForSql}].[WorkOrder];
+                ALTER TABLE [{schemaForSql}].[WorkOrder] ALTER COLUMN [DocumentId] INT NOT NULL;
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'OrderNumber') IS NOT NULL
+            BEGIN
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ux_WorkOrder_Comp_Number'
+                           AND object_id = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+                    DROP INDEX [ux_WorkOrder_Comp_Number] ON [{schemaForSql}].[WorkOrder];
+                IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'df_WorkOrder_OrderDate'
+                           AND parent_object_id = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+                    ALTER TABLE [{schemaForSql}].[WorkOrder] DROP CONSTRAINT [df_WorkOrder_OrderDate];
+                IF EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'df_WorkOrder_RevisionNo'
+                           AND parent_object_id = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+                    ALTER TABLE [{schemaForSql}].[WorkOrder] DROP CONSTRAINT [df_WorkOrder_RevisionNo];
+                ALTER TABLE [{schemaForSql}].[WorkOrder] DROP COLUMN
+                    [OrderNumber], [OrderDate], [RevisionNo], [ParentWorkOrderId], [RevisedFromId], [Notes];
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'DocumentId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE [name] = N'FK_WorkOrder_Document'
+                               AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_WorkOrder_Document'
+                               AND object_id = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+                    CREATE UNIQUE INDEX [UX_WorkOrder_Document] ON [{schemaForSql}].[WorkOrder]([DocumentId]);
+                ALTER TABLE [{schemaForSql}].[WorkOrder] WITH CHECK
+                    ADD CONSTRAINT [FK_WorkOrder_Document] FOREIGN KEY ([DocumentId])
+                        REFERENCES [{schemaForSql}].[Document]([id]);
             END;
 
             -- ===== WorkOrderSource (Faz 1: bolme + toplama icin many-to-many) =====
@@ -14345,82 +14543,64 @@ END;";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task EnsureStockDocTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    /// <summary>
+    /// 2026-07-02: stock_doc/stock_doc_line (native depo modulu) emekliye ayrildi — stok
+    /// hareketi konsolidasyonu kapsaminda Document/DocumentLine'a tasindi (canli veri yok,
+    /// dogrudan DROP). Yerine Sayim'in taslak/gercek ayrimini tasiyan InventoryCount/
+    /// InventoryCountLine companion cifti geliyor (ham sayim girisleri stok hareketi
+    /// DEGILDIR — sadece "Yansit" ile turetilen farklar DocumentLine'a yazilir).
+    /// </summary>
+    private async Task EnsureInventoryCountTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
         var sql = $"""
-            IF OBJECT_ID(N'[{s}].[stock_doc]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[stock_doc]
-                (
-                    [id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_stock_doc] PRIMARY KEY,
-                    [company_id]       INT               NOT NULL,
-                    [doc_type]         NVARCHAR(20)      NOT NULL,
-                    [doc_no]           NVARCHAR(30)      NOT NULL,
-                    [doc_date]         DATE              NOT NULL,
-                    [from_location_id] INT               NULL,
-                    [to_location_id]   INT               NULL,
-                    [ref_no]           NVARCHAR(50)      NULL,
-                    [notes]            NVARCHAR(500)     NULL,
-                    [created_by_id]    INT               NULL,
-                    [created]          DATETIME         NOT NULL CONSTRAINT [df_stock_doc_created] DEFAULT GETDATE(),
-                    [IsActive]        BIT               NOT NULL CONSTRAINT [df_stock_doc_active]  DEFAULT 1,
-                    CONSTRAINT [uq_stock_doc_no] UNIQUE ([company_id], [doc_no])
-                );
-                CREATE INDEX [ix_stock_doc_company_type] ON [{s}].[stock_doc]([company_id], [doc_type]);
-            END;
-
-            IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[stock_doc_line]
-                (
-                    [id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_stock_doc_line] PRIMARY KEY,
-                    [doc_id]           INT               NOT NULL,
-                    [line_no]          INT               NOT NULL,
-                    [item_id]          INT               NOT NULL,
-                    [unit_id]          INT               NULL,
-                    [qty]              DECIMAL(18,4)     NOT NULL,
-                    [combination_id]   INT               NULL,
-                    [notes]            NVARCHAR(200)     NULL,
-                    [from_location_id] INT               NULL,
-                    [to_location_id]   INT               NULL,
-                    CONSTRAINT [fk_stock_doc_line_doc] FOREIGN KEY ([doc_id])
-                        REFERENCES [{s}].[stock_doc]([id]) ON DELETE CASCADE
-                );
-                CREATE INDEX [ix_stock_doc_line_doc] ON [{s}].[stock_doc_line]([doc_id]);
-            END;
-
             IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NOT NULL
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM sys.columns
-                               WHERE object_id = OBJECT_ID(N'[{s}].[stock_doc_line]')
-                                 AND [name] = N'from_location_id')
-                    ALTER TABLE [{s}].[stock_doc_line] ADD [from_location_id] INT NULL;
-
-                IF NOT EXISTS (SELECT 1 FROM sys.columns
-                               WHERE object_id = OBJECT_ID(N'[{s}].[stock_doc_line]')
-                                 AND [name] = N'to_location_id')
-                    ALTER TABLE [{s}].[stock_doc_line] ADD [to_location_id] INT NULL;
-            END;
-
-            -- stock_doc.created_by_id: repo bu kolonu bekliyor; legacy created_by→created_by_id rename
-            -- migration'i kaldirilmis. Mevcut DB'lerde eksikse ekle (idempotent).
+                DROP TABLE [{s}].[stock_doc_line];
             IF OBJECT_ID(N'[{s}].[stock_doc]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[stock_doc]', N'created_by_id') IS NULL
-                ALTER TABLE [{s}].[stock_doc] ADD [created_by_id] INT NULL;
+                DROP TABLE [{s}].[stock_doc];
 
-            -- AR-GE/ÜR-GE maliyet entegrasyonu (Faz 1): cikis fisine proje referansi + satir birim maliyeti
-            IF OBJECT_ID(N'[{s}].[stock_doc]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[stock_doc]', N'arge_project_id') IS NULL
-                ALTER TABLE [{s}].[stock_doc] ADD [arge_project_id] INT NULL;
+            IF OBJECT_ID(N'[{s}].[InventoryCount]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[InventoryCount]
+                (
+                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_InventoryCount] PRIMARY KEY,
+                    [DocumentId] INT NOT NULL,
+                    [LocationId] INT NULL,
+                    [CountDate]  DATETIME NOT NULL CONSTRAINT [DF_InventoryCount_CountDate] DEFAULT SYSUTCDATETIME(),
+                    -- Status: 0=Draft (serbestce duzenlenebilir), 1=Applied (Yansitildi — DocumentLine'a
+                    -- fark satirlari yazildi, immutable), 2=Cancelled.
+                    [Status]     TINYINT NOT NULL CONSTRAINT [DF_InventoryCount_Status] DEFAULT(0),
+                    [CreatedById] INT NULL,
+                    [Created]    DATETIME NOT NULL CONSTRAINT [DF_InventoryCount_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT NULL,
+                    [Updated]    DATETIME NULL,
+                    CONSTRAINT [UX_InventoryCount_Document] UNIQUE ([DocumentId]),
+                    CONSTRAINT [FK_InventoryCount_Document] FOREIGN KEY ([DocumentId])
+                        REFERENCES [{s}].[Document]([id]),
+                    CONSTRAINT [CK_InventoryCount_Status] CHECK ([Status] BETWEEN 0 AND 2)
+                );
+                CREATE INDEX [IX_InventoryCount_Status] ON [{s}].[InventoryCount]([Status]);
+            END;
 
-            IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[stock_doc_line]', N'unit_cost') IS NULL
-                ALTER TABLE [{s}].[stock_doc_line] ADD [unit_cost] DECIMAL(18,4) NULL;
-
-            IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[stock_doc_line]', N'lot_no') IS NULL
-                ALTER TABLE [{s}].[stock_doc_line] ADD [lot_no] NVARCHAR(50) NULL;
+            IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[InventoryCountLine]
+                (
+                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_InventoryCountLine] PRIMARY KEY,
+                    [InventoryCountId] INT NOT NULL,
+                    [ItemId]           INT NOT NULL,
+                    [ConfigId]         INT NULL,
+                    [UnitId]           INT NULL,
+                    -- SystemQtyAtCount: sadece referans/gorsel amacli (taslakta doldurulan) snapshot.
+                    -- "Yansit" gercek farki hesaplarken bakiyeyi YENIDEN sorgular (staleness onlemi).
+                    [SystemQtyAtCount] DECIMAL(18,4) NULL,
+                    [CountedQty]       DECIMAL(18,4) NOT NULL CONSTRAINT [DF_InventoryCountLine_CountedQty] DEFAULT(0),
+                    [Notes]            NVARCHAR(500) NULL,
+                    CONSTRAINT [FK_InventoryCountLine_InventoryCount] FOREIGN KEY ([InventoryCountId])
+                        REFERENCES [{s}].[InventoryCount]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_InventoryCountLine_Count] ON [{s}].[InventoryCountLine]([InventoryCountId]);
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;

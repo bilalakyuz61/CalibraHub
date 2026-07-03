@@ -24,7 +24,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[provider_code],[Created],[Updated]
+            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[IsActive],[provider_code],[Created],[Updated]
             FROM {_table} WHERE [company_id] = @CompanyId ORDER BY [name];
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
@@ -50,7 +50,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[provider_code],[Created],[Updated]
+            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[IsActive],[provider_code],[Created],[Updated]
             FROM {_table} WHERE [id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -65,10 +65,10 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         cmd.CommandText = $"""
             IF EXISTS (SELECT 1 FROM {_table} WHERE [id] = @Id)
                 UPDATE {_table} SET [name]=@Name, [auth_type]=@AuthType, [base_url]=@BaseUrl,
-                    [auth_config_json]=@AuthConfigJson, [is_active]=@IsActive, [provider_code]=@ProviderCode, [Updated]=@UpdatedAt
+                    [auth_config_json]=@AuthConfigJson, [IsActive]=@IsActive, [provider_code]=@ProviderCode, [Updated]=@UpdatedAt
                 WHERE [id]=@Id
             ELSE
-                INSERT INTO {_table} ([id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[provider_code],[Created],[Updated])
+                INSERT INTO {_table} ([id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[IsActive],[provider_code],[Created],[Updated])
                 VALUES (@Id,@CompanyId,@Name,@AuthType,@BaseUrl,@AuthConfigJson,@IsActive,@ProviderCode,@CreatedAt,@UpdatedAt);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", p.Id));

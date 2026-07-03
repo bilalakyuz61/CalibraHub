@@ -18,6 +18,7 @@ namespace CalibraHub.Web.Controllers;
 public sealed class WarehouseController : Controller
 {
     private readonly IStockDocRepository _stockDocRepo;
+    private readonly IInventoryCountRepository _inventoryCountRepo;
     private readonly ILogisticsConfigurationService _logisticsService;
     private readonly IArgeProjectService _argeService;
     private readonly IFieldSettingRepository _fieldSettings;
@@ -33,6 +34,7 @@ public sealed class WarehouseController : Controller
 
     public WarehouseController(
         IStockDocRepository stockDocRepo,
+        IInventoryCountRepository inventoryCountRepo,
         ILogisticsConfigurationService logisticsService,
         IArgeProjectService argeService,
         IFieldSettingRepository fieldSettings,
@@ -40,6 +42,7 @@ public sealed class WarehouseController : Controller
         CalibraDatabaseOptions dbOptions)
     {
         _stockDocRepo = stockDocRepo;
+        _inventoryCountRepo = inventoryCountRepo;
         _logisticsService = logisticsService;
         _argeService = argeService;
         _fieldSettings = fieldSettings;
@@ -130,39 +133,43 @@ public sealed class WarehouseController : Controller
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT
-                l.item_id,
+                l.ItemId,
                 i.Code             AS material_code,
                 i.Name             AS material_name,
-                l.unit_id,
+                l.UnitId,
                 u.Code             AS unit_code,
-                l.combination_id,
+                l.CombinationId,
                 cfg.RecordCode     AS combination_code,
                 SUM(
                     CASE
-                        WHEN d.doc_type = 'STOCK_IN'  AND l.to_location_id   = @LocId THEN  l.qty
-                        WHEN d.doc_type = 'STOCK_OUT' AND l.from_location_id = @LocId THEN -l.qty
-                        WHEN d.doc_type = 'TRANSFER'  AND l.to_location_id   = @LocId THEN  l.qty
-                        WHEN d.doc_type = 'TRANSFER'  AND l.from_location_id = @LocId THEN -l.qty
+                        WHEN l.MovementType = 2 AND l.LocationId     = @LocId THEN  l.Quantity
+                        WHEN l.MovementType = 1 AND l.FromLocationId = @LocId THEN -l.Quantity
+                        WHEN l.MovementType = 3 AND l.LocationId     = @LocId THEN  l.Quantity
+                        WHEN l.MovementType = 3 AND l.FromLocationId = @LocId THEN -l.Quantity
+                        WHEN l.MovementType = 4 AND l.LocationId     = @LocId THEN  l.Quantity
+                        WHEN l.MovementType = 4 AND l.FromLocationId = @LocId THEN -l.Quantity
                         ELSE 0
                     END
                 ) AS expected_qty
-            FROM [{_schema}].[stock_doc] d
-            JOIN [{_schema}].[stock_doc_line] l ON l.doc_id = d.id
-            LEFT JOIN [{_schema}].[Items]             i   ON i.Id   = l.item_id
-            LEFT JOIN [{_schema}].[Unit]              u   ON u.Id   = l.unit_id
-            LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.Id = l.combination_id
-            WHERE d.company_id = @CompanyId
-              AND d.is_active  = 1
-              AND CONVERT(DATE, d.doc_date) <= @Date
-              AND d.doc_type IN ('STOCK_IN','STOCK_OUT','TRANSFER')
-              AND (l.from_location_id = @LocId OR l.to_location_id = @LocId)
-            GROUP BY l.item_id, i.Code, i.Name, l.unit_id, u.Code, l.combination_id, cfg.RecordCode
+            FROM [{_schema}].[Document] d
+            JOIN [{_schema}].[DocumentLine] l ON l.DocumentId = d.id
+            LEFT JOIN [{_schema}].[Items]             i   ON i.Id   = l.ItemId
+            LEFT JOIN [{_schema}].[Unit]              u   ON u.Id   = l.UnitId
+            LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.Id = l.CombinationId
+            WHERE d.CompanyId = @CompanyId
+              AND d.IsActive  = 1
+              AND CONVERT(DATE, d.DocumentDate) <= @Date
+              AND l.MovementType IN (1,2,3,4)
+              AND (l.FromLocationId = @LocId OR l.LocationId = @LocId)
+            GROUP BY l.ItemId, i.Code, i.Name, l.UnitId, u.Code, l.CombinationId, cfg.RecordCode
             HAVING SUM(
                 CASE
-                    WHEN d.doc_type = 'STOCK_IN'  AND l.to_location_id   = @LocId THEN  l.qty
-                    WHEN d.doc_type = 'STOCK_OUT' AND l.from_location_id = @LocId THEN -l.qty
-                    WHEN d.doc_type = 'TRANSFER'  AND l.to_location_id   = @LocId THEN  l.qty
-                    WHEN d.doc_type = 'TRANSFER'  AND l.from_location_id = @LocId THEN -l.qty
+                    WHEN l.MovementType = 2 AND l.LocationId     = @LocId THEN  l.Quantity
+                    WHEN l.MovementType = 1 AND l.FromLocationId = @LocId THEN -l.Quantity
+                    WHEN l.MovementType = 3 AND l.LocationId     = @LocId THEN  l.Quantity
+                    WHEN l.MovementType = 3 AND l.FromLocationId = @LocId THEN -l.Quantity
+                    WHEN l.MovementType = 4 AND l.LocationId     = @LocId THEN  l.Quantity
+                    WHEN l.MovementType = 4 AND l.FromLocationId = @LocId THEN -l.Quantity
                     ELSE 0
                 END
             ) > 0
@@ -218,6 +225,30 @@ public sealed class WarehouseController : Controller
         {
             await _stockDocRepo.DeleteAsync(id, ct);
             return Json(new { ok = true });
+        }
+        catch
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Yansıt (2026-07-02) — taslak sayım satırlarını güncel bakiyeyle karşılaştırır, farkları
+    /// DocumentLine'a (Adjust) atomik yazar. Idempotent: aynı sayım ikinci kez yansıtılamaz.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> ApplyInventoryJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            var writtenCount = await _inventoryCountRepo.ApplyAsync(id, ct);
+            return Json(new { ok = true, writtenCount });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
         }
         catch
         {

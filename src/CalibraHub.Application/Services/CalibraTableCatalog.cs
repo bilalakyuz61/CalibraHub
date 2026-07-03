@@ -77,8 +77,11 @@ public static class CalibraTableCatalog
         // Dinamik Raporlama
         "RptDef", "RptDefRole", "RptRunLog", "RptView", "RptViewCol", "RptViewRole",
 
-        // Sirket Parametre / Numerator / Stok Hareketi (Faz 0)
-        "CompanyParameter", "Numerator", "StockMovement",
+        // Sirket Parametre / Numerator (Faz 0)
+        "CompanyParameter", "Numerator",
+
+        // Sayim (2026-07-02 stok hareketi konsolidasyonu — stock hareketleri artik DocumentLine'da)
+        "InventoryCount", "InventoryCountLine",
 
         // Takvim
         "CalendarEvent",

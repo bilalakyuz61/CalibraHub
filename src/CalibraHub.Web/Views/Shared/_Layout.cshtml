@@ -5,6 +5,7 @@
 @inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
 @inject IAntiforgery Antiforgery
 @inject CalibraHub.Application.Abstractions.Services.IPermissionService PermService
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @{
     // Workspace (iframe) mode: ya ?workspace=1 query flag'i var, YA DA
     // request bir iframe'den geliyor (Sec-Fetch-Dest: iframe). Ikincisi
@@ -329,6 +330,9 @@
                 year = DateTime.Now.Year.ToString(),
                 status = layoutUi.Text("system_status"),
                 appVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "?",
+                runMode = Env.IsDevelopment() ? "DEV"
+                        : !System.Environment.UserInteractive ? "SVC"
+                        : (string?)null,
             },
             menu = await BuildMenuForCurrentUserAsync(),
             theme = uiRuntime.ThemeCode,
@@ -687,7 +691,18 @@ else if (!useDashboardShell)
                     <span>@profileCompany</span>
                 </div>
             }
-            <div class="status-item">v1.1.0</div>
+            <div class="status-item">
+                v1.1.0
+                @{
+                    var _runMode = Env.IsDevelopment() ? "DEV"
+                                 : !System.Environment.UserInteractive ? "SVC"
+                                 : null;
+                }
+                @if (_runMode != null)
+                {
+                    <span class="status-run-badge status-run-badge--@_runMode.ToLower()">@_runMode</span>
+                }
+            </div>
         </div>
     </footer>
 }

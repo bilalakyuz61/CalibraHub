@@ -225,6 +225,10 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
           Sil
         </button>
+        <button type="button" class="inv-btn inv-btn--primary" id="invApplyBtn" title="Sayım farklarını stok hareketine yansıtır — bu işlem sonrası sayım düzenlenemez">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.85.99 6.57 2.64L21 8"/><path d="M21 3v5h-5"/></svg>
+          Yansıt
+        </button>
     }
 
     <!-- Belge no + rozet -->
@@ -320,6 +324,19 @@
       <div class="inv-modal__actions">
         <button type="button" class="inv-modal__cancel" id="invModalCancel">Vazgeç</button>
         <button type="button" class="inv-modal__ok"     id="invModalOk">Sil</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Yansıt onay modal -->
+  <div id="invApplyModal" class="inv-modal-backdrop" style="display:none;">
+    <div class="inv-modal">
+      <div class="inv-modal__icon">🔄</div>
+      <h3 class="inv-modal__title">Sayımı Yansıt</h3>
+      <p class="inv-modal__msg">Güncel stok bakiyesiyle karşılaştırılan farklar stok hareketine yazılacak. Bu işlemden sonra sayım düzenlenemez. Devam edilsin mi?</p>
+      <div class="inv-modal__actions">
+        <button type="button" class="inv-modal__cancel" id="invApplyModalCancel">Vazgeç</button>
+        <button type="button" class="inv-modal__ok"     id="invApplyModalOk">Yansıt</button>
       </div>
     </div>
   </div>
@@ -620,6 +637,34 @@
         }
     }
 
+    // ── Yansıt ───────────────────────────────────────────────────────
+    function showApplyModal() { document.getElementById('invApplyModal').style.display = 'flex'; document.getElementById('invApplyModalOk').focus(); }
+    function hideApplyModal() { document.getElementById('invApplyModal').style.display = 'none'; }
+    async function doApply() {
+        hideApplyModal();
+        if (!DOC_ID) return;
+        try {
+            var resp = await fetch('/Warehouse/ApplyInventoryJson?id=' + DOC_ID, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': TOKEN },
+            });
+            var json = await resp.json();
+            if (json && json.ok) {
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast('Sayım yansıtıldı — ' + json.writtenCount + ' fark satırı yazıldı.', 'ok');
+                window.location.href = '/Warehouse/Inventory';
+            } else {
+                var msg = (json && json.error) || 'Yansıtma başarısız.';
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(msg, 'err');
+                else alert(msg);
+            }
+        } catch (ex) {
+            if (window.CalibraHub && window.CalibraHub.toast)
+                window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
+        }
+    }
+
     // ── Line Grid ────────────────────────────────────────────────────
     function patchGridKey() {
         Object.defineProperty(window.CalibraHub, 'salesLineGrid', {
@@ -733,11 +778,19 @@
         document.getElementById('invDeleteModal')?.addEventListener('click', function(e) {
             if (e.target === this) hideDeleteModal();
         });
+        var applyBtn = document.getElementById('invApplyBtn');
+        if (applyBtn) applyBtn.addEventListener('click', showApplyModal);
+        document.getElementById('invApplyModalCancel')?.addEventListener('click', hideApplyModal);
+        document.getElementById('invApplyModalOk')?.addEventListener('click', doApply);
+        document.getElementById('invApplyModal')?.addEventListener('click', function(e) {
+            if (e.target === this) hideApplyModal();
+        });
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') hideDeleteModal();
+            if (e.key === 'Escape') { hideDeleteModal(); hideApplyModal(); }
         });
         if (!DOC_ID) {
             if (delBtn) delBtn.style.display = 'none';
+            if (applyBtn) applyBtn.style.display = 'none';
         }
     }
 

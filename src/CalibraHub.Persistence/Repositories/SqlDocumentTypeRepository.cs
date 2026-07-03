@@ -24,7 +24,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[sql_view_name],[required_key_column],[description],[is_active],[Created],[Updated]
+            SELECT [id],[code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated]
             FROM {_table}
             ORDER BY [name];
             """;
@@ -39,7 +39,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[sql_view_name],[required_key_column],[description],[is_active],[Created],[Updated]
+            SELECT [id],[code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated]
             FROM {_table}
             WHERE [id] = @Id;
             """;
@@ -53,7 +53,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[sql_view_name],[required_key_column],[description],[is_active],[Created],[Updated]
+            SELECT [id],[code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated]
             FROM {_table}
             WHERE [code] = @Code;
             """;
@@ -70,9 +70,9 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         {
             command.CommandText = $"""
                 UPDATE {_table}
-                    SET [code]=@Code,[name]=@Name,[sql_view_name]=@SqlViewName,
+                    SET [code]=@Code,[name]=@Name,[SqlViewName]=@SqlViewName,
                         [required_key_column]=@ReqKey,
-                        [description]=@Description,[is_active]=@IsActive,[Updated]=GETDATE()
+                        [description]=@Description,[IsActive]=@IsActive,[Updated]=GETDATE()
                     WHERE [id]=@Id;
                 SELECT @Id;
                 """;
@@ -81,7 +81,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         else
         {
             command.CommandText = $"""
-                INSERT INTO {_table} ([code],[name],[sql_view_name],[required_key_column],[description],[is_active],[Created],[Updated])
+                INSERT INTO {_table} ([code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated])
                 VALUES (@Code,@Name,@SqlViewName,@ReqKey,@Description,@IsActive,GETDATE(),GETDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;

@@ -61,7 +61,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                    wo.[StartedByPersonnelId],   sp.[FullName] AS StartedByName,   wo.[StartedAt],
                    wo.[CompletedByPersonnelId], cp.[FullName] AS CompletedByName, wo.[CompletedAt],
                    wo.[Notes],
-                   w.[OrderNumber] AS WoNumber,
+                   d.[DocumentNumber] AS WoNumber,
                    i.[Code]        AS ItemCode,
                    i.[Name]        AS ItemName,
                    w.[PlannedQuantity] AS WoPlannedQty,
@@ -78,6 +78,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                    END AS UpstreamCap
             FROM {_table} wo
             INNER JOIN [{_schema}].[WorkOrder] w  ON w.[Id]  = wo.[WorkOrderId]
+            INNER JOIN [{_schema}].[Document]  d  ON d.[id]  = w.[DocumentId]
             LEFT  JOIN [{_schema}].[Operation] op ON op.[Id] = wo.[OperationId]
             LEFT  JOIN [{_schema}].[Machine]   m  ON m.[Id]  = wo.[MachineId]
             LEFT  JOIN [{_schema}].[Personnel] sp ON sp.[Id] = wo.[StartedByPersonnelId]
@@ -87,7 +88,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
               AND wo.[Status] IN (0, 1)
               AND w.[Status] IN (1, 2)
               AND w.[IsActive] = 1
-            ORDER BY w.[Priority] DESC, w.[OrderDate], wo.[Sequence];";
+            ORDER BY w.[Priority] DESC, d.[DocumentDate], wo.[Sequence];";
         cmd.Parameters.Clear();
         cmd.Parameters.AddWithValue("@MachineId", machineId);
         return await ReadListAsync(cmd, ct);
@@ -233,23 +234,83 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task CompleteAsync(int id, int personnelId, decimal? finalQuantity, CancellationToken ct)
+    public async Task CompleteAsync(int id, int personnelId, decimal? finalQuantity, DocumentLine? stockLine, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $@"
-            UPDATE {_table}
-            SET [Status] = 2,
-                [ProducedQuantity] = COALESCE(@FinalQty, [ProducedQuantity]),
-                [CompletedByPersonnelId] = @PersonnelId,
-                [CompletedAt] = GETUTCDATE(),
-                [StartedByPersonnelId] = COALESCE([StartedByPersonnelId], @PersonnelId),
-                [StartedAt]            = COALESCE([StartedAt], GETUTCDATE())
-            WHERE [Id] = @Id;";
-        cmd.Parameters.AddWithValue("@Id", id);
-        cmd.Parameters.AddWithValue("@PersonnelId", personnelId);
-        cmd.Parameters.AddWithValue("@FinalQty", (object?)finalQuantity ?? DBNull.Value);
-        await cmd.ExecuteNonQueryAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = $@"
+                    UPDATE {_table}
+                    SET [Status] = 2,
+                        [ProducedQuantity] = COALESCE(@FinalQty, [ProducedQuantity]),
+                        [CompletedByPersonnelId] = @PersonnelId,
+                        [CompletedAt] = GETUTCDATE(),
+                        [StartedByPersonnelId] = COALESCE([StartedByPersonnelId], @PersonnelId),
+                        [StartedAt]            = COALESCE([StartedAt], GETUTCDATE())
+                    WHERE [Id] = @Id;";
+                cmd.Parameters.AddWithValue("@Id", id);
+                cmd.Parameters.AddWithValue("@PersonnelId", personnelId);
+                cmd.Parameters.AddWithValue("@FinalQty", (object?)finalQuantity ?? DBNull.Value);
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // Son operasyon tamamlaniyorsa (stockLine dolu) — mamul girisi AYNI transaction'da
+            // append edilir. AppendStockLineAsync'in ayni UPDLOCK+HOLDLOCK deseni burada
+            // tekrarlanir (SqlDocumentRepository referans alinarak) — Application katmani
+            // iki repository arasinda transaction paylasamadigi icin atomiklik burada saglanir.
+            if (stockLine is not null)
+            {
+                var s = _schema.Replace("]", "]]");
+                var lineTable = $"[{s}].[DocumentLine]";
+
+                int nextLineNo;
+                await using (var selCmd = conn.CreateCommand())
+                {
+                    selCmd.Transaction = tx;
+                    selCmd.CommandText = $"""
+                        SELECT ISNULL(MAX([LineNo]), 0) + 1 FROM {lineTable} WITH (UPDLOCK, HOLDLOCK)
+                        WHERE [DocumentId] = @DocumentId;
+                        """;
+                    selCmd.Parameters.AddWithValue("@DocumentId", stockLine.DocumentId);
+                    nextLineNo = Convert.ToInt32(await selCmd.ExecuteScalarAsync(ct));
+                }
+
+                await using var insCmd = conn.CreateCommand();
+                insCmd.Transaction = tx;
+                insCmd.CommandText = $"""
+                    INSERT INTO {lineTable}
+                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[UnitPrice],[DiscountRate],[LineTotal],
+                         [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotNo],[Notes])
+                    VALUES
+                        (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,0,0,0,
+                         @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotNo,@Notes);
+                    """;
+                insCmd.Parameters.AddWithValue("@DocumentId", stockLine.DocumentId);
+                insCmd.Parameters.AddWithValue("@LineNo", nextLineNo);
+                insCmd.Parameters.AddWithValue("@ItemId", stockLine.ItemId);
+                insCmd.Parameters.AddWithValue("@UnitId", (object?)stockLine.UnitId ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@Quantity", stockLine.Quantity);
+                insCmd.Parameters.AddWithValue("@CombinationId", (object?)stockLine.CombinationId ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@LocationId", (object?)stockLine.LocationId ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@FromLocationId", (object?)stockLine.FromLocationId ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@MovementType", (object?)stockLine.MovementType ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@UnitCost", (object?)stockLine.UnitCost ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@LotNo", (object?)stockLine.LotNo ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@Notes", (object?)stockLine.Notes ?? DBNull.Value);
+                await insCmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     private string BuildSelect(string filter) => $@"
@@ -262,7 +323,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                wo.[CompletedByPersonnelId], cp.[FullName] AS CompletedByName, wo.[CompletedAt],
                wo.[Notes],
                -- Faz 3 ShopFloor UX: mamul + planlanan miktar bağlamı
-               w.[OrderNumber] AS WoNumber,
+               d.[DocumentNumber] AS WoNumber,
                i.[Code] AS ItemCode, i.[Name] AS ItemName,
                w.[PlannedQuantity] AS WoPlannedQty,
                -- 2026-05-22: Upstream cap — bu op'tan önceki tüm op'ların net üretimi
@@ -284,6 +345,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
         LEFT JOIN [{_schema}].[Personnel] sp ON sp.[Id] = wo.[StartedByPersonnelId]
         LEFT JOIN [{_schema}].[Personnel] cp ON cp.[Id] = wo.[CompletedByPersonnelId]
         LEFT JOIN [{_schema}].[WorkOrder] w  ON w.[Id]  = wo.[WorkOrderId]
+        LEFT JOIN [{_schema}].[Document]  d  ON d.[id]  = w.[DocumentId]
         LEFT JOIN [{_schema}].[Items]     i  ON i.[Id]  = w.[ItemId]
         {filter};";
 

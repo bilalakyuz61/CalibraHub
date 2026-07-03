@@ -24,8 +24,8 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT [id],[provider],[access_token_encrypted],[phone_number_id],[business_account_id],
-                   [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[is_enabled],
-                   [last_successful_send_at],[last_error],[Created],[Updated],[app_secret_encrypted]
+                   [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[IsEnabled],
+                   [last_successful_send_at],[LastError],[Created],[Updated],[app_secret_encrypted]
               FROM {_table}
              WHERE [id] = 1;
             """;
@@ -66,9 +66,9 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
                        [display_phone_number]     = @DisplayPhoneNumber,
                        [webhook_verify_token]     = @WebhookToken,
                        [web_qr_bridge_url]        = @BridgeUrl,
-                       [is_enabled]               = @IsEnabled,
+                       [IsEnabled]               = @IsEnabled,
                        [last_successful_send_at]  = @LastSuccessfulSendAt,
-                       [last_error]               = @LastError,
+                       [LastError]               = @LastError,
                        [Updated]               = GETUTCDATE()
                  WHERE [id] = 1;
             END
@@ -76,8 +76,8 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
             BEGIN
                 INSERT INTO {_table}
                     ([id],[provider],[access_token_encrypted],[app_secret_encrypted],[phone_number_id],[business_account_id],
-                     [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[is_enabled],
-                     [last_successful_send_at],[last_error],[Created],[Updated])
+                     [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[IsEnabled],
+                     [last_successful_send_at],[LastError],[Created],[Updated])
                 VALUES
                     (1,@Provider,@Token,@AppSecret,@PhoneNumberId,@BusinessAccountId,@DisplayPhoneNumber,@WebhookToken,@BridgeUrl,@IsEnabled,
                      @LastSuccessfulSendAt,@LastError,GETUTCDATE(),GETUTCDATE());

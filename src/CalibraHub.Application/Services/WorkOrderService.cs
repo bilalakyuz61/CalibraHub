@@ -99,9 +99,25 @@ public sealed class WorkOrderService : IWorkOrderService
             throw new ArgumentException("Planlanan miktar 0'dan buyuk olmali.", nameof(request.PlannedQuantity));
         if (request.ItemId <= 0)
             throw new ArgumentException("Mamul (ItemId) zorunlu.", nameof(request.ItemId));
+        if (_documentTypeRepo is null)
+            throw new InvalidOperationException("Belge tipi deposu (IDocumentTypeRepository) kayitli degil.");
 
         var orderDate = DateTime.UtcNow;
         var orderNumber = await ResolveOrderNumberAsync(orderDate, ct);
+
+        // 2026-07-02: Document companion modeli — belge kimligi (numara/tarih/notlar) once
+        // Document'ta olusturulur (ArgeProjectService.SaveAsync ile ayni desen), WorkOrder
+        // sonra bu DocumentId'ye baglanir.
+        var type = await _documentTypeRepo.GetByCodeAsync(WorkOrderTypeCode, ct)
+            ?? throw new InvalidOperationException("'is_emri' belge tipi tanimli degil (DB init calismadi mi?).");
+        var documentId = await _documents.UpsertAsync(new Document
+        {
+            DocumentNumber = orderNumber,
+            DocumentTypeId = type.Id,
+            DocumentDate = orderDate,
+            Status = DocumentStatus.Draft,
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+        }, ct);
 
         var defaultLocationId = request.WarehouseLocationId
             ?? await _parameters.GetIntAsync(FormCode, "DefaultLocationId", ct);
@@ -130,8 +146,7 @@ public sealed class WorkOrderService : IWorkOrderService
 
         var entity = new WorkOrder
         {
-            OrderNumber = orderNumber,
-            OrderDate = orderDate,
+            DocumentId = documentId,
             ItemId = request.ItemId,
             ConfigId = request.ConfigId,
             PlannedQuantity = request.PlannedQuantity,
@@ -145,7 +160,6 @@ public sealed class WorkOrderService : IWorkOrderService
             RoutingId = resolvedRoutingId,
             DefaultMachineId = request.DefaultMachineId,
             AssignedPersonnelId = request.AssignedPersonnelId,
-            Notes = request.Notes,
             ArgeProjectId = argeProjectId,
         };
 
@@ -160,11 +174,24 @@ public sealed class WorkOrderService : IWorkOrderService
         return newId;
     }
 
-    public Task UpdateAsync(int id, UpdateWorkOrderRequest request, CancellationToken ct)
+    public async Task UpdateAsync(int id, UpdateWorkOrderRequest request, CancellationToken ct)
     {
         if (request.PlannedQuantity <= 0)
             throw new ArgumentException("Planlanan miktar 0'dan buyuk olmali.", nameof(request.PlannedQuantity));
-        return _workOrders.UpdateAsync(id, request, null, ct);
+
+        await _workOrders.UpdateAsync(id, request, null, ct);
+
+        // Notlar artik Document.notes'ta — WorkOrder tarafi guncellendikten sonra ayrica yazilir.
+        var current = await _workOrders.GetAsync(id, ct);
+        if (current is not null)
+        {
+            var doc = await _documents.GetByIdAsync(current.DocumentId, ct);
+            if (doc is not null)
+            {
+                doc.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+                await _documents.UpsertAsync(doc, ct);
+            }
+        }
     }
 
     public async Task ChangeStatusAsync(int id, WorkOrderStatus newStatus, CancellationToken ct)
@@ -205,7 +232,32 @@ public sealed class WorkOrderService : IWorkOrderService
         if (current.Status is WorkOrderStatus.Closed or WorkOrderStatus.Cancelled)
             throw new InvalidOperationException("Kapali veya iptal edilmis is emri revize edilemez.");
 
-        return await _workOrders.CreateRevisionAsync(id, null, ct);
+        if (_documentTypeRepo is null)
+            throw new InvalidOperationException("Belge tipi deposu (IDocumentTypeRepository) kayitli degil.");
+
+        // 2026-07-02: DocumentService'in teklif revizyon deseniyle ayni — yeni bir Document
+        // satiri acilir (ParentDocumentId=eski, RevisionNo+1), suffix hack YOK (numara motoru
+        // DocumentNumberRule ile native uretir).
+        var oldDoc = await _documents.GetByIdAsync(current.DocumentId, ct)
+            ?? throw new InvalidOperationException("Belge bulunamadi.");
+
+        var revisionDate = DateTime.UtcNow;
+        var newNumber = await ResolveOrderNumberAsync(revisionDate, ct);
+        var type = await _documentTypeRepo.GetByCodeAsync(WorkOrderTypeCode, ct)
+            ?? throw new InvalidOperationException("'is_emri' belge tipi tanimli degil (DB init calismadi mi?).");
+
+        var newDocumentId = await _documents.UpsertAsync(new Document
+        {
+            DocumentNumber = newNumber,
+            DocumentTypeId = type.Id,
+            DocumentDate = revisionDate,
+            Status = DocumentStatus.Draft,
+            RevisionNo = oldDoc.RevisionNo + 1,
+            ParentDocumentId = oldDoc.Id,
+            Notes = oldDoc.Notes,
+        }, ct);
+
+        return await _workOrders.CreateRevisionAsync(id, newDocumentId, null, ct);
     }
 
     public async Task<int> CreateFromSalesLineAsync(CreateWorkOrderFromSalesLineRequest request, CancellationToken ct)
@@ -319,6 +371,14 @@ public sealed class WorkOrderService : IWorkOrderService
 
     public Task<IReadOnlyCollection<WorkOrderComponentDto>> GetComponentsAsync(int workOrderId, CancellationToken ct)
         => _workOrderComponents.GetByWorkOrderAsync(workOrderId, ct);
+
+    public Task IssueComponentAsync(IssueWorkOrderComponentRequest request, CancellationToken ct)
+    {
+        if (request.WorkOrderComponentId <= 0) throw new ArgumentException("Bileşen kaydı zorunlu.");
+        if (request.Quantity <= 0) throw new ArgumentException("Miktar 0'dan büyük olmalı.");
+        if (request.OperatorPersonnelId <= 0) throw new ArgumentException("Operatör (Personnel) zorunlu.");
+        return _workOrderComponents.IssueAsync(request.WorkOrderComponentId, request.Quantity, request.OperatorPersonnelId, ct);
+    }
 
     private static void ValidateTransition(WorkOrderStatus current, WorkOrderStatus next)
     {

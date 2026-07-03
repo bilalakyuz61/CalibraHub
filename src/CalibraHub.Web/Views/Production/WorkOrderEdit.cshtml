@@ -765,18 +765,6 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
         <a class="woe-back" href="@Url.Action("WorkOrders")" title="Listeye dön">←</a>
         <a class="woe-btn" href="@Url.Action("WorkOrderEdit")" id="btn-new" title="Yeni iş emri">+ Yeni</a>
         <button class="woe-btn woe-btn--primary" id="btn-save" @(isNew || canEditPlan ? "" : "disabled")>Kaydet</button>
-        @* "Üretime Planla" switch — sadece YENİ iş emrinde göster. Default ON; kapatırsa
-           WO Taslak (Planned) statüsünde kaydedilir, sonradan toolbar'daki "Yayımla" ile
-           üretime açılabilir. ON ise Save sırasında autoRelease=true gönderilir,
-           backend operasyonları otomatik patlatır + Released (Yayımlandı) statüsüne yazar. *@
-        @if (isNew)
-        {
-            <label class="woe-switch-inline" title="Açıkken: kaydet sonrası iş emri Yayımlandı statüsüne geçer ve üretim sahasına açılır. Kapatırsan: Taslak kalır, sonra Yayımla butonuyla açarsın.">
-                <input type="checkbox" id="f-autoRelease" checked />
-                <span class="woe-switch-track"></span>
-                <span class="woe-switch-text">Üretime Planla</span>
-            </label>
-        }
         @if (!isNew)
         {
             @* Yayımla / Kapat / İptal butonları toolbar'dan kaldırıldı:
@@ -926,6 +914,21 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                     <label>Notlar</label>
                     <textarea id="f-notes" @(canEditPlan || isNew ? "" : "readonly")>@Model?.Notes</textarea>
                 </div>
+
+                @* "Üretime Planla" switch — sadece YENİ iş emrinde göster. Default ON; kapatırsa
+                   WO Taslak (Planned) statüsünde kaydedilir. ON ise Save sırasında autoRelease=true
+                   gönderilir, backend operasyonları otomatik patlatır + Released statüsüne yazar. *@
+                @if (isNew)
+                {
+                    <div class="woe-row">
+                        <label>Üretime Planla</label>
+                        <label class="woe-switch-inline" title="Açıkken: kaydet sonrası iş emri Yayımlandı statüsüne geçer ve üretim sahasına açılır. Kapatırsan: Taslak kalır, sonra Yayımla butonuyla açarsın.">
+                            <input type="checkbox" id="f-autoRelease" checked />
+                            <span class="woe-switch-track"></span>
+                            <span class="woe-switch-text">Evet — kaydet sonrası yayımlanır</span>
+                        </label>
+                    </div>
+                }
 
                 @if (!isNew)
                 {

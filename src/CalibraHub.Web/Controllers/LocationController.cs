@@ -223,7 +223,7 @@ public sealed class LocationController : Controller
         int stockDocCount, machineCount, assetCount, itemLocCount;
         cmd.CommandText = $"""
             SELECT
-                (SELECT COUNT(*) FROM [{s}].[stock_doc]     WHERE from_location_id = @id OR to_location_id = @id) AS StockDocCount,
+                (SELECT COUNT(*) FROM [{s}].[DocumentLine]   WHERE LocationId = @id OR FromLocationId = @id) AS StockDocCount,
                 (SELECT COUNT(*) FROM [{s}].[Machine]        WHERE LocationId = @id)                               AS MachineCount,
                 (SELECT COUNT(*) FROM [{s}].[Asset]          WHERE LocationId = @id)                               AS AssetCount,
                 (SELECT COUNT(*) FROM [{s}].[item_locations] WHERE location_id = @id)                              AS ItemLocCount
@@ -249,7 +249,13 @@ public sealed class LocationController : Controller
 
         if (stockDocCount > 0)
         {
-            cmd.CommandText = $"SELECT TOP 3 doc_no FROM [{s}].[stock_doc] WHERE (from_location_id = @id OR to_location_id = @id) ORDER BY id DESC";
+            cmd.CommandText = $"""
+                SELECT TOP 3 d.[DocumentNumber]
+                FROM [{s}].[DocumentLine] dl
+                INNER JOIN [{s}].[Document] d ON d.[id] = dl.[DocumentId]
+                WHERE dl.[LocationId] = @id OR dl.[FromLocationId] = @id
+                ORDER BY dl.[Id] DESC
+                """;
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) stockDocSamples.Add(r.GetString(0));
         }

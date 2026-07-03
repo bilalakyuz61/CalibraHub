@@ -19,7 +19,6 @@ namespace CalibraHub.Web.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/field-settings")]
-[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
 public sealed class FieldSettingsController : ControllerBase
 {
     private readonly IFieldSettingRepository _repo;
@@ -30,6 +29,7 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpGet("form/{formId:int}")]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
     public async Task<IActionResult> GetByForm(int formId, CancellationToken ct)
     {
         var items = await _repo.GetByFormIdAsync(formId, ct);
@@ -40,6 +40,7 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpGet("guide/{guideCode}")]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
     public async Task<IActionResult> GetByGuide(string guideCode, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(guideCode))
@@ -53,6 +54,7 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
     public async Task<IActionResult> Upsert([FromBody] UpsertFieldSettingRequest request, CancellationToken ct)
     {
         if (request == null)
@@ -76,6 +78,7 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpPost("by-form-code")]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
     public async Task<IActionResult> UpsertByFormCode(
         [FromBody] UpsertFieldSettingByFormCodeRequest request, CancellationToken ct)
     {
@@ -97,6 +100,7 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpPost("bulk-map")]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
     public async Task<IActionResult> BulkMap([FromBody] BulkMapGuideRequest request, CancellationToken ct)
     {
         if (request == null)
@@ -118,6 +122,7 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         if (id <= 0) return BadRequest(new { success = false, message = "Gecersiz id." });
@@ -144,6 +149,7 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpGet("discover/{formId:int}")]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.ViewSettings)]
     public async Task<IActionResult> DiscoverFields(int formId, [FromQuery] bool includeMapped, CancellationToken ct)
     {
         if (formId <= 0) return BadRequest(new { success = false, message = "Gecersiz formId." });

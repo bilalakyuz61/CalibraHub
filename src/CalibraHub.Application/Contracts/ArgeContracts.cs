@@ -81,8 +81,8 @@ public sealed record ArgeProjectLaborDto(
     int OperationCount);
 
 /// <summary>
-/// Projeye bağlı depo çıkışlarının (stock_doc.arge_project_id) malzeme maliyeti rollup'u (Faz 4).
-/// MaterialCost = Σ(qty × unit_cost); yalnızca STOCK_OUT türü hareketler.
+/// Projeye bağlı depo çıkışlarının (DocumentLine, Document.ParentDocumentId=proje) malzeme
+/// maliyeti rollup'u (Faz 4). MaterialCost = Σ(Quantity × UnitCost); yalnızca Issue (MovementType=1) hareketler.
 /// </summary>
 public sealed record ArgeProjectMaterialDto(
     decimal MaterialCost,

@@ -37,6 +37,7 @@ public sealed record WorkOrderSourceDto(
 public sealed record WorkOrderDto(
     int Id,
     int CompanyId,
+    int DocumentId,
     string OrderNumber,
     DateTime OrderDate,
     int ItemId,

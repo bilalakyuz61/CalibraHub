@@ -20,8 +20,12 @@ public interface IWorkOrderRepository
 
     Task ChangeStatusAsync(int id, WorkOrderStatus newStatus, int? userId, CancellationToken ct);
 
-    /// <summary>Released sonrasi revize: yeni emir kopyalanir (RevisionNo+1, RevisedFromId=eski), eski Cancelled.</summary>
-    Task<int> CreateRevisionAsync(int existingId, int? userId, CancellationToken ct);
+    /// <summary>
+    /// Released sonrasi revize: yeni WorkOrder satiri kopyalanir (newDocumentId ile — Document
+    /// tarafindaki yeni revizyon satirini SERVICE onceden olusturur ve buraya parametre gecer),
+    /// eski WorkOrder Cancelled olur.
+    /// </summary>
+    Task<int> CreateRevisionAsync(int existingId, int newDocumentId, int? userId, CancellationToken ct);
 
     Task<IReadOnlyCollection<WorkOrderSourceDto>> GetSourcesAsync(int workOrderId, CancellationToken ct);
 

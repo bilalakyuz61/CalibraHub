@@ -1404,6 +1404,14 @@ function Sidebar(props) {
             </>
           )}
           <span className="flex-shrink-0">{'v' + ((props.system && props.system.appVersion) || '?')}</span>
+          {props.system && props.system.runMode && (
+            <span className={
+              'flex-shrink-0 px-1 rounded text-[9px] font-bold tracking-wide border font-mono ' +
+              (props.system.runMode === 'DEV'
+                ? (isDark ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-amber-100 text-amber-700 border-amber-300')
+                : (isDark ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-indigo-100 text-indigo-700 border-indigo-300'))
+            }>{props.system.runMode}</span>
+          )}
         </div>
       </div>
     </aside>
@@ -2330,6 +2338,14 @@ function StatusBar(props) {
         )}
         <span className={dividerColor}>·</span>
         <span>{'v' + ((props.system && props.system.appVersion) || '?')}</span>
+        {props.system && props.system.runMode && (
+          <span className={
+            'px-1 rounded text-[9px] font-bold tracking-wide border ' +
+            (props.system.runMode === 'DEV'
+              ? (isDark ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-amber-100 text-amber-700 border-amber-300')
+              : (isDark ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-indigo-100 text-indigo-700 border-indigo-300'))
+          }>{props.system.runMode}</span>
+        )}
       </div>
     </footer>
   )

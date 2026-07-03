@@ -168,7 +168,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         // document_source tablosu IDocumentSourceRepository.EnsureSchemaAsync ile garantilenir;
         // burada OBJECT_ID guard ile tabloya bagimliligi gevsetmek zorunda kalmadan,
         // sadece NOT EXISTS sub-query'i tablo olusturulduktan sonra cagiriyoruz (DocumentService garanti eder).
-        where += $" AND NOT EXISTS (SELECT 1 FROM [{_schema}].[document_source] ds WHERE ds.[source_document_id] = q.[id])";
+        where += $" AND NOT EXISTS (SELECT 1 FROM [{_schema}].[DocumentSource] ds WHERE ds.[SourceDocumentId] = q.[id])";
 
         if (fromDate.HasValue)
         {
@@ -469,6 +469,68 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             delCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
             await delCmd.ExecuteNonQueryAsync(ct);
         }
+    }
+
+    public async Task<int> AppendStockLineAsync(int documentId, DocumentLine line, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            var newId = await AppendStockLineCoreAsync(conn, tx, documentId, line, ct);
+            await tx.CommitAsync(ct);
+            return newId;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Append-only insert — SaveLinesAsync'in upsert-all/replace davranışının aksine mevcut
+    /// satırlara dokunmaz. LineNo ataması UPDLOCK+HOLDLOCK ile concurrent-safe (SqlDocumentNumberService
+    /// deseninin aynısı — bkz. SqlDocumentNumberService.IncrementCounterAsync).
+    /// </summary>
+    private async Task<int> AppendStockLineCoreAsync(SqlConnection conn, SqlTransaction tx, int documentId, DocumentLine line, CancellationToken ct)
+    {
+        int nextLineNo;
+        await using (var selCmd = conn.CreateCommand())
+        {
+            selCmd.Transaction = tx;
+            selCmd.CommandText = $"""
+                SELECT ISNULL(MAX([LineNo]), 0) + 1 FROM {_lineTable} WITH (UPDLOCK, HOLDLOCK)
+                WHERE [DocumentId] = @DocumentId;
+                """;
+            selCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+            nextLineNo = Convert.ToInt32(await selCmd.ExecuteScalarAsync(ct));
+        }
+
+        await using var insCmd = conn.CreateCommand();
+        insCmd.Transaction = tx;
+        insCmd.CommandText = $"""
+            INSERT INTO {_lineTable}
+                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[UnitPrice],[DiscountRate],[LineTotal],
+                 [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotNo],[Notes])
+            VALUES
+                (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,0,0,0,
+                 @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotNo,@Notes);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
+            """;
+        insCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+        insCmd.Parameters.Add(new SqlParameter("@LineNo", nextLineNo));
+        insCmd.Parameters.Add(new SqlParameter("@ItemId", line.ItemId));
+        insCmd.Parameters.Add(new SqlParameter("@UnitId", (object?)line.UnitId ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@Quantity", line.Quantity));
+        insCmd.Parameters.Add(new SqlParameter("@CombinationId", (object?)line.CombinationId ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@LocationId", (object?)line.LocationId ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@FromLocationId", (object?)line.FromLocationId ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@MovementType", (object?)line.MovementType ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@UnitCost", (object?)line.UnitCost ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@LotNo", (object?)line.LotNo ?? DBNull.Value));
+        insCmd.Parameters.Add(new SqlParameter("@Notes", (object?)line.Notes ?? DBNull.Value));
+        return Convert.ToInt32(await insCmd.ExecuteScalarAsync(ct));
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)

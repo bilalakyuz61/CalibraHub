@@ -2,14 +2,21 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
+using CalibraHub.Domain.Enums;
+using System.Linq;
 
 namespace CalibraHub.Application.Services;
 
 public sealed class WorkOrderOperationService : IWorkOrderOperationService
 {
     private readonly IWorkOrderOperationRepository _repo;
+    private readonly IWorkOrderRepository _workOrders;
 
-    public WorkOrderOperationService(IWorkOrderOperationRepository repo) => _repo = repo;
+    public WorkOrderOperationService(IWorkOrderOperationRepository repo, IWorkOrderRepository workOrders)
+    {
+        _repo = repo;
+        _workOrders = workOrders;
+    }
 
     public Task<IReadOnlyCollection<WorkOrderOperationDto>> GetByWorkOrderAsync(int workOrderId, CancellationToken ct)
         => _repo.GetByWorkOrderAsync(workOrderId, ct);
@@ -80,17 +87,45 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
     {
         if (req.WorkOrderOperationId <= 0) throw new ArgumentException("Operasyon kaydı zorunlu.");
         if (req.OperatorPersonnelId <= 0) throw new ArgumentException("Operatör (Personnel) zorunlu.");
+
+        // 2026-07-02: op her durumda lazim — hem upstream cap kontrolu hem de "son operasyon mu"
+        // tespiti icin (son operasyon tamamlaninca mamul girisi DocumentLine'a append edilir).
+        var op = await _repo.GetAsync(req.WorkOrderOperationId, ct)
+            ?? throw new InvalidOperationException("Operasyon bulunamadı.");
+
         // 2026-05-22: Final miktar verildiyse upstream cap kontrolü. FinalQuantity null ise
         // mevcut ProducedQuantity korunur (sadece status = Completed olur), cap zaten Partial'da
         // tutulduğundan ek kontrol gerekmez.
-        if (req.FinalQuantity.HasValue)
+        if (req.FinalQuantity.HasValue && req.FinalQuantity.Value > op.UpstreamCap)
+            throw new InvalidOperationException(
+                $"Final miktar upstream limitini aşıyor: {req.FinalQuantity.Value:N2} > {op.UpstreamCap:N2}");
+
+        // Bu, iş emrindeki en yüksek Sequence'lı operasyon mu? Öyleyse mamul girişi yazılır
+        // (üretimin son adımı = stoğa giren mamul). Ara operasyonlar stok hareketi yaratmaz.
+        DocumentLine? stockLine = null;
+        var allOps = await _repo.GetByWorkOrderAsync(op.WorkOrderId, ct);
+        var isLastOperation = allOps.Count > 0 && op.Sequence == allOps.Max(o => o.Sequence);
+        if (isLastOperation)
         {
-            var op = await _repo.GetAsync(req.WorkOrderOperationId, ct);
-            if (op is null) throw new InvalidOperationException("Operasyon bulunamadı.");
-            if (req.FinalQuantity.Value > op.UpstreamCap)
-                throw new InvalidOperationException(
-                    $"Final miktar upstream limitini aşıyor: {req.FinalQuantity.Value:N2} > {op.UpstreamCap:N2}");
+            var wo = await _workOrders.GetAsync(op.WorkOrderId, ct)
+                ?? throw new InvalidOperationException("İş emri bulunamadı.");
+            var finalQty = req.FinalQuantity ?? op.ProducedQuantity;
+            if (finalQty > 0)
+            {
+                stockLine = new DocumentLine
+                {
+                    DocumentId = wo.DocumentId,
+                    ItemId = wo.ItemId,
+                    CombinationId = wo.ConfigId,
+                    UnitId = wo.UnitId,
+                    Quantity = finalQty,
+                    LocationId = wo.WarehouseLocationId,
+                    MovementType = (byte)StockMovementType.Receipt,
+                    Notes = $"İş Emri #{wo.OrderNumber} — üretim tamamlama",
+                };
+            }
         }
-        await _repo.CompleteAsync(req.WorkOrderOperationId, req.OperatorPersonnelId, req.FinalQuantity, ct);
+
+        await _repo.CompleteAsync(req.WorkOrderOperationId, req.OperatorPersonnelId, req.FinalQuantity, stockLine, ct);
     }
 }

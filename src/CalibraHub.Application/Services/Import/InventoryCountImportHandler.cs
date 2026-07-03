@@ -117,23 +117,14 @@ public sealed class InventoryCountImportHandler : IImportTargetHandler
                 groups[key] = g;
             }
 
-            if (string.Equals(item.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase))
-            {
-                // Seri-takipli: her seri ayrı satır (miktar 1); seri no lot_no kolonuna yazılır.
-                foreach (var sn in SplitSerials(serialRaw))
-                    g.Lines.Add(new SaveStockDocLineRequest(
-                        Id: null, ItemId: item.Id, MaterialCode: item.Code, MaterialName: item.Name,
-                        UnitId: item.UnitId, Qty: 1m, CombinationId: configId, Notes: notes,
-                        FromLocationId: null, ToLocationId: null, UnitCost: null, LotNo: sn));
-            }
-            else
-            {
-                g.Lines.Add(new SaveStockDocLineRequest(
-                    Id: null, ItemId: item.Id, MaterialCode: item.Code, MaterialName: item.Name,
-                    UnitId: item.UnitId, Qty: qty.Value, CombinationId: configId, Notes: notes,
-                    FromLocationId: null, ToLocationId: null, UnitCost: null,
-                    LotNo: string.IsNullOrWhiteSpace(lotNo) ? null : lotNo));
-            }
+            // InventoryCountLine modeli lot/seri kolonu taşımaz (manuel sayımla birebir: ItemId + ConfigId +
+            // CountedQty + Notes). İzlenebilir stoklarda lot/seri yukarıda VALIDATE edilir; commit'te kaybolmaması
+            // için satır notuna işlenir. Seri-takiplide de TEK satır — CountedQty = sayılan miktar (seri adedine eşit).
+            g.Lines.Add(new SaveStockDocLineRequest(
+                Id: null, ItemId: item.Id, MaterialCode: item.Code, MaterialName: item.Name,
+                UnitId: item.UnitId, Qty: qty.Value, CombinationId: configId,
+                Notes: ComposeCountNotes(item, notes, lotNo, serialRaw),
+                FromLocationId: null, ToLocationId: null, UnitCost: null, LotNo: null));
         }
 
         int inserted = 0;
@@ -211,6 +202,25 @@ public sealed class InventoryCountImportHandler : IImportTargetHandler
             ? Array.Empty<string>()
             : cell.Split(new[] { ',', ';', '\n', '\r', '\t', '|' }, StringSplitOptions.RemoveEmptyEntries)
                   .Select(s => s.Trim()).Where(s => s.Length > 0).ToArray();
+
+    /// <summary>Lot/seri bilgisini satır notuna işler — InventoryCountLine lot/seri kolonu tutmadığı için
+    /// (manuel sayım UI'ı da tutmaz) bilgi kaybolmasın diye Not'a yazılır. Lot-takipli → "Lot: X",
+    /// seri-takipli → "Seri: a, b, c"; kullanıcı notu varsa " | " ile birleştirilir.</summary>
+    private static string? ComposeCountNotes(Item item, string? notes, string? lotNo, string? serialRaw)
+    {
+        var tt = item.TrackingType ?? "None";
+        string? trace = null;
+        if (string.Equals(tt, "Lot", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(lotNo))
+            trace = "Lot: " + lotNo.Trim();
+        else if (string.Equals(tt, "Serial", StringComparison.OrdinalIgnoreCase))
+        {
+            var serials = SplitSerials(serialRaw);
+            if (serials.Length > 0) trace = "Seri: " + string.Join(", ", serials);
+        }
+        var baseNote = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        if (string.IsNullOrWhiteSpace(trace)) return baseNote;
+        return baseNote is null ? trace : baseNote + " | " + trace;
+    }
 
     private (IReadOnlyList<string> Keys, IReadOnlyList<string> Labels) DisplayCols(IReadOnlyList<string> mapped)
     {

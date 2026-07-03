@@ -16,4 +16,11 @@ public interface IWorkOrderComponentRepository
     Task ReplaceForWorkOrderAsync(int workOrderId, IReadOnlyCollection<WorkOrderComponent> components, CancellationToken ct);
 
     Task DeleteByWorkOrderAsync(int workOrderId, CancellationToken ct);
+
+    /// <summary>
+    /// Malzeme sarfı (2026-07-02) — WorkOrderComponent.IssuedQuantity += quantity VE
+    /// DocumentLine'a Issue satırı AYNI transaction'da atomik yazılır (WorkOrder.DocumentId +
+    /// WarehouseLocationId, component'in bağlı olduğu WorkOrder'dan JOIN ile çözülür).
+    /// </summary>
+    Task IssueAsync(int componentId, decimal quantity, int personnelId, CancellationToken ct);
 }

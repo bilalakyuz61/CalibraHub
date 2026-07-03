@@ -27,8 +27,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
     private readonly string _woTable;
     private readonly string _woOpTable;
     private readonly string _operationTable;
-    private readonly string _stockDocTable;
-    private readonly string _stockDocLineTable;
+    private readonly string _lineTable;
 
     public SqlArgeProjectRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
     {
@@ -46,8 +45,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
         _woTable = $"[{s}].[WorkOrder]";
         _woOpTable = $"[{s}].[WorkOrderOperation]";
         _operationTable = $"[{s}].[Operation]";
-        _stockDocTable = $"[{s}].[stock_doc]";
-        _stockDocLineTable = $"[{s}].[stock_doc_line]";
+        _lineTable = $"[{s}].[DocumentLine]";
     }
 
     public async Task<IReadOnlyCollection<ArgeProjectListItem>> ListAsync(string? search, byte? status, CancellationToken ct)
@@ -421,17 +419,19 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
 
     public async Task<ArgeProjectMaterialDto> GetProjectMaterialAsync(int projectId, CancellationToken ct)
     {
+        // 2026-07-02: stock_doc/stock_doc_line emekliye ayrildi — AR-GE malzeme cikisi artik
+        // DocumentLine'da (MovementType=Issue=1), ust Document.ParentDocumentId = ArgeProject'in
+        // kendi Document.Id'sine (=projectId parametresi) bagli depo_cikis belgeleri uzerinden.
         var sql = $"""
             SELECT
-                COUNT(DISTINCT sd.[id]) AS DocCount,
-                COUNT(sdl.[id])         AS LineCount,
-                ISNULL(SUM(sdl.[qty] * ISNULL(sdl.[unit_cost], 0)), 0) AS MaterialCost
-            FROM {_stockDocTable} sd
-            INNER JOIN {_stockDocLineTable} sdl ON sdl.[stock_doc_id] = sd.[id]
-            WHERE sd.[arge_project_id] = @Proj
-              AND sd.[doc_type] = 'STOCK_OUT'
-              AND sd.[is_active] = 1
-              AND sdl.[is_active] = 1;
+                COUNT(DISTINCT d.[id]) AS DocCount,
+                COUNT(dl.[Id])         AS LineCount,
+                ISNULL(SUM(dl.[Quantity] * ISNULL(dl.[UnitCost], 0)), 0) AS MaterialCost
+            FROM {_docTable} d
+            INNER JOIN {_lineTable} dl ON dl.[DocumentId] = d.[id]
+            WHERE d.[ParentDocumentId] = @Proj
+              AND dl.[MovementType] = 1 /* Issue */
+              AND d.[IsActive] = 1;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();

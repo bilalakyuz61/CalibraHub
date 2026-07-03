@@ -673,9 +673,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [feature_id], [code], [description], [value], [sort_order], [is_active], [Created]
+            SELECT [id], [feature_id], [code], [description], [value], [SortOrder], [IsActive], [Created]
             FROM {_propertyValuesTableName}
-            ORDER BY [feature_id], [sort_order], [code];
+            ORDER BY [feature_id], [SortOrder], [code];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -2345,7 +2345,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_propertyValuesTableName}
-                ([feature_id], [code], [description], [value], [sort_order], [is_active], [Created], [Updated])
+                ([feature_id], [code], [description], [value], [SortOrder], [IsActive], [Created], [Updated])
             VALUES
                 (@PropertyId, @Code, @Description, @Value, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
             """;

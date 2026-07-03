@@ -27,6 +27,12 @@ public interface IWorkOrderOperationRepository
     /// <summary>ProducedQuantity += qty, ScrapQuantity += scrap. Status InProgress'e geçer (henüz Pending ise).</summary>
     Task PartialCompleteAsync(int id, int personnelId, decimal quantity, decimal? scrap, CancellationToken ct);
 
-    /// <summary>ProducedQuantity = finalQty (verilmişse), Status=Completed, CompletedBy/At doldurulur.</summary>
-    Task CompleteAsync(int id, int personnelId, decimal? finalQuantity, CancellationToken ct);
+    /// <summary>
+    /// ProducedQuantity = finalQty (verilmişse), Status=Completed, CompletedBy/At doldurulur.
+    /// stockLine verilmişse (son operasyon tamamlanıyor ve mamul girişi yazılması gerekiyorsa)
+    /// AYNI transaction'da DocumentLine'a append edilir — WorkOrderOperationService bu
+    /// koordinasyonu Application katmanında yapamaz (SqlConnection'a erişimi yok), bu yüzden
+    /// atomiklik repository içinde sağlanır ("operasyon tamamlandı ama stok hiç yazılmadı" riskini önler).
+    /// </summary>
+    Task CompleteAsync(int id, int personnelId, decimal? finalQuantity, DocumentLine? stockLine, CancellationToken ct);
 }

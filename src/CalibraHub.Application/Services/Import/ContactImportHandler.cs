@@ -222,7 +222,6 @@ public sealed class ContactImportHandler : RowImportHandlerBase
                 : (await _widgetRepo.GetWidgetsByFormAsync(_form.Id, ct))
                     .Where(w => !w.IsSystemField && w.IsActive && !IsContainerType(w.DataType))
                     .OrderBy(w => w.SortOrder).ToList();
-            System.Console.WriteLine($"[IMPORT-WIDGET] form={_form?.FormCode ?? "NULL"} id={_form?.Id} widgets={_widgets.Count} codes=[{string.Join(",", _widgets.Select(w => w.WidgetCode))}]");
         }
     }
 

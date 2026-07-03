@@ -173,7 +173,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
             SELECT m.[level], g.[id], g.[code], g.[description]
             FROM {_mappingTable} m
             INNER JOIN {_table} g ON g.[id] = m.[card_group_id]
-            WHERE m.[entity_type] = @EntityType AND m.[entity_id] = @EntityId
+            WHERE m.[entity_type] = @EntityType AND m.[EntityId] = @EntityId
             ORDER BY m.[level];
             """;
         command.Parameters.Add(new SqlParameter("@EntityType", entityType));
@@ -202,7 +202,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
             delCmd.Transaction = tx;
             delCmd.CommandText = $"""
                 DELETE FROM {_mappingTable}
-                WHERE [entity_type] = @EntityType AND [entity_id] = @EntityId;
+                WHERE [entity_type] = @EntityType AND [EntityId] = @EntityId;
                 """;
             delCmd.Parameters.Add(new SqlParameter("@EntityType", entityType));
             delCmd.Parameters.Add(new SqlParameter("@EntityId", entityId));
@@ -215,7 +215,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
                 await using var insCmd = connection.CreateCommand();
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $"""
-                    INSERT INTO {_mappingTable} ([entity_type], [entity_id], [level], [card_group_id])
+                    INSERT INTO {_mappingTable} ([entity_type], [EntityId], [level], [card_group_id])
                     VALUES (@EntityType, @EntityId, @Level, @CardGroupId);
                     """;
                 insCmd.Parameters.Add(new SqlParameter("@EntityType", entityType));
