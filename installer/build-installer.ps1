@@ -15,7 +15,7 @@
     .\build-installer.ps1 -Version "2.0.0"
 #>
 param(
-    [string]$Version = "2.1.16",
+    [string]$Version = "2.1.17",
     [string]$Configuration = "Release"
 )
 
@@ -86,6 +86,17 @@ if (-not (Test-Path $PublishDir)) {
         }
     }
 }
+
+# --- CalibraHub.Web.csproj versiyon guncelle ---
+# Uygulama icindeki typeof(Program).Assembly.GetName().Version installer versiyonu ile eslessin.
+Write-Step ("CalibraHub.Web.csproj versiyonu guncelleniyor ($Version)...")
+$WebCsproj = Join-Path $RootDir "src\CalibraHub.Web\CalibraHub.Web.csproj"
+$csprojContent = Get-Content $WebCsproj -Raw
+$csprojContent = $csprojContent -replace '<Version>[^<]+</Version>', "<Version>$Version</Version>"
+$csprojContent = $csprojContent -replace '<AssemblyVersion>[^<]+</AssemblyVersion>', "<AssemblyVersion>$Version.0</AssemblyVersion>"
+$csprojContent = $csprojContent -replace '<FileVersion>[^<]+</FileVersion>', "<FileVersion>$Version.0</FileVersion>"
+[System.IO.File]::WriteAllText($WebCsproj, $csprojContent, [System.Text.Encoding]::UTF8)
+Write-Host ("  Guncellendi: " + $WebCsproj) -ForegroundColor Gray
 
 # --- React bundle (Vite) - publish oncesi zorunlu, wwwroot/react/* publish'e dahil edilir ---
 # PowerShell $ErrorActionPreference=Stop iken native exe stderr'i NativeCommandError'a
@@ -163,24 +174,35 @@ if (Test-Path $DesignerCsproj) {
 # services.msc snap-in'i ile yonetilir; ileride benzer bir UI gerekirse Web icine
 # /Admin/Services sayfasi olarak entegre edilir.
 
-# --- WhatsApp Bridge (Node.js sidecar) - Source kopyala ---
-Write-Step "CalibraHubWhatsAppBridge kaynaklari publish/WhatsAppBridge'e kopyalaniyor..."
+# --- WhatsApp Bridge (Node.js sidecar) - temiz payload stage ---
+# publish\WhatsAppBridge ayni zamanda CALISAN node-windows servis dizini olabilir; wrapper
+# daemon\*.err.log + yuklu node_modules native modullerini kilitli tutar → Inno compress
+# kilit hatasi verir (exit 2). Bu yuzden payload'i AYRI temiz bir stage dizinine
+# (WhatsAppBridge_pkg) robocopy ile kopyalar, runtime artefaktlarini HARIC tutariz:
+#   node_modules → kurulum sonrasi npm install ile yeniden uretilir (bkz. .iss [Run])
+#   daemon, .wwebjs_cache, .wwebjs_auth, session-data, *.log → salt runtime, pakete girmez
+# robocopy haric tutulan/kilitli dosyalari hic acmaz → kilit sorunu ortadan kalkar.
+Write-Step "WhatsApp Bridge payload stage'leniyor (runtime artefaktlari haric)..."
 $BridgeSrc = Join-Path $RootDir "tools\CalibraHubWhatsAppBridge"
-$BridgeDst = Join-Path $PublishDir "WhatsAppBridge"
+if (-not (Test-Path $BridgeSrc)) { $BridgeSrc = Join-Path $PublishDir "WhatsAppBridge" }  # fallback: canli servis dizini
+$BridgeDst = Join-Path $PublishDir "WhatsAppBridge_pkg"
+if (Test-Path $BridgeDst) { Remove-Item $BridgeDst -Recurse -Force -ErrorAction SilentlyContinue }
 if (Test-Path $BridgeSrc) {
     New-Item -ItemType Directory -Path $BridgeDst -Force | Out-Null
-    $exclude = @('node_modules', 'session-data', '.git', '*.log')
-    Get-ChildItem -Path $BridgeSrc -Force | Where-Object {
-        $name = $_.Name
-        $skip = $false
-        foreach ($pattern in $exclude) {
-            if ($name -like $pattern) { $skip = $true; break }
-        }
-        -not $skip
-    } | Copy-Item -Destination $BridgeDst -Recurse -Force
-    Write-Host ("  Bridge dosyalari kopyalandi: " + $BridgeDst) -ForegroundColor Gray
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'   # robocopy native stderr NativeCommandError'a sarilmasin
+    & robocopy $BridgeSrc $BridgeDst /E /XD node_modules daemon .wwebjs_cache .wwebjs_auth session-data .git /XF *.log /R:1 /W:1 /NFL /NDL /NJH /NJS | Out-Null
+    $rc = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP
+    cmd /c "exit 0"   # robocopy exit 0-7 = basari; LASTEXITCODE'u sonraki adimlar icin sifirla
+    if ($rc -ge 8) {
+        Write-Host ("HATA: robocopy Bridge stage basarisiz (exit " + $rc + ")") -ForegroundColor Red
+        exit 1
+    }
+    $cnt = (Get-ChildItem $BridgeDst -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+    Write-Host ("  Bridge payload stage'lendi: " + $BridgeDst + " (" + $cnt + " dosya)") -ForegroundColor Gray
 } else {
-    Write-Host ("UYARI: Bridge kaynak klasoru bulunamadi: " + $BridgeSrc + " - atlandi.") -ForegroundColor Yellow
+    Write-Host ("UYARI: Bridge kaynagi bulunamadi (tools + publish\WhatsAppBridge yok) - atlandi.") -ForegroundColor Yellow
 }
 
 # --- Grafana KALDIRILDI (2026-06-19) ---

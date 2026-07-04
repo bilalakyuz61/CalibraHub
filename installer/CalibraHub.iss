@@ -65,8 +65,10 @@ Source: "grant-service-acl.ps1"; DestDir: "{app}"; Flags: ignoreversion
 ; Eski installer-side bootstrap script'leri yerine Bridge kendi package.json'i ile npm install yapar
 ; (post-install [Run] adimi WhatsApp Bridge klasorunde dogrudan npm install cagirir).
 ; Source: "whatsapp\*"; DestDir: "{app}\WhatsAppSetup"; Flags: ignoreversion recursesubdirs createallsubdirs
-; WhatsApp Bridge kaynak kodu (npm install kurulum sirasinda calisir)
-Source: "..\publish\WhatsAppBridge\*"; DestDir: "{app}\WhatsAppBridge"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+; WhatsApp Bridge kaynak kodu (npm install kurulum sirasinda calisir).
+; Kaynak = WhatsAppBridge_pkg: build-installer.ps1 runtime artefaktlarini (node_modules, daemon,
+; .wwebjs_*, *.log) haric temiz stage'ler — canli servis dizinindeki kilitli dosyalar pakete girmez.
+Source: "..\publish\WhatsAppBridge_pkg\*"; DestDir: "{app}\WhatsAppBridge"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; Bagimlilik (.NET 10 + Node.js) check & install scripti + bundled hosting bundle.
 ; dependencies\dotnet-hosting-10-win.exe build-installer.ps1 tarafindan cache'lenir;
 ; dosya yoksa Inno warning verir ve install-dependencies.ps1 internet fallback'i kullanir.
