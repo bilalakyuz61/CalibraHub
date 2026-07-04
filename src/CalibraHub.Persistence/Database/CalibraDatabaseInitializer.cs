@@ -6515,7 +6515,7 @@ END;";
                 INSERT @SeedSqlFn VALUES
                     (N''CARI_BAKIYE'',  N''Cari Bakiye (SQL)'',
                      N''Cari hesabin guncel bakiyesini hesaplar (Borc - Alacak).'',
-                     N''SELECT ISNULL(SUM(CASE WHEN dt.[Sign] = 1 THEN d.[Amount] ELSE -d.[Amount] END), 0) AS [Value] FROM [dbo].[Document] d INNER JOIN [dbo].[document_types] dt ON dt.[Id] = d.[DocumentTypeId] WHERE d.[ContactId] = @Key AND d.[IsActive] = 1'',
+                     N''SELECT ISNULL(SUM(CASE WHEN dt.[Sign] = 1 THEN d.[Amount] ELSE -d.[Amount] END), 0) AS [Value] FROM [dbo].[Document] d INNER JOIN [dbo].[DocumentType] dt ON dt.[Id] = d.[DocumentTypeId] WHERE d.[ContactId] = @Key AND d.[IsActive] = 1'',
                      100),
                     (N''TODAY_NETSIS'', N''Bugun (Netsis Format)'',
                      N''Bugunun tarihini Netsis ISO 8601 formatinda doner (@Key parametresi kullanilmaz).'',
@@ -6530,6 +6530,12 @@ END;";
                 SELECT sf.Code, sf.Label, sf.Description, sf.SqlSnippet, sf.SortOrder
                 FROM @SeedSqlFn sf
                 WHERE NOT EXISTS (SELECT 1 FROM [{s}].[IntegrationLookupFunction] f WHERE f.Code = sf.Code);
+
+                -- Migration: mevcut CARI_BAKIYE kaydinda eski [document_types] varsa [DocumentType] ile guncelle
+                UPDATE [{s}].[IntegrationLookupFunction]
+                   SET [SqlSnippet] = (SELECT sf2.SqlSnippet FROM @SeedSqlFn sf2 WHERE sf2.Code = N''CARI_BAKIYE'')
+                 WHERE [Code] = N''CARI_BAKIYE''
+                   AND [SqlSnippet] LIKE N''%[dbo].[document_types]%'';
 
                 DECLARE @SqlFnIds TABLE (Id INT);
                 INSERT @SqlFnIds SELECT [Id] FROM [{s}].[IntegrationLookupFunction]
@@ -8765,7 +8771,7 @@ END;";
         var s = _schema.Replace("]", "]]");
         var sql = $"""
             DECLARE @argeTypeId INT =
-                (SELECT TOP 1 [id] FROM [{s}].[document_types] WHERE [code] = 'arge_proje');
+                (SELECT TOP 1 [Id] FROM [{s}].[DocumentType] WHERE [Code] = 'arge_proje');
             IF @argeTypeId IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM [{s}].[DocumentNumberRule] WHERE [DocumentTypeId] = @argeTypeId)
             BEGIN
@@ -8806,7 +8812,7 @@ END;";
                     [Created]          DATETIME         NOT NULL CONSTRAINT [DF_ReportTemplate_Created] DEFAULT SYSUTCDATETIME(),
                     [Updated]          DATETIME         NULL,
                     CONSTRAINT [FK_ReportTemplate_DocumentType]
-                        FOREIGN KEY ([DocumentTypeId]) REFERENCES [{s}].[document_types]([id])
+                        FOREIGN KEY ([DocumentTypeId]) REFERENCES [{s}].[DocumentType]([Id])
                 );
                 CREATE INDEX [IX_ReportTemplate_DocumentType] ON [{s}].[ReportTemplate]([DocumentTypeId]);
             END;
@@ -9450,10 +9456,10 @@ END;";
         var s = _schema.Replace("]", "]]");
         var commandText = $"""
             IF OBJECT_ID(N'[{s}].[Document]', N'U') IS NOT NULL
-               AND OBJECT_ID(N'[{s}].[document_types]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentType]', N'U') IS NOT NULL
             BEGIN
                 DECLARE @QuoteTypeId INT =
-                    (SELECT TOP 1 [id] FROM [{s}].[document_types] WHERE [code] = N'satis_teklifi');
+                    (SELECT TOP 1 [Id] FROM [{s}].[DocumentType] WHERE [Code] = N'satis_teklifi');
                 IF @QuoteTypeId IS NOT NULL
                     UPDATE [{s}].[Document]
                        SET [DocumentTypeId] = @QuoteTypeId
@@ -9518,9 +9524,9 @@ END;";
         await using (var migCmd = connection.CreateCommand())
         {
             migCmd.CommandText = $"""
-                UPDATE [{s}].[document_types]
+                UPDATE [{s}].[DocumentType]
                    SET [SqlViewName] = 'vw_ReportDocument', [Updated] = GETDATE()
-                 WHERE [code] = 'satis_teklifi' AND [SqlViewName] = 'vw_Document';
+                 WHERE [Code] = 'satis_teklifi' AND [SqlViewName] = 'vw_Document';
                 """;
             await migCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -9531,12 +9537,12 @@ END;";
         await using (var renameCmd = connection.CreateCommand())
         {
             renameCmd.CommandText = $"""
-                UPDATE [{s}].[document_types]
-                   SET [name]        = N'Ihtiyac Kaydi',
-                       [description] = N'Ic ihtiyac kaydi — depodan veya satin alma ile karsilanabilir',
+                UPDATE [{s}].[DocumentType]
+                   SET [Name]        = N'Ihtiyac Kaydi',
+                       [Description] = N'Ic ihtiyac kaydi — depodan veya satin alma ile karsilanabilir',
                        [Updated]     = GETDATE()
-                 WHERE [code] = 'alis_talebi'
-                   AND [name] IN (N'Alis Talebi', N'Satin Alma Talep', N'Satın Alma Talep');
+                 WHERE [Code] = 'alis_talebi'
+                   AND [Name] IN (N'Alis Talebi', N'Satin Alma Talep', N'Satın Alma Talep');
                 """;
             await renameCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -9548,9 +9554,9 @@ END;";
             if (string.IsNullOrWhiteSpace(reqKey)) continue;
             await using var updCmd = connection.CreateCommand();
             updCmd.CommandText = $"""
-                UPDATE [{s}].[document_types]
-                   SET [required_key_column] = @ReqKey, [Updated] = GETDATE()
-                 WHERE [code] = @Code AND ([required_key_column] IS NULL OR [required_key_column] = N'');
+                UPDATE [{s}].[DocumentType]
+                   SET [RequiredKeyColumn] = @ReqKey, [Updated] = GETDATE()
+                 WHERE [Code] = @Code AND ([RequiredKeyColumn] IS NULL OR [RequiredKeyColumn] = N'');
                 """;
             updCmd.Parameters.AddWithValue("@Code",   code);
             updCmd.Parameters.AddWithValue("@ReqKey", reqKey);
@@ -9560,8 +9566,8 @@ END;";
         foreach (var (code, name, viewName, reqKey, desc) in DefaultDocumentTypes)
         {
             var commandText = $"""
-                IF NOT EXISTS (SELECT 1 FROM [{s}].[document_types] WHERE [code] = @Code)
-                    INSERT INTO [{s}].[document_types] ([code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated])
+                IF NOT EXISTS (SELECT 1 FROM [{s}].[DocumentType] WHERE [Code] = @Code)
+                    INSERT INTO [{s}].[DocumentType] ([Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated])
                     VALUES (@Code, @Name, @ViewName, @ReqKey, @Description, 1, GETDATE(), GETDATE());
                 """;
             await using var cmd = connection.CreateCommand();
@@ -9606,7 +9612,7 @@ END;";
             int? docTypeId = null;
             await using (var typeCmd = connection.CreateCommand())
             {
-                typeCmd.CommandText = $"SELECT TOP 1 [id] FROM [{s}].[document_types] WHERE [code] = @Code;";
+                typeCmd.CommandText = $"SELECT TOP 1 [Id] FROM [{s}].[DocumentType] WHERE [Code] = @Code;";
                 typeCmd.Parameters.AddWithValue("@Code", code);
                 var raw = await typeCmd.ExecuteScalarAsync(cancellationToken);
                 if (raw != null && raw != DBNull.Value) docTypeId = Convert.ToInt32(raw);
@@ -10397,40 +10403,40 @@ END;";
             -- BaseTableFilter ile belge tipiyle ayristir. document_types.code ile
             -- subquery yapiyoruz — Id'ler tenant'lar arasi degisken olabilir.
             UPDATE dbo.Forms
-               SET [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[document_types] WHERE [code] = ''satis_teklifi'')'
+               SET [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''satis_teklifi'')'
              WHERE [FormCode] IN (N'SALES_QUOTE_NEW', N'SALES_QUOTE_EDIT')
-               AND ([BaseTableFilter] IS NULL OR [BaseTableFilter] = N'');
+               AND ([BaseTableFilter] IS NULL OR [BaseTableFilter] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
             UPDATE dbo.Forms
-               SET [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[document_types] WHERE [code] = ''satis_siparisi'')'
+               SET [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''satis_siparisi'')'
              WHERE [FormCode] IN (N'SALES_ORDER_NEW', N'SALES_ORDER_EDIT')
-               AND ([BaseTableFilter] IS NULL OR [BaseTableFilter] = N'');
+               AND ([BaseTableFilter] IS NULL OR [BaseTableFilter] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
 
             -- 2026-05-22: Satin Alma form aile baglantilari — ayni dbo.Document tablosu
             -- ama BaseTableFilter ile DocumentTypeId'e gore ayrisir.
             UPDATE dbo.Forms
                SET [BaseTable]       = N'dbo.Document',
                    [BaseRecordKey]   = N'DocumentNumber',
-                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[document_types] WHERE [code] = ''alis_talebi'')'
+                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''alis_talebi'')'
              WHERE [FormCode] IN (N'PURCHASE_REQUEST_NEW', N'PURCHASE_REQUEST_EDIT')
-               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
             UPDATE dbo.Forms
                SET [BaseTable]       = N'dbo.Document',
                    [BaseRecordKey]   = N'DocumentNumber',
-                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[document_types] WHERE [code] = ''alis_teklifi'')'
+                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''alis_teklifi'')'
              WHERE [FormCode] IN (N'PURCHASE_QUOTE_NEW', N'PURCHASE_QUOTE_EDIT')
-               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
             UPDATE dbo.Forms
                SET [BaseTable]       = N'dbo.Document',
                    [BaseRecordKey]   = N'DocumentNumber',
-                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[document_types] WHERE [code] = ''alis_siparisi'')'
+                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''alis_siparisi'')'
              WHERE [FormCode] IN (N'PURCHASE_ORDER_NEW', N'PURCHASE_ORDER_EDIT')
-               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
             UPDATE dbo.Forms
                SET [BaseTable]       = N'dbo.Document',
                    [BaseRecordKey]   = N'DocumentNumber',
-                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[document_types] WHERE [code] = ''satin_alma_talebi'')'
+                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''satin_alma_talebi'')'
              WHERE [FormCode] IN (N'PURCHASE_DEMAND_NEW', N'PURCHASE_DEMAND_EDIT')
-               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
             -- Kalem formlari (DocumentLine) — filter yok, parent FK uzerinden filtrelenir
             UPDATE dbo.Forms
                SET [BaseTable]     = N'dbo.DocumentLine',
@@ -12217,6 +12223,16 @@ END;";
                 IF OBJECT_ID(N'[{s}].[{oldName}]', N'U') IS NOT NULL
                    AND OBJECT_ID(N'[{s}].[{newName}]', N'U') IS NULL
                 BEGIN
+                    EXEC sp_rename N'[{s}].[{oldName}]', N'{newName}';
+                END
+                ELSE IF OBJECT_ID(N'[{s}].[{oldName}]', N'U') IS NOT NULL
+                        AND OBJECT_ID(N'[{s}].[{newName}]', N'U') IS NOT NULL
+                        AND (SELECT ISNULL(SUM(p.[rows]), 0)
+                             FROM sys.partitions p
+                             WHERE p.[object_id] = OBJECT_ID(N'[{s}].[{newName}]')
+                               AND p.[index_id] IN (0, 1)) = 0
+                BEGIN
+                    DROP TABLE [{s}].[{newName}];
                     EXEC sp_rename N'[{s}].[{oldName}]', N'{newName}';
                 END;
                 """);
@@ -14531,7 +14547,7 @@ END;";
                     -- 2026-05-20: Mail sablonu olarak da kullanim bayragi.
                     [UseAsMailTemplate] BIT             NOT NULL CONSTRAINT [df_DocLayout_UseAsMail]   DEFAULT(0),
                     CONSTRAINT [FK_DocLayout_DocumentType] FOREIGN KEY ([DocumentTypeId])
-                        REFERENCES [{s}].[document_types]([id])
+                        REFERENCES [{s}].[DocumentType]([Id])
                 );
                 CREATE UNIQUE INDEX [ux_DocLayout_Code]            ON [{s}].[DocLayout]([Code]);
                 CREATE INDEX [ix_DocLayout_DocType]                ON [{s}].[DocLayout]([DocType])        WHERE [IsActive] = 1;
@@ -14623,7 +14639,7 @@ END;";
 
             -- FK constraint (mevcut DB'lere ekle)
             IF OBJECT_ID(N'[{s}].[DocLayout]', N'U') IS NOT NULL
-               AND OBJECT_ID(N'[{s}].[document_types]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentType]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[DocLayout]', N'DocumentTypeId') IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM sys.foreign_keys
@@ -14632,7 +14648,7 @@ END;";
             BEGIN
                 ALTER TABLE [{s}].[DocLayout]
                     ADD CONSTRAINT [FK_DocLayout_DocumentType] FOREIGN KEY ([DocumentTypeId])
-                        REFERENCES [{s}].[document_types]([id]);
+                        REFERENCES [{s}].[DocumentType]([Id]);
             END;
 
             -- Index for new FK column
@@ -14673,11 +14689,11 @@ END;";
                             SELECT N''delivery_note''  , N''irsaliye''                         UNION ALL
                             SELECT N''invoice''        , N''fatura''
                         )
-                        UPDATE l SET l.[DocumentTypeId] = dt.[id]
+                        UPDATE l SET l.[DocumentTypeId] = dt.[Id]
                         FROM [{s}].[DocLayout] l
                         LEFT JOIN map m ON m.old = l.[DocType]
-                        INNER JOIN [{s}].[document_types] dt
-                               ON dt.[code] = COALESCE(m.new_code, l.[DocType])
+                        INNER JOIN [{s}].[DocumentType] dt
+                               ON dt.[Code] = COALESCE(m.new_code, l.[DocType])
                         WHERE l.[DocumentTypeId] IS NULL
                           AND l.[DocType] IS NOT NULL
                           AND l.[DocType] <> N''custom'';
@@ -14733,7 +14749,7 @@ END;";
                     [Created]         DATETIME      NOT NULL CONSTRAINT [DF_DocLayoutRule_Created] DEFAULT(SYSUTCDATETIME()),
                     [Updated]         DATETIME      NOT NULL CONSTRAINT [DF_DocLayoutRule_Updated] DEFAULT(SYSUTCDATETIME()),
                     CONSTRAINT [FK_DocLayoutRule_Layout]       FOREIGN KEY ([LayoutId])       REFERENCES [{s}].[DocLayout]([Id]),
-                    CONSTRAINT [FK_DocLayoutRule_DocumentType] FOREIGN KEY ([DocumentTypeId]) REFERENCES [{s}].[document_types]([id])
+                    CONSTRAINT [FK_DocLayoutRule_DocumentType] FOREIGN KEY ([DocumentTypeId]) REFERENCES [{s}].[DocumentType]([Id])
                 );
 
                 -- Sorgu desenine optimize edilmiş kapsayıcı (covering) index:
@@ -14816,7 +14832,7 @@ END;";
 
             -- FK constraint
             IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
-               AND OBJECT_ID(N'[{s}].[document_types]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentType]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'DocumentTypeId') IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM sys.foreign_keys
@@ -14825,7 +14841,7 @@ END;";
             BEGIN
                 ALTER TABLE [{s}].[DocLayoutRule]
                     ADD CONSTRAINT [FK_DocLayoutRule_DocumentType] FOREIGN KEY ([DocumentTypeId])
-                        REFERENCES [{s}].[document_types]([id]);
+                        REFERENCES [{s}].[DocumentType]([Id]);
             END;
 
             -- ── Idempotent data backfill: DocType (string) → DocumentTypeId (INT) ──
@@ -14846,11 +14862,11 @@ END;";
                             SELECT N''delivery_note''  , N''irsaliye''                         UNION ALL
                             SELECT N''invoice''        , N''fatura''
                         )
-                        UPDATE r SET r.[DocumentTypeId] = dt.[id]
+                        UPDATE r SET r.[DocumentTypeId] = dt.[Id]
                         FROM [{s}].[DocLayoutRule] r
                         LEFT JOIN map m ON m.old = r.[DocType]
-                        INNER JOIN [{s}].[document_types] dt
-                               ON dt.[code] = COALESCE(m.new_code, r.[DocType])
+                        INNER JOIN [{s}].[DocumentType] dt
+                               ON dt.[Code] = COALESCE(m.new_code, r.[DocType])
                         WHERE r.[DocumentTypeId] IS NULL
                           AND r.[DocType] IS NOT NULL
                           AND r.[DocType] <> N''custom'';
