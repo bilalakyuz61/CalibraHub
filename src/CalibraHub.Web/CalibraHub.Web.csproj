@@ -23,9 +23,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>CalibraHub.Web-30fd9770-bd8b-4a42-a002-8bc7f236fbaf</UserSecretsId>
-    <Version>1.1.0</Version>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <Version>2.1.17</Version>
+    <AssemblyVersion>2.1.17.0</AssemblyVersion>
+    <FileVersion>2.1.17.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

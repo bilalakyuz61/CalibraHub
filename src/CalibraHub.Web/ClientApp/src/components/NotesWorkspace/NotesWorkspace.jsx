@@ -50,7 +50,8 @@ import {
   Maximize2, Minimize2, Eye, EyeOff, LayoutTemplate,
   RefreshCw, Download,
   Globe, Keyboard,
-  Mic, PenLine, Camera
+  Mic, PenLine, Camera,
+  Clock, ArrowUpAZ, ArrowDownAZ, CalendarDays
 } from 'lucide-react'
 import * as api from '../../services/notesService'
 
@@ -1229,6 +1230,14 @@ function SlashCommandMenu(props) {
   )
 }
 
+var SORT_OPTIONS = [
+  { value: 'updatedDesc', label: 'Son Düzenlenen',  icon: Clock        },
+  { value: 'updatedAsc',  label: 'Eski Düzenlenen', icon: RotateCcw    },
+  { value: 'titleAsc',    label: 'Başlık (A-Z)',     icon: ArrowUpAZ    },
+  { value: 'titleDesc',   label: 'Başlık (Z-A)',     icon: ArrowDownAZ  },
+  { value: 'createdDesc', label: 'Oluşturma Tarihi', icon: CalendarDays },
+]
+
 /* ══════════════════════════════════════════════════════════
    NotesWorkspace — Main 3-Pane Component
    ══════════════════════════════════════════════════════════ */
@@ -1257,6 +1266,7 @@ export default function NotesWorkspace() {
   // ── Sifreleme state'leri (Mod 1 + Mod 2) ──────────────────────────────
   // Mod 1: Secili bolumu sifrele modalı
   var [encryptSelectionOpen, setEncryptSelectionOpen] = useState(false)
+  var [encryptSuggestedPw, setEncryptSuggestedPw] = useState(null)
   // Mod 1: Sifreli bloga tiklayinca acilan decrypt modali { ct, hint, range }
   var [decryptBlockTarget, setDecryptBlockTarget] = useState(null)
   // Mod 2: Tum notu sifrele modali (not icin)
@@ -1266,6 +1276,8 @@ export default function NotesWorkspace() {
   var [folderCtxMenu, setFolderCtxMenu] = useState(null)
   var [tableCtxMenu, setTableCtxMenu] = useState(null) // { x, y }
   var [sortOrder, setSortOrder] = useState('updatedDesc') // updatedDesc | updatedAsc | titleAsc | titleDesc | createdDesc
+  var [sortDropOpen, setSortDropOpen] = useState(false)
+  var sortDropRef = useRef(null)
   var [contentLoadedTick, setContentLoadedTick] = useState(0) // not seçilince lazy-load tamamlandığında artar
   var [contentLoading, setContentLoading] = useState(false)   // içerik yüklenirken editor read-only
   var notesRef = useRef([])                                    // notes'un güncel değeri (stale closure önlemi)
@@ -1965,6 +1977,17 @@ export default function NotesWorkspace() {
     return function () { document.removeEventListener('mousedown', close) }
   }, [gearMenuOpen])
 
+  // Sıralama dropdown'ını dışarı tıklayınca kapat
+  useEffect(function () {
+    if (!sortDropOpen) return
+    function close(e) {
+      if (sortDropRef.current && sortDropRef.current.contains(e.target)) return
+      setSortDropOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return function () { document.removeEventListener('mousedown', close) }
+  }, [sortDropOpen])
+
   // ── Global keyboard shortcuts: Focus Mode / Find / Quick Switcher / Esc ─
   useEffect(function () {
     function onKey(e) {
@@ -2299,6 +2322,9 @@ export default function NotesWorkspace() {
     if (!editor || !selectedNote) return
     var sel = editor.state.selection
     if (sel && !sel.empty) {
+      // Notta daha önce kullanılmış şifre varsa öner
+      var cached = recallPassword('note-blk-pw-' + selectedNote.id)
+      setEncryptSuggestedPw(cached || null)
       setEncryptSelectionOpen(true)
     } else {
       // Zaten sifreli ise tekrar sifreleme teklif etme
@@ -2334,11 +2360,15 @@ export default function NotesWorkspace() {
         .deleteSelection()
         .insertContent({
           type: 'text',
-          text: '🔒 Sifreli bolum',
+          text: 'Sifreli bolum',
           marks: [{ type: 'encrypted', attrs: { ct: payload, hint: hint || null } }]
         })
         .run()
+      // Bu notta kullanılan şifreyi oturum cache'ine kaydet (sonraki şifrelemede teklif edilsin)
+      var noteId = selectedNoteIdRef.current
+      if (noteId) rememberPassword('note-blk-pw-' + noteId, password)
       setEncryptSelectionOpen(false)
+      setEncryptSuggestedPw(null)
     } catch (e) {
       showMsg('Sifreleme hatasi: ' + (e.message || e), false)
     }
@@ -2993,19 +3023,41 @@ export default function NotesWorkspace() {
             )}
           </div>
           <div className="nw-list-actions">
-            <div className="nw-sort-wrap">
-              <select
-                className="nw-sort-select"
-                value={sortOrder}
-                onChange={function (e) { setSortOrder(e.target.value) }}
-                title="Sıralama"
-              >
-                <option value="updatedDesc">Son Düzenlenen</option>
-                <option value="updatedAsc">Eski Düzenlenen</option>
-                <option value="titleAsc">Başlık (A-Z)</option>
-                <option value="titleDesc">Başlık (Z-A)</option>
-                <option value="createdDesc">Oluşturma Tarihi</option>
-              </select>
+            <div className="nw-sort-wrap" ref={sortDropRef}>
+              {(function () {
+                var cur = SORT_OPTIONS.find(function (o) { return o.value === sortOrder }) || SORT_OPTIONS[0]
+                var CurIcon = cur.icon
+                return (
+                  <>
+                    <button
+                      className={'nw-sort-btn' + (sortDropOpen ? ' open' : '')}
+                      onClick={function () { setSortDropOpen(function (p) { return !p }) }}
+                      title="Sıralama"
+                    >
+                      <CurIcon size={12} className="nw-sort-cur-icon" />
+                      <span className="nw-sort-cur-label">{cur.label}</span>
+                      <ChevronDown size={10} className={'nw-sort-chevron' + (sortDropOpen ? ' open' : '')} />
+                    </button>
+                    {sortDropOpen && (
+                      <div className="nw-sort-menu">
+                        {SORT_OPTIONS.map(function (opt) {
+                          var OptIcon = opt.icon
+                          return (
+                            <button
+                              key={opt.value}
+                              className={'nw-sort-item' + (sortOrder === opt.value ? ' active' : '')}
+                              onClick={function () { setSortOrder(opt.value); setSortDropOpen(false) }}
+                            >
+                              <OptIcon size={13} />
+                              <span>{opt.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
             {selectedFolderId !== '__trash' && (
               <button className="nw-list-new-btn" onClick={handleNewNote} title="Yeni not">
@@ -3608,7 +3660,8 @@ export default function NotesWorkspace() {
       <EncryptPromptModal
         open={encryptSelectionOpen}
         title="Secili metni sifrele"
-        onCancel={function() { setEncryptSelectionOpen(false) }}
+        suggestedPassword={encryptSuggestedPw}
+        onCancel={function() { setEncryptSelectionOpen(false); setEncryptSuggestedPw(null) }}
         onSubmit={handleEncryptSelectionSubmit}
       />
       <EncryptPromptModal

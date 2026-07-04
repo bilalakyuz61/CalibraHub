@@ -12,10 +12,14 @@ import { Lock, Unlock, EyeOff, Eye, AlertTriangle } from 'lucide-react'
 
 // ── EncryptPromptModal ────────────────────────────────────────────────
 export function EncryptPromptModal(props) {
-  var open = props.open
-  var title = props.title || 'Sifrele'
-  var onCancel = props.onCancel
-  var onSubmit = props.onSubmit // (password, hint) => void
+  var open             = props.open
+  var title            = props.title || 'Sifrele'
+  var onCancel         = props.onCancel
+  var onSubmit         = props.onSubmit           // (password, hint) => void
+  var suggestedPassword = props.suggestedPassword  // string | null — mevcut not sifresi
+
+  // mode: 'suggest' (mevcut sifre teklif) | 'form' (yeni sifre gir)
+  var [mode, setMode] = useState('form')
   var [pw1, setPw1] = useState('')
   var [pw2, setPw2] = useState('')
   var [hint, setHint] = useState('')
@@ -26,19 +30,68 @@ export function EncryptPromptModal(props) {
   useEffect(function() {
     if (open) {
       setPw1(''); setPw2(''); setHint(''); setShow(false); setErr('')
-      setTimeout(function() { if (pwRef.current) pwRef.current.focus() }, 50)
+      setMode(suggestedPassword ? 'suggest' : 'form')
+      if (!suggestedPassword) {
+        setTimeout(function() { if (pwRef.current) pwRef.current.focus() }, 50)
+      }
     }
-  }, [open])
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
 
-  function submit() {
+  function submitNew() {
     if (!pw1) { setErr('Parola bos olamaz.'); return }
     if (pw1.length < 4) { setErr('Parola en az 4 karakter olmali.'); return }
     if (pw1 !== pw2) { setErr('Parolalar eslemiyor.'); return }
     onSubmit(pw1, hint || null)
   }
 
+  function switchToForm() {
+    setMode('form')
+    setTimeout(function() { if (pwRef.current) pwRef.current.focus() }, 50)
+  }
+
+  // ── Mod: mevcut şifre teklifi ──────────────────────────────────────
+  if (mode === 'suggest') {
+    return (
+      <div className="nw-enc-backdrop" onMouseDown={onCancel}>
+        <div className="nw-enc-modal" onMouseDown={function(e){ e.stopPropagation() }}>
+          <div className="nw-enc-header">
+            <Lock size={16} /> <span>{title}</span>
+          </div>
+          <div className="nw-enc-body">
+            <div className="nw-enc-reuse-card">
+              <div className="nw-enc-reuse-icon"><Lock size={22} /></div>
+              <div className="nw-enc-reuse-text">
+                <strong>Bu notta şifrelenmiş bölüm var.</strong>
+                <span>Aynı şifreyi kullanmak ister misiniz?</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="nw-enc-btn nw-enc-btn--primary nw-enc-btn--full"
+              autoFocus
+              onClick={function() { onSubmit(suggestedPassword, null) }}
+            >
+              <Lock size={13} /> Mevcut şifreyi kullan
+            </button>
+            <button
+              type="button"
+              className="nw-enc-btn nw-enc-btn--ghost nw-enc-btn--full nw-enc-btn--new"
+              onClick={switchToForm}
+            >
+              Yeni şifre gireceğim
+            </button>
+          </div>
+          <div className="nw-enc-footer">
+            <button type="button" className="nw-enc-btn nw-enc-btn--ghost" onClick={onCancel}>İptal</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Mod: yeni şifre formu ──────────────────────────────────────────
   return (
     <div className="nw-enc-backdrop" onMouseDown={onCancel}>
       <div className="nw-enc-modal" onMouseDown={function(e){ e.stopPropagation() }}>
@@ -54,7 +107,7 @@ export function EncryptPromptModal(props) {
           <div className="nw-enc-input-wrap">
             <input ref={pwRef} type={show ? 'text' : 'password'} className="nw-enc-input"
               value={pw1} onChange={function(e){ setPw1(e.target.value); setErr('') }}
-              onKeyDown={function(e){ if (e.key === 'Enter') submit() }} />
+              onKeyDown={function(e){ if (e.key === 'Enter') submitNew() }} />
             <button type="button" className="nw-enc-eye" onClick={function(){ setShow(!show) }}>
               {show ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
@@ -62,16 +115,16 @@ export function EncryptPromptModal(props) {
           <label className="nw-enc-label">Parola (tekrar)</label>
           <input type={show ? 'text' : 'password'} className="nw-enc-input"
             value={pw2} onChange={function(e){ setPw2(e.target.value); setErr('') }}
-            onKeyDown={function(e){ if (e.key === 'Enter') submit() }} />
+            onKeyDown={function(e){ if (e.key === 'Enter') submitNew() }} />
           <label className="nw-enc-label">Ipucu (opsiyonel)</label>
           <input type="text" className="nw-enc-input" placeholder="orn: annemin ilk evcil hayvani"
             value={hint} onChange={function(e){ setHint(e.target.value) }}
-            onKeyDown={function(e){ if (e.key === 'Enter') submit() }} />
+            onKeyDown={function(e){ if (e.key === 'Enter') submitNew() }} />
           {err && <div className="nw-enc-err">{err}</div>}
         </div>
         <div className="nw-enc-footer">
           <button type="button" className="nw-enc-btn nw-enc-btn--ghost" onClick={onCancel}>Iptal</button>
-          <button type="button" className="nw-enc-btn nw-enc-btn--primary" onClick={submit}>
+          <button type="button" className="nw-enc-btn nw-enc-btn--primary" onClick={submitNew}>
             <Lock size={13} /> Sifrele
           </button>
         </div>

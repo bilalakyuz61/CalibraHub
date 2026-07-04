@@ -586,22 +586,54 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.2)
   display: flex; align-items: center; gap: 6px; flex-shrink: 0;
 }
 .nw-sort-wrap { position: relative; }
-.nw-sort-select {
-  appearance: none; border: 1px solid #e2e8f0; border-radius: 6px;
-  padding: 4px 22px 4px 8px; font-size: .7rem; color: #64748b;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 6px center;
-  cursor: pointer; outline: none; font-family: inherit;
+.nw-sort-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 8px; border-radius: 6px;
+  border: 1px solid var(--app-border, #e2e8f0);
+  background: var(--app-surface, #fff);
+  color: var(--app-text-muted, #64748b);
+  font-size: .7rem; font-family: inherit; font-weight: 500;
+  cursor: pointer; outline: none; transition: border-color .12s, background .12s;
+  white-space: nowrap;
 }
-.nw-sort-select:focus { border-color: #6366f1; }
-.dark .nw-sort-select {
-  background-color: #1e293b; border-color: rgba(255,255,255,.12);
-  color: rgba(255,255,255,.7);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+.nw-sort-btn:hover { border-color: #6366f1; color: #6366f1; }
+.nw-sort-btn.open { border-color: #6366f1; color: #6366f1; }
+.nw-sort-cur-icon { flex-shrink: 0; }
+.nw-sort-cur-label { max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.nw-sort-chevron { flex-shrink: 0; transition: transform .15s; }
+.nw-sort-chevron.open { transform: rotate(180deg); }
+.nw-sort-menu {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  background: var(--app-surface, #fff);
+  border: 1px solid var(--app-border, #e2e8f0);
+  border-radius: 8px; padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.10);
+  min-width: 160px; z-index: 200;
 }
-.dark .nw-sort-select option {
-  background: #1e293b; color: rgba(255,255,255,.85);
+.nw-sort-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 6px 10px; border: none; background: none;
+  border-radius: 5px; font-size: .72rem; font-family: inherit;
+  color: var(--app-text-muted, #64748b); cursor: pointer;
+  transition: background .1s, color .1s; text-align: left;
 }
-.dark .nw-sort-select:focus { border-color: #818cf8; }
+.nw-sort-item:hover { background: var(--app-hover, #f1f5f9); color: var(--app-text, #0f172a); }
+.nw-sort-item.active {
+  background: #eef2ff; color: #6366f1; font-weight: 600;
+}
+body.app-theme-dark .nw-sort-btn {
+  background: var(--app-surface, #1e293b); border-color: rgba(255,255,255,.12);
+  color: rgba(255,255,255,.55);
+}
+body.app-theme-dark .nw-sort-btn:hover,
+body.app-theme-dark .nw-sort-btn.open { border-color: #818cf8; color: #818cf8; }
+body.app-theme-dark .nw-sort-menu {
+  background: #1e293b; border-color: rgba(255,255,255,.1);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+body.app-theme-dark .nw-sort-item { color: rgba(255,255,255,.55); }
+body.app-theme-dark .nw-sort-item:hover { background: rgba(255,255,255,.06); color: rgba(255,255,255,.9); }
+body.app-theme-dark .nw-sort-item.active { background: rgba(99,102,241,.2); color: #818cf8; }
 .nw-new-note-btn {
   display: inline-flex; align-items: center; gap: 5px;
   background: #6366f1; color: #fff; border: none; border-radius: 7px;
@@ -2767,6 +2799,28 @@ body.app-theme-dark .nw-readonly-banner { color: #fcd34d; background: rgba(251,1
 }
 .nw-enc-btn--primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(99,102,241,0.4); }
 .nw-enc-btn--primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.nw-enc-btn--full { width: 100%; justify-content: center; }
+.nw-enc-btn--new {
+  margin-top: 2px; font-weight: 500;
+  color: #6366f1; border-color: transparent; font-size: 0.8rem;
+}
+.nw-enc-btn--new:hover { background: rgba(99,102,241,0.06); color: #4f46e5; }
+.dark .nw-enc-btn--new { color: #818cf8; }
+.dark .nw-enc-btn--new:hover { background: rgba(99,102,241,0.12); color: #a5b4fc; }
+.nw-enc-reuse-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 10px; margin-bottom: 4px;
+  background: linear-gradient(135deg, rgba(251,191,36,.12), rgba(245,158,11,.08));
+  border: 1px solid rgba(245,158,11,.32);
+}
+.nw-enc-reuse-icon { color: #d97706; flex-shrink: 0; }
+.nw-enc-reuse-text { display: flex; flex-direction: column; gap: 2px; }
+.nw-enc-reuse-text strong { font-size: 0.82rem; color: #92400e; font-weight: 700; }
+.nw-enc-reuse-text span  { font-size: 0.76rem; color: #b45309; }
+.dark .nw-enc-reuse-card { background: rgba(251,191,36,.09); border-color: rgba(251,191,36,.22); }
+.dark .nw-enc-reuse-text strong { color: #fbbf24; }
+.dark .nw-enc-reuse-text span  { color: #fcd34d; }
+.dark .nw-enc-reuse-icon { color: #fbbf24; }
 
 /* ── Mod 2 Lock Screen ── */
 .nw-lockscreen {
