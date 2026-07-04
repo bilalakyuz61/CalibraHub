@@ -65,6 +65,21 @@ public sealed class CalibraDatabaseInitializer
     }
 
     /// <summary>
+    /// Mevcut per-company DB'lerde birikmiş eski snake_case tablo/kolon isimlerini
+    /// PascalCase'e çeker. Idempotent — zaten rename edilmişse no-op.
+    /// Program.cs startup per-company döngüsünden her şirket için çağrılır.
+    /// </summary>
+    public async Task MigrateSchemaForConnectionAsync(
+        string connectionString, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await MigrateTableRenamesAsync(connection, cancellationToken);
+        await MigrateColumnRenamesAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
     /// FastReport raporlari icin tek kapsamli belge view'i ve onu uretecek
     /// stored proc'u (sp_Report_RebuildDocumentView) per-company DB'de kurar.
     /// Proc INFORMATION_SCHEMA uzerinden v_Flat_SALES_QUOTE_EDIT ve
@@ -356,15 +371,15 @@ SELECT
     d.[id]                                 AS BelgeId,
     d.[DocumentNumber]                     AS BelgeNo,
     d.[DocumentTypeId]                     AS BelgeTurId,
-    dt.[code]                              AS BelgeTurKodu,
-    dt.[name]                              AS BelgeTurAdi,
+    dt.[Code]                              AS BelgeTurKodu,
+    dt.[Name]                              AS BelgeTurAdi,
     d.[CompanyId]                          AS BelgeSirketId,
     d.[DocumentDate]                       AS BelgeTarihi,
     d.[ValidUntil]                         AS GecerlilikTarihi,
     d.[CurrencyId]                         AS ParaBirimiId,
-    cur.[code]                             AS ParaBirimi,
-    cur.[name]                             AS ParaBirimiAdi,
-    cur.[symbol]                           AS ParaBirimiSimgesi,
+    cur.[Code]                             AS ParaBirimi,
+    cur.[Name]                             AS ParaBirimiAdi,
+    cur.[Symbol]                           AS ParaBirimiSimgesi,
     d.[SubTotal]                           AS AraToplam,
     d.[DiscountRate]                       AS IskontoOrani,
     d.[DiscountAmount]                     AS IskontoTutari,
@@ -419,7 +434,7 @@ SELECT
 
     -- ─── Satis Temsilcisi ───────────────────────────────────────────────
     d.[SalesRepId]                         AS TemsilciId,
-    sr.[rep_name]                          AS TemsilciAdi,
+    sr.[RepName]                           AS TemsilciAdi,
 
     -- ─── Sirket (master DB Company) ────────────────────────────────────
     comp.[Name]                            AS SirketAdi,
@@ -479,31 +494,31 @@ SELECT
     -- Kombinasyon detaylarini tek satirda birlestir — Designer Community Edition
     -- Detail Data band desteklemedigi icin kullanisli. Ornek: Boy - 1200 / Renk - Kirmizi
     STUFF((
-        SELECT N'' / '' + CONCAT(sqld.[feature_name], N'' - '', sqld.[value_name])
-        FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[Id]
-        ORDER BY sqld.[line_order]
+        SELECT N'' / '' + CONCAT(sqld.[FeatureName], N'' - '', sqld.[ValueName])
+        FROM [dbo].[SalesQuoteLineDetail] sqld
+        WHERE sqld.[QuoteLineId] = dl.[Id]
+        ORDER BY sqld.[LineOrder]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 3, N'''')       AS KombinasyonOzet,
 
     -- Sadece deger kisimlari (virgulle ayrilmis) — etiketsiz, kisa gosterim
     STUFF((
-        SELECT N'', '' + sqld.[value_name]
-        FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[Id]
-        ORDER BY sqld.[line_order]
+        SELECT N'', '' + sqld.[ValueName]
+        FROM [dbo].[SalesQuoteLineDetail] sqld
+        WHERE sqld.[QuoteLineId] = dl.[Id]
+        ORDER BY sqld.[LineOrder]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonDegerleri,
 
     -- Belge ozelinde girilen aciklamalar (sales_quote_line_details.description)
     -- Sadece NULL/bos olmayanlari virgulle birlestirir. Ornek: 4 kat koruma, ozel siparis
     STUFF((
-        SELECT N'', '' + sqld.[description]
-        FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[Id]
-          AND sqld.[description] IS NOT NULL
-          AND LTRIM(RTRIM(sqld.[description])) <> N''''
-        ORDER BY sqld.[line_order]
+        SELECT N'', '' + sqld.[Description]
+        FROM [dbo].[SalesQuoteLineDetail] sqld
+        WHERE sqld.[QuoteLineId] = dl.[Id]
+          AND sqld.[Description] IS NOT NULL
+          AND LTRIM(RTRIM(sqld.[Description])) <> N''''
+        ORDER BY sqld.[LineOrder]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonAciklamalari,
 
@@ -514,15 +529,15 @@ SELECT
     -- aciklama yer alir, ozellik basligi (feature_name) yok.
     -- Format ornegi: 1200 (4 kat koruma), Kirmizi
     STUFF((
-        SELECT N'', '' + sqld.[value_name]
-            + CASE WHEN sqld.[description] IS NOT NULL
-                    AND LTRIM(RTRIM(sqld.[description])) <> N''''
-                   THEN N'' ('' + sqld.[description] + N'')''
+        SELECT N'', '' + sqld.[ValueName]
+            + CASE WHEN sqld.[Description] IS NOT NULL
+                    AND LTRIM(RTRIM(sqld.[Description])) <> N''''
+                   THEN N'' ('' + sqld.[Description] + N'')''
                    ELSE N''''
               END
-        FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[Id]
-        ORDER BY sqld.[line_order]
+        FROM [dbo].[SalesQuoteLineDetail] sqld
+        WHERE sqld.[QuoteLineId] = dl.[Id]
+        ORDER BY sqld.[LineOrder]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonDetay
 ' + @HwColsSql + @LwColsSql + N'
@@ -533,12 +548,12 @@ FROM [dbo].[Document] d
 LEFT JOIN [dbo].[DocumentLine]           dl   ON dl.[DocumentId]     = d.[id]
                                               AND (dl.[RevisedFromId] IS NULL OR dl.[RevisedFromId] = 0)
 LEFT JOIN [dbo].[Contact]                c    ON c.[Id]               = d.[ContactId]
-LEFT JOIN [dbo].[sales_representatives]  sr   ON sr.[id]              = d.[SalesRepId]
-LEFT JOIN [dbo].[document_types]         dt   ON dt.[id]              = d.[DocumentTypeId]
+LEFT JOIN [dbo].[SalesRepresentative]    sr   ON sr.[Id]              = d.[SalesRepId]
+LEFT JOIN [dbo].[DocumentType]           dt   ON dt.[Id]              = d.[DocumentTypeId]
 LEFT JOIN [dbo].[Items]                  i    ON i.[Id]               = dl.[ItemId]
 LEFT JOIN [dbo].[Unit]                   mu   ON mu.[Id]              = dl.[UnitId]
 LEFT JOIN [dbo].[Location]               loc  ON loc.[Id]             = dl.[LocationId]
-LEFT JOIN [dbo].[currencies]             cur  ON cur.[id]             = d.[CurrencyId]
+LEFT JOIN [dbo].[Currency]               cur  ON cur.[Id]             = d.[CurrencyId]
 ' + @HwJoin + @LwJoin + N'
 LEFT JOIN [{systemDatabaseName}].[dbo].[Company] comp ON comp.[Id] = d.[CompanyId]
 -- Sadece aktif belgeler: silinmis / pasif (IsActive = 0) Document kayitlari
@@ -566,7 +581,7 @@ SELECT
     d.[DocumentNumber]           AS BelgeNo,
     d.[DocumentTypeId]           AS BelgeTurId,
     d.[CurrencyId]               AS ParaBirimiId,
-    cmbCur.[code]                AS ParaBirimi,
+    cmbCur.[Code]                AS ParaBirimi,
     dl.[Id]                      AS KalemId,
     dl.[LineNo]                  AS KalemSiraNo,
     i.[Code]                     AS MalzemeKodu,
@@ -582,19 +597,19 @@ SELECT
     mu.[IntlCode]                AS BirimUluslararasiKodu,
     loc.[LocationCode]           AS LokasyonKodu,
     loc.[LocationName]           AS LokasyonAdi,
-    sqld.[id]                    AS DetayId,
-    sqld.[line_order]            AS SiraNo,
-    sqld.[feature_name]          AS OzellikAdi,
-    sqld.[value_code]            AS DegerKodu,
-    sqld.[value_name]            AS DegerAdi,
-    sqld.[description]           AS Aciklama
+    sqld.[Id]                    AS DetayId,
+    sqld.[LineOrder]             AS SiraNo,
+    sqld.[FeatureName]           AS OzellikAdi,
+    sqld.[ValueCode]             AS DegerKodu,
+    sqld.[ValueName]             AS DegerAdi,
+    sqld.[Description]           AS Aciklama
 FROM [dbo].[DocumentLine] dl
 INNER JOIN [dbo].[Document]     d      ON d.[id]              = dl.[DocumentId]
-LEFT  JOIN [dbo].[sales_quote_line_details] sqld ON sqld.[quote_line_id] = dl.[Id]
+LEFT  JOIN [dbo].[SalesQuoteLineDetail] sqld ON sqld.[QuoteLineId] = dl.[Id]
 LEFT  JOIN [dbo].[Items]        i      ON i.[Id]              = dl.[ItemId]
 LEFT  JOIN [dbo].[Unit]         mu     ON mu.[Id]             = dl.[UnitId]
 LEFT  JOIN [dbo].[Location]     loc    ON loc.[Id]            = dl.[LocationId]
-LEFT  JOIN [dbo].[currencies]   cmbCur ON cmbCur.[id]         = d.[CurrencyId]
+LEFT  JOIN [dbo].[Currency]     cmbCur ON cmbCur.[Id]         = d.[CurrencyId]
 -- Revize edilmis kalemler ve pasif belgeler filtrelenir (vw_ReportDocument ile ayni
 -- kurallar). Aksi halde document 4 te bir kalemin 4 versiyonu varsa kombinasyon
 -- ozellikleri 4 kere tekrar eder.
@@ -636,6 +651,10 @@ END;";
             await EnsureSchemaAndTablesAsync(connection, cancellationToken);
             await EnsureIntegratorLoginColumnsAsync(connection, cancellationToken);
             await EnsureCompanySchemaAsync(connection, cancellationToken);
+            // 2026-07-05: snake_case → PascalCase tablo/kolon rename'leri per-company DB'lere de uygulanir.
+            // InitializeAsync yalnizca system DB'yi migrate eder; per-company DB'ler buradan migrate edilir.
+            await MigrateTableRenamesAsync(connection, cancellationToken);
+            await MigrateColumnRenamesAsync(connection, cancellationToken);
             await EnsurePltSystemLogTableAsync(connection, cancellationToken);
             await EnsureNotesTablesAsync(connection, cancellationToken);
             await EnsureNoteExtensionsAsync(connection, cancellationToken);
@@ -4725,30 +4744,30 @@ END;";
                 CREATE INDEX [IX_NoteFolder_CompanyId_UserId] ON [{s}].[NoteFolder]([CompanyId], [UserId]);
             END;
 
-            IF OBJECT_ID(N'[{s}].[notes]', N'U') IS NOT NULL
+            IF OBJECT_ID(N'[{s}].[Note]', N'U') IS NOT NULL
             BEGIN
-                IF COL_LENGTH(N'{sl}.notes', N'folder_id') IS NULL
-                   AND COL_LENGTH(N'{sl}.notes', N'FolderId') IS NULL
-                    ALTER TABLE [{s}].[notes] ADD [FolderId] UNIQUEIDENTIFIER NULL;
+                IF COL_LENGTH(N'{sl}.Note', N'folder_id') IS NULL
+                   AND COL_LENGTH(N'{sl}.Note', N'FolderId') IS NULL
+                    ALTER TABLE [{s}].[Note] ADD [FolderId] UNIQUEIDENTIFIER NULL;
             END;
 
-            IF OBJECT_ID(N'[{s}].[notes]', N'U') IS NOT NULL
+            IF OBJECT_ID(N'[{s}].[Note]', N'U') IS NOT NULL
             BEGIN
-                IF COL_LENGTH(N'{sl}.notes', N'is_pinned') IS NULL
-                   AND COL_LENGTH(N'{sl}.notes', N'IsPinned') IS NULL
-                    ALTER TABLE [{s}].[notes] ADD [IsPinned] BIT NOT NULL CONSTRAINT [df_notes_is_pinned] DEFAULT(0);
+                IF COL_LENGTH(N'{sl}.Note', N'is_pinned') IS NULL
+                   AND COL_LENGTH(N'{sl}.Note', N'IsPinned') IS NULL
+                    ALTER TABLE [{s}].[Note] ADD [IsPinned] BIT NOT NULL CONSTRAINT [df_Note_is_pinned] DEFAULT(0);
             END;
 
-            IF OBJECT_ID(N'[{s}].[note_reminders]', N'U') IS NOT NULL
+            IF OBJECT_ID(N'[{s}].[NoteReminder]', N'U') IS NOT NULL
             BEGIN
-                IF COL_LENGTH(N'{sl}.note_reminders', N'recurrence_type') IS NULL
-                    ALTER TABLE [{s}].[note_reminders] ADD [recurrence_type] INT NOT NULL CONSTRAINT [df_note_reminders_recurrence_type] DEFAULT(0);
-                IF COL_LENGTH(N'{sl}.note_reminders', N'recurrence_data') IS NULL
-                    ALTER TABLE [{s}].[note_reminders] ADD [recurrence_data] NVARCHAR(200) NULL;
-                IF COL_LENGTH(N'{sl}.note_reminders', N'delivery_channel') IS NULL
-                    ALTER TABLE [{s}].[note_reminders] ADD [delivery_channel] INT NOT NULL CONSTRAINT [df_note_reminders_delivery_channel] DEFAULT(0);
-                IF COL_LENGTH(N'{sl}.note_reminders', N'target_user_id') IS NULL
-                    ALTER TABLE [{s}].[note_reminders] ADD [target_user_id] INT NULL;
+                IF COL_LENGTH(N'{sl}.NoteReminder', N'recurrence_type') IS NULL
+                    ALTER TABLE [{s}].[NoteReminder] ADD [recurrence_type] INT NOT NULL CONSTRAINT [df_NoteReminder_recurrence_type] DEFAULT(0);
+                IF COL_LENGTH(N'{sl}.NoteReminder', N'recurrence_data') IS NULL
+                    ALTER TABLE [{s}].[NoteReminder] ADD [recurrence_data] NVARCHAR(200) NULL;
+                IF COL_LENGTH(N'{sl}.NoteReminder', N'delivery_channel') IS NULL
+                    ALTER TABLE [{s}].[NoteReminder] ADD [delivery_channel] INT NOT NULL CONSTRAINT [df_NoteReminder_delivery_channel] DEFAULT(0);
+                IF COL_LENGTH(N'{sl}.NoteReminder', N'target_user_id') IS NULL
+                    ALTER TABLE [{s}].[NoteReminder] ADD [target_user_id] INT NULL;
             END;
 
             IF OBJECT_ID(N'[{s}].[NoteReminderTarget]', N'U') IS NULL
@@ -4829,53 +4848,52 @@ END;";
             ELSE
             BEGIN
                 -- Migration: description kolonu ekle
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[note_attachments]') AND name = N'description')
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[NoteAttachment]') AND name = N'description')
                 BEGIN
-                    ALTER TABLE [{s}].[note_attachments] ADD [description] NVARCHAR(500) NULL;
+                    ALTER TABLE [{s}].[NoteAttachment] ADD [description] NVARCHAR(500) NULL;
                 END;
 
                 -- Migration: binary_content kolonu — dosya icerigini DB'de saklar.
-                -- NULL: legacy file system fallback (NotesController.DownloadAttachment
-                -- once DB'den okur, yoksa wwwroot disindaki note-attachments klasorunden fallback).
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[note_attachments]') AND name = N'binary_content')
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[NoteAttachment]') AND name = N'binary_content')
+                   AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[NoteAttachment]') AND name = N'BinaryContent')
                 BEGIN
-                    ALTER TABLE [{s}].[note_attachments] ADD [binary_content] VARBINARY(MAX) NULL;
+                    ALTER TABLE [{s}].[NoteAttachment] ADD [BinaryContent] VARBINARY(MAX) NULL;
                 END;
 
-                -- Migration: IsActive kolonu — soft-delete desteği (NoteController company DB'e taşındı)
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[note_attachments]') AND name = N'IsActive')
+                -- Migration: IsActive kolonu — soft-delete desteği
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[NoteAttachment]') AND name = N'IsActive')
                 BEGIN
-                    ALTER TABLE [{s}].[note_attachments] ADD [IsActive] BIT NOT NULL
-                        CONSTRAINT [DF_note_attachments_IsActive] DEFAULT 1;
+                    ALTER TABLE [{s}].[NoteAttachment] ADD [IsActive] BIT NOT NULL
+                        CONSTRAINT [DF_NoteAttachment_IsActive] DEFAULT 1;
                 END;
             END;
 
-            -- Migration: notes.Tags kolonu — virgul ayirali etiketler (orn. "proje,toplanti").
-            IF OBJECT_ID(N'[{s}].[notes]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[notes]', N'Tags') IS NULL
+            -- Migration: Note.Tags kolonu — virgul ayirali etiketler (orn. "proje,toplanti").
+            IF OBJECT_ID(N'[{s}].[Note]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[Note]', N'Tags') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[notes] ADD [Tags] NVARCHAR(500) NULL;
+                ALTER TABLE [{s}].[Note] ADD [Tags] NVARCHAR(500) NULL;
             END;
 
-            -- Migration: notes — kayit baglantisi + gorunurluk kolonlari.
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='linked_entity_type')
-                ALTER TABLE [{s}].[notes] ADD [linked_entity_type] NVARCHAR(50) NULL;
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='linked_entity_id')
-                ALTER TABLE [{s}].[notes] ADD [linked_entity_id] INT NULL;
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='linked_entity_label')
-                ALTER TABLE [{s}].[notes] ADD [linked_entity_label] NVARCHAR(200) NULL;
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='visibility')
-                ALTER TABLE [{s}].[notes] ADD [visibility] TINYINT NOT NULL DEFAULT 0;
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='share_token')
-                ALTER TABLE [{s}].[notes] ADD [share_token] NVARCHAR(40) NULL;
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='share_is_public')
-                ALTER TABLE [{s}].[notes] ADD [share_is_public] BIT NOT NULL DEFAULT 0;
-            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='UX_notes_share_token')
-                EXEC(N'CREATE UNIQUE INDEX [UX_notes_share_token] ON [{s}].[notes] ([share_token]) WHERE [share_token] IS NOT NULL');
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='share_include_attachments')
-                ALTER TABLE [{s}].[notes] ADD [share_include_attachments] BIT NOT NULL CONSTRAINT [DF_notes_share_include_attachments] DEFAULT 0;
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='ocr_text')
-                ALTER TABLE [{s}].[notes] ADD [ocr_text] NVARCHAR(MAX) NULL;
+            -- Migration: Note — kayit baglantisi + gorunurluk kolonlari.
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='linked_entity_type')
+                ALTER TABLE [{s}].[Note] ADD [linked_entity_type] NVARCHAR(50) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='linked_entity_id')
+                ALTER TABLE [{s}].[Note] ADD [linked_entity_id] INT NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='linked_entity_label')
+                ALTER TABLE [{s}].[Note] ADD [linked_entity_label] NVARCHAR(200) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='visibility')
+                ALTER TABLE [{s}].[Note] ADD [visibility] TINYINT NOT NULL DEFAULT 0;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='share_token')
+                ALTER TABLE [{s}].[Note] ADD [share_token] NVARCHAR(40) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='share_is_public')
+                ALTER TABLE [{s}].[Note] ADD [share_is_public] BIT NOT NULL DEFAULT 0;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='UX_Note_share_token')
+                EXEC(N'CREATE UNIQUE INDEX [UX_Note_share_token] ON [{s}].[Note] ([share_token]) WHERE [share_token] IS NOT NULL');
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='share_include_attachments')
+                ALTER TABLE [{s}].[Note] ADD [share_include_attachments] BIT NOT NULL CONSTRAINT [DF_Note_share_include_attachments] DEFAULT 0;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='ocr_text')
+                ALTER TABLE [{s}].[Note] ADD [ocr_text] NVARCHAR(MAX) NULL;
 
             IF OBJECT_ID(N'[{s}].[CardGroup]', N'U') IS NULL
             BEGIN
@@ -11827,8 +11845,8 @@ END;";
                 CAST(q.[status] AS NVARCHAR(30)) AS [Status]
             FROM [{s}].[Document] q
             LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[ContactId]
-            INNER JOIN [{s}].[document_types] dt
-                ON dt.[id] = q.[DocumentTypeId] AND dt.[code] = N'satis_siparisi'
+            INNER JOIN [{s}].[DocumentType] dt
+                ON dt.[Id] = q.[DocumentTypeId] AND dt.[Code] = N'satis_siparisi'
             WHERE q.[IsActive] = 1
               AND EXISTS (SELECT 1 FROM [{s}].[DocumentSource] ds WHERE ds.[DocumentId] = q.[id]);
             """;
@@ -12420,10 +12438,17 @@ END;";
             ("IntegrationApiProfile", "base_url",                 "BaseUrl"),
             ("IntegrationApiProfile", "auth_config_json",         "AuthConfigJson"),
 
-            // 2026-07-05: Note (yeni adı — zaten migrate edilmiş kolonlar hariç)
+            // 2026-07-05: Note (yeni adı — tüm snake_case kolonlar)
             ("Note",         "id",                                "Id"),
+            ("Note",         "company_id",                        "CompanyId"),
+            ("Note",         "user_id",                           "UserId"),
             ("Note",         "title",                             "Title"),
             ("Note",         "content",                           "Content"),
+            ("Note",         "folder_id",                         "FolderId"),
+            ("Note",         "is_pinned",                         "IsPinned"),
+            ("Note",         "is_deleted",                        "IsDeleted"),
+            ("Note",         "is_fully_encrypted",                "IsFullyEncrypted"),
+            ("Note",         "encryption_hint",                   "EncryptionHint"),
 
             // 2026-07-05: NoteReminder (yeni adı)
             ("NoteReminder", "id",                                "Id"),

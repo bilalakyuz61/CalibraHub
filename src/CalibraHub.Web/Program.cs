@@ -898,6 +898,18 @@ using (var scope = app.Services.CreateScope())
         {
             if (string.IsNullOrWhiteSpace(c.DatabaseConnectionString)) continue;
 
+            // 2026-07-05: snake_case → PascalCase tablo+kolon migration (document_types, currencies vb.)
+            try
+            {
+                await dbInitForCompanies.MigrateSchemaForConnectionAsync(
+                    c.DatabaseConnectionString, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex,
+                    "[Schema Migration] Sirket {CompanyId} icin tablo/kolon migration basarisiz", c.Id);
+            }
+
             // Notes tablosu kolon migrasyonu — linked_entity_*, visibility vb.
             try
             {
