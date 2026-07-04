@@ -15,7 +15,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[currencies]";
+        _table = $"[{schema}].[Currency]";
     }
 
     public async Task<IReadOnlyCollection<Currency>> GetAllAsync(CancellationToken ct)
@@ -23,7 +23,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
         var list = new List<Currency>();
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [id],[code],[name],[symbol],[IsActive],[Created],[Updated] FROM {_table} ORDER BY [code];";
+        cmd.CommandText = $"SELECT [Id],[Code],[Name],[Symbol],[IsActive],[Created],[Updated] FROM {_table} ORDER BY [Code];";
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
         return list;
@@ -33,7 +33,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [id],[code],[name],[symbol],[IsActive],[Created],[Updated] FROM {_table} WHERE [id] = @Id;";
+        cmd.CommandText = $"SELECT [Id],[Code],[Name],[Symbol],[IsActive],[Created],[Updated] FROM {_table} WHERE [Id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
@@ -44,7 +44,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_table} ([code],[name],[symbol],[IsActive],[Created],[Updated])
+            INSERT INTO {_table} ([Code],[Name],[Symbol],[IsActive],[Created],[Updated])
             VALUES (@Code, @Name, @Symbol, @IsActive, GETDATE(), GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
@@ -59,7 +59,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [code]=@Code,[name]=@Name,[symbol]=@Symbol,[IsActive]=@IsActive,[Updated]=GETDATE() WHERE [id]=@Id;";
+        cmd.CommandText = $"UPDATE {_table} SET [Code]=@Code,[Name]=@Name,[Symbol]=@Symbol,[IsActive]=@IsActive,[Updated]=GETDATE() WHERE [Id]=@Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
         cmd.Parameters.Add(new SqlParameter("@Code", entity.Code));
         cmd.Parameters.Add(new SqlParameter("@Name", entity.Name));
@@ -72,7 +72,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await cmd.ExecuteNonQueryAsync(ct);
     }

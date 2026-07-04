@@ -16,8 +16,8 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table        = $"[{schema}].[card_groups]";
-        _mappingTable = $"[{schema}].[card_group_mappings]";
+        _table        = $"[{schema}].[CardGroup]";
+        _mappingTable = $"[{schema}].[CardGroupMapping]";
     }
 
     public async Task<IReadOnlyCollection<CardGroup>> GetByLevelAsync(int cardType, int level, int? parentId, CancellationToken ct)
@@ -29,19 +29,19 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         if (level == 1)
         {
             command.CommandText = $"""
-                SELECT [id], [card_type], [level], [parent_id], [code], [description]
+                SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
                 FROM {_table}
-                WHERE [card_type] = @CardType AND [level] = 1
-                ORDER BY [code];
+                WHERE [CardType] = @CardType AND [Level] = 1
+                ORDER BY [Code];
                 """;
         }
         else if (parentId.HasValue)
         {
             command.CommandText = $"""
-                SELECT [id], [card_type], [level], [parent_id], [code], [description]
+                SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
                 FROM {_table}
-                WHERE [card_type] = @CardType AND [level] = @Level AND [parent_id] = @ParentId
-                ORDER BY [code];
+                WHERE [CardType] = @CardType AND [Level] = @Level AND [ParentId] = @ParentId
+                ORDER BY [Code];
                 """;
             command.Parameters.Add(new SqlParameter("@Level", level));
             command.Parameters.Add(new SqlParameter("@ParentId", parentId.Value));
@@ -50,10 +50,10 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         {
             // Level > 1 but no parent filter — return all at this level
             command.CommandText = $"""
-                SELECT [id], [card_type], [level], [parent_id], [code], [description]
+                SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
                 FROM {_table}
-                WHERE [card_type] = @CardType AND [level] = @Level
-                ORDER BY [code];
+                WHERE [CardType] = @CardType AND [Level] = @Level
+                ORDER BY [Code];
                 """;
             command.Parameters.Add(new SqlParameter("@Level", level));
         }
@@ -73,10 +73,10 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [card_type], [level], [parent_id], [code], [description]
+            SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
             FROM {_table}
-            WHERE [parent_id] = @ParentId
-            ORDER BY [code];
+            WHERE [ParentId] = @ParentId
+            ORDER BY [Code];
             """;
         command.Parameters.Add(new SqlParameter("@ParentId", parentId));
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -90,8 +90,8 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [card_type], [level], [parent_id], [code], [description]
-            FROM {_table} WHERE [id] = @Id;
+            SELECT [Id], [CardType], [Level], [ParentId], [Code], [Description]
+            FROM {_table} WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -103,7 +103,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(1) FROM {_table} WHERE [parent_id] = @Id;";
+        command.CommandText = $"SELECT COUNT(1) FROM {_table} WHERE [ParentId] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         var result = await command.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result) > 0;
@@ -114,7 +114,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            INSERT INTO {_table} ([card_type], [level], [parent_id], [code], [description])
+            INSERT INTO {_table} ([CardType], [Level], [ParentId], [Code], [Description])
             VALUES (@CardType, @Level, @ParentId, @Code, @Description);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
@@ -133,8 +133,8 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_table}
-            SET [code] = @Code, [description] = @Description
-            WHERE [id] = @Id;
+            SET [Code] = @Code, [Description] = @Description
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", group.Id));
         command.Parameters.Add(new SqlParameter("@Code", group.Code));
@@ -146,7 +146,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         await command.ExecuteNonQueryAsync(ct);
     }
@@ -170,11 +170,11 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT m.[level], g.[id], g.[code], g.[description]
+            SELECT m.[Level], g.[Id], g.[Code], g.[Description]
             FROM {_mappingTable} m
-            INNER JOIN {_table} g ON g.[id] = m.[card_group_id]
-            WHERE m.[entity_type] = @EntityType AND m.[EntityId] = @EntityId
-            ORDER BY m.[level];
+            INNER JOIN {_table} g ON g.[Id] = m.[CardGroupId]
+            WHERE m.[EntityType] = @EntityType AND m.[EntityId] = @EntityId
+            ORDER BY m.[Level];
             """;
         command.Parameters.Add(new SqlParameter("@EntityType", entityType));
         command.Parameters.Add(new SqlParameter("@EntityId", entityId));
@@ -202,7 +202,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
             delCmd.Transaction = tx;
             delCmd.CommandText = $"""
                 DELETE FROM {_mappingTable}
-                WHERE [entity_type] = @EntityType AND [EntityId] = @EntityId;
+                WHERE [EntityType] = @EntityType AND [EntityId] = @EntityId;
                 """;
             delCmd.Parameters.Add(new SqlParameter("@EntityType", entityType));
             delCmd.Parameters.Add(new SqlParameter("@EntityId", entityId));
@@ -215,7 +215,7 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
                 await using var insCmd = connection.CreateCommand();
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $"""
-                    INSERT INTO {_mappingTable} ([entity_type], [EntityId], [level], [card_group_id])
+                    INSERT INTO {_mappingTable} ([EntityType], [EntityId], [Level], [CardGroupId])
                     VALUES (@EntityType, @EntityId, @Level, @CardGroupId);
                     """;
                 insCmd.Parameters.Add(new SqlParameter("@EntityType", entityType));

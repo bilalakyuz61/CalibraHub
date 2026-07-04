@@ -15,7 +15,7 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[sales_representatives]";
+        _table = $"[{schema}].[SalesRepresentative]";
     }
 
     public async Task<IReadOnlyCollection<SalesRepresentative>> GetAllAsync(CancellationToken cancellationToken)
@@ -23,7 +23,7 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
         var list = new List<SalesRepresentative>();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT [id],[rep_name],[IsActive],[Created],[Updated] FROM {_table} ORDER BY [rep_name];";
+        command.CommandText = $"SELECT [Id],[RepName],[IsActive],[Created],[Updated] FROM {_table} ORDER BY [RepName];";
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
             list.Add(Map(reader));
@@ -34,7 +34,7 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT [id],[rep_name],[IsActive],[Created],[Updated] FROM {_table} WHERE [id] = @Id;";
+        command.CommandText = $"SELECT [Id],[RepName],[IsActive],[Created],[Updated] FROM {_table} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
@@ -45,7 +45,7 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            INSERT INTO {_table} ([rep_name],[IsActive],[Created],[Updated])
+            INSERT INTO {_table} ([RepName],[IsActive],[Created],[Updated])
             VALUES (@Name, @IsActive, GETDATE(), GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
@@ -60,8 +60,8 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            UPDATE {_table} SET [rep_name]=@Name, [IsActive]=@IsActive, [Updated]=GETDATE()
-            WHERE [id] = @Id;
+            UPDATE {_table} SET [RepName]=@Name, [IsActive]=@IsActive, [Updated]=GETDATE()
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", entity.Id));
         command.Parameters.Add(new SqlParameter("@Name", entity.RepName));
@@ -73,7 +73,7 @@ public sealed class SqlSalesRepresentativeRepository : ISalesRepresentativeRepos
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -60,7 +60,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
                    a.[TargetDate], a.[ProgressPercent], a.[Description], a.[Created],
                    (SELECT COUNT(*) FROM {_protoTable} pr WHERE pr.[ProjectId] = a.[DocumentId] AND pr.[IsActive] = 1) AS [PrototypeCount]
             FROM {_argeTable} a
-            INNER JOIN {_docTable} d ON d.[id] = a.[DocumentId]
+            INNER JOIN {_docTable} d ON d.[Id] = a.[DocumentId]
             LEFT JOIN {_personnelTable} p ON p.[Id] = a.[OwnerPersonnelId]
             WHERE {where}
             ORDER BY a.[Created] DESC;
@@ -428,7 +428,7 @@ public sealed class SqlArgeProjectRepository : IArgeProjectRepository
                 COUNT(dl.[Id])         AS LineCount,
                 ISNULL(SUM(dl.[Quantity] * ISNULL(dl.[UnitCost], 0)), 0) AS MaterialCost
             FROM {_docTable} d
-            INNER JOIN {_lineTable} dl ON dl.[DocumentId] = d.[id]
+            INNER JOIN {_lineTable} dl ON dl.[DocumentId] = d.[Id]
             WHERE d.[ParentDocumentId] = @Proj
               AND dl.[MovementType] = 1 /* Issue */
               AND d.[IsActive] = 1;

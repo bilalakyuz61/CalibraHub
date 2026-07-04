@@ -140,7 +140,7 @@ public sealed class SqlApprovalInstanceRepository : IApprovalInstanceRepository
     }
 
     /// <summary>
-    /// Onayda bekleyenler ekrani: ApprovalStepRecord JOIN Document + document_types + Contact + currencies.
+    /// Onayda bekleyenler ekrani: ApprovalStepRecord JOIN Document + DocumentType + Contact + Currency.
     /// Sadece su andaki adim (StepOrder = Instance.CurrentStep) Pending olanlar listelenir.
     /// scope: mine → ApproverId = @UserId, department → ApproverId IN (@DepUsers), all → filtre yok.
     /// </summary>
@@ -170,22 +170,22 @@ SELECT
     flow.[Name]            AS FlowName,
     (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id]) AS TotalSteps,
     (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id] AND [StepOrder] <= sr.[StepOrder]) AS StepPosition,
-    doc.[id]               AS DocumentInternalId,
+    doc.[Id]               AS DocumentInternalId,
     doc.[DocumentNumber]   AS DocumentNumber,
     doc.[DocumentDate]     AS DocumentDate,
     doc.[DocumentTypeId]   AS DocumentTypeId,
-    dt.[name]              AS DocumentTypeName,
+    dt.[Name]              AS DocumentTypeName,
     doc.[ContactId]        AS ContactId,
     c.[AccountTitle]       AS ContactName,
     doc.[GrandTotal]       AS GrandTotal,
-    cur.[code]             AS CurrencyCode
+    cur.[Code]             AS CurrencyCode
 FROM [{s}].[ApprovalStepRecord] sr
 INNER JOIN [{s}].[ApprovalInstance] inst ON inst.[Id] = sr.[InstanceId]
 INNER JOIN [{s}].[ApprovalFlow] flow              ON flow.[Id] = inst.[FlowId]
-LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[id] = inst.[DocumentId]
-LEFT  JOIN [{s}].[document_types] dt              ON dt.[id] = doc.[DocumentTypeId]
+LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[Id] = inst.[DocumentId]
+LEFT  JOIN [{s}].[DocumentType] dt                ON dt.[Id] = doc.[DocumentTypeId]
 LEFT  JOIN [{s}].[Contact] c                      ON c.[Id]  = doc.[ContactId]
-LEFT  JOIN [{s}].[currencies] cur                 ON cur.[id] = doc.[CurrencyId]
+LEFT  JOIN [{s}].[Currency] cur                   ON cur.[Id] = doc.[CurrencyId]
 WHERE sr.[Status] = N'Pending'
   AND inst.[Status] = N'Pending'
   AND inst.[IsActive] = 1
@@ -292,15 +292,15 @@ SELECT
     flow.[Name]            AS FlowName,
     (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id]) AS TotalSteps,
     (SELECT COUNT(*) FROM [{s}].[ApprovalStepRecord] WHERE [InstanceId] = inst.[Id] AND [StepOrder] <= sr.[StepOrder]) AS StepPosition,
-    doc.[id]               AS DocumentInternalId,
+    doc.[Id]               AS DocumentInternalId,
     doc.[DocumentNumber]   AS DocumentNumber,
     doc.[DocumentDate]     AS DocumentDate,
     doc.[DocumentTypeId]   AS DocumentTypeId,
-    dt.[name]              AS DocumentTypeName,
+    dt.[Name]              AS DocumentTypeName,
     doc.[ContactId]        AS ContactId,
     c.[AccountTitle]       AS ContactName,
     doc.[GrandTotal]       AS GrandTotal,
-    cur.[code]             AS CurrencyCode
+    cur.[Code]             AS CurrencyCode
 FROM [{s}].[ApprovalInstance] inst
 INNER JOIN [{s}].[ApprovalFlow] flow              ON flow.[Id] = inst.[FlowId]
 INNER JOIN [{s}].[ApprovalStepRecord] sr          ON sr.[InstanceId] = inst.[Id]
@@ -308,10 +308,10 @@ INNER JOIN [{s}].[ApprovalStepRecord] sr          ON sr.[InstanceId] = inst.[Id]
         SELECT MAX([StepOrder]) FROM [{s}].[ApprovalStepRecord]
         WHERE [InstanceId] = inst.[Id] AND [Status] NOT IN (N'Pending',N'Waiting',N'Skipped')
     )
-LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[id] = inst.[DocumentId]
-LEFT  JOIN [{s}].[document_types] dt              ON dt.[id] = doc.[DocumentTypeId]
+LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[Id] = inst.[DocumentId]
+LEFT  JOIN [{s}].[DocumentType] dt                ON dt.[Id] = doc.[DocumentTypeId]
 LEFT  JOIN [{s}].[Contact] c                      ON c.[Id]  = doc.[ContactId]
-LEFT  JOIN [{s}].[currencies] cur                 ON cur.[id] = doc.[CurrencyId]
+LEFT  JOIN [{s}].[Currency] cur                   ON cur.[Id] = doc.[CurrencyId]
 WHERE inst.[Status] IN (N'Approved',N'Rejected')
   AND inst.[IsActive] = 1
   AND inst.[DocumentId] IS NOT NULL

@@ -21,7 +21,7 @@ public sealed class SqlWaContactRepository : IWaContactRepository
         _schema       = $"[{s}]";
         _contactTable = $"[{s}].[WaContact]";
         _jidTable     = $"[{s}].[WaContactJid]";
-        _inboxTable   = $"[{s}].[wa_inbox]";
+        _inboxTable   = $"[{s}].[WaInbox]";
     }
 
     public async Task<WaContact?> FindByJidAsync(string jid, CancellationToken ct)
@@ -145,11 +145,11 @@ public sealed class SqlWaContactRepository : IWaContactRepository
         cmd.CommandText = $"""
             DECLARE @phones TABLE (phone NVARCHAR(32), display_name NVARCHAR(200));
             INSERT INTO @phones
-            SELECT DISTINCT i.[contact_phone],
-                   MAX(i.[contact_name])
+            SELECT DISTINCT i.[ContactPhone],
+                   MAX(i.[ContactName])
             FROM {_inboxTable} i
-            WHERE i.[contact_phone] IS NOT NULL
-            GROUP BY i.[contact_phone];
+            WHERE i.[ContactPhone] IS NOT NULL
+            GROUP BY i.[ContactPhone];
 
             MERGE {_contactTable} AS tgt
             USING (
@@ -171,15 +171,15 @@ public sealed class SqlWaContactRepository : IWaContactRepository
 
     public async Task LinkInboxContactIdsAsync(CancellationToken ct)
     {
-        // wa_inbox.contact_id = WaContact.Id (phone eşleşmesi üzerinden)
+        // WaInbox.ContactId = WaContact.Id (phone eşleşmesi üzerinden)
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE i
-               SET i.[contact_id] = c.[Id]
+               SET i.[ContactId] = c.[Id]
             FROM {_inboxTable} i
-            JOIN {_contactTable} c ON c.[PrimaryPhone] = i.[contact_phone]
-            WHERE i.[contact_id] IS NULL;
+            JOIN {_contactTable} c ON c.[PrimaryPhone] = i.[ContactPhone]
+            WHERE i.[ContactId] IS NULL;
             """;
         cmd.CommandTimeout = 120;
         await cmd.ExecuteNonQueryAsync(ct);

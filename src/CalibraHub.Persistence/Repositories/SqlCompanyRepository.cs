@@ -27,12 +27,12 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [title], [address], [city], [district], [postal_code],
-                   [tax_office], [tax_number],
-                   [is_e_document_approval_enabled], [IsActive], [connection_string],
-                   [public_url]
+            SELECT [Id], [Name], [Title], [Address], [City], [District], [PostalCode],
+                   [TaxOffice], [TaxNumber],
+                   [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString],
+                   [PublicUrl]
             FROM {_tableName}
-            ORDER BY [name];
+            ORDER BY [Name];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -49,12 +49,12 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [title], [address], [city], [district], [postal_code],
-                   [tax_office], [tax_number],
-                   [is_e_document_approval_enabled], [IsActive], [connection_string],
-                   [public_url]
+            SELECT [Id], [Name], [Title], [Address], [City], [District], [PostalCode],
+                   [TaxOffice], [TaxNumber],
+                   [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString],
+                   [PublicUrl]
             FROM {_tableName}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
 
@@ -72,11 +72,11 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         // [id] INT IDENTITY — INSERT'e dahil edilmez, OUTPUT ile okunur
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([name], [title], [address], [city], [district], [postal_code],
-                 [tax_office], [tax_number],
-                 [is_e_document_approval_enabled], [IsActive], [connection_string], [public_url],
+                ([Name], [Title], [Address], [City], [District], [PostalCode],
+                 [TaxOffice], [TaxNumber],
+                 [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString], [PublicUrl],
                  [Created], [Updated])
-            OUTPUT INSERTED.[id]
+            OUTPUT INSERTED.[Id]
             VALUES
                 (@Name, @Title, @Address, @City, @District, @PostalCode,
                  @TaxOffice, @TaxNumber,
@@ -97,20 +97,20 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_tableName}
-            SET [name] = @Name,
-                [title] = @Title,
-                [address] = @Address,
-                [city] = @City,
-                [district] = @District,
-                [postal_code] = @PostalCode,
-                [tax_office] = @TaxOffice,
-                [tax_number] = @TaxNumber,
-                [is_e_document_approval_enabled] = @IsEDocumentApprovalEnabled,
+            SET [Name] = @Name,
+                [Title] = @Title,
+                [Address] = @Address,
+                [City] = @City,
+                [District] = @District,
+                [PostalCode] = @PostalCode,
+                [TaxOffice] = @TaxOffice,
+                [TaxNumber] = @TaxNumber,
+                [IsEDocumentApprovalEnabled] = @IsEDocumentApprovalEnabled,
                 [IsActive] = @IsActive,
-                [connection_string] = @ConnectionString,
-                [public_url] = @PublicBaseUrl,
+                [ConnectionString] = @ConnectionString,
+                [PublicUrl] = @PublicBaseUrl,
                 [Updated] = @UpdatedAt
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         AddInsertParameters(command, company);
         command.Parameters.Add(new SqlParameter("@Id", company.Id));
@@ -139,7 +139,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
     {
         await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_tableName} WHERE [id] = @Id;";
+        command.CommandText = $"DELETE FROM {_tableName} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -148,18 +148,18 @@ public sealed class SqlCompanyRepository : ICompanyRepository
     {
         var company = new Company
         {
-            Id = r.GetInt32(r.GetOrdinal("id")),
-            Name = r.GetString(r.GetOrdinal("name")),
-            Title = r.GetString(r.GetOrdinal("title")),
-            Address = r.GetString(r.GetOrdinal("address")),
-            City = r.IsDBNull(r.GetOrdinal("city")) ? null : r.GetString(r.GetOrdinal("city")),
-            District = r.IsDBNull(r.GetOrdinal("district")) ? null : r.GetString(r.GetOrdinal("district")),
-            PostalCode = r.IsDBNull(r.GetOrdinal("postal_code")) ? null : r.GetString(r.GetOrdinal("postal_code")),
-            TaxOffice = r.GetString(r.GetOrdinal("tax_office")),
-            TaxNumber = r.GetString(r.GetOrdinal("tax_number")),
-            IsEDocumentApprovalEnabled = r.GetBoolean(r.GetOrdinal("is_e_document_approval_enabled")),
-            DatabaseConnectionString = r.IsDBNull(r.GetOrdinal("connection_string")) ? null : r.GetString(r.GetOrdinal("connection_string")),
-            PublicBaseUrl = r.IsDBNull(r.GetOrdinal("public_url")) ? null : r.GetString(r.GetOrdinal("public_url"))
+            Id = r.GetInt32(r.GetOrdinal("Id")),
+            Name = r.GetString(r.GetOrdinal("Name")),
+            Title = r.GetString(r.GetOrdinal("Title")),
+            Address = r.GetString(r.GetOrdinal("Address")),
+            City = r.IsDBNull(r.GetOrdinal("City")) ? null : r.GetString(r.GetOrdinal("City")),
+            District = r.IsDBNull(r.GetOrdinal("District")) ? null : r.GetString(r.GetOrdinal("District")),
+            PostalCode = r.IsDBNull(r.GetOrdinal("PostalCode")) ? null : r.GetString(r.GetOrdinal("PostalCode")),
+            TaxOffice = r.GetString(r.GetOrdinal("TaxOffice")),
+            TaxNumber = r.GetString(r.GetOrdinal("TaxNumber")),
+            IsEDocumentApprovalEnabled = r.GetBoolean(r.GetOrdinal("IsEDocumentApprovalEnabled")),
+            DatabaseConnectionString = r.IsDBNull(r.GetOrdinal("ConnectionString")) ? null : r.GetString(r.GetOrdinal("ConnectionString")),
+            PublicBaseUrl = r.IsDBNull(r.GetOrdinal("PublicUrl")) ? null : r.GetString(r.GetOrdinal("PublicUrl"))
         };
 
         if (!r.GetBoolean(r.GetOrdinal("IsActive")))

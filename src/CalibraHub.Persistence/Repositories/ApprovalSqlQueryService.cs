@@ -33,8 +33,8 @@ public sealed class ApprovalSqlQueryService : IApprovalSqlQueryService
     private static readonly HashSet<string> _allowedTables = new(StringComparer.OrdinalIgnoreCase)
     {
         "Document", "DocumentLine", "Contact", "Items", "Personnel", "Department",
-        "UserProfile", "MaterialGroups", "MaterialGroupMappings", "card_groups",
-        "card_group_mappings", "ApprovalFlow", "ApprovalInstance",
+        "UserProfile", "MaterialGroups", "MaterialGroupMappings", "CardGroup",
+        "CardGroupMapping", "ApprovalFlow", "ApprovalInstance",
     };
 
     public ApprovalSqlQueryService(

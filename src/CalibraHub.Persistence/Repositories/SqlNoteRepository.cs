@@ -26,11 +26,11 @@ public sealed class SqlNoteRepository : INoteRepository
         _connectionFactory = connectionFactory;
         _encryption = encryption;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _notesTable = $"[{schema}].[notes]";
-        _remindersTable = $"[{schema}].[note_reminders]";
-        _sharesTable = $"[{schema}].[note_shares]";
-        _foldersTable = $"[{schema}].[note_folders]";
-        _reminderTargetsTable = $"[{schema}].[note_reminder_targets]";
+        _notesTable = $"[{schema}].[Note]";
+        _remindersTable = $"[{schema}].[NoteReminder]";
+        _sharesTable = $"[{schema}].[NoteShare]";
+        _foldersTable = $"[{schema}].[NoteFolder]";
+        _reminderTargetsTable = $"[{schema}].[NoteReminderTarget]";
     }
 
     public async Task<IReadOnlyCollection<Note>> GetByUserAsync(int companyId, int userId, Guid? folderId, CancellationToken cancellationToken)
@@ -62,7 +62,7 @@ public sealed class SqlNoteRepository : INoteRepository
                   AND n.[CompanyId] = @CompanyId
                   AND (n.[UserId] = @UserId
                        OR n.[visibility] = 1
-                       OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[note_id] = n.[Id] AND s.[shared_with_user_id] = @UserId))
+                       OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[NoteId] = n.[Id] AND s.[SharedWithUserId] = @UserId))
                 ORDER BY n.[Updated] DESC;
                 """;
         }
@@ -95,7 +95,7 @@ public sealed class SqlNoteRepository : INoteRepository
               AND n.[CompanyId] = @CompanyId
               AND (n.[UserId] = @UserId
                    OR n.[visibility] = 1
-                   OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[note_id] = n.[Id] AND s.[shared_with_user_id] = @UserId))
+                   OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[NoteId] = n.[Id] AND s.[SharedWithUserId] = @UserId))
             ORDER BY n.[Updated] DESC;
             """;
         command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
@@ -118,7 +118,7 @@ public sealed class SqlNoteRepository : INoteRepository
             WHERE n.[Id] = @Id AND n.[IsDeleted] = 0
               AND (n.[UserId] = @UserId
                    OR n.[visibility] = 1
-                   OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[note_id] = n.[Id] AND s.[shared_with_user_id] = @UserId));
+                   OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[NoteId] = n.[Id] AND s.[SharedWithUserId] = @UserId));
             """;
         command.Parameters.Add(new SqlParameter("@Id", noteId));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
@@ -239,11 +239,11 @@ public sealed class SqlNoteRepository : INoteRepository
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = $"""
-                SELECT [id], [note_id], [remind_at], [is_sent], [sent_at], [recurrence_type], [recurrence_data],
+                SELECT [Id], [NoteId], [RemindAt], [IsSent], [SentAt], [recurrence_type], [recurrence_data],
                        [delivery_channel], [target_user_id]
                 FROM {_remindersTable}
-                WHERE [note_id] = @NoteId
-                ORDER BY [remind_at];
+                WHERE [NoteId] = @NoteId
+                ORDER BY [RemindAt];
                 """;
             command.Parameters.Add(new SqlParameter("@NoteId", noteId));
 
@@ -259,10 +259,10 @@ public sealed class SqlNoteRepository : INoteRepository
         {
             await using var tCmd = connection.CreateCommand();
             tCmd.CommandText = $"""
-                SELECT t.[reminder_id], t.[user_id]
+                SELECT t.[ReminderId], t.[UserId]
                 FROM {_reminderTargetsTable} t
-                INNER JOIN {_remindersTable} r ON r.[id] = t.[reminder_id]
-                WHERE r.[note_id] = @NoteId;
+                INNER JOIN {_remindersTable} r ON r.[Id] = t.[ReminderId]
+                WHERE r.[NoteId] = @NoteId;
                 """;
             tCmd.Parameters.Add(new SqlParameter("@NoteId", noteId));
             await using var tReader = await tCmd.ExecuteReaderAsync(cancellationToken);
@@ -319,7 +319,7 @@ public sealed class SqlNoteRepository : INoteRepository
             command.Transaction = tx;
             command.CommandText = $"""
                 INSERT INTO {_remindersTable}
-                    ([id], [note_id], [remind_at], [is_sent], [sent_at], [recurrence_type], [recurrence_data],
+                    ([Id], [NoteId], [RemindAt], [IsSent], [SentAt], [recurrence_type], [recurrence_data],
                      [delivery_channel], [target_user_id])
                 VALUES (@Id, @NoteId, @RemindAt, 0, NULL, @RecurrenceType, @RecurrenceData,
                         @DeliveryChannel, NULL);
@@ -336,7 +336,7 @@ public sealed class SqlNoteRepository : INoteRepository
             {
                 await using var tCmd = connection.CreateCommand();
                 tCmd.Transaction = tx;
-                tCmd.CommandText = $"INSERT INTO {_reminderTargetsTable} ([id],[reminder_id],[user_id]) VALUES (@Id,@Rid,@Uid);";
+                tCmd.CommandText = $"INSERT INTO {_reminderTargetsTable} ([Id],[ReminderId],[UserId]) VALUES (@Id,@Rid,@Uid);";
                 tCmd.Parameters.Add(new SqlParameter("@Id",  Guid.NewGuid()));
                 tCmd.Parameters.Add(new SqlParameter("@Rid", reminder.Id));
                 tCmd.Parameters.Add(new SqlParameter("@Uid", uid));
@@ -356,7 +356,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_remindersTable} WHERE [id] = @Id;";
+        command.CommandText = $"DELETE FROM {_remindersTable} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", reminderId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -376,11 +376,11 @@ public sealed class SqlNoteRepository : INoteRepository
             .Select((_, i) => "@N" + i)
             .ToArray();
         command.CommandText = $@"
-            SELECT [note_id], COUNT(*) AS [cnt]
+            SELECT [NoteId], COUNT(*) AS [cnt]
             FROM {_remindersTable}
-            WHERE [is_sent] = 0
-              AND [note_id] IN ({string.Join(",", paramNames)})
-            GROUP BY [note_id];";
+            WHERE [IsSent] = 0
+              AND [NoteId] IN ({string.Join(",", paramNames)})
+            GROUP BY [NoteId];";
 
         var idx = 0;
         foreach (var id in noteIds)
@@ -403,11 +403,11 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [note_id], [shared_with_user_id], [shared_at],
-                   ISNULL([can_edit], 0) AS [can_edit]
+            SELECT [Id], [NoteId], [SharedWithUserId], [SharedAt],
+                   ISNULL([CanEdit], 0) AS [CanEdit]
             FROM {_sharesTable}
-            WHERE [note_id] = @NoteId
-            ORDER BY [shared_at];
+            WHERE [NoteId] = @NoteId
+            ORDER BY [SharedAt];
             """;
         command.Parameters.Add(new SqlParameter("@NoteId", noteId));
 
@@ -434,12 +434,12 @@ public sealed class SqlNoteRepository : INoteRepository
         // Upsert: mevcut paylaşımın can_edit değerini güncelle, yoksa yeni satır ekle
         command.CommandText = $"""
             MERGE {_sharesTable} AS target
-            USING (VALUES (@NoteId, @SharedWithUserId)) AS src ([note_id], [shared_with_user_id])
-              ON target.[note_id] = src.[note_id] AND target.[shared_with_user_id] = src.[shared_with_user_id]
+            USING (VALUES (@NoteId, @SharedWithUserId)) AS src ([NoteId], [SharedWithUserId])
+              ON target.[NoteId] = src.[NoteId] AND target.[SharedWithUserId] = src.[SharedWithUserId]
             WHEN MATCHED THEN
-                UPDATE SET [can_edit] = @CanEdit, [shared_at] = @SharedAt
+                UPDATE SET [CanEdit] = @CanEdit, [SharedAt] = @SharedAt
             WHEN NOT MATCHED THEN
-                INSERT ([id], [note_id], [shared_with_user_id], [shared_at], [can_edit])
+                INSERT ([Id], [NoteId], [SharedWithUserId], [SharedAt], [CanEdit])
                 VALUES (@Id, @NoteId, @SharedWithUserId, @SharedAt, @CanEdit);
             """;
         command.Parameters.Add(new SqlParameter("@Id", share.Id));
@@ -454,7 +454,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_sharesTable} SET [can_edit] = @CanEdit WHERE [id] = @Id;";
+        command.CommandText = $"UPDATE {_sharesTable} SET [CanEdit] = @CanEdit WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", shareId));
         command.Parameters.Add(new SqlParameter("@CanEdit", canEdit));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -464,7 +464,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_sharesTable} WHERE [id] = @Id;";
+        command.CommandText = $"DELETE FROM {_sharesTable} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", shareId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -476,13 +476,13 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT r.[id], r.[note_id], r.[remind_at], r.[recurrence_type], r.[recurrence_data],
+            SELECT r.[Id], r.[NoteId], r.[RemindAt], r.[recurrence_type], r.[recurrence_data],
                    r.[delivery_channel], r.[target_user_id],
                    n.[Id], n.[CompanyId], n.[UserId], n.[Title], n.[Content], n.[Created], n.[Updated], n.[FolderId]
             FROM {_remindersTable} r
-            INNER JOIN {_notesTable} n ON r.[note_id] = n.[Id]
-            WHERE r.[is_sent] = 0
-              AND r.[remind_at] <= @Now
+            INNER JOIN {_notesTable} n ON r.[NoteId] = n.[Id]
+            WHERE r.[IsSent] = 0
+              AND r.[RemindAt] <= @Now
               AND n.[IsDeleted] = 0;
             """;
         command.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
@@ -523,9 +523,9 @@ public sealed class SqlNoteRepository : INoteRepository
             var paramNames = dueIds.Select((_, i) => "@T" + i).ToArray();
             await using var tCmd = connection.CreateCommand();
             tCmd.CommandText = $"""
-                SELECT [reminder_id], [user_id]
+                SELECT [ReminderId], [UserId]
                 FROM {_reminderTargetsTable}
-                WHERE [reminder_id] IN ({string.Join(",", paramNames)});
+                WHERE [ReminderId] IN ({string.Join(",", paramNames)});
                 """;
             for (var i = 0; i < dueIds.Length; i++)
                 tCmd.Parameters.Add(new SqlParameter(paramNames[i], dueIds[i]));
@@ -556,7 +556,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_remindersTable} SET [is_sent] = 1, [sent_at] = @SentAt WHERE [id] = @Id;";
+        command.CommandText = $"UPDATE {_remindersTable} SET [IsSent] = 1, [SentAt] = @SentAt WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", reminderId));
         command.Parameters.Add(new SqlParameter("@SentAt", sentAt));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -569,10 +569,10 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [user_id], [name], [parent_folder_id], [Created]
+            SELECT [Id], [CompanyId], [UserId], [Name], [ParentFolderId], [Created]
             FROM {_foldersTable}
-            WHERE [company_id] = @CompanyId AND [user_id] = @UserId AND [is_deleted] = 0
-            ORDER BY [name];
+            WHERE [CompanyId] = @CompanyId AND [UserId] = @UserId AND [IsDeleted] = 0
+            ORDER BY [Name];
             """;
         command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@UserId", userId));
@@ -599,10 +599,10 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_foldersTable} WHERE [id] = @Id)
-                UPDATE {_foldersTable} SET [name] = @Name WHERE [id] = @Id;
+            IF EXISTS (SELECT 1 FROM {_foldersTable} WHERE [Id] = @Id)
+                UPDATE {_foldersTable} SET [Name] = @Name WHERE [Id] = @Id;
             ELSE
-                INSERT INTO {_foldersTable} ([id], [company_id], [user_id], [name], [parent_folder_id], [Created], [is_deleted])
+                INSERT INTO {_foldersTable} ([Id], [CompanyId], [UserId], [Name], [ParentFolderId], [Created], [IsDeleted])
                 VALUES (@Id, @CompanyId, @UserId, @Name, @ParentFolderId, @CreatedAt, 0);
             """;
         command.Parameters.Add(new SqlParameter("@Id", folder.Id));
@@ -661,10 +661,10 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE r FROM {_remindersTable} r
-            INNER JOIN {_notesTable} n ON r.[note_id] = n.[Id]
+            INNER JOIN {_notesTable} n ON r.[NoteId] = n.[Id]
             WHERE n.[Id] = @Id AND n.[UserId] = @UserId;
             DELETE s FROM {_sharesTable} s
-            INNER JOIN {_notesTable} n ON s.[note_id] = n.[Id]
+            INNER JOIN {_notesTable} n ON s.[NoteId] = n.[Id]
             WHERE n.[Id] = @Id AND n.[UserId] = @UserId;
             DELETE FROM {_notesTable} WHERE [Id] = @Id AND [UserId] = @UserId;
             """;
@@ -679,10 +679,10 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE r FROM {_remindersTable} r
-            INNER JOIN {_notesTable} n ON r.[note_id] = n.[Id]
+            INNER JOIN {_notesTable} n ON r.[NoteId] = n.[Id]
             WHERE n.[IsDeleted] = 1 AND n.[CompanyId] = @CompanyId AND n.[UserId] = @UserId;
             DELETE s FROM {_sharesTable} s
-            INNER JOIN {_notesTable} n ON s.[note_id] = n.[Id]
+            INNER JOIN {_notesTable} n ON s.[NoteId] = n.[Id]
             WHERE n.[IsDeleted] = 1 AND n.[CompanyId] = @CompanyId AND n.[UserId] = @UserId;
             DELETE FROM {_notesTable}
             WHERE [IsDeleted] = 1 AND [CompanyId] = @CompanyId AND [UserId] = @UserId;
@@ -696,7 +696,7 @@ public sealed class SqlNoteRepository : INoteRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"UPDATE {_foldersTable} SET [name] = @Name WHERE [id] = @Id";
+        command.CommandText = $"UPDATE {_foldersTable} SET [Name] = @Name WHERE [Id] = @Id";
         command.Parameters.Add(new SqlParameter("@Name", name));
         command.Parameters.Add(new SqlParameter("@Id", folderId));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -707,10 +707,10 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            DECLARE @ParentId UNIQUEIDENTIFIER = (SELECT [parent_folder_id] FROM {_foldersTable} WHERE [id] = @FolderId);
+            DECLARE @ParentId UNIQUEIDENTIFIER = (SELECT [ParentFolderId] FROM {_foldersTable} WHERE [Id] = @FolderId);
             UPDATE {_notesTable} SET [FolderId] = NULL WHERE [FolderId] = @FolderId;
-            UPDATE {_foldersTable} SET [parent_folder_id] = @ParentId WHERE [parent_folder_id] = @FolderId;
-            UPDATE {_foldersTable} SET [is_deleted] = 1 WHERE [id] = @FolderId;
+            UPDATE {_foldersTable} SET [ParentFolderId] = @ParentId WHERE [ParentFolderId] = @FolderId;
+            UPDATE {_foldersTable} SET [IsDeleted] = 1 WHERE [Id] = @FolderId;
             """;
         command.Parameters.Add(new SqlParameter("@FolderId", folderId));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -808,7 +808,7 @@ public sealed class SqlNoteRepository : INoteRepository
 
     private static NoteReminder MapReminder(SqlDataReader reader)
     {
-        // Kolon sirasi: id, note_id, remind_at, is_sent, sent_at, recurrence_type, recurrence_data,
+        // Kolon sirasi: Id, NoteId, RemindAt, IsSent, SentAt, recurrence_type, recurrence_data,
         //               delivery_channel, target_user_id (artik okunmuyor — many-to-many table var)
         var reminder = new NoteReminder
         {

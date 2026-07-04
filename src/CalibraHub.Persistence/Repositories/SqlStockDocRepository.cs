@@ -66,17 +66,17 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT d.[id], d.[CompanyId], dt.[code], d.[DocumentNumber], d.[DocumentDate],
+            SELECT d.[Id], d.[CompanyId], dt.[Code], d.[DocumentNumber], d.[DocumentDate],
                    NULL AS FromLocationId, NULL AS FromLocationName,
                    d.[LocationId], loc.[LocationName] AS ToLocationName,
-                   d.[notes], d.[CreatedById], d.[Created], d.[IsActive],
-                   (SELECT COUNT(*) FROM {T("DocumentLine")} dl WHERE dl.[DocumentId] = d.[id]) AS LineCount,
+                   d.[Notes], d.[CreatedById], d.[Created], d.[IsActive],
+                   (SELECT COUNT(*) FROM {T("DocumentLine")} dl WHERE dl.[DocumentId] = d.[Id]) AS LineCount,
                    d.[ParentDocumentId] AS ArgeProjectId, ap.[Name] AS ArgeProjectName
             FROM {T("Document")} d
-            INNER JOIN {T("document_types")} dt ON dt.[id] = d.[DocumentTypeId]
+            INNER JOIN {T("DocumentType")} dt ON dt.[Id] = d.[DocumentTypeId]
             LEFT JOIN {T("Location")} loc ON loc.[Id] = d.[LocationId]
             LEFT JOIN {T("ArgeProject")} ap ON ap.[DocumentId] = d.[ParentDocumentId]
-            WHERE d.[CompanyId] = @CompanyId AND dt.[code] IN ({paramList}) AND d.[IsActive] = 1
+            WHERE d.[CompanyId] = @CompanyId AND dt.[Code] IN ({paramList}) AND d.[IsActive] = 1
             ORDER BY d.[Created] DESC;
             """;
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -95,14 +95,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT d.[id], d.[CompanyId], N'INVENTORY_COUNT' AS DocType, d.[DocumentNumber], d.[DocumentDate],
+            SELECT d.[Id], d.[CompanyId], N'INVENTORY_COUNT' AS DocType, d.[DocumentNumber], d.[DocumentDate],
                    ic.[LocationId], loc.[LocationName] AS FromLocationName,
                    NULL AS ToLocationId, NULL AS ToLocationName,
-                   d.[notes], d.[CreatedById], d.[Created], d.[IsActive],
+                   d.[Notes], d.[CreatedById], d.[Created], d.[IsActive],
                    (SELECT COUNT(*) FROM {T("InventoryCountLine")} l WHERE l.[InventoryCountId] = ic.[Id]) AS LineCount,
                    NULL AS ArgeProjectId, NULL AS ArgeProjectName
             FROM {T("InventoryCount")} ic
-            INNER JOIN {T("Document")} d ON d.[id] = ic.[DocumentId]
+            INNER JOIN {T("Document")} d ON d.[Id] = ic.[DocumentId]
             LEFT JOIN {T("Location")} loc ON loc.[Id] = ic.[LocationId]
             WHERE d.[CompanyId] = @CompanyId AND d.[IsActive] = 1
             ORDER BY d.[Created] DESC;
@@ -123,16 +123,16 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                SELECT d.[id], d.[CompanyId], N'INVENTORY_COUNT' AS DocType, d.[DocumentNumber], d.[DocumentDate],
+                SELECT d.[Id], d.[CompanyId], N'INVENTORY_COUNT' AS DocType, d.[DocumentNumber], d.[DocumentDate],
                        ic.[LocationId], loc.[LocationName] AS FromLocationName,
                        NULL AS ToLocationId, NULL AS ToLocationName,
-                       d.[notes], d.[CreatedById], d.[Created], d.[IsActive],
+                       d.[Notes], d.[CreatedById], d.[Created], d.[IsActive],
                        (SELECT COUNT(*) FROM {T("InventoryCountLine")} l WHERE l.[InventoryCountId] = ic.[Id]) AS LineCount,
                        NULL AS ArgeProjectId, NULL AS ArgeProjectName
                 FROM {T("InventoryCount")} ic
-                INNER JOIN {T("Document")} d ON d.[id] = ic.[DocumentId]
+                INNER JOIN {T("Document")} d ON d.[Id] = ic.[DocumentId]
                 LEFT JOIN {T("Location")} loc ON loc.[Id] = ic.[LocationId]
-                WHERE d.[id] = @Id AND d.[CompanyId] = @CompanyId;
+                WHERE d.[Id] = @Id AND d.[CompanyId] = @CompanyId;
                 """;
             cmd.Parameters.AddWithValue("@Id", id);
             cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -144,17 +144,17 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                SELECT d.[id], d.[CompanyId], dt.[code], d.[DocumentNumber], d.[DocumentDate],
+                SELECT d.[Id], d.[CompanyId], dt.[Code], d.[DocumentNumber], d.[DocumentDate],
                        NULL AS FromLocationId, NULL AS FromLocationName,
                        d.[LocationId], loc.[LocationName] AS ToLocationName,
-                       d.[notes], d.[CreatedById], d.[Created], d.[IsActive],
-                       (SELECT COUNT(*) FROM {T("DocumentLine")} dl WHERE dl.[DocumentId] = d.[id]) AS LineCount,
+                       d.[Notes], d.[CreatedById], d.[Created], d.[IsActive],
+                       (SELECT COUNT(*) FROM {T("DocumentLine")} dl WHERE dl.[DocumentId] = d.[Id]) AS LineCount,
                        d.[ParentDocumentId] AS ArgeProjectId, ap.[Name] AS ArgeProjectName
                 FROM {T("Document")} d
-                INNER JOIN {T("document_types")} dt ON dt.[id] = d.[DocumentTypeId]
+                INNER JOIN {T("DocumentType")} dt ON dt.[Id] = d.[DocumentTypeId]
                 LEFT JOIN {T("Location")} loc ON loc.[Id] = d.[LocationId]
                 LEFT JOIN {T("ArgeProject")} ap ON ap.[DocumentId] = d.[ParentDocumentId]
-                WHERE d.[id] = @Id AND d.[CompanyId] = @CompanyId;
+                WHERE d.[Id] = @Id AND d.[CompanyId] = @CompanyId;
                 """;
             cmd.Parameters.AddWithValue("@Id", id);
             cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -248,10 +248,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     UPDATE {T("Document")} SET
                         [DocumentDate] = @DocDate,
                         [LocationId]   = @ToLoc,
-                        [notes]        = @Notes,
+                        [Notes]        = @Notes,
                         [ParentDocumentId] = @ArgeProjectId
-                    WHERE [id] = @Id AND [CompanyId] = @CompanyId;
-                    SELECT [DocumentNumber] FROM {T("Document")} WHERE [id] = @Id;
+                    WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
+                    SELECT [DocumentNumber] FROM {T("Document")} WHERE [Id] = @Id;
                     """;
                 upd.Parameters.AddWithValue("@Id", docId);
                 upd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -269,10 +269,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.CommandText = $"""
                     INSERT INTO {T("Document")}
                         ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
-                         [notes],[status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
-                    SELECT @CompanyId, @DocNo, dt.[id], @DocDate, @ToLoc,
+                         [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
+                    SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, @ToLoc,
                            @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @ArgeProjectId
-                    FROM {T("document_types")} dt WHERE dt.[code] = @TypeCode;
+                    FROM {T("DocumentType")} dt WHERE dt.[Code] = @TypeCode;
                     SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
                 ins.Parameters.AddWithValue("@CompanyId", companyId);
@@ -362,11 +362,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 {
                     upd.Transaction = tx;
                     upd.CommandText = $"""
-                        UPDATE {T("Document")} SET [DocumentDate] = @DocDate, [notes] = @Notes
-                        WHERE [id] = @Id AND [CompanyId] = @CompanyId;
+                        UPDATE {T("Document")} SET [DocumentDate] = @DocDate, [Notes] = @Notes
+                        WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
                         UPDATE {T("InventoryCount")} SET [LocationId] = @LocId
                         WHERE [DocumentId] = @Id AND [Status] = 0;
-                        SELECT [DocumentNumber] FROM {T("Document")} WHERE [id] = @Id;
+                        SELECT [DocumentNumber] FROM {T("Document")} WHERE [Id] = @Id;
                         """;
                     upd.Parameters.AddWithValue("@Id", docId);
                     upd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -393,9 +393,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     ins.Transaction = tx;
                     ins.CommandText = $"""
                         INSERT INTO {T("Document")}
-                            ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[notes],[status],[CreatedById],[Created],[IsActive])
-                        SELECT @CompanyId, @DocNo, dt.[id], @DocDate, @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1
-                        FROM {T("document_types")} dt WHERE dt.[code] = N'sayim';
+                            ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[Notes],[Status],[CreatedById],[Created],[IsActive])
+                        SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1
+                        FROM {T("DocumentType")} dt WHERE dt.[Code] = N'sayim';
                         SELECT CAST(SCOPE_IDENTITY() AS INT);
                         """;
                     ins.Parameters.AddWithValue("@CompanyId", companyId);
@@ -469,7 +469,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {T("Document")} SET [IsActive]=0 WHERE [id]=@Id AND [CompanyId]=@CompanyId;";
+        cmd.CommandText = $"UPDATE {T("Document")} SET [IsActive]=0 WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         await cmd.ExecuteNonQueryAsync(ct);

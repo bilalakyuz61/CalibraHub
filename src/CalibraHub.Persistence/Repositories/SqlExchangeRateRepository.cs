@@ -17,14 +17,14 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _table = $"[{schema}].[Exchange]";
-        _currenciesTable = $"[{schema}].[currencies]";
+        _currenciesTable = $"[{schema}].[Currency]";
     }
 
-    // SELECT kolonlari — CurrencyId FK ile currencies JOIN'lenir, code+name otomatik dolar
+    // SELECT kolonlari — CurrencyId FK ile Currency JOIN'lenir, Code+Name otomatik dolar
     private const string SelectCols =
-        "r.[id], r.[CurrencyId], c.[code], r.[date], r.[buying_rate], r.[selling_rate], " +
-        "ISNULL(r.[effective_buying_rate],0), ISNULL(r.[effective_selling_rate],0), " +
-        "r.[source], r.[Created], c.[name]";
+        "r.[Id], r.[CurrencyId], c.[Code], r.[Date], r.[BuyingRate], r.[SellingRate], " +
+        "ISNULL(r.[EffectiveBuyingRate],0), ISNULL(r.[EffectiveSellingRate],0), " +
+        "r.[Source], r.[Created], c.[Name]";
 
     public async Task<IReadOnlyCollection<ExchangeRate>> GetLatestRatesAsync(CancellationToken ct)
     {
@@ -34,13 +34,13 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         cmd.CommandText = $"""
             SELECT {SelectCols}
             FROM {_table} r
-            INNER JOIN {_currenciesTable} c ON c.[id] = r.[CurrencyId]
+            INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
             INNER JOIN (
-                SELECT [CurrencyId], MAX([date]) AS [max_date]
+                SELECT [CurrencyId], MAX([Date]) AS [max_date]
                 FROM {_table}
                 GROUP BY [CurrencyId]
-            ) latest ON r.[CurrencyId] = latest.[CurrencyId] AND r.[date] = latest.[max_date]
-            ORDER BY c.[code];
+            ) latest ON r.[CurrencyId] = latest.[CurrencyId] AND r.[Date] = latest.[max_date]
+            ORDER BY c.[Code];
             """;
         await using var rd = await cmd.ExecuteReaderAsync(ct);
         while (await rd.ReadAsync(ct)) list.Add(Map(rd));
@@ -56,14 +56,14 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         cmd.CommandText = $"""
             SELECT {SelectCols}
             FROM {_table} r
-            INNER JOIN {_currenciesTable} c ON c.[id] = r.[CurrencyId]
+            INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
             INNER JOIN (
-                SELECT [CurrencyId], MAX([date]) AS [best_date]
+                SELECT [CurrencyId], MAX([Date]) AS [best_date]
                 FROM {_table}
-                WHERE [date] <= @Date
+                WHERE [Date] <= @Date
                 GROUP BY [CurrencyId]
-            ) best ON r.[CurrencyId] = best.[CurrencyId] AND r.[date] = best.[best_date]
-            ORDER BY c.[code];
+            ) best ON r.[CurrencyId] = best.[CurrencyId] AND r.[Date] = best.[best_date]
+            ORDER BY c.[Code];
             """;
         cmd.Parameters.Add(new SqlParameter("@Date", date.Date));
         await using var rd = await cmd.ExecuteReaderAsync(ct);
@@ -78,9 +78,9 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         cmd.CommandText = $"""
             SELECT TOP 1 {SelectCols}
             FROM {_table} r
-            INNER JOIN {_currenciesTable} c ON c.[id] = r.[CurrencyId]
-            WHERE c.[code] = @Code AND r.[date] <= @Date
-            ORDER BY r.[date] DESC;
+            INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
+            WHERE c.[Code] = @Code AND r.[Date] <= @Date
+            ORDER BY r.[Date] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Code", currencyCode));
         cmd.Parameters.Add(new SqlParameter("@Date", date.Date));
@@ -100,7 +100,7 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         {
             codeIdMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             await using var lookupCmd = conn.CreateCommand();
-            lookupCmd.CommandText = $"SELECT [id], [code] FROM {_currenciesTable};";
+            lookupCmd.CommandText = $"SELECT [Id], [Code] FROM {_currenciesTable};";
             await using var lookupRd = await lookupCmd.ExecuteReaderAsync(ct);
             while (await lookupRd.ReadAsync(ct))
                 codeIdMap[lookupRd.GetString(1)] = lookupRd.GetInt32(0);
@@ -117,13 +117,13 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
             cmd.CommandText = $"""
                 MERGE {_table} AS tgt
                 USING (SELECT @CurrencyId AS [cid], @Date AS [d]) AS src
-                    ON tgt.[CurrencyId] = src.[cid] AND tgt.[date] = src.[d]
+                    ON tgt.[CurrencyId] = src.[cid] AND tgt.[Date] = src.[d]
                 WHEN MATCHED THEN
-                    UPDATE SET [buying_rate]=@Buying, [selling_rate]=@Selling,
-                               [effective_buying_rate]=@EffBuying, [effective_selling_rate]=@EffSelling,
-                               [source]=@Source
+                    UPDATE SET [BuyingRate]=@Buying, [SellingRate]=@Selling,
+                               [EffectiveBuyingRate]=@EffBuying, [EffectiveSellingRate]=@EffSelling,
+                               [Source]=@Source
                 WHEN NOT MATCHED THEN
-                    INSERT ([CurrencyId],[date],[buying_rate],[selling_rate],[effective_buying_rate],[effective_selling_rate],[source],[Created])
+                    INSERT ([CurrencyId],[Date],[BuyingRate],[SellingRate],[EffectiveBuyingRate],[EffectiveSellingRate],[Source],[Created])
                     VALUES (@CurrencyId, @Date, @Buying, @Selling, @EffBuying, @EffSelling, @Source, GETDATE());
                 """;
             cmd.Parameters.Add(new SqlParameter("@CurrencyId", currencyId));
@@ -145,9 +145,9 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         cmd.CommandText = $"""
             SELECT {SelectCols}
             FROM {_table} r
-            INNER JOIN {_currenciesTable} c ON c.[id] = r.[CurrencyId]
-            WHERE c.[code] = @Code AND r.[date] BETWEEN @From AND @To
-            ORDER BY r.[date] DESC;
+            INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
+            WHERE c.[Code] = @Code AND r.[Date] BETWEEN @From AND @To
+            ORDER BY r.[Date] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Code", currencyCode));
         cmd.Parameters.Add(new SqlParameter("@From", from.Date));
@@ -165,9 +165,9 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         cmd.CommandText = $"""
             SELECT {SelectCols}
             FROM {_table} r
-            INNER JOIN {_currenciesTable} c ON c.[id] = r.[CurrencyId]
-            WHERE r.[date] BETWEEN @From AND @To
-            ORDER BY r.[date] DESC, c.[code];
+            INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
+            WHERE r.[Date] BETWEEN @From AND @To
+            ORDER BY r.[Date] DESC, c.[Code];
             """;
         cmd.Parameters.Add(new SqlParameter("@From", from.Date));
         cmd.Parameters.Add(new SqlParameter("@To", to.Date));
@@ -182,8 +182,8 @@ public sealed class SqlExchangeRateRepository : IExchangeRateRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             DELETE r FROM {_table} r
-            INNER JOIN {_currenciesTable} c ON c.[id] = r.[CurrencyId]
-            WHERE c.[code] = @Code AND r.[date] = @Date;
+            INNER JOIN {_currenciesTable} c ON c.[Id] = r.[CurrencyId]
+            WHERE c.[Code] = @Code AND r.[Date] = @Date;
             """;
         cmd.Parameters.Add(new SqlParameter("@Code", currencyCode));
         cmd.Parameters.Add(new SqlParameter("@Date", date.Date));

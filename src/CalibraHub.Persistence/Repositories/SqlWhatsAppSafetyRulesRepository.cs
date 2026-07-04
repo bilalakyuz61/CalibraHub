@@ -15,7 +15,7 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[whatsapp_safety_rules]";
+        _table = $"[{schema}].[WhatsAppSafetyRule]";
     }
 
     public async Task<WhatsAppSafetyRules?> GetAsync(CancellationToken cancellationToken)
@@ -23,12 +23,12 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[max_per_minute],[max_per_hour],[max_per_day],[max_per_recipient_per_day],
-                   [min_delay_seconds],[max_delay_seconds],
-                   [max_consecutive_failures],[failure_cooldown_minutes],
-                   [warmup_days],[warmup_max_per_day],[max_identical_messages_per_day],
+            SELECT [Id],[MaxPerMinute],[MaxPerHour],[MaxPerDay],[MaxPerRecipientPerDay],
+                   [MinDelaySeconds],[MaxDelaySeconds],
+                   [MaxConsecutiveFailures],[FailureCooldownMinutes],
+                   [WarmupDays],[WarmupMaxPerDay],[MaxIdenticalMessagesPerDay],
                    [Created],[Updated]
-              FROM {_table} WHERE [id]=1;
+              FROM {_table} WHERE [Id]=1;
             """;
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await r.ReadAsync(cancellationToken)) return null;
@@ -56,22 +56,22 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [id]=1)
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [Id]=1)
                 UPDATE {_table} SET
-                    [max_per_minute]=@MaxMin, [max_per_hour]=@MaxHour, [max_per_day]=@MaxDay,
-                    [max_per_recipient_per_day]=@MaxRcpDay,
-                    [min_delay_seconds]=@MinDelay, [max_delay_seconds]=@MaxDelay,
-                    [max_consecutive_failures]=@MaxFail, [failure_cooldown_minutes]=@CDMin,
-                    [warmup_days]=@WarmDays, [warmup_max_per_day]=@WarmMax,
-                    [max_identical_messages_per_day]=@MaxIdent,
+                    [MaxPerMinute]=@MaxMin, [MaxPerHour]=@MaxHour, [MaxPerDay]=@MaxDay,
+                    [MaxPerRecipientPerDay]=@MaxRcpDay,
+                    [MinDelaySeconds]=@MinDelay, [MaxDelaySeconds]=@MaxDelay,
+                    [MaxConsecutiveFailures]=@MaxFail, [FailureCooldownMinutes]=@CDMin,
+                    [WarmupDays]=@WarmDays, [WarmupMaxPerDay]=@WarmMax,
+                    [MaxIdenticalMessagesPerDay]=@MaxIdent,
                     [Updated]=GETUTCDATE()
-                WHERE [id]=1;
+                WHERE [Id]=1;
             ELSE
                 INSERT INTO {_table}
-                    ([id],[max_per_minute],[max_per_hour],[max_per_day],[max_per_recipient_per_day],
-                     [min_delay_seconds],[max_delay_seconds],
-                     [max_consecutive_failures],[failure_cooldown_minutes],
-                     [warmup_days],[warmup_max_per_day],[max_identical_messages_per_day],
+                    ([Id],[MaxPerMinute],[MaxPerHour],[MaxPerDay],[MaxPerRecipientPerDay],
+                     [MinDelaySeconds],[MaxDelaySeconds],
+                     [MaxConsecutiveFailures],[FailureCooldownMinutes],
+                     [WarmupDays],[WarmupMaxPerDay],[MaxIdenticalMessagesPerDay],
                      [Created],[Updated])
                 VALUES (1,@MaxMin,@MaxHour,@MaxDay,@MaxRcpDay,@MinDelay,@MaxDelay,
                         @MaxFail,@CDMin,@WarmDays,@WarmMax,@MaxIdent,GETUTCDATE(),GETUTCDATE());

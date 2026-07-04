@@ -15,7 +15,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[integration_api_profiles]";
+        _table = $"[{schema}].[IntegrationApiProfile]";
     }
 
     public async Task<IReadOnlyCollection<IntegrationApiProfile>> GetByCompanyAsync(int companyId, CancellationToken ct)
@@ -24,8 +24,8 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[IsActive],[provider_code],[Created],[Updated]
-            FROM {_table} WHERE [company_id] = @CompanyId ORDER BY [name];
+            SELECT [Id],[CompanyId],[Name],[AuthType],[BaseUrl],[AuthConfigJson],[IsActive],[provider_code],[Created],[Updated]
+            FROM {_table} WHERE [CompanyId] = @CompanyId ORDER BY [Name];
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         Console.WriteLine($"[GetByCompanyAsync] table={_table}, companyId={companyId}");
@@ -33,7 +33,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         // Tum satirlari da log'la (debug)
         await using (var allCmd = conn.CreateCommand())
         {
-            allCmd.CommandText = $"SELECT [id],[company_id],[name] FROM {_table};";
+            allCmd.CommandText = $"SELECT [Id],[CompanyId],[Name] FROM {_table};";
             await using var allR = await allCmd.ExecuteReaderAsync(ct);
             while (await allR.ReadAsync(ct))
                 Console.WriteLine($"[GetByCompanyAsync]   row: id={allR.GetGuid(0)}, company_id={allR[1]}, name={allR.GetString(2)}");
@@ -50,8 +50,8 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[IsActive],[provider_code],[Created],[Updated]
-            FROM {_table} WHERE [id] = @Id;
+            SELECT [Id],[CompanyId],[Name],[AuthType],[BaseUrl],[AuthConfigJson],[IsActive],[provider_code],[Created],[Updated]
+            FROM {_table} WHERE [Id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -63,12 +63,12 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [id] = @Id)
-                UPDATE {_table} SET [name]=@Name, [auth_type]=@AuthType, [base_url]=@BaseUrl,
-                    [auth_config_json]=@AuthConfigJson, [IsActive]=@IsActive, [provider_code]=@ProviderCode, [Updated]=@UpdatedAt
-                WHERE [id]=@Id
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [Id] = @Id)
+                UPDATE {_table} SET [Name]=@Name, [AuthType]=@AuthType, [BaseUrl]=@BaseUrl,
+                    [AuthConfigJson]=@AuthConfigJson, [IsActive]=@IsActive, [provider_code]=@ProviderCode, [Updated]=@UpdatedAt
+                WHERE [Id]=@Id
             ELSE
-                INSERT INTO {_table} ([id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[IsActive],[provider_code],[Created],[Updated])
+                INSERT INTO {_table} ([Id],[CompanyId],[Name],[AuthType],[BaseUrl],[AuthConfigJson],[IsActive],[provider_code],[Created],[Updated])
                 VALUES (@Id,@CompanyId,@Name,@AuthType,@BaseUrl,@AuthConfigJson,@IsActive,@ProviderCode,@CreatedAt,@UpdatedAt);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", p.Id));
@@ -88,20 +88,20 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id]=@Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static IntegrationApiProfile Map(SqlDataReader r) => new()
     {
-        Id = r.GetGuid(r.GetOrdinal("id")),
-        CompanyId = r.GetInt32(r.GetOrdinal("company_id")),
-        Name = r.GetString(r.GetOrdinal("name")),
-        AuthType = r.GetString(r.GetOrdinal("auth_type")),
-        BaseUrl = r.GetString(r.GetOrdinal("base_url")),
-        AuthConfigJson = r.IsDBNull(r.GetOrdinal("auth_config_json")) ? null : r.GetString(r.GetOrdinal("auth_config_json")),
-        IsActive = r.GetBoolean(r.GetOrdinal("is_active")),
+        Id = r.GetGuid(r.GetOrdinal("Id")),
+        CompanyId = r.GetInt32(r.GetOrdinal("CompanyId")),
+        Name = r.GetString(r.GetOrdinal("Name")),
+        AuthType = r.GetString(r.GetOrdinal("AuthType")),
+        BaseUrl = r.GetString(r.GetOrdinal("BaseUrl")),
+        AuthConfigJson = r.IsDBNull(r.GetOrdinal("AuthConfigJson")) ? null : r.GetString(r.GetOrdinal("AuthConfigJson")),
+        IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
         ProviderCode = r.IsDBNull(r.GetOrdinal("provider_code")) ? null : r.GetString(r.GetOrdinal("provider_code")),
         CreatedAt = r.GetDateTime(r.GetOrdinal("Created")),
         UpdatedAt = r.GetDateTime(r.GetOrdinal("Updated")),

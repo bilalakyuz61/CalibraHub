@@ -114,7 +114,7 @@ public sealed class SqlCalendarRepository : ICalendarRepository
                        CASE WHEN wo.PlannedEndDate IS NULL THEN NULL
                             ELSE CONVERT(nvarchar(10), wo.PlannedEndDate, 120) END AS EndDate
                 FROM dbo.WorkOrder wo
-                INNER JOIN dbo.Document d ON d.id = wo.DocumentId
+                INNER JOIN dbo.Document d ON d.Id = wo.DocumentId
                 LEFT JOIN dbo.Items i ON i.Id = wo.ItemId
                 WHERE wo.CompanyId = @CompanyId
                   AND wo.IsActive = 1

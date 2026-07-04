@@ -58,7 +58,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         _materialGroupsTableName    = $"[{_schema}].[MaterialGroups]";
         _materialGroupMappingsTableName = $"[{_schema}].[MaterialGroupMappings]";
         _itemUnitsTableName = $"[{_schema}].[ItemUnits]";
-        _itemLocationsTableName = $"[{_schema}].[item_locations]";
+        _itemLocationsTableName = $"[{_schema}].[ItemLocation]";
         _locationTypesTableName = $"[{_schema}].[LocationType]";
         _machinesTableName = $"[{_schema}].[Machine]";
     }
@@ -673,9 +673,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [feature_id], [code], [description], [value], [SortOrder], [IsActive], [Created]
+            SELECT [Id], [FeatureId], [Code], [Description], [Value], [SortOrder], [IsActive], [Created]
             FROM {_propertyValuesTableName}
-            ORDER BY [feature_id], [SortOrder], [code];
+            ORDER BY [FeatureId], [SortOrder], [Code];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -1847,10 +1847,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT DISTINCT fv.[feature_id]
+            SELECT DISTINCT fv.[FeatureId]
             FROM {_itemConfigurationTableName} parent
             JOIN {_itemConfigurationTableName} child ON child.[ParentId] = parent.[Id]
-            JOIN [{_schema}].[FeatureValue] fv ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+            JOIN [{_schema}].[FeatureValue] fv ON fv.[Id] = TRY_CAST(child.[RecordName] AS INT)
             WHERE parent.[ItemId] = @ItemId
               AND parent.[IsActive] = 1
               AND parent.[RecordType] = N'CONFIG'
@@ -1876,10 +1876,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT DISTINCT fv.[feature_id], fv.[id]
+            SELECT DISTINCT fv.[FeatureId], fv.[Id]
             FROM {_itemConfigurationTableName} parent
             JOIN {_itemConfigurationTableName} child ON child.[ParentId] = parent.[Id]
-            JOIN [{_schema}].[FeatureValue] fv ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+            JOIN [{_schema}].[FeatureValue] fv ON fv.[Id] = TRY_CAST(child.[RecordName] AS INT)
             WHERE parent.[ItemId] = @ItemId
               AND parent.[IsActive] = 1
               AND parent.[RecordType] = N'CONFIG'
@@ -1993,33 +1993,58 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         var s = _schema.Replace("]", "]]");
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            IF OBJECT_ID(N'[{s}].[item_locations]', N'U') IS NULL
+            -- Migration: item_locations → ItemLocation tablo rename (mevcut DB'ler)
+            IF OBJECT_ID(N'[{s}].[item_locations]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[ItemLocation]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[item_locations]
+                EXEC sp_rename N'[{s}].[item_locations]', N'ItemLocation';
+            END;
+            -- Migration: kolon rename (snake_case → PascalCase, mevcut DB'ler)
+            IF OBJECT_ID(N'[{s}].[ItemLocation]', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'[{s}].[ItemLocation]', N'id') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[ItemLocation]', N'Id') IS NULL
+                    EXEC sp_rename N'[{s}].[ItemLocation].[id]', N'Id', N'COLUMN';
+                IF COL_LENGTH(N'[{s}].[ItemLocation]', N'item_id') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[ItemLocation]', N'ItemId') IS NULL
+                    EXEC sp_rename N'[{s}].[ItemLocation].[item_id]', N'ItemId', N'COLUMN';
+                IF COL_LENGTH(N'[{s}].[ItemLocation]', N'location_id') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[ItemLocation]', N'LocationId') IS NULL
+                    EXEC sp_rename N'[{s}].[ItemLocation].[location_id]', N'LocationId', N'COLUMN';
+                IF COL_LENGTH(N'[{s}].[ItemLocation]', N'is_default') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[ItemLocation]', N'IsDefault') IS NULL
+                    EXEC sp_rename N'[{s}].[ItemLocation].[is_default]', N'IsDefault', N'COLUMN';
+                IF COL_LENGTH(N'[{s}].[ItemLocation]', N'sort_order') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[ItemLocation]', N'SortOrder') IS NULL
+                    EXEC sp_rename N'[{s}].[ItemLocation].[sort_order]', N'SortOrder', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{s}].[ItemLocation]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemLocation]
                 (
-                    [id]          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [item_id]     INT NOT NULL,
-                    [location_id] INT NULL,
-                    [is_default]  BIT NOT NULL DEFAULT(0),
-                    [sort_order]  INT NOT NULL DEFAULT(0)
+                    [Id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [ItemId]     INT NOT NULL,
+                    [LocationId] INT NULL,
+                    [IsDefault]  BIT NOT NULL DEFAULT(0),
+                    [SortOrder]  INT NOT NULL DEFAULT(0)
                 );
                 CREATE UNIQUE INDEX [ux_item_locations_item_location]
-                    ON [{s}].[item_locations]([item_id], [location_id])
-                    WHERE [location_id] IS NOT NULL;
+                    ON [{s}].[ItemLocation]([ItemId], [LocationId])
+                    WHERE [LocationId] IS NOT NULL;
                 CREATE UNIQUE INDEX [ux_item_locations_item_default]
-                    ON [{s}].[item_locations]([item_id])
-                    WHERE [is_default] = 1;
+                    ON [{s}].[ItemLocation]([ItemId])
+                    WHERE [IsDefault] = 1;
                 CREATE INDEX [ix_item_locations_location]
-                    ON [{s}].[item_locations]([location_id]);
+                    ON [{s}].[ItemLocation]([LocationId]);
             END;
-            IF COLUMNPROPERTY(OBJECT_ID(N'[{s}].[item_locations]'), N'location_id', 'AllowsNull') = 0
+            IF COLUMNPROPERTY(OBJECT_ID(N'[{s}].[ItemLocation]'), N'LocationId', 'AllowsNull') = 0
             BEGIN
-                IF EXISTS (SELECT 1 FROM sys.indexes WHERE [object_id] = OBJECT_ID(N'[{s}].[item_locations]') AND [name] = N'ux_item_locations_item_location')
-                    DROP INDEX [ux_item_locations_item_location] ON [{s}].[item_locations];
-                ALTER TABLE [{s}].[item_locations] ALTER COLUMN [location_id] INT NULL;
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE [object_id] = OBJECT_ID(N'[{s}].[ItemLocation]') AND [name] = N'ux_item_locations_item_location')
+                    DROP INDEX [ux_item_locations_item_location] ON [{s}].[ItemLocation];
+                ALTER TABLE [{s}].[ItemLocation] ALTER COLUMN [LocationId] INT NULL;
                 CREATE UNIQUE INDEX [ux_item_locations_item_location]
-                    ON [{s}].[item_locations]([item_id], [location_id])
-                    WHERE [location_id] IS NOT NULL;
+                    ON [{s}].[ItemLocation]([ItemId], [LocationId])
+                    WHERE [LocationId] IS NOT NULL;
             END;
             """;
         await cmd.ExecuteNonQueryAsync(ct);
@@ -2032,10 +2057,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await EnsureItemLocationsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[item_id],[location_id],[is_default],[sort_order]
+            SELECT [Id],[ItemId],[LocationId],[IsDefault],[SortOrder]
             FROM {_itemLocationsTableName}
-            WHERE [item_id] = @ItemId
-            ORDER BY [sort_order], [id];
+            WHERE [ItemId] = @ItemId
+            ORDER BY [SortOrder], [Id];
             """;
         cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -2059,7 +2084,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await EnsureItemLocationsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            UPDATE {_itemLocationsTableName}               SET [location_id]        = NULL, [is_default] = 0  WHERE [location_id]        = @id;
+            UPDATE {_itemLocationsTableName}               SET [LocationId]         = NULL, [IsDefault]  = 0  WHERE [LocationId]         = @id;
             UPDATE [{_schema}].[Asset]                     SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
             UPDATE [{_schema}].[Document]                  SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
             UPDATE [{_schema}].[DocumentLine]              SET [LocationId]         = NULL                    WHERE [LocationId]         = @id;
@@ -2086,7 +2111,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // Strateji: sil + yeniden ekle (kuctuk liste, <20 satir)
         await using (var delCmd = connection.CreateCommand())
         {
-            delCmd.CommandText = $"DELETE FROM {_itemLocationsTableName} WHERE [item_id] = @ItemId;";
+            delCmd.CommandText = $"DELETE FROM {_itemLocationsTableName} WHERE [ItemId] = @ItemId;";
             delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -2102,7 +2127,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = $"""
                 INSERT INTO {_itemLocationsTableName}
-                    ([item_id],[location_id],[is_default],[sort_order])
+                    ([ItemId],[LocationId],[IsDefault],[SortOrder])
                 VALUES (@ItemId, @LocationId, @IsDefault, @SortOrder);
                 """;
             cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
@@ -2345,7 +2370,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_propertyValuesTableName}
-                ([feature_id], [code], [description], [value], [SortOrder], [IsActive], [Created], [Updated])
+                ([FeatureId], [Code], [Description], [Value], [SortOrder], [IsActive], [Created], [Updated])
             VALUES
                 (@PropertyId, @Code, @Description, @Value, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
             """;
@@ -2932,15 +2957,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         cmd2.CommandText = $"""
             SELECT
                 child.[ParentId]                                      AS ConfigId,
-                fv.[id]                                               AS FeatureValueId,
+                fv.[Id]                                               AS FeatureValueId,
                 f.[Name]                                              AS FeatureName,
-                COALESCE(NULLIF(fv.[description], N''), fv.[value])   AS ValueDesc,
-                fv.[code]                                             AS ValueCode
+                COALESCE(NULLIF(fv.[Description], N''), fv.[Value])   AS ValueDesc,
+                fv.[Code]                                             AS ValueCode
             FROM {_itemConfigurationTableName} child
             JOIN [{_schema}].[FeatureValue] fv
-                ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+                ON fv.[Id] = TRY_CAST(child.[RecordName] AS INT)
             JOIN {_propertiesTableName} f
-                ON f.[Id] = fv.[feature_id]
+                ON f.[Id] = fv.[FeatureId]
             WHERE child.[RecordType] = 'CONFIG'
               AND child.[ParentId] IN ({string.Join(",", combos.Keys)})
             ORDER BY child.[ParentId], f.[Name];
@@ -3012,15 +3037,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd2.CommandText = $"""
                 SELECT
                     child.[ParentId]                                      AS ConfigId,
-                    fv.[id]                                               AS FeatureValueId,
+                    fv.[Id]                                               AS FeatureValueId,
                     f.[Name]                                              AS FeatureName,
-                    COALESCE(NULLIF(fv.[description], N''), fv.[value])   AS ValueDesc,
-                    fv.[code]                                             AS ValueCode
+                    COALESCE(NULLIF(fv.[Description], N''), fv.[Value])   AS ValueDesc,
+                    fv.[Code]                                             AS ValueCode
                 FROM {_itemConfigurationTableName} child
                 JOIN [{_schema}].[FeatureValue] fv
-                    ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+                    ON fv.[Id] = TRY_CAST(child.[RecordName] AS INT)
                 JOIN {_propertiesTableName} f
-                    ON f.[Id] = fv.[feature_id]
+                    ON f.[Id] = fv.[FeatureId]
                 WHERE child.[RecordType] = 'CONFIG'
                   AND child.[ParentId] IN ({string.Join(",", rows.Keys)})
                 ORDER BY child.[ParentId], f.[Name];

@@ -15,7 +15,7 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[design_templates]";
+        _table = $"[{schema}].[DesignTemplate]";
     }
 
     public async Task<IReadOnlyCollection<DesignTemplate>> GetAllAsync(CancellationToken cancellationToken)
@@ -24,9 +24,9 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [IsActive], [Created], [Updated]
+            SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
-            ORDER BY [type], [sub_type], [name];
+            ORDER BY [Type], [SubType], [Name];
             """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -40,10 +40,10 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [IsActive], [Created], [Updated]
+            SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
-            WHERE [type] = @Type
-            ORDER BY [sub_type], [name];
+            WHERE [Type] = @Type
+            ORDER BY [SubType], [Name];
             """;
         command.Parameters.Add(new SqlParameter("@Type", type));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -58,10 +58,10 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [IsActive], [Created], [Updated]
+            SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
-            WHERE [type] = 'document' AND [sub_type] = @SubType
-            ORDER BY [name];
+            WHERE [Type] = 'document' AND [SubType] = @SubType
+            ORDER BY [Name];
             """;
         command.Parameters.Add(new SqlParameter("@SubType", subType));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -75,9 +75,9 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [IsActive], [Created], [Updated]
+            SELECT [Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated]
             FROM {_table}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -93,21 +93,21 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
 
         command.CommandText = $"""
             MERGE {_table} AS target
-            USING (SELECT @Id AS [id]) AS source ON target.[id] = source.[id]
+            USING (SELECT @Id AS [Id]) AS source ON target.[Id] = source.[Id]
             WHEN MATCHED THEN
                 UPDATE SET
-                    [name]         = @Name,
-                    [type]         = @Type,
-                    [sub_type]     = @SubType,
-                    [description]  = @Description,
-                    [html_content] = @HtmlContent,
-                    [css_content]  = @CssContent,
-                    [gjs_data]     = @GjsData,
-                    [jsr_content]  = @JsrContent,
+                    [Name]        = @Name,
+                    [Type]        = @Type,
+                    [SubType]     = @SubType,
+                    [Description] = @Description,
+                    [HtmlContent] = @HtmlContent,
+                    [CssContent]  = @CssContent,
+                    [GjsData]     = @GjsData,
+                    [JsrContent]  = @JsrContent,
                     [IsActive]    = @IsActive,
-                    [Updated]   = @UpdatedAt
+                    [Updated]     = @UpdatedAt
             WHEN NOT MATCHED THEN
-                INSERT ([id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [IsActive], [Created], [Updated])
+                INSERT ([Id], [Name], [Type], [SubType], [Description], [HtmlContent], [CssContent], [GjsData], [JsrContent], [IsActive], [Created], [Updated])
                 VALUES (@Id, @Name, @Type, @SubType, @Description, @HtmlContent, @CssContent, @GjsData, @JsrContent, @IsActive, @CreatedAt, @UpdatedAt);
             """;
 
@@ -131,7 +131,7 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

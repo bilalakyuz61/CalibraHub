@@ -14,14 +14,14 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[user_settings]";
+        _table = $"[{schema}].[UserSettings]";
     }
 
     public async Task<string?> GetAsync(int userId, string settingKey, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT [setting_value] FROM {_table} WHERE [user_id] = @UserId AND [setting_key] = @Key;";
+        command.CommandText = $"SELECT [SettingValue] FROM {_table} WHERE [UserId] = @UserId AND [SettingKey] = @Key;";
         command.Parameters.Add(new SqlParameter("@UserId", userId));
         command.Parameters.Add(new SqlParameter("@Key", settingKey));
         var result = await command.ExecuteScalarAsync(cancellationToken);
@@ -34,12 +34,12 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             MERGE {_table} AS tgt
-            USING (SELECT @UserId AS [user_id], @Key AS [setting_key]) AS src
-                ON tgt.[user_id] = src.[user_id] AND tgt.[setting_key] = src.[setting_key]
+            USING (SELECT @UserId AS [UserId], @Key AS [SettingKey]) AS src
+                ON tgt.[UserId] = src.[UserId] AND tgt.[SettingKey] = src.[SettingKey]
             WHEN MATCHED THEN
-                UPDATE SET [setting_value] = @Value, [Updated] = GETDATE()
+                UPDATE SET [SettingValue] = @Value, [Updated] = GETDATE()
             WHEN NOT MATCHED THEN
-                INSERT ([user_id], [setting_key], [setting_value], [Updated])
+                INSERT ([UserId], [SettingKey], [SettingValue], [Updated])
                 VALUES (@UserId, @Key, @Value, GETDATE());
             """;
         command.Parameters.Add(new SqlParameter("@UserId", userId));

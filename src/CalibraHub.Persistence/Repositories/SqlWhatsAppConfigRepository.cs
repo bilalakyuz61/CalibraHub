@@ -15,7 +15,7 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[whatsapp_config]";
+        _table = $"[{schema}].[WhatsAppConfig]";
     }
 
     public async Task<WhatsAppConfig?> GetAsync(CancellationToken cancellationToken)
@@ -23,11 +23,11 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[provider],[access_token_encrypted],[phone_number_id],[business_account_id],
-                   [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[IsEnabled],
-                   [last_successful_send_at],[LastError],[Created],[Updated],[app_secret_encrypted]
+            SELECT [Id],[Provider],[AccessTokenEncrypted],[PhoneNumberId],[BusinessAccountId],
+                   [DisplayPhoneNumber],[WebhookVerifyToken],[WebQrBridgeUrl],[IsEnabled],
+                   [LastSuccessfulSendAt],[LastError],[Created],[Updated],[app_secret_encrypted]
               FROM {_table}
-             WHERE [id] = 1;
+             WHERE [Id] = 1;
             """;
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await r.ReadAsync(cancellationToken)) return null;
@@ -55,29 +55,29 @@ public sealed class SqlWhatsAppConfigRepository : IWhatsAppConfigRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [id] = 1)
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [Id] = 1)
             BEGIN
                 UPDATE {_table}
-                   SET [provider]                 = @Provider,
-                       [access_token_encrypted]   = @Token,
+                   SET [Provider]                 = @Provider,
+                       [AccessTokenEncrypted]     = @Token,
                        [app_secret_encrypted]     = @AppSecret,
-                       [phone_number_id]          = @PhoneNumberId,
-                       [business_account_id]      = @BusinessAccountId,
-                       [display_phone_number]     = @DisplayPhoneNumber,
-                       [webhook_verify_token]     = @WebhookToken,
-                       [web_qr_bridge_url]        = @BridgeUrl,
+                       [PhoneNumberId]            = @PhoneNumberId,
+                       [BusinessAccountId]        = @BusinessAccountId,
+                       [DisplayPhoneNumber]       = @DisplayPhoneNumber,
+                       [WebhookVerifyToken]       = @WebhookToken,
+                       [WebQrBridgeUrl]           = @BridgeUrl,
                        [IsEnabled]               = @IsEnabled,
-                       [last_successful_send_at]  = @LastSuccessfulSendAt,
+                       [LastSuccessfulSendAt]     = @LastSuccessfulSendAt,
                        [LastError]               = @LastError,
                        [Updated]               = GETUTCDATE()
-                 WHERE [id] = 1;
+                 WHERE [Id] = 1;
             END
             ELSE
             BEGIN
                 INSERT INTO {_table}
-                    ([id],[provider],[access_token_encrypted],[app_secret_encrypted],[phone_number_id],[business_account_id],
-                     [display_phone_number],[webhook_verify_token],[web_qr_bridge_url],[IsEnabled],
-                     [last_successful_send_at],[LastError],[Created],[Updated])
+                    ([Id],[Provider],[AccessTokenEncrypted],[app_secret_encrypted],[PhoneNumberId],[BusinessAccountId],
+                     [DisplayPhoneNumber],[WebhookVerifyToken],[WebQrBridgeUrl],[IsEnabled],
+                     [LastSuccessfulSendAt],[LastError],[Created],[Updated])
                 VALUES
                     (1,@Provider,@Token,@AppSecret,@PhoneNumberId,@BusinessAccountId,@DisplayPhoneNumber,@WebhookToken,@BridgeUrl,@IsEnabled,
                      @LastSuccessfulSendAt,@LastError,GETUTCDATE(),GETUTCDATE());

@@ -15,7 +15,7 @@ public sealed class SqlWhatsAppSendLogRepository : IWhatsAppSendLogRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[whatsapp_send_log]";
+        _table = $"[{schema}].[WhatsAppSendLog]";
     }
 
     public async Task<long> InsertAsync(WhatsAppSendLog entry, CancellationToken cancellationToken)
@@ -24,8 +24,8 @@ public sealed class SqlWhatsAppSendLogRepository : IWhatsAppSendLogRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
-                ([sent_at],[to_phone],[message_hash],[message_id],[success],[error_message],[block_reason])
-            OUTPUT INSERTED.[id]
+                ([SentAt],[ToPhone],[MessageHash],[MessageId],[Success],[ErrorMessage],[BlockReason])
+            OUTPUT INSERTED.[Id]
             VALUES (@SentAt,@ToPhone,@Hash,@MsgId,@Success,@Err,@Block);
             """;
         cmd.Parameters.Add(new SqlParameter("@SentAt",  entry.SentAt));
@@ -43,7 +43,7 @@ public sealed class SqlWhatsAppSendLogRepository : IWhatsAppSendLogRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(1) FROM {_table} WHERE [success]=1 AND [sent_at] >= @Since;";
+        cmd.CommandText = $"SELECT COUNT(1) FROM {_table} WHERE [Success]=1 AND [SentAt] >= @Since;";
         cmd.Parameters.Add(new SqlParameter("@Since", sinceUtc));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken));
     }
@@ -54,8 +54,8 @@ public sealed class SqlWhatsAppSendLogRepository : IWhatsAppSendLogRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT COUNT(1) FROM {_table}
-             WHERE [success]=1 AND [to_phone]=@Phone
-               AND [sent_at] >= CAST(GETUTCDATE() AS DATE);
+             WHERE [Success]=1 AND [ToPhone]=@Phone
+               AND [SentAt] >= CAST(GETUTCDATE() AS DATE);
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", toPhone));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken));
@@ -67,8 +67,8 @@ public sealed class SqlWhatsAppSendLogRepository : IWhatsAppSendLogRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT COUNT(1) FROM {_table}
-             WHERE [success]=1 AND [message_hash]=@Hash
-               AND [sent_at] >= CAST(GETUTCDATE() AS DATE);
+             WHERE [Success]=1 AND [MessageHash]=@Hash
+               AND [SentAt] >= CAST(GETUTCDATE() AS DATE);
             """;
         cmd.Parameters.Add(new SqlParameter("@Hash", messageHash));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken));
@@ -79,9 +79,9 @@ public sealed class SqlWhatsAppSendLogRepository : IWhatsAppSendLogRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT TOP (@N) [id],[sent_at],[to_phone],[message_hash],[message_id],[success],[error_message],[block_reason]
+            SELECT TOP (@N) [Id],[SentAt],[ToPhone],[MessageHash],[MessageId],[Success],[ErrorMessage],[BlockReason]
               FROM {_table}
-             ORDER BY [id] DESC;
+             ORDER BY [Id] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@N", count));
         var list = new List<WhatsAppSendLog>();

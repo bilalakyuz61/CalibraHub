@@ -422,21 +422,21 @@ SELECT
     sr.[rep_name]                          AS TemsilciAdi,
 
     -- ─── Sirket (master DB Company) ────────────────────────────────────
-    comp.[name]                            AS SirketAdi,
-    comp.[title]                           AS SirketUnvani,
-    comp.[address]                         AS SirketAdresi,
-    comp.[city]                            AS SirketSehir,
-    comp.[district]                        AS SirketIlce,
-    comp.[postal_code]                     AS SirketPostaKodu,
-    comp.[tax_office]                      AS SirketVergiDairesi,
-    comp.[tax_number]                      AS SirketVergiNo,
-    comp.[is_e_document_approval_enabled]  AS SirketEBelgeAktif,
-    CONCAT(comp.[address],
-        CASE WHEN comp.[district]    IS NOT NULL THEN N'' / '' + comp.[district]    ELSE N'''' END,
-        CASE WHEN comp.[city]        IS NOT NULL THEN N'' / '' + comp.[city]        ELSE N'''' END,
-        CASE WHEN comp.[postal_code] IS NOT NULL THEN N'' ''   + comp.[postal_code] ELSE N'''' END
+    comp.[Name]                            AS SirketAdi,
+    comp.[Title]                           AS SirketUnvani,
+    comp.[Address]                         AS SirketAdresi,
+    comp.[City]                            AS SirketSehir,
+    comp.[District]                        AS SirketIlce,
+    comp.[PostalCode]                      AS SirketPostaKodu,
+    comp.[TaxOffice]                       AS SirketVergiDairesi,
+    comp.[TaxNumber]                       AS SirketVergiNo,
+    comp.[IsEDocumentApprovalEnabled]      AS SirketEBelgeAktif,
+    CONCAT(comp.[Address],
+        CASE WHEN comp.[District]    IS NOT NULL THEN N'' / '' + comp.[District]    ELSE N'''' END,
+        CASE WHEN comp.[City]        IS NOT NULL THEN N'' / '' + comp.[City]        ELSE N'''' END,
+        CASE WHEN comp.[PostalCode]  IS NOT NULL THEN N'' ''   + comp.[PostalCode]  ELSE N'''' END
     )                                      AS SirketTamAdres,
-    CONCAT(comp.[tax_office], N'' V.D. '', comp.[tax_number])
+    CONCAT(comp.[TaxOffice], N'' V.D. '', comp.[TaxNumber])
                                            AS SirketVergiSatiri,
 
     -- ─── Belge Kalemi ──────────────────────────────────────────────────
@@ -540,7 +540,7 @@ LEFT JOIN [dbo].[Unit]                   mu   ON mu.[Id]              = dl.[Unit
 LEFT JOIN [dbo].[Location]               loc  ON loc.[Id]             = dl.[LocationId]
 LEFT JOIN [dbo].[currencies]             cur  ON cur.[id]             = d.[CurrencyId]
 ' + @HwJoin + @LwJoin + N'
-LEFT JOIN [{systemDatabaseName}].[dbo].[Company] comp ON comp.[id] = d.[CompanyId]
+LEFT JOIN [{systemDatabaseName}].[dbo].[Company] comp ON comp.[Id] = d.[CompanyId]
 -- Sadece aktif belgeler: silinmis / pasif (IsActive = 0) Document kayitlari
 -- raporda gorunmez. Renamer is_active -> IsActive (PascalCase) yapiyor.
 WHERE d.[IsActive] = 1;';
@@ -742,9 +742,20 @@ END;";
             // davranışı: yalnızca Ensure*Async (CREATE TABLE IF NOT EXISTS) çalışır. Şema
             // değişiklikleri bundan sonra elle SSMS'ten yapılır. Eski metod gövdeleri dosya
             // içinde dead-code olarak duruyor — çağrılmıyorlar.
+            // 2026-07-05 — MigrateTableRenamesAsync + MigrateColumnRenamesAsync geri eklendi.
+            // Mevcut DB'lerde birikmiş eski isimli kolon/tablo startup hatası üretmeye başladı
+            // (Invalid column name 'Updated', 'PublicUrl' vb.). Her iki metod tamamen idempotent;
+            // zaten rename edilmişse no-op.
+            // SIRALAMA: EnsureSchemaAndTablesAsync + EnsureCompanySchemaAsync ÖNCE (CREATE IF NOT EXISTS),
+            // sonra MigrateTable/ColumnRenames (eski isimleri yeni isimlere çevirir). Bu sayede hem
+            // sıfır-DB (tablolar CREATE'den sonra anında doğru isimde) hem mevcut-DB (eski isimler
+            // rename edilir) senaryosu çalışır. SeedDefaultDocLayouts ve diğer "yeni isim" kullanan
+            // seed'ler migration'lardan SONRA çalışacak şekilde aşağıda sıralanmıştır.
             await EnsureSchemaAndTablesAsync(connection, cancellationToken);
             await EnsureIntegratorLoginColumnsAsync(connection, cancellationToken);
             await EnsureCompanySchemaAsync(connection, cancellationToken);
+            await MigrateTableRenamesAsync(connection, cancellationToken);
+            await MigrateColumnRenamesAsync(connection, cancellationToken);
             await EnsurePltSystemLogTableAsync(connection, cancellationToken);
             await EnsureNotesTablesAsync(connection, cancellationToken);
             await EnsureNoteExtensionsAsync(connection, cancellationToken);
@@ -1310,18 +1321,18 @@ END;";
                 DROP TABLE [{schemaForSql}].[user_settings];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[user_settings]', N'U') IS NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[UserSettings]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{schemaForSql}].[user_settings]
+                CREATE TABLE [{schemaForSql}].[UserSettings]
                 (
-                    [id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_user_settings] PRIMARY KEY,
-                    [user_id]    INT              NOT NULL,
-                    [setting_key]   NVARCHAR(200) NOT NULL,
-                    [setting_value] NVARCHAR(MAX) NULL,
-                    [Updated]    DATETIME     NULL
+                    [Id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_UserSettings] PRIMARY KEY,
+                    [UserId]       INT              NOT NULL,
+                    [SettingKey]   NVARCHAR(200) NOT NULL,
+                    [SettingValue] NVARCHAR(MAX) NULL,
+                    [Updated]      DATETIME     NULL
                 );
-                CREATE UNIQUE INDEX [ux_user_settings_user_key]
-                    ON [{schemaForSql}].[user_settings]([user_id], [setting_key]);
+                CREATE UNIQUE INDEX [UX_UserSettings_UserId_SettingKey]
+                    ON [{schemaForSql}].[UserSettings]([UserId], [SettingKey]);
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[UiLabelTranslation]', N'U') IS NULL
@@ -2310,15 +2321,15 @@ END;";
             BEGIN
                 CREATE TABLE [{schemaForSql}].[ItemFeature]
                 (
-                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_ItemFeature] PRIMARY KEY,
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ItemFeature] PRIMARY KEY,
                     [CompanyId]       INT NOT NULL,
                     [Name]            NVARCHAR(120) NOT NULL,
                     [DataType]        NVARCHAR(30)  NOT NULL,
                     [UnitOfMeasure]   NVARCHAR(20)  NULL,
-                    [VisibleInDesign] BIT NOT NULL CONSTRAINT [df_ItemFeature_VisibleInDesign] DEFAULT(1),
-                    [IsActive]        BIT NOT NULL CONSTRAINT [df_ItemFeature_IsActive] DEFAULT(1),
-                    [CreatedAt]       DATETIME NOT NULL,
-                    [UpdatedAt]       DATETIME NOT NULL
+                    [VisibleInDesign] BIT NOT NULL CONSTRAINT [DF_ItemFeature_VisibleInDesign] DEFAULT(1),
+                    [IsActive]        BIT NOT NULL CONSTRAINT [DF_ItemFeature_IsActive] DEFAULT(1),
+                    [Created]         DATETIME NOT NULL,
+                    [Updated]         DATETIME NOT NULL
                 );
 
                 EXEC(N'
@@ -2364,27 +2375,27 @@ END;";
             BEGIN
                 CREATE TABLE [{schemaForSql}].[FeatureValue]
                 (
-                    [id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_configuration_property_values] PRIMARY KEY,
-                    [feature_id] INT NOT NULL,
-                    [code] NVARCHAR(30) NOT NULL,
-                    [description] NVARCHAR(160) NOT NULL,
-                    [value] NVARCHAR(160) NOT NULL,
-                    [SortOrder] INT NOT NULL CONSTRAINT [df_configuration_property_values_sort_order] DEFAULT(0),
-                    [IsActive] BIT NOT NULL CONSTRAINT [df_configuration_property_values_is_active] DEFAULT(1),
-                    [Created] DATETIME NOT NULL,
-                    [Updated] DATETIME NULL    ,
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_FeatureValue] PRIMARY KEY,
+                    [FeatureId]   INT NOT NULL,
+                    [Code]        NVARCHAR(30) NOT NULL,
+                    [Description] NVARCHAR(160) NOT NULL,
+                    [Value]       NVARCHAR(160) NOT NULL,
+                    [SortOrder]   INT NOT NULL CONSTRAINT [DF_FeatureValue_SortOrder] DEFAULT(0),
+                    [IsActive]    BIT NOT NULL CONSTRAINT [DF_FeatureValue_IsActive] DEFAULT(1),
+                    [Created]     DATETIME NOT NULL,
+                    [Updated]     DATETIME NULL,
                     CONSTRAINT [FK_FeatureValue_ItemFeature]
-                        FOREIGN KEY ([feature_id]) REFERENCES [{schemaForSql}].[ItemFeature]([Id])
+                        FOREIGN KEY ([FeatureId]) REFERENCES [{schemaForSql}].[ItemFeature]([Id])
                 );
 
                 EXEC(N'
-                    CREATE UNIQUE INDEX [ux_configuration_property_values_property_id_value]
-                        ON [{schemaForSql}].[FeatureValue]([feature_id], [value]);
+                    CREATE UNIQUE INDEX [UX_FeatureValue_FeatureId_Value]
+                        ON [{schemaForSql}].[FeatureValue]([FeatureId], [Value]);
                 ');
 
                 EXEC(N'
-                    CREATE UNIQUE INDEX [ux_configuration_property_values_property_id_code]
-                        ON [{schemaForSql}].[FeatureValue]([feature_id], [code]);
+                    CREATE UNIQUE INDEX [UX_FeatureValue_FeatureId_Code]
+                        ON [{schemaForSql}].[FeatureValue]([FeatureId], [Code]);
                 ');
             END;
 
@@ -2460,20 +2471,20 @@ END;";
             BEGIN
                 CREATE TABLE [{schemaForSql}].[ItemFeatureMappings]
                 (
-                    [Id]                       INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_ItemFeatureMappings] PRIMARY KEY,
+                    [Id]                       INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ItemFeatureMappings] PRIMARY KEY,
                     [ItemId]                   INT NOT NULL,
                     [FeatureId]                INT NOT NULL,
                     [FeatureValueId]           INT NULL,
-                    [PrintDescriptionInDesign] BIT NOT NULL CONSTRAINT [df_ItemFeatureMappings_PrintDescriptionInDesign] DEFAULT(1),
-                    [IsActive]                 BIT NOT NULL CONSTRAINT [df_ItemFeatureMappings_IsActive] DEFAULT(1),
-                    [CreatedAt]                DATETIME NOT NULL,
-                    [UpdatedAt]                DATETIME NOT NULL,
+                    [PrintDescriptionInDesign] BIT NOT NULL CONSTRAINT [DF_ItemFeatureMappings_PrintDescriptionInDesign] DEFAULT(1),
+                    [IsActive]                 BIT NOT NULL CONSTRAINT [DF_ItemFeatureMappings_IsActive] DEFAULT(1),
+                    [Created]                  DATETIME NOT NULL,
+                    [Updated]                  DATETIME NOT NULL,
                     CONSTRAINT [FK_ItemFeatureMappings_Items]
                         FOREIGN KEY ([ItemId]) REFERENCES [{schemaForSql}].[Items]([Id]) ON DELETE CASCADE,
                     CONSTRAINT [FK_ItemFeatureMappings_ItemFeature]
                         FOREIGN KEY ([FeatureId]) REFERENCES [{schemaForSql}].[ItemFeature]([Id]),
                     CONSTRAINT [FK_ItemFeatureMappings_FeatureValue]
-                        FOREIGN KEY ([FeatureValueId]) REFERENCES [{schemaForSql}].[FeatureValue]([id])
+                        FOREIGN KEY ([FeatureValueId]) REFERENCES [{schemaForSql}].[FeatureValue]([Id])
                 );
 
                 CREATE INDEX [ix_ItemFeatureMappings_ItemId]
@@ -2502,7 +2513,7 @@ END;";
             BEGIN
                 CREATE TABLE [{schemaForSql}].[ItemConfiguration]
                 (
-                    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [Id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ItemConfiguration] PRIMARY KEY,
                     [ParentId] INT NULL,
                     [RecordType] NVARCHAR(20) NOT NULL,
                     [RecordCode] NVARCHAR(100) NOT NULL,
@@ -2510,9 +2521,9 @@ END;";
                     [DataType] NVARCHAR(20) NULL,
                     [RelatedMaterialCode] NVARCHAR(50) NULL,
                     [ItemId] INT NULL,
-                    [IsActive] BIT NOT NULL CONSTRAINT [df_ItemConfiguration_IsActive] DEFAULT(1),
-                    [VisibleInDesign] BIT NOT NULL CONSTRAINT [df_ItemConfiguration_VisibleInDesign] DEFAULT(1),
-                    [CreatedDate] DATETIME NOT NULL CONSTRAINT [df_ItemConfiguration_CreatedDate] DEFAULT(GETDATE())
+                    [IsActive] BIT NOT NULL CONSTRAINT [DF_ItemConfiguration_IsActive] DEFAULT(1),
+                    [VisibleInDesign] BIT NOT NULL CONSTRAINT [DF_ItemConfiguration_VisibleInDesign] DEFAULT(1),
+                    [Created] DATETIME NOT NULL CONSTRAINT [DF_ItemConfiguration_Created] DEFAULT(GETDATE())
                 );
             END;
 
@@ -3316,24 +3327,25 @@ END;";
             BEGIN
                 CREATE TABLE [{schemaForSql}].[Company]
                 (
-                    [id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_company] PRIMARY KEY,
-                    [name] NVARCHAR(120) NOT NULL,
-                    [title] NVARCHAR(200) NOT NULL,
-                    [address] NVARCHAR(500) NOT NULL,
-                    [tax_office] NVARCHAR(100) NOT NULL,
-                    [tax_number] NVARCHAR(20) NOT NULL,
-                    [is_e_document_approval_enabled] BIT NOT NULL CONSTRAINT [df_company_is_e_document_approval_enabled] DEFAULT(0),
-                    [IsActive] BIT NOT NULL CONSTRAINT [df_company_is_active] DEFAULT(1),
-                    [Created] DATETIME NOT NULL,
-                    [Updated] DATETIME NULL    
+                    [Id]                          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Company] PRIMARY KEY,
+                    [Name]                        NVARCHAR(120) NOT NULL,
+                    [Title]                       NVARCHAR(200) NOT NULL,
+                    [Address]                     NVARCHAR(500) NOT NULL,
+                    [TaxOffice]                   NVARCHAR(100) NOT NULL,
+                    [TaxNumber]                   NVARCHAR(20) NOT NULL,
+                    [IsEDocumentApprovalEnabled]  BIT NOT NULL CONSTRAINT [DF_Company_IsEDocumentApprovalEnabled] DEFAULT(0),
+                    [IsActive]                    BIT NOT NULL CONSTRAINT [DF_Company_IsActive] DEFAULT(1),
+                    [Created]                     DATETIME NOT NULL,
+                    [Updated]                     DATETIME NULL
                 );
 
-                CREATE UNIQUE INDEX [ux_company_name] ON [{schemaForSql}].[Company]([name]);
-                CREATE UNIQUE INDEX [ux_company_tax_number] ON [{schemaForSql}].[Company]([tax_number]);
+                CREATE UNIQUE INDEX [UX_Company_Name] ON [{schemaForSql}].[Company]([Name]);
+                CREATE UNIQUE INDEX [UX_Company_TaxNumber] ON [{schemaForSql}].[Company]([TaxNumber]);
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'is_e_document_approval_enabled') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'IsEDocumentApprovalEnabled') IS NULL
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Company]
                 ADD [is_e_document_approval_enabled] BIT NOT NULL
@@ -3342,6 +3354,7 @@ END;";
 
             IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'connection_string') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'ConnectionString') IS NULL
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Company]
                 ADD [connection_string] NVARCHAR(500) NULL;
@@ -3349,6 +3362,7 @@ END;";
 
             IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'city') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'City') IS NULL
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Company] ADD [city] NVARCHAR(100) NULL;
                 ALTER TABLE [{schemaForSql}].[Company] ADD [district] NVARCHAR(100) NULL;
@@ -3357,6 +3371,7 @@ END;";
 
             IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'public_url') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'PublicUrl') IS NULL
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Company]
                 ADD [public_url] NVARCHAR(300) NULL;
@@ -3434,7 +3449,7 @@ END;";
                 -- Deferred EXEC so column resolution happens after the ALTER TABLE above runs
                 EXEC sp_executesql
                     N'INSERT INTO [{schemaForSql}].[Company]
-                        ([name], [title], [address], [tax_office], [tax_number], [IsActive], [Created], [Updated])
+                        ([Name], [Title], [Address], [TaxOffice], [TaxNumber], [IsActive], [Created], [Updated])
                       VALUES
                         (@CompanyName, @CompanyTitle, @CompanyAddress, @CompanyTaxOffice, @CompanyTaxNumber, 1, @Now, @Now)',
                     N'@CompanyName NVARCHAR(120), @CompanyTitle NVARCHAR(200), @CompanyAddress NVARCHAR(500), @CompanyTaxOffice NVARCHAR(100), @CompanyTaxNumber NVARCHAR(20), @Now DATETIME',
@@ -4587,22 +4602,22 @@ END;";
                 DROP TABLE [{s}].[notes];
             END;
 
-            IF OBJECT_ID(N'[{s}].[notes]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[Note]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[notes]
+                CREATE TABLE [{s}].[Note]
                 (
-                    [id]                  UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [company_id]          INT NOT NULL,
-                    [user_id]             INT NOT NULL,
-                    [title]               NVARCHAR(200) NOT NULL,
-                    [content]             NVARCHAR(MAX) NULL,
-                    [Created]          DATETIME NOT NULL,
-                    [Updated]          DATETIME NULL    ,
-                    [is_deleted]          BIT NOT NULL CONSTRAINT [df_notes_is_deleted] DEFAULT(0),
-                    [is_fully_encrypted]  BIT NOT NULL CONSTRAINT [df_notes_is_fully_encrypted] DEFAULT(0),
-                    [encryption_hint]     NVARCHAR(300) NULL
+                    [Id]                 UNIQUEIDENTIFIER NOT NULL CONSTRAINT [PK_Note] PRIMARY KEY,
+                    [CompanyId]          INT NOT NULL,
+                    [UserId]             INT NOT NULL,
+                    [Title]              NVARCHAR(200) NOT NULL,
+                    [Content]            NVARCHAR(MAX) NULL,
+                    [Created]            DATETIME NOT NULL,
+                    [Updated]            DATETIME NULL,
+                    [IsDeleted]          BIT NOT NULL CONSTRAINT [DF_Note_IsDeleted] DEFAULT(0),
+                    [IsFullyEncrypted]   BIT NOT NULL CONSTRAINT [DF_Note_IsFullyEncrypted] DEFAULT(0),
+                    [EncryptionHint]     NVARCHAR(300) NULL
                 );
-                CREATE INDEX [ix_notes_company_user] ON [{s}].[notes]([company_id], [user_id]);
+                CREATE INDEX [IX_Note_CompanyId_UserId] ON [{s}].[Note]([CompanyId], [UserId]);
             END;
 
             -- 2026-05-26: Notes ekosistemi PascalCase'e migrate ediliyor (CLAUDE.md uyum).
@@ -4648,40 +4663,40 @@ END;";
             IF COL_LENGTH(N'[{s}].[notes]', N'EncryptionHint') IS NULL AND COL_LENGTH(N'[{s}].[notes]', N'encryption_hint') IS NOT NULL
                 EXEC sp_rename N'[{s}].[notes].[encryption_hint]', N'EncryptionHint', N'COLUMN';
 
-            IF OBJECT_ID(N'[{s}].[note_reminders]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[NoteReminder]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[note_reminders]
+                CREATE TABLE [{s}].[NoteReminder]
                 (
-                    [id]        UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [note_id]   UNIQUEIDENTIFIER NOT NULL,
-                    [remind_at] DATETIME NOT NULL,
-                    [is_sent]   BIT NOT NULL CONSTRAINT [df_note_reminders_is_sent] DEFAULT(0),
-                    [sent_at]   DATETIME NULL,
-                    CONSTRAINT [fk_note_reminders_notes_note_id]
-                        FOREIGN KEY ([note_id]) REFERENCES [{s}].[notes]([id])
+                    [Id]       UNIQUEIDENTIFIER NOT NULL CONSTRAINT [PK_NoteReminder] PRIMARY KEY,
+                    [NoteId]   UNIQUEIDENTIFIER NOT NULL,
+                    [RemindAt] DATETIME NOT NULL,
+                    [IsSent]   BIT NOT NULL CONSTRAINT [DF_NoteReminder_IsSent] DEFAULT(0),
+                    [SentAt]   DATETIME NULL,
+                    CONSTRAINT [FK_NoteReminder_Note]
+                        FOREIGN KEY ([NoteId]) REFERENCES [{s}].[Note]([Id])
                 );
-                CREATE INDEX [ix_note_reminders_note_id] ON [{s}].[note_reminders]([note_id]);
-                CREATE INDEX [ix_note_reminders_unsent] ON [{s}].[note_reminders]([is_sent], [remind_at]);
+                CREATE INDEX [IX_NoteReminder_NoteId] ON [{s}].[NoteReminder]([NoteId]);
+                CREATE INDEX [IX_NoteReminder_Unsent] ON [{s}].[NoteReminder]([IsSent], [RemindAt]);
             END;
 
-            IF OBJECT_ID(N'[{s}].[note_shares]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[NoteShare]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[note_shares]
+                CREATE TABLE [{s}].[NoteShare]
                 (
-                    [id]                   UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [note_id]              UNIQUEIDENTIFIER NOT NULL,
-                    [shared_with_user_id]  INT NOT NULL,
-                    [shared_at]            DATETIME NOT NULL,
-                    CONSTRAINT [fk_note_shares_notes_note_id]
-                        FOREIGN KEY ([note_id]) REFERENCES [{s}].[notes]([id]),
-                    CONSTRAINT [ux_note_shares_note_user]
-                        UNIQUE ([note_id], [shared_with_user_id])
+                    [Id]               UNIQUEIDENTIFIER NOT NULL CONSTRAINT [PK_NoteShare] PRIMARY KEY,
+                    [NoteId]           UNIQUEIDENTIFIER NOT NULL,
+                    [SharedWithUserId] INT NOT NULL,
+                    [SharedAt]         DATETIME NOT NULL,
+                    CONSTRAINT [FK_NoteShare_Note]
+                        FOREIGN KEY ([NoteId]) REFERENCES [{s}].[Note]([Id]),
+                    CONSTRAINT [UX_NoteShare_NoteId_UserId]
+                        UNIQUE ([NoteId], [SharedWithUserId])
                 );
-                CREATE INDEX [ix_note_shares_note_id] ON [{s}].[note_shares]([note_id]);
-                CREATE INDEX [ix_note_shares_shared_with] ON [{s}].[note_shares]([shared_with_user_id]);
+                CREATE INDEX [IX_NoteShare_NoteId] ON [{s}].[NoteShare]([NoteId]);
+                CREATE INDEX [IX_NoteShare_SharedWithUserId] ON [{s}].[NoteShare]([SharedWithUserId]);
             END;
-            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[note_shares]') AND name = 'can_edit')
-                ALTER TABLE [{s}].[note_shares] ADD [can_edit] BIT NOT NULL CONSTRAINT [DF_note_shares_can_edit] DEFAULT 0;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[NoteShare]') AND name = 'CanEdit')
+                ALTER TABLE [{s}].[NoteShare] ADD [CanEdit] BIT NOT NULL CONSTRAINT [DF_NoteShare_CanEdit] DEFAULT 0;
             """;
 
         await using var cmd = connection.CreateCommand();
@@ -4695,19 +4710,19 @@ END;";
         var sl = _schema.Replace("'", "''");
 
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[note_folders]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[NoteFolder]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[note_folders]
+                CREATE TABLE [{s}].[NoteFolder]
                 (
-                    [id]               UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [company_id]       INT NOT NULL,
-                    [user_id]          INT NOT NULL,
-                    [name]             NVARCHAR(200) NOT NULL,
-                    [parent_folder_id] UNIQUEIDENTIFIER NULL,
-                    [Created]       DATETIME NOT NULL,
-                    [is_deleted]       BIT NOT NULL CONSTRAINT [df_note_folders_is_deleted] DEFAULT(0)
+                    [Id]             UNIQUEIDENTIFIER NOT NULL CONSTRAINT [PK_NoteFolder] PRIMARY KEY,
+                    [CompanyId]      INT NOT NULL,
+                    [UserId]         INT NOT NULL,
+                    [Name]           NVARCHAR(200) NOT NULL,
+                    [ParentFolderId] UNIQUEIDENTIFIER NULL,
+                    [Created]        DATETIME NOT NULL,
+                    [IsDeleted]      BIT NOT NULL CONSTRAINT [DF_NoteFolder_IsDeleted] DEFAULT(0)
                 );
-                CREATE INDEX [ix_note_folders_company_user] ON [{s}].[note_folders]([company_id], [user_id]);
+                CREATE INDEX [IX_NoteFolder_CompanyId_UserId] ON [{s}].[NoteFolder]([CompanyId], [UserId]);
             END;
 
             IF OBJECT_ID(N'[{s}].[notes]', N'U') IS NOT NULL
@@ -4736,19 +4751,19 @@ END;";
                     ALTER TABLE [{s}].[note_reminders] ADD [target_user_id] INT NULL;
             END;
 
-            IF OBJECT_ID(N'[{s}].[note_reminder_targets]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[NoteReminderTarget]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[note_reminder_targets]
+                CREATE TABLE [{s}].[NoteReminderTarget]
                 (
-                    [id]          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [reminder_id] UNIQUEIDENTIFIER NOT NULL,
-                    [user_id]     INT NOT NULL,
-                    CONSTRAINT [fk_reminder_targets_reminder]
-                        FOREIGN KEY ([reminder_id]) REFERENCES [{s}].[note_reminders]([id]) ON DELETE CASCADE,
-                    CONSTRAINT [ux_reminder_targets] UNIQUE ([reminder_id], [user_id])
+                    [Id]         UNIQUEIDENTIFIER NOT NULL CONSTRAINT [PK_NoteReminderTarget] PRIMARY KEY,
+                    [ReminderId] UNIQUEIDENTIFIER NOT NULL,
+                    [UserId]     INT NOT NULL,
+                    CONSTRAINT [FK_NoteReminderTarget_NoteReminder]
+                        FOREIGN KEY ([ReminderId]) REFERENCES [{s}].[NoteReminder]([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [UX_NoteReminderTarget_ReminderId_UserId] UNIQUE ([ReminderId], [UserId])
                 );
-                CREATE INDEX [ix_reminder_targets_reminder] ON [{s}].[note_reminder_targets]([reminder_id]);
-                CREATE INDEX [ix_reminder_targets_user] ON [{s}].[note_reminder_targets]([user_id]);
+                CREATE INDEX [IX_NoteReminderTarget_ReminderId] ON [{s}].[NoteReminderTarget]([ReminderId]);
+                CREATE INDEX [IX_NoteReminderTarget_UserId] ON [{s}].[NoteReminderTarget]([UserId]);
             END;
 
             IF OBJECT_ID(N'[{s}].[UserNotification]', N'U') IS NULL
@@ -4793,23 +4808,23 @@ END;";
                     ALTER TABLE [{s}].[UserNotification] ADD [UpdatedById] INT NULL;
             END
 
-            IF OBJECT_ID(N'[{s}].[note_attachments]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[NoteAttachment]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[note_attachments]
+                CREATE TABLE [{s}].[NoteAttachment]
                 (
-                    [id]             UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [note_id]        UNIQUEIDENTIFIER NOT NULL,
+                    [Id]            UNIQUEIDENTIFIER NOT NULL CONSTRAINT [PK_NoteAttachment] PRIMARY KEY,
+                    [NoteId]        UNIQUEIDENTIFIER NOT NULL,
                     [FileName]      NVARCHAR(255) NOT NULL,
-                    [stored_name]    NVARCHAR(255) NOT NULL,
-                    [content_type]   NVARCHAR(100) NULL,
-                    [FileSize]      BIGINT NOT NULL CONSTRAINT [df_note_attachments_file_size] DEFAULT(0),
+                    [StoredName]    NVARCHAR(255) NOT NULL,
+                    [ContentType]   NVARCHAR(100) NULL,
+                    [FileSize]      BIGINT NOT NULL CONSTRAINT [DF_NoteAttachment_FileSize] DEFAULT(0),
                     [UploadedAt]    DATETIME NOT NULL,
-                    [description]    NVARCHAR(500) NULL,
-                    [binary_content] VARBINARY(MAX) NULL,
-                    CONSTRAINT [fk_note_attachments_note_id]
-                        FOREIGN KEY ([note_id]) REFERENCES [{s}].[notes]([id])
+                    [Description]   NVARCHAR(500) NULL,
+                    [BinaryContent] VARBINARY(MAX) NULL,
+                    CONSTRAINT [FK_NoteAttachment_Note]
+                        FOREIGN KEY ([NoteId]) REFERENCES [{s}].[Note]([Id])
                 );
-                CREATE INDEX [ix_note_attachments_note_id] ON [{s}].[note_attachments]([note_id]);
+                CREATE INDEX [IX_NoteAttachment_NoteId] ON [{s}].[NoteAttachment]([NoteId]);
             END;
             ELSE
             BEGIN
@@ -4862,33 +4877,33 @@ END;";
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[notes]') AND name='ocr_text')
                 ALTER TABLE [{s}].[notes] ADD [ocr_text] NVARCHAR(MAX) NULL;
 
-            IF OBJECT_ID(N'[{s}].[card_groups]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[CardGroup]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[card_groups]
+                CREATE TABLE [{s}].[CardGroup]
                 (
-                    [id]          INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
-                    [card_type]   TINYINT NOT NULL,
-                    [level]       TINYINT NOT NULL,
-                    [parent_id]   INT NULL,
-                    [code]        NVARCHAR(20) NOT NULL,
-                    [description] NVARCHAR(200) NULL
+                    [Id]          INT NOT NULL IDENTITY(1,1) CONSTRAINT [PK_CardGroup] PRIMARY KEY,
+                    [CardType]    TINYINT NOT NULL,
+                    [Level]       TINYINT NOT NULL,
+                    [ParentId]    INT NULL,
+                    [Code]        NVARCHAR(20) NOT NULL,
+                    [Description] NVARCHAR(200) NULL
                 );
-                CREATE INDEX [ix_card_groups_type_level] ON [{s}].[card_groups]([card_type], [level]);
+                CREATE INDEX [IX_CardGroup_CardType_Level] ON [{s}].[CardGroup]([CardType], [Level]);
             END;
 
-            IF OBJECT_ID(N'[{s}].[card_group_mappings]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[CardGroupMapping]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[card_group_mappings]
+                CREATE TABLE [{s}].[CardGroupMapping]
                 (
-                    [id]            INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
-                    [entity_type]   TINYINT NOT NULL,
-                    [EntityId]     NVARCHAR(50) NOT NULL,
-                    [level]         TINYINT NOT NULL,
-                    [card_group_id] INT NOT NULL,
-                    CONSTRAINT [uq_card_group_mappings] UNIQUE ([entity_type], [EntityId], [level])
+                    [Id]          INT NOT NULL IDENTITY(1,1) CONSTRAINT [PK_CardGroupMapping] PRIMARY KEY,
+                    [EntityType]  TINYINT NOT NULL,
+                    [EntityId]    NVARCHAR(50) NOT NULL,
+                    [Level]       TINYINT NOT NULL,
+                    [CardGroupId] INT NOT NULL,
+                    CONSTRAINT [UX_CardGroupMapping_EntityType_EntityId_Level] UNIQUE ([EntityType], [EntityId], [Level])
                 );
-                CREATE INDEX [ix_card_group_mappings_entity]
-                    ON [{s}].[card_group_mappings]([entity_type], [EntityId]);
+                CREATE INDEX [IX_CardGroupMapping_EntityType_EntityId]
+                    ON [{s}].[CardGroupMapping]([EntityType], [EntityId]);
             END;
             """;
 
@@ -5181,25 +5196,25 @@ END;";
     {
         var s = _schema.Replace("]", "]]");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[design_templates]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[DesignTemplate]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[design_templates]
+                CREATE TABLE [{s}].[DesignTemplate]
                 (
-                    [id]           UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [name]         NVARCHAR(200)    NOT NULL,
-                    [type]         NVARCHAR(50)     NOT NULL,
-                    [sub_type]     NVARCHAR(100)    NULL,
-                    [description]  NVARCHAR(500)    NULL,
-                    [html_content] NVARCHAR(MAX)    NULL,
-                    [css_content]  NVARCHAR(MAX)    NULL,
-                    [gjs_data]     NVARCHAR(MAX)    NULL,
-                    [jsr_content]  NVARCHAR(MAX)    NULL,
-                    [IsActive]    BIT              NOT NULL CONSTRAINT [df_design_templates_is_active] DEFAULT(1),
-                    [Created]   DATETIME     NOT NULL,
-                    [Updated]   DATETIME     NULL    
+                    [Id]          UNIQUEIDENTIFIER NOT NULL CONSTRAINT [PK_DesignTemplate] PRIMARY KEY,
+                    [Name]        NVARCHAR(200)    NOT NULL,
+                    [Type]        NVARCHAR(50)     NOT NULL,
+                    [SubType]     NVARCHAR(100)    NULL,
+                    [Description] NVARCHAR(500)    NULL,
+                    [HtmlContent] NVARCHAR(MAX)    NULL,
+                    [CssContent]  NVARCHAR(MAX)    NULL,
+                    [GjsData]     NVARCHAR(MAX)    NULL,
+                    [JsrContent]  NVARCHAR(MAX)    NULL,
+                    [IsActive]    BIT              NOT NULL CONSTRAINT [DF_DesignTemplate_IsActive] DEFAULT(1),
+                    [Created]     DATETIME         NOT NULL,
+                    [Updated]     DATETIME         NULL
                 );
-                CREATE INDEX [ix_design_templates_type]     ON [{s}].[design_templates]([type]);
-                CREATE INDEX [ix_design_templates_sub_type] ON [{s}].[design_templates]([sub_type]);
+                CREATE INDEX [IX_DesignTemplate_Type]    ON [{s}].[DesignTemplate]([Type]);
+                CREATE INDEX [IX_DesignTemplate_SubType] ON [{s}].[DesignTemplate]([SubType]);
             END
             ELSE
             BEGIN
@@ -5315,7 +5330,7 @@ END;";
                     [PriceGroupId]   INT            NULL,
                     [SalesRepresentativeId] INT     NULL,
                     [ContactGroupId] INT            NULL,
-                    [CreatedAt]      DATETIME      NOT NULL,
+                    [Created]        DATETIME      NOT NULL,
                     CONSTRAINT [uq_contact_accounts_code] UNIQUE ([AccountCode])
                 );
 
@@ -5430,7 +5445,7 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[ContactAddress]
                 (
-                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_contact_address] PRIMARY KEY,
+                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ContactAddress] PRIMARY KEY,
                     [ContactId]        INT              NOT NULL,
                     [Name]             NVARCHAR(100)    NOT NULL,
                     [CountryCode]      NVARCHAR(2)      NULL,
@@ -5440,8 +5455,8 @@ END;";
                     [PostalCode]       NVARCHAR(10)     NULL,
                     [AddressLine]      NVARCHAR(500)    NULL,
                     [IsDefault]        BIT              NOT NULL DEFAULT(0),
-                    [CreatedAt]        DATETIME        NOT NULL DEFAULT(SYSDATETIME()),
-                    CONSTRAINT [fk_contact_address_contact] FOREIGN KEY ([ContactId])
+                    [Created]          DATETIME         NOT NULL DEFAULT(SYSDATETIME()),
+                    CONSTRAINT [FK_ContactAddress_Contact] FOREIGN KEY ([ContactId])
                         REFERENCES [{s}].[Contact]([Id]) ON DELETE CASCADE
                 );
                 CREATE INDEX [ix_contact_address_contact] ON [{s}].[ContactAddress]([ContactId]);
@@ -5463,18 +5478,18 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[ContactItem]
                 (
-                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_contact_item] PRIMARY KEY,
+                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ContactItem] PRIMARY KEY,
                     [ContactId]  INT              NOT NULL,
                     [ItemId]     INT              NOT NULL,
                     [VendorCode] NVARCHAR(60)     NULL,
                     [VendorName] NVARCHAR(200)    NULL,
                     [Notes]      NVARCHAR(500)    NULL,
-                    [IsActive]   BIT              NOT NULL CONSTRAINT [df_contact_item_active]  DEFAULT(1),
-                    [CreatedAt]  DATETIME     NOT NULL CONSTRAINT [df_contact_item_created] DEFAULT(SYSUTCDATETIME()),
-                    [UpdatedAt]  DATETIME     NULL,
-                    CONSTRAINT [fk_contact_item_contact] FOREIGN KEY ([ContactId])
+                    [IsActive]   BIT              NOT NULL CONSTRAINT [DF_ContactItem_IsActive]  DEFAULT(1),
+                    [Created]    DATETIME     NOT NULL CONSTRAINT [DF_ContactItem_Created] DEFAULT(SYSUTCDATETIME()),
+                    [Updated]    DATETIME     NULL,
+                    CONSTRAINT [FK_ContactItem_Contact] FOREIGN KEY ([ContactId])
                         REFERENCES [{s}].[Contact]([Id]) ON DELETE CASCADE,
-                    CONSTRAINT [fk_contact_item_item] FOREIGN KEY ([ItemId])
+                    CONSTRAINT [FK_ContactItem_Item] FOREIGN KEY ([ItemId])
                         REFERENCES [{s}].[Items]([Id]) ON DELETE CASCADE
                 );
                 CREATE UNIQUE INDEX [ux_contact_item_contact_item] ON [{s}].[ContactItem]([ContactId],[ItemId]);
@@ -5838,18 +5853,18 @@ END;";
         await using (var createCmd = connection.CreateCommand())
         {
             createCmd.CommandText = $"""
-                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[integration_api_profiles]'))
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationApiProfile]'))
                 BEGIN
-                    CREATE TABLE [{s}].[integration_api_profiles] (
-                        [id]               UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() CONSTRAINT PK_integration_api_profiles PRIMARY KEY,
-                        [company_id]       INT NOT NULL,
-                        [name]             NVARCHAR(200)    NOT NULL,
-                        [auth_type]        NVARCHAR(50)     NOT NULL DEFAULT 'None',
-                        [base_url]         NVARCHAR(500)    NOT NULL,
-                        [auth_config_json] NVARCHAR(MAX)    NULL,
-                        [IsActive]        BIT              NOT NULL DEFAULT 1,
-                        [Created]       DATETIME        NOT NULL DEFAULT GETDATE(),
-                        [Updated]       DATETIME        NULL     DEFAULT GETDATE()
+                    CREATE TABLE [{s}].[IntegrationApiProfile] (
+                        [Id]             UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID() CONSTRAINT [PK_IntegrationApiProfile] PRIMARY KEY,
+                        [CompanyId]      INT NOT NULL,
+                        [Name]           NVARCHAR(200)    NOT NULL,
+                        [AuthType]       NVARCHAR(50)     NOT NULL DEFAULT 'None',
+                        [BaseUrl]        NVARCHAR(500)    NOT NULL,
+                        [AuthConfigJson] NVARCHAR(MAX)    NULL,
+                        [IsActive]       BIT              NOT NULL DEFAULT 1,
+                        [Created]        DATETIME         NOT NULL DEFAULT GETDATE(),
+                        [Updated]        DATETIME         NULL     DEFAULT GETDATE()
                     );
                 END
                 """;
@@ -7287,8 +7302,8 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[Document]
                 (
-                    [id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document] PRIMARY KEY,
-                    [CompanyId]         INT              NOT NULL CONSTRAINT [df_document_CompanyId] DEFAULT({DefaultCompanyId}),
+                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Document] PRIMARY KEY,
+                    [CompanyId]         INT              NOT NULL CONSTRAINT [DF_Document_CompanyId] DEFAULT({DefaultCompanyId}),
                     [DocumentNumber]    NVARCHAR(15)     NOT NULL,
                     [DocumentTypeId]    INT              NULL,
                     [DocumentDate]      DATETIME     NOT NULL,
@@ -7296,7 +7311,7 @@ END;";
                     [ContactId]         INT              NULL,
                     [ContactAddress]    NVARCHAR(500)    NULL,
                     [SalesRepId]        INT              NULL,
-                    [CurrencyId]        INT              NOT NULL CONSTRAINT [df_document_CurrencyId] DEFAULT(1),
+                    [CurrencyId]        INT              NOT NULL CONSTRAINT [DF_Document_CurrencyId] DEFAULT(1),
                     [SubTotal]          DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [DiscountRate]      DECIMAL(5,2)     NOT NULL DEFAULT(0),
                     [DiscountAmount]    DECIMAL(18,4)    NOT NULL DEFAULT(0),
@@ -7306,19 +7321,19 @@ END;";
                     [PaymentTerms]      NVARCHAR(500)    NULL,
                     [DeliveryTerms]     NVARCHAR(500)    NULL,
                     [DeliveryAddress]   NVARCHAR(500)    NULL,
-                    [status]            NVARCHAR(20)     NOT NULL DEFAULT(N'Draft'),
+                    [Status]            NVARCHAR(20)     NOT NULL DEFAULT(N'Draft'),
                     [RevisionNo]        INT              NOT NULL DEFAULT(0),
                     [ParentDocumentId]  INT              NULL,
-                    [notes]             NVARCHAR(MAX)    NULL,
-                    [CreatedById]         INT    NULL,
+                    [Notes]             NVARCHAR(MAX)    NULL,
+                    [CreatedById]       INT              NULL,
                     [Created]           DATETIME     NOT NULL,
                     [Updated]           DATETIME     NULL,
                     [IsActive]          BIT              NOT NULL DEFAULT(1)
                 );
-                CREATE UNIQUE INDEX [ux_document_number] ON [{s}].[Document]([DocumentNumber]);
-                CREATE INDEX [ix_document_status] ON [{s}].[Document]([status]);
-                CREATE INDEX [ix_document_contact] ON [{s}].[Document]([ContactId]);
-                CREATE INDEX [ix_document_company] ON [{s}].[Document]([CompanyId]);
+                CREATE UNIQUE INDEX [UX_Document_Number] ON [{s}].[Document]([DocumentNumber]);
+                CREATE INDEX [IX_Document_Status] ON [{s}].[Document]([Status]);
+                CREATE INDEX [IX_Document_Contact] ON [{s}].[Document]([ContactId]);
+                CREATE INDEX [IX_Document_Company] ON [{s}].[Document]([CompanyId]);
             END;
 
             -- CreatedById migration: NVARCHAR veya renamed snake_case → INT
@@ -7716,18 +7731,18 @@ END;";
     {
         var s = _schema.Replace("]", "]]");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[user_settings]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[UserSettings]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[user_settings]
+                CREATE TABLE [{s}].[UserSettings]
                 (
-                    [id]            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [user_id]       UNIQUEIDENTIFIER NOT NULL,
-                    [setting_key]   NVARCHAR(200)    NOT NULL,
-                    [setting_value] NVARCHAR(MAX)    NULL,
-                    [Updated]    DATETIME     NULL    
+                    [Id]           UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                    [UserId]       UNIQUEIDENTIFIER NOT NULL,
+                    [SettingKey]   NVARCHAR(200)    NOT NULL,
+                    [SettingValue] NVARCHAR(MAX)    NULL,
+                    [Updated]      DATETIME     NULL
                 );
-                CREATE UNIQUE INDEX [ux_user_settings_user_key]
-                    ON [{s}].[user_settings]([user_id], [setting_key]);
+                CREATE UNIQUE INDEX [UX_UserSettings_UserId_SettingKey]
+                    ON [{s}].[UserSettings]([UserId], [SettingKey]);
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -7742,19 +7757,19 @@ END;";
         var s = _schema.Replace("]", "]]");
         var sl = _schema.Replace("'", "''");
         var sql = $"""
-            IF OBJECT_ID(N'[{s}].[currencies]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[Currency]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[currencies]
+                CREATE TABLE [{s}].[Currency]
                 (
-                    [id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [code]       NVARCHAR(5)       NOT NULL,
-                    [name]       NVARCHAR(100)     NOT NULL,
-                    [symbol]     NVARCHAR(5)       NULL,
-                    [IsActive]  BIT               NOT NULL DEFAULT(1),
-                    [Created] DATETIME      NOT NULL DEFAULT(GETDATE()),
-                    [Updated] DATETIME      NULL     DEFAULT(GETDATE())
+                    [Id]       INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Currency] PRIMARY KEY,
+                    [Code]     NVARCHAR(5)       NOT NULL,
+                    [Name]     NVARCHAR(100)     NOT NULL,
+                    [Symbol]   NVARCHAR(5)       NULL,
+                    [IsActive] BIT               NOT NULL DEFAULT(1),
+                    [Created]  DATETIME          NOT NULL DEFAULT(GETDATE()),
+                    [Updated]  DATETIME          NULL     DEFAULT(GETDATE())
                 );
-                CREATE UNIQUE INDEX [ux_currencies_code] ON [{s}].[currencies]([code]);
+                CREATE UNIQUE INDEX [UX_Currency_Code] ON [{s}].[Currency]([Code]);
             END;
 
             -- Migration: eski currencies tablosuna PascalCase kolonlar ekle
@@ -7793,15 +7808,15 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[Exchange]
                 (
-                    [id]                     INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [CurrencyId]             INT               NOT NULL,
-                    [date]                   DATE              NOT NULL,
-                    [buying_rate]            DECIMAL(18,6)     NOT NULL,
-                    [selling_rate]           DECIMAL(18,6)     NOT NULL,
-                    [effective_buying_rate]  DECIMAL(18,6)     NOT NULL DEFAULT(0),
-                    [effective_selling_rate] DECIMAL(18,6)     NOT NULL DEFAULT(0),
-                    [source]                 NVARCHAR(20)      NOT NULL DEFAULT(N'TCMB'),
-                    [Created]             DATETIME      NOT NULL DEFAULT(GETDATE())
+                    [Id]                    INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Exchange] PRIMARY KEY,
+                    [CurrencyId]            INT               NOT NULL,
+                    [Date]                  DATE              NOT NULL,
+                    [BuyingRate]            DECIMAL(18,6)     NOT NULL,
+                    [SellingRate]           DECIMAL(18,6)     NOT NULL,
+                    [EffectiveBuyingRate]   DECIMAL(18,6)     NOT NULL DEFAULT(0),
+                    [EffectiveSellingRate]  DECIMAL(18,6)     NOT NULL DEFAULT(0),
+                    [Source]                NVARCHAR(20)      NOT NULL DEFAULT(N'TCMB'),
+                    [Created]               DATETIME          NOT NULL DEFAULT(GETDATE())
                 );
             END;
 
@@ -7921,18 +7936,18 @@ END;";
     {
         var s = _schema.Replace("]", "]]");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[sales_representatives]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[SalesRepresentative]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[sales_representatives]
+                CREATE TABLE [{s}].[SalesRepresentative]
                 (
-                    [id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [rep_name]   NVARCHAR(200)     NOT NULL,
-                    [IsActive]  BIT               NOT NULL DEFAULT(1),
-                    [Created] DATETIME      NOT NULL DEFAULT(GETDATE()),
-                    [Updated] DATETIME      NULL     DEFAULT(GETDATE())
+                    [Id]       INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_SalesRepresentative] PRIMARY KEY,
+                    [RepName]  NVARCHAR(200)     NOT NULL,
+                    [IsActive] BIT               NOT NULL DEFAULT(1),
+                    [Created]  DATETIME          NOT NULL DEFAULT(GETDATE()),
+                    [Updated]  DATETIME          NULL     DEFAULT(GETDATE())
                 );
-                CREATE UNIQUE INDEX [ux_sales_representatives_name]
-                    ON [{s}].[sales_representatives]([rep_name]);
+                CREATE UNIQUE INDEX [UX_SalesRepresentative_RepName]
+                    ON [{s}].[SalesRepresentative]([RepName]);
             END;
 
             -- Mevcut tablolarda rep_code varsa kaldir (UI'dan ve veri tabanindan cikariliyor)
@@ -8206,21 +8221,21 @@ END;";
 
         // Detay tablosu
         var createSql = $"""
-            IF OBJECT_ID(N'[{s}].[sales_quote_line_details]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[SalesQuoteLineDetail]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[sales_quote_line_details]
+                CREATE TABLE [{s}].[SalesQuoteLineDetail]
                 (
-                    [id]             INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [quote_line_id]  INT               NOT NULL,
-                    [feature_name]   NVARCHAR(200)     NOT NULL,
-                    [value_code]     NVARCHAR(100)     NOT NULL,
-                    [value_name]     NVARCHAR(200)     NOT NULL,
-                    [description]    NVARCHAR(500)     NULL,
-                    [line_order]     INT               NOT NULL DEFAULT(0),
-                    CONSTRAINT [fk_sqld_quote_line] FOREIGN KEY ([quote_line_id])
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_SalesQuoteLineDetail] PRIMARY KEY,
+                    [QuoteLineId] INT               NOT NULL,
+                    [FeatureName] NVARCHAR(200)     NOT NULL,
+                    [ValueCode]   NVARCHAR(100)     NOT NULL,
+                    [ValueName]   NVARCHAR(200)     NOT NULL,
+                    [Description] NVARCHAR(500)     NULL,
+                    [LineOrder]   INT               NOT NULL DEFAULT(0),
+                    CONSTRAINT [FK_SalesQuoteLineDetail_DocumentLine] FOREIGN KEY ([QuoteLineId])
                         REFERENCES [{s}].[DocumentLine]([Id]) ON DELETE CASCADE
                 );
-                CREATE INDEX [ix_sqld_quote_line] ON [{s}].[sales_quote_line_details]([quote_line_id]);
+                CREATE INDEX [IX_SalesQuoteLineDetail_QuoteLineId] ON [{s}].[SalesQuoteLineDetail]([QuoteLineId]);
             END;
             """;
         await using (var cmd2 = connection.CreateCommand()) { cmd2.CommandText = createSql; await cmd2.ExecuteNonQueryAsync(cancellationToken); }
@@ -8343,24 +8358,24 @@ END;";
     {
         var s = _schema.Replace("]", "]]");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[item_locations]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[ItemLocation]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[item_locations]
+                CREATE TABLE [{s}].[ItemLocation]
                 (
-                    [id]          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [item_id]     INT NOT NULL,
-                    [location_id] INT NOT NULL,
+                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ItemLocation] PRIMARY KEY,
+                    [ItemId]     INT NOT NULL,
+                    [LocationId] INT NOT NULL,
                     [IsDefault]  BIT NOT NULL DEFAULT(0),
                     [SortOrder]  INT NOT NULL DEFAULT(0)
                 );
-                CREATE UNIQUE INDEX [ux_item_locations_item_location]
-                    ON [{s}].[item_locations]([item_id], [location_id]);
+                CREATE UNIQUE INDEX [UX_ItemLocation_ItemId_LocationId]
+                    ON [{s}].[ItemLocation]([ItemId], [LocationId]);
                 -- Her malzemenin en fazla bir varsayilan lokasyonu olabilir
-                CREATE UNIQUE INDEX [ux_item_locations_item_default]
-                    ON [{s}].[item_locations]([item_id])
+                CREATE UNIQUE INDEX [UX_ItemLocation_ItemId_Default]
+                    ON [{s}].[ItemLocation]([ItemId])
                     WHERE [IsDefault] = 1;
-                CREATE INDEX [ix_item_locations_location]
-                    ON [{s}].[item_locations]([location_id]);
+                CREATE INDEX [IX_ItemLocation_LocationId]
+                    ON [{s}].[ItemLocation]([LocationId]);
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -8374,21 +8389,21 @@ END;";
     {
         var s = _schema.Replace("]", "]]");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[document_types]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[DocumentType]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[document_types]
+                CREATE TABLE [{s}].[DocumentType]
                 (
-                    [id]                   INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document_types] PRIMARY KEY,
-                    [code]                 NVARCHAR(50)     NOT NULL,
-                    [name]                 NVARCHAR(200)    NOT NULL,
-                    [SqlViewName]        NVARCHAR(128)    NULL,
-                    [required_key_column]  NVARCHAR(100)    NULL,
-                    [description]          NVARCHAR(500)    NULL,
-                    [IsActive]            BIT              NOT NULL DEFAULT(1),
-                    [Created]           DATETIME     NOT NULL,
-                    [Updated]           DATETIME     NULL    
+                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentType] PRIMARY KEY,
+                    [Code]             NVARCHAR(50)     NOT NULL,
+                    [Name]             NVARCHAR(200)    NOT NULL,
+                    [SqlViewName]      NVARCHAR(128)    NULL,
+                    [RequiredKeyColumn] NVARCHAR(100)   NULL,
+                    [Description]      NVARCHAR(500)    NULL,
+                    [IsActive]         BIT              NOT NULL DEFAULT(1),
+                    [Created]          DATETIME         NOT NULL,
+                    [Updated]          DATETIME         NULL
                 );
-                CREATE UNIQUE INDEX [ux_document_types_code] ON [{s}].[document_types]([code]);
+                CREATE UNIQUE INDEX [UX_DocumentType_Code] ON [{s}].[DocumentType]([Code]);
             END;
 
             -- Migration: mevcut DB'lere eksik kolonları ekle
@@ -9053,23 +9068,23 @@ END;";
         var s = _schema.Replace("]", "]]");
         var schemaLiteral = _schema.Replace("'", "''");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[whatsapp_config]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[WhatsAppConfig]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[whatsapp_config]
+                CREATE TABLE [{s}].[WhatsAppConfig]
                 (
-                    [id]                       INT           NOT NULL CONSTRAINT [pk_whatsapp_config] PRIMARY KEY,
-                    [provider]                 INT           NOT NULL DEFAULT(0),
-                    [access_token_encrypted]   NVARCHAR(MAX) NULL,
-                    [phone_number_id]          NVARCHAR(64)  NULL,
-                    [business_account_id]      NVARCHAR(64)  NULL,
-                    [display_phone_number]     NVARCHAR(32)  NULL,
-                    [webhook_verify_token]     NVARCHAR(128) NULL,
-                    [web_qr_bridge_url]        NVARCHAR(256) NULL,
-                    [IsEnabled]               BIT           NOT NULL DEFAULT(0),
-                    [last_successful_send_at]  DATETIME  NULL,
-                    [LastError]               NVARCHAR(500) NULL,
-                    [Created]               DATETIME  NOT NULL,
-                    [Updated]               DATETIME  NULL    
+                    [Id]                     INT           NOT NULL CONSTRAINT [PK_WhatsAppConfig] PRIMARY KEY,
+                    [Provider]               INT           NOT NULL DEFAULT(0),
+                    [AccessTokenEncrypted]   NVARCHAR(MAX) NULL,
+                    [PhoneNumberId]          NVARCHAR(64)  NULL,
+                    [BusinessAccountId]      NVARCHAR(64)  NULL,
+                    [DisplayPhoneNumber]     NVARCHAR(32)  NULL,
+                    [WebhookVerifyToken]     NVARCHAR(128) NULL,
+                    [WebQrBridgeUrl]         NVARCHAR(256) NULL,
+                    [IsEnabled]              BIT           NOT NULL DEFAULT(0),
+                    [LastSuccessfulSendAt]   DATETIME      NULL,
+                    [LastError]              NVARCHAR(500) NULL,
+                    [Created]                DATETIME      NOT NULL,
+                    [Updated]                DATETIME      NULL
                 );
             END;
             -- Migration: eski tabloya provider + web_qr_bridge_url kolonlari ekle
@@ -9100,76 +9115,76 @@ END;";
             END;
 
             -- Safety rules — tek-row config
-            IF OBJECT_ID(N'[{s}].[whatsapp_safety_rules]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[WhatsAppSafetyRule]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[whatsapp_safety_rules]
+                CREATE TABLE [{s}].[WhatsAppSafetyRule]
                 (
-                    [id]                              INT          NOT NULL CONSTRAINT [pk_whatsapp_safety_rules] PRIMARY KEY,
-                    [max_per_minute]                  INT          NOT NULL DEFAULT(5),
-                    [max_per_hour]                    INT          NOT NULL DEFAULT(60),
-                    [max_per_day]                     INT          NOT NULL DEFAULT(300),
-                    [max_per_recipient_per_day]       INT          NOT NULL DEFAULT(3),
-                    [min_delay_seconds]               INT          NOT NULL DEFAULT(3),
-                    [max_delay_seconds]               INT          NOT NULL DEFAULT(15),
-                    [max_consecutive_failures]        INT          NOT NULL DEFAULT(5),
-                    [failure_cooldown_minutes]        INT          NOT NULL DEFAULT(30),
-                    [warmup_days]                     INT          NOT NULL DEFAULT(7),
-                    [warmup_max_per_day]              INT          NOT NULL DEFAULT(50),
-                    [max_identical_messages_per_day]  INT          NOT NULL DEFAULT(10),
-                    [Created]                      DATETIME NOT NULL,
-                    [Updated]                      DATETIME NULL
+                    [Id]                           INT          NOT NULL CONSTRAINT [PK_WhatsAppSafetyRule] PRIMARY KEY,
+                    [MaxPerMinute]                 INT          NOT NULL DEFAULT(5),
+                    [MaxPerHour]                   INT          NOT NULL DEFAULT(60),
+                    [MaxPerDay]                    INT          NOT NULL DEFAULT(300),
+                    [MaxPerRecipientPerDay]        INT          NOT NULL DEFAULT(3),
+                    [MinDelaySeconds]              INT          NOT NULL DEFAULT(3),
+                    [MaxDelaySeconds]              INT          NOT NULL DEFAULT(15),
+                    [MaxConsecutiveFailures]       INT          NOT NULL DEFAULT(5),
+                    [FailureCooldownMinutes]       INT          NOT NULL DEFAULT(30),
+                    [WarmupDays]                   INT          NOT NULL DEFAULT(7),
+                    [WarmupMaxPerDay]              INT          NOT NULL DEFAULT(50),
+                    [MaxIdenticalMessagesPerDay]   INT          NOT NULL DEFAULT(10),
+                    [Created]                      DATETIME     NOT NULL,
+                    [Updated]                      DATETIME     NULL
                 );
-                INSERT INTO [{s}].[whatsapp_safety_rules]
-                    ([id],[Created],[Updated])
+                INSERT INTO [{s}].[WhatsAppSafetyRule]
+                    ([Id],[Created],[Updated])
                 VALUES (1, GETUTCDATE(), GETUTCDATE());
             END;
 
             -- Send log — her gönderim girişimini audit'e kaydeder
-            IF OBJECT_ID(N'[{s}].[whatsapp_send_log]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[WhatsAppSendLog]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[whatsapp_send_log]
+                CREATE TABLE [{s}].[WhatsAppSendLog]
                 (
-                    [id]            BIGINT        IDENTITY(1,1) NOT NULL CONSTRAINT [pk_whatsapp_send_log] PRIMARY KEY,
-                    [sent_at]       DATETIME  NOT NULL,
-                    [to_phone]      NVARCHAR(32)  NULL,
-                    [message_hash]  NVARCHAR(64)  NULL,
-                    [message_id]    NVARCHAR(128) NULL,
-                    [success]       BIT           NOT NULL,
-                    [error_message] NVARCHAR(500) NULL,
-                    [block_reason]  NVARCHAR(300) NULL
+                    [Id]           BIGINT        IDENTITY(1,1) NOT NULL CONSTRAINT [PK_WhatsAppSendLog] PRIMARY KEY,
+                    [SentAt]       DATETIME      NOT NULL,
+                    [ToPhone]      NVARCHAR(32)  NULL,
+                    [MessageHash]  NVARCHAR(64)  NULL,
+                    [MessageId]    NVARCHAR(128) NULL,
+                    [Success]      BIT           NOT NULL,
+                    [ErrorMessage] NVARCHAR(500) NULL,
+                    [BlockReason]  NVARCHAR(300) NULL
                 );
-                CREATE INDEX [ix_whatsapp_send_log_sent_at] ON [{s}].[whatsapp_send_log]([sent_at] DESC);
-                CREATE INDEX [ix_whatsapp_send_log_recipient_today] ON [{s}].[whatsapp_send_log]([to_phone],[sent_at]) WHERE [success]=1;
-                CREATE INDEX [ix_whatsapp_send_log_hash_today] ON [{s}].[whatsapp_send_log]([message_hash],[sent_at]) WHERE [success]=1;
+                CREATE INDEX [IX_WhatsAppSendLog_SentAt] ON [{s}].[WhatsAppSendLog]([SentAt] DESC);
+                CREATE INDEX [IX_WhatsAppSendLog_ToPhone_SentAt] ON [{s}].[WhatsAppSendLog]([ToPhone],[SentAt]) WHERE [Success]=1;
+                CREATE INDEX [IX_WhatsAppSendLog_MessageHash_SentAt] ON [{s}].[WhatsAppSendLog]([MessageHash],[SentAt]) WHERE [Success]=1;
             END;
 
             -- WhatsApp inbox/giden — Bridge'ten poll'lanan birebir mesajlar (gruplar haric)
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [{s}].[wa_inbox]
+                CREATE TABLE [{s}].[WaInbox]
                 (
-                    [id]             BIGINT        IDENTITY(1,1) NOT NULL CONSTRAINT [pk_wa_inbox] PRIMARY KEY,
-                    [bridge_msg_id]  NVARCHAR(128) NULL,                  -- whatsapp-web.js msg.id._serialized; UNIQUE for dedup
-                    [direction]      TINYINT       NOT NULL,              -- 0=incoming, 1=outgoing
-                    [contact_phone]  NVARCHAR(32)  NOT NULL,              -- normalize: digits, no '+'
-                    [contact_id]     INT           NULL,                  -- Contact.Id eslestirme (phone -> Contact.WaPhone/Mobile/Phone)
-                    [contact_name]   NVARCHAR(150) NULL,                  -- WA pushname
-                    [body]           NVARCHAR(MAX) NULL,
-                    [media_type]     NVARCHAR(20)  NULL,                  -- chat|image|video|audio|document|sticker|location
-                    [has_media]      BIT           NOT NULL DEFAULT 0,
-                    [received_at]    DATETIME  NOT NULL,              -- Bridge'in verdiği timestamp
-                    [Created]     DATETIME  NOT NULL,              -- DB'ye yazıldığı an
-                    [ReadAt]        DATETIME  NULL,                  -- kullanıcı okuyunca set edilir (sohbet acılınca)
-                    [media_path]     NVARCHAR(500) NULL,                  -- wwwroot/uploads/whatsapp/yyyy/MM/<id>.<ext>
-                    [media_mime]     NVARCHAR(100) NULL,
-                    [media_filename] NVARCHAR(200) NULL,
-                    [media_size]     INT           NULL
+                    [Id]            BIGINT        IDENTITY(1,1) NOT NULL CONSTRAINT [PK_WaInbox] PRIMARY KEY,
+                    [BridgeMsgId]   NVARCHAR(128) NULL,                  -- whatsapp-web.js msg.id._serialized; UNIQUE for dedup
+                    [Direction]     TINYINT       NOT NULL,              -- 0=incoming, 1=outgoing
+                    [ContactPhone]  NVARCHAR(32)  NOT NULL,              -- normalize: digits, no '+'
+                    [ContactId]     INT           NULL,                  -- Contact.Id eslestirme (phone -> Contact.WaPhone/Mobile/Phone)
+                    [ContactName]   NVARCHAR(150) NULL,                  -- WA pushname
+                    [Body]          NVARCHAR(MAX) NULL,
+                    [MediaType]     NVARCHAR(20)  NULL,                  -- chat|image|video|audio|document|sticker|location
+                    [HasMedia]      BIT           NOT NULL DEFAULT 0,
+                    [ReceivedAt]    DATETIME      NOT NULL,              -- Bridge'in verdiği timestamp
+                    [Created]       DATETIME      NOT NULL,              -- DB'ye yazıldığı an
+                    [ReadAt]        DATETIME      NULL,                  -- kullanıcı okuyunca set edilir (sohbet acılınca)
+                    [MediaPath]     NVARCHAR(500) NULL,                  -- wwwroot/uploads/whatsapp/yyyy/MM/<id>.<ext>
+                    [MediaMime]     NVARCHAR(100) NULL,
+                    [MediaFilename] NVARCHAR(200) NULL,
+                    [MediaSize]     INT           NULL
                 );
-                CREATE UNIQUE INDEX [ux_wa_inbox_bridge_msg_id] ON [{s}].[wa_inbox]([bridge_msg_id]) WHERE [bridge_msg_id] IS NOT NULL;
-                CREATE INDEX [ix_wa_inbox_phone_received] ON [{s}].[wa_inbox]([contact_phone],[received_at] DESC);
+                CREATE UNIQUE INDEX [UX_WaInbox_BridgeMsgId] ON [{s}].[WaInbox]([BridgeMsgId]) WHERE [BridgeMsgId] IS NOT NULL;
+                CREATE INDEX [IX_WaInbox_ContactPhone_ReceivedAt] ON [{s}].[WaInbox]([ContactPhone],[ReceivedAt] DESC);
                 -- Deferred EXEC: filtered index WHERE [ReadAt] IS NULL must not be compiled
                 -- against the existing table at batch-compile time (ReadAt may not exist yet).
-                EXEC(N'CREATE INDEX [ix_wa_inbox_unread] ON [{s}].[wa_inbox]([contact_phone]) WHERE [direction]=0 AND [ReadAt] IS NULL;');
+                EXEC(N'CREATE INDEX [IX_WaInbox_Unread] ON [{s}].[WaInbox]([ContactPhone]) WHERE [Direction]=0 AND [ReadAt] IS NULL;');
             END;
 
             -- Migration: ReadAt kolonu eski wa_inbox tablolarında yok — ekle
@@ -9619,7 +9634,7 @@ END;";
                            [MarginRight]     = @MarginRight,
                            [IsDefault]       = 1,
                            [IsActive]        = 1,
-                           [UpdatedAt]       = SYSUTCDATETIME(),
+                           [Updated]         = SYSUTCDATETIME(),
                            [OutputFormat]    = @OutputFormat,
                            [UseAsMailTemplate] = @UseAsMail
                      WHERE [Id] = @Id;";
@@ -9654,7 +9669,7 @@ END;";
                     INSERT INTO [{s}].[DocLayout]
                         ([Code],[Name],[DocType],[DocumentTypeId],[Description],[LayoutJson],
                          [PageW],[PageH],[MarginTop],[MarginBot],[MarginLeft],[MarginRight],
-                         [OwnerUserId],[IsDefault],[IsActive],[CreatedAt],[UpdatedAt],
+                         [OwnerUserId],[IsDefault],[IsActive],[Created],[Updated],
                          [OutputFormat],[UseAsMailTemplate])
                     VALUES
                         (@Code,@Name,@DocType,@DocTypeId,@Description,@LayoutJson,
@@ -9862,15 +9877,15 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[PriceGroup]
                 (
-                    [id]            INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [Id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_PriceGroup] PRIMARY KEY,
                     [CompanyId]     INT NOT NULL,
                     [Code]          NVARCHAR(50)  NOT NULL,
                     [Name]          NVARCHAR(150) NOT NULL,
-                    [description]   NVARCHAR(500) NULL,
-                    [IsActive]      BIT NOT NULL CONSTRAINT [df_price_groups_is_active] DEFAULT(1),
-                    [AllowsBuying]  BIT NOT NULL CONSTRAINT [df_price_groups_allows_buying]  DEFAULT(1),
-                    [AllowsSelling] BIT NOT NULL CONSTRAINT [df_price_groups_allows_selling] DEFAULT(1),
-                    [AllowsCost]    BIT NOT NULL CONSTRAINT [df_price_groups_allows_cost]    DEFAULT(1),
+                    [Description]   NVARCHAR(500) NULL,
+                    [IsActive]      BIT NOT NULL CONSTRAINT [DF_PriceGroup_IsActive] DEFAULT(1),
+                    [AllowsBuying]  BIT NOT NULL CONSTRAINT [DF_PriceGroup_AllowsBuying]  DEFAULT(1),
+                    [AllowsSelling] BIT NOT NULL CONSTRAINT [DF_PriceGroup_AllowsSelling] DEFAULT(1),
+                    [AllowsCost]    BIT NOT NULL CONSTRAINT [DF_PriceGroup_AllowsCost]    DEFAULT(1),
                     [Created]       DATETIME NOT NULL,
                     [Updated]       DATETIME NULL
                 );
@@ -10108,20 +10123,20 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[PriceList]
                 (
-                    [id]          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_PriceList] PRIMARY KEY,
                     [GroupId]     INT NOT NULL,
                     [ItemId]      INT NOT NULL,
                     [ConfigId]    INT NULL,
                     [CurrencyId]  INT NOT NULL,
                     [PriceType]   NVARCHAR(10)  NOT NULL,
-                    [Price]       DECIMAL(18,4) NOT NULL CONSTRAINT [df_pricelist_price] DEFAULT(0),
+                    [Price]       DECIMAL(18,4) NOT NULL CONSTRAINT [DF_PriceList_Price] DEFAULT(0),
                     [ValidFrom]   DATE NOT NULL,
                     [ValidTo]     DATE NULL,
-                    [IsActive]    BIT NOT NULL CONSTRAINT [df_pricelist_is_active] DEFAULT(1),
+                    [IsActive]    BIT NOT NULL CONSTRAINT [DF_PriceList_IsActive] DEFAULT(1),
                     [Created]     DATETIME NOT NULL,
-                    [Updated]     DATETIME NULL    ,
-                    CONSTRAINT [fk_pricelist_pricegroup]
-                        FOREIGN KEY ([GroupId]) REFERENCES [{s}].[PriceGroup]([id])
+                    [Updated]     DATETIME NULL,
+                    CONSTRAINT [FK_PriceList_PriceGroup]
+                        FOREIGN KEY ([GroupId]) REFERENCES [{s}].[PriceGroup]([Id])
                 );
             END;
 
@@ -12154,6 +12169,27 @@ END;";
             ("company",                     "Company"),
             ("price_groups",                "PriceGroup"),
             ("price_list_entries",          "PriceList"),
+            // 2026-07-05: Legacy snake_case tabloları PascalCase'e çekme
+            ("user_settings",               "UserSettings"),
+            ("notes",                       "Note"),
+            ("note_reminders",              "NoteReminder"),
+            ("note_shares",                 "NoteShare"),
+            ("note_reminder_targets",       "NoteReminderTarget"),
+            ("note_attachments",            "NoteAttachment"),
+            ("note_folders",                "NoteFolder"),
+            ("card_groups",                 "CardGroup"),
+            ("card_group_mappings",         "CardGroupMapping"),
+            ("design_templates",            "DesignTemplate"),
+            ("integration_api_profiles",    "IntegrationApiProfile"),
+            ("item_locations",              "ItemLocation"),
+            ("document_types",              "DocumentType"),
+            ("sales_quote_line_details",    "SalesQuoteLineDetail"),
+            ("currencies",                  "Currency"),
+            ("sales_representatives",       "SalesRepresentative"),
+            ("whatsapp_config",             "WhatsAppConfig"),
+            ("whatsapp_safety_rules",       "WhatsAppSafetyRule"),
+            ("whatsapp_send_log",           "WhatsAppSendLog"),
+            ("wa_inbox",                    "WaInbox"),
         };
 
         var sb = new System.Text.StringBuilder();
@@ -12230,6 +12266,250 @@ END;";
             // istiyor. Bu yuzden rename degil, ALTER TABLE ile yeni CreatedBy/UpdatedBy ekleniyor
             // (yukaridaki MigrateItemsTableAsync icinde). Eski INT FK kolonlar kullanilmiyor;
             // ileride DB temizliginde DROP edilebilir.
+
+            // 2026-07-05: Kolon rename'leri — Company tablosu
+            ("Company",      "id",                                "Id"),
+            ("Company",      "name",                              "Name"),
+            ("Company",      "title",                             "Title"),
+            ("Company",      "address",                           "Address"),
+            ("Company",      "tax_office",                        "TaxOffice"),
+            ("Company",      "tax_number",                        "TaxNumber"),
+            ("Company",      "is_e_document_approval_enabled",    "IsEDocumentApprovalEnabled"),
+            ("Company",      "connection_string",                 "ConnectionString"),
+            ("Company",      "city",                              "City"),
+            ("Company",      "district",                          "District"),
+            ("Company",      "postal_code",                       "PostalCode"),
+            ("Company",      "public_url",                        "PublicUrl"),
+
+            // 2026-07-05: Document — sadece eksik kolonlar (bazıları zaten migrate edilmiş)
+            ("Document",     "id",                                "Id"),
+            ("Document",     "status",                            "Status"),
+            ("Document",     "notes",                             "Notes"),
+
+            // 2026-07-05: Exchange tablosu
+            ("Exchange",     "id",                                "Id"),
+            ("Exchange",     "date",                              "Date"),
+            ("Exchange",     "buying_rate",                       "BuyingRate"),
+            ("Exchange",     "selling_rate",                      "SellingRate"),
+            ("Exchange",     "effective_buying_rate",             "EffectiveBuyingRate"),
+            ("Exchange",     "effective_selling_rate",            "EffectiveSellingRate"),
+            ("Exchange",     "source",                            "Source"),
+
+            // 2026-07-05: FeatureValue tablosu
+            ("FeatureValue", "id",                                "Id"),
+            ("FeatureValue", "feature_id",                        "FeatureId"),
+            ("FeatureValue", "code",                              "Code"),
+            ("FeatureValue", "description",                       "Description"),
+            ("FeatureValue", "value",                             "Value"),
+
+            // 2026-07-05: ItemFeature tablosu
+            ("ItemFeature",  "CreatedAt",                         "Created"),
+            ("ItemFeature",  "UpdatedAt",                         "Updated"),
+
+            // 2026-07-05: ItemFeatureMappings tablosu
+            ("ItemFeatureMappings", "CreatedAt",                  "Created"),
+            ("ItemFeatureMappings", "UpdatedAt",                  "Updated"),
+
+            // 2026-07-05: ItemConfiguration tablosu
+            ("ItemConfiguration", "CreatedDate",                  "Created"),
+
+            // 2026-07-05: Contact tablosu
+            ("Contact",      "CreatedAt",                         "Created"),
+
+            // 2026-07-05: ContactAddress tablosu
+            ("ContactAddress", "CreatedAt",                       "Created"),
+
+            // 2026-07-05: ContactItem tablosu
+            ("ContactItem",  "CreatedAt",                         "Created"),
+            ("ContactItem",  "UpdatedAt",                         "Updated"),
+
+            // 2026-07-05: PriceGroup tablosu
+            ("PriceGroup",   "id",                                "Id"),
+            ("PriceGroup",   "description",                       "Description"),
+
+            // 2026-07-05: PriceList tablosu
+            ("PriceList",    "id",                                "Id"),
+
+            // 2026-07-05: FldSet tablosu
+            ("FldSet",       "CreatedAt",                         "Created"),
+            ("FldSet",       "UpdatedAt",                         "Updated"),
+
+            // 2026-07-05: RptView tablosu
+            ("RptView",      "CreatedAt",                         "Created"),
+            ("RptView",      "UpdatedAt",                         "Updated"),
+
+            // 2026-07-05: RptDef tablosu
+            ("RptDef",       "CreatedAt",                         "Created"),
+            ("RptDef",       "UpdatedAt",                         "Updated"),
+
+            // 2026-07-05: DocLayout tablosu
+            ("DocLayout",    "CreatedAt",                         "Created"),
+            ("DocLayout",    "UpdatedAt",                         "Updated"),
+
+            // 2026-07-05: DocLayoutRule tablosu
+            ("DocLayoutRule", "CreatedAt",                        "Created"),
+            ("DocLayoutRule", "UpdatedAt",                        "Updated"),
+
+            // 2026-07-05: UserSettings (yeni adı — MigrateTableRenamesAsync sonrası)
+            ("UserSettings", "id",                                "Id"),
+            ("UserSettings", "user_id",                           "UserId"),
+            ("UserSettings", "setting_key",                       "SettingKey"),
+            ("UserSettings", "setting_value",                     "SettingValue"),
+
+            // 2026-07-05: Currency (yeni adı)
+            ("Currency",     "id",                                "Id"),
+            ("Currency",     "code",                              "Code"),
+            ("Currency",     "name",                              "Name"),
+            ("Currency",     "symbol",                            "Symbol"),
+
+            // 2026-07-05: SalesRepresentative (yeni adı)
+            ("SalesRepresentative", "id",                         "Id"),
+            ("SalesRepresentative", "rep_name",                   "RepName"),
+
+            // 2026-07-05: DocumentType (yeni adı)
+            ("DocumentType", "id",                                "Id"),
+            ("DocumentType", "code",                              "Code"),
+            ("DocumentType", "name",                              "Name"),
+            ("DocumentType", "required_key_column",               "RequiredKeyColumn"),
+            ("DocumentType", "description",                       "Description"),
+
+            // 2026-07-05: SalesQuoteLineDetail (yeni adı)
+            ("SalesQuoteLineDetail", "id",                        "Id"),
+            ("SalesQuoteLineDetail", "quote_line_id",             "QuoteLineId"),
+            ("SalesQuoteLineDetail", "feature_name",              "FeatureName"),
+            ("SalesQuoteLineDetail", "value_code",                "ValueCode"),
+            ("SalesQuoteLineDetail", "value_name",                "ValueName"),
+            ("SalesQuoteLineDetail", "description",               "Description"),
+            ("SalesQuoteLineDetail", "line_order",                "LineOrder"),
+
+            // 2026-07-05: ItemLocation (yeni adı)
+            ("ItemLocation", "id",                                "Id"),
+            ("ItemLocation", "item_id",                           "ItemId"),
+            ("ItemLocation", "location_id",                       "LocationId"),
+
+            // 2026-07-05: CardGroup (yeni adı)
+            ("CardGroup",    "id",                                "Id"),
+            ("CardGroup",    "card_type",                         "CardType"),
+            ("CardGroup",    "level",                             "Level"),
+            ("CardGroup",    "parent_id",                         "ParentId"),
+            ("CardGroup",    "code",                              "Code"),
+            ("CardGroup",    "description",                       "Description"),
+
+            // 2026-07-05: CardGroupMapping (yeni adı)
+            ("CardGroupMapping", "id",                            "Id"),
+            ("CardGroupMapping", "entity_type",                   "EntityType"),
+            ("CardGroupMapping", "level",                         "Level"),
+            ("CardGroupMapping", "card_group_id",                 "CardGroupId"),
+
+            // 2026-07-05: DesignTemplate (yeni adı)
+            ("DesignTemplate", "id",                              "Id"),
+            ("DesignTemplate", "name",                            "Name"),
+            ("DesignTemplate", "type",                            "Type"),
+            ("DesignTemplate", "sub_type",                        "SubType"),
+            ("DesignTemplate", "description",                     "Description"),
+            ("DesignTemplate", "html_content",                    "HtmlContent"),
+            ("DesignTemplate", "css_content",                     "CssContent"),
+            ("DesignTemplate", "gjs_data",                        "GjsData"),
+            ("DesignTemplate", "jsr_content",                     "JsrContent"),
+
+            // 2026-07-05: IntegrationApiProfile (yeni adı)
+            ("IntegrationApiProfile", "id",                       "Id"),
+            ("IntegrationApiProfile", "company_id",               "CompanyId"),
+            ("IntegrationApiProfile", "name",                     "Name"),
+            ("IntegrationApiProfile", "auth_type",                "AuthType"),
+            ("IntegrationApiProfile", "base_url",                 "BaseUrl"),
+            ("IntegrationApiProfile", "auth_config_json",         "AuthConfigJson"),
+
+            // 2026-07-05: Note (yeni adı — zaten migrate edilmiş kolonlar hariç)
+            ("Note",         "id",                                "Id"),
+            ("Note",         "title",                             "Title"),
+            ("Note",         "content",                           "Content"),
+
+            // 2026-07-05: NoteReminder (yeni adı)
+            ("NoteReminder", "id",                                "Id"),
+            ("NoteReminder", "note_id",                           "NoteId"),
+            ("NoteReminder", "remind_at",                         "RemindAt"),
+            ("NoteReminder", "is_sent",                           "IsSent"),
+            ("NoteReminder", "sent_at",                           "SentAt"),
+
+            // 2026-07-05: NoteShare (yeni adı)
+            ("NoteShare",    "id",                                "Id"),
+            ("NoteShare",    "note_id",                           "NoteId"),
+            ("NoteShare",    "shared_with_user_id",               "SharedWithUserId"),
+            ("NoteShare",    "shared_at",                         "SharedAt"),
+            ("NoteShare",    "can_edit",                          "CanEdit"),
+
+            // 2026-07-05: NoteReminderTarget (yeni adı)
+            ("NoteReminderTarget", "id",                          "Id"),
+            ("NoteReminderTarget", "reminder_id",                 "ReminderId"),
+            ("NoteReminderTarget", "user_id",                     "UserId"),
+
+            // 2026-07-05: NoteAttachment (yeni adı)
+            ("NoteAttachment", "id",                              "Id"),
+            ("NoteAttachment", "note_id",                         "NoteId"),
+            ("NoteAttachment", "stored_name",                     "StoredName"),
+            ("NoteAttachment", "content_type",                    "ContentType"),
+            ("NoteAttachment", "description",                     "Description"),
+            ("NoteAttachment", "binary_content",                  "BinaryContent"),
+
+            // 2026-07-05: NoteFolder (yeni adı)
+            ("NoteFolder",   "id",                                "Id"),
+            ("NoteFolder",   "company_id",                        "CompanyId"),
+            ("NoteFolder",   "user_id",                           "UserId"),
+            ("NoteFolder",   "name",                              "Name"),
+            ("NoteFolder",   "parent_folder_id",                  "ParentFolderId"),
+            ("NoteFolder",   "is_deleted",                        "IsDeleted"),
+
+            // 2026-07-05: WhatsAppConfig (yeni adı)
+            ("WhatsAppConfig", "id",                              "Id"),
+            ("WhatsAppConfig", "provider",                        "Provider"),
+            ("WhatsAppConfig", "access_token_encrypted",          "AccessTokenEncrypted"),
+            ("WhatsAppConfig", "phone_number_id",                 "PhoneNumberId"),
+            ("WhatsAppConfig", "business_account_id",             "BusinessAccountId"),
+            ("WhatsAppConfig", "display_phone_number",            "DisplayPhoneNumber"),
+            ("WhatsAppConfig", "webhook_verify_token",            "WebhookVerifyToken"),
+            ("WhatsAppConfig", "web_qr_bridge_url",               "WebQrBridgeUrl"),
+            ("WhatsAppConfig", "last_successful_send_at",         "LastSuccessfulSendAt"),
+
+            // 2026-07-05: WhatsAppSafetyRule (yeni adı)
+            ("WhatsAppSafetyRule", "id",                          "Id"),
+            ("WhatsAppSafetyRule", "max_per_minute",              "MaxPerMinute"),
+            ("WhatsAppSafetyRule", "max_per_hour",                "MaxPerHour"),
+            ("WhatsAppSafetyRule", "max_per_day",                 "MaxPerDay"),
+            ("WhatsAppSafetyRule", "max_per_recipient_per_day",   "MaxPerRecipientPerDay"),
+            ("WhatsAppSafetyRule", "min_delay_seconds",           "MinDelaySeconds"),
+            ("WhatsAppSafetyRule", "max_delay_seconds",           "MaxDelaySeconds"),
+            ("WhatsAppSafetyRule", "max_consecutive_failures",    "MaxConsecutiveFailures"),
+            ("WhatsAppSafetyRule", "failure_cooldown_minutes",    "FailureCooldownMinutes"),
+            ("WhatsAppSafetyRule", "warmup_days",                 "WarmupDays"),
+            ("WhatsAppSafetyRule", "warmup_max_per_day",          "WarmupMaxPerDay"),
+            ("WhatsAppSafetyRule", "max_identical_messages_per_day", "MaxIdenticalMessagesPerDay"),
+
+            // 2026-07-05: WhatsAppSendLog (yeni adı)
+            ("WhatsAppSendLog", "id",                             "Id"),
+            ("WhatsAppSendLog", "sent_at",                        "SentAt"),
+            ("WhatsAppSendLog", "to_phone",                       "ToPhone"),
+            ("WhatsAppSendLog", "message_hash",                   "MessageHash"),
+            ("WhatsAppSendLog", "message_id",                     "MessageId"),
+            ("WhatsAppSendLog", "success",                        "Success"),
+            ("WhatsAppSendLog", "error_message",                  "ErrorMessage"),
+            ("WhatsAppSendLog", "block_reason",                   "BlockReason"),
+
+            // 2026-07-05: WaInbox (yeni adı)
+            ("WaInbox",      "id",                                "Id"),
+            ("WaInbox",      "bridge_msg_id",                     "BridgeMsgId"),
+            ("WaInbox",      "direction",                         "Direction"),
+            ("WaInbox",      "contact_phone",                     "ContactPhone"),
+            ("WaInbox",      "contact_id",                        "ContactId"),
+            ("WaInbox",      "contact_name",                      "ContactName"),
+            ("WaInbox",      "body",                              "Body"),
+            ("WaInbox",      "media_type",                        "MediaType"),
+            ("WaInbox",      "has_media",                         "HasMedia"),
+            ("WaInbox",      "received_at",                       "ReceivedAt"),
+            ("WaInbox",      "media_path",                        "MediaPath"),
+            ("WaInbox",      "media_mime",                        "MediaMime"),
+            ("WaInbox",      "media_filename",                    "MediaFilename"),
+            ("WaInbox",      "media_size",                        "MediaSize"),
         };
 
         // Her kolon rename'i ayri batch'te calistir — bir tanesi patlarsa digerleri devam edebilsin.
@@ -12636,7 +12916,7 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[FldSet]
                 (
-                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_FldSet] PRIMARY KEY,
+                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_FldSet] PRIMARY KEY,
                     [FormId]     INT            NOT NULL,
                     [FieldKey]   NVARCHAR(120)  NOT NULL,
                     [FieldLabel] NVARCHAR(200)  NOT NULL,
@@ -12647,8 +12927,8 @@ END;";
                     [FormatJson] NVARCHAR(MAX)  NULL,
                     [IsActive]   BIT            NOT NULL CONSTRAINT [df_FldSet_Active] DEFAULT(1),
                     [SortOrder]  INT            NOT NULL CONSTRAINT [df_FldSet_Sort] DEFAULT(0),
-                    [CreatedAt]  DATETIME   NOT NULL CONSTRAINT [df_FldSet_Created] DEFAULT(SYSUTCDATETIME()),
-                    [UpdatedAt]  DATETIME   NOT NULL CONSTRAINT [df_FldSet_Updated] DEFAULT(SYSUTCDATETIME())
+                    [Created]    DATETIME   NOT NULL CONSTRAINT [DF_FldSet_Created] DEFAULT(SYSUTCDATETIME()),
+                    [Updated]    DATETIME   NOT NULL CONSTRAINT [DF_FldSet_Updated] DEFAULT(SYSUTCDATETIME())
                 );
                 CREATE UNIQUE INDEX [ux_FldSet_FormField] ON [{s}].[FldSet]([FormId], [FieldKey]);
                 CREATE INDEX [ix_FldSet_Guide] ON [{s}].[FldSet]([GuideCode]) WHERE [GuideCode] IS NOT NULL;
@@ -12822,14 +13102,14 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[RptView]
                 (
-                    [Id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_RptView] PRIMARY KEY,
+                    [Id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_RptView] PRIMARY KEY,
                     [Code]          NVARCHAR(60)  NOT NULL,
                     [Name]          NVARCHAR(200) NOT NULL,
                     [SqlObjectName] NVARCHAR(120) NOT NULL,
                     [Description]   NVARCHAR(500) NULL,
-                    [IsActive]      BIT           NOT NULL CONSTRAINT [df_RptView_Active]  DEFAULT(1),
-                    [CreatedAt]     DATETIME  NOT NULL CONSTRAINT [df_RptView_Created] DEFAULT(SYSUTCDATETIME()),
-                    [UpdatedAt]     DATETIME  NOT NULL CONSTRAINT [df_RptView_Updated] DEFAULT(SYSUTCDATETIME())
+                    [IsActive]      BIT           NOT NULL CONSTRAINT [DF_RptView_IsActive] DEFAULT(1),
+                    [Created]       DATETIME  NOT NULL CONSTRAINT [DF_RptView_Created] DEFAULT(SYSUTCDATETIME()),
+                    [Updated]       DATETIME  NOT NULL CONSTRAINT [DF_RptView_Updated] DEFAULT(SYSUTCDATETIME())
                 );
                 CREATE UNIQUE INDEX [ux_RptView_Code] ON [{s}].[RptView]([Code]);
                 CREATE UNIQUE INDEX [ux_RptView_SqlObjectName] ON [{s}].[RptView]([SqlObjectName]) WHERE [IsActive] = 1;
@@ -12879,18 +13159,18 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[RptDef]
                 (
-                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_RptDef] PRIMARY KEY,
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_RptDef] PRIMARY KEY,
                     [Code]        NVARCHAR(60)     NOT NULL,
                     [Name]        NVARCHAR(200)    NOT NULL,
                     [ViewId]      INT              NOT NULL,
                     [Category]    TINYINT          NOT NULL,
                     [ConfigJson]  NVARCHAR(MAX)    NOT NULL,
                     [OwnerUserId] INT              NOT NULL,
-                    [IsShared]    BIT              NOT NULL CONSTRAINT [df_RptDef_Shared]  DEFAULT(0),
-                    [IsActive]    BIT              NOT NULL CONSTRAINT [df_RptDef_Active]  DEFAULT(1),
-                    [CreatedAt]   DATETIME     NOT NULL CONSTRAINT [df_RptDef_Created] DEFAULT(SYSUTCDATETIME()),
-                    [UpdatedAt]   DATETIME     NOT NULL CONSTRAINT [df_RptDef_Updated] DEFAULT(SYSUTCDATETIME()),
-                    CONSTRAINT [fk_RptDef_View] FOREIGN KEY ([ViewId]) REFERENCES [{s}].[RptView]([Id])
+                    [IsShared]    BIT              NOT NULL CONSTRAINT [DF_RptDef_IsShared] DEFAULT(0),
+                    [IsActive]    BIT              NOT NULL CONSTRAINT [DF_RptDef_IsActive] DEFAULT(1),
+                    [Created]     DATETIME     NOT NULL CONSTRAINT [DF_RptDef_Created] DEFAULT(SYSUTCDATETIME()),
+                    [Updated]     DATETIME     NOT NULL CONSTRAINT [DF_RptDef_Updated] DEFAULT(SYSUTCDATETIME()),
+                    CONSTRAINT [FK_RptDef_View] FOREIGN KEY ([ViewId]) REFERENCES [{s}].[RptView]([Id])
                 );
                 CREATE UNIQUE INDEX [ux_RptDef_Code]  ON [{s}].[RptDef]([Code]);
                 CREATE INDEX [ix_RptDef_Owner] ON [{s}].[RptDef]([OwnerUserId]) WHERE [IsActive] = 1;
@@ -14198,7 +14478,7 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[DocLayout]
                 (
-                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_DocLayout] PRIMARY KEY,
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocLayout] PRIMARY KEY,
                     [Code]            NVARCHAR(60)      NOT NULL,
                     [Name]            NVARCHAR(200)     NOT NULL,
                     -- Legacy string code (backward-compat). Yeni kayitlar DocumentTypeId kullanir;
@@ -14208,17 +14488,17 @@ END;";
                     [DocumentTypeId]  INT               NULL,
                     [Description]     NVARCHAR(500)     NULL,
                     [LayoutJson]      NVARCHAR(MAX)     NOT NULL,
-                    [PageW]           DECIMAL(8,2)      NOT NULL CONSTRAINT [df_DocLayout_PageW]   DEFAULT(210),
-                    [PageH]           DECIMAL(8,2)      NOT NULL CONSTRAINT [df_DocLayout_PageH]   DEFAULT(297),
-                    [MarginTop]       DECIMAL(6,2)      NOT NULL CONSTRAINT [df_DocLayout_MT]      DEFAULT(10),
-                    [MarginBot]       DECIMAL(6,2)      NOT NULL CONSTRAINT [df_DocLayout_MB]      DEFAULT(10),
-                    [MarginLeft]      DECIMAL(6,2)      NOT NULL CONSTRAINT [df_DocLayout_ML]      DEFAULT(15),
-                    [MarginRight]     DECIMAL(6,2)      NOT NULL CONSTRAINT [df_DocLayout_MR]      DEFAULT(10),
+                    [PageW]           DECIMAL(8,2)      NOT NULL CONSTRAINT [DF_DocLayout_PageW]   DEFAULT(210),
+                    [PageH]           DECIMAL(8,2)      NOT NULL CONSTRAINT [DF_DocLayout_PageH]   DEFAULT(297),
+                    [MarginTop]       DECIMAL(6,2)      NOT NULL CONSTRAINT [DF_DocLayout_MT]      DEFAULT(10),
+                    [MarginBot]       DECIMAL(6,2)      NOT NULL CONSTRAINT [DF_DocLayout_MB]      DEFAULT(10),
+                    [MarginLeft]      DECIMAL(6,2)      NOT NULL CONSTRAINT [DF_DocLayout_ML]      DEFAULT(15),
+                    [MarginRight]     DECIMAL(6,2)      NOT NULL CONSTRAINT [DF_DocLayout_MR]      DEFAULT(10),
                     [OwnerUserId]     INT               NOT NULL,
-                    [IsDefault]       BIT               NOT NULL CONSTRAINT [df_DocLayout_Default] DEFAULT(0),
-                    [IsActive]        BIT               NOT NULL CONSTRAINT [df_DocLayout_Active]  DEFAULT(1),
-                    [CreatedAt]       DATETIME      NOT NULL CONSTRAINT [df_DocLayout_Created] DEFAULT(SYSUTCDATETIME()),
-                    [UpdatedAt]       DATETIME      NOT NULL CONSTRAINT [df_DocLayout_Updated] DEFAULT(SYSUTCDATETIME()),
+                    [IsDefault]       BIT               NOT NULL CONSTRAINT [DF_DocLayout_IsDefault] DEFAULT(0),
+                    [IsActive]        BIT               NOT NULL CONSTRAINT [DF_DocLayout_IsActive]  DEFAULT(1),
+                    [Created]         DATETIME      NOT NULL CONSTRAINT [DF_DocLayout_Created] DEFAULT(SYSUTCDATETIME()),
+                    [Updated]         DATETIME      NOT NULL CONSTRAINT [DF_DocLayout_Updated] DEFAULT(SYSUTCDATETIME()),
                     -- LEGACY: 'pdf' (default) | 'email' — render hedefi.
                     -- 2026-05-20: UI'da Cikti Turu dropdown'i kaldirildi; sutun
                     -- backward-compat icin korunur, yeni kayitlar her zaman 'pdf'.
@@ -14379,6 +14659,21 @@ END;";
                     END;
                 ');
             END;
+
+            -- 2026-07-05: DocLayout — CreatedAt → Created, UpdatedAt → Updated kolon rename.
+            -- Eski DB'lerde kolonlar farkli isimde olabilir; idempotent EXEC ile rename.
+            IF OBJECT_ID(N'[{s}].[DocLayout]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayout]', N'CreatedAt') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayout]', N'Created') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{s}].[DocLayout].[CreatedAt]', N'Created', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{s}].[DocLayout]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayout]', N'UpdatedAt') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayout]', N'Updated') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{s}].[DocLayout].[UpdatedAt]', N'Updated', N'COLUMN';
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
@@ -14398,7 +14693,7 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[DocLayoutRule]
                 (
-                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_DocLayoutRule] PRIMARY KEY,
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocLayoutRule] PRIMARY KEY,
                     -- Legacy string code (backward-compat). Yeni kayitlar DocumentTypeId kullanir.
                     [DocType]         NVARCHAR(60)      NULL,
                     -- FK to DocumentType (Document.DocumentTypeId ile hizalanir).
@@ -14409,10 +14704,10 @@ END;";
                     [UserId]          INT               NULL,
                     [BranchId]        INT               NULL,
                     [WarehouseId]     INT               NULL,
-                    [IsActive]        BIT               NOT NULL CONSTRAINT [df_DocLayoutRule_Active]  DEFAULT(1),
-                    [CreatedAt]       DATETIME      NOT NULL CONSTRAINT [df_DocLayoutRule_Created] DEFAULT(SYSUTCDATETIME()),
-                    [UpdatedAt]       DATETIME      NOT NULL CONSTRAINT [df_DocLayoutRule_Updated] DEFAULT(SYSUTCDATETIME()),
-                    CONSTRAINT [fk_DocLayoutRule_Layout]       FOREIGN KEY ([LayoutId])       REFERENCES [{s}].[DocLayout]([Id]),
+                    [IsActive]        BIT               NOT NULL CONSTRAINT [DF_DocLayoutRule_IsActive]  DEFAULT(1),
+                    [Created]         DATETIME      NOT NULL CONSTRAINT [DF_DocLayoutRule_Created] DEFAULT(SYSUTCDATETIME()),
+                    [Updated]         DATETIME      NOT NULL CONSTRAINT [DF_DocLayoutRule_Updated] DEFAULT(SYSUTCDATETIME()),
+                    CONSTRAINT [FK_DocLayoutRule_Layout]       FOREIGN KEY ([LayoutId])       REFERENCES [{s}].[DocLayout]([Id]),
                     CONSTRAINT [FK_DocLayoutRule_DocumentType] FOREIGN KEY ([DocumentTypeId]) REFERENCES [{s}].[document_types]([id])
                 );
 
@@ -14536,6 +14831,20 @@ END;";
                           AND r.[DocType] <> N''custom'';
                     END;
                 ');
+            END;
+
+            -- 2026-07-05: DocLayoutRule — CreatedAt → Created, UpdatedAt → Updated kolon rename.
+            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'CreatedAt') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'Created') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{s}].[DocLayoutRule].[CreatedAt]', N'Created', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'UpdatedAt') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'Updated') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{s}].[DocLayoutRule].[UpdatedAt]', N'Updated', N'COLUMN';
             END;
             """;
         await using var cmd = connection.CreateCommand();

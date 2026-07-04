@@ -18,7 +18,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table        = $"[{schema}].[wa_inbox]";
+        _table        = $"[{schema}].[WaInbox]";
         _contactTable = $"[{schema}].[Contact]";
         _groupTable   = $"[{schema}].[WaGroup]";
     }
@@ -28,22 +28,22 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
 
-        // UNIQUE filtered index var ama NULL bridge_msg_id durumunda dedup yok (zaten Bridge bos id atmaz).
+        // UNIQUE filtered index var ama NULL BridgeMsgId durumunda dedup yok (zaten Bridge bos id atmaz).
         // IF NOT EXISTS ile guvenli upsert.
         cmd.CommandText = $"""
             IF @BridgeMsgId IS NOT NULL
-               AND EXISTS (SELECT 1 FROM {_table} WHERE [bridge_msg_id] = @BridgeMsgId)
+               AND EXISTS (SELECT 1 FROM {_table} WHERE [BridgeMsgId] = @BridgeMsgId)
             BEGIN
                 SELECT NULL;
                 RETURN;
             END;
 
             INSERT INTO {_table}
-                ([bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                 [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
-                 [media_path],[media_mime],[media_filename],[media_size],[is_lid],[wa_contact_id],
+                ([BridgeMsgId],[Direction],[ContactPhone],[ContactId],[ContactName],
+                 [Body],[MediaType],[HasMedia],[ReceivedAt],[Created],[ReadAt],
+                 [MediaPath],[MediaMime],[MediaFilename],[MediaSize],[is_lid],[wa_contact_id],
                  [group_jid],[sender_jid],[SenderName])
-            OUTPUT INSERTED.[id]
+            OUTPUT INSERTED.[Id]
             VALUES (@BridgeMsgId,@Direction,@Phone,@ContactId,@Name,
                     @Body,@MediaType,@HasMedia,@ReceivedAt,@CreatedAt,NULL,
                     @MediaPath,@MediaMime,@MediaFileName,@MediaSize,@IsLid,@WaContactId,
@@ -94,46 +94,46 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
             ),
             has_incoming_cte AS (
                 -- Gelen mesaji olan telefon numaralari — LID dedup icin (correlated subquery yerine)
-                SELECT DISTINCT [contact_phone]
+                SELECT DISTINCT [ContactPhone]
                 FROM {_table}
-                WHERE [direction] = 0
+                WHERE [Direction] = 0
             ),
             last_msg AS (
                 SELECT
-                    [contact_phone],
+                    [ContactPhone],
                     [group_jid],
-                    [body], [media_type], [direction], [received_at],
+                    [Body], [MediaType], [Direction], [ReceivedAt],
                     ISNULL([is_lid], 0) AS [is_lid],
-                    ROW_NUMBER() OVER (PARTITION BY [contact_phone] ORDER BY [received_at] DESC, [id] DESC) AS rn
+                    ROW_NUMBER() OVER (PARTITION BY [ContactPhone] ORDER BY [ReceivedAt] DESC, [Id] DESC) AS rn
                 FROM {_table}
             ),
             last_incoming_name AS (
                 SELECT
-                    [contact_phone],
-                    [contact_name],
-                    ROW_NUMBER() OVER (PARTITION BY [contact_phone] ORDER BY [received_at] DESC, [id] DESC) AS rn
+                    [ContactPhone],
+                    [ContactName],
+                    ROW_NUMBER() OVER (PARTITION BY [ContactPhone] ORDER BY [ReceivedAt] DESC, [Id] DESC) AS rn
                 FROM {_table}
-                WHERE [direction] = 0
-                  AND [contact_name] IS NOT NULL
-                  AND LEN(LTRIM(RTRIM([contact_name]))) > 0
+                WHERE [Direction] = 0
+                  AND [ContactName] IS NOT NULL
+                  AND LEN(LTRIM(RTRIM([ContactName]))) > 0
             ),
             unread AS (
-                SELECT [contact_phone], COUNT(1) AS unread_count
+                SELECT [ContactPhone], COUNT(1) AS unread_count
                 FROM {_table}
-                WHERE [direction] = 0 AND [ReadAt] IS NULL
-                GROUP BY [contact_phone]
+                WHERE [Direction] = 0 AND [ReadAt] IS NULL
+                GROUP BY [ContactPhone]
             )
             SELECT TOP (@N)
-                lm.[contact_phone],
+                lm.[ContactPhone],
                 cn.[Id]             AS contact_id,
-                lin.[contact_name]  AS contact_name,
+                lin.[ContactName]   AS contact_name,
                 cn.[AccountTitle],
                 cn.[AccountCode],
                 cn.[WaName],
-                lm.[body],
-                lm.[media_type],
-                lm.[direction],
-                lm.[received_at],
+                lm.[Body],
+                lm.[MediaType],
+                lm.[Direction],
+                lm.[ReceivedAt],
                 COALESCE(u.unread_count, 0) AS unread_count,
                 lm.[is_lid],
                 -- Faz 4: grup bilgileri
@@ -142,18 +142,18 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                 wg.[Subject]        AS group_subject,
                 COALESCE(wg.[MemberCount], 0) AS member_count,
                 -- LID dedup icin: bu konusmada hic gelen mesaj var mi?
-                CAST(CASE WHEN hi.[contact_phone] IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS has_incoming
+                CAST(CASE WHEN hi.[ContactPhone] IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS has_incoming
             FROM last_msg lm
             LEFT JOIN last_incoming_name lin
-                   ON lin.[contact_phone] = lm.[contact_phone] AND lin.rn = 1
-            LEFT JOIN unread u ON u.[contact_phone] = lm.[contact_phone]
+                   ON lin.[ContactPhone] = lm.[ContactPhone] AND lin.rn = 1
+            LEFT JOIN unread u ON u.[ContactPhone] = lm.[ContactPhone]
             LEFT JOIN {_groupTable} wg ON wg.[GroupJid] = lm.[group_jid]
             LEFT JOIN contact_norm cn
-                   ON cn.norm_phone = lm.[contact_phone]
+                   ON cn.norm_phone = lm.[ContactPhone]
                   AND lm.[group_jid] IS NULL
-            LEFT JOIN has_incoming_cte hi ON hi.[contact_phone] = lm.[contact_phone]
+            LEFT JOIN has_incoming_cte hi ON hi.[ContactPhone] = lm.[ContactPhone]
             WHERE lm.rn = 1
-            ORDER BY lm.[received_at] DESC;
+            ORDER BY lm.[ReceivedAt] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@N", limit));
 
@@ -229,17 +229,17 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             ;WITH recent AS (
                 SELECT TOP (@N)
-                    [id],[bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                    [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
-                    [media_path],[media_mime],[media_filename],[media_size],
+                    [Id],[BridgeMsgId],[Direction],[ContactPhone],[ContactId],[ContactName],
+                    [Body],[MediaType],[HasMedia],[ReceivedAt],[Created],[ReadAt],
+                    [MediaPath],[MediaMime],[MediaFilename],[MediaSize],
                     ISNULL([is_deleted],0) AS [is_deleted],
                     [quoted_msg_id],[reaction_emoji],[delivery_status],
                     [group_jid],[sender_jid],[SenderName]
                 FROM {_table}
-                WHERE [contact_phone] = @Phone
-                ORDER BY [received_at] DESC, [id] DESC
+                WHERE [ContactPhone] = @Phone
+                ORDER BY [ReceivedAt] DESC, [Id] DESC
             )
-            SELECT * FROM recent ORDER BY [received_at] ASC, [id] ASC;
+            SELECT * FROM recent ORDER BY [ReceivedAt] ASC, [Id] ASC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
         cmd.Parameters.Add(new SqlParameter("@N", limit));
@@ -285,8 +285,8 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [ReadAt] = @ReadAt
-             WHERE [contact_phone] = @Phone
-               AND [direction] = 0
+             WHERE [ContactPhone] = @Phone
+               AND [Direction] = 0
                AND [ReadAt] IS NULL;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone",  contactPhone));
@@ -298,7 +298,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT MAX([received_at]) FROM {_table};";
+        cmd.CommandText = $"SELECT MAX([ReceivedAt]) FROM {_table};";
         var v = await cmd.ExecuteScalarAsync(cancellationToken);
         return v is null || v is DBNull ? null : (DateTime)v;
     }
@@ -309,7 +309,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             DELETE FROM {_table}
-            WHERE [contact_phone] = @Phone;
+            WHERE [ContactPhone] = @Phone;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -320,12 +320,12 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT TOP (@N) [id], [bridge_msg_id]
+            SELECT TOP (@N) [Id], [BridgeMsgId]
               FROM {_table}
-             WHERE [has_media] = 1
-               AND [media_path] IS NULL
-               AND [bridge_msg_id] IS NOT NULL
-             ORDER BY [received_at] DESC;
+             WHERE [HasMedia] = 1
+               AND [MediaPath] IS NULL
+               AND [BridgeMsgId] IS NOT NULL
+             ORDER BY [ReceivedAt] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@N", limit));
         var list = new List<(long, string)>();
@@ -341,11 +341,11 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_table}
-               SET [media_path]     = @Path,
-                   [media_mime]     = @Mime,
-                   [media_filename] = @FileName,
-                   [media_size]     = @Size
-             WHERE [id] = @Id;
+               SET [MediaPath]     = @Path,
+                   [MediaMime]     = @Mime,
+                   [MediaFilename] = @FileName,
+                   [MediaSize]     = @Size
+             WHERE [Id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Path",     mediaPath));
         cmd.Parameters.Add(new SqlParameter("@Mime",     (object?)mediaMime     ?? DBNull.Value));
@@ -362,12 +362,12 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                   [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
-                   [media_path],[media_mime],[media_filename],[media_size],
+            SELECT [Id],[BridgeMsgId],[Direction],[ContactPhone],[ContactId],[ContactName],
+                   [Body],[MediaType],[HasMedia],[ReceivedAt],[Created],[ReadAt],
+                   [MediaPath],[MediaMime],[MediaFilename],[MediaSize],
                    ISNULL([is_deleted],0),[quoted_msg_id],[reaction_emoji],[delivery_status]
             FROM {_table}
-            WHERE [bridge_msg_id] = @Id;
+            WHERE [BridgeMsgId] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", bridgeMsgId));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -403,8 +403,8 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_table}
-               SET [is_deleted] = 1, [body] = NULL
-             WHERE [bridge_msg_id] = @Id;
+               SET [is_deleted] = 1, [Body] = NULL
+             WHERE [BridgeMsgId] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", bridgeMsgId));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -417,7 +417,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [reaction_emoji] = @Emoji
-             WHERE [bridge_msg_id] = @Id;
+             WHERE [BridgeMsgId] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Emoji", (object?)emoji ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Id",    bridgeMsgId));
@@ -431,7 +431,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [delivery_status] = @Status
-             WHERE [bridge_msg_id] = @Id;
+             WHERE [BridgeMsgId] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Status", status));
         cmd.Parameters.Add(new SqlParameter("@Id",     bridgeMsgId));
@@ -445,15 +445,15 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT TOP (@N)
-                [id],[bridge_msg_id],[direction],[contact_phone],[contact_id],[contact_name],
-                [body],[media_type],[has_media],[received_at],[Created],[ReadAt],
-                [media_path],[media_mime],[media_filename],[media_size],
+                [Id],[BridgeMsgId],[Direction],[ContactPhone],[ContactId],[ContactName],
+                [Body],[MediaType],[HasMedia],[ReceivedAt],[Created],[ReadAt],
+                [MediaPath],[MediaMime],[MediaFilename],[MediaSize],
                 ISNULL([is_deleted],0),[quoted_msg_id],[reaction_emoji],[delivery_status]
             FROM {_table}
-            WHERE [contact_phone] = @Phone
-              AND [body] LIKE @Query
+            WHERE [ContactPhone] = @Phone
+              AND [Body] LIKE @Query
               AND ISNULL([is_deleted],0) = 0
-            ORDER BY [received_at] DESC, [id] DESC;
+            ORDER BY [ReceivedAt] DESC, [Id] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
         cmd.Parameters.Add(new SqlParameter("@Query", "%" + query.Replace("%","[%]").Replace("_","[_]") + "%"));
@@ -494,16 +494,16 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
-        // Son gelen mesajın read_at'ını NULL yap
+        // Son gelen mesajın ReadAt'ını NULL yap
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [ReadAt] = NULL
-             WHERE [id] = (
-                 SELECT TOP 1 [id]
+             WHERE [Id] = (
+                 SELECT TOP 1 [Id]
                    FROM {_table}
-                  WHERE [contact_phone] = @Phone
-                    AND [direction] = 0
-                  ORDER BY [received_at] DESC, [id] DESC
+                  WHERE [ContactPhone] = @Phone
+                    AND [Direction] = 0
+                  ORDER BY [ReceivedAt] DESC, [Id] DESC
              );
             """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));

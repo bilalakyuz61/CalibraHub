@@ -37,7 +37,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         _schema = schema;
         _quoteTable = $"[{schema}].[Document]";
         _lineTable = $"[{schema}].[DocumentLine]";
-        _detailTable = $"[{schema}].[sales_quote_line_details]";
+        _detailTable = $"[{schema}].[SalesQuoteLineDetail]";
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var where = "WHERE [IsActive] = 1";
         if (!string.IsNullOrWhiteSpace(status))
         {
-            where += " AND [status] = @Status";
+            where += " AND [Status] = @Status";
             cmd.Parameters.Add(new SqlParameter("@Status", status.Trim()));
         }
         if (!string.IsNullOrWhiteSpace(search))
@@ -80,18 +80,18 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
         // Cari ismi Contact.AccountTitle'dan cekilir — contact_name kolonu Faz 2'de drop edildi.
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
+            SELECT q.[Id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
-                   q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id]) AS [line_count]
+                   q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
-            LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
+            LEFT JOIN [{_schema}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
             LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
             {where.Replace("[", "q.[")}
@@ -111,11 +111,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
 
-        var where = "WHERE q.[IsActive] = 1 AND dt.[code] = @TypeCode";
+        var where = "WHERE q.[IsActive] = 1 AND dt.[Code] = @TypeCode";
         cmd.Parameters.Add(new SqlParameter("@TypeCode", typeCode));
         if (!string.IsNullOrWhiteSpace(status))
         {
-            where += " AND q.[status] = @Status";
+            where += " AND q.[Status] = @Status";
             cmd.Parameters.Add(new SqlParameter("@Status", status.Trim()));
         }
         if (!string.IsNullOrWhiteSpace(search))
@@ -127,24 +127,24 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var dv = await _dvFilter.BuildAsync(FormCodes.SalesQuote, "q", "id", ct);
 
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
+            SELECT q.[Id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
-                   q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id]) AS [line_count],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id] AND ISNULL(l.[FulfillmentStatus],0) = 0) AS [fulfill_pending],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id] AND ISNULL(l.[FulfillmentStatus],0) = 1) AS [fulfill_partial],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id] AND ISNULL(l.[FulfillmentStatus],0) = 2) AS [fulfill_full]
+                   q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count],
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id] AND ISNULL(l.[FulfillmentStatus],0) = 0) AS [fulfill_pending],
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id] AND ISNULL(l.[FulfillmentStatus],0) = 1) AS [fulfill_partial],
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id] AND ISNULL(l.[FulfillmentStatus],0) = 2) AS [fulfill_full]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
-            LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
+            LEFT JOIN [{_schema}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
             LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
-            INNER JOIN [{_schema}].[document_types] dt ON dt.[id] = q.[DocumentTypeId]
+            INNER JOIN [{_schema}].[DocumentType] dt ON dt.[Id] = q.[DocumentTypeId]
             {where}
             {dv.Sql}
             ORDER BY q.[Created] DESC;
@@ -163,12 +163,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
 
-        var where = "WHERE q.[IsActive] = 1 AND q.[status] = N'Approved' AND dt.[code] = N'satis_teklifi'";
+        var where = "WHERE q.[IsActive] = 1 AND q.[Status] = N'Approved' AND dt.[Code] = N'satis_teklifi'";
         // NOT EXISTS koprusu — daha onceden siparise donusturulen teklifler hariç.
         // document_source tablosu IDocumentSourceRepository.EnsureSchemaAsync ile garantilenir;
         // burada OBJECT_ID guard ile tabloya bagimliligi gevsetmek zorunda kalmadan,
         // sadece NOT EXISTS sub-query'i tablo olusturulduktan sonra cagiriyoruz (DocumentService garanti eder).
-        where += $" AND NOT EXISTS (SELECT 1 FROM [{_schema}].[DocumentSource] ds WHERE ds.[SourceDocumentId] = q.[id])";
+        where += $" AND NOT EXISTS (SELECT 1 FROM [{_schema}].[DocumentSource] ds WHERE ds.[SourceDocumentId] = q.[Id])";
 
         if (fromDate.HasValue)
         {
@@ -192,21 +192,21 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         }
 
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
+            SELECT q.[Id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
-                   q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id]) AS [line_count]
+                   q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
-            LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
+            LEFT JOIN [{_schema}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
             LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
-            INNER JOIN [{_schema}].[document_types] dt ON dt.[id] = q.[DocumentTypeId]
+            INNER JOIN [{_schema}].[DocumentType] dt ON dt.[Id] = q.[DocumentTypeId]
             {where}
             ORDER BY q.[ContactId], q.[DocumentDate] DESC;
             """;
@@ -222,21 +222,21 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         // Cari ismi Contact.AccountTitle'dan gelir — contact_name kolonu Faz 2'de drop edildi.
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
+            SELECT q.[Id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
-                   q.[CurrencyId],cur.[code] AS CurrencyCode,cur.[symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
-                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
-                   q.[notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
+                   q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
+                   q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    ca.[AccountCode] AS customer_code
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
-            LEFT JOIN [{_schema}].[currencies] cur ON cur.[id] = q.[CurrencyId]
+            LEFT JOIN [{_schema}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
             LEFT JOIN [{_schema}].[Personnel] p ON p.[Id] = q.[RequesterPersonnelId]
             LEFT JOIN [{_schema}].[Location] hloc ON hloc.[Id] = q.[LocationId]
-            WHERE q.[id] = @Id;
+            WHERE q.[Id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -296,10 +296,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     [CurrencyId]=@CurrencyId, [SubTotal]=@SubTotal, [DiscountRate]=@DiscountRate,
                     [DiscountAmount]=@DiscountAmount, [TaxRate]=@TaxRate, [TaxAmount]=@TaxAmount,
                     [GrandTotal]=@GrandTotal, [PaymentTerms]=@PaymentTerms, [DeliveryTerms]=@DeliveryTerms,
-                    [DeliveryAddress]=@DeliveryAddress, [status]=@Status, [RevisionNo]=@RevisionNo,
+                    [DeliveryAddress]=@DeliveryAddress, [Status]=@Status, [RevisionNo]=@RevisionNo,
                     [ParentDocumentId]=@ParentDocumentId,
-                    [notes]=@Notes, [Updated]=@UpdatedAt
-                WHERE [id] = @Id;
+                    [Notes]=@Notes, [Updated]=@UpdatedAt
+                WHERE [Id] = @Id;
                 SELECT @Id;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", q.Id));
@@ -310,8 +310,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 INSERT INTO {_quoteTable}
                     ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[ValidUntil],[DeliveryDate],[DeliveryDays],[ContactId],[ContactAddress],
                      [SalesRepId],[RequesterPersonnelId],[LocationId],[CurrencyId],[SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
-                     [PaymentTerms],[DeliveryTerms],[DeliveryAddress],[status],[RevisionNo],[ParentDocumentId],
-                     [notes],[CreatedById],[Created],[Updated],[IsActive])
+                     [PaymentTerms],[DeliveryTerms],[DeliveryAddress],[Status],[RevisionNo],[ParentDocumentId],
+                     [Notes],[CreatedById],[Created],[Updated],[IsActive])
                 VALUES
                     (@CompanyId,@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@DeliveryDate,@DeliveryDays,@ContactId,@ContactAddress,
                      @SalesRepId,@RequesterPersonnelId,@LocationId,@CurrencyId,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
@@ -537,7 +537,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_quoteTable} SET [IsActive] = 0, [Updated] = @Now WHERE [id] = @Id;";
+        cmd.CommandText = $"UPDATE {_quoteTable} SET [IsActive] = 0, [Updated] = @Now WHERE [Id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -547,7 +547,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_quoteTable} SET [status] = @Status, [Updated] = @Now WHERE [id] = @Id;";
+        cmd.CommandText = $"UPDATE {_quoteTable} SET [Status] = @Status, [Updated] = @Now WHERE [Id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         cmd.Parameters.Add(new SqlParameter("@Status", status));
         cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
@@ -653,10 +653,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 copyDetails.Transaction = tx;
                 copyDetails.CommandText = $"""
                     INSERT INTO {_detailTable}
-                        ([quote_line_id],[feature_name],[value_code],[value_name],[description],[line_order])
-                    SELECT @NewId, [feature_name], [value_code], [value_name], [description], [line_order]
+                        ([QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder])
+                    SELECT @NewId, [FeatureName], [ValueCode], [ValueName], [Description], [LineOrder]
                     FROM {_detailTable}
-                    WHERE [quote_line_id] = @ParentId;
+                    WHERE [QuoteLineId] = @ParentId;
                     """;
                 copyDetails.Parameters.Add(new SqlParameter("@NewId", newLineId));
                 copyDetails.Parameters.Add(new SqlParameter("@ParentId", parentLineId));
@@ -697,7 +697,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
     private static Document MapQuote(SqlDataReader r) => new()
     {
-        Id = r.GetInt32(r.GetOrdinal("id")),
+        Id = r.GetInt32(r.GetOrdinal("Id")),
         CompanyId = TryGetOrdinal(r, "CompanyId") is int cmpOrd && cmpOrd >= 0 && !r.IsDBNull(cmpOrd)
             ? r.GetInt32(cmpOrd) : 0,
         DocumentNumber = r.GetString(r.GetOrdinal("DocumentNumber")),
@@ -736,10 +736,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         PaymentTerms = r.IsDBNull(r.GetOrdinal("PaymentTerms")) ? null : r.GetString(r.GetOrdinal("PaymentTerms")),
         DeliveryTerms = r.IsDBNull(r.GetOrdinal("DeliveryTerms")) ? null : r.GetString(r.GetOrdinal("DeliveryTerms")),
         DeliveryAddress = r.IsDBNull(r.GetOrdinal("DeliveryAddress")) ? null : r.GetString(r.GetOrdinal("DeliveryAddress")),
-        Status = Enum.TryParse<DocumentStatus>(r.GetString(r.GetOrdinal("status")), out var s) ? s : DocumentStatus.Draft,
+        Status = Enum.TryParse<DocumentStatus>(r.GetString(r.GetOrdinal("Status")), out var s) ? s : DocumentStatus.Draft,
         RevisionNo = r.GetInt32(r.GetOrdinal("RevisionNo")),
         ParentDocumentId = r.IsDBNull(r.GetOrdinal("ParentDocumentId")) ? null : r.GetInt32(r.GetOrdinal("ParentDocumentId")),
-        Notes = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
+        Notes = r.IsDBNull(r.GetOrdinal("Notes")) ? null : r.GetString(r.GetOrdinal("Notes")),
         CreatedById = TryGetOrdinal(r, "CreatedById") is int cbOrd && cbOrd >= 0 && !r.IsDBNull(cbOrd) ? r.GetInt32(cbOrd) : null,
         CreatedAt = r.GetDateTime(r.GetOrdinal("Created")),
         UpdatedAt = r.IsDBNull(r.GetOrdinal("Updated")) ? DateTime.MinValue : r.GetDateTime(r.GetOrdinal("Updated")),
@@ -861,8 +861,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[quote_line_id],[feature_name],[value_code],[value_name],[description],[line_order]
-            FROM {_detailTable} WHERE [quote_line_id] = @LineId ORDER BY [line_order];
+            SELECT [Id],[QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder]
+            FROM {_detailTable} WHERE [QuoteLineId] = @LineId ORDER BY [LineOrder];
             """;
         cmd.Parameters.Add(new SqlParameter("@LineId", documentLineId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -885,7 +885,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using (var del = conn.CreateCommand())
         {
-            del.CommandText = $"DELETE FROM {_detailTable} WHERE [quote_line_id] = @LineId;";
+            del.CommandText = $"DELETE FROM {_detailTable} WHERE [QuoteLineId] = @LineId;";
             del.Parameters.Add(new SqlParameter("@LineId", documentLineId));
             await del.ExecuteNonQueryAsync(ct);
         }
@@ -895,7 +895,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             order++;
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                INSERT INTO {_detailTable} ([quote_line_id],[feature_name],[value_code],[value_name],[description],[line_order])
+                INSERT INTO {_detailTable} ([QuoteLineId],[FeatureName],[ValueCode],[ValueName],[Description],[LineOrder])
                 VALUES (@LineId, @Feature, @ValCode, @ValName, @Desc, @Order);
                 """;
             cmd.Parameters.Add(new SqlParameter("@LineId", documentLineId));

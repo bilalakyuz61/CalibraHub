@@ -110,7 +110,7 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
               + ISNULL(SUM(CASE WHEN dl.[MovementType] = 4 AND dl.[LocationId] = @LocId THEN dl.[Quantity] ELSE 0 END), 0)
               - ISNULL(SUM(CASE WHEN dl.[MovementType] = 4 AND dl.[FromLocationId] = @LocId THEN dl.[Quantity] ELSE 0 END), 0)
             FROM {T("DocumentLine")} dl
-            INNER JOIN {T("Document")} d ON d.[id] = dl.[DocumentId]
+            INNER JOIN {T("Document")} d ON d.[Id] = dl.[DocumentId]
             WHERE dl.[ItemId] = @ItemId AND d.[CompanyId] = @CompanyId AND d.[IsActive] = 1
               AND (dl.[LocationId] = @LocId OR dl.[FromLocationId] = @LocId);
             """;

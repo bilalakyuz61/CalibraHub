@@ -276,10 +276,12 @@ CREATE TABLE dbo.<TableName> (
 ### Multi-tenant kolon
 - Per-company DB mimarisi var → **`CompanyId` kolonu YOK** (tablo zaten ait olduğu DB'de). Master DB tabloları (`dbo.Company`) hariç.
 
-### Legacy istisnalar (refactor edilmiyor)
-Mevcut snake_case tablolar **kasıtlı olarak dokunulmuyor**: çalışıyor, kapsamlı view/proc/repository bağımlılıkları var, riske girilmez. Liste (özet): `user_settings`, `notes*`, `card_groups*`, `integration_api_profiles`, `integration_event_*`, `sales_quote_line_details`, `sales_representatives`, `document_types`, `currencies`, `whatsapp_*`, `wa_inbox`, `item_locations`, `design_templates`. Bu tablolara yeni kolon eklendiğinde o tablonun stiline uyulur.
+### Legacy istisnalar (2026-07-05 itibarıyla tamamlandı)
+Önceki tüm snake_case tablolar (`user_settings`, `notes*`, `card_groups*`, `integration_api_profiles`, `sales_quote_line_details`, `sales_representatives`, `document_types`, `currencies`, `whatsapp_*`, `wa_inbox`, `item_locations`, `design_templates`) `MigrateTableRenamesAsync` + `MigrateColumnRenamesAsync` ile PascalCase'e migrate edildi. **Artık istisna yok.**
 
-Refactor şart olduğunda **full-rename + view backward-compat + migration** yaklaşımı: PriceGroup/PriceList örneğine bak (`MigrateColumnRenamesAsync` içinde `group_code → Code`, `price_group_id → GroupId` gibi).
+**İstisna kalan tek tablo:** `PLT_SISTEM_LOG` — dış sistem entegrasyonu, ALL_CAPS kasıtlı kalıyor.
+
+Refactor yaklaşımı: **full-rename + IF EXISTS migration guard** — `MigrateTableRenamesAsync` ve `MigrateColumnRenamesAsync` metodlarına IF EXISTS sp_rename blokları eklenir, idempotent çalışır.
 
 ## ID tabanlı eşleştirme kuralı
 

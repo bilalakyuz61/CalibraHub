@@ -15,7 +15,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[document_types]";
+        _table = $"[{schema}].[DocumentType]";
     }
 
     public async Task<IReadOnlyCollection<DocumentType>> GetAllAsync(CancellationToken cancellationToken)
@@ -24,9 +24,9 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated]
+            SELECT [Id],[Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated]
             FROM {_table}
-            ORDER BY [name];
+            ORDER BY [Name];
             """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -39,9 +39,9 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated]
+            SELECT [Id],[Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated]
             FROM {_table}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -53,9 +53,9 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated]
+            SELECT [Id],[Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated]
             FROM {_table}
-            WHERE [code] = @Code;
+            WHERE [Code] = @Code;
             """;
         command.Parameters.Add(new SqlParameter("@Code", code));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -70,10 +70,10 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         {
             command.CommandText = $"""
                 UPDATE {_table}
-                    SET [code]=@Code,[name]=@Name,[SqlViewName]=@SqlViewName,
-                        [required_key_column]=@ReqKey,
-                        [description]=@Description,[IsActive]=@IsActive,[Updated]=GETDATE()
-                    WHERE [id]=@Id;
+                    SET [Code]=@Code,[Name]=@Name,[SqlViewName]=@SqlViewName,
+                        [RequiredKeyColumn]=@ReqKey,
+                        [Description]=@Description,[IsActive]=@IsActive,[Updated]=GETDATE()
+                    WHERE [Id]=@Id;
                 SELECT @Id;
                 """;
             command.Parameters.Add(new SqlParameter("@Id", entity.Id));
@@ -81,7 +81,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         else
         {
             command.CommandText = $"""
-                INSERT INTO {_table} ([code],[name],[SqlViewName],[required_key_column],[description],[IsActive],[Created],[Updated])
+                INSERT INTO {_table} ([Code],[Name],[SqlViewName],[RequiredKeyColumn],[Description],[IsActive],[Created],[Updated])
                 VALUES (@Code,@Name,@SqlViewName,@ReqKey,@Description,@IsActive,GETDATE(),GETDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
@@ -100,7 +100,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_table} WHERE [id] = @Id;";
+        command.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

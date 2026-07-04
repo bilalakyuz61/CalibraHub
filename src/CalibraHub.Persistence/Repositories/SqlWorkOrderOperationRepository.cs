@@ -78,7 +78,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                    END AS UpstreamCap
             FROM {_table} wo
             INNER JOIN [{_schema}].[WorkOrder] w  ON w.[Id]  = wo.[WorkOrderId]
-            INNER JOIN [{_schema}].[Document]  d  ON d.[id]  = w.[DocumentId]
+            INNER JOIN [{_schema}].[Document]  d  ON d.[Id]  = w.[DocumentId]
             LEFT  JOIN [{_schema}].[Operation] op ON op.[Id] = wo.[OperationId]
             LEFT  JOIN [{_schema}].[Machine]   m  ON m.[Id]  = wo.[MachineId]
             LEFT  JOIN [{_schema}].[Personnel] sp ON sp.[Id] = wo.[StartedByPersonnelId]
@@ -345,7 +345,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
         LEFT JOIN [{_schema}].[Personnel] sp ON sp.[Id] = wo.[StartedByPersonnelId]
         LEFT JOIN [{_schema}].[Personnel] cp ON cp.[Id] = wo.[CompletedByPersonnelId]
         LEFT JOIN [{_schema}].[WorkOrder] w  ON w.[Id]  = wo.[WorkOrderId]
-        LEFT JOIN [{_schema}].[Document]  d  ON d.[id]  = w.[DocumentId]
+        LEFT JOIN [{_schema}].[Document]  d  ON d.[Id]  = w.[DocumentId]
         LEFT JOIN [{_schema}].[Items]     i  ON i.[Id]  = w.[ItemId]
         {filter};";
 

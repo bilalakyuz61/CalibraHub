@@ -53,7 +53,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     // ── Fiyat Gruplari ────────────────────────────────────────────────────────
 
     private const string GroupCols =
-        "[id],[CompanyId],[Code],[Name],[description],[IsActive]," +
+        "[Id],[CompanyId],[Code],[Name],[Description],[IsActive]," +
         "[AllowsBuying],[AllowsSelling],[AllowsCost],[Created],[Updated]";
 
     public async Task<IReadOnlyCollection<PriceGroup>> GetAllGroupsAsync(CancellationToken ct)
@@ -62,7 +62,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         // Satır görünürlük kuralları (row-level security) — tek tablo, alias 'pg'.
-        var dv = await _dvFilter.BuildAsync(FormCodes.PriceList, "pg", "id", ct);
+        var dv = await _dvFilter.BuildAsync(FormCodes.PriceList, "pg", "Id", ct);
         cmd.CommandText = $"""
             SELECT {GroupCols}
             FROM {_tblGroups} pg
@@ -84,7 +84,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         cmd.CommandText = $"""
             SELECT {GroupCols}
             FROM {_tblGroups}
-            WHERE [CompanyId]=@CompanyId AND [id]=@Id;
+            WHERE [CompanyId]=@CompanyId AND [Id]=@Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -97,7 +97,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_tblGroups} ([CompanyId],[Code],[Name],[description],[IsActive],[AllowsBuying],[AllowsSelling],[AllowsCost],[Created],[Updated])
+            INSERT INTO {_tblGroups} ([CompanyId],[Code],[Name],[Description],[IsActive],[AllowsBuying],[AllowsSelling],[AllowsCost],[Created],[Updated])
             VALUES (@CompanyId,@Code,@Name,@Desc,@Active,@AllowsBuying,@AllowsSelling,@AllowsCost,GETDATE(),GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
@@ -121,10 +121,10 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_tblGroups}
-            SET [Code]=@Code,[Name]=@Name,[description]=@Desc,[IsActive]=@Active,
+            SET [Code]=@Code,[Name]=@Name,[Description]=@Desc,[IsActive]=@Active,
                 [AllowsBuying]=@AllowsBuying,[AllowsSelling]=@AllowsSelling,[AllowsCost]=@AllowsCost,
                 [Updated]=GETDATE()
-            WHERE [CompanyId]=@CompanyId AND [id]=@Id;
+            WHERE [CompanyId]=@CompanyId AND [Id]=@Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId",     GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id",            g.Id));
@@ -144,10 +144,10 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             DELETE pl FROM {_tblEntries} pl
-                INNER JOIN {_tblGroups} g ON g.[id] = pl.[GroupId]
-                WHERE g.[CompanyId]=@CompanyId AND g.[id]=@Id;
+                INNER JOIN {_tblGroups} g ON g.[Id] = pl.[GroupId]
+                WHERE g.[CompanyId]=@CompanyId AND g.[Id]=@Id;
             DELETE FROM {_tblGroups}
-                WHERE [CompanyId]=@CompanyId AND [id]=@Id;
+                WHERE [CompanyId]=@CompanyId AND [Id]=@Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id",        id));
@@ -157,12 +157,12 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     // ── Fiyat Kalemleri ──────────────────────────────────────────────────────
 
     private const string EntryCols =
-        "[id],[GroupId],[ItemId],[ConfigId],[CurrencyId]," +
+        "[Id],[GroupId],[ItemId],[ConfigId],[CurrencyId]," +
         "[PriceType],[Price],[ValidFrom],[ValidTo],[IsActive],[Created],[Updated]";
 
     private string TblItems          => $"[{_schema}].[Items]";
     private string TblConfigurations => $"[{_schema}].[ItemConfiguration]";
-    private string TblCurrencies     => $"[{_schema}].[currencies]";
+    private string TblCurrencies     => $"[{_schema}].[Currency]";
 
     /// <summary>
     /// Grup bazli liste — her DB satiri tek bir DTO'ya map'lenir (PriceType + Price).
@@ -207,7 +207,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine("WITH AsOf AS (");
             sb.AppendLine($"  SELECT p.*, ROW_NUMBER() OVER (");
             sb.AppendLine("    PARTITION BY p.[GroupId], p.[ItemId], p.[ConfigId], p.[CurrencyId], p.[PriceType]");
-            sb.AppendLine("    ORDER BY p.[ValidFrom] DESC, p.[id] DESC");
+            sb.AppendLine("    ORDER BY p.[ValidFrom] DESC, p.[Id] DESC");
             sb.AppendLine("  ) AS rn");
             sb.AppendLine($"  FROM {_tblEntries} p");
             sb.AppendLine("  WHERE p.[GroupId] = @GroupId");
@@ -215,7 +215,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine("    AND p.[ValidFrom] <= @ActiveOn");
             sb.AppendLine("    AND (p.[ValidTo] IS NULL OR p.[ValidTo] >= @ActiveOn)");
             sb.AppendLine(")");
-            sb.AppendLine("SELECT p.[id], p.[GroupId], p.[ItemId], i.[Code], i.[Name],");
+            sb.AppendLine("SELECT p.[Id], p.[GroupId], p.[ItemId], i.[Code], i.[Name],");
             sb.AppendLine("       p.[ConfigId], cfg.[RecordCode],");
             sb.AppendLine("       p.[CurrencyId], cur.[code],");
             sb.AppendLine("       p.[PriceType], p.[Price],");
@@ -225,13 +225,13 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine("FROM AsOf p");
             sb.AppendLine($"LEFT JOIN {TblItems} i ON i.[Id] = p.[ItemId]");
             sb.AppendLine($"LEFT JOIN {TblConfigurations} cfg ON cfg.[Id] = p.[ConfigId]");
-            sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[id] = p.[CurrencyId]");
+            sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[Id] = p.[CurrencyId]");
             sb.AppendLine("WHERE p.rn = 1");
             cmd.Parameters.Add(new SqlParameter("@ActiveOn", filter.ActiveOn!.Value.Date));
         }
         else
         {
-            sb.AppendLine($"SELECT p.[id], p.[GroupId], p.[ItemId], i.[Code], i.[Name],");
+            sb.AppendLine($"SELECT p.[Id], p.[GroupId], p.[ItemId], i.[Code], i.[Name],");
             sb.AppendLine($"       p.[ConfigId], cfg.[RecordCode],");
             sb.AppendLine($"       p.[CurrencyId], cur.[code],");
             sb.AppendLine($"       p.[PriceType], p.[Price],");
@@ -241,7 +241,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine($"FROM {_tblEntries} p");
             sb.AppendLine($"LEFT JOIN {TblItems} i ON i.[Id] = p.[ItemId]");
             sb.AppendLine($"LEFT JOIN {TblConfigurations} cfg ON cfg.[Id] = p.[ConfigId]");
-            sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[id] = p.[CurrencyId]");
+            sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[Id] = p.[CurrencyId]");
             sb.AppendLine($"WHERE p.[GroupId] = @GroupId");
         }
 
@@ -314,7 +314,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {EntryCols} FROM {_tblEntries} WHERE [id]=@Id;";
+        cmd.CommandText = $"SELECT {EntryCols} FROM {_tblEntries} WHERE [Id]=@Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? MapEntry(r) : null;
@@ -361,7 +361,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
                 [PriceType]=@PriceType,[Price]=@Price,
                 [ValidFrom]=@ValidFrom,[ValidTo]=@ValidTo,
                 [IsActive]=@Active,[Updated]=GETDATE()
-            WHERE [id]=@Id;
+            WHERE [Id]=@Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", e.Id));
         AddEntryParams(cmd, e);
@@ -372,7 +372,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_tblEntries} WHERE [id]=@Id;";
+        cmd.CommandText = $"DELETE FROM {_tblEntries} WHERE [Id]=@Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -395,7 +395,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
               AND [PriceType]  = @PriceType
               AND [ValidFrom]  = @ValidFrom
               AND [IsActive]   = 1
-              AND [id]        <> @ExcludeId;";
+              AND [Id]        <> @ExcludeId;";
         cmd.Parameters.Add(new SqlParameter("@GroupId",    groupId));
         cmd.Parameters.Add(new SqlParameter("@ItemId",     itemId));
         if (configId.HasValue)

@@ -53,7 +53,7 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                    d.[RevisionNo],
                    w.[AssignedPersonnelId], ap.[FullName] AS AssignedPersonnelName
             FROM {_woTable} w
-            INNER JOIN {_docTable} d ON d.[id] = w.[DocumentId]
+            INNER JOIN {_docTable} d ON d.[Id] = w.[DocumentId]
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
             LEFT JOIN [{_schema}].[Users] usr ON usr.[Id] = w.[AssignedUserId]
@@ -118,13 +118,13 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                        w.[RoutingId], rt.[Code] AS RoutingCode, rt.[Name] AS RoutingName,
                        w.[DefaultMachineId], dm.[Code] AS DefaultMachineCode, dm.[Name] AS DefaultMachineName,
                        w.[AssignedPersonnelId], ap.[FullName] AS AssignedPersonnelName,
-                       d.[notes], w.[Created], w.[Updated],
+                       d.[Notes], w.[Created], w.[Updated],
                        -- 2026-05-22: Standart rehber pattern A icin ek display kolonlari
                        ap.[Code] AS AssignedPersonnelCode,
                        loc.[LocationName] AS WarehouseLocationName,
                        w.[ArgeProjectId], apr.[Name] AS ArgeProjectName
                 FROM {_woTable} w
-                INNER JOIN {_docTable} d ON d.[id] = w.[DocumentId]
+                INNER JOIN {_docTable} d ON d.[Id] = w.[DocumentId]
                 LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
                 LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
                 LEFT JOIN [{_schema}].[Users] usr ON usr.[Id] = w.[AssignedUserId]
@@ -489,7 +489,7 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                    w.[PlannedStartDate], w.[PlannedEndDate],
                    w.[AssignedUserId], usr.[FullName], d.[RevisionNo]
             FROM {_woTable} w
-            INNER JOIN {_docTable} d ON d.[id] = w.[DocumentId]
+            INNER JOIN {_docTable} d ON d.[Id] = w.[DocumentId]
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
             LEFT JOIN [{_schema}].[Users] usr ON usr.[Id] = w.[AssignedUserId]
