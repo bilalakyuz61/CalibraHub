@@ -340,6 +340,46 @@ export default function SmartBoard(props) {
     if (action.url) navigateInWorkspace(action.url)
   }, [])
 
+  /* ── Alt+N / Insert — primary header action ("Yeni X") kisayolu ──
+     Odak iframe icindeyken dogrudan keydown yakalanir; odak Shell'de
+     (sidebar/menu) iken Shell aktif tab'a calibra:hotkey mesaji forward
+     eder, burada message listener'i ile yakalanir. */
+  useEffect(function () {
+    var primary = null
+    for (var i = 0; i < actions.length; i++) {
+      if (actions[i].variant === 'primary') { primary = actions[i]; break }
+    }
+    if (!primary && actions.length > 0) primary = actions[0]
+    if (!primary) return undefined
+
+    function trigger() { handleActionClick(primary) }
+
+    function onKey(e) {
+      var isAltN = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key || '').toLowerCase() === 'n'
+      var isInsert = e.key === 'Insert' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
+      if (!isAltN && !isInsert) return
+      if (isInsert) {
+        // Insert input icinde overwrite toggle'dir — form alanlarinda karisma
+        var t = e.target
+        var tag = (t && t.tagName) ? t.tagName.toLowerCase() : ''
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+        if (t && t.isContentEditable) return
+      }
+      e.preventDefault()
+      trigger()
+    }
+    function onMsg(e) {
+      var d = e && e.data
+      if (d && typeof d === 'object' && d.type === 'calibra:hotkey' && d.action === 'new') trigger()
+    }
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('message', onMsg)
+    return function () {
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('message', onMsg)
+    }
+  }, [actions, handleActionClick])
+
   var handleConfigSaved = useCallback(function (newConfig) {
     setUserConfig(newConfig)
   }, [])
@@ -631,7 +671,7 @@ export default function SmartBoard(props) {
                 <button
                   key={action.id || action.label}
                   onClick={function () { handleActionClick(action) }}
-                  title={action.label}
+                  title={isPrimary ? action.label + ' (Alt+N / Insert)' : action.label}
                   aria-label={action.label}
                   className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
                     (isPrimary
