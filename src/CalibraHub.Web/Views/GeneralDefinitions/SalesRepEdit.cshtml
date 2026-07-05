@@ -507,8 +507,8 @@ body.app-theme-dark .sre-root {
     if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
         doMount();
     } else {
-        var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
-        var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        var cssUrl = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+        var jsUrl  = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
         if (!document.querySelector('link[data-sre-bundle]')) {
             var link = document.createElement('link');
             link.rel = 'stylesheet'; link.href = cssUrl;

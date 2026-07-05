@@ -72,16 +72,15 @@ public sealed class SqlIntegrationLookupFunctionRegistry : IIntegrationLookupFun
         return list;
     }
 
-    public IReadOnlyList<IntegrationLookupFunctionDto> List()
+    public async Task<IReadOnlyList<IntegrationLookupFunctionDto>> ListAsync(CancellationToken ct)
     {
-        // Sync interface — cache hit'te bekleme yok. Cache miss'te GetAwaiter ile bloklayici.
-        var cached = GetCachedAsync(CancellationToken.None).GetAwaiter().GetResult();
+        var cached = await GetCachedAsync(ct);
         return cached.Select(ToDto).ToList();
     }
 
-    public IntegrationLookupFunctionDto? Get(string functionId)
+    public async Task<IntegrationLookupFunctionDto?> GetAsync(string functionId, CancellationToken ct)
     {
-        var cached = GetCachedAsync(CancellationToken.None).GetAwaiter().GetResult();
+        var cached = await GetCachedAsync(ct);
         var f = cached.FirstOrDefault(x =>
             string.Equals(x.Id, functionId, StringComparison.OrdinalIgnoreCase));
         return f is null ? null : ToDto(f);

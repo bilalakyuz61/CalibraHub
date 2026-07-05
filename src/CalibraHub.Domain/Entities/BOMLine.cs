@@ -19,6 +19,13 @@ public sealed class BOMLine
 
     public Guid LineGuid { get; init; }
 
+    /// <summary>
+    /// Satır açıklaması (opsiyonel, max 1000). Kullanıcının bileşene not düşmesi için —
+    /// örn. "montajda yapıştırıcı ile", "tedarikçi X'ten". 2026-07-05: UI'da toplanan
+    /// değer daha önce hiçbir katmanda taşınmıyordu; uçtan uca eklendi.
+    /// </summary>
+    public string? Note { get; init; }
+
     // Audit dortlusu — header (BOM) ile birlikte bu satir da kim/ne zaman bilgisi
     // tasir. UpdateBOMAsync mevcut tum line'lari DELETE+INSERT yaptigi icin
     // satir-bazli Updated kolonu olmaz (her save sonrasi yeni satir = yeni Created).
@@ -70,7 +77,7 @@ public sealed class BOMLine
     /// Yeni satir uretici — invariant'tan gecmis bir BOMLine doner. Service
     /// resolved tuple'larini bu factory ile entity'ye cevirir.
     /// </summary>
-    public static BOMLine Create(int itemId, int? configId, decimal quantity, decimal scrapRatio, int? createdById = null)
+    public static BOMLine Create(int itemId, int? configId, decimal quantity, decimal scrapRatio, int? createdById = null, string? note = null)
     {
         var line = new BOMLine
         {
@@ -80,6 +87,7 @@ public sealed class BOMLine
             ScrapRatio  = scrapRatio,
             LineGuid    = Guid.NewGuid(),
             CreatedById = createdById,
+            Note        = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
         };
         line.EnsureValid();
         return line;

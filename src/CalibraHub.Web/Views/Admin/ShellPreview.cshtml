@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CalibraHub — Kabuk Onizleme</title>
-    <link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+    <link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
     <style>
         * { box-sizing: border-box; }
         html, body {
@@ -57,7 +57,7 @@
         };
     </script>
 
-    <script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+    <script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
     <script>
         (function() {
             var el = document.getElementById('shell-root');

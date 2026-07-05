@@ -45,7 +45,7 @@
 @section Styles {
 @if (Model.UsesMaterialCardSchema)
 {
-    <link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+    <link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
 }
 <style>
     .page-admin-view-settings .integrator-dashboard__content {
@@ -486,7 +486,7 @@
             // Server-side'dan inline enjekte edilen React config
             window.__CALIBRA_ADMIN_REGISTRY__ = @Html.Raw(adminRegistryJson);
         </script>
-        <script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"
+        <script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"
                 onerror="console.error('[AdminRegistry] Bundle yuklenemedi')"
                 onload="console.log('[AdminRegistry] Bundle loaded, typeof window.CalibraHub =', typeof window.CalibraHub)"></script>
         <script>

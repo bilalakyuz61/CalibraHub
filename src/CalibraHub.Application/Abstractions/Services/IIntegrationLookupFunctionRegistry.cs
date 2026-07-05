@@ -16,10 +16,10 @@ namespace CalibraHub.Application.Abstractions.Services;
 public interface IIntegrationLookupFunctionRegistry
 {
     /// <summary>Tum fonksiyonlari listele — UI dropdown'unu doldurmak icin.</summary>
-    IReadOnlyList<IntegrationLookupFunctionDto> List();
+    Task<IReadOnlyList<IntegrationLookupFunctionDto>> ListAsync(CancellationToken ct);
 
     /// <summary>Belirli fonksiyon icin metadata getir.</summary>
-    IntegrationLookupFunctionDto? Get(string functionId);
+    Task<IntegrationLookupFunctionDto?> GetAsync(string functionId, CancellationToken ct);
 
     /// <summary>
     /// Verilen fonksiyonu calistir: anahtar deger ile view'da satir bul, donus kolonunu cek.

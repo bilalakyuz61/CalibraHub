@@ -37,7 +37,7 @@ public sealed class SqlContactItemRepository : IContactItemRepository
                    i.[Code]  AS ItemCode,
                    i.[Name]  AS ItemName,
                    ci.[VendorCode], ci.[VendorName], ci.[Notes],
-                   ci.[IsActive], ci.[CreatedAt], ci.[UpdatedAt]
+                   ci.[IsActive], ci.[Created], ci.[Updated]
             FROM {_table} ci
             INNER JOIN {_itemsTable} i ON i.[Id] = ci.[ItemId]
             WHERE ci.[ContactId] = @ContactId
@@ -71,7 +71,7 @@ public sealed class SqlContactItemRepository : IContactItemRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
-                ([ContactId],[ItemId],[VendorCode],[VendorName],[Notes],[IsActive],[CreatedAt])
+                ([ContactId],[ItemId],[VendorCode],[VendorName],[Notes],[IsActive],[Created])
             VALUES
                 (@ContactId,@ItemId,@VendorCode,@VendorName,@Notes,@IsActive,@CreatedAt);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
@@ -101,7 +101,7 @@ public sealed class SqlContactItemRepository : IContactItemRepository
                 [VendorName] = @VendorName,
                 [Notes]      = @Notes,
                 [IsActive]   = @IsActive,
-                [UpdatedAt]  = SYSUTCDATETIME()
+                [Updated]    = SYSUTCDATETIME()
             WHERE [Id] = @Id;
             """;
         AddParams(cmd, entity);

@@ -9,6 +9,7 @@ using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -29,6 +30,7 @@ namespace CalibraHub.Web.Controllers;
 [AllowAnonymous]
 [IgnoreAntiforgeryToken]
 [Route("api/whatsapp/webhook")]
+[EnableRateLimiting("webhook")]
 public sealed class WhatsAppWebhookController : ControllerBase
 {
     private const string GraphApiBase = "https://graph.facebook.com/v21.0";

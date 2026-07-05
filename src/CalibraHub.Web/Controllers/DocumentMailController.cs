@@ -27,10 +27,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class DocumentMailController : Controller
 {
     private readonly IDocumentService _quoteService;
+    private readonly ILogger<DocumentMailController> _logger;
 
-    public DocumentMailController(IDocumentService quoteService)
+    public DocumentMailController(IDocumentService quoteService, ILogger<DocumentMailController> logger)
     {
         _quoteService = quoteService;
+        _logger = logger;
     }
 
     // Her belge turu icin gerekli context — baslik, default konu/gorsel metin
@@ -346,7 +348,7 @@ public sealed class DocumentMailController : Controller
 
         // TODO: IEmailSender / SMTP entegrasyonu buraya gelir.
         //       Su an basarili cevap + console log ile UI akisini test edersiniz.
-        Console.WriteLine($"[DocumentMail] type={documentType} id={documentId} to={to} subject={subject}");
+        _logger.LogDebug("[DocumentMail] type={DocumentType} id={DocumentId} to={To} subject={Subject}", documentType, documentId, to, subject);
         return Json(new { success = true, message = "Mail kuyruga alindi (simulasyon)." });
     }
 }

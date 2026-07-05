@@ -5,7 +5,7 @@
 }
 
 @section Styles {
-<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+<link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
 <style>
     .page-calendar .workspace-action-bar { display: none !important; }
     .workspace-frame-body.page-calendar .app-content-area--workspace-frame {
@@ -48,7 +48,7 @@
 </section>
 
 @section Scripts {
-<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
 <script>
     (function () {
         var el = document.getElementById('calendarPageRoot')

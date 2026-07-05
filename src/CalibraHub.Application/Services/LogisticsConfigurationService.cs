@@ -2825,7 +2825,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 ConfigCode: null,
                 Quantity:   l.Quantity,
                 ScrapRatio: l.ScrapRatio,
-                LineGuid:   l.LineGuid)).ToList())).ToList();
+                LineGuid:   l.LineGuid,
+                Note:       l.Note)).ToList())).ToList();
     }
 
     /// <summary>
@@ -2921,14 +2922,20 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             foreach (var item in all) activeById.TryAdd(item.Id, item);
         }
 
-        // Config — config kodu verilmis ama ConfigId yoksa best-effort lookup (legacy)
+        // Config — config kodu verilmisse Id'ye COZULMEK ZORUNDA (2026-07-05).
+        // Onceki davranis: eslesme yoksa sessizce ConfigId=null ile devam ediyordu;
+        // bu, upsert'in (ItemId, ConfigId=NULL) hedefine kayip mamulun configsiz
+        // recetesini EZMESINE yol acabiliyordu. Artik cozulemezse acik hata.
         int? parentConfigId = request.ConfigId;
         if (parentConfigId is null && !string.IsNullOrWhiteSpace(request.ConfigurationCode))
         {
             var parentItem = activeById[parentItemId];
             var combos = await _repository.GetCombinationsByMaterialCodeAsync(parentItem.Code, cancellationToken);
             var match = combos.FirstOrDefault(c => string.Equals(c.Code, request.ConfigurationCode.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (match is not null) parentConfigId = match.ConfigId;
+            if (match is null)
+                throw new ArgumentException(
+                    $"'{request.ConfigurationCode.Trim()}' kodlu kombinasyon bu mamulde bulunamadı. Kombinasyon rehberinden geçerli bir kayıt seçiniz.");
+            parentConfigId = match.ConfigId;
         }
 
         // Lines koleksiyonu — SaveBOMRequestValidator zaten validate ediyor
@@ -2943,7 +2950,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         // Numerik invariant'lar (Quantity>0, ScrapRatio>=0) Domain'de
         // BOMLine.EnsureValid icinde + validator katmaninda — ayni kontrol burada
         // tekrar edilmez.
-        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, decimal Scrap)>(lines.Count);
+        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, decimal Scrap, string? Note)>(lines.Count);
         foreach (var line in lines)
         {
             int lineItemId = line.ItemId;
@@ -2967,16 +2974,21 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 foreach (var item in probe) activeById.TryAdd(item.Id, item);
             }
 
+            // Satir config'i de ayni sıkı kurala tabi (2026-07-05): kod verildiyse cozulmeli.
             int? lineConfigId = line.ConfigId;
             if (lineConfigId is null && !string.IsNullOrWhiteSpace(line.ComponentConfigCode))
             {
                 var lineItem = activeById[lineItemId];
                 var combos = await _repository.GetCombinationsByMaterialCodeAsync(lineItem.Code, cancellationToken);
                 var match = combos.FirstOrDefault(c => string.Equals(c.Code, line.ComponentConfigCode.Trim(), StringComparison.OrdinalIgnoreCase));
-                if (match is not null) lineConfigId = match.ConfigId;
+                if (match is null)
+                    throw new ArgumentException(
+                        $"'{lineItem.Code}' bileşeni için '{line.ComponentConfigCode.Trim()}' kodlu kombinasyon bulunamadı. Satırı düzenleyip geçerli bir kombinasyon seçiniz.");
+                lineConfigId = match.ConfigId;
             }
 
-            resolvedLines.Add((lineItemId, lineConfigId, line.Quantity, line.ScrapRatio));
+            resolvedLines.Add((lineItemId, lineConfigId, line.Quantity, line.ScrapRatio,
+                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim()));
         }
 
         byte[]? imageData = null;
@@ -3010,13 +3022,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var childrenCache = new Dictionary<int, IReadOnlyCollection<int>>();
         try
         {
-            BOM.EnsureNoCycle(parentItemId, componentItemIds, childId =>
+            await BOM.EnsureNoCycleAsync(parentItemId, componentItemIds, async childId =>
             {
                 if (childrenCache.TryGetValue(childId, out var cached)) return cached;
-                // Async lookup'i sync delegate icine sokmak — kayit zinciri 5-6
-                // seviye, BFS sirasinda en kotu durumda 50-100 child id sorgulanir.
-                var ids = _repository.GetBOMComponentItemIdsAsync(childId, cancellationToken)
-                                     .GetAwaiter().GetResult();
+                var ids = await _repository.GetBOMComponentItemIdsAsync(childId, cancellationToken);
                 childrenCache[childId] = ids;
                 return ids;
             });
@@ -3057,7 +3066,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         try
         {
             foreach (var l in resolvedLines)
-                entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Qty, l.Scrap, userId));
+                entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Qty, l.Scrap, userId, l.Note));
             entity.EnsureValid();
         }
         catch (CalibraHub.Domain.Common.DomainException dex)

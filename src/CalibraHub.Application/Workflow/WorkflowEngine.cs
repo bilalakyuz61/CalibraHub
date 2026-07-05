@@ -173,25 +173,33 @@ public sealed class WorkflowEngine(
             case WorkflowNodeType.Start:
             case WorkflowNodeType.Decision:
                 // İlk true condition'lı transition (priority sıralı); yoksa default
-                var picked = transitions.FirstOrDefault(t => EvaluateCondition(t.Condition, context))
-                          ?? transitions.FirstOrDefault(t => t.IsDefault);
+                var picked = transitions.FirstOrDefault(t => t.IsDefault);
+                foreach (var t in transitions)
+                {
+                    if (await EvaluateConditionAsync(t.Condition, context, ct)) { picked = t; break; }
+                }
                 if (picked is not null)
                     await EnterNodeAsync(instance, def, picked.ToNodeId, contextJson, actor, ct, context);
                 break;
 
             case WorkflowNodeType.ParallelSplit:
                 // Condition true olan TÜM transition'lar; condition yoksa hepsi
-                var selected = transitions.Where(t =>
-                    string.IsNullOrWhiteSpace(t.Condition) || EvaluateCondition(t.Condition, context)).ToList();
-                foreach (var tr in selected)
+                foreach (var tr in transitions)
+                {
+                    if (!string.IsNullOrWhiteSpace(tr.Condition) &&
+                        !await EvaluateConditionAsync(tr.Condition, context, ct)) continue;
                     await EnterNodeAsync(instance, def, tr.ToNodeId, contextJson, actor, ct, context);
+                }
                 break;
 
             case WorkflowNodeType.Task:
                 // Task tamamlandı → sadece geçerli transition'a git
-                var next = transitions.FirstOrDefault(t =>
-                    string.IsNullOrWhiteSpace(t.Condition) || EvaluateCondition(t.Condition, context))
-                    ?? transitions.FirstOrDefault(t => t.IsDefault);
+                var next = transitions.FirstOrDefault(t => t.IsDefault);
+                foreach (var t in transitions)
+                {
+                    if (string.IsNullOrWhiteSpace(t.Condition) ||
+                        await EvaluateConditionAsync(t.Condition, context, ct)) { next = t; break; }
+                }
                 if (next is not null)
                     await EnterNodeAsync(instance, def, next.ToNodeId, contextJson, actor, ct, context);
                 break;
@@ -274,7 +282,8 @@ public sealed class WorkflowEngine(
         }
     }
 
-    private bool EvaluateCondition(string? condition, Dictionary<string, object?> context)
+    private async Task<bool> EvaluateConditionAsync(
+        string? condition, Dictionary<string, object?> context, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(condition)) return true;
         try
@@ -283,7 +292,8 @@ public sealed class WorkflowEngine(
             orgChartFunctions.Register(expr);
             foreach (var kv in context)
                 expr.Parameters[kv.Key] = kv.Value;
-            var result = expr.Evaluate();
+            // OrgChart fonksiyonları async handler ile bağlı — sync Evaluate() kullanma.
+            var result = await expr.EvaluateAsync(ct);
             return result is bool b && b;
         }
         catch { return false; }

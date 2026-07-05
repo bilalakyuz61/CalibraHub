@@ -18,7 +18,9 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Data.SqlClient;
+using System.Threading.RateLimiting;
 
 // ─── SERVICE STARTUP HARDENING ────────────────────────────────────────────
 // Servis modunda (LocalSystem) cwd = C:\Windows\System32 olur — relative path
@@ -192,6 +194,51 @@ builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.OrgChartDomainService>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.ShopFloorLockoutTracker>();
 builder.Services.AddSingleton<CalibraHub.Application.Services.LoginLockoutTracker>();
+
+// Rate limiting — yalnizca [EnableRateLimiting("...")] ile isaretli hassas endpoint'lerde calisir.
+// Global limiter bilincli olarak YOK: ERP UI'i (grid yukleme, paralel fetch) yuksek burst uretir.
+// Not: Kestrel dogrudan dinliyor (61001) — RemoteIpAddress gercek istemci IP'sidir. Reverse proxy
+// arkasina alinirsa ForwardedHeaders middleware'i eklenmeli, yoksa tum istemciler tek partition'a duser.
+builder.Services.AddRateLimiter(limiter =>
+{
+    limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    limiter.OnRejected = async (ctx, ct) =>
+    {
+        ctx.HttpContext.Response.ContentType = "application/json; charset=utf-8";
+        await ctx.HttpContext.Response.WriteAsync(
+            "{\"ok\":false,\"error\":\"Çok fazla istek gönderildi. Lütfen biraz bekleyip yeniden deneyin.\"}", ct);
+    };
+
+    static string ClientIp(HttpContext ctx)
+        => ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    static RateLimitPartition<string> PerIpFixedWindow(HttpContext ctx, int permitPerMinute)
+        => RateLimitPartition.GetFixedWindowLimiter(ClientIp(ctx), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = permitPerMinute,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+
+    // Kimliksiz auth yuzeyi: login POST + sirket listesi (e-posta enumeration'i da yavaslatir)
+    limiter.AddPolicy("auth", ctx => PerIpFixedWindow(ctx, 20));
+
+    // Anonim token'li public linkler (hizli onay, not paylasimi)
+    limiter.AddPolicy("public-share", ctx => PerIpFixedWindow(ctx, 30));
+
+    // Webhook — Meta Cloud API burst'lerine tolerans birak
+    limiter.AddPolicy("webhook", ctx => PerIpFixedWindow(ctx, 300));
+
+    // Pahali operasyonlar (AI cagrisi, Excel export) — girisli kullanici bazinda
+    limiter.AddPolicy("expensive", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.Identity?.IsAuthenticated == true ? $"u:{ctx.User.Identity!.Name}" : $"ip:{ClientIp(ctx)}",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
+});
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalFlowService,
                            CalibraHub.Application.Services.ApprovalFlowService>();
 builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IApprovalNotificationDispatcher,
@@ -285,8 +332,6 @@ builder.Services.AddScoped<ICardGroupRepository, SqlCardGroupRepository>();
 builder.Services.AddScoped<ICollaborationLockRepository, SqlCollaborationLockRepository>();
 builder.Services.AddScoped<IDesignTemplateRepository, SqlDesignTemplateRepository>();
 builder.Services.AddScoped<IIntegrationApiProfileRepository, SqlIntegrationApiProfileRepository>();
-builder.Services.AddHttpClient();
-builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IDocumentRepository, SqlDocumentRepository>();
 builder.Services.AddScoped<IDocumentSourceRepository, SqlDocumentSourceRepository>();
 builder.Services.AddScoped<IArgeProjectRepository, SqlArgeProjectRepository>();
@@ -376,8 +421,7 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAiTo
 // 2026-05-24: Calibo dokuman okuyucu — xlsx/pdf/docx text extraction
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IDocumentTextExtractor,
                               CalibraHub.Infrastructure.DocumentExtraction.DocumentTextExtractor>();
-// In-memory pending action cache (write tool onay flow'u icin)
-builder.Services.AddMemoryCache();
+// In-memory pending action cache (write tool onay flow'u icin) — IMemoryCache kaydı satır ~136'da
 builder.Services.AddSingleton<CalibraHub.Application.Services.Ai.Tools.AiPendingActionStore>();
 // Web tarafindan HttpContext'ten user context dolduran scoped impl
 builder.Services.AddScoped<CalibraHub.Application.Services.Ai.Tools.ICalibroUserContext,
@@ -996,6 +1040,10 @@ app.UseRouting();
 app.UseSession();  // GateController'in Session'a erisimi icin
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Auth'tan SONRA: "expensive" policy'si kullanici kimligine gore partition'lar,
+// bu yuzden HttpContext.User dolmus olmali.
+app.UseRateLimiter();
 
 // CORS — Authentication'dan sonra ki cookie-based credentials akabilsin.
 // Sadece [EnableCors("MobileApi")] olan endpoint'lerde devreye girer.

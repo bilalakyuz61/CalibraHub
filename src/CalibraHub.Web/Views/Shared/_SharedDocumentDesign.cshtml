@@ -470,8 +470,8 @@
     // React bundle'i async yukle ve mount helper'lari hazir olunca mount et.
     // Hem line grid hem widget renderer icin polling kullanilir — Razor'un
     // DOMContentLoaded'inda bundle henuz hazir olmayabilir.
-    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
     // CSS <link> tek sefer
     if (!document.querySelector('link[data-sdd-widgets-css]')) {

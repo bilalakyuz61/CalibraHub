@@ -52,7 +52,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
 
         cmd.CommandText = $@"
             SELECT d.[Id], d.[Code], d.[Name], d.[ViewId], v.[Code] AS ViewCode,
-                   d.[Category], d.[IsShared], d.[OwnerUserId], d.[UpdatedAt]
+                   d.[Category], d.[IsShared], d.[OwnerUserId], d.[Updated]
             FROM {_rptDef} d
             INNER JOIN {_rptView} v ON v.[Id] = d.[ViewId]
             WHERE d.[IsActive] = 1
@@ -61,7 +61,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
                  OR @IsAdmin = 1
                  OR (d.[IsShared] = 1 AND ({roleClause}))
               )
-            ORDER BY d.[UpdatedAt] DESC, d.[Name];";
+            ORDER BY d.[Updated] DESC, d.[Name];";
         cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@IsAdmin", isAdmin);
 
@@ -89,7 +89,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[ViewId],[Category],[ConfigJson],[OwnerUserId],
-                   [IsShared],[IsActive],[CreatedAt],[UpdatedAt]
+                   [IsShared],[IsActive],[Created],[Updated]
             FROM {_rptDef} WHERE [Id] = @Id;";
         cmd.Parameters.AddWithValue("@Id", id);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -102,7 +102,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[ViewId],[Category],[ConfigJson],[OwnerUserId],
-                   [IsShared],[IsActive],[CreatedAt],[UpdatedAt]
+                   [IsShared],[IsActive],[Created],[Updated]
             FROM {_rptDef} WHERE [Code] = @Code;";
         cmd.Parameters.AddWithValue("@Code", code);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -151,7 +151,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
                     [OwnerUserId] = @OwnerUserId,
                     [IsShared]    = @IsShared,
                     [IsActive]    = @IsActive,
-                    [UpdatedAt]   = SYSUTCDATETIME()
+                    [Updated]     = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
                 INSERT ([Code],[Name],[ViewId],[Category],[ConfigJson],[OwnerUserId],[IsShared],[IsActive])
                 VALUES (@Code,@Name,@ViewId,@Category,@ConfigJson,@OwnerUserId,@IsShared,@IsActive);
@@ -210,7 +210,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_rptDef} SET [IsActive] = 0, [UpdatedAt] = SYSUTCDATETIME() WHERE [Id] = @Id;";
+        cmd.CommandText = $"UPDATE {_rptDef} SET [IsActive] = 0, [Updated] = SYSUTCDATETIME() WHERE [Id] = @Id;";
         cmd.Parameters.AddWithValue("@Id", id);
         await cmd.ExecuteNonQueryAsync(ct);
     }

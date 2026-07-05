@@ -226,7 +226,7 @@ public sealed class LocationController : Controller
                 (SELECT COUNT(*) FROM [{s}].[DocumentLine]   WHERE LocationId = @id OR FromLocationId = @id) AS StockDocCount,
                 (SELECT COUNT(*) FROM [{s}].[Machine]        WHERE LocationId = @id)                               AS MachineCount,
                 (SELECT COUNT(*) FROM [{s}].[Asset]          WHERE LocationId = @id)                               AS AssetCount,
-                (SELECT COUNT(*) FROM [{s}].[item_locations] WHERE location_id = @id)                              AS ItemLocCount
+                (SELECT COUNT(*) FROM [{s}].[ItemLocation]   WHERE LocationId = @id)                               AS ItemLocCount
             """;
         cmd.Parameters.AddWithValue("@id", id);
         {
@@ -273,7 +273,7 @@ public sealed class LocationController : Controller
         }
         if (itemLocCount > 0)
         {
-            cmd.CommandText = $"SELECT TOP 3 ISNULL(i.[Name], i.[Code]) FROM [{s}].[item_locations] il JOIN [{s}].[Items] i ON i.[Id] = il.[item_id] WHERE il.location_id = @id ORDER BY il.id DESC";
+            cmd.CommandText = $"SELECT TOP 3 ISNULL(i.[Name], i.[Code]) FROM [{s}].[ItemLocation] il JOIN [{s}].[Items] i ON i.[Id] = il.[ItemId] WHERE il.[LocationId] = @id ORDER BY il.[Id] DESC";
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) itemLocSamples.Add(r.IsDBNull(0) ? string.Empty : r.GetString(0));
         }

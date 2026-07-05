@@ -5,10 +5,10 @@
     ViewData["FormCode"] = "PRODUCT_TREES";
     ViewData["BodyClass"] = "page-product-trees-list";
     ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
-        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>product_trees</td><td style='padding:6px 8px;'>Recete master bilgileri (mamul + opsiyonel kombinasyon + gorsel)</td></tr>"
-        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>product_tree_lines</td><td style='padding:6px 8px;'>Recete bilesenleri (miktar, fire, kombinasyon)</td></tr>"
-        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Items</td><td style='padding:6px 8px;'>Mamul ve bilesen referans tablosu</td></tr>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>ItemConfiguration</td><td style='padding:6px 8px;'>Kombinasyon (config) tanimlari</td></tr>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>BOM</td><td style='padding:6px 8px;'>Reçete master bilgileri (mamul + opsiyonel kombinasyon + görsel + rota)</td></tr>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>BOMLine</td><td style='padding:6px 8px;'>Reçete bileşenleri (miktar, fire, kombinasyon, açıklama)</td></tr>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Items</td><td style='padding:6px 8px;'>Mamul ve bileşen referans tablosu</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>ItemConfiguration</td><td style='padding:6px 8px;'>Kombinasyon (config) tanımları</td></tr>"
         + "</table>";
 
     // Inline JSON: SmartBoard config (server-side hazirlandi)
@@ -55,11 +55,15 @@
 <script>
 (function() {
     var BOARD_CONFIG = @Html.Raw(boardConfigJson);
-    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-    var CSS_URL = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    // Dosya-hash versiyonlama (_Layout ile ayni) — ?v=Ticks her istekte degistigi
+    // icin bundle hic cache'lenemiyordu; artik degismedikce cache'ten gelir.
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
+    // Dis shell (workspace=1 olmayan) context'inde bu script de calisir ama mount
+    // elementi yoktur — sessizce cik (console.error gurultusu yaratma).
     var el = document.getElementById('reactSmartBoard');
-    if (!el) { console.error('[BOM] Mount element yok'); return; }
+    if (!el) return;
 
     function showError(msg) {
         el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">'

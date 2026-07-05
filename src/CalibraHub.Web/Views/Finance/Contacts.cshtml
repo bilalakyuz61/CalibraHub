@@ -78,8 +78,8 @@
 @section Scripts {
 <script>
 (function () {
-    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
     // Combined payload endpoint — config + ilk sayfa verisi tek istek.
     // HTML response anlik (DB cagirisi yok), spinner hemen gorunur, bundle ve
     // veri PARALEL yuklenir (eskiden HTML render 3 sn DB bekliyordu).

@@ -5071,8 +5071,13 @@ END;";
             -- yeni kolonlar yeni eklendiyse, default SYSUTCDATETIME yerine eski degeri kullan).
             -- EXEC sp_executesql ile deferred parsing (ALTER ile ayni batch'te yeni kolon
             -- adi parser tarafindan goruluyor olabilir ama guvenli yontem dynamic SQL).
+            -- 2026-07-05 FIX: onceki surumde ''0001-01-01'' literal'i vardi — DATETIME
+            -- alt siniri 1753 oldugundan tablo ILK SATIRINI alir almaz her acilis
+            -- SqlException 242 (out-of-range) ile cokuyordu (satir yokken predicate
+            -- hic degerlendirilmedigi icin bos DB'de gorunmuyordu). DATETIME kolonda
+            -- 0001-01-01 zaten temsil edilemez; NULL kontrolu tek basina ayni amaci gorur.
             EXEC sp_executesql N'
-                IF EXISTS (SELECT 1 FROM [{s}].[BOM] WHERE [Created] IS NULL OR [Created] = ''0001-01-01'')
+                IF EXISTS (SELECT 1 FROM [{s}].[BOM] WHERE [Created] IS NULL)
                     UPDATE [{s}].[BOM] SET [Created] = [CreatedAt] WHERE [Created] IS NULL;
                 UPDATE [{s}].[BOM] SET [Updated] = [UpdatedAt]
                     WHERE [Updated] IS NULL AND [UpdatedAt] IS NOT NULL AND [UpdatedAt] <> [CreatedAt];
@@ -5131,6 +5136,7 @@ END;";
                     [Quantity]              DECIMAL(18,4)   NOT NULL CONSTRAINT [df_product_tree_lines_qty]   DEFAULT 1,
                     [ScrapRatio]            DECIMAL(18,4)   NOT NULL CONSTRAINT [df_product_tree_lines_scrap] DEFAULT 0,
                     [LineGuid]              UNIQUEIDENTIFIER NOT NULL CONSTRAINT [df_product_tree_lines_guid] DEFAULT NEWID(),
+                    [Note]                  NVARCHAR(1000)  NULL,
                     [CreatedById]             INT   NULL,
                     [Created]               DATETIME       NOT NULL CONSTRAINT [df_BOMLine_Created] DEFAULT SYSUTCDATETIME(),
                     CONSTRAINT [fk_product_tree_lines_trees]
@@ -5150,6 +5156,10 @@ END;";
 
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[BOMLine]') AND name = N'Created')
                 ALTER TABLE [{s}].[BOMLine] ADD [Created] DATETIME NOT NULL CONSTRAINT [df_BOMLine_Created] DEFAULT SYSUTCDATETIME();
+
+            -- 2026-07-05: satir aciklamasi — UI'da toplanan Not degeri artik persist ediliyor.
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[BOMLine]') AND name = N'Note')
+                ALTER TABLE [{s}].[BOMLine] ADD [Note] NVARCHAR(1000) NULL;
 
             -- BOM.IsActive filtered index — soft-delete sonrasi sadece aktif kayitlari
             -- hizla cekmek icin (liste sayfasi WHERE [IsActive]=1 ile sorgulanir).
@@ -6818,13 +6828,14 @@ END;";
                     ALTER TABLE [{s}].[IntegrationFieldDoc] ADD [UpdatedById] INT NULL;
             END
 
-            -- 5) ApiProfile.provider_code — hangi provider'a bagli (Netsis vb.)
+            -- 5) ApiProfile.ProviderCode — hangi provider'a bagli (Netsis vb.)
             -- Denormalized string (FK degil) — admin UI'da dropdown'dan secilir,
             -- kosul: IntegrationProvider.Code ile match olmali (runtime kontrol).
+            -- Eski snake_case kurulumlar MigrateColumnRenamesAsync ile ProviderCode'a rename edilir.
             IF NOT EXISTS (SELECT 1 FROM sys.columns
                 WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationApiProfile]') AND name IN (N'provider_code', N'ProviderCode'))
             BEGIN
-                ALTER TABLE [{s}].[IntegrationApiProfile] ADD [provider_code] NVARCHAR(40) NULL;
+                ALTER TABLE [{s}].[IntegrationApiProfile] ADD [ProviderCode] NVARCHAR(40) NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -12441,6 +12452,8 @@ END;";
             ("ItemLocation", "id",                                "Id"),
             ("ItemLocation", "item_id",                           "ItemId"),
             ("ItemLocation", "location_id",                       "LocationId"),
+            ("ItemLocation", "is_default",                        "IsDefault"),
+            ("ItemLocation", "sort_order",                        "SortOrder"),
 
             // 2026-07-05: CardGroup (yeni adı)
             ("CardGroup",    "id",                                "Id"),
@@ -12453,6 +12466,7 @@ END;";
             // 2026-07-05: CardGroupMapping (yeni adı)
             ("CardGroupMapping", "id",                            "Id"),
             ("CardGroupMapping", "entity_type",                   "EntityType"),
+            ("CardGroupMapping", "entity_id",                     "EntityId"),
             ("CardGroupMapping", "level",                         "Level"),
             ("CardGroupMapping", "card_group_id",                 "CardGroupId"),
 
@@ -12474,6 +12488,7 @@ END;";
             ("IntegrationApiProfile", "auth_type",                "AuthType"),
             ("IntegrationApiProfile", "base_url",                 "BaseUrl"),
             ("IntegrationApiProfile", "auth_config_json",         "AuthConfigJson"),
+            ("IntegrationApiProfile", "provider_code",            "ProviderCode"),
 
             // 2026-07-05: Note (yeni adı — tüm snake_case kolonlar)
             ("Note",         "id",                                "Id"),

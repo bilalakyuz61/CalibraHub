@@ -626,8 +626,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // 2026-07-05: kolon adi [CreatedAt] degil [Created] — initializer tabloyu
+        // [Created] ile kurar (satir 2350); eski ad taze kurulumda "Invalid column
+        // name" 500'u uretiyordu (GetSnapshotAsync -> malzeme karti kaydi dahil).
         command.CommandText = $"""
-            SELECT [Id], [CompanyId], [Name], [DataType], [UnitOfMeasure], [VisibleInDesign], [IsActive], [CreatedAt]
+            SELECT [Id], [CompanyId], [Name], [DataType], [UnitOfMeasure], [VisibleInDesign], [IsActive], [Created]
             FROM {_propertiesTableName}
             WHERE [CompanyId] = @CompanyId
             ORDER BY [Name];
@@ -709,11 +712,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // 2026-07-05: [CreatedAt] → [Created] (MigrateColumnRenamesAsync ile senkron)
         command.CommandText = $"""
-            SELECT [Id], [ItemId], [FeatureId], [FeatureValueId], [IsActive], [CreatedAt],
+            SELECT [Id], [ItemId], [FeatureId], [FeatureValueId], [IsActive], [Created],
                    ISNULL([PrintDescriptionInDesign], 1) AS [PrintDescriptionInDesign]
             FROM {_itemFeatureMappingsTableName}
-            ORDER BY [CreatedAt] DESC;
+            ORDER BY [Created] DESC;
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -747,8 +751,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // 2026-07-05: [Created] → [Created] (MigrateColumnRenamesAsync ile senkron)
         command.CommandText = $"""
-            SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate], [VisibleInDesign]
+            SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created], [VisibleInDesign]
             FROM {_itemConfigurationTableName}
             ORDER BY [RecordType], [ParentId], [RecordCode], [Id];
             """;
@@ -851,7 +856,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET @GeneratedCode = N'OZ' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_itemConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [VisibleInDesign], [CreatedDate])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [VisibleInDesign], [Created])
             VALUES
                 (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, @VisibleInDesign, GETDATE());
 
@@ -900,7 +905,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET @GeneratedCode = N'DG' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_itemConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created])
             VALUES
                 (@FeatureId, N'VALUE', @GeneratedCode, @RecordName, NULL, @Aciklama, @IsActive, GETDATE());
 
@@ -948,7 +953,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET @GeneratedCode = @RelatedMaterialCode + N'-' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_itemConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created])
             VALUES
                 (@ValueId, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());
 
@@ -988,13 +993,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // Global sayac: CMB + 12 haneli sifir-dolgulu sira no (toplam 15 karakter)
         sql.AppendLine($"SELECT @NextNo = ISNULL(MAX(TRY_CAST(SUBSTRING([RecordCode], 4, 12) AS INT)), 0) + 1 FROM {_itemConfigurationTableName} WITH (UPDLOCK, HOLDLOCK) WHERE [RecordType] = N'CONFIG' AND LEFT([RecordCode], 3) = N'CMB' AND LEN([RecordCode]) = 15;");
         sql.AppendLine("SET @GeneratedCode = N'CMB' + RIGHT(REPLICATE(N'0', 12) + CAST(@NextNo AS NVARCHAR(12)), 12);");
-        sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]) VALUES (NULL, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());");
+        sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created]) VALUES (NULL, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());");
         sql.AppendLine("DECLARE @ConfigId INT = SCOPE_IDENTITY();");
 
         var pIndex = 0;
         foreach (var valId in valueIds)
         {
-            sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]) VALUES (@ConfigId, N'CONFIG', CAST(NEWID() AS NVARCHAR(100)), CAST(@ValueId{pIndex} AS NVARCHAR(255)), NULL, @RelatedMaterialCode, 1, GETDATE());");
+            sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created]) VALUES (@ConfigId, N'CONFIG', CAST(NEWID() AS NVARCHAR(100)), CAST(@ValueId{pIndex} AS NVARCHAR(255)), NULL, @RelatedMaterialCode, 1, GETDATE());");
             command.Parameters.Add(new SqlParameter($"@ValueId{pIndex}", valId));
             pIndex++;
         }
@@ -1042,7 +1047,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         {
             sql.AppendLine($"""
                 INSERT INTO {_itemConfigurationTableName}
-                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
+                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [Created])
                 VALUES
                     (@FeatureId, N'FEATURE_STOCK', @StockCode{index}, @StockCode{index}, NULL, @StockCode{index}, 1, GETDATE());
                 """);
@@ -1117,7 +1122,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             {
                 headerCmd.CommandText = $"""
                     INSERT INTO {_itemFeatureMappingsTableName}
-                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [Created], [Updated])
                     VALUES
                         (@ItemId, @FeatureId, NULL, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
                     """;
@@ -1135,7 +1140,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 await using var valCmd = connection.CreateCommand();
                 valCmd.CommandText = $"""
                     INSERT INTO {_itemFeatureMappingsTableName}
-                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [Created], [Updated])
                     VALUES
                         (@ItemId, @FeatureId, @FeatureValueId, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
                     """;
@@ -1953,7 +1958,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             {
                 headerCmd.CommandText = $"""
                     INSERT INTO {_itemFeatureMappingsTableName}
-                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [Created], [Updated])
                     VALUES
                         (@ItemId, @FeatureId, NULL, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
                     """;
@@ -1971,7 +1976,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 await using var valCmd = connection.CreateCommand();
                 valCmd.CommandText = $"""
                     INSERT INTO {_itemFeatureMappingsTableName}
-                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [Created], [Updated])
                     VALUES
                         (@ItemId, @FeatureId, @FeatureValueId, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
                     """;
@@ -2295,9 +2300,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         var companyId = property.CompanyId > 0 ? property.CompanyId : _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // 2026-07-05: kolonlar [Created]/[Updated] (MigrateColumnRenamesAsync ile senkron)
         command.CommandText = $"""
             INSERT INTO {_propertiesTableName}
-                ([CompanyId], [Name], [DataType], [UnitOfMeasure], [VisibleInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                ([CompanyId], [Name], [DataType], [UnitOfMeasure], [VisibleInDesign], [IsActive], [Created], [Updated])
             VALUES
                 (@CompanyId, @Name, @DataType, @UnitOfMeasure, @VisibleInDesign, @IsActive, @CreatedAt, @UpdatedAt);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
@@ -2328,7 +2334,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [UnitOfMeasure] = @UnitOfMeasure,
                 [VisibleInDesign] = @VisibleInDesign,
                 [IsActive] = @IsActive,
-                [UpdatedAt] = @UpdatedAt
+                [Updated] = @UpdatedAt
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
@@ -2393,7 +2399,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_itemFeatureMappingsTableName}
-                ([ItemId], [FeatureId], [FeatureValueId], [IsActive], [CreatedAt], [UpdatedAt])
+                ([ItemId], [FeatureId], [FeatureValueId], [IsActive], [Created], [Updated])
             VALUES
                 (@ItemId, @FeatureId, @FeatureValueId, @IsActive, @CreatedAt, @UpdatedAt);
             """;
@@ -2419,7 +2425,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             UPDATE {_itemFeatureMappingsTableName}
             SET
                 [FeatureValueId] = @FeatureValueId,
-                [UpdatedAt] = @UpdatedAt
+                [Updated] = @UpdatedAt
             WHERE [Id] = @Id;
             """;
 
@@ -2470,7 +2476,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 l.[Quantity],
                 l.[ScrapRatio],
                 l.[LineGuid],
-                t.[RoutingId], r.[Code] AS RoutingCode, r.[Name] AS RoutingName
+                t.[RoutingId], r.[Code] AS RoutingCode, r.[Name] AS RoutingName,
+                l.[Note]     AS [LineNote]
             FROM {_productTreesTableName} t
             LEFT JOIN {_productTreeLinesTableName} l ON l.[BOMId] = t.[Id]
             LEFT JOIN [{_schema}].[Routing] r ON r.[Id] = t.[RoutingId]
@@ -2524,6 +2531,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     Quantity   = reader.IsDBNull(12) ? 0m : reader.GetDecimal(12),
                     ScrapRatio = reader.IsDBNull(13) ? 0m : reader.GetDecimal(13),
                     LineGuid   = reader.IsDBNull(14) ? Guid.Empty : reader.GetGuid(14),
+                    Note       = reader.IsDBNull(18) ? null : reader.GetString(18),
                 });
             }
         }
@@ -2557,7 +2565,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 lcfg.[RecordCode] AS LineConfigCode,
                 l.[Quantity],
                 l.[ScrapRatio],
-                t.[RoutingId], r.[Code] AS RoutingCode, r.[Name] AS RoutingName
+                t.[RoutingId], r.[Code] AS RoutingCode, r.[Name] AS RoutingName,
+                l.[Note]     AS [LineNote]
             FROM {_productTreesTableName} t
             INNER JOIN {_stockCardsTableName} pi ON pi.[id] = t.[ItemId]
             LEFT  JOIN [{_schema}].[ItemConfiguration] pcfg ON pcfg.[Id] = t.[ConfigId]
@@ -2615,7 +2624,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     ConfigId:              reader.IsDBNull(14) ? null : reader.GetInt32(14),
                     ComponentConfigCode:   reader.IsDBNull(15) ? null : reader.GetString(15),
                     Quantity:              reader.GetDecimal(16),
-                    ScrapRatio:            reader.GetDecimal(17)));
+                    ScrapRatio:            reader.GetDecimal(17),
+                    Note:                  reader.IsDBNull(21) ? null : reader.GetString(21)));
             }
         }
 
@@ -2662,9 +2672,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Transaction = transaction;
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[CreatedById],[Created])
+                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[Note],[CreatedById],[Created])
                 VALUES
-                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@CreatedById,SYSUTCDATETIME());
+                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@Note,@CreatedById,SYSUTCDATETIME());
                 """;
             lineCmd.Parameters.Add(new SqlParameter("@BOMId",   newId));
             lineCmd.Parameters.Add(new SqlParameter("@ItemId",  line.ItemId));
@@ -2672,6 +2682,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Parameters.Add(new SqlParameter("@Qty",      line.Quantity));
             lineCmd.Parameters.Add(new SqlParameter("@Scrap",    line.ScrapRatio));
             lineCmd.Parameters.Add(new SqlParameter("@LineGuid", line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
+            lineCmd.Parameters.Add(new SqlParameter("@Note",     (object?)line.Note ?? DBNull.Value));
             lineCmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)line.CreatedById ?? (object?)tree.CreatedById ?? DBNull.Value));
             await lineCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -2734,9 +2745,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             // kim yaptigini gosterir; satir CreatedById ayni save'i yapan kullanici.
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[CreatedById],[Created])
+                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid],[Note],[CreatedById],[Created])
                 VALUES
-                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@CreatedById,SYSUTCDATETIME());
+                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid,@Note,@CreatedById,SYSUTCDATETIME());
                 """;
             lineCmd.Parameters.Add(new SqlParameter("@BOMId",   tree.Id));
             lineCmd.Parameters.Add(new SqlParameter("@ItemId",  line.ItemId));
@@ -2744,6 +2755,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Parameters.Add(new SqlParameter("@Qty",      line.Quantity));
             lineCmd.Parameters.Add(new SqlParameter("@Scrap",    line.ScrapRatio));
             lineCmd.Parameters.Add(new SqlParameter("@LineGuid", line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
+            lineCmd.Parameters.Add(new SqlParameter("@Note",     (object?)line.Note ?? DBNull.Value));
             lineCmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)line.CreatedById ?? (object?)tree.UpdatedById ?? DBNull.Value));
             await lineCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -3004,7 +3016,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using (var cmd1 = connection.CreateCommand())
         {
             cmd1.CommandText = $"""
-                SELECT cfg.[Id], cfg.[RecordCode], cfg.[RecordName], cfg.[IsActive], cfg.[CreatedDate],
+                SELECT cfg.[Id], cfg.[RecordCode], cfg.[RecordName], cfg.[IsActive], cfg.[Created],
                        i.[Id] AS ItemId, i.[Code] AS ItemCode, i.[Name] AS ItemName
                 FROM {_itemConfigurationTableName} cfg
                 LEFT JOIN {_stockCardsTableName} i ON i.[Code] = cfg.[RelatedMaterialCode]
@@ -3218,7 +3230,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd.Parameters.Add(new SqlParameter(p, ids[i]));
         }
         cmd.CommandText = $"""
-            SELECT [Id], [ItemId], [FeatureId], [FeatureValueId], [IsActive], [CreatedAt],
+            SELECT [Id], [ItemId], [FeatureId], [FeatureValueId], [IsActive], [Created],
                    ISNULL([PrintDescriptionInDesign], 1) AS [PrintDescriptionInDesign]
             FROM {_itemFeatureMappingsTableName}
             WHERE [ItemId] IN ({string.Join(",", paramNames)})

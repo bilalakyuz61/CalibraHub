@@ -1077,8 +1077,8 @@
         el.innerHTML = '<div style="padding:20px;color:#94a3b8;">React panel yükleniyor…</div>';
 
         // Bundle script + css yüklü mü? Değilse şimdi ekle.
-        var BUNDLE_JS  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-        var BUNDLE_CSS = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var BUNDLE_JS  = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+        var BUNDLE_CSS = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
         if (!document.querySelector('link[data-ai-bundle]')) {
             var link = document.createElement('link');

@@ -16,17 +16,20 @@ public sealed class PriceListController : Controller
     private readonly ILogisticsConfigurationService _logistics;
     private readonly ICurrencyService _currencySvc;
     private readonly IFinanceService _finance;
+    private readonly ILogger<PriceListController> _logger;
 
     public PriceListController(
         IPriceListService svc,
         ILogisticsConfigurationService logistics,
         ICurrencyService currencySvc,
-        IFinanceService finance)
+        IFinanceService finance,
+        ILogger<PriceListController> logger)
     {
         _svc         = svc;
         _logistics   = logistics;
         _currencySvc = currencySvc;
         _finance     = finance;
+        _logger      = logger;
     }
 
     // ── Fiyat Gruplari (CalibraSmartBoard kart sistemi) ─────────────────────
@@ -597,8 +600,7 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PriceList.GetPriceListEntries] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {"Islem sirasinda bir hata olustu."}");
-            Console.WriteLine(ex.StackTrace);
+            _logger.LogError(ex, "GetPriceListEntries hatasi (groupId={GroupId})", groupId);
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -685,8 +687,7 @@ public sealed class PriceListController : Controller
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PriceList.ExportExcel] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {"Islem sirasinda bir hata olustu."}");
-            Console.WriteLine(ex.StackTrace);
+            _logger.LogError(ex, "ExportExcel hatasi (groupId={GroupId})", groupId);
             return Content("Excel oluşturulamadı: " + "Islem sirasinda bir hata olustu.", "text/plain");
         }
     }

@@ -63,18 +63,19 @@ public sealed class BomController : Controller
         return new
         {
             boardKey = "logistics-boms",
-            title = "Urun Agaci (Receteler)",
-            subtitle = totalCount.ToString("N0") + " recete",
+            title = "Ürün Ağacı (Reçeteler)",
+            subtitle = totalCount.ToString("N0") + " reçete",
             icon = "GitBranch",
             iconColor = "emerald",
-            searchPlaceholder = "Recete ara... (mamul kodu, adi)",
-            emptyText = "Henuz recete tanimlanmamis",
+            searchPlaceholder = "Reçete ara... (mamul kodu, adı)",
+            emptyText = "Henüz reçete tanımlanmamış",
             apiUrl = "/Logistics/GetBOMsPage",
             totalCount,
             pageSize = BomPageSize,
+            itemLabel = "reçete",   // SmartBoard sayfali mod sayac etiketi ("N reçete")
             actions = new[]
             {
-                new { id = "new", label = "Yeni Recete", icon = "Plus", variant = "primary", url = "/Logistics/BOMEdit" }
+                new { id = "new", label = "Yeni Reçete", icon = "Plus", variant = "primary", url = "/Logistics/BOMEdit" }
             },
             masterWidgets,
             entities,
@@ -96,7 +97,7 @@ public sealed class BomController : Controller
                           ? b.ItemCode
                           : $"{b.ItemCode} · {b.ConfigCode}",
             description = string.IsNullOrEmpty(b.Description)
-                          ? $"{b.Lines.Count} bilesen"
+                          ? $"{b.Lines.Count} bileşen"
                           : b.Description,
             imageUrl    = b.ImageData != null && !string.IsNullOrEmpty(b.ImageMimeType)
                           ? $"data:{b.ImageMimeType};base64,{Convert.ToBase64String(b.ImageData)}"
@@ -107,7 +108,7 @@ public sealed class BomController : Controller
             widgets     = Array.Empty<object>(),
             primaryAction = new
             {
-                label = "Duzenle",
+                label = "Düzenle",
                 icon  = "Edit",
                 url   = $"/Logistics/BOMEdit?id={b.Id}",
             },
@@ -116,7 +117,7 @@ public sealed class BomController : Controller
                 label   = "Sil",
                 icon    = "Trash2",
                 apiUrl  = $"/Logistics/DeleteBOMJson?id={b.Id}",
-                confirm = "Bu receteyi silmek istediginizden emin misiniz?",
+                confirm = "Bu reçeteyi silmek istediğinizden emin misiniz?",
             },
         }).ToList();
 
@@ -146,9 +147,9 @@ public sealed class BomController : Controller
             var entities = BuildEntities(pageItems);
             return Json(new { entities, totalCount, page, pageSize });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return Json(new { error = "Islem sirasinda bir hata olustu." });
+            return Json(new { error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
@@ -478,7 +479,44 @@ public sealed class BomController : Controller
             componentConfigCode   = l.ComponentConfigCode,
             quantity              = l.Quantity,
             scrapRatio            = l.ScrapRatio,
+            note                  = l.Note,
         }),
     };
+
+    /// <summary>
+    /// 2026-07-05: Excel'den toplu yapıştırma akışı için toplu kod çözümleyici.
+    /// POST /Logistics/ResolveItemCodes  body: { codes: ["A","B",...] }
+    /// Dönüş: her kod için { code, found, id, resolvedCode, name, hasConfig }.
+    /// Tek Items okuması ile N kodu çözer — satır başına StockLookup çağrısı yapılmaz.
+    /// </summary>
+    public sealed record ResolveItemCodesRequest(List<string>? Codes);
+
+    [HttpPost]
+    public async Task<IActionResult> ResolveItemCodes([FromBody] ResolveItemCodesRequest? request, CancellationToken ct)
+    {
+        var codes = (request?.Codes ?? new List<string>())
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(500)
+            .ToList();
+        if (codes.Count == 0) return Json(Array.Empty<object>());
+
+        var items = await _logisticsConfigurationService.GetItemsForLookupAsync(ct);
+        var byCode = items
+            .GroupBy(i => i.Code.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var result = codes.Select(c =>
+        {
+            if (byCode.TryGetValue(c, out var it))
+                return new ResolvedItemCodeDto(c, true, it.Id, it.Code.Trim(), it.Name, it.Combinations);
+            return new ResolvedItemCodeDto(c, false, 0, null, null, false);
+        });
+        return Json(result);
+    }
+
+    private sealed record ResolvedItemCodeDto(
+        string Code, bool Found, int Id, string? ResolvedCode, string? Name, bool HasConfig);
 }
 

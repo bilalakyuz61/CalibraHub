@@ -7,6 +7,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Services.Ai.Tools;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -19,6 +20,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CompanySettings)]
+[EnableRateLimiting("expensive")]
 public sealed class AiController : Controller
 {
     private readonly IAiChatService _chat;

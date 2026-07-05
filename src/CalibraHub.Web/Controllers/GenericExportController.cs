@@ -33,6 +33,7 @@ namespace CalibraHub.Web.Controllers;
 [Route("api/export")]
 [IgnoreAntiforgeryToken]
 [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Dashboards)]
+[Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("expensive")]
 public sealed class GenericExportController : ControllerBase
 {
     private readonly ILogger<GenericExportController> _logger;

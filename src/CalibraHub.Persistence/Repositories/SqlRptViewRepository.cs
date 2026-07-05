@@ -35,7 +35,7 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[CreatedAt],[UpdatedAt]
+            SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[Created],[Updated]
             FROM {_rptView}
             WHERE (@IncludeInactive = 1 OR [IsActive] = 1)
             ORDER BY [Code];";
@@ -53,7 +53,7 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[CreatedAt],[UpdatedAt]
+            SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[Created],[Updated]
             FROM {_rptView} WHERE [Id] = @Id;";
         cmd.Parameters.AddWithValue("@Id", id);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -65,7 +65,7 @@ public sealed class SqlRptViewRepository : IRptViewRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[CreatedAt],[UpdatedAt]
+            SELECT [Id],[Code],[Name],[SqlObjectName],[Description],[IsActive],[Created],[Updated]
             FROM {_rptView} WHERE [Code] = @Code;";
         cmd.Parameters.AddWithValue("@Code", code);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -147,7 +147,7 @@ public sealed class SqlRptViewRepository : IRptViewRepository
                     [SqlObjectName] = @SqlObjectName,
                     [Description]   = @Description,
                     [IsActive]      = @IsActive,
-                    [UpdatedAt]     = SYSUTCDATETIME()
+                    [Updated]       = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
                 INSERT ([Code],[Name],[SqlObjectName],[Description],[IsActive])
                 VALUES (@Code,@Name,@SqlObjectName,@Description,@IsActive);

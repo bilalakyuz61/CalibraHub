@@ -300,8 +300,11 @@ export default function SmartBoard(props) {
     return arr
   }, [search, entities, isPaginated, filters])
 
+  // Sayfali modda sayac etiketi board config'ten gelir (itemLabel: "reçete", "cari"...).
+  // Varsayilan 'cari' — pagination ilk Cari board'unda dogdu; itemLabel gondermeyen
+  // mevcut ekranlarin davranisi degismesin.
   var subtitle = isPaginated
-    ? (totalCount > 0 ? totalCount.toLocaleString('tr-TR') + ' cari' : '')
+    ? (totalCount > 0 ? totalCount.toLocaleString('tr-TR') + ' ' + (props.itemLabel || 'cari') : '')
     : (props.subtitle || '')
 
   var handleActionClick = useCallback(function (action) {

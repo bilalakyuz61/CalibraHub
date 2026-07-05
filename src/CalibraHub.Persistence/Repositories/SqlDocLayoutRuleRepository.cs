@@ -95,7 +95,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
             WHERE r.[IsActive] = 1
               AND r.[DocType] = @DocType
               AND {string.Join(" AND ", whereClauses)}
-            ORDER BY ({string.Join(" + ", weightTerms)}) DESC, r.[UpdatedAt] DESC;";
+            ORDER BY ({string.Join(" + ", weightTerms)}) DESC, r.[Updated] DESC;";
 
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
@@ -128,7 +128,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
             SELECT TOP 1 [Id]
             FROM {_layoutTable} WITH (READUNCOMMITTED)
             WHERE [IsActive] = 1 AND [DocType] = @DocType
-            ORDER BY [IsDefault] DESC, [UpdatedAt] DESC;";
+            ORDER BY [IsDefault] DESC, [Updated] DESC;";
 
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
@@ -145,7 +145,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
     private string SelectRuleFields() => $@"
         r.[Id], r.[DocType], r.[LayoutId], l.[Name] AS LayoutName,
         r.[CustomerId], r.[UserId], r.[BranchId], r.[WarehouseId],
-        r.[IsActive], r.[UpdatedAt], r.[ContactGroupId], r.[AccountType]";
+        r.[IsActive], r.[Updated], r.[ContactGroupId], r.[AccountType]";
 
     public async Task<IReadOnlyCollection<DocLayoutRuleDto>> ListAllAsync(CancellationToken ct)
     {
@@ -154,7 +154,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
             FROM {_ruleTable} r WITH (READUNCOMMITTED)
             INNER JOIN {_layoutTable} l WITH (READUNCOMMITTED) ON l.[Id] = r.[LayoutId]
             WHERE r.[IsActive] = 1
-            ORDER BY r.[DocType], r.[UpdatedAt] DESC;";
+            ORDER BY r.[DocType], r.[Updated] DESC;";
 
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
@@ -202,7 +202,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
                     [WarehouseId]    = @WarehouseId,
                     [AccountType]    = @AccountType,
                     [IsActive]       = @IsActive,
-                    [UpdatedAt]      = SYSUTCDATETIME()
+                    [Updated]        = SYSUTCDATETIME()
                 WHERE [Id] = @Id;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", req.Id);
@@ -242,7 +242,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
 
     public async Task SoftDeleteAsync(int id, CancellationToken ct)
     {
-        var sql = $"UPDATE {_ruleTable} SET [IsActive]=0, [UpdatedAt]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+        var sql = $"UPDATE {_ruleTable} SET [IsActive]=0, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
         await using var conn = await _factory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = sql;
@@ -258,7 +258,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
         // Sorgu: belirtilen DocType için tüm aktif kuralların kriter alanları
         // ile UpdatedAt'ı. Küçük dataset; tamamen RAM'e alınıp eşleştirme C#'ta.
         var sql = $@"
-            SELECT [Id], [LayoutId], [CustomerId], [UserId], [BranchId], [WarehouseId], [UpdatedAt], [ContactGroupId], [AccountType]
+            SELECT [Id], [LayoutId], [CustomerId], [UserId], [BranchId], [WarehouseId], [Updated], [ContactGroupId], [AccountType]
             FROM {_ruleTable} WITH (READUNCOMMITTED)
             WHERE [IsActive] = 1 AND [DocType] = @DocType;";
 

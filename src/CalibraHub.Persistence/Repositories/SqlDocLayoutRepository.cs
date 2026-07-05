@@ -26,13 +26,13 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[Code],[Name],[DocType],[Description],[IsDefault],[OwnerUserId],[UpdatedAt],
+            SELECT [Id],[Code],[Name],[DocType],[Description],[IsDefault],[OwnerUserId],[Updated],
                    [DocumentTypeId],[OutputFormat],[DefaultSubject],[DefaultBody],
                    ISNULL([UseAsMailTemplate], 0) AS [UseAsMailTemplate]
             FROM {_layout}
             WHERE [IsActive] = 1
               AND (@DocType IS NULL OR [DocType] = @DocType)
-            ORDER BY [IsDefault] DESC, [UpdatedAt] DESC, [Name];";
+            ORDER BY [IsDefault] DESC, [Updated] DESC, [Name];";
         cmd.Parameters.Add(new SqlParameter("@DocType", System.Data.SqlDbType.NVarChar, 60)
             { Value = (object?)docType ?? DBNull.Value });
 
@@ -65,7 +65,7 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[DocType],[Description],[LayoutJson],
                    [PageW],[PageH],[MarginTop],[MarginBot],[MarginLeft],[MarginRight],
-                   [OwnerUserId],[IsDefault],[IsActive],[CreatedAt],[UpdatedAt],[DocumentTypeId],[OutputFormat],
+                   [OwnerUserId],[IsDefault],[IsActive],[Created],[Updated],[DocumentTypeId],[OutputFormat],
                    [DefaultSubject],[DefaultBody],
                    [DefaultsViewName],[DefaultsSubjectColumn],[DefaultsBodyColumn],[DefaultsWhere],
                    ISNULL([UseAsMailTemplate], 0) AS [UseAsMailTemplate]
@@ -132,7 +132,7 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
                     [DefaultsBodyColumn]    = @DefaultsBodyColumn,
                     [DefaultsWhere]         = @DefaultsWhere,
                     [UseAsMailTemplate]     = @UseAsMailTemplate,
-                    [UpdatedAt]      = SYSUTCDATETIME()
+                    [Updated]        = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
                 INSERT ([Code],[Name],[DocType],[DocumentTypeId],[Description],[LayoutJson],
                         [PageW],[PageH],[MarginTop],[MarginBot],[MarginLeft],[MarginRight],
@@ -232,7 +232,7 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_layout} SET [IsActive]=0, [UpdatedAt]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+        cmd.CommandText = $"UPDATE {_layout} SET [IsActive]=0, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
         cmd.Parameters.AddWithValue("@Id", id);
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -252,7 +252,7 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
                 THROW 51001, 'Layout bulunamadi veya pasif.', 1;
             UPDATE {_layout}
             SET [IsDefault] = CASE WHEN [Id] = @Id THEN 1 ELSE 0 END,
-                [UpdatedAt] = SYSUTCDATETIME()
+                [Updated] = SYSUTCDATETIME()
             WHERE [IsActive] = 1
               AND (
                     (@DocumentTypeId IS NOT NULL AND [DocumentTypeId] = @DocumentTypeId)

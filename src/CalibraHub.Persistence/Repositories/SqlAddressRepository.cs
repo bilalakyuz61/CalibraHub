@@ -148,10 +148,10 @@ public sealed class SqlAddressRepository : IAddressRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id],[ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[CreatedAt]
+            SELECT [Id],[ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created]
             FROM {_addressTable}
             WHERE [ContactId] = @ContactId
-            ORDER BY [IsDefault] DESC, [CreatedAt];
+            ORDER BY [IsDefault] DESC, [Created];
             """;
         cmd.Parameters.Add(new SqlParameter("@ContactId", contactId));
         var list = new List<ContactAddress>();
@@ -165,7 +165,7 @@ public sealed class SqlAddressRepository : IAddressRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id],[ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[CreatedAt]
+            SELECT [Id],[ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created]
             FROM {_addressTable} WHERE [Id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -179,7 +179,7 @@ public sealed class SqlAddressRepository : IAddressRepository
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_addressTable}
-                ([ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[CreatedAt])
+                ([ContactId],[Name],[CountryCode],[CityName],[DistrictName],[NeighborhoodName],[PostalCode],[AddressLine],[IsDefault],[Created])
             VALUES
                 (@ContactId,@Name,@Cc,@City,@Dist,@Ng,@Pk,@Addr,@Def,@At);
             SELECT CAST(SCOPE_IDENTITY() AS INT);

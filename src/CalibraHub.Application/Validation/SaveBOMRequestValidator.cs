@@ -66,5 +66,10 @@ public sealed class SaveBOMLineRequestValidator : AbstractValidator<SaveBOMLineR
         RuleFor(x => x.ScrapRatio)
             .GreaterThanOrEqualTo(0m)
             .WithMessage("Fire orani negatif olamaz (0 veya daha buyuk olmalidir).");
+
+        // 2026-07-05: satır açıklaması — DB kolonu NVARCHAR(1000)
+        RuleFor(x => x.Note)
+            .MaximumLength(1000)
+            .WithMessage("Bileşen açıklaması en fazla 1000 karakter olabilir.");
     }
 }

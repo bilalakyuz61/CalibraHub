@@ -9,7 +9,7 @@
 }
 
 @section Styles {
-<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+<link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
 <style>
     .page-whatsapp .workspace-action-bar { display: none !important; }
     .page-whatsapp .integrator-dashboard,
@@ -44,7 +44,7 @@
 @Html.AntiForgeryToken()
 
 @section Scripts {
-<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
 <script>
     (function () {
         var el = document.getElementById('whatsappRoot');

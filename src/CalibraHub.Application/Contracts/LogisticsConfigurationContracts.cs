@@ -320,7 +320,8 @@ public sealed record BOMLineDto(
     string? ConfigCode,
     decimal Quantity,
     decimal ScrapRatio,
-    Guid LineGuid);
+    Guid LineGuid,
+    string? Note = null);          // 2026-07-05: satır açıklaması (uçtan uca eklendi)
 
 public sealed record CreateBOMRequest(
     int ItemId,
@@ -369,7 +370,8 @@ public sealed record BOMLineWithName(
     int? ConfigId,
     string? ComponentConfigCode,
     decimal Quantity,
-    decimal ScrapRatio);
+    decimal ScrapRatio,
+    string? Note = null);          // 2026-07-05: satır açıklaması (uçtan uca eklendi)
 
 // Frontend submit — backend ItemId/ConfigId ile calisir, ama mevcut UI'lar
 // materialCode/configCode kullaniyor olabilir. ItemId 0 gelirse service
@@ -396,7 +398,8 @@ public sealed record SaveBOMLineRequest(
     string? ComponentMaterialCode, // legacy: ItemId 0 ise lookup icin
     string? ComponentConfigCode,   // legacy: ConfigId null ise lookup icin
     decimal Quantity,
-    decimal ScrapRatio);
+    decimal ScrapRatio,
+    string? Note = null);          // 2026-07-05: satır açıklaması (opsiyonel, max 1000)
 
 /// <summary>
 /// Repository → service ham satir tasiyici (ExplodeBOMAsync icinde kullanilir).

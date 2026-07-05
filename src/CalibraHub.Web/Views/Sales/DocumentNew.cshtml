@@ -815,8 +815,8 @@ body.app-theme-dark .wiz-hlabel {
         if (tryAttach()) return;
 
         // React bundle henüz yüklenmemiş — bundle'ı yükle sonra bağla
-        var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-        var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+        var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
         if (!document.querySelector('link[data-wiz-css]')) {
             var link = document.createElement('link');
@@ -860,8 +860,8 @@ body.app-theme-dark .wiz-hlabel {
         if (wiz.gridMounted) return;
         wiz.gridMounted = true;
 
-        var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-        var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+        var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
         function mountGrid() {
             var el = $id('wizReactGrid');

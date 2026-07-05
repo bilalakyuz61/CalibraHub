@@ -238,7 +238,7 @@ public sealed class MailSendController : Controller
         await using var conn = await _connFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[Code],[Name],[Description],[IsDefault],[UpdatedAt],[DefaultSubject],[DefaultBody]
+            SELECT [Id],[Code],[Name],[Description],[IsDefault],[Updated],[DefaultSubject],[DefaultBody]
             FROM [{_schema}].[DocLayout]
             WHERE [IsActive] = 1
               AND (
@@ -1102,11 +1102,11 @@ public sealed class MailSendController : Controller
                 {
                     var alias = "mg" + level;
                     cardGroupJoin.AppendLine($@"
-                INNER JOIN [{_schema}].[card_group_mappings] {alias}
-                        ON {alias}.[entity_id]     = CAST(c.[Id] AS NVARCHAR(50))
-                       AND {alias}.[entity_type]   = 2
-                       AND {alias}.[level]         = {level}
-                       AND {alias}.[card_group_id] = @G{level}");
+                INNER JOIN [{_schema}].[CardGroupMapping] {alias}
+                        ON {alias}.[EntityId]     = CAST(c.[Id] AS NVARCHAR(50))
+                       AND {alias}.[EntityType]   = 2
+                       AND {alias}.[Level]        = {level}
+                       AND {alias}.[CardGroupId]  = @G{level}");
                     cardGroupActive.Add((level, gid));
                 }
             }

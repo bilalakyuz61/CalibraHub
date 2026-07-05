@@ -2264,8 +2264,8 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
             doMount();
         } else {
             // Workspace iframe — bundle dinamik yukle
-            var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
-            var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+            var cssUrl = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+            var jsUrl  = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
 
             if (!document.querySelector('link[data-woe-bundle]')) {
                 var link = document.createElement('link');

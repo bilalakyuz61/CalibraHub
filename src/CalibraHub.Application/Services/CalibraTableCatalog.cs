@@ -24,16 +24,16 @@ public static class CalibraTableCatalog
     public static readonly IReadOnlySet<string> OwnedTableNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         // Kullanici & Yetki
-        "Department", "User", "user_settings",
+        "Department", "User", "UserSettings",
 
         // Sirket
-        "company",
+        "Company",
 
         // Cari
         "Contact",
 
         // Stok & Lojistik
-        "Item", "Location", "Unit", "ItemUnits",
+        "Item", "Location", "Unit", "ItemUnits", "ItemLocation",
 
         // Urun Ozellik / Konfigurasyon
         "Feature", "FeatureValue", "FieldGroup", "Field",
@@ -44,17 +44,17 @@ public static class CalibraTableCatalog
 
         // Satis Teklifi / Belge
         "Document", "DocumentLine",
-        "sales_quote_attachments", "sales_quote_line_details", "sales_representatives",
+        "sales_quote_attachments", "SalesQuoteLineDetail", "SalesRepresentative",
 
         // Fiyat Listesi & Doviz
-        "PriceGroup", "PriceList", "currencies", "Exchange",
+        "PriceGroup", "PriceList", "Currency", "Exchange",
 
         // Belge / Ek / Tasarim
-        "design_templates", "document_types", "report_templates", "Attachment",
+        "DesignTemplate", "DocumentType", "report_templates", "Attachment",
 
         // Not (Notes)
-        "card_group_mappings", "card_groups",
-        "note_attachments", "note_folders", "note_reminders", "note_shares", "notes",
+        "CardGroupMapping", "CardGroup",
+        "NoteAttachment", "NoteFolder", "NoteReminder", "NoteReminderTarget", "NoteShare", "Note",
 
         // Widget / EAV / Alan Ayarlari
         "FldSet", "Forms", "WidgetMas", "WidgetTra", "dynamic_field_values",
@@ -67,7 +67,7 @@ public static class CalibraTableCatalog
 
         // Entegrasyon
         "ErpConnectionSetting", "IncomingDocument",
-        "integration_api_profiles",
+        "IntegrationApiProfile",
         "IntegratorSetting", "SmtpProfile",
         "CBT_EBELGEMAS", // Legacy ERP e-belge tablosu — IncomingDocumentRepository kullaniyor
 

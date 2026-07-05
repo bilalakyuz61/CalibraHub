@@ -2165,8 +2165,8 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
         if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
             doMount();
         } else {
-            var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
-            var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+            var cssUrl = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+            var jsUrl  = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
 
             if (!document.querySelector('link[data-ca-bundle]')) {
                 var link = document.createElement('link');

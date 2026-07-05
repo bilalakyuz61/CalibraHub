@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -56,6 +57,7 @@ public sealed class MobileApiController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] MobileLoginRequest req, CancellationToken ct)
     {
         if (req is null || string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
@@ -111,6 +113,7 @@ public sealed class MobileApiController : ControllerBase
     /// </summary>
     [HttpGet("companies")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Companies(CancellationToken ct)
     {
         var companies = await _companyRepo.GetAllAsync(ct);

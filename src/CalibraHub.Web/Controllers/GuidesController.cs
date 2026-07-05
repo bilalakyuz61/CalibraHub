@@ -30,11 +30,13 @@ public sealed class GuidesController : ControllerBase
 {
     private readonly IGuideService _guideService;
     private readonly IGuideRepository _guideRepository;
+    private readonly ILogger<GuidesController> _logger;
 
-    public GuidesController(IGuideService guideService, IGuideRepository guideRepository)
+    public GuidesController(IGuideService guideService, IGuideRepository guideRepository, ILogger<GuidesController> logger)
     {
         _guideService = guideService;
         _guideRepository = guideRepository;
+        _logger = logger;
     }
 
     /// <summary>
@@ -149,7 +151,7 @@ public sealed class GuidesController : ControllerBase
                 }
                 catch (Exception parseEx)
                 {
-                    Console.Error.WriteLine($"[GuideDistinct] Constraint JSON parse hatasi (guide='{guideCode}'): {parseEx.Message}; raw='{constraints}'");
+                    _logger.LogWarning(parseEx, "GuideDistinct constraint JSON parse hatasi (guide={GuideCode}); raw={Raw}", guideCode, constraints);
                 }
             }
 
@@ -164,12 +166,12 @@ public sealed class GuidesController : ControllerBase
         }
         catch (Microsoft.Data.SqlClient.SqlException sqlEx)
         {
-            Console.Error.WriteLine($"[GuideDistinct] SQL hatasi (guide='{guideCode}', col='{column}'): {sqlEx.Number} {sqlEx.Message}");
+            _logger.LogWarning(sqlEx, "GuideDistinct SQL hatasi (guide={GuideCode}, col={Column}, number={SqlNumber})", guideCode, column, sqlEx.Number);
             return StatusCode(500, new { success = false, message = sqlEx.Message });
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[GuideDistinct] Hata: {ex}");
+            _logger.LogError(ex, "GuideDistinct hatasi");
             return StatusCode(500, new { success = false, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -200,16 +202,16 @@ public sealed class GuidesController : ControllerBase
                         constraints,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     // DEBUG: incoming constraints'i logla — sorun teshisi icin (gecici)
-                    Console.WriteLine($"[GuideSearch:DBG] guide='{guideCode}' raw='{constraints}' parsedCount={(parsedConstraints?.Count ?? -1)}");
+                    _logger.LogDebug("[GuideSearch:DBG] guide={GuideCode} raw={Raw} parsedCount={ParsedCount}", guideCode, constraints, parsedConstraints?.Count ?? -1);
                     if (parsedConstraints != null)
                     {
                         foreach (var c in parsedConstraints)
-                            Console.WriteLine($"  → Field='{c.Field}' Op='{c.Operator}' Val='{c.Value}' Logic='{c.Logic}' RawSql='{c.RawSql}'");
+                            _logger.LogDebug("  → Field={Field} Op={Operator} Val={Value} Logic={Logic} RawSql={RawSql}", c.Field, c.Operator, c.Value, c.Logic, c.RawSql);
                     }
                 }
                 catch (Exception parseEx)
                 {
-                    Console.Error.WriteLine($"[GuideSearch] Constraint JSON parse hatasi (guide='{guideCode}'): {parseEx.Message}; raw='{constraints}'");
+                    _logger.LogWarning(parseEx, "GuideSearch constraint JSON parse hatasi (guide={GuideCode}); raw={Raw}", guideCode, constraints);
                 }
             }
 
@@ -225,7 +227,7 @@ public sealed class GuidesController : ControllerBase
         }
         catch (Microsoft.Data.SqlClient.SqlException sqlEx)
         {
-            Console.Error.WriteLine($"[GuideSearch] SQL hatasi (guide='{guideCode}'): {sqlEx.Number} {sqlEx.Message}");
+            _logger.LogWarning(sqlEx, "GuideSearch SQL hatasi (guide={GuideCode}, number={SqlNumber})", guideCode, sqlEx.Number);
             return StatusCode(500, new
             {
                 success = false,
@@ -235,7 +237,7 @@ public sealed class GuidesController : ControllerBase
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[GuideSearch] Hata (guide='{guideCode}'): {ex}");
+            _logger.LogError(ex, "GuideSearch hatasi (guide={GuideCode})", guideCode);
             return StatusCode(500, new
             {
                 success = false,

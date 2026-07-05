@@ -47,8 +47,8 @@
 <script>
 (function() {
     var BOARD_CONFIG = @Html.Raw(boardConfigJson);
-    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
     var el = document.getElementById('reactSmartBoard');
     if (!el) { console.error('[Forms] Mount element yok'); return; }

@@ -44,8 +44,8 @@ public sealed class NotesController : Controller
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
-    // -- Not ekleri � note_attachments (company DB) -----------------------------
-    // Merkezi dbo.Attachment (master DB) yerine per-company note_attachments kullanilir.
+    // -- Not ekleri — NoteAttachment (company DB) -------------------------------
+    // Merkezi dbo.Attachment (master DB) yerine per-company NoteAttachment kullanilir.
     // FormId+RefId INT semasiyla uyumlu; not ekleri merkezi tabloya yazilmaz.
 
     private async Task<List<object>> GetNoteAttachmentsAsync(Guid noteId, CancellationToken ct)
@@ -54,9 +54,9 @@ public sealed class NotesController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[FileName],[FileSize],[content_type],[description],[UploadedAt]
-            FROM [{_schema}].[note_attachments]
-            WHERE [note_id] = @NoteId AND ([IsActive] IS NULL OR [IsActive] = 1)
+            SELECT [Id],[FileName],[FileSize],[ContentType],[Description],[UploadedAt]
+            FROM [{_schema}].[NoteAttachment]
+            WHERE [NoteId] = @NoteId AND ([IsActive] IS NULL OR [IsActive] = 1)
             ORDER BY [UploadedAt];
             """;
         cmd.Parameters.Add(new SqlParameter("@NoteId", noteId));
@@ -81,9 +81,9 @@ public sealed class NotesController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [FileName],[content_type],[binary_content]
-            FROM [{_schema}].[note_attachments]
-            WHERE [id] = @Id AND ([IsActive] IS NULL OR [IsActive] = 1);
+            SELECT [FileName],[ContentType],[BinaryContent]
+            FROM [{_schema}].[NoteAttachment]
+            WHERE [Id] = @Id AND ([IsActive] IS NULL OR [IsActive] = 1);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", attachmentId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -96,7 +96,7 @@ public sealed class NotesController : Controller
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [note_id] FROM [{_schema}].[note_attachments] WHERE [id] = @Id AND ([IsActive] IS NULL OR [IsActive] = 1);";
+        cmd.CommandText = $"SELECT [NoteId] FROM [{_schema}].[NoteAttachment] WHERE [Id] = @Id AND ([IsActive] IS NULL OR [IsActive] = 1);";
         cmd.Parameters.Add(new SqlParameter("@Id", attachmentId));
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is null or DBNull ? null : (Guid)result;
@@ -106,7 +106,7 @@ public sealed class NotesController : Controller
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE [{_schema}].[note_attachments] SET [IsActive] = 0 WHERE [id] = @Id;";
+        cmd.CommandText = $"UPDATE [{_schema}].[NoteAttachment] SET [IsActive] = 0 WHERE [Id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", attachmentId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -115,7 +115,7 @@ public sealed class NotesController : Controller
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE [{_schema}].[note_attachments] SET [IsActive] = 0 WHERE [note_id] = @NoteId;";
+        cmd.CommandText = $"UPDATE [{_schema}].[NoteAttachment] SET [IsActive] = 0 WHERE [NoteId] = @NoteId;";
         cmd.Parameters.Add(new SqlParameter("@NoteId", noteId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -125,8 +125,8 @@ public sealed class NotesController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO [{_schema}].[note_attachments]
-                ([id],[note_id],[FileName],[stored_name],[content_type],[FileSize],[UploadedAt],[description],[binary_content],[IsActive])
+            INSERT INTO [{_schema}].[NoteAttachment]
+                ([Id],[NoteId],[FileName],[StoredName],[ContentType],[FileSize],[UploadedAt],[Description],[BinaryContent],[IsActive])
             VALUES
                 (@Id,@NoteId,@FileName,'',@ContentType,@FileSize,SYSUTCDATETIME(),@Description,@Content,1);
             """;
@@ -1153,6 +1153,7 @@ public sealed class NotesController : Controller
     /// <summary>Genel link ile not görüntüleme — login gerektirmez. cid=companyId, t=token.</summary>
     [AllowAnonymous]
     [HttpGet("/Notes/Public")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-share")]
     public async Task<IActionResult> PublicShare(int cid, string t, CancellationToken cancellationToken)
     {
         if (cid <= 0 || string.IsNullOrWhiteSpace(t) || t.Length > 40)
@@ -1174,7 +1175,7 @@ public sealed class NotesController : Controller
                    [IsPinned], [IsFullyEncrypted], [EncryptionHint], [Tags],
                    [linked_entity_type], [linked_entity_id], [linked_entity_label], [visibility],
                    [share_token], [share_is_public], [share_include_attachments]
-            FROM [{_schema}].[notes]
+            FROM [{_schema}].[Note]
             WHERE [share_token] = @Token AND [share_is_public] = 1 AND [IsDeleted] = 0;
             """;
         cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Token", t));
@@ -1228,6 +1229,7 @@ public sealed class NotesController : Controller
     /// <summary>Herkese açık notta paylaşılan eki indir — login gerektirmez; share token + ek sahipliği doğrulanır.</summary>
     [AllowAnonymous]
     [HttpGet("/Notes/PublicAttachment")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-share")]
     public async Task<IActionResult> PublicAttachment(int cid, string t, Guid aid, CancellationToken cancellationToken)
     {
         if (cid <= 0 || string.IsNullOrWhiteSpace(t) || t.Length > 40 || aid == Guid.Empty)
@@ -1239,7 +1241,7 @@ public sealed class NotesController : Controller
         await conn.OpenAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id] FROM [{_schema}].[notes]
+            SELECT [Id] FROM [{_schema}].[Note]
             WHERE [share_token] = @Token AND [share_is_public] = 1 AND [share_include_attachments] = 1 AND [IsDeleted] = 0;
             """;
         cmd.Parameters.Add(new SqlParameter("@Token", t));

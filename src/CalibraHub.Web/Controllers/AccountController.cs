@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Web.Controllers;
@@ -86,6 +87,7 @@ public sealed class AccountController : Controller
 
     [AllowAnonymous]
     [HttpGet]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> CompaniesForUser(string? email, CancellationToken cancellationToken)
     {
         var options = await GetCompanyOptionsByEmailAsync(email, null, cancellationToken);
@@ -216,6 +218,7 @@ public sealed class AccountController : Controller
     [AllowAnonymous]
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login(LoginInputModel input, CancellationToken cancellationToken)
     {
         var isAjax = string.Equals(Request.Headers["X-Requested-With"].ToString(), "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);

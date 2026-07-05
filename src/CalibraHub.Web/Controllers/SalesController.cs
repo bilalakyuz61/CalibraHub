@@ -980,9 +980,9 @@ public sealed class SalesController : Controller
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = $"""
-                SELECT [item_id], [location_id]
-                FROM [{_schema}].[item_locations]
-                WHERE [is_default] = 1;
+                SELECT [ItemId], [LocationId]
+                FROM [{_schema}].[ItemLocation]
+                WHERE [IsDefault] = 1;
                 """;
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
@@ -1382,7 +1382,7 @@ public sealed class SalesController : Controller
             catch (Exception widgetEx)
             {
                 // Widget kopyasi basarisiz olsa bile revize olustu — silent log.
-                Console.WriteLine($"[ReviseLine] Widget kopyalama hatasi (newLineId={newLineId}): {widgetEx.Message}");
+                _logger.LogWarning(widgetEx, "ReviseLine widget kopyalama hatasi (newLineId={NewLineId})", newLineId);
             }
 
             return Json(new { success = true, newLineId = newLineId.Value });
@@ -1838,7 +1838,7 @@ public sealed class SalesController : Controller
     {
         if (string.IsNullOrWhiteSpace(to))
             return Json(new { success = false, message = "Alici boş." });
-        Console.WriteLine($"[SendQuoteMail-shim] quoteId={quoteId} to={to} subject={subject}");
+        _logger.LogDebug("[SendQuoteMail-shim] quoteId={QuoteId} to={To} subject={Subject}", quoteId, to, subject);
         return Json(new { success = true, message = "Mail kuyruga alindi (simulasyon)." });
     }
 

@@ -23,6 +23,7 @@ public sealed class LogisticsController : Controller
     private readonly IPriceListService _priceListService;
     private readonly ICurrencyService _currencyService;
     private readonly Application.Abstractions.Persistence.ICardGroupRepository _cardGroupRepo;
+    private readonly ILogger<LogisticsController> _logger;
 
     public LogisticsController(
         ILogisticsConfigurationService logisticsConfigurationService,
@@ -31,7 +32,8 @@ public sealed class LogisticsController : Controller
         IWidgetService widgetService,
         IPriceListService priceListService,
         ICurrencyService currencyService,
-        Application.Abstractions.Persistence.ICardGroupRepository cardGroupRepo)
+        Application.Abstractions.Persistence.ICardGroupRepository cardGroupRepo,
+        ILogger<LogisticsController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _uiConfigurationService = uiConfigurationService;
@@ -40,6 +42,7 @@ public sealed class LogisticsController : Controller
         _priceListService = priceListService;
         _currencyService = currencyService;
         _cardGroupRepo = cardGroupRepo;
+        _logger = logger;
     }
 
     private int GetCompanyId()
@@ -607,9 +610,9 @@ public sealed class LogisticsController : Controller
         }
 
         // DEBUG: maliyet teshisi (gecici)
-        Console.WriteLine($"[CostView] material='{materialCode}' configCode='{configCode}' priceGroup={priceGroupId} currency={currencyId} priceType='{priceType}' validOn={priceDate:yyyy-MM-dd}");
+        _logger.LogDebug("[CostView] material={MaterialCode} configCode={ConfigCode} priceGroup={PriceGroupId} currency={CurrencyId} priceType={PriceType} validOn={ValidOn:yyyy-MM-dd}", materialCode, configCode, priceGroupId, currencyId, priceType, priceDate);
         foreach (var l in bom.Lines)
-            Console.WriteLine($"[CostView]   BOM bilesen: code='{l.ComponentMaterialCode}' itemId={l.ItemId} configId={(l.ConfigId?.ToString() ?? "NULL")} qty={l.Quantity}");
+            _logger.LogDebug("[CostView]   BOM bilesen: code={ComponentCode} itemId={ItemId} configId={ConfigId} qty={Qty}", l.ComponentMaterialCode, l.ItemId, l.ConfigId, l.Quantity);
 
         // PriceType DB konvansiyonu: 'b'/'s'/'m'. Bos ise varsayilan 'm' (Maliyet).
         var pType = string.IsNullOrWhiteSpace(priceType) ? "m" : priceType.Trim();

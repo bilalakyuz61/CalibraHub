@@ -454,7 +454,7 @@ body.app-theme-dark .cum-select { color-scheme: dark; }
 </section>
 
 @section Scripts {
-<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
 <script>
 (function () {
     var el = document.getElementById('cum-mount')

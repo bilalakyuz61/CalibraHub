@@ -1155,9 +1155,9 @@ public sealed class PurchaseController : Controller
         {
             await using var cmdDef = conn.CreateCommand();
             cmdDef.CommandText = $"""
-                SELECT [item_id], [location_id]
-                FROM [{s}].[item_locations]
-                WHERE [item_id] IN ({iParamList}) AND [is_default] = 1;
+                SELECT [ItemId], [LocationId]
+                FROM [{s}].[ItemLocation]
+                WHERE [ItemId] IN ({iParamList}) AND [IsDefault] = 1;
                 """;
             for (var i = 0; i < distinctItemIds.Count; i++)
                 cmdDef.Parameters.Add(new SqlParameter($"@i{i}", distinctItemIds[i]));
@@ -1504,7 +1504,7 @@ public sealed class PurchaseController : Controller
                 ISNULL(stk.Balance, 0) AS stockBalance
             FROM [{s}].[DocumentLine]   dl
             INNER JOIN [{s}].[Document]       d   ON d.[Id] = dl.[DocumentId]
-            INNER JOIN [{s}].[document_types] dt  ON dt.[Id] = d.[DocumentTypeId]
+            INNER JOIN [{s}].[DocumentType]   dt  ON dt.[Id] = d.[DocumentTypeId]
             INNER JOIN [{s}].[Items]          i   ON i.[Id] = dl.[ItemId]
             LEFT  JOIN [{s}].[MeasureUnits]   mu  ON mu.[Id] = dl.[UnitId]
             LEFT  JOIN (

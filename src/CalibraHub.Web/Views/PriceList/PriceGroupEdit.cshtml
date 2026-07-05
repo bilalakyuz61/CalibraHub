@@ -484,7 +484,7 @@
 @section Scripts {
 <!-- 2026-06-02: Tip 1 standart rehber (CalibraHub.openGuideLookup) icin bundle.
      Workspace tab iframe'inde _Layout bundle'i otomatik gelmiyor — explicit ekliyoruz. -->
-<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
 <script>
 (function () {
     var API = function (a) { return '/PriceList/' + a; };

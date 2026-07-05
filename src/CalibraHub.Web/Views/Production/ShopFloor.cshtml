@@ -28,7 +28,7 @@
     @* Premium design tokens (--surface-*, --text-*, --accent-*, --motion-*).
        Kiosk her zaman dark kalir — uretim alaninda LED ekran/gozyorgunlugu
        icin tercih edilen mod. body.app-theme-dark zorla aktif. *@
-    <link rel="stylesheet" href="~/css/tokens.css?v=@(DateTime.UtcNow.Ticks)" />
+    <link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/css/tokens.css")" />
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
         html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }

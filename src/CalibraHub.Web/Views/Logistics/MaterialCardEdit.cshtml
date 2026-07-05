@@ -3174,8 +3174,8 @@
             doMount();
         } else {
             // Workspace frame — bundle'i dinamik yukle
-            var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
-            var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+            var cssUrl = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+            var jsUrl  = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
 
             // CSS (yoksa ekle)
             if (!document.querySelector('link[data-mce-bundle]')) {

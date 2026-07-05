@@ -141,6 +141,18 @@ public class BOM
         int parentItemId,
         IReadOnlyCollection<int> proposedChildItemIds,
         Func<int, IEnumerable<int>> getChildren)
+        => EnsureNoCycleAsync(parentItemId, proposedChildItemIds,
+                childId => Task.FromResult(getChildren(childId)))
+            .GetAwaiter().GetResult(); // delegate sync — hicbir await askida kalmaz, gercek blokaj yok
+
+    /// <summary>
+    /// <see cref="EnsureNoCycle"/> ile ayni algoritma; cocuk listesi async kaynaklardan
+    /// (repository) geldiginde thread bloklamadan gezinmek icin.
+    /// </summary>
+    public static async Task EnsureNoCycleAsync(
+        int parentItemId,
+        IReadOnlyCollection<int> proposedChildItemIds,
+        Func<int, Task<IEnumerable<int>>> getChildren)
     {
         const int maxDepth = 20;
         DomainException.ThrowIf(
@@ -158,7 +170,7 @@ public class BOM
             foreach (var childId in frontier)
             {
                 if (!visited.Add(childId)) continue; // zaten gezildi, atla
-                var grandChildren = getChildren(childId);
+                var grandChildren = await getChildren(childId);
                 if (grandChildren == null) continue;
                 foreach (var gc in grandChildren)
                 {

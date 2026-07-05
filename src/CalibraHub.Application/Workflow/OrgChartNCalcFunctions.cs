@@ -6,7 +6,9 @@ namespace CalibraHub.Application.Workflow;
 
 /// <summary>
 /// NCalc Expression'larına OrgChart hiyerarşi fonksiyonlarını ekler.
-/// WorkflowEngine.EvaluateCondition çağırılmadan önce bu handler kaydedilir.
+/// WorkflowEngine.EvaluateConditionAsync çağırılmadan önce bu handler kaydedilir.
+/// Handler'lar async event (EvaluateAsyncFunction) üzerinden bağlanır — repository
+/// çağrıları thread bloklamadan await edilir; ifade EvaluateAsync ile değerlendirilmelidir.
 ///
 /// Desteklenen fonksiyonlar:
 ///   OrgChart.SupervisorOf(userId)        → string | null
@@ -21,39 +23,39 @@ public sealed class OrgChartNCalcFunctions(
 {
     public void Register(Expression expr)
     {
-        expr.EvaluateFunction += (name, args) =>
+        expr.EvaluateAsyncFunction += async (name, args) =>
         {
             switch (name)
             {
                 case "OrgChart.SupervisorOf":
                 {
-                    var userId = args.Parameters[0].Evaluate()?.ToString() ?? "";
-                    args.Result = GetSupervisorOf(userId).GetAwaiter().GetResult();
+                    var userId = (await args.Parameters.EvaluateAsync(0))?.ToString() ?? "";
+                    args.Result = await GetSupervisorOf(userId);
                     break;
                 }
                 case "OrgChart.SubordinatesOf":
                 {
-                    var userId = args.Parameters[0].Evaluate()?.ToString() ?? "";
-                    args.Result = GetSubordinatesOf(userId).GetAwaiter().GetResult();
+                    var userId = (await args.Parameters.EvaluateAsync(0))?.ToString() ?? "";
+                    args.Result = await GetSubordinatesOf(userId);
                     break;
                 }
                 case "OrgChart.DepartmentOf":
                 {
-                    var userId = args.Parameters[0].Evaluate()?.ToString() ?? "";
-                    args.Result = GetDepartmentOf(userId).GetAwaiter().GetResult();
+                    var userId = (await args.Parameters.EvaluateAsync(0))?.ToString() ?? "";
+                    args.Result = await GetDepartmentOf(userId);
                     break;
                 }
                 case "OrgChart.HierarchyLevel":
                 {
-                    var userId = args.Parameters[0].Evaluate()?.ToString() ?? "";
-                    args.Result = GetHierarchyLevel(userId).GetAwaiter().GetResult();
+                    var userId = (await args.Parameters.EvaluateAsync(0))?.ToString() ?? "";
+                    args.Result = await GetHierarchyLevel(userId);
                     break;
                 }
                 case "User.HasRole":
                 {
-                    var userId = args.Parameters[0].Evaluate()?.ToString() ?? "";
-                    var role   = args.Parameters[1].Evaluate()?.ToString() ?? "";
-                    args.Result = HasRole(userId, role).GetAwaiter().GetResult();
+                    var userId = (await args.Parameters.EvaluateAsync(0))?.ToString() ?? "";
+                    var role   = (await args.Parameters.EvaluateAsync(1))?.ToString() ?? "";
+                    args.Result = await HasRole(userId, role);
                     break;
                 }
             }

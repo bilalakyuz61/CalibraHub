@@ -981,7 +981,7 @@ function aeCloseModal() { var m = document.getElementById('ae-modal'); if (m) m.
     }
     if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) doMount();
     else {
-        var jsUrl = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        var jsUrl = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
         if (!document.querySelector('script[data-ae-bundle]')) {
             var s = document.createElement('script'); s.src = jsUrl; s.setAttribute('data-ae-bundle', '1');
             s.onload = function () { setTimeout(doMount, 0); };

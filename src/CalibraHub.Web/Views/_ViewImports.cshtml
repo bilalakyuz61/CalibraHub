@@ -2,3 +2,7 @@
 @using CalibraHub.Web.Models
 @using CalibraHub.Web.Controllers
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@* 2026-07-05: Dosya-hash asset versiyonlama — tum view'larda kullanilabilir.
+   ?v=DateTime.UtcNow.Ticks deseni YASAK (bundle hic cache'lenemiyor);
+   yerine: @FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js") *@
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersioner

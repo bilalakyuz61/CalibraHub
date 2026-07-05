@@ -41,8 +41,8 @@
 @section Scripts {
 <script>
 (function() {
-    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
     var el = document.getElementById('integrationsHub');
 
     function showError(msg) { if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;">' + msg + '</div>'; }

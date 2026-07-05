@@ -3,6 +3,7 @@ using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -13,6 +14,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [AllowAnonymous]
 [Route("Approval")]
+[EnableRateLimiting("public-share")]
 public sealed class QuickApprovalController : Controller
 {
     private readonly IApprovalTokenRepository _tokenRepo;

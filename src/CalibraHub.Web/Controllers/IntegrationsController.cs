@@ -48,6 +48,7 @@ public sealed class IntegrationsController : Controller
     private readonly IPermissionService _permService;
     private readonly IPermissionDefRepository _permDefRepo;
     private readonly PermissionDefDiscoveryService _permDiscovery;
+    private readonly ILogger<IntegrationsController> _logger;
 
     public IntegrationsController(
         IIntegrationService service,
@@ -57,7 +58,8 @@ public sealed class IntegrationsController : Controller
         IIntegrationLookupFunctionRegistry functionRegistry,
         IPermissionService permService,
         IPermissionDefRepository permDefRepo,
-        PermissionDefDiscoveryService permDiscovery)
+        PermissionDefDiscoveryService permDiscovery,
+        ILogger<IntegrationsController> logger)
     {
         _service = service;
         _repo = repo;
@@ -67,6 +69,7 @@ public sealed class IntegrationsController : Controller
         _permService = permService;
         _permDefRepo = permDefRepo;
         _permDiscovery = permDiscovery;
+        _logger = logger;
     }
 
     // ── Razor sayfalari ────────────────────────────────────────────────
@@ -308,11 +311,11 @@ public sealed class IntegrationsController : Controller
     /// hala doner ama Wizard "Fonksiyon" source dropdown'i artik <see cref="DbFunctionsApi"/> kullanir.
     /// </summary>
     [HttpGet("/Integrations/api/lookup-functions")]
-    public IActionResult LookupFunctionsApi()
+    public async Task<IActionResult> LookupFunctionsApi(CancellationToken ct)
     {
         try
         {
-            var functions = _functionRegistry.List();
+            var functions = await _functionRegistry.ListAsync(ct);
             return Json(new { success = true, functions });
         }
         catch (Exception ex)
@@ -660,7 +663,7 @@ public sealed class IntegrationsController : Controller
         [FromBody] SaveIntegrationEndpointRequest req,
         CancellationToken ct)
     {
-        Console.WriteLine($"[SaveEndpointApi] req={(req is null ? "null" : $"id={req.Id}, name={req.Name}, bodyLen={req.BodySchema?.Length ?? 0}")}");
+        _logger.LogDebug("[SaveEndpointApi] reqNull={ReqNull} id={Id} name={Name} bodyLen={BodyLen}", req is null, req?.Id, req?.Name, req?.BodySchema?.Length ?? 0);
         if (req is null)
             return Json(new { success = false, error = "Request bos." });
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.UrlTemplate))
@@ -707,9 +710,7 @@ public sealed class IntegrationsController : Controller
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[SaveEndpointApi] {ex.GetType().Name}: {"İşlem sırasında bir hata oluştu."}\n{ex.StackTrace}");
-            if (ex.InnerException != null)
-                Console.Error.WriteLine($"[SaveEndpointApi INNER] {ex.InnerException.Message}");
+            _logger.LogError(ex, "SaveEndpointApi hatasi");
             return Json(new { success = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

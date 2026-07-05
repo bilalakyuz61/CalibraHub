@@ -21,10 +21,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class ApiProfileController : Controller
 {
     private readonly IIntegrationApiProfileRepository _apiProfileRepo;
+    private readonly ILogger<ApiProfileController> _logger;
 
-    public ApiProfileController(IIntegrationApiProfileRepository apiProfileRepo)
+    public ApiProfileController(IIntegrationApiProfileRepository apiProfileRepo, ILogger<ApiProfileController> logger)
     {
         _apiProfileRepo = apiProfileRepo;
+        _logger = logger;
     }
 
     private int GetCompanyId()
@@ -117,10 +119,7 @@ public sealed class ApiProfileController : Controller
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[SaveApiProfileJson ERROR] {ex.GetType().Name}: {"İşlem sırasında bir hata oluştu."}");
-            Console.Error.WriteLine($"[SaveApiProfileJson STACK] {ex.StackTrace}");
-            if (ex.InnerException != null)
-                Console.Error.WriteLine($"[SaveApiProfileJson INNER] {ex.InnerException.Message}\n{ex.InnerException.StackTrace}");
+            _logger.LogError(ex, "SaveApiProfileJson hatasi");
             return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }

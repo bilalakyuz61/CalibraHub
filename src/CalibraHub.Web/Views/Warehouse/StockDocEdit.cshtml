@@ -440,8 +440,8 @@
     var IS_TRANSFER = DOC_TYPE === 'TRANSFER';
     var LIST_URL    = '@listUrl';
     var LINE_GRID_CONFIG = @Html.Raw(Model.LineGridConfigJson);
-    var BUNDLE_URL  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-    var CSS_URL     = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var BUNDLE_URL  = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL     = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
     var TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
 
     // ── State ─────────────────────────────────────────────────────────

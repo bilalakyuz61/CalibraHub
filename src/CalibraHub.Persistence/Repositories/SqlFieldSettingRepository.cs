@@ -34,7 +34,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [Id],[FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],
-                   [IsRequired],[FormatJson],[IsActive],[SortOrder],[CreatedAt],[UpdatedAt]
+                   [IsRequired],[FormatJson],[IsActive],[SortOrder],[Created],[Updated]
             FROM {_fldSetTable}
             WHERE [FormId] = @FormId
             ORDER BY [SortOrder], [FieldKey];";
@@ -48,7 +48,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [Id],[FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],
-                   [IsRequired],[FormatJson],[IsActive],[SortOrder],[CreatedAt],[UpdatedAt]
+                   [IsRequired],[FormatJson],[IsActive],[SortOrder],[Created],[Updated]
             FROM {_fldSetTable}
             WHERE [GuideCode] = @GuideCode AND [IsActive] = 1
             ORDER BY [FormId], [SortOrder], [FieldKey];";
@@ -80,7 +80,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
                     [GuideCode]=@GuideCode, [ViewName]=@ViewName, [FilterJson]=@FilterJson,
                     [IsRequired]=@IsRequired, [FormatJson]=@FormatJson,
                     [IsActive]=@IsActive, [SortOrder]=@SortOrder,
-                    [UpdatedAt]=SYSUTCDATETIME()
+                    [Updated]=SYSUTCDATETIME()
                 WHERE [Id]=@Id;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", request.Id);
@@ -126,7 +126,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
                         [FilterJson]  = @FilterJson,
                         [IsRequired]  = @IsRequired,
                         [IsActive]    = 1,
-                        [UpdatedAt]   = SYSUTCDATETIME()
+                        [Updated]     = SYSUTCDATETIME()
                 WHEN NOT MATCHED THEN
                     INSERT ([FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],[IsRequired],[IsActive])
                     VALUES (@FormId, @FieldKey, @FieldLabel,
@@ -165,7 +165,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
                            [ViewName]   = @ViewName,
                            [FilterJson] = @FilterJson, [IsRequired] = @IsRequired,
                            [FormatJson] = @FormatJson, [IsActive]   = 1,
-                           [UpdatedAt]  = SYSUTCDATETIME()
+                           [Updated]    = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
                 INSERT ([FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],[IsRequired],[FormatJson],[IsActive],[SortOrder])
                 VALUES (@FormId,@FieldKey,@FieldLabel,@GuideCode,@ViewName,@FilterJson,@IsRequired,@FormatJson,1,10);
