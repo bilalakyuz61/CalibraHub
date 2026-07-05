@@ -3145,6 +3145,22 @@
     renderStatList(['Approved']);  // Durum: Onaylı varsayılan seçili
     _updateStatLbl();
 
+    // Karşılama: Bekliyor + Kısmen varsayılan seçili (tamamlananlar gizli)
+    (function() {
+        var defaults = ['pending', 'partial'];
+        document.querySelectorAll('#fc3MsFulfillChips .fc3-ms-chip').forEach(function(chip) {
+            var cb = chip.querySelector('.fc3-ms-cb-fulfill');
+            if (!cb) return;
+            if (defaults.indexOf(cb.value) !== -1) {
+                cb.checked = true;
+                chip.classList.add('active');
+            }
+        });
+        var lbl = document.getElementById('fc3FulfillLbl');
+        if (lbl) lbl.textContent = defaults.length + ' seçili';
+        applyFilters();
+    })();
+
     // Cari grubu chip'leri — veri varsa section'ı göster
     var _cariGrpAll = (function() {
         var set = new Set();
