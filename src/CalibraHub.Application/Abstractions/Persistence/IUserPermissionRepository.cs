@@ -18,12 +18,20 @@ public interface IPermissionGrantRepository
     /// <summary>Bir departmana atanmış tüm izin satırları (DepartmentId=d).</summary>
     Task<IReadOnlyList<PermissionGrant>> ListByDepartmentAsync(int departmentId, CancellationToken ct);
 
+    /// <summary>Bir yetki grubuna atanmış tüm izin satırları (GroupId=g).</summary>
+    Task<IReadOnlyList<PermissionGrant>> ListByGroupAsync(int groupId, CancellationToken ct);
+
     /// <summary>
-    /// PermissionService.CheckAsync için: kullanıcının kendi override'ı + departmanından gelen
-    /// satırları TEK SORGUDA döner. UI'da matrix render için de kullanılır.
+    /// PermissionService.CheckAsync için: kullanıcının kendi override'ı + üye olduğu AKTİF
+    /// grupların satırları + departmanından gelen satırları TEK SORGUDA döner.
+    /// UI'da matrix render için de kullanılır.
     /// </summary>
     Task<IReadOnlyList<PermissionGrant>> ListForUserAndDepartmentAsync(
         int userId, int? departmentId, CancellationToken ct);
+
+    /// <summary>Bir grubun izin satırlarını TOPLU REPLACE eder (admin UI "Kaydet").</summary>
+    Task BulkReplaceForGroupAsync(
+        int groupId, IReadOnlyList<PermissionGrant> entities, CancellationToken ct);
 
     /// <summary>Save (create veya update). UserId XOR DepartmentId kuralı service'de validate edilir.</summary>
     Task<int> SaveAsync(PermissionGrant entity, CancellationToken ct);

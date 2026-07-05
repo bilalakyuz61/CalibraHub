@@ -4,32 +4,36 @@ using CalibraHub.Domain.Common;
 namespace CalibraHub.Domain.Entities;
 
 /// <summary>
-/// Yetki atama kaydı — bir izni KULLANICIYA veya DEPARTMANA bağlar (tek tablo + tek owner).
+/// Yetki atama kaydı — bir izni KULLANICIYA, GRUBA veya DEPARTMANA bağlar (tek tablo + tek owner).
 /// **DB Tablo adı:** UserPermission. Class adı C# enum'u (UserPermission) ile çakışmasın
 /// diye PermissionGrant olarak adlandırıldı.
 ///
-/// **Sahip kuralı (XOR):** Tam olarak UserId veya DepartmentId DOLU olmalı, ikisi birden olamaz,
-/// ikisi de boş olamaz. DB CHECK constraint bunu garanti eder.
+/// **Sahip kuralı:** Tam olarak biri dolu olmalı: UserId, DepartmentId veya GroupId.
+/// DB CHECK constraint (CK_UserPermission_OneOwner) bunu garanti eder.
 ///
 /// **Resolution priority (PermissionService.CheckAsync):**
 ///   1) SystemAdmin → her zaman izinli
 ///   2) PermissionGrant(UserId=u) → varsa IsGranted değeri
-///   3) PermissionGrant(DepartmentId=u.DepartmentId) → varsa IsGranted değeri
-///   4) Default deny
+///   3) PermissionGrant(GroupId ∈ u'nun aktif grupları) → herhangi biri İZİN ise izin (union-allow)
+///   4) PermissionGrant(DepartmentId=u.DepartmentId) → varsa IsGranted değeri
+///   5) Default deny
 ///
-/// IsGranted=false (açıkça reddet) departmana verilmiş izni belirli kullanıcıdan
-/// almak için kullanılır.
+/// IsGranted=false (açıkça reddet) gruba/departmana verilmiş izni belirli
+/// kullanıcıdan almak için kullanılır (kullanıcı override en yüksek öncelik).
 /// </summary>
-[Description("Yetki ataması: kullanıcı (UserId) VEYA departman (DepartmentId) — biri dolu olur. DB tablo: UserPermission. 2026-06-06.")]
+[Description("Yetki ataması: kullanıcı (UserId), grup (GroupId) VEYA departman (DepartmentId) — tam biri dolu olur. DB tablo: UserPermission.")]
 public sealed class PermissionGrant
 {
     public int Id { get; init; }
 
-    /// <summary>NULL ise satır departman bazlı; doluysa kullanıcı bazlı atama.</summary>
+    /// <summary>Doluysa kullanıcı bazlı atama (en yüksek öncelik).</summary>
     public int? UserId { get; set; }
 
-    /// <summary>NULL ise satır kullanıcı bazlı; doluysa departman bazlı atama.</summary>
+    /// <summary>Doluysa departman bazlı atama.</summary>
     public int? DepartmentId { get; set; }
+
+    /// <summary>Doluysa yetki grubu bazlı atama (2026-07-06). Öncelik: User &gt; Group &gt; Department.</summary>
+    public int? GroupId { get; set; }
 
     public int PermissionDefId { get; set; }
 
@@ -39,15 +43,14 @@ public sealed class PermissionGrant
     public DateTime Created { get; init; } = DateTime.UtcNow;
     public int? CreatedById { get; set; }
 
-    /// <summary>Sahip tipi — yardımcı (UserId/DepartmentId'ye bakar). 'USER' / 'DEPARTMENT'.</summary>
-    public string OwnerType => UserId.HasValue ? "USER" : "DEPARTMENT";
+    /// <summary>Sahip tipi — yardımcı. 'USER' / 'GROUP' / 'DEPARTMENT'.</summary>
+    public string OwnerType => UserId.HasValue ? "USER" : GroupId.HasValue ? "GROUP" : "DEPARTMENT";
 
     public void EnsureValid()
     {
-        var userSet = UserId.HasValue;
-        var deptSet = DepartmentId.HasValue;
-        DomainException.ThrowIf(userSet == deptSet,
-            "PermissionGrant'ta tam olarak biri (UserId veya DepartmentId) dolu olmalı.");
+        var owners = (UserId.HasValue ? 1 : 0) + (DepartmentId.HasValue ? 1 : 0) + (GroupId.HasValue ? 1 : 0);
+        DomainException.ThrowIf(owners != 1,
+            "PermissionGrant'ta tam olarak biri (UserId, DepartmentId veya GroupId) dolu olmalı.");
         DomainException.ThrowIf(PermissionDefId <= 0,
             "PermissionDefId zorunlu.");
     }

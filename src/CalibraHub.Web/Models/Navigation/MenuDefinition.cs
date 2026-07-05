@@ -59,7 +59,7 @@ public static class MenuDefinition
             new("settings.company",        isEn ? "Company Settings"       : "Şirket Ayarları",         "Building2",          "/Admin/CompanySettings",    null, AdminOnly: true),
             new("settings.parameters",     isEn ? "Company Parameters"     : "Şirket Parametreleri",    "SlidersHorizontal",  "/Admin/Parameters",         null, AdminOnly: true),
             new("settings.decimals",       isEn ? "Decimal Settings"       : "Ondalık Ayarları",        "Ruler",              "/Admin/DecimalSettings",    null,
-                PermissionFormCode: FormCodes.CompanySettings),
+                PermissionFormCode: FormCodes.DecimalSettings),
             new("settings.integrations",   isEn ? "Integration Wizard"     : "Entegrasyon Wizard",      "Plug",               "/Integrations",             null,
                 MatchPath: "/Integrations", PermissionFormCode: FormCodes.Integrations),
             new("settings.viewsettings",   isEn ? "Field Guide"            : "Alan Rehberi",            "LayoutGrid",         "/Admin/ViewSettings",       null,
@@ -88,7 +88,8 @@ public static class MenuDefinition
             // Grup: isMenuAdmin || canView("NOTES")  →  en az bir child gerekiyor (otomatik gizleme var)
             new("general", isEn ? "General" : "Genel", "LayoutList", null, new List<MenuNode>
             {
-                new("general.calendar", isEn ? "Calendar"           : "Takvim",              "CalendarDays", "/Calendar", null),
+                new("general.calendar", isEn ? "Calendar"           : "Takvim",              "CalendarDays", "/Calendar", null,
+                    PermissionFormCode: FormCodes.Calendar),
                 new("general.notes",    isEn ? "Notes"              : "Notlar",             "FileText",     "/Notes",    null,
                     PermissionFormCode: FormCodes.Notes),
                 new("general.whatsapp", "WhatsApp",                                          "MessageCircle","/Whatsapp", null,
@@ -243,12 +244,12 @@ public static class MenuDefinition
             }),
 
             // ────────────── Veri Aktarımı / Data Import ──────────────
-            // Şablon-tabanlı içe aktarım (AI'sız), Cari pilotu. Pilot aşamasında yetki
-            // kısıtı yok (tüm kullanıcılar görür); ileride PermissionFormCode/AdminOnly eklenebilir.
+            // Şablon-tabanlı içe aktarım (AI'sız). 2026-07-06: DATA_IMPORT form kodu ile
+            // yetki kapsamına alındı — toplu veri yazma yetkisiz kullanıcıya açık kalmamalı.
             new("dataimport", isEn ? "Data Import" : "Veri Aktarımı", "Upload", null, new List<MenuNode>
             {
                 new("dataimport.run", isEn ? "Import / Templates" : "İçe Aktarım", "FileUp", "/Import", null,
-                    MatchPath: "/Import"),
+                    MatchPath: "/Import", PermissionFormCode: FormCodes.DataImport),
             }),
 
             // ────────────── 8. Tasarım / Design ──────────────

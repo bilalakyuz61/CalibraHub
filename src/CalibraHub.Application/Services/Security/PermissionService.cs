@@ -168,6 +168,18 @@ public sealed class PermissionService : IPermissionService
             return userGrant.IsGranted;
         }
 
+        // 4.5) Grup kararı — kullanıcının üye olduğu AKTİF gruplardan gelen satırlar
+        // (ListForUserAndDepartmentAsync üyelik join'i ile getirir). Birden fazla grup
+        // çakışırsa union-allow: en az bir grup İZİN veriyorsa izin. Grup satırı hiç
+        // yoksa departmana düşülür.
+        var groupGrants = relevant.Where(g => g.GroupId.HasValue).ToList();
+        if (groupGrants.Count > 0)
+        {
+            var groupAllowed = groupGrants.Any(g => g.IsGranted);
+            _logger.LogDebug("[PERM][DIAG] {Result} u={UserId} dept={DeptId} {FormCode}:{ActionCode} → group grants ({Count} satır, union-allow)", groupAllowed ? "ALLOW" : "DENY", userId, departmentId?.ToString() ?? "-", formCode, actionCode, groupGrants.Count);
+            return groupAllowed;
+        }
+
         // 5) Sonra departman bazlı
         if (departmentId.HasValue)
         {
@@ -292,6 +304,16 @@ public sealed class PermissionService : IPermissionService
                 continue;
             }
 
+            // Grup birleşimi — CheckAsync 4.5 ile aynı kural (union-allow)
+            var defGroupGrants = grants.Where(g => g.PermissionDefId == d.Id && g.GroupId.HasValue).ToList();
+            if (defGroupGrants.Count > 0)
+            {
+                result.Add(new EffectivePermissionDto(
+                    d.Id, d.FormCode, d.ActionCode, d.Label, d.Category,
+                    Source: "GROUP", IsAllowed: defGroupGrants.Any(g => g.IsGranted), FormSortOrder: formSort));
+                continue;
+            }
+
             if (departmentId.HasValue)
             {
                 var deptGrant = grants.FirstOrDefault(g =>
@@ -316,6 +338,32 @@ public sealed class PermissionService : IPermissionService
             .OrderBy(x => x.FormSortOrder)
             .ThenBy(x => x.FormCode, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => ActionSortPriority(x.ActionCode))
+            .ThenBy(x => x.ActionCode, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<EffectivePermissionDto>> GetGroupPermissionsAsync(
+        int groupId, CancellationToken ct)
+    {
+        var defs        = await GetDefsCachedAsync(ct);
+        var grants      = await _grantRepo.ListByGroupAsync(groupId, ct); // küçük liste, cache gereksiz
+        var formSortMap = await BuildFormSortMapAsync(ct);
+
+        var result = new List<EffectivePermissionDto>(defs.Count);
+        foreach (var d in defs)
+        {
+            var formSort = formSortMap.TryGetValue(d.FormCode, out var so) ? so : int.MaxValue;
+            var grant = grants.FirstOrDefault(g => g.PermissionDefId == d.Id);
+            result.Add(new EffectivePermissionDto(
+                d.Id, d.FormCode, d.ActionCode, d.Label, d.Category,
+                Source: grant is not null ? "GROUP" : "DEFAULT",
+                IsAllowed: grant?.IsGranted ?? false,
+                FormSortOrder: formSort));
+        }
+
+        return result
+            .OrderBy(x => x.FormSortOrder)
+            .ThenBy(x => x.FormCode, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.ActionCode, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

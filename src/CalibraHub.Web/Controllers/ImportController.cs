@@ -26,7 +26,7 @@ namespace CalibraHub.Web.Controllers;
 ///   POST /Import/api/commit               → dosya + şablon → kayıt + rapor
 /// </summary>
 [Authorize]
-[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DataVisibility)]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DataImport)]
 public sealed class ImportController : Controller
 {
     private const long MaxUploadBytes = 12L * 1024 * 1024;   // 12 MB

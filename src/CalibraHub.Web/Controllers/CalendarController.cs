@@ -8,7 +8,7 @@ namespace CalibraHub.Web.Controllers;
 
 [Authorize]
 [Route("[controller]/[action]")]
-[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Notes)]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.Calendar)]
 public sealed class CalendarController : Controller
 {
     private readonly CalendarService _calendarService;

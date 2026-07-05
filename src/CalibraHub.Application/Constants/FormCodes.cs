@@ -173,6 +173,13 @@ public static class FormCodes
     public const string SetupDefinitions   = "SETUP_DEFINITIONS";
     public const string Scheduler          = "SCHEDULER";
     public const string ApprovalFlows      = "APPROVAL_FLOWS";
+    public const string DecimalSettings    = "DECIMAL_SETTINGS";
+
+    // ═══════════════════════════════════════════════════
+    // GENEL (yetki kapsamına sonradan alınanlar — 2026-07-06)
+    // ═══════════════════════════════════════════════════
+    public const string Calendar           = "CALENDAR";
+    public const string DataImport         = "DATA_IMPORT";
 
     // ═══════════════════════════════════════════════════
     // Tüm sabitler (startup assertion için reflection alternatifi)

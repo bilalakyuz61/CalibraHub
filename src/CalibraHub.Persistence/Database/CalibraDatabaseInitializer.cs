@@ -733,6 +733,7 @@ END;";
             await EnsureWorkflowInstanceTablesAsync(connection, cancellationToken);
             await EnsureAttachmentTableAsync(cancellationToken); // system DB'ye yazar (idempotent)
             await EnsurePermissionTablesAsync(connection, cancellationToken);
+            await EnsurePermissionGroupTablesAsync(connection, cancellationToken);
             await MigrateDateTime2ToDateTimeAsync(connection, cancellationToken);
             await EnsureCalendarTablesAsync(connection, cancellationToken);
             await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
@@ -868,6 +869,7 @@ END;";
             await EnsureWorkflowInstanceTablesAsync(connection, cancellationToken);
             await EnsureAttachmentTableAsync(cancellationToken);
             await EnsurePermissionTablesAsync(connection, cancellationToken);
+            await EnsurePermissionGroupTablesAsync(connection, cancellationToken);
             await MigrateDateTime2ToDateTimeAsync(connection, cancellationToken);
             await EnsureCalendarTablesAsync(connection, cancellationToken);
             await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
@@ -11129,7 +11131,8 @@ END;";
             ("STOCK_IN_LINES",      "Kalem Bilgisi",                    "Lojistik",             "Ambar Giriş",              336,  true),
             ("STOCK_OUT",           "Üst Bilgi",                        "Lojistik",             "Ambar Çıkış",              340,  true),
             ("STOCK_OUT_LINES",     "Kalem Bilgisi",                    "Lojistik",             "Ambar Çıkış",              341,  true),
-            ("INVENTORY_COUNT",     "Sayım",                            "Lojistik",             null,                       345,  true),
+            ("INVENTORY_COUNT",       "Üst Bilgi",                      "Lojistik",             "Sayım",                    345,  true),
+            ("INVENTORY_COUNT_LINES", "Kalem Bilgisi",                  "Lojistik",             "Sayım",                    346,  true),
 
             // ── Satış ─────────────────────────────────────────────────────────
             ("SALES_QUOTE",         "Satış Teklifi",                    "Satış",                "Satış Teklifi",            400,  true),  // SmartBoard liste
@@ -11239,6 +11242,11 @@ END;";
             // solmenüdeki aynı isimli menü maddesini yetkilendiren form'u doğru tanımlar.
             ("SETUP_DEFINITIONS",   "Alan Rehberi",                     "Ayarlar",              null,                       960,  false), // yönetim sayfası
             ("APPROVAL_FLOWS",      "Onay Akışları",                    "Ayarlar",              null,                       970,  false), // yönetim sayfası
+            ("DECIMAL_SETTINGS",    "Ondalık Ayarları",                 "Ayarlar",              null,                       905,  false), // form bazlı ondalık hane yönetim sayfası
+
+            // ── Genel (yetki kapsamına sonradan alınanlar — 2026-07-06) ─────
+            ("CALENDAR",            "Takvim",                           "Genel",                null,                       15,   false),
+            ("DATA_IMPORT",         "Veri Aktarımı",                    "Veri Aktarımı",        null,                       790,  false), // Excel/CSV içe aktarım
         };
 
         foreach (var (code, name, module, subModule, sort, isWidgetForm) in forms)
@@ -16613,6 +16621,80 @@ END;";
     //   3) UserPermission(DepartmentId=u.DepartmentId) → varsa IsGranted
     //   4) Default deny
     // ============================================================================
+    /// <summary>
+    /// Yetki grubu altyapısı (2026-07-06): PermissionGroup (grup/rol tanımı) +
+    /// UserPermissionGroup (üyelik) + UserPermission.GroupId (üçüncü sahip türü).
+    /// Resolve sırası: User override → Grup birleşimi → Departman → deny.
+    /// GroupId migration'ı EXEC ile deferred — mevcut tabloda parse-time kolon
+    /// doğrulamasına takılmaz (BridgeMsgId dersi).
+    /// </summary>
+    private async Task EnsurePermissionGroupTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            -- ── PermissionGroup: yetki grubu (rol) tanımı ─────────────────────
+            IF OBJECT_ID(N'[{s}].[PermissionGroup]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[PermissionGroup]
+                (
+                    [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_PermissionGroup] PRIMARY KEY,
+                    [Name]        NVARCHAR(100) NOT NULL,
+                    [Description] NVARCHAR(400) NULL,
+                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_PermissionGroup_IsActive] DEFAULT(1),
+                    [CreatedById] INT           NULL,
+                    [Created]     DATETIME      NOT NULL CONSTRAINT [DF_PermissionGroup_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT           NULL,
+                    [Updated]     DATETIME      NULL
+                );
+                CREATE UNIQUE INDEX [UX_PermissionGroup_Name] ON [{s}].[PermissionGroup]([Name]);
+            END;
+
+            -- ── UserPermissionGroup: kullanıcı ↔ grup üyeliği ─────────────────
+            IF OBJECT_ID(N'[{s}].[UserPermissionGroup]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[UserPermissionGroup]
+                (
+                    [Id]          INT      IDENTITY(1,1) NOT NULL CONSTRAINT [PK_UserPermissionGroup] PRIMARY KEY,
+                    [UserId]      INT      NOT NULL,
+                    [GroupId]     INT      NOT NULL,
+                    [CreatedById] INT      NULL,
+                    [Created]     DATETIME NOT NULL CONSTRAINT [DF_UserPermissionGroup_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_UserPermissionGroup_User]
+                        FOREIGN KEY ([UserId]) REFERENCES [{s}].[Users]([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_UserPermissionGroup_Group]
+                        FOREIGN KEY ([GroupId]) REFERENCES [{s}].[PermissionGroup]([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [UX_UserPermissionGroup_User_Group]
+                    ON [{s}].[UserPermissionGroup]([UserId], [GroupId]);
+                CREATE INDEX [IX_UserPermissionGroup_Group] ON [{s}].[UserPermissionGroup]([GroupId]);
+            END;
+
+            -- ── UserPermission.GroupId — üçüncü sahip türü (grup grant'ları) ──
+            IF OBJECT_ID(N'[{s}].[UserPermission]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.UserPermission', N'GroupId') IS NULL
+            BEGIN
+                EXEC(N'ALTER TABLE [{s}].[UserPermission] ADD [GroupId] INT NULL;');
+                IF EXISTS (SELECT 1 FROM sys.check_constraints
+                           WHERE parent_object_id = OBJECT_ID(N'[{s}].[UserPermission]')
+                             AND name = N'CK_UserPermission_OneOwner')
+                    EXEC(N'ALTER TABLE [{s}].[UserPermission] DROP CONSTRAINT [CK_UserPermission_OneOwner];');
+                EXEC(N'ALTER TABLE [{s}].[UserPermission] ADD CONSTRAINT [CK_UserPermission_OneOwner] CHECK (
+                        ([UserId] IS NOT NULL AND [DepartmentId] IS NULL AND [GroupId] IS NULL) OR
+                        ([UserId] IS NULL AND [DepartmentId] IS NOT NULL AND [GroupId] IS NULL) OR
+                        ([UserId] IS NULL AND [DepartmentId] IS NULL AND [GroupId] IS NOT NULL));');
+                EXEC(N'ALTER TABLE [{s}].[UserPermission] ADD CONSTRAINT [FK_UserPermission_Group]
+                        FOREIGN KEY ([GroupId]) REFERENCES [{s}].[PermissionGroup]([Id]) ON DELETE CASCADE;');
+                EXEC(N'CREATE UNIQUE INDEX [UX_UserPermission_Group_Perm]
+                        ON [{s}].[UserPermission]([GroupId], [PermissionDefId]) WHERE [GroupId] IS NOT NULL;');
+                EXEC(N'CREATE INDEX [IX_UserPermission_Group]
+                        ON [{s}].[UserPermission]([GroupId]) WHERE [GroupId] IS NOT NULL;');
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private async Task EnsurePermissionTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");

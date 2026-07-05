@@ -92,3 +92,30 @@ public sealed record BulkAssignPermissionRequest(
 public sealed record PermissionAssignmentItem(
     int PermissionDefId,
     bool IsGranted);
+
+// ── Yetki grupları (2026-07-06) ─────────────────────────────────────────
+
+/// <summary>Grup listesi satırı — üye sayısı dahil (Yetki Yönetimi UI).</summary>
+public sealed record PermissionGroupDto(
+    int Id,
+    string Name,
+    string? Description,
+    bool IsActive,
+    int MemberCount);
+
+/// <summary>Grup üyesi — matris başlığı ve üye yönetim modali için.</summary>
+public sealed record PermissionGroupMemberDto(
+    int UserId,
+    string FullName,
+    string? Email);
+
+/// <summary>Grup oluştur/güncelle isteği.</summary>
+public sealed record SavePermissionGroupRequest(
+    int? Id,
+    string Name,
+    string? Description,
+    bool IsActive = true);
+
+/// <summary>Grup üyeliğini toplu replace isteği.</summary>
+public sealed record SaveGroupMembersRequest(
+    IReadOnlyList<int> UserIds);

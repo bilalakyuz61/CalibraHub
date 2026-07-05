@@ -55,6 +55,13 @@ public interface IPermissionService
         int departmentId, CancellationToken ct);
 
     /// <summary>
+    /// Bir yetki grubunun tanımlı izin satırlarını matris olarak döner
+    /// (admin UI "Grup" modu). Source: GROUP/DEFAULT.
+    /// </summary>
+    Task<IReadOnlyList<EffectivePermissionDto>> GetGroupPermissionsAsync(
+        int groupId, CancellationToken ct);
+
+    /// <summary>
     /// Kullanıcının belirli bir operasyon için en geniş erişim kapsamını döner.
     /// <para>
     /// <paramref name="operation"/>: "VIEW", "EDIT" veya "DELETE".

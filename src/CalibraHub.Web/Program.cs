@@ -398,6 +398,8 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPerm
                            CalibraHub.Persistence.Repositories.SqlPermissionDefRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionGrantRepository,
                            CalibraHub.Persistence.Repositories.SqlPermissionGrantRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionGroupRepository,
+                           CalibraHub.Persistence.Repositories.SqlPermissionGroupRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IPermissionService,
                            CalibraHub.Application.Services.Security.PermissionService>();
 builder.Services.AddScoped<CalibraHub.Application.Services.Security.PermissionDefDiscoveryService>();

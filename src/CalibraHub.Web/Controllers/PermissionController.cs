@@ -26,15 +26,18 @@ public sealed class PermissionController : Controller
     private readonly IPermissionService _permService;
     private readonly IPermissionGrantRepository _grantRepo;
     private readonly IUserProfileRepository _userRepo;
+    private readonly IPermissionGroupRepository _groupRepo;
 
     public PermissionController(
         IPermissionService permService,
         IPermissionGrantRepository grantRepo,
-        IUserProfileRepository userRepo)
+        IUserProfileRepository userRepo,
+        IPermissionGroupRepository groupRepo)
     {
         _permService = permService;
         _grantRepo = grantRepo;
         _userRepo = userRepo;
+        _groupRepo = groupRepo;
     }
 
     // ── Current user — client-side gate'leri için ─────────────────────────
@@ -114,6 +117,109 @@ public sealed class PermissionController : Controller
         // Hem null-dept key'i hem de kullanıcının gerçek dept'iyle olan key'i temizle.
         _permService.InvalidateCache(userId: id, departmentId: target.DepartmentId);
         return Json(new { ok = true, count = grants.Count });
+    }
+
+    // ── Yetki grupları (2026-07-06) ───────────────────────────────────────
+
+    /// <summary>Grup listesi (üye sayılarıyla). Pasifler dahil — admin listesi.</summary>
+    [HttpGet("Groups")]
+    public async Task<IActionResult> Groups(CancellationToken ct)
+    {
+        if (!await CanManagePermissionsAsync(ct)) return StatusCode(403, new { ok = false, error = "Yetki yönetimi için yetkiniz yok." });
+        var groups = await _groupRepo.ListAsync(includeInactive: true, ct);
+        return Json(new { ok = true, groups });
+    }
+
+    [HttpPost("Groups/Save")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GroupSave([FromBody] SavePermissionGroupRequest request, CancellationToken ct)
+    {
+        if (!await CanManagePermissionsAsync(ct)) return StatusCode(403, new { ok = false, error = "Yetki yönetimi için yetkiniz yok." });
+        if (request is null || string.IsNullOrWhiteSpace(request.Name))
+            return Json(new { ok = false, error = "Grup adı zorunlu." });
+        try
+        {
+            var (currentUserId, _, _) = GetCurrentUser();
+            var id = await _groupRepo.SaveAsync(new PermissionGroup
+            {
+                Id          = request.Id ?? 0,
+                Name        = request.Name.Trim(),
+                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                IsActive    = request.IsActive,
+                CreatedById = currentUserId > 0 ? currentUserId : null,
+                UpdatedById = currentUserId > 0 ? currentUserId : null,
+            }, ct);
+            return Json(new { ok = true, id });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>Grup izin matrisi.</summary>
+    [HttpGet("Group/{id:int}")]
+    public async Task<IActionResult> GroupMatrix(int id, CancellationToken ct)
+    {
+        if (!await CanManagePermissionsAsync(ct)) return StatusCode(403, new { ok = false, error = "Yetki yönetimi için yetkiniz yok." });
+        var matrix = await _permService.GetGroupPermissionsAsync(id, ct);
+        return Json(new { ok = true, groupId = id, permissions = matrix });
+    }
+
+    [HttpPost("Group/{id:int}/Save")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GroupMatrixSave(
+        int id, [FromBody] BulkAssignPermissionRequest request, CancellationToken ct)
+    {
+        if (!await CanManagePermissionsAsync(ct)) return StatusCode(403, new { ok = false, error = "Yetki yönetimi için yetkiniz yok." });
+        if (request is null || request.Items is null)
+            return Json(new { ok = false, error = "Geçersiz istek." });
+
+        var grants = request.Items.Select(i => new PermissionGrant
+        {
+            GroupId         = id,
+            PermissionDefId = i.PermissionDefId,
+            IsGranted       = i.IsGranted,
+            CreatedById     = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var _guid) ? _guid : (int?)null,
+        }).ToList();
+
+        await _grantRepo.BulkReplaceForGroupAsync(id, grants, ct);
+        // Grup üyelerinin cache'leri bilinmiyor — 10sn TTL ile doğal düşer.
+        return Json(new { ok = true, count = grants.Count });
+    }
+
+    /// <summary>Grubun üyeleri.</summary>
+    [HttpGet("Group/{id:int}/Members")]
+    public async Task<IActionResult> GroupMembers(int id, CancellationToken ct)
+    {
+        if (!await CanManagePermissionsAsync(ct)) return StatusCode(403, new { ok = false, error = "Yetki yönetimi için yetkiniz yok." });
+        var members = await _groupRepo.ListMembersAsync(id, ct);
+        return Json(new { ok = true, groupId = id, members });
+    }
+
+    [HttpPost("Group/{id:int}/Members/Save")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GroupMembersSave(
+        int id, [FromBody] SaveGroupMembersRequest request, CancellationToken ct)
+    {
+        if (!await CanManagePermissionsAsync(ct)) return StatusCode(403, new { ok = false, error = "Yetki yönetimi için yetkiniz yok." });
+        if (request is null || request.UserIds is null)
+            return Json(new { ok = false, error = "Geçersiz istek." });
+        var (currentUserId, _, _) = GetCurrentUser();
+        await _groupRepo.ReplaceMembersAsync(id, request.UserIds, currentUserId > 0 ? currentUserId : null, ct);
+        // Üyeliği değişen kullanıcıların grant cache'i 10sn TTL ile düşer;
+        // ayrıca bilinenler için hedefli invalidation yap.
+        foreach (var uid in request.UserIds) _permService.InvalidateCache(userId: uid);
+        return Json(new { ok = true, count = request.UserIds.Count });
+    }
+
+    /// <summary>Kullanıcının üye olduğu aktif gruplar (Kullanıcı modunda rozet).</summary>
+    [HttpGet("UserGroups/{userId:int}")]
+    public async Task<IActionResult> UserGroups(int userId, CancellationToken ct)
+    {
+        if (!await CanManagePermissionsAsync(ct)) return StatusCode(403, new { ok = false, error = "Yetki yönetimi için yetkiniz yok." });
+        var groups = await _groupRepo.ListGroupsForUserAsync(userId, ct);
+        return Json(new { ok = true, userId, groups });
     }
 
     // ── Tanılama (geçici) ─────────────────────────────────────────────────

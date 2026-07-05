@@ -17,7 +17,7 @@ namespace CalibraHub.Web.Controllers;
 /// kullanıcılar erişir, PermissionScope'a tabi değildir.
 /// </summary>
 [Authorize]
-[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CompanySettings)]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DecimalSettings)]
 public sealed class DecimalSettingsController : Controller
 {
     private readonly IDecimalSettingService _decimals;

@@ -388,6 +388,101 @@
         margin-left: 6px; vertical-align: middle;
     }
     body.app-theme-dark .pm-action-row__badge { background: rgba(99,102,241,.2); color: #a5b4fc; }
+
+    /* ── Grup Yönetimi (2026-07-06) ─────────────────────────────────── */
+    .pm-btn--ghost {
+        background: transparent; color: var(--bs-body-color, #334155);
+        border: 1px solid var(--app-border, #cbd5e1);
+    }
+    .pm-btn--ghost:hover { border-color: #818cf8; color: #6366f1; }
+    body.app-theme-dark .pm-btn--ghost { color: #cbd5e1; border-color: rgba(255,255,255,.16); }
+    body.app-theme-dark .pm-btn--ghost:hover { color: #a5b4fc; border-color: rgba(129,140,248,.5); }
+
+    .pmg-backdrop {
+        position: fixed; inset: 0; z-index: 9990; display: none;
+        align-items: center; justify-content: center;
+        background: rgba(15,23,42,.55); backdrop-filter: blur(4px);
+    }
+    .pmg-backdrop.open { display: flex; }
+    .pmg-modal {
+        width: min(640px, 94vw); max-height: 82vh; display: flex; flex-direction: column;
+        border-radius: 14px; overflow: hidden;
+        background: var(--app-surface, #ffffff);
+        border: 1px solid var(--app-border, #e2e8f0);
+        box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    body.app-theme-dark .pmg-modal { background: #0f172a; border-color: rgba(255,255,255,.1); }
+    .pmg-head {
+        display: flex; align-items: center; gap: 10px; padding: 14px 18px;
+        border-bottom: 1px solid var(--app-border, #e2e8f0); flex-shrink: 0;
+    }
+    body.app-theme-dark .pmg-head { border-bottom-color: rgba(255,255,255,.08); }
+    .pmg-title { font-size: .95rem; font-weight: 700; flex: 1; color: var(--bs-body-color, #0f172a); }
+    body.app-theme-dark .pmg-title { color: #e2e8f0; }
+    .pmg-close {
+        width: 28px; height: 28px; border: none; background: transparent; cursor: pointer;
+        color: #64748b; border-radius: 6px; font-size: 16px; line-height: 1;
+    }
+    .pmg-close:hover { background: rgba(148,163,184,.15); }
+    .pmg-body { padding: 14px 18px; overflow-y: auto; flex: 1; }
+
+    .pmg-new { display: flex; gap: 8px; margin-bottom: 14px; }
+    .pmg-new input[type="text"] {
+        flex: 1; padding: 7px 10px; border-radius: 8px; font-size: .82rem;
+        border: 1px solid var(--app-border, #cbd5e1); background: var(--app-surface, #fff);
+        color: var(--bs-body-color, #0f172a);
+    }
+    body.app-theme-dark .pmg-new input[type="text"] { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); color: #e2e8f0; }
+    .pmg-new input[type="text"]:focus { outline: none; border-color: #818cf8; }
+
+    .pmg-row {
+        display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+        border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; margin-bottom: 8px;
+    }
+    body.app-theme-dark .pmg-row { border-color: rgba(255,255,255,.08); }
+    .pmg-row--inactive { opacity: .55; }
+    .pmg-row-name { font-weight: 600; font-size: .84rem; color: var(--bs-body-color, #0f172a); }
+    body.app-theme-dark .pmg-row-name { color: #e2e8f0; }
+    .pmg-row-desc { font-size: .72rem; color: #64748b; }
+    .pmg-row-main { flex: 1; min-width: 0; }
+    .pmg-count {
+        font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+        background: rgba(99,102,241,.12); color: #4f46e5; white-space: nowrap;
+    }
+    body.app-theme-dark .pmg-count { background: rgba(99,102,241,.2); color: #a5b4fc; }
+
+    /* Switchkey — Aktif/Pasif (native checkbox ham düşmez) */
+    .pmg-switch { position: relative; display: inline-block; width: 34px; height: 19px; flex-shrink: 0; cursor: pointer; }
+    .pmg-switch input { opacity: 0; width: 0; height: 0; }
+    .pmg-switch .tr {
+        position: absolute; inset: 0; border-radius: 999px; transition: background .15s;
+        background: #cbd5e1;
+    }
+    body.app-theme-dark .pmg-switch .tr { background: rgba(255,255,255,.18); }
+    .pmg-switch .tr::after {
+        content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px;
+        border-radius: 50%; background: #fff; transition: transform .15s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    }
+    .pmg-switch input:checked + .tr { background: #6366f1; }
+    .pmg-switch input:checked + .tr::after { transform: translateX(15px); }
+
+    .pmg-member-search { width: 100%; margin-bottom: 8px; }
+    .pmg-member-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; padding: 6px; }
+    body.app-theme-dark .pmg-member-list { border-color: rgba(255,255,255,.08); }
+    .pmg-member {
+        display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px;
+        font-size: .8rem; cursor: pointer; color: var(--bs-body-color, #0f172a);
+    }
+    body.app-theme-dark .pmg-member { color: #e2e8f0; }
+    .pmg-member:hover { background: rgba(99,102,241,.07); }
+    .pmg-member input { accent-color: #6366f1; }
+    .pmg-member-mail { font-size: .7rem; color: #64748b; }
+    .pmg-foot {
+        display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px;
+        border-top: 1px solid var(--app-border, #e2e8f0); flex-shrink: 0;
+    }
+    body.app-theme-dark .pmg-foot { border-top-color: rgba(255,255,255,.08); }
 </style>
 }
 
@@ -397,6 +492,12 @@
             <label>
                 <input type="radio" name="permMode" value="dept" />
                 <span>Departman</span>
+            </label>
+            <label>
+                @* 2026-07-06 — Yetki grubu (rol): birden fazla kullanıcıya tek pakette izin.
+                   Çözümleme: Kullanıcı override > Grup birleşimi > Departman > deny. *@
+                <input type="radio" name="permMode" value="group" />
+                <span>Grup</span>
             </label>
             <label>
                 @* 2026-06-08 — Varsayılan mod: Kullanıcı. Tipik kullanım kullanıcıya yetki vermek;
@@ -414,13 +515,14 @@
         </div>
 
         <button type="button" id="permSaveBtn" class="pm-btn pm-btn--primary" disabled>Kaydet</button>
+        <button type="button" id="permGroupsBtn" class="pm-btn pm-btn--ghost" style="display:none;">Grup Yönetimi</button>
 
         <select id="permQuickFilter" class="pm-quick-filter-sel" style="display:none;">
             <option value="all">Tümü</option>
             <option value="has">Sahip olduğu</option>
             <option value="no">Sahip olmadığı</option>
-            <option value="fromGroup" data-user-only>Gruptan aldığı</option>
-            <option value="noFromGroup" data-user-only>Kendinde var, grupta yok</option>
+            <option value="fromGroup" data-user-only>Departmandan aldığı</option>
+            <option value="noFromGroup" data-user-only>Kendinde var, departmanda yok</option>
         </select>
 
         <span id="permDeptBadge" class="pm-dept-badge" style="display:none;"></span>
@@ -560,7 +662,7 @@
             if (eff && !isFromGroup(it)) counts.noFromGroup++;
         });
         var labels = { all: 'Tümü', has: 'Sahip olduğu', no: 'Sahip olmadığı',
-                       fromGroup: 'Gruptan aldığı', noFromGroup: 'Kendinde var, grupta yok' };
+                       fromGroup: 'Departmandan aldığı', noFromGroup: 'Kendinde var, departmanda yok' };
         quickFilterSel.querySelectorAll('option').forEach(function (opt) {
             var k = opt.value;
             if (labels[k] !== undefined) opt.textContent = labels[k] + ' (' + (counts[k] || 0) + ')';
@@ -593,6 +695,8 @@
             asideEl.innerHTML = '<div class="pm-aside-empty">Yukarıdan hedef seçin.</div>';
             contentEl.innerHTML = '<div class="pm-empty"><div class="pm-empty__icon">🛡️</div><div>Soldan bir form seçin</div></div>';
             saveBtn.disabled = true;
+            var groupsBtn = document.getElementById('permGroupsBtn');
+            if (groupsBtn) groupsBtn.style.display = state.mode === 'group' ? 'inline-flex' : 'none';
             loadTargets();
         });
     });
@@ -616,9 +720,9 @@
         renderContent();
     });
 
-    // Departmansız kullanıcı için user-only seçenekleri disable et
+    // Kullanıcı modu dışında (dept/grup) ve departmansız kullanıcıda user-only seçenekler anlamsız
     function applyFilterDisabledClass() {
-        var disableUserOnly = state.mode === 'user' && !state.targetHasDept;
+        var disableUserOnly = state.mode !== 'user' || !state.targetHasDept;
         quickFilterSel.querySelectorAll('option[data-user-only]').forEach(function (opt) {
             opt.disabled = disableUserOnly;
         });
@@ -644,6 +748,28 @@
     async function loadTargets() {
         targetSel.innerHTML = '<option value="">— Seçiniz —</option>';
         state.userDeptMap = {};
+
+        // Grup modu: /Permission/Groups (aktifler seçilebilir, pasifler işaretli)
+        if (state.mode === 'group') {
+            try {
+                var gr = await fetch('/Permission/Groups', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                var gd = await gr.json();
+                if (!gd.ok) throw new Error(gd.error || 'Grup listesi alınamadı.');
+                state.groups = gd.groups || [];
+                state.groups.forEach(function (g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.id;
+                    opt.textContent = g.name + ' (' + (g.memberCount || 0) + ' üye)' + (g.isActive ? '' : ' — pasif');
+                    targetSel.appendChild(opt);
+                });
+                if (state.groups.length === 0)
+                    setStatus('Henüz yetki grubu yok — "Grup Yönetimi" ile oluşturun.', '');
+            } catch (e) {
+                setStatus('Grup listesi yüklenemedi: ' + e.message, 'err');
+            }
+            return;
+        }
+
         var url = state.mode === 'user' ? '/CompanyUser/UsersLookup' : '/Admin/GetDepartmentsLookup';
         try {
             var r = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
@@ -674,9 +800,9 @@
         state.targetId = id;
         setStatus('Yükleniyor...', '');
 
-        var url = state.mode === 'user'
-            ? '/Permission/User/' + id
-            : '/Permission/Department/' + id;
+        var url = state.mode === 'user'  ? '/Permission/User/' + id
+                : state.mode === 'group' ? '/Permission/Group/' + id
+                :                          '/Permission/Department/' + id;
         try {
             var r = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
             if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -684,8 +810,9 @@
             if (!data.ok) throw new Error(data.error || 'Yetki listesi alınamadı.');
             // Kullanıcı modunda hedefin rolünü kaydet — AdminOnly uyarısı için
             state.targetRole = (state.mode === 'user') ? (data.role || null) : null;
+            var explicitSource = state.mode === 'user' ? 'USER' : state.mode === 'group' ? 'GROUP' : 'DEPARTMENT';
             state.items = (data.permissions || []).map(function (p) {
-                var isExplicit = p.source === (state.mode === 'user' ? 'USER' : 'DEPARTMENT');
+                var isExplicit = p.source === explicitSource;
                 return {
                     permissionDefId: p.permissionDefId,
                     formCode: p.formCode,
@@ -1115,9 +1242,9 @@
                 return { permissionDefId: it.permissionDefId, isGranted: it.isGranted };
             });
 
-        var url = state.mode === 'user'
-            ? '/Permission/User/' + state.targetId + '/Save'
-            : '/Permission/Department/' + state.targetId + '/Save';
+        var url = state.mode === 'user'  ? '/Permission/User/' + state.targetId + '/Save'
+                : state.mode === 'group' ? '/Permission/Group/' + state.targetId + '/Save'
+                :                          '/Permission/Department/' + state.targetId + '/Save';
 
         saveBtn.disabled = true;
         setStatus('Kaydediliyor...', '');
@@ -1165,7 +1292,204 @@
         });
     }
 
+    // ── Grup Yönetimi modali (2026-07-06) ────────────────────────────
+    (function initGroupManager() {
+        var backdrop = document.getElementById('pmgBackdrop');
+        var bodyEl = document.getElementById('pmgBody');
+        var titleEl = document.getElementById('pmgTitle');
+        var backBtn = document.getElementById('pmgBackBtn');
+        var saveMembersBtn = document.getElementById('pmgSaveMembersBtn');
+        if (!backdrop) return;
+
+        var view = 'list';           // 'list' | 'members'
+        var memberGroup = null;      // { id, name }
+        var allUsers = [];           // UsersLookup cache
+        var memberIds = {};          // { userId: true }
+        var memberSearch = '';
+
+        function openModal() { backdrop.classList.add('open'); renderList(); }
+        function closeModal() { backdrop.classList.remove('open'); view = 'list'; }
+
+        document.getElementById('permGroupsBtn').addEventListener('click', openModal);
+        document.getElementById('pmgCloseBtn').addEventListener('click', closeModal);
+        backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeModal(); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && backdrop.classList.contains('open')) closeModal();
+        });
+
+        async function fetchGroups() {
+            var r = await fetch('/Permission/Groups', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+            var d = await r.json();
+            if (!d.ok) throw new Error(d.error || 'Grup listesi alınamadı.');
+            state.groups = d.groups || [];
+            return state.groups;
+        }
+
+        async function postJson(url, payload) {
+            var r = await fetch(url, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify(payload),
+            });
+            var d = await r.json();
+            if (!d.ok) throw new Error(d.error || 'İşlem başarısız.');
+            return d;
+        }
+
+        async function renderList() {
+            view = 'list';
+            titleEl.textContent = 'Yetki Grupları';
+            backBtn.style.display = 'none';
+            saveMembersBtn.style.display = 'none';
+            bodyEl.innerHTML = '<div style="color:#64748b;font-size:.8rem;padding:12px">Yükleniyor…</div>';
+            var groups;
+            try { groups = await fetchGroups(); }
+            catch (e) { bodyEl.innerHTML = '<div style="color:#ef4444;font-size:.8rem;padding:12px">' + escHtml(e.message) + '</div>'; return; }
+
+            var html = '<div class="pmg-new">'
+                + '<input type="text" id="pmgNewName" placeholder="Yeni grup adı (örn. Satış Ekibi)" />'
+                + '<input type="text" id="pmgNewDesc" placeholder="Açıklama (opsiyonel)" />'
+                + '<button type="button" class="pm-btn pm-btn--primary" id="pmgAddBtn">Ekle</button>'
+                + '</div>';
+            if (groups.length === 0) {
+                html += '<div style="color:#64748b;font-size:.8rem;padding:8px 2px">Henüz grup yok. Yukarıdan ilk grubu oluşturun; ardından ana ekranda Grup modunda izinlerini işaretleyin.</div>';
+            }
+            groups.forEach(function (g) {
+                html += '<div class="pmg-row' + (g.isActive ? '' : ' pmg-row--inactive') + '" data-gid="' + g.id + '">'
+                    + '<div class="pmg-row-main">'
+                    +   '<div class="pmg-row-name">' + escHtml(g.name) + '</div>'
+                    +   (g.description ? '<div class="pmg-row-desc">' + escHtml(g.description) + '</div>' : '')
+                    + '</div>'
+                    + '<span class="pmg-count">' + (g.memberCount || 0) + ' üye</span>'
+                    + '<button type="button" class="pm-btn pm-btn--ghost" data-members="' + g.id + '" data-name="' + escHtml(g.name) + '">Üyeler</button>'
+                    + '<label class="pmg-switch" title="' + (g.isActive ? 'Aktif' : 'Pasif') + '">'
+                    +   '<input type="checkbox" data-toggle="' + g.id + '"' + (g.isActive ? ' checked' : '') + ' />'
+                    +   '<span class="tr"></span>'
+                    + '</label>'
+                    + '</div>';
+            });
+            bodyEl.innerHTML = html;
+
+            document.getElementById('pmgAddBtn').addEventListener('click', async function () {
+                var name = (document.getElementById('pmgNewName').value || '').trim();
+                var desc = (document.getElementById('pmgNewDesc').value || '').trim();
+                if (!name) { setStatus('Grup adı boş olamaz.', 'err'); return; }
+                try {
+                    await postJson('/Permission/Groups/Save', { id: null, name: name, description: desc || null, isActive: true });
+                    setStatus('Grup oluşturuldu: ' + name, 'ok');
+                    renderList();
+                    if (state.mode === 'group') loadTargets();
+                } catch (e) { setStatus('Hata: ' + e.message, 'err'); }
+            });
+
+            bodyEl.querySelectorAll('input[data-toggle]').forEach(function (sw) {
+                sw.addEventListener('change', async function () {
+                    var gid = parseInt(sw.getAttribute('data-toggle'), 10);
+                    var g = (state.groups || []).find(function (x) { return x.id === gid; });
+                    if (!g) return;
+                    try {
+                        await postJson('/Permission/Groups/Save', { id: gid, name: g.name, description: g.description, isActive: sw.checked });
+                        setStatus(sw.checked ? 'Grup aktifleştirildi.' : 'Grup pasifleştirildi — izinleri çözümlemeye girmez.', 'ok');
+                        renderList();
+                        if (state.mode === 'group') loadTargets();
+                    } catch (e) { setStatus('Hata: ' + e.message, 'err'); sw.checked = !sw.checked; }
+                });
+            });
+
+            bodyEl.querySelectorAll('button[data-members]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    renderMembers(parseInt(btn.getAttribute('data-members'), 10), btn.getAttribute('data-name'));
+                });
+            });
+        }
+
+        async function renderMembers(groupId, groupName) {
+            view = 'members';
+            memberGroup = { id: groupId, name: groupName };
+            memberSearch = '';
+            titleEl.textContent = 'Üyeler — ' + groupName;
+            backBtn.style.display = 'inline-flex';
+            saveMembersBtn.style.display = 'inline-flex';
+            bodyEl.innerHTML = '<div style="color:#64748b;font-size:.8rem;padding:12px">Yükleniyor…</div>';
+            try {
+                // Kullanıcı listesi (bir kez) + mevcut üyeler
+                if (allUsers.length === 0) {
+                    var ur = await fetch('/CompanyUser/UsersLookup', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                    allUsers = (await ur.json()) || [];
+                }
+                var mr = await fetch('/Permission/Group/' + groupId + '/Members', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                var md = await mr.json();
+                if (!md.ok) throw new Error(md.error || 'Üyeler alınamadı.');
+                memberIds = {};
+                (md.members || []).forEach(function (m) { memberIds[m.userId] = true; });
+                drawMemberList();
+            } catch (e) {
+                bodyEl.innerHTML = '<div style="color:#ef4444;font-size:.8rem;padding:12px">' + escHtml(e.message) + '</div>';
+            }
+        }
+
+        function drawMemberList() {
+            var q = memberSearch.toLocaleLowerCase('tr-TR');
+            var html = '<input type="text" class="pmg-new-input pmg-member-search" id="pmgMemberSearch" placeholder="Kullanıcı ara…" value="' + escHtml(memberSearch) + '" style="padding:7px 10px;border-radius:8px;font-size:.82rem;border:1px solid var(--app-border,#cbd5e1);background:transparent;color:inherit" />'
+                + '<div class="pmg-member-list">';
+            allUsers.forEach(function (u) {
+                var nm = u.name || u.fullName || ('#' + u.id);
+                if (q && (nm + ' ' + (u.email || '')).toLocaleLowerCase('tr-TR').indexOf(q) === -1) return;
+                html += '<label class="pmg-member">'
+                    + '<input type="checkbox" data-uid="' + u.id + '"' + (memberIds[u.id] ? ' checked' : '') + ' />'
+                    + '<span>' + escHtml(nm) + '</span>'
+                    + (u.email ? '<span class="pmg-member-mail">' + escHtml(u.email) + '</span>' : '')
+                    + '</label>';
+            });
+            html += '</div>';
+            bodyEl.innerHTML = html;
+
+            var si = document.getElementById('pmgMemberSearch');
+            si.addEventListener('input', function () {
+                memberSearch = si.value;
+                var pos = si.selectionStart;
+                drawMemberList();
+                var si2 = document.getElementById('pmgMemberSearch');
+                si2.focus(); try { si2.setSelectionRange(pos, pos); } catch (e) { /* ignore */ }
+            });
+            bodyEl.querySelectorAll('input[data-uid]').forEach(function (cb) {
+                cb.addEventListener('change', function () {
+                    var uid = parseInt(cb.getAttribute('data-uid'), 10);
+                    if (cb.checked) memberIds[uid] = true; else delete memberIds[uid];
+                });
+            });
+        }
+
+        backBtn.addEventListener('click', renderList);
+
+        saveMembersBtn.addEventListener('click', async function () {
+            if (!memberGroup) return;
+            var ids = Object.keys(memberIds).map(function (k) { return parseInt(k, 10); });
+            try {
+                await postJson('/Permission/Group/' + memberGroup.id + '/Members/Save', { userIds: ids });
+                setStatus('Üyeler kaydedildi: ' + ids.length + ' kullanıcı.', 'ok');
+                try { var _bc2 = new BroadcastChannel('calibra-menu-refresh'); _bc2.postMessage(1); _bc2.close(); } catch (e) { /* ignore */ }
+                renderList();
+                if (state.mode === 'group') loadTargets();
+            } catch (e) { setStatus('Hata: ' + e.message, 'err'); }
+        });
+    })();
+
     loadTargets();
 })();
 </script>
 }
+
+<div class="pmg-backdrop" id="pmgBackdrop">
+    <div class="pmg-modal">
+        <div class="pmg-head">
+            <button type="button" class="pm-btn pm-btn--ghost" id="pmgBackBtn" style="display:none;">← Gruplar</button>
+            <div class="pmg-title" id="pmgTitle">Yetki Grupları</div>
+            <button type="button" class="pmg-close" id="pmgCloseBtn" aria-label="Kapat">✕</button>
+        </div>
+        <div class="pmg-body" id="pmgBody"></div>
+        <div class="pmg-foot">
+            <button type="button" class="pm-btn pm-btn--primary" id="pmgSaveMembersBtn" style="display:none;">Üyeleri Kaydet</button>
+        </div>
+    </div>
+</div>

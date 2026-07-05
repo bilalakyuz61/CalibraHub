@@ -13,6 +13,8 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
 {
     private readonly SqlServerConnectionFactory _factory;
     private readonly string _table;
+    private readonly string _memberTable;
+    private readonly string _groupTable;
 
     public SqlPermissionGrantRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
     {
@@ -21,10 +23,12 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         var s = schema.Replace("]", "]]");
         // 2026-06-06: DB tablo adı UserPermission, C# class adı PermissionGrant (enum çakışması).
         _table = $"[{s}].[UserPermission]";
+        _memberTable = $"[{s}].[UserPermissionGroup]";
+        _groupTable = $"[{s}].[PermissionGroup]";
     }
 
     private const string SelectColumns =
-        "[Id],[UserId],[DepartmentId],[PermissionDefId],[IsGranted],[Created],[CreatedById]";
+        "[Id],[UserId],[DepartmentId],[PermissionDefId],[IsGranted],[Created],[CreatedById],[GroupId]";
 
     public async Task<PermissionGrant?> GetByIdAsync(int id, CancellationToken ct)
     {
@@ -62,20 +66,39 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         return list;
     }
 
+    public async Task<IReadOnlyList<PermissionGrant>> ListByGroupAsync(int groupId, CancellationToken ct)
+    {
+        await using var conn = await _factory.OpenSystemConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [GroupId]=@G;";
+        cmd.Parameters.AddWithValue("@G", groupId);
+
+        var list = new List<PermissionGrant>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct)) list.Add(Map(r));
+        return list;
+    }
+
     public async Task<IReadOnlyList<PermissionGrant>> ListForUserAndDepartmentAsync(
         int userId, int? departmentId, CancellationToken ct)
     {
         await using var conn = await _factory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Kullanıcının kendi satırları + üye olduğu AKTİF grupların satırları (+ departman).
+        var groupFilter = $"""
+            [GroupId] IN (SELECT upg.[GroupId] FROM {_memberTable} upg
+                          INNER JOIN {_groupTable} pg ON pg.[Id] = upg.[GroupId] AND pg.[IsActive] = 1
+                          WHERE upg.[UserId] = @U)
+            """;
         if (departmentId.HasValue)
         {
-            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U OR [DepartmentId]=@D;";
+            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U OR [DepartmentId]=@D OR {groupFilter};";
             cmd.Parameters.AddWithValue("@U", userId);
             cmd.Parameters.AddWithValue("@D", departmentId.Value);
         }
         else
         {
-            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U;";
+            cmd.CommandText = $"SELECT {SelectColumns} FROM {_table} WHERE [UserId]=@U OR {groupFilter};";
             cmd.Parameters.AddWithValue("@U", userId);
         }
 
@@ -83,6 +106,50 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
         return list;
+    }
+
+    public async Task BulkReplaceForGroupAsync(
+        int groupId, IReadOnlyList<PermissionGrant> entities, CancellationToken ct)
+    {
+        await using var conn = await _factory.OpenSystemConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await using (var delCmd = conn.CreateCommand())
+            {
+                delCmd.Transaction = tx;
+                delCmd.CommandText = $"DELETE FROM {_table} WHERE [GroupId]=@G;";
+                delCmd.Parameters.AddWithValue("@G", groupId);
+                await delCmd.ExecuteNonQueryAsync(ct);
+            }
+
+            foreach (var e in entities)
+            {
+                e.UserId = null;
+                e.DepartmentId = null;
+                e.GroupId = groupId;
+                e.EnsureValid();
+
+                await using var insCmd = conn.CreateCommand();
+                insCmd.Transaction = tx;
+                insCmd.CommandText = $@"
+                    INSERT INTO {_table}
+                        ([UserId],[DepartmentId],[GroupId],[PermissionDefId],[IsGranted],[CreatedById])
+                    VALUES (NULL,NULL,@G,@P,@Gr,@CreatedById);";
+                insCmd.Parameters.AddWithValue("@G", groupId);
+                insCmd.Parameters.AddWithValue("@P", e.PermissionDefId);
+                insCmd.Parameters.AddWithValue("@Gr", e.IsGranted);
+                insCmd.Parameters.AddWithValue("@CreatedById", (object?)e.CreatedById ?? DBNull.Value);
+                await insCmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(ct); } catch { /* ignore */ }
+            throw;
+        }
     }
 
     public async Task<int> SaveAsync(PermissionGrant entity, CancellationToken ct)
@@ -94,7 +161,7 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         {
             cmd.CommandText = $@"
                 UPDATE {_table} SET
-                    [UserId]=@U,[DepartmentId]=@D,[PermissionDefId]=@P,[IsGranted]=@G
+                    [UserId]=@U,[DepartmentId]=@D,[GroupId]=@Grp,[PermissionDefId]=@P,[IsGranted]=@G
                 WHERE [Id]=@Id;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", entity.Id);
@@ -103,13 +170,14 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         {
             cmd.CommandText = $@"
                 INSERT INTO {_table}
-                    ([UserId],[DepartmentId],[PermissionDefId],[IsGranted],[CreatedById])
-                VALUES (@U,@D,@P,@G,@CreatedById);
+                    ([UserId],[DepartmentId],[GroupId],[PermissionDefId],[IsGranted],[CreatedById])
+                VALUES (@U,@D,@Grp,@P,@G,@CreatedById);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
             cmd.Parameters.AddWithValue("@CreatedById", (object?)entity.CreatedById ?? DBNull.Value);
         }
         cmd.Parameters.AddWithValue("@U", (object?)entity.UserId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@D", (object?)entity.DepartmentId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Grp", (object?)entity.GroupId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@P", entity.PermissionDefId);
         cmd.Parameters.AddWithValue("@G", entity.IsGranted);
 
@@ -153,6 +221,7 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
                 // Sahibi zorla — entity'de yanlış doluysa override (BulkReplace anahtar bilgi)
                 e.UserId = userId;
                 e.DepartmentId = departmentId;
+                e.GroupId = null;
                 e.EnsureValid();
 
                 await using var insCmd = conn.CreateCommand();
@@ -214,5 +283,6 @@ public sealed class SqlPermissionGrantRepository : IPermissionGrantRepository
         IsGranted       = r.GetBoolean(4),
         Created         = r.GetDateTime(5),
         CreatedById     = r.IsDBNull(6) ? null : r.GetInt32(6),
+        GroupId         = r.IsDBNull(7) ? null : r.GetInt32(7),
     };
 }
