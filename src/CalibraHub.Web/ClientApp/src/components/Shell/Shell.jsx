@@ -1403,6 +1403,16 @@ function Sidebar(props) {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault()
                   if (visibleNodes.length > 0) setFocusedKey(visibleNodes[0].key)
+                } else if (e.key === 'Enter') {
+                  e.preventDefault()
+                  // Klavyeyle odaklanan varsa onu, yoksa ilk görünür düğümü aç
+                  var target = focusedKey ? visibleNodes.find(function(n) { return n.key === focusedKey }) : null
+                  if (!target && visibleNodes.length > 0) target = visibleNodes[0]
+                  if (target) {
+                    var hasC = Array.isArray(target.children) && target.children.length > 0
+                    if (hasC) { props.onToggleNode && props.onToggleNode(target.key); setFocusedKey(target.key) }
+                    else if (target.url) { props.onSelectLeaf && props.onSelectLeaf(target) }
+                  }
                 } else if (e.key === 'Escape') {
                   e.preventDefault()
                   if (searchTerm) { setSearchTerm(''); setFocusedKey(null) }
