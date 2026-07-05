@@ -18,7 +18,7 @@
  *   }
  */
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet } from 'lucide-react'
+import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw } from 'lucide-react'
 import SmartCard from './SmartCard'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
 import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
@@ -96,10 +96,11 @@ export default function SmartBoard(props) {
 
   // In-place refresh state
   var [recentIds, setRecentIds] = useState(function () { return new Set() })
+  var [refreshing, setRefreshing] = useState(false)
 
   var refreshBoard = useCallback(function (highlightId) {
-    if (!refreshUrl) { window.location.reload(); return }
-    fetch(refreshUrl, { credentials: 'same-origin' })
+    if (!refreshUrl) { window.location.reload(); return Promise.resolve() }
+    return fetch(refreshUrl, { credentials: 'same-origin' })
       .then(function (r) { return r.json() })
       .then(function (data) {
         var newEntities = Array.isArray(data.entities) ? data.entities : []
@@ -113,6 +114,12 @@ export default function SmartBoard(props) {
       })
       .catch(function () { window.location.reload() })
   }, [refreshUrl])
+
+  // Header "Yenile" butonu — in-place refresh (refreshUrl yoksa tam sayfa reload)
+  var handleManualRefresh = useCallback(function () {
+    setRefreshing(true)
+    Promise.resolve(refreshBoard()).finally(function () { setRefreshing(false) })
+  }, [refreshBoard])
 
   // Theme detection
   var [isDark, setIsDark] = useState(function () {
@@ -608,6 +615,23 @@ export default function SmartBoard(props) {
         )}
 
         {!searchable && <div className="flex-1" />}
+
+        {/* Yenile — in-place board refresh (refreshUrl yoksa tam sayfa reload) */}
+        <button
+          onClick={handleManualRefresh}
+          disabled={refreshing}
+          className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
+            (refreshing
+              ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-400/30 cursor-wait'
+              : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06]')
+          }
+          title="Yenile"
+        >
+          <RefreshCw size={15} className={refreshing
+            ? 'text-indigo-600 dark:text-indigo-400 animate-spin'
+            : 'text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors'
+          } />
+        </button>
 
         {/* Filter button — hayalet mod (low saturation, dot indicator aktifte) */}
         <button

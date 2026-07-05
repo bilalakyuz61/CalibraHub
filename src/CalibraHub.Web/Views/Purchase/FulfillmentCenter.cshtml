@@ -1027,6 +1027,10 @@
     .fc3-flat-row .fc3-sub-qty,
     .fc3-flat-row .fc3-sub-remain,
     .fc3-flat-row .fc3-sub-unit { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* ── Yenile butonu spin animasyonu ── */
+    @@keyframes fc3spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .fc3-hd-icon-btn.fc3-spin svg { animation: fc3spin .8s linear infinite; }
 </style>
 }
 
@@ -1051,6 +1055,9 @@
             <svg class="fc3-qs-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" id="fc3QuickSearch" class="fc3-qs-input" placeholder="Belge no, talep eden, malzeme…" autocomplete="off" oninput="applyFilters()">
         </div>
+        <button type="button" class="fc3-hd-icon-btn" id="fc3RefreshBtn" onclick="fc3RefreshPage(this)" title="Yenile">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
         <button class="fc3-filt-btn fc3-hd-icon-btn" id="fc3FiltBtn" onclick="fc3OpenDrawer()" title="Filtreler">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
             <span class="fc3-filt-badge" id="fc3FiltBadge"></span>
@@ -2354,6 +2361,12 @@
         var t = document.querySelector('input[name="__RequestVerificationToken"]');
         return t ? t.value : '';
     }
+
+    // Header "Yenile" — liste verisi sunucu tarafında gömülü olduğundan tam sayfa yenilenir
+    window.fc3RefreshPage = function(btn) {
+        if (btn) btn.classList.add('fc3-spin');
+        window.location.reload();
+    };
 
     window.fc3FulfillFromStock = function() {
         var ids = Object.keys(_lineSel).map(Number);
