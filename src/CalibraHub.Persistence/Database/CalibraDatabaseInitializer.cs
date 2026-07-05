@@ -5236,18 +5236,19 @@ END;";
             END
             ELSE
             BEGIN
-                -- Migration: mevcut tabloya sub_type kolonu ekle
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[design_templates]') AND name = N'sub_type')
+                -- Migration: mevcut tabloya SubType kolonu ekle (sub_type VEYA SubType yoksa)
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DesignTemplate]') AND name IN (N'sub_type', N'SubType'))
                 BEGIN
-                    ALTER TABLE [{s}].[design_templates] ADD [sub_type] NVARCHAR(100) NULL;
-                    CREATE INDEX [ix_design_templates_sub_type] ON [{s}].[design_templates]([sub_type]);
+                    ALTER TABLE [{s}].[DesignTemplate] ADD [SubType] NVARCHAR(100) NULL;
+                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'[{s}].[DesignTemplate]') AND name = N'IX_DesignTemplate_SubType')
+                        CREATE INDEX [IX_DesignTemplate_SubType] ON [{s}].[DesignTemplate]([SubType]);
                 END;
-                -- Migration: frx_content → jsr_content (FastReport yerine jsreport)
-                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[design_templates]') AND name = N'jsr_content')
-                    ALTER TABLE [{s}].[design_templates] ADD [jsr_content] NVARCHAR(MAX) NULL;
-                -- frx_content varsa silinmeden önce içeriği jsr_content'e taşı (deferred compile için EXEC)
-                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[design_templates]') AND name = N'FrxContent')
-                    EXEC(N'UPDATE [{s}].[design_templates] SET [jsr_content] = [FrxContent] WHERE [jsr_content] IS NULL AND [FrxContent] IS NOT NULL; ALTER TABLE [{s}].[design_templates] DROP COLUMN [FrxContent];');
+                -- Migration: JsrContent kolonu ekle (jsr_content VEYA JsrContent yoksa)
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DesignTemplate]') AND name IN (N'jsr_content', N'JsrContent'))
+                    ALTER TABLE [{s}].[DesignTemplate] ADD [JsrContent] NVARCHAR(MAX) NULL;
+                -- FrxContent varsa silinmeden önce içeriği JsrContent'e taşı (deferred compile için EXEC)
+                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DesignTemplate]') AND name = N'FrxContent')
+                    EXEC(N'UPDATE [{s}].[DesignTemplate] SET [JsrContent] = COALESCE([JsrContent], [FrxContent]); ALTER TABLE [{s}].[DesignTemplate] DROP COLUMN [FrxContent];');
             END;
             """;
 
@@ -5889,32 +5890,33 @@ END;";
             await createCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        // Adim 3: company_id kolonu UNIQUEIDENTIFIER ise INT'e donustur
+        // Adim 3: CompanyId kolonu UNIQUEIDENTIFIER ise INT'e donustur
         foreach (var step in new[]
         {
-            // 3a - company_id UNIQUEIDENTIFIER ise dusur
+            // 3a - CompanyId UNIQUEIDENTIFIER ise dusur (eski tip migration)
             $"""
             IF EXISTS (
                 SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_api_profiles]')
-                  AND name = 'company_id' AND system_type_id = TYPE_ID('uniqueidentifier')
+                WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationApiProfile]')
+                  AND name IN (N'company_id', N'CompanyId') AND system_type_id = TYPE_ID('uniqueidentifier')
             )
-                ALTER TABLE [{s}].[integration_api_profiles] DROP COLUMN [company_id];
+                ALTER TABLE [{s}].[IntegrationApiProfile] DROP COLUMN [CompanyId];
             """,
-            // 3b - company_id kolonu yoksa INT olarak ekle
+            // 3b - CompanyId kolonu yoksa INT olarak ekle
             $"""
             IF NOT EXISTS (
                 SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_api_profiles]')
-                  AND name = 'company_id'
+                WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationApiProfile]')
+                  AND name IN (N'company_id', N'CompanyId')
             )
-                ALTER TABLE [{s}].[integration_api_profiles] ADD [company_id] INT NOT NULL DEFAULT({DefaultCompanyId});
+                ALTER TABLE [{s}].[IntegrationApiProfile] ADD [CompanyId] INT NOT NULL DEFAULT({DefaultCompanyId});
             """,
-            // 3c - company_id = 0 olan satirlari default company ile guncelle
+            // 3c - CompanyId = 0 olan satirlari default company ile guncelle
             $"""
-            UPDATE [{s}].[integration_api_profiles]
-            SET [company_id] = {DefaultCompanyId}
-            WHERE [company_id] = 0;
+            IF OBJECT_ID(N'[{s}].[IntegrationApiProfile]', N'U') IS NOT NULL
+                UPDATE [{s}].[IntegrationApiProfile]
+                SET [CompanyId] = {DefaultCompanyId}
+                WHERE [CompanyId] = 0;
             """,
         })
         {
@@ -5965,7 +5967,7 @@ END;";
                     [UpdatedById]     INT NULL,
                     [Updated]       DATETIME     NULL,
                     CONSTRAINT FK_IntegrationEndpoint_ApiProfile FOREIGN KEY ([ApiProfileId])
-                        REFERENCES [{s}].[integration_api_profiles]([id])
+                        REFERENCES [{s}].[IntegrationApiProfile]([Id])
                 );
                 CREATE INDEX IX_IntegrationEndpoint_Profile
                     ON [{s}].[IntegrationEndpoint]([ApiProfileId], [IsActive]);
@@ -6523,7 +6525,7 @@ END;";
                      110),
                     (N''STOK_MIKTAR'',  N''Stok Mevcut Miktar (SQL)'',
                      N''Bir stok kalemenin tum depolardaki toplam mevcut miktarini hesaplar.'',
-                     N''SELECT ISNULL(SUM([Quantity]), 0) AS [Value] FROM [dbo].[item_locations] WHERE [ItemId] = @Key'',
+                     N''SELECT ISNULL(SUM([Quantity]), 0) AS [Value] FROM [dbo].[ItemLocation] WHERE [ItemId] = @Key'',
                      120);
 
                 INSERT INTO [{s}].[IntegrationLookupFunction] (Code, Label, Description, SqlSnippet, SortOrder)
@@ -6536,6 +6538,12 @@ END;";
                    SET [SqlSnippet] = (SELECT sf2.SqlSnippet FROM @SeedSqlFn sf2 WHERE sf2.Code = N''CARI_BAKIYE'')
                  WHERE [Code] = N''CARI_BAKIYE''
                    AND [SqlSnippet] LIKE N''%[dbo].[document_types]%'';
+
+                -- Migration: mevcut STOK_MIKTAR kaydinda eski [item_locations] varsa [ItemLocation] ile guncelle
+                UPDATE [{s}].[IntegrationLookupFunction]
+                   SET [SqlSnippet] = (SELECT sf2.SqlSnippet FROM @SeedSqlFn sf2 WHERE sf2.Code = N''STOK_MIKTAR'')
+                 WHERE [Code] = N''STOK_MIKTAR''
+                   AND [SqlSnippet] LIKE N''%[dbo].[item_locations]%'';
 
                 DECLARE @SqlFnIds TABLE (Id INT);
                 INSERT @SqlFnIds SELECT [Id] FROM [{s}].[IntegrationLookupFunction]
@@ -6814,9 +6822,9 @@ END;";
             -- Denormalized string (FK degil) — admin UI'da dropdown'dan secilir,
             -- kosul: IntegrationProvider.Code ile match olmali (runtime kontrol).
             IF NOT EXISTS (SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_api_profiles]') AND name = 'provider_code')
+                WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationApiProfile]') AND name IN (N'provider_code', N'ProviderCode'))
             BEGIN
-                ALTER TABLE [{s}].[integration_api_profiles] ADD [provider_code] NVARCHAR(40) NULL;
+                ALTER TABLE [{s}].[IntegrationApiProfile] ADD [provider_code] NVARCHAR(40) NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -7437,7 +7445,7 @@ END;";
                 EXEC sp_executesql N'
                     UPDATE d SET d.[CurrencyId] = ISNULL(c.[id], 1)
                     FROM [{s}].[Document] d
-                    LEFT JOIN [{s}].[currencies] c ON c.[code] = d.[currency]
+                    LEFT JOIN [{s}].[Currency] c ON c.[code] = d.[currency]
                     WHERE d.[CurrencyId] IS NULL;
                 ';
             END;
@@ -7463,10 +7471,10 @@ END;";
             IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys
                            WHERE name = N'fk_document_currency'
                              AND parent_object_id = OBJECT_ID(N'[{s}].[Document]'))
-               AND OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
                 ALTER TABLE [{s}].[Document] WITH CHECK
                     ADD CONSTRAINT [fk_document_currency]
-                    FOREIGN KEY ([CurrencyId]) REFERENCES [{s}].[currencies]([id]);
+                    FOREIGN KEY ([CurrencyId]) REFERENCES [{s}].[Currency]([Id]);
 
             -- 6) Index (currency-bazli filtreleme yapan rapor sorgulari icin)
             IF NOT EXISTS (SELECT 1 FROM sys.indexes
@@ -7798,26 +7806,26 @@ END;";
 
             -- Migration: eski currencies tablosuna PascalCase kolonlar ekle
             -- Once is_active → IsActive rename (eski snake_case kayitlar icin)
-            IF OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{sl}.currencies', N'is_active') IS NOT NULL
-               AND COL_LENGTH(N'{sl}.currencies', N'IsActive') IS NULL
-                EXEC sp_rename N'{sl}.[currencies].[is_active]', N'IsActive', N'COLUMN';
+            IF OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.Currency', N'is_active') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.Currency', N'IsActive') IS NULL
+                EXEC sp_rename N'{sl}.[Currency].[is_active]', N'IsActive', N'COLUMN';
             -- Eger ne is_active ne IsActive yoksa yeni kolon ekle (fresh install icin)
-            IF OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{sl}.currencies', N'IsActive') IS NULL
-               AND COL_LENGTH(N'{sl}.currencies', N'is_active') IS NULL
+            IF OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.Currency', N'IsActive') IS NULL
+               AND COL_LENGTH(N'{sl}.Currency', N'is_active') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[currencies] ADD [IsActive] BIT NOT NULL CONSTRAINT [df_currencies_IsActive] DEFAULT(1);
+                ALTER TABLE [{s}].[Currency] ADD [IsActive] BIT NOT NULL CONSTRAINT [df_currencies_IsActive] DEFAULT(1);
             END;
-            IF OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{sl}.currencies', N'Created') IS NULL
+            IF OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.Currency', N'Created') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[currencies] ADD [Created] DATETIME NOT NULL CONSTRAINT [df_currencies_Created] DEFAULT GETDATE();
+                ALTER TABLE [{s}].[Currency] ADD [Created] DATETIME NOT NULL CONSTRAINT [df_currencies_Created] DEFAULT GETDATE();
             END;
-            IF OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{sl}.currencies', N'Updated') IS NULL
+            IF OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.Currency', N'Updated') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[currencies] ADD [Updated] DATETIME NULL;
+                ALTER TABLE [{s}].[Currency] ADD [Updated] DATETIME NULL;
             END;
 
             -- Migration: eski exchange_rates tablosu varsa Exchange'e yeniden adlandir (idempotent)
@@ -7879,12 +7887,12 @@ END;";
             IF OBJECT_ID(N'[{s}].[Exchange]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[Exchange]', N'currency_code') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[Exchange]', N'CurrencyId') IS NOT NULL
-               AND OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
             BEGIN
                 EXEC('
                     UPDATE r SET r.[CurrencyId] = c.[id]
                     FROM [{s}].[Exchange] r
-                    INNER JOIN [{s}].[currencies] c ON c.[code] = r.[currency_code]
+                    INNER JOIN [{s}].[Currency] c ON c.[code] = r.[currency_code]
                     WHERE r.[CurrencyId] IS NULL
                 ');
             END;
@@ -7913,7 +7921,7 @@ END;";
 
             -- 8) FK constraint (data temiz oldugunda)
             IF OBJECT_ID(N'[{s}].[Exchange]', N'U') IS NOT NULL
-               AND OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[Exchange]', N'CurrencyId') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
                                WHERE name = N'fk_exchange_currency'
@@ -7921,7 +7929,7 @@ END;";
                AND NOT EXISTS (SELECT 1 FROM [{s}].[Exchange] WHERE [CurrencyId] IS NULL)
             BEGIN
                 ALTER TABLE [{s}].[Exchange] ADD CONSTRAINT [fk_exchange_currency]
-                    FOREIGN KEY ([CurrencyId]) REFERENCES [{s}].[currencies]([id]);
+                    FOREIGN KEY ([CurrencyId]) REFERENCES [{s}].[Currency]([Id]);
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -7941,8 +7949,8 @@ END;";
         foreach (var (code, name, symbol) in seeds)
         {
             var sql = $"""
-                IF NOT EXISTS (SELECT 1 FROM [{s}].[currencies] WHERE [code] = @Code)
-                    INSERT INTO [{s}].[currencies] ([code],[name],[symbol],[IsActive],[Created],[Updated])
+                IF NOT EXISTS (SELECT 1 FROM [{s}].[Currency] WHERE [code] = @Code)
+                    INSERT INTO [{s}].[Currency] ([code],[name],[symbol],[IsActive],[Created],[Updated])
                     VALUES (@Code, @Name, @Symbol, 1, GETDATE(), GETDATE());
                 """;
             await using var cmd = connection.CreateCommand();
@@ -7975,25 +7983,25 @@ END;";
             END;
 
             -- Mevcut tablolarda rep_code varsa kaldir (UI'dan ve veri tabanindan cikariliyor)
-            IF OBJECT_ID(N'[{s}].[sales_representatives]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{s}.[sales_representatives]', N'rep_code') IS NOT NULL
+            IF OBJECT_ID(N'[{s}].[SalesRepresentative]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.[SalesRepresentative]', N'rep_code') IS NOT NULL
             BEGIN
                 IF EXISTS (SELECT 1 FROM sys.indexes
-                           WHERE [object_id] = OBJECT_ID(N'[{s}].[sales_representatives]')
+                           WHERE [object_id] = OBJECT_ID(N'[{s}].[SalesRepresentative]')
                              AND [name] = N'ux_sales_representatives_code')
                 BEGIN
-                    EXEC(N'DROP INDEX [ux_sales_representatives_code] ON [{s}].[sales_representatives];');
+                    EXEC(N'DROP INDEX [ux_sales_representatives_code] ON [{s}].[SalesRepresentative];');
                 END;
-                EXEC(N'ALTER TABLE [{s}].[sales_representatives] DROP COLUMN [rep_code];');
+                EXEC(N'ALTER TABLE [{s}].[SalesRepresentative] DROP COLUMN [rep_code];');
             END;
 
             -- Yeni unique index (rep_name uzerinde) eksikse ekle
-            IF OBJECT_ID(N'[{s}].[sales_representatives]', N'U') IS NOT NULL
+            IF OBJECT_ID(N'[{s}].[SalesRepresentative]', N'U') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.indexes
-                               WHERE [object_id] = OBJECT_ID(N'[{s}].[sales_representatives]')
+                               WHERE [object_id] = OBJECT_ID(N'[{s}].[SalesRepresentative]')
                                  AND [name] = N'ux_sales_representatives_name')
             BEGIN
-                EXEC(N'CREATE UNIQUE INDEX [ux_sales_representatives_name] ON [{s}].[sales_representatives]([rep_name]);');
+                EXEC(N'CREATE UNIQUE INDEX [ux_sales_representatives_name] ON [{s}].[SalesRepresentative]([rep_name]);');
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -9112,30 +9120,30 @@ END;";
                 );
             END;
             -- Migration: eski tabloya provider + web_qr_bridge_url kolonlari ekle
-            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'provider') IS NULL
-                ALTER TABLE [{s}].[whatsapp_config] ADD [provider] INT NOT NULL DEFAULT(0);
-            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'web_qr_bridge_url') IS NULL
-                ALTER TABLE [{s}].[whatsapp_config] ADD [web_qr_bridge_url] NVARCHAR(256) NULL;
-            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'app_secret_encrypted') IS NULL
-                ALTER TABLE [{s}].[whatsapp_config] ADD [app_secret_encrypted] NVARCHAR(MAX) NULL;
+            IF COL_LENGTH(N'[{s}].[WhatsAppConfig]', N'provider') IS NULL
+                ALTER TABLE [{s}].[WhatsAppConfig] ADD [provider] INT NOT NULL DEFAULT(0);
+            IF COL_LENGTH(N'[{s}].[WhatsAppConfig]', N'web_qr_bridge_url') IS NULL
+                ALTER TABLE [{s}].[WhatsAppConfig] ADD [web_qr_bridge_url] NVARCHAR(256) NULL;
+            IF COL_LENGTH(N'[{s}].[WhatsAppConfig]', N'app_secret_encrypted') IS NULL
+                ALTER TABLE [{s}].[WhatsAppConfig] ADD [app_secret_encrypted] NVARCHAR(MAX) NULL;
             -- Migration: IsEnabled / LastError PascalCase olmali (repository boyle sorgular; bu tablonun
             -- Created/Updated'i de PascalCase — proje snake→Pascal gecisinde). Tablo yanlis snake_case
             -- (is_enabled/last_error) ile olusmus veya oyle yeniden adlandirilmis olabilir → veriyi
             -- koruyarak Pascal'a cevir; hic yoksa ekle. (COL_LENGTH underscore'u gercek karakter sayar;
             -- 'IsEnabled' ile 'is_enabled' eslesmez, IS NULL kontrolu dogru calisir.)
-            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'IsEnabled') IS NULL
+            IF COL_LENGTH(N'[{s}].[WhatsAppConfig]', N'IsEnabled') IS NULL
             BEGIN
-                IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'is_enabled') IS NOT NULL
-                    EXEC sp_rename N'[{s}].[whatsapp_config].[is_enabled]', N'IsEnabled', N'COLUMN';
+                IF COL_LENGTH(N'[{s}].[WhatsAppConfig]', N'is_enabled') IS NOT NULL
+                    EXEC sp_rename N'[{s}].[WhatsAppConfig].[is_enabled]', N'IsEnabled', N'COLUMN';
                 ELSE
-                    ALTER TABLE [{s}].[whatsapp_config] ADD [IsEnabled] BIT NOT NULL DEFAULT(0);
+                    ALTER TABLE [{s}].[WhatsAppConfig] ADD [IsEnabled] BIT NOT NULL DEFAULT(0);
             END;
-            IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'LastError') IS NULL
+            IF COL_LENGTH(N'[{s}].[WhatsAppConfig]', N'LastError') IS NULL
             BEGIN
-                IF COL_LENGTH(N'[{s}].[whatsapp_config]', N'last_error') IS NOT NULL
-                    EXEC sp_rename N'[{s}].[whatsapp_config].[last_error]', N'LastError', N'COLUMN';
+                IF COL_LENGTH(N'[{s}].[WhatsAppConfig]', N'last_error') IS NOT NULL
+                    EXEC sp_rename N'[{s}].[WhatsAppConfig].[last_error]', N'LastError', N'COLUMN';
                 ELSE
-                    ALTER TABLE [{s}].[whatsapp_config] ADD [LastError] NVARCHAR(500) NULL;
+                    ALTER TABLE [{s}].[WhatsAppConfig] ADD [LastError] NVARCHAR(500) NULL;
             END;
 
             -- Safety rules — tek-row config
@@ -9204,18 +9212,29 @@ END;";
                     [MediaFilename] NVARCHAR(200) NULL,
                     [MediaSize]     INT           NULL
                 );
-                CREATE UNIQUE INDEX [UX_WaInbox_BridgeMsgId] ON [{s}].[WaInbox]([BridgeMsgId]) WHERE [BridgeMsgId] IS NOT NULL;
+                -- Deferred EXEC: BridgeMsgId may not exist on the renamed table at batch-compile time.
+                EXEC(N'CREATE UNIQUE INDEX [UX_WaInbox_BridgeMsgId] ON [{s}].[WaInbox]([BridgeMsgId]) WHERE [BridgeMsgId] IS NOT NULL;');
                 CREATE INDEX [IX_WaInbox_ContactPhone_ReceivedAt] ON [{s}].[WaInbox]([ContactPhone],[ReceivedAt] DESC);
                 -- Deferred EXEC: filtered index WHERE [ReadAt] IS NULL must not be compiled
                 -- against the existing table at batch-compile time (ReadAt may not exist yet).
                 EXEC(N'CREATE INDEX [IX_WaInbox_Unread] ON [{s}].[WaInbox]([ContactPhone]) WHERE [Direction]=0 AND [ReadAt] IS NULL;');
             END;
 
-            -- Migration: ReadAt kolonu eski wa_inbox tablolarında yok — ekle
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'ReadAt') IS NULL
+            -- Migration: BridgeMsgId unique index — eski ux_wa_inbox_bridge_msg_id drop+rename sonrasi yeniden olustur
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'BridgeMsgId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N'[{s}].[WaInbox]')
+                                 AND name = N'UX_WaInbox_BridgeMsgId')
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [ReadAt] DATETIME NULL;
+                EXEC(N'CREATE UNIQUE INDEX [UX_WaInbox_BridgeMsgId] ON [{s}].[WaInbox]([BridgeMsgId]) WHERE [BridgeMsgId] IS NOT NULL;');
+            END;
+
+            -- Migration: ReadAt kolonu eski wa_inbox tablolarında yok — ekle
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'ReadAt') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[WaInbox] ADD [ReadAt] DATETIME NULL;
             END;
 
             -- (Kaldirildi) WhatsApp 2024+ protokolu LID identifier'lari da kullaniyor (15+ basamak).
@@ -9283,104 +9302,104 @@ END;";
             END;
 
             -- wa_inbox.is_lid: LID identifier içeren satırlar (gerçek telefon numarası değil)
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'is_lid') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'is_lid') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [is_lid] BIT NOT NULL CONSTRAINT [DF_wa_inbox_is_lid] DEFAULT 0;
+                ALTER TABLE [{s}].[WaInbox] ADD [is_lid] BIT NOT NULL CONSTRAINT [DF_wa_inbox_is_lid] DEFAULT 0;
             END;
 
             -- wa_inbox.wa_contact_id: WaContact FK (contact_id mevcut Contact tablosuna bağlı, bu yeni)
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'wa_contact_id') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'wa_contact_id') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [wa_contact_id] INT NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [wa_contact_id] INT NULL;
             END;
 
             -- Medya destek kolonlari (image/video/audio/document)
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'media_path') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'media_path') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [media_path] NVARCHAR(500) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [media_path] NVARCHAR(500) NULL;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'media_mime') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'media_mime') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [media_mime] NVARCHAR(100) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [media_mime] NVARCHAR(100) NULL;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'media_filename') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'media_filename') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [media_filename] NVARCHAR(200) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [media_filename] NVARCHAR(200) NULL;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'media_size') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'media_size') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [media_size] INT NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [media_size] INT NULL;
             END;
 
             -- Faz 2: mesaj türü, alıntı yanıt, reaksiyon, silme, iletim durumu
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'message_type') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'message_type') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [message_type] NVARCHAR(20) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [message_type] NVARCHAR(20) NULL;
                 -- text|image|audio|video|document|sticker|location|reaction|deleted
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'quoted_msg_id') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'quoted_msg_id') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [quoted_msg_id] NVARCHAR(80) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [quoted_msg_id] NVARCHAR(80) NULL;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'reaction_emoji') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'reaction_emoji') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [reaction_emoji] NVARCHAR(20) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [reaction_emoji] NVARCHAR(20) NULL;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'is_forwarded') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'is_forwarded') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [is_forwarded] BIT NOT NULL CONSTRAINT [DF_wa_inbox_is_forwarded] DEFAULT 0;
+                ALTER TABLE [{s}].[WaInbox] ADD [is_forwarded] BIT NOT NULL CONSTRAINT [DF_wa_inbox_is_forwarded] DEFAULT 0;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'is_deleted') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'is_deleted') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [is_deleted] BIT NOT NULL CONSTRAINT [DF_wa_inbox_is_deleted] DEFAULT 0;
+                ALTER TABLE [{s}].[WaInbox] ADD [is_deleted] BIT NOT NULL CONSTRAINT [DF_wa_inbox_is_deleted] DEFAULT 0;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'delivery_status') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'delivery_status') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [delivery_status] NVARCHAR(20) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [delivery_status] NVARCHAR(20) NULL;
                 -- sent|delivered|read|failed
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'delivered_at') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'delivered_at') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [delivered_at] DATETIME NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [delivered_at] DATETIME NULL;
             END;
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'read_by_peer_at') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'read_by_peer_at') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [read_by_peer_at] DATETIME NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [read_by_peer_at] DATETIME NULL;
             END;
 
             -- Faz 4: grup mesajları için wa_inbox ek kolonlar
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.wa_inbox', N'group_jid') IS NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.WaInbox', N'group_jid') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[wa_inbox] ADD [group_jid]   NVARCHAR(80)  NULL;
-                ALTER TABLE [{s}].[wa_inbox] ADD [sender_jid]  NVARCHAR(80)  NULL;
-                ALTER TABLE [{s}].[wa_inbox] ADD [SenderName] NVARCHAR(200) NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [group_jid]   NVARCHAR(80)  NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [sender_jid]  NVARCHAR(80)  NULL;
+                ALTER TABLE [{s}].[WaInbox] ADD [SenderName] NVARCHAR(200) NULL;
             END;
 
             -- Performans indexi: direction + contact_phone + received_at
             -- GetConversationsAsync CTE'leri (has_incoming_cte, last_incoming_name) ve
             -- GetMessagesByPhoneAsync direkt esitlik sorgusu icin kullanilir.
-            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
+            IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.indexes
-                               WHERE object_id = OBJECT_ID(N'[{s}].[wa_inbox]')
+                               WHERE object_id = OBJECT_ID(N'[{s}].[WaInbox]')
                                  AND name = N'ix_wa_inbox_direction_phone')
             BEGIN
                 CREATE INDEX [ix_wa_inbox_direction_phone]
-                    ON [{s}].[wa_inbox]([direction], [contact_phone], [received_at] DESC);
+                    ON [{s}].[WaInbox]([direction], [contact_phone], [received_at] DESC);
             END;
 
             -- WaGroup: grup master tablosu
@@ -9778,7 +9797,7 @@ END;";
                 LEFT JOIN [{s}].[DocumentLine] ql ON ql.[DocumentId] = q.[id]
                 LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[ItemId]
                 LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[UnitId]
-                LEFT JOIN [{s}].[currencies] cur ON cur.[id] = q.[CurrencyId]
+                LEFT JOIN [{s}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
                 WHERE q.[IsActive] = 1
                 """),
             ("vw_DeliveryNote", $"""
@@ -9833,7 +9852,7 @@ END;";
                 LEFT JOIN [{s}].[DocumentLine] ql ON ql.[DocumentId] = q.[id]
                 LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[ItemId]
                 LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[UnitId]
-                LEFT JOIN [{s}].[currencies] cur ON cur.[id] = q.[CurrencyId]
+                LEFT JOIN [{s}].[Currency] cur ON cur.[Id] = q.[CurrencyId]
                 WHERE q.[IsActive] = 1
                 """),
             ("vw_MaterialCards", $"""
@@ -9979,12 +9998,12 @@ END;";
                 -- SQL Server deferred name resolution parse-time'da kolonu goremez,
                 -- bu yuzden UPDATE'i EXEC ile sarmalayip runtime'a erteliyoruz.
                 IF COL_LENGTH(N'[{s}].[PriceList]', N'currency') IS NOT NULL
-                   AND OBJECT_ID(N'[{s}].[currencies]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[{s}].[Currency]', N'U') IS NOT NULL
                 BEGIN
                     EXEC('
                         UPDATE p SET p.[CurrencyId] = c.[id]
                         FROM [{s}].[PriceList] p
-                        INNER JOIN [{s}].[currencies] c ON c.[code] = p.[currency]
+                        INNER JOIN [{s}].[Currency] c ON c.[code] = p.[currency]
                         WHERE p.[CurrencyId] IS NULL
                     ');
                 END;
@@ -10499,10 +10518,11 @@ END;";
 
             -- Satis Temsilcileri (Alan Rehberi'nde widget eklenebilsin diye base table seed)
             UPDATE dbo.Forms
-               SET [BaseTable] = N'dbo.sales_representatives',
+               SET [BaseTable] = N'dbo.SalesRepresentative',
                    [BaseRecordKey] = N'id'
              WHERE [FormCode] = N'SALES_REPS'
-               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+               AND ([BaseTable] IS NULL OR [BaseTable] = N''
+                    OR [BaseTable] = N'dbo.sales_representatives');
 
             -- SALES_QUOTE_NEW de SALES_QUOTE_EDIT ile ayni base'e baglansin (tek seviyede eksikti)
             UPDATE dbo.Forms
@@ -12232,6 +12252,7 @@ END;";
                              WHERE p.[object_id] = OBJECT_ID(N'[{s}].[{newName}]')
                                AND p.[index_id] IN (0, 1)) = 0
                 BEGIN
+                    EXEC(N'DECLARE @rfk NVARCHAR(MAX) = N''''; SELECT @rfk = @rfk + N''ALTER TABLE '' + QUOTENAME(SCHEMA_NAME(tp.schema_id)) + N''.'' + QUOTENAME(tp.name) + N'' DROP CONSTRAINT '' + QUOTENAME(fk.name) + N''; '' FROM sys.foreign_keys fk INNER JOIN sys.tables tp ON fk.parent_object_id = tp.object_id WHERE fk.referenced_object_id = OBJECT_ID(N''[{s}].[{newName}]''); IF LEN(@rfk) > 0 EXEC(@rfk);');
                     DROP TABLE [{s}].[{newName}];
                     EXEC sp_rename N'[{s}].[{oldName}]', N'{newName}';
                 END;
@@ -12557,6 +12578,27 @@ END;";
         var allRenames = new List<(string Table, string OldCol, string NewCol)>(columnRenames);
         // PascalCase kolon rename: MaterialGroupMappings.StockCardId -> ItemId
         allRenames.Add(("MaterialGroupMappings", "StockCardId", "ItemId"));
+
+        // bridge_msg_id -> BridgeMsgId rename'i icin onleyici unique index'i once dusur.
+        // 'ux_wa_inbox_bridge_msg_id' filtreli unique index kolona bagli oldugu icin sp_rename bloklandi.
+        await using (var preDropCmd = connection.CreateCommand())
+        {
+            preDropCmd.CommandText = $"""
+                IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'[{s}].[WaInbox]', N'bridge_msg_id') IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N'[{s}].[WaInbox]')
+                                 AND name = N'ux_wa_inbox_bridge_msg_id')
+                BEGIN
+                    DROP INDEX [ux_wa_inbox_bridge_msg_id] ON [{s}].[WaInbox];
+                END;
+                """;
+            try { await preDropCmd.ExecuteNonQueryAsync(cancellationToken); }
+            catch (Microsoft.Data.SqlClient.SqlException ex)
+            {
+                Console.Error.WriteLine($"[DB INIT WARN] WaInbox bridge_msg_id index drop atlandi: {ex.Message}");
+            }
+        }
 
         foreach (var (table, oldCol, newCol) in allRenames)
         {
