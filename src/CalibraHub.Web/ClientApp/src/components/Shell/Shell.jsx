@@ -369,6 +369,25 @@ export default function Shell(props) {
     return function () { window.removeEventListener('keydown', onAltH) }
   }, [])
 
+  /* F3 — menü arama inputuna odaklan; sidebar kapalıysa önce aç */
+  var sidebarSearchRef = useRef(null)
+  useEffect(function () {
+    function onF3(e) {
+      if (e.key !== 'F3') return
+      e.preventDefault()
+      var wasOpen = sidebarOpen
+      if (!wasOpen) setSidebarOpen(true)
+      setTimeout(function () {
+        if (sidebarSearchRef.current) {
+          sidebarSearchRef.current.focus()
+          sidebarSearchRef.current.select()
+        }
+      }, wasOpen ? 0 : 240)
+    }
+    window.addEventListener('keydown', onF3)
+    return function () { window.removeEventListener('keydown', onF3) }
+  }, [sidebarOpen])
+
   /* ── Sidebar tamamen gizle — hangi tab'larin sidebar istegi var ── */
   var [sidebarHideTabKeys, setSidebarHideTabKeys] = useState(function() { return new Set() })
   var forceSidebarHidden = sidebarHideTabKeys.has(activeTabKey)
@@ -817,6 +836,7 @@ export default function Shell(props) {
         collapsed={!sidebarOpen}
         hidden={forceSidebarHidden}
         isMobile={isMobile}
+        searchInputRef={sidebarSearchRef}
       />
 
       {/* Sag: Ana alan */}
@@ -1197,16 +1217,33 @@ function CloseConfirmModal(props) {
    Sidebar
    ══════════════════════════════════════════════════════════════ */
 
+/* Gorunur node listesi + parent haritasi — klavye navigasyonu icin */
+function buildNavMeta(tree, expandedNodes) {
+  var visibleNodes = []
+  var parentMap = {}
+  function walk(nodes, parentKey) {
+    nodes.forEach(function(node) {
+      parentMap[node.key] = parentKey
+      visibleNodes.push(node)
+      var hasC = Array.isArray(node.children) && node.children.length > 0
+      if (hasC && expandedNodes[node.key]) walk(node.children, node.key)
+    })
+  }
+  walk(tree, null)
+  return { visibleNodes: visibleNodes, parentMap: parentMap }
+}
+
 /* Menuyu recursive filtrele — arama terimine uyan leaf'leri VE onlarin
    ata gruplarini tutar. Parent'lar otomatik acik sayilir (donus degeri
-   ikinci element: expandedKeys seti). */
+   ikinci element: expandedKeys seti).
+   toLocaleLowerCase('tr-TR') kullanilir: i/İ ve ı/I Turkce eslesir. */
 function filterMenuTree(menu, term) {
   if (!term) return { tree: menu, expandKeys: null }
-  var t = term.toLowerCase().trim()
+  var t = term.toLocaleLowerCase('tr-TR').trim()
   var expand = {}
 
   function walk(node) {
-    var labelHit = (node.label || '').toLowerCase().indexOf(t) !== -1
+    var labelHit = (node.label || '').toLocaleLowerCase('tr-TR').indexOf(t) !== -1
     var filteredChildren = []
     if (Array.isArray(node.children)) {
       node.children.forEach(function(c) {
@@ -1244,12 +1281,38 @@ function Sidebar(props) {
   var bgColor = isDark ? 'bg-[#0c0f1a]/70' : 'bg-white/70'
 
   var [searchTerm, setSearchTerm] = useState('')
+  var [focusedKey, setFocusedKey] = useState(null)
+  var localSearchRef = useRef(null)
+  var searchRef = props.searchInputRef || localSearchRef
+
   var filtered = filterMenuTree(props.menu, searchTerm)
   var displayTree = filtered.tree
   // Arama aktifse tum eslesen zinciri genislet; degilse normal expanded state
   var effectiveExpanded = filtered.expandKeys
     ? Object.assign({}, props.expandedNodes, filtered.expandKeys)
     : props.expandedNodes
+
+  var navMeta = buildNavMeta(displayTree, effectiveExpanded)
+  var visibleNodes = navMeta.visibleNodes
+  var navParentMap = navMeta.parentMap
+
+  // Arama degisince klavye odagini sifirla
+  useEffect(function() { setFocusedKey(null) }, [searchTerm])
+
+  // focusedKey degisince ilgili DOM elementini odakla (animasyon icin 260ms retry)
+  useEffect(function() {
+    if (!focusedKey) return
+    var el = document.querySelector('[data-nodeid="' + focusedKey + '"]')
+    if (el) {
+      el.focus({ preventScroll: false })
+    } else {
+      var tid = setTimeout(function() {
+        var el2 = document.querySelector('[data-nodeid="' + focusedKey + '"]')
+        if (el2) el2.focus({ preventScroll: false })
+      }, 260)
+      return function() { clearTimeout(tid) }
+    }
+  }, [focusedKey])
 
   var isMobile = !!props.isMobile
 
@@ -1332,9 +1395,20 @@ function Sidebar(props) {
               className={'absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ' + (isDark ? 'text-white/50' : 'text-slate-400')}
             />
             <input
+              ref={searchRef}
               type="text"
               value={searchTerm}
               onChange={function(e) { setSearchTerm(e.target.value) }}
+              onKeyDown={function(e) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  if (visibleNodes.length > 0) setFocusedKey(visibleNodes[0].key)
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  if (searchTerm) { setSearchTerm(''); setFocusedKey(null) }
+                  else if (searchRef.current) searchRef.current.blur()
+                }
+              }}
               placeholder={tShell('search_placeholder', lang)}
               style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
               className={
@@ -1375,6 +1449,11 @@ function Sidebar(props) {
                   expandedNodes={effectiveExpanded}
                   onToggleNode={props.onToggleNode}
                   onSelectLeaf={props.onSelectLeaf}
+                  focusedKey={focusedKey}
+                  setFocusedKey={setFocusedKey}
+                  visibleNodes={visibleNodes}
+                  navParentMap={navParentMap}
+                  searchInputRef={searchRef}
                 />
               )
             })
@@ -1425,6 +1504,7 @@ function SidebarNode(props) {
   var hasChildren = Array.isArray(node.children) && node.children.length > 0
   var expanded = !!props.expandedNodes[node.key]
   var isActive = props.activeKey === node.key
+  var isFocused = props.focusedKey === node.key
   var Icon = resolveIcon(node.icon)
 
   function handleClick() {
@@ -1435,8 +1515,47 @@ function SidebarNode(props) {
     }
   }
 
-  // Cerceve (border) kaldirildi — dar sidebar'da kart gibi gorunen hat
-  // yerine yalnizca arka plan opakligi ile aktif/hover durumu ayirt edilir.
+  function handleKeyDown(e) {
+    var key = e.key
+    var nodes = props.visibleNodes || []
+    var idx = nodes.findIndex(function(n) { return n.key === node.key })
+    if (key === 'ArrowDown') {
+      e.preventDefault()
+      if (idx < nodes.length - 1) props.setFocusedKey && props.setFocusedKey(nodes[idx + 1].key)
+    } else if (key === 'ArrowUp') {
+      e.preventDefault()
+      if (idx > 0) {
+        props.setFocusedKey && props.setFocusedKey(nodes[idx - 1].key)
+      } else {
+        props.setFocusedKey && props.setFocusedKey(null)
+        if (props.searchInputRef && props.searchInputRef.current) props.searchInputRef.current.focus()
+      }
+    } else if (key === 'ArrowRight') {
+      e.preventDefault()
+      if (hasChildren) {
+        if (!expanded) props.onToggleNode && props.onToggleNode(node.key)
+        if (Array.isArray(node.children) && node.children.length > 0) {
+          props.setFocusedKey && props.setFocusedKey(node.children[0].key)
+        }
+      }
+    } else if (key === 'ArrowLeft') {
+      e.preventDefault()
+      if (hasChildren && expanded) {
+        props.onToggleNode && props.onToggleNode(node.key)
+      } else {
+        var pk = props.navParentMap && props.navParentMap[node.key]
+        if (pk) props.setFocusedKey && props.setFocusedKey(pk)
+      }
+    } else if (key === 'Escape') {
+      e.preventDefault()
+      props.setFocusedKey && props.setFocusedKey(null)
+      if (props.searchInputRef && props.searchInputRef.current) props.searchInputRef.current.focus()
+    } else if (key === 'Enter' || key === ' ') {
+      e.preventDefault()
+      handleClick()
+    }
+  }
+
   // Top-level (level 0) ust kategori — biraz daha buyuk ve kalin.
   var base = level === 0
     ? 'flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-[15px] font-semibold cursor-pointer transition-all group'
@@ -1449,13 +1568,18 @@ function SidebarNode(props) {
     : (isDark
       ? 'text-white/60 hover:bg-white/[0.05] hover:text-white'
       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900')
+  var focusRing = isFocused ? ' ring-2 ring-inset ring-indigo-400/60' : ''
 
   return (
     <div>
       <motion.div
         whileTap={{ scale: 0.98 }}
         onClick={handleClick}
-        className={base + ' ' + variant + ' select-none'}
+        tabIndex={-1}
+        data-nodeid={node.key}
+        onKeyDown={handleKeyDown}
+        onFocus={function() { props.setFocusedKey && props.setFocusedKey(node.key) }}
+        className={base + ' ' + variant + focusRing + ' select-none focus:outline-none'}
         style={{ marginLeft: level * 12, marginBottom: 2, userSelect: 'none', WebkitUserSelect: 'none' }}
       >
         <Icon
@@ -1500,6 +1624,11 @@ function SidebarNode(props) {
                   expandedNodes={props.expandedNodes}
                   onToggleNode={props.onToggleNode}
                   onSelectLeaf={props.onSelectLeaf}
+                  focusedKey={props.focusedKey}
+                  setFocusedKey={props.setFocusedKey}
+                  visibleNodes={props.visibleNodes}
+                  navParentMap={props.navParentMap}
+                  searchInputRef={props.searchInputRef}
                 />
               )
             })}
