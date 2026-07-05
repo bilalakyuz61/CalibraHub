@@ -359,13 +359,15 @@ public sealed class PurchaseController : Controller
                 var isDraft = string.Equals(doc.Status, "Draft", StringComparison.OrdinalIgnoreCase);
                 extraActionsList.Add(new
                 {
-                    type     = "api-post",
-                    label    = "Onaya Gönder",
-                    icon     = "Send",
-                    color    = "emerald",
-                    url      = "/ApprovalFlow/StartByDocument?documentId={id}",
-                    confirm  = $"{doc.DocumentNumber} numaralı ihtiyaç kaydını onaya göndermek istiyor musunuz?",
-                    disabled = !isDraft,
+                    type           = "api-post",
+                    label          = "Onaya Gönder",
+                    icon           = "Send",
+                    color          = "emerald",
+                    url            = "/ApprovalFlow/StartByDocument?documentId={id}",
+                    confirm        = $"{doc.DocumentNumber} numaralı ihtiyaç kaydını onaya göndermek istiyor musunuz?",
+                    confirmOkLabel = "Evet, Gönder",
+                    confirmVariant = "primary",
+                    disabled       = !isDraft,
                 });
             }
             var extraActions = extraActionsList.ToArray();

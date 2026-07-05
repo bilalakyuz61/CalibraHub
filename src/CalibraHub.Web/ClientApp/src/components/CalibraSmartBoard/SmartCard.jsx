@@ -190,7 +190,24 @@ export default function SmartCard(props) {
   // ── Onay modalı (silme vb.) ──
   var [confirmOpen, setConfirmOpen]   = useState(false)
   var [confirmMsg,  setConfirmMsg]    = useState('')
+  var [confirmOpts, setConfirmOpts]   = useState(null)  // { okLabel, variant: 'danger'|'primary' }
   var confirmCallbackRef = useRef(null)
+
+  // ── Uyarı modalı (api-post hata mesajları — sayfa ortasında) ──
+  var [alertOpen, setAlertOpen] = useState(false)
+  var [alertMsg,  setAlertMsg]  = useState('')
+
+  function showAlert(message) {
+    setAlertMsg(message)
+    setAlertOpen(true)
+  }
+
+  useEffect(function() {
+    if (!alertOpen) return
+    function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter') setAlertOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+  }, [alertOpen])
 
   // ── Inline KITT aksiyonu (modal yerine kart altinda acilan dar form seridi) ──
   // Mail gonderme, hizli not, durum degistirme gibi "kucuk aksiyonlar" modal
@@ -227,8 +244,9 @@ export default function SmartCard(props) {
     })
   }, [modalOpen, modalLoading, modalHtml])
 
-  function showConfirm(message, callback) {
+  function showConfirm(message, callback, opts) {
     setConfirmMsg(message)
+    setConfirmOpts(opts || null)
     confirmCallbackRef.current = callback
     setConfirmOpen(true)
   }
@@ -557,7 +575,9 @@ export default function SmartCard(props) {
 
     if (action.type === 'api-post') {
       if (action.confirm) {
-        showConfirm(action.confirm, function() { handleExtraAction(e, Object.assign({}, action, { confirm: null })) })
+        showConfirm(action.confirm,
+          function() { handleExtraAction(e, Object.assign({}, action, { confirm: null })) },
+          { okLabel: action.confirmOkLabel, variant: action.confirmVariant })
         return
       }
       var postUrl = (action.url || '').replace('{id}', id)
@@ -571,20 +591,17 @@ export default function SmartCard(props) {
         .then(function(r) { return r.json() })
         .then(function(data) {
           setLoadingActions(function(prev) { var n = Object.assign({}, prev); delete n[actionKey]; return n })
-          // Rapor §6.6 — toast fallback
-          if (data && data.success === false) {
-            var msg = 'Hata: ' + (data.message || 'Bilinmeyen')
-            if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err')
-            else alert(msg)
+          // Hata: iki yanıt şekli de tanınır — { success:false, message } ve { ok:false, error }.
+          // Mesaj sayfa ortasında uyarı modalıyla gösterilir (toast değil).
+          if (data && (data.success === false || data.ok === false)) {
+            showAlert(data.message || data.error || 'İşlem gerçekleştirilemedi.')
           }
           else if (onRefresh) onRefresh(id)
           else window.location.reload()
         })
         .catch(function(err) {
           setLoadingActions(function(prev) { var n = Object.assign({}, prev); delete n[actionKey]; return n })
-          var em = 'Hata: ' + err.message
-          if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
-          else alert(em)
+          showAlert('Bağlantı hatası: ' + err.message)
         })
       return
     }
@@ -939,6 +956,12 @@ export default function SmartCard(props) {
 
       {/* Onay modali — portal ile tam ekran ortasında */}
       {confirmOpen && createPortal(
+        (function() {
+          var isPrimary = confirmOpts && confirmOpts.variant === 'primary'
+          var okLabel   = (confirmOpts && confirmOpts.okLabel) || (isPrimary ? 'Evet, Devam' : 'Evet, Sil')
+          var OkIcon    = isPrimary ? Check : Trash2
+          var okBg      = isPrimary ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'
+          return (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={handleConfirmNo}
@@ -947,7 +970,9 @@ export default function SmartCard(props) {
             style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '32px 28px', maxWidth: 380, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
             onClick={function(e) { e.stopPropagation() }}
           >
-            <Trash2 size={26} style={{ color: '#ef4444' }} />
+            {isPrimary
+              ? <Check size={26} style={{ color: '#10b981' }} />
+              : <Trash2 size={26} style={{ color: '#ef4444' }} />}
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>Emin misiniz?</h3>
             <p style={{ fontSize: '.84rem', color: '#94a3b8', margin: 0 }}>{confirmMsg}</p>
             <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
@@ -956,10 +981,34 @@ export default function SmartCard(props) {
                 İptal
               </button>
               <button type="button" onClick={handleConfirmYes}
-                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Trash2 size={13} /> Evet, Sil
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, background: okBg, color: '#fff', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <OkIcon size={13} /> {okLabel}
               </button>
             </div>
+          </div>
+        </div>
+          )
+        })(),
+        getTopBody()
+      )}
+
+      {/* Uyarı modali — api-post hataları sayfa ortasında (toast değil) */}
+      {alertOpen && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={function() { setAlertOpen(false) }}
+        >
+          <div
+            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '32px 28px', maxWidth: 400, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
+            onClick={function(e) { e.stopPropagation() }}
+          >
+            <AlertTriangle size={26} style={{ color: '#f59e0b' }} />
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>İşlem Yapılamadı</h3>
+            <p style={{ fontSize: '.84rem', color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>{alertMsg}</p>
+            <button type="button" onClick={function() { setAlertOpen(false) }} autoFocus
+              style={{ padding: '8px 22px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, marginTop: 8, background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+              Tamam
+            </button>
           </div>
         </div>,
         getTopBody()
