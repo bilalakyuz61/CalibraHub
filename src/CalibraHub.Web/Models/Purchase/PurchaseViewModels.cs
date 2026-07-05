@@ -65,12 +65,22 @@ public sealed record PurchaseOrderLineRequest(
 public sealed record CloseRequestsModel(IReadOnlyList<int> RequestIds);
 
 /// <summary>
-/// Satın Alma Talebi sihirbazı — seçilen İhtiyaç kalemlerinden belge oluşturma.
+/// Satın Alma Talebi — seçilen İhtiyaç kalemlerinden belge oluşturma.
 /// POST /Purchase/CreatePurchaseDemand
+/// İki çağrı şekli desteklenir:
+///   - Sihirbaz: yalnızca LineIds → her kalem kalan miktar (Quantity − FulfilledFromStock
+///     − FulfilledByPurchase) kadar talep edilir.
+///   - FulfillmentCenter: Lines (kalem başına miktar/not) → verilen miktarlar kullanılır.
 /// </summary>
 public sealed record CreatePurchaseDemandRequest(
-    IReadOnlyList<int> LineIds,
-    string?            Notes);
+    IReadOnlyList<int>? LineIds,
+    string?             Notes,
+    IReadOnlyList<PurchaseDemandLineInput>? Lines = null);
+
+public sealed record PurchaseDemandLineInput(
+    int     LineId,
+    decimal Qty,
+    string? Notes = null);
 
 /// <summary>
 /// Depodan Karşıla — seçili ihtiyaç kalemlerini FIFO stok dağıtımıyla karşıla.

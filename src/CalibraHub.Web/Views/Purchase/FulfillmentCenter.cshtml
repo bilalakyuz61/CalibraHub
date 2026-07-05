@@ -1117,6 +1117,8 @@
     <span class="fc3-fb-res" id="fc3FbRes"></span>
 </div>
 
+@Html.AntiForgeryToken()
+
 @* ── İşlem Formu Alt Çekmece ── *@
 <div class="fc3-action-sheet" id="fc3ActionSheet">
     <div class="fc3-as-hd">
@@ -2299,6 +2301,11 @@
         if (!vals.length) fc3CloseActionSheet();
     }
 
+    function fc3Csrf() {
+        var t = document.querySelector('input[name="__RequestVerificationToken"]');
+        return t ? t.value : '';
+    }
+
     window.fc3FulfillFromStock = function() {
         var ids = Object.keys(_lineSel).map(Number);
         if (!ids.length) return;
@@ -2308,7 +2315,7 @@
         if (res) { res.textContent = ''; res.className = 'fc3-fb-res'; }
         fetch('/Purchase/FulfillFromStock', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
             body: JSON.stringify({ lineIds: ids, notes: null })
         })
         .then(function(r) { return r.json(); })
@@ -2427,8 +2434,9 @@
     function _saveColDefs() {
         var json = _serializeDefs();
         try { localStorage.setItem('fc3-col-flat-v3', json); } catch(e) {}
+        var csrfEl = document.querySelector('input[name="__RequestVerificationToken"]');
         fetch('/Purchase/SaveFlatColConfig', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfEl ? csrfEl.value : '' },
             body: JSON.stringify({ config: json })
         }).catch(function() {});
     }
@@ -2892,7 +2900,7 @@
         if (!lines.length) { err.textContent='Lütfen en az bir kalem seçin ve kaynak depoyu belirtin.'; err.style.display='block'; return; }
         if (btn) btn.disabled = true;
         fetch('/Purchase/CreateTransfer', {
-            method:'POST', headers:{'Content-Type':'application/json'},
+            method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
             body: JSON.stringify({ requestIds:Array.from(new Set(Object.values(_lineSel).map(function(v){return v.docId;}))), notes:(document.getElementById('fc3TfNotes')||{}).value||null, lines:lines }),
         })
         .then(function(r) { return r.json(); })
@@ -2926,7 +2934,7 @@
         if (!lines.length) { err.textContent='Lütfen en az bir kalem seçin ve depoyu belirtin.'; err.style.display='block'; return; }
         if (btn) btn.disabled = true;
         fetch('/Purchase/CreateStockIssue', {
-            method:'POST', headers:{'Content-Type':'application/json'},
+            method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
             body: JSON.stringify({ requestIds:Array.from(new Set(Object.values(_lineSel).map(function(v){return v.docId;}))), notes:(document.getElementById('fc3SfNotes')||{}).value||null, lines:lines }),
         })
         .then(function(r) { return r.json(); })
@@ -2952,22 +2960,20 @@
             var q    = qty ? parseFloat(qty.value.replace(',','.')) : 0;
             if (q <= 0) return;
             var l = _lines[idx]; if (!l) return;
-            lines.push({ itemId:l.itemId, unitId:l.unitId||null, qty:q,
-                         combinationId:l.combinationId||null,
-                         notes:(note ? note.value : null) || null,
-                         requestLineId:l.lineId||null });
+            lines.push({ lineId:l.lineId, qty:q, notes:(note ? note.value : null) || null });
         });
         if (!lines.length) { err.textContent='Lütfen en az bir kalem seçin.'; err.style.display='block'; return; }
         if (btn) btn.disabled = true;
-        fetch('/Purchase/CreatePurchaseOrderFromIhtiyac', {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ requestIds:Array.from(new Set(Object.values(_lineSel).map(function(v){return v.docId;}))), notes:(document.getElementById('fc3PrNotes')||{}).value||null, contactId:null, lines:lines }),
+        // satin_alma_talebi belgesi oluşturur (DocumentSource bağlantılı) — sipariş değil
+        fetch('/Purchase/CreatePurchaseDemand', {
+            method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
+            body: JSON.stringify({ lines:lines, notes:(document.getElementById('fc3PrNotes')||{}).value||null }),
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (btn) btn.disabled = false;
             if (d.ok) {
-                ok.innerHTML = '✔ Satın alma talebi oluşturuldu: <a href="/Purchase/Edit?id=' + d.docId + '" target="_blank" style="color:#6ee7b7;">' + esc(d.docNo) + '</a>';
+                ok.innerHTML = '✔ Satın alma talebi oluşturuldu: <a href="/Purchase/Edit?type=purchase_demand&id=' + d.docId + '" target="_blank" style="color:#6ee7b7;">' + esc(d.docNo) + '</a>';
                 ok.style.display = 'block';
                 invalidateDocCache();
             } else {
@@ -2992,7 +2998,7 @@
         }).then(function(ok) {
             if (!ok) return;
             fetch('/Purchase/CloseRequests', {
-                method:'POST', headers:{'Content-Type':'application/json'},
+                method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
                 body: JSON.stringify({ requestIds:ids }),
             })
             .then(function(r) { return r.json(); })

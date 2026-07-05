@@ -88,6 +88,26 @@ public sealed class ParametersController : Controller
                 ? pinLim
                 : ShopFloorMaxPinAttemptsDefault;
 
+        // Üretim tab'i: reçetede mükerrer bileşen izni (default: kapalı = birleştir)
+        ViewData["BomAllowDuplicateComponents"] = productionParams
+            .FirstOrDefault(p => p.ParamKey ==
+                CalibraHub.Application.Constants.ProductionParameters.BomAllowDuplicateComponentsKey)
+            ?.ParamValue == "true";
+
+        // Stok tab'i: belge türü bazında "stok bakiyesini etkiler" switch'leri.
+        // Parametre tanımsızsa AÇIK (etkiler) kabul edilir.
+        var stockParams = await _companyParameters.ListAsync(
+            CalibraHub.Application.Constants.StockParameters.FormCode, cancellationToken);
+        ViewData["StockEffectStates"] = CalibraHub.Application.Constants.StockParameters.MovementCapableTypes
+            .Select(t => new StockEffectState(
+                t.Code,
+                t.Label,
+                t.Description,
+                stockParams.FirstOrDefault(p =>
+                    p.ParamKey == CalibraHub.Application.Constants.StockParameters.EffectKey(t.Code))
+                    ?.ParamValue != "false"))
+            .ToList();
+
         return View("~/Views/Admin/Parameters.cshtml");
     }
 
@@ -225,6 +245,49 @@ public sealed class ParametersController : Controller
                 input.ShopFloorMaxPinAttempts.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 CalibraHub.Domain.Enums.CompanyParameterDataType.Int), ct);
 
+            // Reçetede mükerrer bileşen izni (Ürün Ağacı satır davranışı)
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                ProductionFormCode,
+                CalibraHub.Application.Constants.ProductionParameters.BomAllowDuplicateComponentsKey,
+                input.BomAllowDuplicateComponents ? "true" : "false",
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    [HttpPost("/Admin/SaveStockParametersJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveStockParametersJson(
+        [FromBody] StockParametersInput input,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (input.Types is null || input.Types.Count == 0)
+                return Json(new { ok = false, error = "Kaydedilecek parametre yok." });
+
+            // Whitelist: yalnızca MovementCapableTypes'ta tanımlı belge türü kodları kabul edilir.
+            var validCodes = CalibraHub.Application.Constants.StockParameters.MovementCapableTypes
+                .Select(t => t.Code)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in input.Types)
+            {
+                if (string.IsNullOrWhiteSpace(item.Code) || !validCodes.Contains(item.Code))
+                    continue;
+
+                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                    CalibraHub.Application.Constants.StockParameters.FormCode,
+                    CalibraHub.Application.Constants.StockParameters.EffectKey(item.Code),
+                    item.Enabled ? "true" : "false",
+                    CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            }
+
             return Json(new { ok = true });
         }
         catch (Exception ex)
@@ -237,6 +300,9 @@ public sealed class ParametersController : Controller
     public sealed record ApprovalParametersInput(List<ApprovalKindInput> Kinds);
     public sealed record ApprovalKindInput(string Kind, bool Enabled);
     public sealed record ApprovalKindState(string Code, string Label, bool Enabled);
-    public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts);
+    public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts, bool BomAllowDuplicateComponents = false);
+    public sealed record StockParametersInput(List<StockEffectInput> Types);
+    public sealed record StockEffectInput(string Code, bool Enabled);
+    public sealed record StockEffectState(string Code, string Label, string Description, bool Enabled);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);
 }

@@ -3,6 +3,9 @@
     ViewData["BodyClass"] = "page-admin-parameters";
     var isEDocApproval = (ViewData["IsEDocumentApprovalEnabled"] is bool b) && b;
     var shopFloorMaxPinAttempts = ViewData["ShopFloorMaxPinAttempts"] as int? ?? 5;
+    var bomAllowDup = ViewData["BomAllowDuplicateComponents"] as bool? ?? false;
+    var stockEffects = ViewData["StockEffectStates"]
+        as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
 }
 
 @section Styles {
@@ -279,6 +282,7 @@ body.app-theme-dark .ap-wrapper {
             <button type="button" class="ap-tab"           data-pane="workorder" data-label="İş Emri">İş Emri</button>
             <button type="button" class="ap-tab"           data-pane="salesquote" data-label="Satış Teklifi">Satış Teklifi</button>
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
+            <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
         </aside>
 
         <main class="ap-content">
@@ -378,6 +382,28 @@ body.app-theme-dark .ap-wrapper {
                                       color:var(--ap-text); font-size:13px; font-weight:600; text-align:center;" />
                     </div>
                 </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Reçetede Aynı Bileşen Birden Fazla Satırda</div>
+                        <div class="ap-row-desc">
+                            Açıkken Ürün Ağacı'nda aynı hammadde/bileşen <strong>farklı satırlarda</strong>
+                            tekrar eklenebilir (örn. farklı pozisyonlar için ayrı fire ve açıklama ile).
+                            Kapalıyken aynı bileşen ikinci kez eklendiğinde miktarlar otomatik birleştirilir.
+                            İş emri patlatması ve maliyet hesabı her iki modda da doğru toplar.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-bom-allow-dup" @(bomAllowDup ? "checked" : null) />
+                            <span class="ap-switch-track @(bomAllowDup ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(bomAllowDup ? "is-active" : "")"
+                                  id="ap-bom-allow-dup-label">@(bomAllowDup ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
             </section>
 
             @* ── İş Emri ────────────────────────────────── *@
@@ -413,6 +439,27 @@ body.app-theme-dark .ap-wrapper {
             <section class="ap-pane" id="ap-pane-ihtiyac">
                 <h2>İhtiyaç Kayıtları</h2>
                 <div class="ap-hint">İhtiyaç karşılama merkezi ("Depodan Karşıla") davranış parametreleri.</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Karşılamada Onay Şartı</div>
+                        <div class="ap-row-desc">
+                            Açıkken karşılama aksiyonları (Depodan Karşıla, Depo Transferi, Ambar Çıkış
+                            Fişi, Satın Alma Talebi) yalnızca <strong>Onaylı</strong> ihtiyaç kayıtlarında
+                            çalışır. İhtiyaç Kaydı türünde onay tetikleme tamamen kapalıysa bu şart
+                            uygulanmaz. Kapatıldığında taslak/onay bekleyen kayıtlar da karşılanabilir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-fc-req-approval" checked />
+                            <span class="ap-switch-track is-on">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label is-active" id="ap-fc-req-approval-label">Aktif</span>
+                        </label>
+                    </div>
+                </div>
 
                 <div class="ap-row">
                     <div class="ap-row-main">
@@ -461,6 +508,37 @@ body.app-theme-dark .ap-wrapper {
                 </div>
             </section>
 
+            @* ── Stok ───────────────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-stok">
+                <h2>Stok</h2>
+                <div class="ap-hint">
+                    Belge türü bazında stok bakiyesi etkisi. Kapatılan türün hareketleri
+                    (DocumentLine) stok bakiyesi hesabına dahil edilmez — karşılama merkezi,
+                    depo sayım beklenen miktarı ve stok sorguları bu ayara uyar.
+                </div>
+
+                @foreach (var se in stockEffects)
+                {
+                    <div class="ap-row">
+                        <div class="ap-row-main">
+                            <div class="ap-row-title">@se.Label</div>
+                            <div class="ap-row-desc">@se.Description</div>
+                        </div>
+                        <div class="ap-row-control">
+                            <label class="ap-switch">
+                                <input type="checkbox" class="ap-stock-switch" id="ap-stock-@se.Code"
+                                       data-code="@se.Code" @(se.Enabled ? "checked" : null) />
+                                <span class="ap-switch-track @(se.Enabled ? "is-on" : "")">
+                                    <span class="ap-switch-thumb"></span>
+                                </span>
+                                <span class="ap-switch-label @(se.Enabled ? "is-active" : "")"
+                                      id="ap-stock-@se.Code-label">@(se.Enabled ? "Etkiler" : "Etkilemez")</span>
+                            </label>
+                        </div>
+                    </div>
+                }
+            </section>
+
         </main>
     </div>
 </div>
@@ -481,7 +559,7 @@ body.app-theme-dark .ap-wrapper {
 
     // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac');
+        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -534,9 +612,20 @@ body.app-theme-dark .ap-wrapper {
         });
     }
     wireSwitch('ap-edoc-approval', 'ap-edoc-approval-label');
+    wireSwitch('ap-bom-allow-dup', 'ap-bom-allow-dup-label');
+    wireSwitch('ap-fc-req-approval', 'ap-fc-req-approval-label');
     // Belge türü onay switch'leri — dinamik liste (data-kind attribute'lu)
     document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
         wireSwitch(cb.id, cb.id + '-label');
+    });
+    // Stok etkisi switch'leri — etiket "Etkiler"/"Etkilemez"
+    document.querySelectorAll('.ap-stock-switch').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var on = cb.checked;
+            cb.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', on);
+            var lbl = document.getElementById(cb.id + '-label');
+            if (lbl) { lbl.textContent = on ? 'Etkiler' : 'Etkilemez'; lbl.classList.toggle('is-active', on); }
+        });
     });
 
     // ── Aksiyon seridi Kaydet handler ──────────────────────
@@ -564,11 +653,12 @@ body.app-theme-dark .ap-wrapper {
                     flash('Hatalı PIN limiti 0 ile 50 arasında olmalı.', false);
                     return;
                 }
+                var dupEl = document.getElementById('ap-bom-allow-dup');
                 var rp = await fetch('/Admin/SaveProductionParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ shopFloorMaxPinAttempts: raw })
+                    body: JSON.stringify({ shopFloorMaxPinAttempts: raw, bomAllowDuplicateComponents: !!(dupEl && dupEl.checked) })
                 });
                 var datap = await rp.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!datap.ok;
@@ -582,6 +672,7 @@ body.app-theme-dark .ap-wrapper {
                         ids.push(cb.value);
                     });
                 }
+                var reqApprEl = document.getElementById('ap-fc-req-approval');
                 var r1 = await fetch('/Admin/SaveParameter', {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -596,9 +687,31 @@ body.app-theme-dark .ap-wrapper {
                     body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_LOCATION_IDS', paramValue: ids.join(','), dataType: 1 })
                 });
                 var d2 = await r2.json();
-                ok = !!d1.ok && !!d2.ok;
+                var r3 = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_REQUIRE_APPROVAL', paramValue: (reqApprEl && reqApprEl.checked) ? 'true' : 'false', dataType: 3 })
+                });
+                var d3 = await r3.json();
+                ok = !!d1.ok && !!d2.ok && !!d3.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash((d1.error || d2.error || 'Kaydetme basarisiz.'), false);
+                else    flash((d1.error || d2.error || d3.error || 'Kaydetme basarisiz.'), false);
+            } else if (activePane === 'stok') {
+                var types = [];
+                document.querySelectorAll('.ap-stock-switch').forEach(function (cb) {
+                    types.push({ code: cb.dataset.code, enabled: cb.checked });
+                });
+                var rs = await fetch('/Admin/SaveStockParametersJson', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ types: types })
+                });
+                var datas = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!datas.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(datas.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'approval') {
                 var kinds = [];
                 document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
@@ -662,6 +775,16 @@ body.app-theme-dark .ap-wrapper {
             var modeEl = document.getElementById(cfg.mode === 'ITEM_DEFAULT' ? 'apFcLocDefault' : 'apFcLocSpecific');
             if (modeEl) modeEl.checked = true;
             fcModeChange();
+
+            // Karşılamada onay şartı switch'i (default: açık)
+            var reqAppr = cfg.requireApproval !== false;
+            var raEl = document.getElementById('ap-fc-req-approval');
+            if (raEl) {
+                raEl.checked = reqAppr;
+                raEl.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', reqAppr);
+                var raLbl = document.getElementById('ap-fc-req-approval-label');
+                if (raLbl) { raLbl.textContent = reqAppr ? 'Aktif' : 'Pasif'; raLbl.classList.toggle('is-active', reqAppr); }
+            }
 
             var locs = await (await fetch('/Warehouse/GetLocationsJson')).json();
             _fcLocs = locs || [];

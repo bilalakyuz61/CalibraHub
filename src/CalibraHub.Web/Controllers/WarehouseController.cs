@@ -22,6 +22,8 @@ public sealed class WarehouseController : Controller
     private readonly ILogisticsConfigurationService _logisticsService;
     private readonly IArgeProjectService _argeService;
     private readonly IFieldSettingRepository _fieldSettings;
+    private readonly ICompanyParameterService _companyParams;
+    private readonly IDocumentTypeRepository _documentTypeRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
 
@@ -38,6 +40,8 @@ public sealed class WarehouseController : Controller
         ILogisticsConfigurationService logisticsService,
         IArgeProjectService argeService,
         IFieldSettingRepository fieldSettings,
+        ICompanyParameterService companyParams,
+        IDocumentTypeRepository documentTypeRepo,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
     {
@@ -46,6 +50,8 @@ public sealed class WarehouseController : Controller
         _logisticsService = logisticsService;
         _argeService = argeService;
         _fieldSettings = fieldSettings;
+        _companyParams = companyParams;
+        _documentTypeRepo = documentTypeRepo;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
@@ -129,6 +135,13 @@ public sealed class WarehouseController : Controller
                          ? d.Date : DateTime.Today;
         var companyId  = _connectionFactory.ResolveCurrentCompanyId();
 
+        // Stok etkisi kapalı (STOCK_EFFECT_{code}=false) belge türlerini bakiye dışı bırak
+        var disabledTypeIds = await CalibraHub.Application.Services.StockEffectHelper
+            .GetDisabledDocTypeIdsAsync(_companyParams, _documentTypeRepo, ct);
+        var seFilter = disabledTypeIds.Count == 0
+            ? ""
+            : $" AND (d.DocumentTypeId IS NULL OR d.DocumentTypeId NOT IN ({string.Join(",", disabledTypeIds.Select((_, i) => $"@sef{i}"))}))";
+
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
@@ -160,7 +173,7 @@ public sealed class WarehouseController : Controller
               AND d.IsActive  = 1
               AND CONVERT(DATE, d.DocumentDate) <= @Date
               AND l.MovementType IN (1,2,3,4)
-              AND (l.FromLocationId = @LocId OR l.LocationId = @LocId)
+              AND (l.FromLocationId = @LocId OR l.LocationId = @LocId){seFilter}
             GROUP BY l.ItemId, i.Code, i.Name, l.UnitId, u.Code, l.CombinationId, cfg.RecordCode
             HAVING SUM(
                 CASE
@@ -178,6 +191,8 @@ public sealed class WarehouseController : Controller
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@LocId",     locationId);
         cmd.Parameters.AddWithValue("@Date",      upToDate);
+        for (var i = 0; i < disabledTypeIds.Count; i++)
+            cmd.Parameters.AddWithValue($"@sef{i}", disabledTypeIds[i]);
 
         var result = new List<object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);

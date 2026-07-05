@@ -70,6 +70,52 @@ public sealed class PurchaseController : Controller
 
     private int? CurrentUserId() => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
+    /// <summary>
+    /// Stok etkisi kapalı (STOCK_EFFECT_{code}=false) belge türleri için SQL filtre
+    /// parçası üretir. Bakiye sorgularında Document alias'ına eklenir; parametre
+    /// tanımsızken boş döner (filtre yok = mevcut davranış).
+    /// </summary>
+    private async Task<(string Filter, List<SqlParameter> Parameters)> BuildStockEffectFilterAsync(
+        string docAlias, CancellationToken ct)
+    {
+        var ids = await CalibraHub.Application.Services.StockEffectHelper.GetDisabledDocTypeIdsAsync(
+            _companyParams, _documentTypeRepo, ct);
+        if (ids.Count == 0) return ("", []);
+
+        var names  = string.Join(",", ids.Select((_, i) => $"@sef{i}"));
+        var filter = $" AND ({docAlias}.[DocumentTypeId] IS NULL OR {docAlias}.[DocumentTypeId] NOT IN ({names}))";
+        var prms   = ids.Select((id, i) => new SqlParameter($"@sef{i}", id)).ToList();
+        return (filter, prms);
+    }
+
+    /// <summary>
+    /// FULFILLMENT_REQUIRE_APPROVAL açıkken (default) karşılama aksiyonlarına giren
+    /// ihtiyaç kayıtlarının Onaylı olmasını şart koşar. İhtiyaç Kaydı türünde onay
+    /// tetikleme tamamen kapalıysa (APPROVAL_ENABLED_PurchaseRequest=false) uygulanmaz.
+    /// Hata varsa kullanıcıya gösterilecek mesaj, yoksa null döner.
+    /// </summary>
+    private async Task<string?> CheckFulfillmentApprovalGuardAsync(
+        IEnumerable<int> documentIds, CancellationToken ct)
+    {
+        var require = await _companyParams.GetBoolAsync(
+            FulfillmentParameters.FormCode, FulfillmentParameters.RequireApprovalKey, ct) ?? true;
+        if (!require) return null;
+
+        var kindEnabled = await _companyParams.GetStringAsync(
+            ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
+        if (!kindEnabled) return null;
+
+        foreach (var id in documentIds.Distinct())
+        {
+            var doc = await _documentService.GetQuoteByIdAsync(id, ct);
+            if (doc == null) continue;
+            if (!string.Equals(doc.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                return $"{doc.DocumentNumber} onaylanmadan karşılama yapılamaz (durum: {TranslateStatus(doc.Status)}). " +
+                       "Bu şartı Parametreler → İhtiyaç Kayıtları sekmesinden kapatabilirsiniz.";
+        }
+        return null;
+    }
+
     [HttpGet("/Purchase/Requests")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseRequest)]
     public Task<IActionResult> Requests(CancellationToken ct) =>
@@ -645,6 +691,7 @@ public sealed class PurchaseController : Controller
         var s         = _schema.Replace("]", "]]");
         var paramList = string.Join(",", docIds.Select((_, i) => $"@d{i}"));
         var result    = new Dictionary<int, List<object>>();
+        var (seFilter, seParams) = await BuildStockEffectFilterAsync("sd", ct);
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
@@ -666,7 +713,7 @@ public sealed class PurchaseController : Controller
                        END) AS [Balance]
                 FROM [{s}].[DocumentLine] sdl
                 INNER JOIN [{s}].[Document] sd ON sd.[id] = sdl.[DocumentId]
-                WHERE sdl.[MovementType] IS NOT NULL AND sd.[IsActive] = 1
+                WHERE sdl.[MovementType] IS NOT NULL AND sd.[IsActive] = 1{seFilter}
                 GROUP BY sdl.[ItemId]
             ) sm ON sm.[ItemId] = dl.[ItemId]
             WHERE dl.[DocumentId] IN ({paramList})
@@ -674,6 +721,7 @@ public sealed class PurchaseController : Controller
             """;
         for (var i = 0; i < docIds.Count; i++)
             cmd.Parameters.Add(new SqlParameter($"@d{i}", docIds[i]));
+        foreach (var p in seParams) cmd.Parameters.Add(p);
 
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -787,6 +835,7 @@ public sealed class PurchaseController : Controller
         var s          = _schema.Replace("]", "]]");
         var paramList  = string.Join(",", itemIds.Select((_, i) => $"@i{i}"));
         var companyId  = _connectionFactory.ResolveCurrentCompanyId();
+        var (seFilter, seParams) = await BuildStockEffectFilterAsync("d", ct);
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
@@ -797,6 +846,7 @@ public sealed class PurchaseController : Controller
         // zaten MovementType dolu gelir — ayrica Document.status kontrolüne gerek yok (companion
         // pattern'de Document.Status sabit Draft kalabilir, otorite companion'in kendi status'undedir
         // — bkz. ArgeProjectService).
+        // STOCK_EFFECT_{code}=false olan belge türleri bakiye dışı bırakılır (seFilter).
         cmd.CommandText = $"""
             WITH Combined AS (
                 -- Receipt: hedef lokasyona +miktar
@@ -804,7 +854,7 @@ public sealed class PurchaseController : Controller
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 2
-                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1{seFilter}
 
                 UNION ALL
 
@@ -813,7 +863,7 @@ public sealed class PurchaseController : Controller
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 1
-                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1{seFilter}
 
                 UNION ALL
 
@@ -822,7 +872,7 @@ public sealed class PurchaseController : Controller
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 3 AND dl.LocationId IS NOT NULL
-                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1{seFilter}
 
                 UNION ALL
 
@@ -831,7 +881,7 @@ public sealed class PurchaseController : Controller
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 3 AND dl.FromLocationId IS NOT NULL
-                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1{seFilter}
 
                 UNION ALL
 
@@ -840,7 +890,7 @@ public sealed class PurchaseController : Controller
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 4 AND dl.LocationId IS NOT NULL
-                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1{seFilter}
 
                 UNION ALL
 
@@ -849,7 +899,7 @@ public sealed class PurchaseController : Controller
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 4 AND dl.FromLocationId IS NOT NULL
-                  AND d.CompanyId = @CompanyId AND d.IsActive = 1
+                  AND d.CompanyId = @CompanyId AND d.IsActive = 1{seFilter}
             )
             SELECT c.ItemId, c.LocationId, loc.LocationName, SUM(c.Bal) AS Balance
             FROM Combined c
@@ -861,6 +911,7 @@ public sealed class PurchaseController : Controller
         for (var i = 0; i < itemIds.Length; i++)
             cmd.Parameters.Add(new SqlParameter($"@i{i}", itemIds[i]));
         cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        foreach (var p in seParams) cmd.Parameters.Add(p);
 
         var result = new List<object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -883,6 +934,7 @@ public sealed class PurchaseController : Controller
     /// Yanıt: { ok: true, docNo } veya { ok: false, error }
     /// </summary>
     [HttpPost("/Purchase/CreateTransfer")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateTransfer([FromBody] CreateTransferRequest req, CancellationToken ct)
     {
         try
@@ -896,6 +948,12 @@ public sealed class PurchaseController : Controller
 
             if (validLines.Count == 0)
                 return Json(new { ok = false, error = "Geçerli transfer kalemi bulunamadı (miktar > 0 ve kaynak depo zorunlu)." });
+
+            if (req.RequestIds?.Count > 0)
+            {
+                var guardError = await CheckFulfillmentApprovalGuardAsync(req.RequestIds, ct);
+                if (guardError != null) return Json(new { ok = false, error = guardError });
+            }
 
             // RefNo: kaynak İhtiyaç belge numaraları — izlenebilirlik (birden fazla olabilir).
             string? refNo = null;
@@ -975,6 +1033,7 @@ public sealed class PurchaseController : Controller
     /// POST /Purchase/CreateStockIssue
     /// </summary>
     [HttpPost("/Purchase/CreateStockIssue")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateStockIssue([FromBody] CreateStockIssueRequest req, CancellationToken ct)
     {
         try
@@ -988,6 +1047,12 @@ public sealed class PurchaseController : Controller
 
             if (validLines.Count == 0)
                 return Json(new { ok = false, error = "Geçerli çıkış kalemi bulunamadı (miktar > 0 ve depo zorunlu)." });
+
+            if (req.RequestIds?.Count > 0)
+            {
+                var guardError = await CheckFulfillmentApprovalGuardAsync(req.RequestIds, ct);
+                if (guardError != null) return Json(new { ok = false, error = guardError });
+            }
 
             string? refNo = null;
             if (req.RequestIds?.Count > 0)
@@ -1073,7 +1138,8 @@ public sealed class PurchaseController : Controller
         var ids     = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
                             .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
                             .Select(int.Parse).ToList();
-        return Json(new { mode, locationIds = ids });
+        var requireApproval = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.RequireApprovalKey, ct) ?? true;
+        return Json(new { mode, locationIds = ids, requireApproval });
     }
 
     /// <summary>
@@ -1087,6 +1153,7 @@ public sealed class PurchaseController : Controller
     ///   5. CreateStockIssue iç mantığıyla ambar çıkış fişi oluştur + FulfilledFromStock güncelle.
     /// </summary>
     [HttpPost("/Purchase/FulfillFromStock")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> FulfillFromStock([FromBody] FulfillFromStockRequest req, CancellationToken ct)
     {
         if (req?.LineIds == null || req.LineIds.Count == 0)
@@ -1145,9 +1212,14 @@ public sealed class PurchaseController : Controller
         if (lines.All(l => l.Remaining <= 0))
             return Json(new { ok = false, error = "Seçili kalemlerin tamamı zaten karşılanmış." });
 
+        var guardError = await CheckFulfillmentApprovalGuardAsync(lines.Select(l => l.DocId), ct);
+        if (guardError != null)
+            return Json(new { ok = false, error = guardError });
+
         // -- Stok bakiyelerini çek --
         var distinctItemIds = lines.Select(l => l.ItemId).Distinct().ToList();
         var iParamList      = string.Join(",", distinctItemIds.Select((_, i) => $"@i{i}"));
+        var (seFilter, seParams) = await BuildStockEffectFilterAsync("smd", ct);
 
         // ITEM_DEFAULT modunda her malzemenin varsayılan deposunu al
         var itemDefaultLoc = new Dictionary<int, int>(); // itemId → locationId
@@ -1183,7 +1255,7 @@ public sealed class PurchaseController : Controller
                     FROM [{s}].[DocumentLine] sm
                     INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
                     WHERE sm.[ItemId] IN ({iParamList}) AND smd.[IsActive] = 1
-                      AND (sm.[MovementType] = 2 OR (sm.[MovementType] IN (3,4) AND sm.[LocationId] IS NOT NULL))
+                      AND (sm.[MovementType] = 2 OR (sm.[MovementType] IN (3,4) AND sm.[LocationId] IS NOT NULL)){seFilter}
 
                     UNION ALL
 
@@ -1191,7 +1263,7 @@ public sealed class PurchaseController : Controller
                     FROM [{s}].[DocumentLine] sm
                     INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
                     WHERE sm.[ItemId] IN ({iParamList}) AND smd.[IsActive] = 1
-                      AND (sm.[MovementType] = 1 OR (sm.[MovementType] IN (3,4) AND sm.[FromLocationId] IS NOT NULL))
+                      AND (sm.[MovementType] = 1 OR (sm.[MovementType] IN (3,4) AND sm.[FromLocationId] IS NOT NULL)){seFilter}
                 )
                 SELECT c.[ItemId], c.[LocId] AS [LocationId], SUM(c.[Bal]) AS [Balance]
                 FROM Combined c
@@ -1204,6 +1276,7 @@ public sealed class PurchaseController : Controller
             if (string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase) && configuredLocIds != null)
                 for (var i = 0; i < configuredLocIds.Count; i++)
                     cmd2.Parameters.Add(new SqlParameter($"@loc{i}", configuredLocIds[i]));
+            foreach (var p in seParams) cmd2.Parameters.Add(p);
 
             await using var r2 = await cmd2.ExecuteReaderAsync(ct);
             while (await r2.ReadAsync(ct))
@@ -1339,6 +1412,7 @@ public sealed class PurchaseController : Controller
     /// POST /Purchase/CreatePurchaseOrderFromIhtiyac
     /// </summary>
     [HttpPost("/Purchase/CreatePurchaseOrderFromIhtiyac")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreatePurchaseOrderFromIhtiyac(
         [FromBody] CreatePurchaseOrderFromIhtiyacRequest req, CancellationToken ct)
     {
@@ -1350,6 +1424,12 @@ public sealed class PurchaseController : Controller
             var validLines = req.Lines.Where(l => l.Qty > 0).ToList();
             if (validLines.Count == 0)
                 return Json(new { ok = false, error = "Geçerli satın alma kalemi bulunamadı." });
+
+            if (req.RequestIds?.Count > 0)
+            {
+                var guardError = await CheckFulfillmentApprovalGuardAsync(req.RequestIds, ct);
+                if (guardError != null) return Json(new { ok = false, error = guardError });
+            }
 
             var docType = await _documentTypeRepo.GetByCodeAsync("alis_siparisi", ct);
             if (docType == null)
@@ -1441,6 +1521,7 @@ public sealed class PurchaseController : Controller
     /// POST /Purchase/CloseRequests
     /// </summary>
     [HttpPost("/Purchase/CloseRequests")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> CloseRequests([FromBody] CloseRequestsModel req, CancellationToken ct)
     {
         if (req?.RequestIds == null || req.RequestIds.Count == 0)
@@ -1483,6 +1564,7 @@ public sealed class PurchaseController : Controller
         string? materialSearch, string? requestNumber, bool? hasStock, CancellationToken ct)
     {
         var s = _schema.Replace("]", "]]");
+        var (seFilter, seParams) = await BuildStockEffectFilterAsync("smd", ct);
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
@@ -1518,7 +1600,7 @@ public sealed class PurchaseController : Controller
                        END) AS Balance
                 FROM [{s}].[DocumentLine] sm
                 INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
-                WHERE sm.[MovementType] IS NOT NULL AND smd.[IsActive] = 1
+                WHERE sm.[MovementType] IS NOT NULL AND smd.[IsActive] = 1{seFilter}
                 GROUP BY sm.[ItemId]
             ) stk ON stk.[ItemId] = i.[Id]
             WHERE dt.[code] = N'alis_talebi'
@@ -1538,6 +1620,7 @@ public sealed class PurchaseController : Controller
 
         cmd.Parameters.Add(new SqlParameter("@MatSearch", matParam));
         cmd.Parameters.Add(new SqlParameter("@DocNo",     docNoParam));
+        foreach (var p in seParams) cmd.Parameters.Add(p);
 
         var result = new List<object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -1586,7 +1669,16 @@ public sealed class PurchaseController : Controller
     {
         try
         {
-            if (req?.LineIds == null || req.LineIds.Count == 0)
+            // İki giriş şekli: Lines (kalem başına miktar) veya LineIds (kalan miktar kadar)
+            var inputByLineId = new Dictionary<int, PurchaseDemandLineInput>();
+            if (req?.Lines?.Count > 0)
+                foreach (var l in req.Lines.Where(l => l.Qty > 0))
+                    inputByLineId[l.LineId] = l;
+            else if (req?.LineIds?.Count > 0)
+                foreach (var id in req.LineIds)
+                    inputByLineId[id] = new PurchaseDemandLineInput(id, 0m); // 0 = kalan miktar kullan
+
+            if (inputByLineId.Count == 0)
                 return Json(new { ok = false, error = "Kalem seçilmedi." });
 
             var docType = await _documentTypeRepo.GetByCodeAsync("satin_alma_talebi", ct);
@@ -1595,21 +1687,24 @@ public sealed class PurchaseController : Controller
 
             // Seçilen kalemleri belgelerine göre grupla — DocumentSource için
             var s         = _schema.Replace("]", "]]");
-            var paramList = string.Join(",", req.LineIds.Select((_, i) => $"@lid{i}"));
+            var lineIds   = inputByLineId.Keys.ToList();
+            var paramList = string.Join(",", lineIds.Select((_, i) => $"@lid{i}"));
 
             await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
             await using var cmdFetch = conn.CreateCommand();
             cmdFetch.CommandText = $"""
                 SELECT dl.[Id], dl.[DocumentId], dl.[ItemId], dl.[UnitId], dl.[Quantity],
-                       dl.[FulfilledByPurchase], dl.[CombinationId], dl.[Notes]
+                       ISNULL(dl.[FulfilledByPurchase],0), ISNULL(dl.[FulfilledFromStock],0),
+                       dl.[CombinationId], dl.[Notes]
                 FROM [{s}].[DocumentLine] dl
                 WHERE dl.[Id] IN ({paramList});
                 """;
-            for (var i = 0; i < req.LineIds.Count; i++)
-                cmdFetch.Parameters.Add(new SqlParameter($"@lid{i}", req.LineIds[i]));
+            for (var i = 0; i < lineIds.Count; i++)
+                cmdFetch.Parameters.Add(new SqlParameter($"@lid{i}", lineIds[i]));
 
             var lineRows = new List<(int Id, int DocId, int ItemId, int? UnitId,
-                decimal Qty, decimal FulfilledByPurchase, int? CombinationId, string? Notes)>();
+                decimal Qty, decimal FulfilledByPurchase, decimal FulfilledFromStock,
+                int? CombinationId, string? Notes)>();
 
             await using var rdr = await cmdFetch.ExecuteReaderAsync(ct);
             while (await rdr.ReadAsync(ct))
@@ -1620,9 +1715,10 @@ public sealed class PurchaseController : Controller
                     rdr.GetInt32(2),
                     rdr.IsDBNull(3) ? (int?)null : rdr.GetInt32(3),
                     rdr.GetDecimal(4),
-                    rdr.IsDBNull(5) ? 0m : rdr.GetDecimal(5),
-                    rdr.IsDBNull(6) ? (int?)null : rdr.GetInt32(6),
-                    rdr.IsDBNull(7) ? null : rdr.GetString(7)
+                    rdr.GetDecimal(5),
+                    rdr.GetDecimal(6),
+                    rdr.IsDBNull(7) ? (int?)null : rdr.GetInt32(7),
+                    rdr.IsDBNull(8) ? null : rdr.GetString(8)
                 ));
             }
             await rdr.DisposeAsync();
@@ -1632,8 +1728,30 @@ public sealed class PurchaseController : Controller
 
             var sourceDocIds = lineRows.Select(l => l.DocId).Distinct().ToList();
 
+            var guardError = await CheckFulfillmentApprovalGuardAsync(sourceDocIds, ct);
+            if (guardError != null)
+                return Json(new { ok = false, error = guardError });
+
+            // Talep miktarı: kullanıcı miktarı verdiyse o, vermediyse kalan
+            // (Quantity − FulfilledFromStock − FulfilledByPurchase).
+            var demandLines = new List<(int LineId, int ItemId, int? UnitId, decimal Qty, int? CombinationId, string? Notes,
+                decimal FulfilledFromStock, decimal FulfilledByPurchase)>();
+            foreach (var lr in lineRows)
+            {
+                var input     = inputByLineId[lr.Id];
+                var remaining = Math.Max(0m, lr.Qty - lr.FulfilledFromStock - lr.FulfilledByPurchase);
+                var qty       = input.Qty > 0 ? input.Qty : remaining;
+                if (qty <= 0) continue;
+                demandLines.Add((lr.Id, lr.ItemId, lr.UnitId, qty, lr.CombinationId,
+                    string.IsNullOrWhiteSpace(input.Notes) ? lr.Notes : input.Notes,
+                    lr.FulfilledFromStock, lr.FulfilledByPurchase));
+            }
+
+            if (demandLines.Count == 0)
+                return Json(new { ok = false, error = "Seçilen kalemlerde talep edilecek kalan miktar yok — tümü zaten karşılanmış." });
+
             // Notes'a kaynak belge no'larını ekle
-            string? notes = req.Notes;
+            string? notes = req!.Notes;
             if (sourceDocIds.Count > 0)
             {
                 var nums = new List<string>();
@@ -1664,11 +1782,11 @@ public sealed class PurchaseController : Controller
                 DeliveryTerms:   null,
                 DeliveryAddress: null,
                 Notes:           notes,
-                Lines:           lineRows.Select(l => new CalibraHub.Application.Contracts.SaveDocumentLineRequest(
+                Lines:           demandLines.Select(l => new CalibraHub.Application.Contracts.SaveDocumentLineRequest(
                     Id:            null,
                     ItemId:        l.ItemId,
                     UnitId:        l.UnitId,
-                    Quantity:      l.Qty - l.FulfilledByPurchase,
+                    Quantity:      l.Qty,
                     UnitPrice:     0m,
                     DiscountRate:  0m,
                     CombinationId: l.CombinationId,
@@ -1687,13 +1805,11 @@ public sealed class PurchaseController : Controller
             foreach (var srcId in sourceDocIds)
                 await _docSourceRepo.AddAsync(srcId, doc.Id, ct);
 
-            // FulfilledByPurchase güncelle: remaining miktar kadar artır
-            foreach (var lr in lineRows)
+            // FulfilledByPurchase artır — FulfilledFromStock korunur (0'a EZME).
+            foreach (var dl in demandLines)
             {
-                var addedQty = lr.Qty - lr.FulfilledByPurchase;
-                if (addedQty <= 0) continue;
-                var newByPurchase = lr.FulfilledByPurchase + addedQty;
-                await _documentRepo.UpdateLineFulfillmentAsync(lr.Id, 0m, newByPurchase, ct);
+                await _documentRepo.UpdateLineFulfillmentAsync(
+                    dl.LineId, dl.FulfilledFromStock, dl.FulfilledByPurchase + dl.Qty, ct);
             }
 
             return Json(new { ok = true, docNo = doc.DocumentNumber, docId = doc.Id });
@@ -1792,6 +1908,7 @@ public sealed class PurchaseController : Controller
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveFlatColConfig([FromBody] Fc3SaveColConfigRequest request, CancellationToken ct)
     {
         var uid = CurrentUserId();
