@@ -60,11 +60,13 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
         // 'Document' = "Tüm Belgeler" wildcard (yeni standart), 'All' = legacy wildcard.
         // İkisi de spesifik belge tipiyle eşleşir. Spesifik tip (örn. 'EInvoice') yalnız
         // kendi tipiyle eşleşir; başka spesifik tipe sızmaz.
+        // Sıralama: spesifik kind wildcard'dan ÖNCE gelir — belgeye özel akış varsa
+        // isim sırasından bağımsız olarak genel (Tüm Belgeler) akışı ezer.
         cmd.CommandText = $"""
             SELECT [Id] FROM [{_s}].[ApprovalFlow]
             WHERE [IsActive] = 1
               AND ([DocumentKind] = @Kind OR [DocumentKind] = N'Document' OR [DocumentKind] = N'All')
-            ORDER BY [Name];
+            ORDER BY CASE WHEN [DocumentKind] = @Kind THEN 0 ELSE 1 END, [Name];
             """;
         cmd.Parameters.Add(new SqlParameter("@Kind", documentKind));
 

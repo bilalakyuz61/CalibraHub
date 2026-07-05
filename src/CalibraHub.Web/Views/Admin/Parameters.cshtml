@@ -313,54 +313,41 @@ body.app-theme-dark .ap-wrapper {
             @* ── Onay İşlemleri ─────────────────────────── *@
             <section class="ap-pane" id="ap-pane-approval">
                 <h2>Onay İşlemleri</h2>
-                <div class="ap-hint">Elektronik belge onay akışı parametreleri. Akış şablonlarını yönetmek için
-                    <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.</div>
-
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Alış Faturası Onay Akışı</div>
-                        <div class="ap-row-desc">
-                            Açıkken sisteme giren e-Faturalar, tutar ve içerik koşullarına göre
-                            tanımlı onay akışına yönlendirilir. Onaylanmadan ERP'ye işlenmez.
-                            Kapalıyken belgeler doğrudan işlenmiş sayılır.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-invoice-approval"
-                                   @(ViewData["IsInvoiceApprovalEnabled"] is true ? "checked" : null) />
-                            <span class="ap-switch-track @(ViewData["IsInvoiceApprovalEnabled"] is true ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(ViewData["IsInvoiceApprovalEnabled"] is true ? "is-active" : "")"
-                                  id="ap-invoice-approval-label">
-                                @(ViewData["IsInvoiceApprovalEnabled"] is true ? "Aktif" : "Pasif")
-                            </span>
-                        </label>
-                    </div>
+                <div class="ap-hint">
+                    Belge türü bazında otomatik onay tetikleme. Açık olan türlerde yeni belge
+                    kaydedildiğinde eşleşen onay akışı otomatik başlar; kapalı türlerde otomatik
+                    başlatma yapılmaz (manuel "Onaya Gönder" her zaman kullanılabilir).
+                    Akış şablonlarını yönetmek için
+                    <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.
                 </div>
 
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">e-İrsaliye Onay Akışı</div>
-                        <div class="ap-row-desc">
-                            Gelen e-İrsaliyeler için onay süreci zorunlu hale gelir.
+                @{
+                    var approvalKinds = ViewData["ApprovalKinds"]
+                        as List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>
+                        ?? new List<CalibraHub.Web.Controllers.ParametersController.ApprovalKindState>();
+                }
+                @foreach (var k in approvalKinds)
+                {
+                    <div class="ap-row">
+                        <div class="ap-row-main">
+                            <div class="ap-row-title">@k.Label</div>
+                            <div class="ap-row-desc">
+                                Yeni @k.Label kaydında eşleşen onay akışı otomatik başlatılır.
+                            </div>
+                        </div>
+                        <div class="ap-row-control">
+                            <label class="ap-switch">
+                                <input type="checkbox" class="ap-kind-switch" data-kind="@k.Code"
+                                       id="ap-kind-@k.Code" @(k.Enabled ? "checked" : null) />
+                                <span class="ap-switch-track @(k.Enabled ? "is-on" : "")">
+                                    <span class="ap-switch-thumb"></span>
+                                </span>
+                                <span class="ap-switch-label @(k.Enabled ? "is-active" : "")"
+                                      id="ap-kind-@(k.Code)-label">@(k.Enabled ? "Aktif" : "Pasif")</span>
+                            </label>
                         </div>
                     </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-dispatch-approval"
-                                   @(ViewData["IsDispatchApprovalEnabled"] is true ? "checked" : null) />
-                            <span class="ap-switch-track @(ViewData["IsDispatchApprovalEnabled"] is true ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(ViewData["IsDispatchApprovalEnabled"] is true ? "is-active" : "")"
-                                  id="ap-dispatch-approval-label">
-                                @(ViewData["IsDispatchApprovalEnabled"] is true ? "Aktif" : "Pasif")
-                            </span>
-                        </label>
-                    </div>
-                </div>
+                }
 
                 <div style="margin-top:20px; padding:14px 16px; border-radius:10px; background:var(--ap-surface2); border:1px solid var(--ap-border-light); font-size:.82rem; color:var(--ap-text-muted);">
                     <strong>Akış şablonu tanımlamak için:</strong>
@@ -547,8 +534,10 @@ body.app-theme-dark .ap-wrapper {
         });
     }
     wireSwitch('ap-edoc-approval', 'ap-edoc-approval-label');
-    wireSwitch('ap-invoice-approval', 'ap-invoice-approval-label');
-    wireSwitch('ap-dispatch-approval', 'ap-dispatch-approval-label');
+    // Belge türü onay switch'leri — dinamik liste (data-kind attribute'lu)
+    document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
+        wireSwitch(cb.id, cb.id + '-label');
+    });
 
     // ── Aksiyon seridi Kaydet handler ──────────────────────
     saveBtn.addEventListener('click', async function () {
@@ -611,16 +600,15 @@ body.app-theme-dark .ap-wrapper {
                 if (ok) flash('Kaydedildi.', true);
                 else    flash((d1.error || d2.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'approval') {
-                var invCb  = document.getElementById('ap-invoice-approval');
-                var disCb  = document.getElementById('ap-dispatch-approval');
+                var kinds = [];
+                document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
+                    kinds.push({ kind: cb.dataset.kind, enabled: cb.checked });
+                });
                 var r2 = await fetch('/Admin/SaveApprovalParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({
-                        isInvoiceApprovalEnabled:  invCb ? invCb.checked  : false,
-                        isDispatchApprovalEnabled: disCb ? disCb.checked  : false,
-                    })
+                    body: JSON.stringify({ kinds: kinds })
                 });
                 var data2 = await r2.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!data2.ok;

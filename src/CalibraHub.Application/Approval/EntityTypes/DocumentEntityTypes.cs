@@ -11,6 +11,9 @@ namespace CalibraHub.Application.Approval.EntityTypes;
 /// </summary>
 public static class DocumentEntityTypes
 {
+    /// <summary>"Tüm Belgeler" wildcard kind'ı — spesifik tip çözümlenemeyen belgeler buna düşer.</summary>
+    public const string WildcardKind = "Document";
+
     /// <summary>
     /// (Code, Label, Icon, DocumentTypeFilter) tuple listesi.
     /// DocumentTypeFilter = DocumentService.GetByTypeAsync için belge tipi kodu (ileride match'te kullanılacak).
@@ -28,6 +31,18 @@ public static class DocumentEntityTypes
             ("PurchaseQuote",    "Satın Alma Teklifi",    "FileText",      "alis_teklifi"),
             ("PurchaseOrder",    "Satın Alma Siparişi",   "ShoppingCart",  "alis_siparisi"),
         };
+
+    /// <summary>
+    /// DocumentType.Code → spesifik entity kind çözümlemesi. Eşleşme yoksa Document wildcard.
+    /// DocumentService auto-start ve ApprovalFlowController.StartByDocument aynı mantığı paylaşır.
+    /// </summary>
+    public static string ResolveKind(string? documentTypeCode)
+    {
+        if (string.IsNullOrWhiteSpace(documentTypeCode)) return WildcardKind;
+        var match = Definitions.FirstOrDefault(d =>
+            string.Equals(d.Filter, documentTypeCode, StringComparison.OrdinalIgnoreCase));
+        return string.IsNullOrEmpty(match.Code) ? WildcardKind : match.Code;
+    }
 
     /// <summary>
     /// DI'a wildcard "Document" (DocumentApprovalEntityType) ve 8 spesifik belge tipi

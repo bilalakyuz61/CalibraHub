@@ -1,5 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Approval.EntityTypes;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -14,6 +16,7 @@ public sealed class DocumentService : IDocumentService
     private readonly IDocumentSourceRepository _docSourceRepo;
     private readonly IDocumentNumberService? _docNumberService;
     private readonly IApprovalFlowService? _approvalFlowService;
+    private readonly ICompanyParameterService? _companyParameters;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
 
@@ -23,7 +26,8 @@ public sealed class DocumentService : IDocumentService
         IDocumentTypeRepository documentTypeRepo,
         IDocumentSourceRepository docSourceRepo,
         IDocumentNumberService? docNumberService = null,
-        IApprovalFlowService? approvalFlowService = null)
+        IApprovalFlowService? approvalFlowService = null,
+        ICompanyParameterService? companyParameters = null)
     {
         _repo = repo;
         _financeService = financeService;
@@ -31,6 +35,7 @@ public sealed class DocumentService : IDocumentService
         _docSourceRepo = docSourceRepo;
         _docNumberService = docNumberService;
         _approvalFlowService = approvalFlowService;
+        _companyParameters = companyParameters;
     }
 
     /// <summary>
@@ -466,18 +471,40 @@ public sealed class DocumentService : IDocumentService
         {
             try
             {
-                var flow = await _approvalFlowService.MatchFlowAsync(
-                    "Document", quote.GrandTotal, null, null, ct);
-                if (flow is not null)
+                // Belge tipinden spesifik kind çözümle (SalesQuote/PurchaseOrder/...).
+                // Spesifik akışlar da otomatik tetiklenir; tip çözümlenemezse wildcard'a düşer.
+                var kind = DocumentEntityTypes.WildcardKind;
+                if (quote.DocumentTypeId.HasValue)
                 {
-                    await _approvalFlowService.StartAsync(
-                        new StartApprovalRequest(
-                            DocumentId:      quote.Id,
-                            FlowId:          flow.Id,
-                            StartedBy:       startedByUser ?? "system",
-                            StartedByUserId: createdById),
-                        ct);
-                    approvalStarted = true;
+                    var docType = await _documentTypeRepo.GetByIdAsync(quote.DocumentTypeId.Value, ct);
+                    kind = DocumentEntityTypes.ResolveKind(docType?.Code);
+                }
+
+                // Şirket parametresi: belge türü bazında onay kapalıysa otomatik başlatma.
+                // Parametre tanımsızsa açık kabul edilir (geriye uyum). Manuel "Onaya Gönder"
+                // yolu bu parametreden etkilenmez — açık kullanıcı niyeti her zaman geçerli.
+                var approvalEnabled = true;
+                if (_companyParameters is not null && kind != DocumentEntityTypes.WildcardKind)
+                {
+                    approvalEnabled = await _companyParameters.GetBoolAsync(
+                        ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
+                }
+
+                if (approvalEnabled)
+                {
+                    var flow = await _approvalFlowService.MatchFlowAsync(
+                        kind, quote.GrandTotal, null, null, ct);
+                    if (flow is not null)
+                    {
+                        await _approvalFlowService.StartAsync(
+                            new StartApprovalRequest(
+                                DocumentId:      quote.Id,
+                                FlowId:          flow.Id,
+                                StartedBy:       startedByUser ?? "system",
+                                StartedByUserId: createdById),
+                            ct);
+                        approvalStarted = true;
+                    }
                 }
             }
             catch

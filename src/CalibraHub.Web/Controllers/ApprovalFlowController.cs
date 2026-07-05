@@ -436,19 +436,13 @@ public sealed class ApprovalFlowController : Controller
             if (document is null)
                 return Json(new { ok = false, error = "Belge bulunamadı." });
 
-            // Document.DocumentTypeId → DocumentType.Code → DocumentEntityTypes.Definitions.Filter
-            // ile kind string'i bulunur. Esleme yoksa "Document" wildcard'a dusulur.
-            var kind = "Document";
+            // Document.DocumentTypeId → DocumentType.Code → spesifik kind (paylaşılan helper).
+            // Esleme yoksa "Document" wildcard'a dusulur.
+            var kind = DocumentEntityTypes.WildcardKind;
             if (document.DocumentTypeId.HasValue)
             {
                 var docType = await _documentTypeRepo.GetByIdAsync(document.DocumentTypeId.Value, ct);
-                if (docType is not null && !string.IsNullOrWhiteSpace(docType.Code))
-                {
-                    var match = DocumentEntityTypes.Definitions
-                        .FirstOrDefault(d => string.Equals(d.Filter, docType.Code, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(match.Code))
-                        kind = match.Code;
-                }
+                kind = DocumentEntityTypes.ResolveKind(docType?.Code);
             }
 
             decimal? totalAmount = document.GrandTotal > 0 ? document.GrandTotal : (decimal?)null;
@@ -476,6 +470,11 @@ public sealed class ApprovalFlowController : Controller
                 status = instance.Status,
                 flowName = flow.Name,
             });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Anlamlı iş kuralı mesajları (duplicate onay, adımsız akış vb.) kullanıcıya iletilir.
+            return Json(new { ok = false, error = ex.Message });
         }
         catch (Exception ex)
         {
@@ -600,6 +599,10 @@ public sealed class ApprovalFlowController : Controller
             var reqWithUser = request with { StartedBy = userName };
             var instance = await _service.StartAsync(reqWithUser, ct);
             return Json(new { ok = true, instanceId = instance.Id, status = instance.Status });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
         }
         catch (Exception ex)
         {
@@ -783,7 +786,6 @@ public sealed class ApprovalFlowController : Controller
             {
                 SmartBoardFilterHelpers.MakeStdWidget   ("w_steps",    "Adım Sayısı",  "numeric"),
                 SmartBoardFilterHelpers.MakeStdWidget   ("w_rules",    "Koşul Sayısı", "numeric"),
-                SmartBoardFilterHelpers.MakeStdWidget   ("w_priority", "Öncelik",      "numeric"),
                 SmartBoardFilterHelpers.MakeOptionsWidget("w_kind",     "Belge Türü",
                     SmartBoardFilterHelpers.ToOptionsList(new[] {
                         "e-Fatura", "e-Arşiv", "e-İrsaliye",

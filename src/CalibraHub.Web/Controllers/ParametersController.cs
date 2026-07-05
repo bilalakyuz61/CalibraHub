@@ -41,9 +41,9 @@ public sealed class ParametersController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
-    private const string ApprovalFormCode = "APPROVAL";
-    private const string InvoiceApprovalKey  = "INVOICE_APPROVAL_ENABLED";
-    private const string DispatchApprovalKey = "DISPATCH_APPROVAL_ENABLED";
+    // Belge türü bazında onay parametre anahtarları — ApprovalParameters constants
+    // (formCode=APPROVAL, key=APPROVAL_ENABLED_{Kind}). Eski INVOICE_APPROVAL_ENABLED /
+    // DISPATCH_APPROVAL_ENABLED anahtarları kaldırıldı (hiçbir runtime kodu tüketmiyordu).
 
     private const string ProductionFormCode = "PRODUCTION";
     public  const string ShopFloorMaxPinAttemptsKey = "SHOPFLOOR_MAX_PIN_ATTEMPTS";
@@ -64,12 +64,20 @@ public sealed class ParametersController : Controller
         var company = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
         ViewData["IsEDocumentApprovalEnabled"] = company?.IsEDocumentApprovalEnabled ?? false;
 
-        // Onay İşlemleri tab'i: alış faturası + irsaliye onay parametreleri
-        var approvalParams = await _companyParameters.ListAsync(ApprovalFormCode, cancellationToken);
-        ViewData["IsInvoiceApprovalEnabled"]  = approvalParams
-            .FirstOrDefault(p => p.ParamKey == InvoiceApprovalKey)?.ParamValue == "true";
-        ViewData["IsDispatchApprovalEnabled"] = approvalParams
-            .FirstOrDefault(p => p.ParamKey == DispatchApprovalKey)?.ParamValue == "true";
+        // Onay İşlemleri tab'i: belge türü bazında onay switch'leri.
+        // Kaynak: DocumentEntityTypes.Definitions (Filter != null → Document tablosuna bağlı,
+        // otomatik tetiklemede çözümlenebilen tipler). Parametre tanımsızsa AÇIK kabul edilir.
+        var approvalParams = await _companyParameters.ListAsync(
+            CalibraHub.Application.Constants.ApprovalParameters.FormCode, cancellationToken);
+        ViewData["ApprovalKinds"] = CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.Definitions
+            .Where(d => d.Filter is not null)
+            .Select(d => new ApprovalKindState(
+                d.Code,
+                d.Label,
+                approvalParams.FirstOrDefault(p =>
+                    p.ParamKey == CalibraHub.Application.Constants.ApprovalParameters.EnabledKey(d.Code))
+                    ?.ParamValue != "false"))
+            .ToList();
 
         // Üretim tab'i: shop-floor PIN lockout limiti
         var productionParams = await _companyParameters.ListAsync(ProductionFormCode, cancellationToken);
@@ -170,15 +178,27 @@ public sealed class ParametersController : Controller
     {
         try
         {
-            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
-                ApprovalFormCode, InvoiceApprovalKey,
-                input.IsInvoiceApprovalEnabled ? "true" : "false",
-                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            if (input.Kinds is null || input.Kinds.Count == 0)
+                return Json(new { ok = false, error = "Kaydedilecek parametre yok." });
 
-            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
-                ApprovalFormCode, DispatchApprovalKey,
-                input.IsDispatchApprovalEnabled ? "true" : "false",
-                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            // Whitelist: yalnızca DocumentEntityTypes'ta tanımlı spesifik kind'lar kabul edilir —
+            // keyspace'e rastgele anahtar yazılmasını önler.
+            var validKinds = CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.Definitions
+                .Where(d => d.Filter is not null)
+                .Select(d => d.Code)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in input.Kinds)
+            {
+                if (string.IsNullOrWhiteSpace(item.Kind) || !validKinds.Contains(item.Kind))
+                    continue;
+
+                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                    CalibraHub.Application.Constants.ApprovalParameters.FormCode,
+                    CalibraHub.Application.Constants.ApprovalParameters.EnabledKey(item.Kind),
+                    item.Enabled ? "true" : "false",
+                    CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            }
 
             return Json(new { ok = true });
         }
@@ -214,7 +234,9 @@ public sealed class ParametersController : Controller
     }
 
     public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
-    public sealed record ApprovalParametersInput(bool IsInvoiceApprovalEnabled, bool IsDispatchApprovalEnabled);
+    public sealed record ApprovalParametersInput(List<ApprovalKindInput> Kinds);
+    public sealed record ApprovalKindInput(string Kind, bool Enabled);
+    public sealed record ApprovalKindState(string Code, string Label, bool Enabled);
     public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);
 }

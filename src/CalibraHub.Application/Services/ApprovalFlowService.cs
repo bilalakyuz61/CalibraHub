@@ -143,6 +143,21 @@ public sealed class ApprovalFlowService : IApprovalFlowService
 
     public async Task<ApprovalInstanceDto> StartAsync(StartApprovalRequest request, CancellationToken ct)
     {
+        // Duplicate guard: aynı belge için bekleyen bir onay süreci varken ikinci bir
+        // süreç başlatılamaz. (Auto-start + manuel Onaya Gönder + İşleme Al modalı
+        // üç bağımsız yol — server-side tek koruma noktası burasıdır.)
+        // DocumentId null olabilir (belge-bağımsız entity akışları) — o durumda guard atlanır.
+        // EntityKind karşılaştırması: farklı entity tipinin (Item/Contact) aynı ID'li instance'ı
+        // belge onayını yanlışlıkla engellemesin.
+        if (request.DocumentId.HasValue)
+        {
+            var existing = await _instanceRepo.GetByDocumentIdAsync(request.DocumentId.Value, ct);
+            if (existing is not null
+                && string.Equals(existing.Status, "Pending", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(existing.EntityKind, request.EntityKind, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Bu belge için zaten bekleyen bir onay süreci var.");
+        }
+
         var flow = await _flowRepo.GetByIdAsync(request.FlowId, ct)
             ?? throw new InvalidOperationException($"Akış bulunamadı: {request.FlowId}");
 

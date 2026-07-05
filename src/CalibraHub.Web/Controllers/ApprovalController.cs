@@ -785,6 +785,10 @@ public sealed class ApprovalController : Controller
             return Json(new { ok = true, instanceId = instance.Id, status = instance.Status,
                 currentStep = instance.CurrentStep, totalSteps = instance.TotalSteps });
         }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
         catch (Exception ex)
         {
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
