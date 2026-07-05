@@ -18,6 +18,27 @@
 
 var FALLBACK = { formCode: '*', quantity: 2, unitPrice: 2, amount: 2, rate: 2, exchangeRate: 4, source: 'fallback' }
 var cache = {} // formCode -> Promise<settings>
+var changeListeners = []
+
+/* Ondalık Ayarları ekranı kaydedince 'calibra-decimals-refresh' kanalına yayın
+   yapar — tüm açık workspace iframe'lerinde cache düşer, aboneler tazelenir.
+   Böylece ayar değişikliği AÇIK ekranlara da yeniden yükleme gerektirmeden yansır. */
+try {
+  var __bc = new BroadcastChannel('calibra-decimals-refresh')
+  __bc.onmessage = function () {
+    cache = {}
+    changeListeners.forEach(function (fn) { try { fn() } catch (e) { /* ignore */ } })
+  }
+} catch (e) { /* BroadcastChannel yok — yeni açılan ekranlar yine güncel alır */ }
+
+/** Ayar değişim aboneliği — unsubscribe fonksiyonu döner. */
+export function onDecimalSettingsChanged(cb) {
+  changeListeners.push(cb)
+  return function () {
+    var i = changeListeners.indexOf(cb)
+    if (i >= 0) changeListeners.splice(i, 1)
+  }
+}
 
 export function loadDecimalSettings(formCode) {
   var code = formCode || '*'

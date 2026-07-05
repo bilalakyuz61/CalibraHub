@@ -31,7 +31,7 @@ import QuoteCostSummaryModal from './QuoteCostSummaryModal'
 import { evaluate } from './formulaEvaluator'
 import { getTopBody } from '../../utils/topPortal'
 import DynamicWidgetRenderer from '../DynamicWidgetRenderer/DynamicWidgetRenderer'
-import { loadDecimalSettings, resolveColumnDecimals, roundTo } from '../../utils/decimalSettings'
+import { loadDecimalSettings, resolveColumnDecimals, roundTo, onDecimalSettingsChanged } from '../../utils/decimalSettings'
 
 /* Lucide icon haritasi — C#'taki icon string'ini React bilesenine cevirir */
 var ICON_MAP = {
@@ -101,8 +101,13 @@ export default function CalibraLineItemsGrid(props) {
   useEffect(function () {
     var fc = config.decimalFormCode || config.lineFormCode || 'SALES_QUOTE_LINES'
     var alive = true
-    loadDecimalSettings(fc).then(function (dec) { if (alive) setDecimalCfg(dec) })
-    return function () { alive = false }
+    function loadIt() {
+      loadDecimalSettings(fc).then(function (dec) { if (alive) setDecimalCfg(dec) })
+    }
+    loadIt()
+    // Ondalık Ayarları ekranında kayıt → broadcast → açık grid canlı tazelenir
+    var off = onDecimalSettingsChanged(loadIt)
+    return function () { alive = false; off() }
   }, [config.decimalFormCode, config.lineFormCode])
 
   var allColumns = useMemo(function () {

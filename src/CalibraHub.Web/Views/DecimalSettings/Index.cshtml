@@ -5,7 +5,16 @@
 
 @section Styles {
 <style>
-    .dsx-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 16px 40px; }
+    /* Workspace iframe overflow:hidden — scroll bu sayfanın sorumluluğu.
+       Başlık + araç çubuğu sabit, tablo alanı kalan yüksekliği alıp içinde
+       kayar (sticky thead bu sayede her zaman görünür). */
+    .dsx-wrap {
+        height: 100%; min-height: 0; width: 100%;
+        max-width: 1100px; margin: 0 auto;
+        padding: 18px 16px 14px;
+        display: flex; flex-direction: column;
+    }
+    .dsx-header, .dsx-toolbar { flex-shrink: 0; }
 
     html body {
         --dsx-surface: #ffffff;
@@ -52,6 +61,7 @@
     .dsx-table-wrap {
         border: 1px solid var(--dsx-border); border-radius: 12px; overflow: auto;
         background: var(--dsx-surface);
+        flex: 1 1 auto; min-height: 0;
     }
     table.dsx-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
     .dsx-table th {
@@ -213,6 +223,16 @@
         setTimeout(function () { el.classList.remove('show'); }, 2200);
     }
 
+    // Kaydetme sonrası açık tüm workspace sekmelerine haber ver —
+    // decimalSettings.js cache'ini düşürüp grid'leri yeni ayarla tazeler.
+    function broadcastChange() {
+        try {
+            var bc = new BroadcastChannel('calibra-decimals-refresh');
+            bc.postMessage({ t: Date.now() });
+            bc.close();
+        } catch (e) { /* BroadcastChannel desteklenmiyor — yeni açılan ekranlar yine güncel alır */ }
+    }
+
     // Onay modalı — Promise tabanlı (silme onay standardı)
     var modalResolve = null;
     var modal = document.getElementById('dsxModal');
@@ -326,6 +346,7 @@
                 .then(function (d) {
                     if (!d.ok) { toast(d.error || 'Kaydedilemedi', true); saveBtn.disabled = false; return; }
                     toast('Kaydedildi');
+                    broadcastChange();
                     load();
                 })
                 .catch(function () { toast('Kaydedilemedi', true); saveBtn.disabled = false; });
@@ -349,6 +370,7 @@
                         .then(function (d) {
                             if (!d.ok) { toast(d.error || 'Sıfırlanamadı', true); return; }
                             toast('Varsayılana döndü');
+                            broadcastChange();
                             load();
                         })
                         .catch(function () { toast('Sıfırlanamadı', true); });
