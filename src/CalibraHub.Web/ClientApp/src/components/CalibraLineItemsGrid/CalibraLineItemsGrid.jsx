@@ -31,6 +31,7 @@ import QuoteCostSummaryModal from './QuoteCostSummaryModal'
 import { evaluate } from './formulaEvaluator'
 import { getTopBody } from '../../utils/topPortal'
 import DynamicWidgetRenderer from '../DynamicWidgetRenderer/DynamicWidgetRenderer'
+import { loadDecimalSettings, resolveColumnDecimals, roundTo } from '../../utils/decimalSettings'
 
 /* Lucide icon haritasi — C#'taki icon string'ini React bilesenine cevirir */
 var ICON_MAP = {
@@ -55,12 +56,15 @@ function makeUid() {
 }
 
 /* Her satir icin computed hucreleri hesaplayip satira gomer.
-   Satir save'de ayni sekilde gonderilecektir — server yine kendi hesaplayacak. */
+   Satir save'de ayni sekilde gonderilecektir — server yine kendi hesaplayacak.
+   Kolonun precision'i (ondalik ayarindan override edilmis olabilir) hesap
+   SONUCUNA uygulanir — gosterim degil, saklanan deger yuvarlanir. */
 function applyComputed(row, columns) {
   var result = Object.assign({}, row)
   columns.forEach(function(col) {
     if (col.computed && col.formula) {
-      result[col.key] = evaluate(col.formula, result)
+      var v = evaluate(col.formula, result)
+      result[col.key] = (col.precision != null) ? roundTo(v, col.precision) : v
     }
   })
   return result
@@ -88,7 +92,27 @@ export default function CalibraLineItemsGrid(props) {
   // (gear kirmizi kaliyordu cunku backend dogru formu kontrol edip eksik
   // goruyordu). Config'ten gelmezse legacy 'SALES_QUOTE_LINES' fallback.
   var __lineFormCode = String(config.lineFormCode || 'SALES_QUOTE_LINES')
-  var allColumns = Array.isArray(config.columns) ? config.columns : []
+
+  // ── Ondalık ayarları (form bazında) — kolon precision'larını override eder ──
+  // Ayar formu: config.decimalFormCode (açık bildirim) → lineFormCode fallback.
+  // Yüklenene kadar C# config'indeki precision'lar geçerli kalır (görsel fark
+  // en fazla ilk render'da olur; ayar gelince kolonlar + hesaplar güncellenir).
+  var [decimalCfg, setDecimalCfg] = useState(null)
+  useEffect(function () {
+    var fc = config.decimalFormCode || config.lineFormCode || 'SALES_QUOTE_LINES'
+    var alive = true
+    loadDecimalSettings(fc).then(function (dec) { if (alive) setDecimalCfg(dec) })
+    return function () { alive = false }
+  }, [config.decimalFormCode, config.lineFormCode])
+
+  var allColumns = useMemo(function () {
+    var src = Array.isArray(config.columns) ? config.columns : []
+    if (!decimalCfg) return src
+    return src.map(function (c) {
+      var p = resolveColumnDecimals(c, decimalCfg)
+      return p == null ? c : Object.assign({}, c, { precision: p })
+    })
+  }, [config.columns, decimalCfg])
   // Kolonlari yerlesime gore ayir:
   //   - row-below  : satirin altinda (ornek: Not)
   //   - inline     : satir icinde cell olarak
@@ -1095,7 +1119,7 @@ export default function CalibraLineItemsGrid(props) {
               {labels.totalLabel || 'Toplam'}
             </span>
             <span className="font-mono tabular-nums text-amber-600 dark:text-amber-300 text-[15px] font-bold">
-              {TR_FMT(totalSum, 2)} {currencySymbol}
+              {TR_FMT(totalSum, decimalCfg ? decimalCfg.amount : 2)} {currencySymbol}
             </span>
           </div>
         )}

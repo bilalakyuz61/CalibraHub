@@ -124,6 +124,7 @@ builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IWhat
                               CalibraHub.Web.Infrastructure.WhatsApp.SignalRWhatsAppNotifier>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Messaging.IMessageBus,
                               CalibraHub.Infrastructure.Messaging.InMemoryMessageBus>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Messaging.WhatsAppInboundProcessor>();
 builder.Services.AddHostedService<CalibraHub.Application.Services.Messaging.WhatsAppInboxPollingService>();
 builder.Services.AddHostedService<CalibraHub.Application.Workflow.WorkflowTimeoutEscalationJob>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IMachineIdProvider,
@@ -514,6 +515,12 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.INume
     CalibraHub.Persistence.Repositories.SqlNumeratorRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.INumeratorService,
     CalibraHub.Application.Services.NumeratorService>();
+
+// Ondalik ayarlari (form bazinda hane hassasiyeti — 2026-07-05)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDecimalSettingRepository,
+    CalibraHub.Persistence.Repositories.SqlDecimalSettingRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDecimalSettingService,
+    CalibraHub.Application.Services.DecimalSettingService>();
 
 // Faz 1: Uretim Is Emri
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository,
@@ -1032,7 +1039,15 @@ app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
-        ctx.Context.Response.Headers["Cache-Control"] = "no-cache";
+        // 2026-07-05: Dosya-hash versiyonlu istekler (?v=<hash> — asp-append-version /
+        // FileVersioner) icerik degisince URL de degistigi icin guvenle uzun sure
+        // cache'lenir. Onceki global no-cache, 5MB React bundle'ini her sayfa
+        // acilisinda 304 roundtrip'ine zorluyordu (recete "alanlar sonradan geliyor"
+        // gecikmesinin bilesenlerinden biri). Versiyonsuz istekler no-cache kalir.
+        if (ctx.Context.Request.Query.ContainsKey("v"))
+            ctx.Context.Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+        else
+            ctx.Context.Response.Headers["Cache-Control"] = "no-cache";
     }
 });
 

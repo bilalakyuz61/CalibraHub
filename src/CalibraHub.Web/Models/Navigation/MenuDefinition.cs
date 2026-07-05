@@ -58,6 +58,8 @@ public static class MenuDefinition
         {
             new("settings.company",        isEn ? "Company Settings"       : "Şirket Ayarları",         "Building2",          "/Admin/CompanySettings",    null, AdminOnly: true),
             new("settings.parameters",     isEn ? "Company Parameters"     : "Şirket Parametreleri",    "SlidersHorizontal",  "/Admin/Parameters",         null, AdminOnly: true),
+            new("settings.decimals",       isEn ? "Decimal Settings"       : "Ondalık Ayarları",        "Ruler",              "/Admin/DecimalSettings",    null,
+                PermissionFormCode: FormCodes.CompanySettings),
             new("settings.integrations",   isEn ? "Integration Wizard"     : "Entegrasyon Wizard",      "Plug",               "/Integrations",             null,
                 MatchPath: "/Integrations", PermissionFormCode: FormCodes.Integrations),
             new("settings.viewsettings",   isEn ? "Field Guide"            : "Alan Rehberi",            "LayoutGrid",         "/Admin/ViewSettings",       null,

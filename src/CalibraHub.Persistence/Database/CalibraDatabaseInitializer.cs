@@ -681,6 +681,7 @@ END;";
             await EnsureDocumentTypesTableAsync(connection, cancellationToken);
             await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
             await EnsureCodeRuleTablesAsync(connection, cancellationToken);
+            await EnsureDecimalSettingTableAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
@@ -805,6 +806,7 @@ END;";
             await EnsureDocumentTypesTableAsync(connection, cancellationToken);
             await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
             await EnsureCodeRuleTablesAsync(connection, cancellationToken);
+            await EnsureDecimalSettingTableAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
@@ -4894,6 +4896,9 @@ END;";
                 ALTER TABLE [{s}].[Note] ADD [share_include_attachments] BIT NOT NULL CONSTRAINT [DF_Note_share_include_attachments] DEFAULT 0;
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='ocr_text')
                 ALTER TABLE [{s}].[Note] ADD [ocr_text] NVARCHAR(MAX) NULL;
+            -- Not listesi kart ozeti — icerik at-rest sifreli oldugundan kayit aninda uretilir (Protect'li saklanir)
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[Note]') AND name='snippet')
+                ALTER TABLE [{s}].[Note] ADD [snippet] NVARCHAR(MAX) NULL;
 
             IF OBJECT_ID(N'[{s}].[CardGroup]', N'U') IS NULL
             BEGIN
@@ -8648,6 +8653,43 @@ END;";
                 );
                 CREATE UNIQUE INDEX [UX_CodeRuleCounter_Rule_Reset]
                     ON [{s}].[CodeRuleCounter]([RuleId], [ResetKey]);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// DecimalSetting: form bazinda ondalik hane ayari (miktar/fiyat/tutar/oran/kur).
+    /// FormCode '*' = sirket geneli varsayilan. Etkili ayar cozumleme sirasi:
+    /// (CompanyId, FormCode) → (CompanyId, '*') → hardcoded fallback (2,2,2,2,4).
+    /// CompanyId kolonu bilinçli: sirket yalnizca kendi ayarlarini okur/yazar.
+    /// </summary>
+    private async Task EnsureDecimalSettingTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[DecimalSetting]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DecimalSetting]
+                (
+                    [Id]                   INT          IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DecimalSetting] PRIMARY KEY,
+                    [CompanyId]            INT          NOT NULL,
+                    [FormCode]             NVARCHAR(50) NOT NULL,  -- Forms.FormCode veya '*' (sirket geneli varsayilan)
+                    [QuantityDecimals]     INT          NOT NULL CONSTRAINT [DF_DecimalSetting_QuantityDecimals] DEFAULT(2),
+                    [UnitPriceDecimals]    INT          NOT NULL CONSTRAINT [DF_DecimalSetting_UnitPriceDecimals] DEFAULT(2),
+                    [AmountDecimals]       INT          NOT NULL CONSTRAINT [DF_DecimalSetting_AmountDecimals] DEFAULT(2),
+                    [RateDecimals]         INT          NOT NULL CONSTRAINT [DF_DecimalSetting_RateDecimals] DEFAULT(2),
+                    [ExchangeRateDecimals] INT          NOT NULL CONSTRAINT [DF_DecimalSetting_ExchangeRateDecimals] DEFAULT(4),
+                    [IsActive]             BIT          NOT NULL CONSTRAINT [DF_DecimalSetting_IsActive] DEFAULT(1),
+                    [CreatedById]          INT          NULL,
+                    [Created]              DATETIME     NOT NULL CONSTRAINT [DF_DecimalSetting_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]          INT          NULL,
+                    [Updated]              DATETIME     NULL
+                );
+                CREATE UNIQUE INDEX [UX_DecimalSetting_Company_Form]
+                    ON [{s}].[DecimalSetting]([CompanyId], [FormCode]);
             END;
             """;
         await using var cmd = connection.CreateCommand();

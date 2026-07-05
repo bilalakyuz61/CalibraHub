@@ -9,6 +9,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import ErrorBoundary from './components/ErrorBoundary'
+import { loadDecimalSettings, roundTo as roundDecimalTo } from './utils/decimalSettings'
 import MaterialListEmbed from './components/MaterialCard/MaterialListEmbed'
 import { SmartBoard } from './components/CalibraSmartBoard'
 import { DocDesignerApp, DocDesignerList } from './components/DocDesigner'
@@ -830,6 +831,16 @@ function mountLookupForInput(opts) {
 }
 
 window.CalibraHub = window.CalibraHub || {}
+
+// ── Ondalık ayarları (form bazında) — Razor/vanilla sayfalar için global ──
+// Kullanım:
+//   window.CalibraHub.decimals.load('SALES_QUOTE').then(function(dec) {
+//     var tutar = window.CalibraHub.decimals.roundTo(qty * price, dec.amount)
+//   })
+window.CalibraHub.decimals = {
+  load: loadDecimalSettings,
+  roundTo: roundDecimalTo,
+}
 
 // ── Global toast (sağ alt köşe) ─────────────────────────────────────────
 // Tüm uyarı/hata mesajları buradan akar. alert()/confirm() yerine kullanılır.

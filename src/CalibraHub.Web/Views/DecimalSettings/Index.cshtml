@@ -1,0 +1,363 @@
+@{
+    ViewData["Title"] = "Ondalık Ayarları";
+}
+@Html.AntiForgeryToken()
+
+@section Styles {
+<style>
+    .dsx-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 16px 40px; }
+
+    html body {
+        --dsx-surface: #ffffff;
+        --dsx-border: #e2e8f0;
+        --dsx-text: #0f172a;
+        --dsx-muted: #64748b;
+        --dsx-head-bg: #f8fafc;
+        --dsx-default-bg: rgba(99,102,241,.05);
+        --dsx-badge-custom-bg: #eef2ff;
+        --dsx-badge-custom-tx: #4338ca;
+        --dsx-badge-def-bg: #f1f5f9;
+        --dsx-badge-def-tx: #64748b;
+    }
+    body.app-theme-dark {
+        --dsx-surface: #0f172a;
+        --dsx-border: rgba(255,255,255,.08);
+        --dsx-text: #e2e8f0;
+        --dsx-muted: #94a3b8;
+        --dsx-head-bg: rgba(255,255,255,.03);
+        --dsx-default-bg: rgba(99,102,241,.10);
+        --dsx-badge-custom-bg: rgba(99,102,241,.18);
+        --dsx-badge-custom-tx: #a5b4fc;
+        --dsx-badge-def-bg: rgba(255,255,255,.06);
+        --dsx-badge-def-tx: #94a3b8;
+    }
+
+    .dsx-header { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .dsx-header-icon {
+        width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff;
+        box-shadow: 0 4px 12px rgba(99,102,241,.35);
+    }
+    .dsx-title { font-size: 1.05rem; font-weight: 700; color: var(--dsx-text); line-height: 1.2; }
+    .dsx-sub { font-size: .78rem; color: var(--dsx-muted); }
+    .dsx-toolbar { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; }
+    .dsx-search {
+        flex: 0 0 260px; padding: 7px 10px; border-radius: 8px; font-size: .82rem;
+        border: 1px solid var(--dsx-border); background: var(--dsx-surface); color: var(--dsx-text);
+    }
+    .dsx-search:focus { outline: none; border-color: #818cf8; }
+    .dsx-hint { font-size: .75rem; color: var(--dsx-muted); }
+
+    .dsx-table-wrap {
+        border: 1px solid var(--dsx-border); border-radius: 12px; overflow: auto;
+        background: var(--dsx-surface);
+    }
+    table.dsx-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .dsx-table th {
+        text-align: left; padding: 9px 12px; font-size: .74rem; font-weight: 600;
+        color: var(--dsx-muted); background: var(--dsx-head-bg);
+        border-bottom: 1px solid var(--dsx-border); white-space: nowrap;
+        position: sticky; top: 0; z-index: 1;
+    }
+    .dsx-table th.num, .dsx-table td.num { text-align: center; width: 92px; }
+    .dsx-table td {
+        padding: 7px 12px; border-bottom: 1px solid var(--dsx-border);
+        color: var(--dsx-text); vertical-align: middle;
+    }
+    .dsx-table tr:last-child td { border-bottom: none; }
+    .dsx-row-default td { background: var(--dsx-default-bg); }
+    .dsx-form-name { font-weight: 600; }
+    .dsx-form-code {
+        font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .72rem;
+        color: var(--dsx-muted); margin-top: 1px;
+    }
+    .dsx-module { font-size: .72rem; color: var(--dsx-muted); white-space: nowrap; }
+
+    select.dsx-sel {
+        width: 58px; padding: 4px 6px; border-radius: 7px; font-size: .82rem;
+        text-align: center; cursor: pointer;
+        border: 1px solid var(--dsx-border); background: var(--dsx-surface); color: var(--dsx-text);
+    }
+    select.dsx-sel:focus { outline: none; border-color: #818cf8; }
+    tr.dsx-dirty select.dsx-sel { border-color: #f59e0b; }
+
+    .dsx-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 999px;
+        font-size: .68rem; font-weight: 600; white-space: nowrap;
+    }
+    .dsx-badge--custom { background: var(--dsx-badge-custom-bg); color: var(--dsx-badge-custom-tx); }
+    .dsx-badge--default { background: var(--dsx-badge-def-bg); color: var(--dsx-badge-def-tx); }
+
+    .dsx-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+    .dsx-btn {
+        padding: 5px 12px; border-radius: 8px; font-size: .76rem; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+    }
+    .dsx-btn--save { background: #6366f1; color: #fff; }
+    .dsx-btn--save:hover { background: #4f46e5; }
+    .dsx-btn--save:disabled { opacity: .35; cursor: default; }
+    .dsx-btn--reset {
+        background: transparent; color: var(--dsx-muted); border-color: var(--dsx-border);
+    }
+    .dsx-btn--reset:hover { color: #ef4444; border-color: #ef4444; }
+
+    .dsx-toast {
+        position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+        padding: 9px 18px; border-radius: 10px; font-size: .8rem; font-weight: 600;
+        color: #fff; background: #10b981; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+        opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 9999;
+    }
+    .dsx-toast.err { background: #ef4444; }
+    .dsx-toast.show { opacity: 1; }
+
+    /* Onay modalı — ekran ortası, tema uyumlu (silme onay standardı) */
+    .dsx-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9998; display: none;
+        align-items: center; justify-content: center;
+        background: rgba(15,23,42,.55); backdrop-filter: blur(4px);
+    }
+    .dsx-modal-backdrop.open { display: flex; }
+    .dsx-modal {
+        width: min(420px, 92vw); border-radius: 14px; overflow: hidden;
+        background: var(--dsx-surface); border: 1px solid var(--dsx-border);
+        box-shadow: 0 20px 60px rgba(0,0,0,.35);
+        padding: 22px; text-align: center;
+    }
+    .dsx-modal-icon {
+        width: 52px; height: 52px; border-radius: 50%; margin: 0 auto 10px;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(239,68,68,.12); color: #ef4444;
+    }
+    .dsx-modal-title { font-size: .95rem; font-weight: 700; color: var(--dsx-text); margin-bottom: 6px; }
+    .dsx-modal-msg { font-size: .8rem; color: var(--dsx-muted); margin-bottom: 16px; }
+    .dsx-modal-btns { display: flex; gap: 10px; }
+    .dsx-modal-btns .dsx-btn { flex: 1; padding: 8px 12px; }
+    .dsx-btn--ghost { background: transparent; color: var(--dsx-text); border-color: var(--dsx-border); }
+    .dsx-btn--danger { background: #ef4444; color: #fff; }
+    .dsx-btn--danger:hover { background: #dc2626; }
+</style>
+}
+
+<div class="dsx-wrap">
+    <div class="dsx-header">
+        <div class="dsx-header-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 8.7 15.3 2.7a2.4 2.4 0 0 0-3.4 0L2.7 11.9a2.4 2.4 0 0 0 0 3.4l6 6a2.4 2.4 0 0 0 3.4 0l9.2-9.2a2.4 2.4 0 0 0 0-3.4Z"/><path d="m7.5 10.5 2 2"/><path d="m10.5 7.5 2 2"/><path d="m13.5 4.5 2 2"/><path d="m4.5 13.5 2 2"/></svg>
+        </div>
+        <div>
+            <div class="dsx-title">Ondalık Ayarları</div>
+            <div class="dsx-sub">Form bazında hane hassasiyeti — miktar, birim fiyat, tutar, oran ve kur alanlarının ondalık basamak sayısı. Hesaplamalar bu ayara göre yuvarlanır.</div>
+        </div>
+    </div>
+
+    <div class="dsx-toolbar">
+        <input type="text" id="dsxSearch" class="dsx-search" placeholder="Form ara..." />
+        <span class="dsx-hint">Özel ayarı olmayan formlar Genel Varsayılan değerlerini kullanır. Yeni eklenen modüller listeye otomatik gelir.</span>
+    </div>
+
+    <div class="dsx-table-wrap">
+        <table class="dsx-table">
+            <thead>
+                <tr>
+                    <th>Form</th>
+                    <th>Modül</th>
+                    <th class="num">Miktar</th>
+                    <th class="num">Birim Fiyat</th>
+                    <th class="num">Tutar</th>
+                    <th class="num">Oran</th>
+                    <th class="num">Kur</th>
+                    <th>Durum</th>
+                    <th style="text-align:right">İşlem</th>
+                </tr>
+            </thead>
+            <tbody id="dsxBody">
+                <tr><td colspan="9" style="text-align:center;color:var(--dsx-muted);padding:24px">Yükleniyor…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="dsx-modal-backdrop" id="dsxModal">
+    <div class="dsx-modal">
+        <div class="dsx-modal-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </div>
+        <div class="dsx-modal-title">Varsayılana Dön?</div>
+        <div class="dsx-modal-msg" id="dsxModalMsg"></div>
+        <div class="dsx-modal-btns">
+            <button type="button" class="dsx-btn dsx-btn--ghost" id="dsxModalCancel">Vazgeç</button>
+            <button type="button" class="dsx-btn dsx-btn--danger" id="dsxModalOk">Varsayılana Dön</button>
+        </div>
+    </div>
+</div>
+
+<div class="dsx-toast" id="dsxToast"></div>
+
+@section Scripts {
+<script>
+(function () {
+    var rows = [];
+    var body = document.getElementById('dsxBody');
+    var searchInput = document.getElementById('dsxSearch');
+
+    function getCsrf() {
+        var t = document.querySelector('input[name="__RequestVerificationToken"]');
+        return t ? t.value : '';
+    }
+
+    function toast(msg, isErr) {
+        var el = document.getElementById('dsxToast');
+        el.textContent = msg;
+        el.classList.toggle('err', !!isErr);
+        el.classList.add('show');
+        setTimeout(function () { el.classList.remove('show'); }, 2200);
+    }
+
+    // Onay modalı — Promise tabanlı (silme onay standardı)
+    var modalResolve = null;
+    var modal = document.getElementById('dsxModal');
+    function showConfirm(msg) {
+        document.getElementById('dsxModalMsg').textContent = msg;
+        modal.classList.add('open');
+        document.getElementById('dsxModalOk').focus();
+        return new Promise(function (resolve) { modalResolve = resolve; });
+    }
+    function closeModal(ok) {
+        modal.classList.remove('open');
+        if (modalResolve) { modalResolve(ok); modalResolve = null; }
+    }
+    document.getElementById('dsxModalCancel').addEventListener('click', function () { closeModal(false); });
+    document.getElementById('dsxModalOk').addEventListener('click', function () { closeModal(true); });
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(false); });
+    document.addEventListener('keydown', function (e) {
+        if (!modal.classList.contains('open')) return;
+        if (e.key === 'Escape') closeModal(false);
+        else if (e.key === 'Enter') closeModal(true);
+    });
+
+    var FIELDS = ['quantityDecimals', 'unitPriceDecimals', 'amountDecimals', 'rateDecimals', 'exchangeRateDecimals'];
+
+    function selHtml(formCode, field, value) {
+        var opts = '';
+        for (var i = 0; i <= 6; i++) {
+            opts += '<option value="' + i + '"' + (i === value ? ' selected' : '') + '>' + i + '</option>';
+        }
+        return '<select class="dsx-sel" data-form="' + escAttr(formCode) + '" data-field="' + field + '">' + opts + '</select>';
+    }
+
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }
+
+    function render() {
+        var q = (searchInput.value || '').toLocaleLowerCase('tr-TR').trim();
+        var html = '';
+        rows.forEach(function (r) {
+            if (q) {
+                var hay = (r.formName + ' ' + r.formCode + ' ' + (r.module || '')).toLocaleLowerCase('tr-TR');
+                if (hay.indexOf(q) === -1 && r.formCode !== '*') return;
+            }
+            var isDefault = r.formCode === '*';
+            html += '<tr data-form="' + escAttr(r.formCode) + '"' + (isDefault ? ' class="dsx-row-default"' : '') + '>'
+                + '<td><div class="dsx-form-name">' + escHtml(r.formName) + '</div>'
+                + (isDefault ? '' : '<div class="dsx-form-code">' + escHtml(r.formCode) + '</div>') + '</td>'
+                + '<td class="dsx-module">' + escHtml(r.module || (isDefault ? 'Tüm Formlar' : '—')) + '</td>'
+                + '<td class="num">' + selHtml(r.formCode, 'quantityDecimals', r.quantityDecimals) + '</td>'
+                + '<td class="num">' + selHtml(r.formCode, 'unitPriceDecimals', r.unitPriceDecimals) + '</td>'
+                + '<td class="num">' + selHtml(r.formCode, 'amountDecimals', r.amountDecimals) + '</td>'
+                + '<td class="num">' + selHtml(r.formCode, 'rateDecimals', r.rateDecimals) + '</td>'
+                + '<td class="num">' + selHtml(r.formCode, 'exchangeRateDecimals', r.exchangeRateDecimals) + '</td>'
+                + '<td>' + (isDefault
+                    ? '<span class="dsx-badge dsx-badge--custom">Genel</span>'
+                    : (r.hasCustom
+                        ? '<span class="dsx-badge dsx-badge--custom">Özel</span>'
+                        : '<span class="dsx-badge dsx-badge--default">Varsayılan</span>')) + '</td>'
+                + '<td><div class="dsx-actions">'
+                + '<button type="button" class="dsx-btn dsx-btn--save" data-save="' + escAttr(r.formCode) + '" disabled>Kaydet</button>'
+                + (!isDefault && r.hasCustom
+                    ? '<button type="button" class="dsx-btn dsx-btn--reset" data-reset="' + escAttr(r.formCode) + '">Sıfırla</button>'
+                    : '')
+                + '</div></td>'
+                + '</tr>';
+        });
+        body.innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--dsx-muted);padding:24px">Eşleşme bulunamadı</td></tr>';
+    }
+
+    function load() {
+        fetch('/Admin/DecimalSettings/ListJson', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { toast(d.error || 'Liste alınamadı', true); return; }
+                rows = d.rows || [];
+                render();
+            })
+            .catch(function () { toast('Liste alınamadı', true); });
+    }
+
+    // Select değişince satırı dirty işaretle + Kaydet butonunu aç
+    body.addEventListener('change', function (e) {
+        var sel = e.target;
+        if (!sel.classList || !sel.classList.contains('dsx-sel')) return;
+        var tr = sel.closest('tr');
+        tr.classList.add('dsx-dirty');
+        var btn = tr.querySelector('[data-save]');
+        if (btn) btn.disabled = false;
+    });
+
+    body.addEventListener('click', function (e) {
+        var saveBtn = e.target.closest('[data-save]');
+        if (saveBtn && !saveBtn.disabled) {
+            var formCode = saveBtn.getAttribute('data-save');
+            var tr = saveBtn.closest('tr');
+            var payload = { formCode: formCode };
+            FIELDS.forEach(function (f) {
+                var s = tr.querySelector('select[data-field="' + f + '"]');
+                payload[f] = s ? parseInt(s.value, 10) : 2;
+            });
+            saveBtn.disabled = true;
+            fetch('/Admin/DecimalSettings/SaveJson', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getCsrf() },
+                body: JSON.stringify(payload),
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d.ok) { toast(d.error || 'Kaydedilemedi', true); saveBtn.disabled = false; return; }
+                    toast('Kaydedildi');
+                    load();
+                })
+                .catch(function () { toast('Kaydedilemedi', true); saveBtn.disabled = false; });
+            return;
+        }
+
+        var resetBtn = e.target.closest('[data-reset]');
+        if (resetBtn) {
+            var fc = resetBtn.getAttribute('data-reset');
+            var row = rows.find(function (r) { return r.formCode === fc; });
+            showConfirm('"' + (row ? row.formName : fc) + '" formunun özel ondalık ayarı silinecek ve Genel Varsayılan değerleri kullanılacak.')
+                .then(function (ok) {
+                    if (!ok) return;
+                    fetch('/Admin/DecimalSettings/ResetJson', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getCsrf() },
+                        body: JSON.stringify({ formCode: fc }),
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            if (!d.ok) { toast(d.error || 'Sıfırlanamadı', true); return; }
+                            toast('Varsayılana döndü');
+                            load();
+                        })
+                        .catch(function () { toast('Sıfırlanamadı', true); });
+                });
+        }
+    });
+
+    searchInput.addEventListener('input', render);
+    load();
+})();
+</script>
+}

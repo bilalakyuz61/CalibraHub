@@ -17,6 +17,7 @@ public sealed class DocumentService : IDocumentService
     private readonly IDocumentNumberService? _docNumberService;
     private readonly IApprovalFlowService? _approvalFlowService;
     private readonly ICompanyParameterService? _companyParameters;
+    private readonly IDecimalSettingService? _decimalSettings;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
 
@@ -27,7 +28,8 @@ public sealed class DocumentService : IDocumentService
         IDocumentSourceRepository docSourceRepo,
         IDocumentNumberService? docNumberService = null,
         IApprovalFlowService? approvalFlowService = null,
-        ICompanyParameterService? companyParameters = null)
+        ICompanyParameterService? companyParameters = null,
+        IDecimalSettingService? decimalSettings = null)
     {
         _repo = repo;
         _financeService = financeService;
@@ -36,6 +38,18 @@ public sealed class DocumentService : IDocumentService
         _docNumberService = docNumberService;
         _approvalFlowService = approvalFlowService;
         _companyParameters = companyParameters;
+        _decimalSettings = decimalSettings;
+    }
+
+    /// <summary>
+    /// Belge hesaplarında kullanılacak etkili ondalık ayarı. Servis kayıtlı
+    /// değilse (Worker vb.) fallback (2,2,2,2,4) — davranış asla bloklanmaz.
+    /// </summary>
+    private async Task<EffectiveDecimalsDto> ResolveDecimalsAsync(string formCode, CancellationToken ct)
+    {
+        if (_decimalSettings is null) return EffectiveDecimalsDto.Fallback(formCode);
+        try { return await _decimalSettings.GetEffectiveAsync(formCode, ct); }
+        catch { return EffectiveDecimalsDto.Fallback(formCode); }
     }
 
     /// <summary>
@@ -256,7 +270,9 @@ public sealed class DocumentService : IDocumentService
                 ct)
             : "";
 
-        // Satirlari hesapla
+        // Satirlari hesapla — ondalik ayari form bazinda cozumlenir (Ayarlar → Ondalik Ayarlari)
+        var decimals = await ResolveDecimalsAsync(
+            isPurchaseRequest ? FormCodes.PurchaseRequest : FormCodes.SalesQuote, ct);
         var lineRequests = request.Lines.ToArray();
         decimal subTotal = 0;
         var lineEntities = new List<DocumentLine>(lineRequests.Length);
@@ -264,7 +280,7 @@ public sealed class DocumentService : IDocumentService
         foreach (var ln in lineRequests)
         {
             var lineDiscountMultiplier = 1m - (ln.DiscountRate / 100m);
-            var lineTotal = ln.Quantity * ln.UnitPrice * lineDiscountMultiplier;
+            var lineTotal = decimals.RoundAmount(ln.Quantity * ln.UnitPrice * lineDiscountMultiplier);
             subTotal += lineTotal;
             lineEntities.Add(new DocumentLine
             {
@@ -274,10 +290,10 @@ public sealed class DocumentService : IDocumentService
                 LineNo = lineNo++,
                 ItemId = ln.ItemId,
                 UnitId = ln.UnitId,
-                Quantity = ln.Quantity,
-                UnitPrice = ln.UnitPrice,
-                DiscountRate = ln.DiscountRate,
-                LineTotal = Math.Round(lineTotal, 4),
+                Quantity = decimals.RoundQuantity(ln.Quantity),
+                UnitPrice = decimals.RoundUnitPrice(ln.UnitPrice),
+                DiscountRate = decimals.RoundRate(ln.DiscountRate),
+                LineTotal = lineTotal,
                 CombinationId = ln.CombinationId,
                 LocationId = ln.LocationId,
                 Notes = ln.Notes,
@@ -286,10 +302,10 @@ public sealed class DocumentService : IDocumentService
             });
         }
 
-        var discountAmount = Math.Round(subTotal * (request.DiscountRate / 100m), 4);
+        var discountAmount = decimals.RoundAmount(subTotal * (request.DiscountRate / 100m));
         var afterDiscount = subTotal - discountAmount;
-        var taxAmount = Math.Round(afterDiscount * (request.TaxRate / 100m), 4);
-        var grandTotal = afterDiscount + taxAmount;
+        var taxAmount = decimals.RoundAmount(afterDiscount * (request.TaxRate / 100m));
+        var grandTotal = decimals.RoundAmount(afterDiscount + taxAmount);
 
         // DocumentTypeId null ise varsayilan 'satis_teklifi' turune bagla
         var effectiveDocumentTypeId = request.DocumentTypeId ?? await ResolveDefaultQuoteTypeIdAsync(ct);
