@@ -31,7 +31,7 @@ public sealed class SqlDecimalSettingRepository : IDecimalSettingRepository
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[FormCode],[QuantityDecimals],[UnitPriceDecimals],
                    [AmountDecimals],[RateDecimals],[ExchangeRateDecimals],[IsActive],
-                   [CreatedById],[Created],[UpdatedById],[Updated]
+                   [CreatedById],[Created],[UpdatedById],[Updated],[FxUnitPriceDecimals]
             FROM {_table}
             WHERE [CompanyId]=@CompanyId AND [IsActive]=1
             ORDER BY [FormCode];
@@ -50,7 +50,7 @@ public sealed class SqlDecimalSettingRepository : IDecimalSettingRepository
         cmd.CommandText = $"""
             SELECT TOP 1 [Id],[CompanyId],[FormCode],[QuantityDecimals],[UnitPriceDecimals],
                    [AmountDecimals],[RateDecimals],[ExchangeRateDecimals],[IsActive],
-                   [CreatedById],[Created],[UpdatedById],[Updated]
+                   [CreatedById],[Created],[UpdatedById],[Updated],[FxUnitPriceDecimals]
             FROM {_table}
             WHERE [CompanyId]=@CompanyId AND [FormCode]=@FormCode AND [IsActive]=1;
             """;
@@ -69,18 +69,19 @@ public sealed class SqlDecimalSettingRepository : IDecimalSettingRepository
             USING (SELECT @CompanyId AS CompanyId, @FormCode AS FormCode) AS src
                 ON t.[CompanyId]=src.CompanyId AND t.[FormCode]=src.FormCode
             WHEN MATCHED THEN UPDATE SET
-                [QuantityDecimals]=@Qty, [UnitPriceDecimals]=@Price, [AmountDecimals]=@Amount,
-                [RateDecimals]=@Rate, [ExchangeRateDecimals]=@Fx, [IsActive]=1,
+                [QuantityDecimals]=@Qty, [UnitPriceDecimals]=@Price, [FxUnitPriceDecimals]=@FxPrice,
+                [AmountDecimals]=@Amount, [RateDecimals]=@Rate, [ExchangeRateDecimals]=@Fx, [IsActive]=1,
                 [UpdatedById]=@UserId, [Updated]=SYSUTCDATETIME()
             WHEN NOT MATCHED THEN INSERT
-                ([CompanyId],[FormCode],[QuantityDecimals],[UnitPriceDecimals],[AmountDecimals],
-                 [RateDecimals],[ExchangeRateDecimals],[IsActive],[CreatedById])
-                VALUES (@CompanyId,@FormCode,@Qty,@Price,@Amount,@Rate,@Fx,1,@UserId);
+                ([CompanyId],[FormCode],[QuantityDecimals],[UnitPriceDecimals],[FxUnitPriceDecimals],
+                 [AmountDecimals],[RateDecimals],[ExchangeRateDecimals],[IsActive],[CreatedById])
+                VALUES (@CompanyId,@FormCode,@Qty,@Price,@FxPrice,@Amount,@Rate,@Fx,1,@UserId);
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", setting.CompanyId));
         cmd.Parameters.Add(new SqlParameter("@FormCode", setting.FormCode));
         cmd.Parameters.Add(new SqlParameter("@Qty", setting.QuantityDecimals));
         cmd.Parameters.Add(new SqlParameter("@Price", setting.UnitPriceDecimals));
+        cmd.Parameters.Add(new SqlParameter("@FxPrice", setting.FxUnitPriceDecimals));
         cmd.Parameters.Add(new SqlParameter("@Amount", setting.AmountDecimals));
         cmd.Parameters.Add(new SqlParameter("@Rate", setting.RateDecimals));
         cmd.Parameters.Add(new SqlParameter("@Fx", setting.ExchangeRateDecimals));
@@ -113,5 +114,6 @@ public sealed class SqlDecimalSettingRepository : IDecimalSettingRepository
         Created              = r.GetDateTime(10),
         UpdatedById          = r.IsDBNull(11) ? null : r.GetInt32(11),
         Updated              = r.IsDBNull(12) ? null : r.GetDateTime(12),
+        FxUnitPriceDecimals  = r.GetInt32(13),
     };
 }

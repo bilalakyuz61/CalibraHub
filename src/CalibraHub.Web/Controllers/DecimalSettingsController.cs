@@ -106,6 +106,7 @@ public sealed class DecimalRuntimeController : Controller
             formCode = dec.FormCode,
             quantity = dec.Quantity,
             unitPrice = dec.UnitPrice,
+            fxUnitPrice = dec.FxUnitPrice,
             amount = dec.Amount,
             rate = dec.Rate,
             exchangeRate = dec.ExchangeRate,

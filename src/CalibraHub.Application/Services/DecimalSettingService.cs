@@ -80,8 +80,8 @@ public sealed class DecimalSettingService : IDecimalSettingService
         {
             new(DefaultFormCode, "Genel Varsayılan", null,
                 byCode.ContainsKey(DefaultFormCode),
-                defaults.QuantityDecimals, defaults.UnitPriceDecimals, defaults.AmountDecimals,
-                defaults.RateDecimals, defaults.ExchangeRateDecimals),
+                defaults.QuantityDecimals, defaults.UnitPriceDecimals, defaults.FxUnitPriceDecimals,
+                defaults.AmountDecimals, defaults.RateDecimals, defaults.ExchangeRateDecimals),
         };
 
         foreach (var form in forms.Where(f => f.IsActive).OrderBy(f => f.Module).ThenBy(f => f.SortOrder).ThenBy(f => f.FormCode))
@@ -90,8 +90,8 @@ public sealed class DecimalSettingService : IDecimalSettingService
             var src = has ? s! : defaults;
             rows.Add(new DecimalSettingRowDto(
                 form.FormCode, form.FormName, form.Module, has,
-                src.QuantityDecimals, src.UnitPriceDecimals, src.AmountDecimals,
-                src.RateDecimals, src.ExchangeRateDecimals));
+                src.QuantityDecimals, src.UnitPriceDecimals, src.FxUnitPriceDecimals,
+                src.AmountDecimals, src.RateDecimals, src.ExchangeRateDecimals));
         }
         return rows;
     }
@@ -108,6 +108,7 @@ public sealed class DecimalSettingService : IDecimalSettingService
             FormCode             = code,
             QuantityDecimals     = Clamp(request.QuantityDecimals),
             UnitPriceDecimals    = Clamp(request.UnitPriceDecimals),
+            FxUnitPriceDecimals  = Clamp(request.FxUnitPriceDecimals),
             AmountDecimals       = Clamp(request.AmountDecimals),
             RateDecimals         = Clamp(request.RateDecimals),
             ExchangeRateDecimals = Clamp(request.ExchangeRateDecimals),
@@ -131,8 +132,8 @@ public sealed class DecimalSettingService : IDecimalSettingService
     private static int Clamp(int value) => Math.Clamp(value, 0, 6);
 
     private static EffectiveDecimalsDto ToEffective(string code, DecimalSetting s, string source) =>
-        new(code, s.QuantityDecimals, s.UnitPriceDecimals, s.AmountDecimals,
-            s.RateDecimals, s.ExchangeRateDecimals, source);
+        new(code, s.QuantityDecimals, s.UnitPriceDecimals, s.FxUnitPriceDecimals,
+            s.AmountDecimals, s.RateDecimals, s.ExchangeRateDecimals, source);
 
     // Şirket başına cache jenerasyonu — Save/Reset ile artar, eski girdiler doğal düşer.
     private int GetGeneration(int companyId) =>

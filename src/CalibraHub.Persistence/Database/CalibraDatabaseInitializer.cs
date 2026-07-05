@@ -8679,6 +8679,7 @@ END;";
                     [FormCode]             NVARCHAR(50) NOT NULL,  -- Forms.FormCode veya '*' (sirket geneli varsayilan)
                     [QuantityDecimals]     INT          NOT NULL CONSTRAINT [DF_DecimalSetting_QuantityDecimals] DEFAULT(2),
                     [UnitPriceDecimals]    INT          NOT NULL CONSTRAINT [DF_DecimalSetting_UnitPriceDecimals] DEFAULT(2),
+                    [FxUnitPriceDecimals]  INT          NOT NULL CONSTRAINT [DF_DecimalSetting_FxUnitPriceDecimals] DEFAULT(4),
                     [AmountDecimals]       INT          NOT NULL CONSTRAINT [DF_DecimalSetting_AmountDecimals] DEFAULT(2),
                     [RateDecimals]         INT          NOT NULL CONSTRAINT [DF_DecimalSetting_RateDecimals] DEFAULT(2),
                     [ExchangeRateDecimals] INT          NOT NULL CONSTRAINT [DF_DecimalSetting_ExchangeRateDecimals] DEFAULT(4),
@@ -8691,6 +8692,12 @@ END;";
                 CREATE UNIQUE INDEX [UX_DecimalSetting_Company_Form]
                     ON [{s}].[DecimalSetting]([CompanyId], [FormCode]);
             END;
+
+            -- Migration: FxUnitPriceDecimals — ilk kurulumdan sonra eklendi (2026-07-05)
+            IF OBJECT_ID(N'[{s}].[DecimalSetting]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.DecimalSetting', N'FxUnitPriceDecimals') IS NULL
+                ALTER TABLE [{s}].[DecimalSetting]
+                    ADD [FxUnitPriceDecimals] INT NOT NULL CONSTRAINT [DF_DecimalSetting_FxUnitPriceDecimals] DEFAULT(4);
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;

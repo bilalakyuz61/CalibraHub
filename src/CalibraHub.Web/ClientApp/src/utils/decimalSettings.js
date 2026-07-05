@@ -16,7 +16,7 @@
  * (mount.jsx global expose eder).
  */
 
-var FALLBACK = { formCode: '*', quantity: 2, unitPrice: 2, amount: 2, rate: 2, exchangeRate: 4, source: 'fallback' }
+var FALLBACK = { formCode: '*', quantity: 2, unitPrice: 2, fxUnitPrice: 4, amount: 2, rate: 2, exchangeRate: 4, source: 'fallback' }
 var cache = {} // formCode -> Promise<settings>
 var changeListeners = []
 
@@ -49,6 +49,7 @@ export function loadDecimalSettings(formCode) {
         if (d && d.ok) {
           return {
             formCode: d.formCode, quantity: d.quantity, unitPrice: d.unitPrice,
+            fxUnitPrice: d.fxUnitPrice != null ? d.fxUnitPrice : 4,
             amount: d.amount, rate: d.rate, exchangeRate: d.exchangeRate, source: d.source,
           }
         }
@@ -72,10 +73,11 @@ export function roundTo(value, decimals) {
 
 /**
  * Grid kolonu → ondalık kategorisi eşleme. Öncelik:
- *   1) col.decimalKind ('quantity'|'unitPrice'|'amount'|'rate'|'exchangeRate')
+ *   1) col.decimalKind ('quantity'|'unitPrice'|'fxUnitPrice'|'amount'|'rate'|'exchangeRate')
  *      — C# grid config'i açıkça bildirebilir (yeni ekranlar için önerilen yol)
  *   2) col.type + key heuristics: number→quantity, percent→rate,
- *      currency→(computed/total→amount, değilse unitPrice), kur→exchangeRate
+ *      currency→(computed/total→amount, döviz fiyatı→fxUnitPrice, değilse unitPrice),
+ *      kur→exchangeRate
  * Eşleşme yoksa null döner — kolonun kendi precision'ı korunur.
  */
 export function resolveColumnDecimals(col, dec) {
@@ -85,6 +87,7 @@ export function resolveColumnDecimals(col, dec) {
     var type = String(col.type || '').toLowerCase()
     var key = String(col.key || '').toLowerCase()
     if (/exchange|kur/.test(key)) kind = 'exchangeRate'
+    else if (/fxprice|fx_price|dovizfiyat|doviz_fiyat|foreignprice|currencyprice/.test(key)) kind = 'fxUnitPrice'
     else if (type === 'percent' || /rate|oran|iskonto|kdv/.test(key)) kind = 'rate'
     else if (type === 'currency') kind = (col.computed || /total|amount|tutar|toplam/.test(key)) ? 'amount' : 'unitPrice'
     else if (type === 'number' && /qty|quantity|miktar|adet/.test(key)) kind = 'quantity'
@@ -93,6 +96,7 @@ export function resolveColumnDecimals(col, dec) {
   switch (kind) {
     case 'quantity':     return dec.quantity
     case 'unitPrice':    return dec.unitPrice
+    case 'fxUnitPrice':  return dec.fxUnitPrice
     case 'amount':       return dec.amount
     case 'rate':         return dec.rate
     case 'exchangeRate': return dec.exchangeRate

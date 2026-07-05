@@ -173,6 +173,7 @@
                     <th>Modül</th>
                     <th class="num">Miktar</th>
                     <th class="num">Birim Fiyat</th>
+                    <th class="num">Döviz Fiyatı</th>
                     <th class="num">Tutar</th>
                     <th class="num">Oran</th>
                     <th class="num">Kur</th>
@@ -181,7 +182,7 @@
                 </tr>
             </thead>
             <tbody id="dsxBody">
-                <tr><td colspan="9" style="text-align:center;color:var(--dsx-muted);padding:24px">Yükleniyor…</td></tr>
+                <tr><td colspan="10" style="text-align:center;color:var(--dsx-muted);padding:24px">Yükleniyor…</td></tr>
             </tbody>
         </table>
     </div>
@@ -255,7 +256,7 @@
         else if (e.key === 'Enter') closeModal(true);
     });
 
-    var FIELDS = ['quantityDecimals', 'unitPriceDecimals', 'amountDecimals', 'rateDecimals', 'exchangeRateDecimals'];
+    var FIELDS = ['quantityDecimals', 'unitPriceDecimals', 'fxUnitPriceDecimals', 'amountDecimals', 'rateDecimals', 'exchangeRateDecimals'];
 
     function selHtml(formCode, field, value) {
         var opts = '';
@@ -285,6 +286,7 @@
                 + '<td class="dsx-module">' + escHtml(r.module || (isDefault ? 'Tüm Formlar' : '—')) + '</td>'
                 + '<td class="num">' + selHtml(r.formCode, 'quantityDecimals', r.quantityDecimals) + '</td>'
                 + '<td class="num">' + selHtml(r.formCode, 'unitPriceDecimals', r.unitPriceDecimals) + '</td>'
+                + '<td class="num">' + selHtml(r.formCode, 'fxUnitPriceDecimals', r.fxUnitPriceDecimals) + '</td>'
                 + '<td class="num">' + selHtml(r.formCode, 'amountDecimals', r.amountDecimals) + '</td>'
                 + '<td class="num">' + selHtml(r.formCode, 'rateDecimals', r.rateDecimals) + '</td>'
                 + '<td class="num">' + selHtml(r.formCode, 'exchangeRateDecimals', r.exchangeRateDecimals) + '</td>'
@@ -301,7 +303,7 @@
                 + '</div></td>'
                 + '</tr>';
         });
-        body.innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--dsx-muted);padding:24px">Eşleşme bulunamadı</td></tr>';
+        body.innerHTML = html || '<tr><td colspan="10" style="text-align:center;color:var(--dsx-muted);padding:24px">Eşleşme bulunamadı</td></tr>';
     }
 
     function load() {

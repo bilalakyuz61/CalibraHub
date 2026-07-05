@@ -34,6 +34,11 @@ public sealed class DecimalSetting
     /// <summary>Birim fiyat alanları ondalık hanesi (0-6).</summary>
     public int UnitPriceDecimals { get; set; } = 2;
 
+    /// <summary>Döviz fiyatı alanları ondalık hanesi (0-6). Çift para birimli
+    /// ekranlarda yabancı para cinsinden fiyat için — TL fiyattan daha hassas
+    /// tutulur (varsayılan 4).</summary>
+    public int FxUnitPriceDecimals { get; set; } = 4;
+
     /// <summary>Tutar/toplam alanları ondalık hanesi (0-6).</summary>
     public int AmountDecimals { get; set; } = 2;
 
