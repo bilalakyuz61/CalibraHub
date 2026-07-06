@@ -1357,9 +1357,8 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                         <button type="button" class="ca-btn" id="caAddrCancelBtn">İptal</button>
                     </div>
                 </div>
-                <div id="caAddrNoData" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#f59e0b;font-size:.78rem;">
-                    PTT posta kodu katalogu henuz yuklu degil — Ülke/İl/İlçe/Mahalle listeleri bos. Admin "Şirket Ayarları → Adres Kataloğu" bolumunden yukleyebilir.
-                </div>
+                @* 2026-07-06 — PTT katalog uyarısı kaldırıldı; İl/İlçe/Mahalle serbest
+                   metin girilir, ileride şehir/ilçe tanımlama ekranından beslenecek. *@
             </div>
 
             <!-- Stok Eşleştirmeleri -->
@@ -2188,8 +2187,11 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
 
     // ══════════════════════════════════════════════════════════════
     // İletişim sekmesi — ana adres alanlarinda PTT cascade dropdown
+    // 2026-07-06 — DEVRE DIŞI: Adres kataloğu yapısı kaldırıldı; şehir/ilçe
+    // için ileride ayrı tanımlama ekranı yapılacak. Alanlar serbest metin.
     // ══════════════════════════════════════════════════════════════
     (function () {
+        return; // PTT katalog beslemesi kapalı
         function gid(id) { return document.getElementById(id); }
         var ctyEl  = gid('city');
         var distEl = gid('district');
@@ -2406,46 +2408,14 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
 
     function qs(id) { return document.getElementById(id); }
 
-    async function caAddrLoadCities() {
-        try {
-            var country = (qs('caAddrCountry').value || 'TR').toUpperCase();
-            var r = await fetch('/Address/Cities?countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
-            var data = await r.json();
-            var dl = qs('caAddrCityList');
-            dl.innerHTML = (data || []).map(function (c) { return '<option value="' + c + '">'; }).join('');
-            if (!data || data.length === 0) {
-                caAddrCatalogEmpty = true;
-                qs('caAddrNoData').style.display = '';
-            }
-        } catch (e) { console.warn('[CA] Sehir yuklenemedi:', e); }
-    }
+    // 2026-07-06 — PTT katalog beslemesi devre dışı: şehir/ilçe ileride ayrı
+    // tanımlama ekranından gelecek. İl/İlçe/Mahalle alanları serbest metin;
+    // datalist'ler boş kalır, katalog uyarısı hiç gösterilmez.
+    async function caAddrLoadCities() { /* katalog kapalı */ }
 
-    async function caAddrLoadDistricts() {
-        var city = (qs('caAddrCity').value || '').trim();
-        if (!city) { qs('caAddrDistrictList').innerHTML = ''; return; }
-        var country = (qs('caAddrCountry').value || 'TR').toUpperCase();
-        try {
-            var r = await fetch('/Address/Districts?city=' + encodeURIComponent(city) + '&countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
-            var data = await r.json();
-            qs('caAddrDistrictList').innerHTML = (data || []).map(function (d) { return '<option value="' + d + '">'; }).join('');
-        } catch (e) { console.warn('[CA] Ilce yuklenemedi:', e); }
-    }
+    async function caAddrLoadDistricts() { /* katalog kapalı */ }
 
-    async function caAddrLoadNeighborhoods() {
-        var city = (qs('caAddrCity').value || '').trim();
-        var district = (qs('caAddrDistrict').value || '').trim();
-        if (!city || !district) { qs('caAddrNgList').innerHTML = ''; return; }
-        var country = (qs('caAddrCountry').value || 'TR').toUpperCase();
-        try {
-            var r = await fetch('/Address/Neighborhoods?city=' + encodeURIComponent(city) + '&district=' + encodeURIComponent(district) + '&countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
-            var data = await r.json();
-            // Mahalle seciminde posta kodu otomatik dolsun diye cache'le
-            window.__caNgCache = (data || []).reduce(function (acc, x) { acc[x.name] = x.postalCode; return acc; }, {});
-            qs('caAddrNgList').innerHTML = (data || []).map(function (n) {
-                return '<option value="' + n.name + '">' + (n.postalCode ? '(' + n.postalCode + ')' : '') + '</option>';
-            }).join('');
-        } catch (e) { console.warn('[CA] Mahalle yuklenemedi:', e); }
-    }
+    async function caAddrLoadNeighborhoods() { /* katalog kapalı */ }
 
     function caAddrAutofillPostal() {
         var ng = (qs('caAddrNeighborhood').value || '').trim();

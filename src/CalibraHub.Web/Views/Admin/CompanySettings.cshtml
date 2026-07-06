@@ -23,7 +23,9 @@
         ("general",    "",                "Genel Bilgiler"),     // VIEW yetisi varsa görünür
         ("mail",       "TAB_MAIL",        "Mail Ayarlari"),
         ("integrator", "TAB_INTEGRATOR",  "Entegrator Ayarlari"),
-        ("addresses",  "TAB_ADDRESSES",   "Adres Kataloğu"),
+        // 2026-07-06 — "Adres Kataloğu" (PTT) sekmesi kaldırıldı: şehir/ilçe için
+        // ileride ayrı tanımlama ekranı yapılacak. Backend (AddressController) ve
+        // DB tabloları duruyor; yalnızca UI girişi kapatıldı.
         ("whatsapp",   "TAB_WHATSAPP",    "WhatsApp"),
         ("ai",         "TAB_AI",          "Yapay Zeka"),
     };
@@ -686,8 +688,12 @@
                     </div>
                 </div>
 
-                <!-- Adres Kataloğu (PTT) -->
-                <div class="cs-tab-pane@(firstVisible == "addresses" ? " is-active" : "")" id="cs-pane-addresses" data-cs-pane-key="addresses">
+                @* 2026-07-06 — "Adres Kataloğu (PTT)" pane'i kaldırıldı; şehir/ilçe için
+                   ileride ayrı tanımlama ekranı yapılacak. AddressController + DB duruyor. *@
+                @if (false)
+                {
+                <!-- Adres Kataloğu (PTT) — devre dışı -->
+                <div class="cs-tab-pane" id="cs-pane-addresses" data-cs-pane-key="addresses">
                     <div class="cs-section-title">PTT Posta Kodu Kataloğu</div>
                     <p style="margin:6px 0 14px;font-size:.82rem;color:rgba(100,116,139,.9);">
                         Cari kartlarındaki İl / İlçe / Mahalle dropdown'ları bu katalogdan beslenir. PTT verisini
@@ -771,6 +777,7 @@
                         </label>
                     </div>
                 </div>
+                }
 
                 @{
                     var waCfg = ViewBag.WhatsAppConfig as CalibraHub.Domain.Entities.WhatsAppConfig;
@@ -793,23 +800,21 @@
                         </label>
                     </div>
 
-                    @if (!waCfg?.IsEnabled ?? true)
+                    @* Pasif durumda ayrıca mesaj gösterilmez — switch'in kendisi ve alt açıklaması yeterli. *@
+                    @if (waCfg?.IsEnabled == true)
                     {
-                        <div class="wa-status wa-status--off" style="margin-bottom:10px;">
-                            ● Entegrasyon pasif. Switch'i açıp kaydedin.
-                        </div>
-                    }
-                    else if (!string.IsNullOrEmpty(waCfg.DisplayPhoneNumber))
-                    {
-                        <div class="wa-status wa-status--ok" style="margin-bottom:10px;">
-                            ✓ Aktif — <b>@waCfg.DisplayPhoneNumber</b> (@(waCfg.Provider == CalibraHub.Domain.Entities.WhatsAppProviderType.CloudApi ? "Cloud API" : "Web QR"))
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="wa-status wa-status--warn" style="margin-bottom:10px;">
-                            ⚠ Yapılandırıldı ama bağlantı henüz test edilmedi.
-                        </div>
+                        if (!string.IsNullOrEmpty(waCfg.DisplayPhoneNumber))
+                        {
+                            <div class="wa-status wa-status--ok" style="margin-bottom:10px;">
+                                ✓ Aktif — <b>@waCfg.DisplayPhoneNumber</b> (@(waCfg.Provider == CalibraHub.Domain.Entities.WhatsAppProviderType.CloudApi ? "Cloud API" : "Web QR"))
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="wa-status wa-status--warn" style="margin-bottom:10px;">
+                                ⚠ Yapılandırıldı ama bağlantı henüz test edilmedi.
+                            </div>
+                        }
                     }
 
                     <!-- Bağlantı gövdesi — switch kapalıyken soluk/devre dışı -->
@@ -1467,6 +1472,9 @@
 
 // ── PTT Adres Kataloğu import ─────────────────────────────────
 (function () {
+    // 2026-07-06 — Adres Kataloğu pane'i kaldırıldı (şehir/ilçe ileride ayrı
+    // tanımlama ekranına taşınacak). Pane DOM'da yoksa script hiç başlamaz.
+    if (!document.getElementById('cs-pane-addresses')) return;
     function $id(id) { return document.getElementById(id); }
 
     async function refreshCount() {
@@ -1779,7 +1787,12 @@
         if (!d) return;
         if (!d.reachable) {
             _setQrImg(null);
-            _setQrMsg('Bridge\'e ulasilamiyor: ' + (d.error || 'bilinmeyen hata'), '#dc2626');
+            // 'disabled' / 'no_url' = ayarlar henuz DB'ye kaydedilmemis — bridge sorunu degil.
+            if (d.state === 'disabled' || d.state === 'no_url') {
+                _setQrMsg('Ayarlar henuz kaydedilmedi — Web QR secip alttaki Kaydet butonuna basin.', '#d97706');
+            } else {
+                _setQrMsg('Bridge\'e ulasilamiyor: ' + (d.error || 'bilinmeyen hata'), '#dc2626');
+            }
             return;
         }
         switch (d.state) {

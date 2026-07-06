@@ -15065,6 +15065,13 @@ END;";
                 );
                 CREATE INDEX [IX_InventoryCountLine_Count] ON [{s}].[InventoryCountLine]([InventoryCountId]);
             END;
+
+            -- 2026-07-06: Kalem bazinda depo — satir kendi lokasyonunu tasiyabilir (NULL = header lokasyonu).
+            IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[InventoryCountLine]', N'LocationId') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[InventoryCountLine] ADD [LocationId] INT NULL;
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
@@ -17001,6 +17008,15 @@ END;";
             BEGIN
                 UPDATE [{s}].[PermissionDef] SET [IsActive] = 0, [Updated] = SYSUTCDATETIME()
                 WHERE [FormCode] = N'DASHBOARDS' AND [ActionCode] = N'VIEW' AND [IsActive] = 1;
+            END;
+
+            -- 2026-07-06: Adres Katalogu sekmesi kaldirildi (sehir/ilce ileride ayri
+            -- tanimlama ekrani). BUTTON:TAB_ADDRESSES izni pasiflestirilir — FormButtonCatalog
+            -- artik seed etmiyor, mevcut satir yetki matrisinde gorunmesin.
+            IF OBJECT_ID(N'[{s}].[PermissionDef]', N'U') IS NOT NULL
+            BEGIN
+                UPDATE [{s}].[PermissionDef] SET [IsActive] = 0, [Updated] = SYSUTCDATETIME()
+                WHERE [FormCode] = N'COMPANY_SETTINGS' AND [ActionCode] = N'BUTTON:TAB_ADDRESSES' AND [IsActive] = 1;
             END;
 
             -- 2026-06-17: Eski orphan Rapor Tasarimi form kodlari REPORT_DESIGNER olarak

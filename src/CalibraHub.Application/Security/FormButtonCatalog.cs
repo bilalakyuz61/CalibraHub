@@ -105,7 +105,9 @@ public static class FormButtonCatalog
                 // (Genel Bilgiler tab'ı VIEW iznine bağlı; ayrı TAB_GENERAL gerekmez.)
                 new("TAB_MAIL",        "Sekme: Mail Ayarları"),
                 new("TAB_INTEGRATOR",  "Sekme: Entegratör Ayarları"),
-                new("TAB_ADDRESSES",   "Sekme: Adres Kataloğu"),
+                // TAB_ADDRESSES kaldırıldı (2026-07-06) — Adres Kataloğu sekmesi UI'dan
+                // çıkarıldı; şehir/ilçe ileride ayrı tanımlama ekranı olacak. Mevcut
+                // PermissionDef satırı initializer migration'ında pasifleştirilir.
                 new("TAB_WHATSAPP",    "Sekme: WhatsApp"),
                 new("TAB_AI",          "Sekme: Yapay Zeka"),
 
