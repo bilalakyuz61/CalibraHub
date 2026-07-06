@@ -405,6 +405,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             if (isUpdate) keptIds.Add(ln.Id);
 
             await using var cmd = conn.CreateCommand();
+            // BaseQuantity: ana birime normalize miktar (ticari satırlarda da tutarlı doldurulur —
+            // stok etkilemez ama teklif→sipariş→irsaliye dönüşümü/raporlamada baz miktar hazır olur)
+            var baseQtyExpr = StockUnitSql.BaseQtyExpr($"[{_schema}].[Items]", $"[{_schema}].[ItemUnits]", "@Quantity", "@ItemId", "@UnitId");
             if (isUpdate)
             {
                 cmd.CommandText = $"""
@@ -413,6 +416,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                         [ItemId]         = @ItemId,
                         [UnitId]         = @UnitId,
                         [Quantity]        = @Quantity,
+                        [BaseQuantity]   = {baseQtyExpr},
                         [UnitPrice]      = @UnitPrice,
                         [DiscountRate]   = @DiscountRate,
                         [LineTotal]      = @LineTotal,
@@ -433,11 +437,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 cmd.CommandText = $"""
                     INSERT INTO {_lineTable}
                         ([DocumentId],[LineNo],[ItemId],[UnitId],
-                         [Quantity],[UnitPrice],[DiscountRate],[LineTotal],
+                         [Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
                          [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
                     VALUES
                         (@DocumentId,@LineNo,@ItemId,@UnitId,
-                         @Quantity,@UnitPrice,@DiscountRate,@LineTotal,
+                         @Quantity,{baseQtyExpr},@UnitPrice,@DiscountRate,@LineTotal,
                          @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays);
                     """;
             }
@@ -619,11 +623,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $"""
                     INSERT INTO {_lineTable}
-                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[UnitPrice],
+                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],
                          [DiscountRate],[LineTotal],[CombinationId],[LocationId],[Notes],
                          [NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
                     SELECT
-                        [DocumentId], @NewLineNo, [ItemId], [UnitId], [Quantity], [UnitPrice],
+                        [DocumentId], @NewLineNo, [ItemId], [UnitId], [Quantity], [BaseQuantity], [UnitPrice],
                         [DiscountRate], [LineTotal], [CombinationId], [LocationId], @OrigNotes,
                         [NotesPinned], NULL, [SourceLineId], [DeliveryDate], [DeliveryDays]
                     FROM {_lineTable}
