@@ -1,0 +1,142 @@
+@using CalibraHub.Application.Contracts
+@{
+    var item = ViewBag.Item as VillageDto;
+    ViewData["Title"] = item is null ? "Yeni Köy" : "Köy Düzenle";
+    var itemId = item?.Id ?? 0;
+    var itemName = item?.Name ?? "";
+    var itemDistrictId = item?.DistrictId ?? 0;
+    var itemNeighborhoodId = item?.NeighborhoodId ?? 0;
+    var itemCityId = (int?)(ViewBag.CityId) ?? 0;
+    var itemCountryId = (int?)(ViewBag.CountryId) ?? 0;
+}
+@Html.AntiForgeryToken()
+
+<partial name="_GeneralDefsTabs" model='"villages"' />
+
+<partial name="_GeneralDefsEditStyles" />
+
+<div class="gde-wrap">
+    <div class="gde-card">
+        <div class="gde-title">@(item is null ? "Yeni Köy" : "Köy Düzenle")</div>
+        <div class="gde-sub">Köy, ilçe altında (mahalle ile aynı hizada) veya bir mahallenin altında tanımlanabilir.</div>
+
+        <div class="gde-row">
+            <label class="gde-label" for="gdeCountry">Ülke</label>
+            <select id="gdeCountry" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeCity">Şehir</label>
+            <select id="gdeCity" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeDistrict">İlçe</label>
+            <select id="gdeDistrict" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeNeighborhood">Mahalle (Opsiyonel)</label>
+            <select id="gdeNeighborhood" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeName">Köy Adı</label>
+            <input type="text" id="gdeName" class="gde-input" maxlength="150" value="@itemName" placeholder="Örn. Çamlıca" />
+        </div>
+
+        <div class="gde-actions">
+            <button type="button" class="gde-btn gde-btn--ghost" id="gdeBack">Vazgeç</button>
+            <button type="button" class="gde-btn gde-btn--primary" id="gdeSave">Kaydet</button>
+        </div>
+        <div class="gde-msg" id="gdeMsg"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var ID = @itemId;
+    var DISTRICT_ID = @itemDistrictId;
+    var NEIGHBORHOOD_ID = @itemNeighborhoodId;
+    var CITY_ID = @itemCityId;
+    var COUNTRY_ID = @itemCountryId;
+    function csrf() { var t = document.querySelector('input[name="__RequestVerificationToken"]'); return t ? t.value : ''; }
+    var msg = document.getElementById('gdeMsg');
+    var countrySel = document.getElementById('gdeCountry');
+    var citySel = document.getElementById('gdeCity');
+    var districtSel = document.getElementById('gdeDistrict');
+    var ngSel = document.getElementById('gdeNeighborhood');
+
+    function fill(sel, rows, ph, preId) {
+        sel.innerHTML = '<option value="">' + ph + '</option>';
+        (rows || []).forEach(function (x) {
+            var o = document.createElement('option');
+            o.value = x.id; o.textContent = x.name;
+            sel.appendChild(o);
+        });
+        if (preId > 0) sel.value = String(preId);
+        else if ((rows || []).length > 0 && sel === countrySel) sel.value = String(rows[0].id); // Türkiye başta
+    }
+
+    async function loadCountries() {
+        var r = await fetch('/GeneralDefs/CountriesLookup', { credentials: 'same-origin' });
+        fill(countrySel, await r.json(), 'Ülke seçin...', COUNTRY_ID);
+    }
+    async function loadCities() {
+        var cid = parseInt(countrySel.value, 10) || 0;
+        if (!cid) { citySel.innerHTML = '<option value="">Şehir seçin...</option>'; return; }
+        var r = await fetch('/GeneralDefs/CitiesLookup?countryId=' + cid, { credentials: 'same-origin' });
+        fill(citySel, await r.json(), 'Şehir seçin...', CITY_ID);
+    }
+    async function loadDistricts() {
+        var cid = parseInt(citySel.value, 10) || 0;
+        if (!cid) { districtSel.innerHTML = '<option value="">İlçe seçin...</option>'; return; }
+        var r = await fetch('/GeneralDefs/DistrictsLookup?cityId=' + cid, { credentials: 'same-origin' });
+        fill(districtSel, await r.json(), 'İlçe seçin...', DISTRICT_ID);
+    }
+    async function loadNeighborhoods() {
+        var did = parseInt(districtSel.value, 10) || 0;
+        ngSel.innerHTML = '<option value="">İlçe altında (mahalle ile aynı hizada)</option>';
+        if (!did) return;
+        var r = await fetch('/GeneralDefs/NeighborhoodsLookup?districtId=' + did, { credentials: 'same-origin' });
+        var rows = await r.json();
+        (rows || []).forEach(function (x) {
+            var o = document.createElement('option');
+            o.value = x.id; o.textContent = x.name + ' Mah. altında';
+            ngSel.appendChild(o);
+        });
+        if (NEIGHBORHOOD_ID > 0) ngSel.value = String(NEIGHBORHOOD_ID);
+    }
+
+    countrySel.addEventListener('change', async function () { await loadCities(); await loadDistricts(); await loadNeighborhoods(); });
+    citySel.addEventListener('change', async function () { await loadDistricts(); await loadNeighborhoods(); });
+    districtSel.addEventListener('change', loadNeighborhoods);
+
+    document.getElementById('gdeBack').addEventListener('click', function () {
+        window.location.href = '/GeneralDefs/Villages?workspace=1';
+    });
+
+    async function save() {
+        var districtId = parseInt(districtSel.value, 10) || 0;
+        var neighborhoodId = parseInt(ngSel.value, 10) || null;
+        var name = (document.getElementById('gdeName').value || '').trim();
+        if (!districtId && !neighborhoodId) { msg.textContent = 'İlçe veya mahalle seçilmelidir.'; msg.className = 'gde-msg err'; return; }
+        if (!name) { msg.textContent = 'Köy adı boş olamaz.'; msg.className = 'gde-msg err'; return; }
+        try {
+            var r = await fetch('/GeneralDefs/SaveVillage', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: districtId, neighborhoodId: neighborhoodId, name: name }),
+            });
+            var d = await r.json();
+            if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
+            window.location.href = '/GeneralDefs/Villages?workspace=1';
+        } catch (e) { msg.textContent = 'Hata: ' + e.message; msg.className = 'gde-msg err'; }
+    }
+    document.getElementById('gdeSave').addEventListener('click', save);
+    document.getElementById('gdeName').addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+
+    (async function () {
+        try { await loadCountries(); await loadCities(); await loadDistricts(); await loadNeighborhoods(); }
+        catch (e) { msg.textContent = 'Listeler yüklenemedi.'; msg.className = 'gde-msg err'; }
+    })();
+})();
+</script>
+}

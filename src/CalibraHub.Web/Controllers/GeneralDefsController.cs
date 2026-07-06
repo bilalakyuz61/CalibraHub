@@ -8,16 +8,9 @@ namespace CalibraHub.Web.Controllers;
 
 /// <summary>
 /// Genel Tanımlamalar — Üretim Tanımlamaları pattern'i: _GeneralDefsTabs sekme barı +
-/// her sekme bir SmartBoard (C-Grid) listesi. İlk grup: Adres Tanımlama
-/// (Ülkeler / Şehirler / İlçeler).
-///
-///   GET  /GeneralDefs                     → Countries'e redirect
-///   GET  /GeneralDefs/Countries|Cities|Districts        → SmartBoard sayfaları
-///   GET  /GeneralDefs/*BoardConfig                      → in-place refresh JSON
-///   GET  /GeneralDefs/CountryEdit|CityEdit|DistrictEdit → form (yeni/düzenle)
-///   GET  /GeneralDefs/CountriesLookup / CitiesLookup    → edit dropdown'ları
-///   POST /GeneralDefs/SaveCountry|SaveCity|SaveDistrict → kaydet (CSRF, JSON body)
-///   POST /GeneralDefs/DeleteCountryJson?id= (vb.)       → SmartCard sil aksiyonu (CSRF)
+/// her sekme bir SmartBoard (C-Grid) listesi. Adres Tanımlama grubu:
+/// Ülkeler / Şehirler / İlçeler / Mahalleler / Köyler.
+/// Köy hem ilçe altında (mahalle ile aynı hizada) hem mahalle altında tanımlanabilir.
 /// </summary>
 [Authorize]
 [Route("GeneralDefs")]
@@ -59,10 +52,15 @@ public sealed class GeneralDefsController : Controller
             id          = c.Id,
             title       = c.Name,
             subtitle    = c.Code,
+            description = c.ForeignName,
             statusBadge = (object)new { label = "Aktif", color = "emerald" },
             widgets = new object[]
             {
-                new { id = "w_cities", type = "data", dataType = "numeric", label = "Şehir",
+                new { id = "w_code",     type = "data", dataType = "text",    label = "Ülke Kodu",
+                      value = c.Code ?? "—", color = "violet" },
+                new { id = "w_currency", type = "data", dataType = "text",    label = "Para Birimi",
+                      value = c.CurrencyCode ?? "—", detail = c.CurrencyName, color = "amber" },
+                new { id = "w_cities",   type = "data", dataType = "numeric", label = "Şehir",
                       value = c.CityCount.ToString(), detail = "şehir", color = "indigo" },
             },
             primaryAction = new
@@ -88,7 +86,7 @@ public sealed class GeneralDefsController : Controller
             icon              = "Globe",
             iconColor         = "indigo",
             refreshUrl        = "/GeneralDefs/CountriesBoardConfig",
-            searchPlaceholder = "Hızlı ara… (ülke adı)",
+            searchPlaceholder = "Hızlı ara… (ad, kod, yabancı isim)",
             emptyText         = "Henüz ülke tanımlanmamış",
             actions = new object[]
             {
@@ -97,7 +95,9 @@ public sealed class GeneralDefsController : Controller
             },
             masterWidgets = new List<object>
             {
-                new { id = "w_cities", type = "data", dataType = "numeric", label = "Şehir" },
+                new { id = "w_code",     type = "data", dataType = "text",    label = "Ülke Kodu" },
+                new { id = "w_currency", type = "data", dataType = "text",    label = "Para Birimi" },
+                new { id = "w_cities",   type = "data", dataType = "numeric", label = "Şehir" },
             },
             entities,
         };
@@ -131,6 +131,8 @@ public sealed class GeneralDefsController : Controller
             statusBadge = (object)new { label = "Aktif", color = "emerald" },
             widgets = new object[]
             {
+                new { id = "w_plate",     type = "data", dataType = "text",    label = "Plaka",
+                      value = c.PlateCode ?? "—", color = "violet" },
                 new { id = "w_country",   type = "data", dataType = "options", label = "Ülke",
                       value = c.CountryName, color = "blue" },
                 new { id = "w_districts", type = "data", dataType = "numeric", label = "İlçe",
@@ -159,7 +161,7 @@ public sealed class GeneralDefsController : Controller
             icon              = "Building2",
             iconColor         = "blue",
             refreshUrl        = "/GeneralDefs/CitiesBoardConfig",
-            searchPlaceholder = "Hızlı ara… (şehir, ülke)",
+            searchPlaceholder = "Hızlı ara… (şehir, plaka, ülke)",
             emptyText         = "Henüz şehir tanımlanmamış",
             actions = new object[]
             {
@@ -168,6 +170,7 @@ public sealed class GeneralDefsController : Controller
             },
             masterWidgets = new List<object>
             {
+                new { id = "w_plate",     type = "data", dataType = "text",    label = "Plaka" },
                 new { id = "w_country",   type = "data", dataType = "options", label = "Ülke", options = countryOptions },
                 new { id = "w_districts", type = "data", dataType = "numeric", label = "İlçe" },
             },
@@ -248,6 +251,159 @@ public sealed class GeneralDefsController : Controller
     }
 
     // ══════════════════════════════════════════════════════════════════
+    // Mahalleler
+    // ══════════════════════════════════════════════════════════════════
+    [HttpGet("Neighborhoods")]
+    public async Task<IActionResult> Neighborhoods(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildNeighborhoodsBoardConfigAsync(ct);
+        return View();
+    }
+
+    [HttpGet("NeighborhoodsBoardConfig")]
+    public async Task<IActionResult> NeighborhoodsBoardConfig(CancellationToken ct)
+        => Json(await BuildNeighborhoodsBoardConfigAsync(ct));
+
+    private async Task<object> BuildNeighborhoodsBoardConfigAsync(CancellationToken ct)
+    {
+        var rows = await _repo.ListAllNeighborhoodsAsync(ct);
+        var districtOptions = rows.Select(r => r.DistrictName).Distinct().OrderBy(x => x)
+            .Select(x => new { value = x, label = x }).Cast<object>().ToList();
+
+        var entities = rows.Select(n => new
+        {
+            id          = n.Id,
+            title       = n.Name,
+            subtitle    = $"{n.DistrictName} / {n.CityName}",
+            statusBadge = (object)new { label = "Aktif", color = "emerald" },
+            widgets = new object[]
+            {
+                new { id = "w_district", type = "data", dataType = "options", label = "İlçe",
+                      value = n.DistrictName, color = "violet" },
+                new { id = "w_city",     type = "data", dataType = "options", label = "Şehir",
+                      value = n.CityName, color = "blue" },
+                new { id = "w_villages", type = "data", dataType = "numeric", label = "Köy",
+                      value = n.VillageCount.ToString(), detail = "köy", color = "indigo" },
+            },
+            primaryAction = new
+            {
+                label = "Düzenle", icon = "Edit", color = "amber",
+                url = $"/GeneralDefs/NeighborhoodEdit?id={n.Id}",
+                hideButton = true,
+            },
+            secondaryAction = new
+            {
+                label     = "Sil", icon = "Trash2",
+                apiUrl    = $"/GeneralDefs/DeleteNeighborhoodJson?id={n.Id}",
+                apiMethod = "POST",
+                confirm   = $"Bu mahalleyi silmek istediğinize emin misiniz? ({n.Name})",
+            },
+        }).ToArray();
+
+        return new
+        {
+            boardKey          = "generaldefs-neighborhoods",
+            title             = "Mahalle Tanımlamaları",
+            subtitle          = $"{rows.Count} mahalle",
+            icon              = "Home",
+            iconColor         = "emerald",
+            refreshUrl        = "/GeneralDefs/NeighborhoodsBoardConfig",
+            searchPlaceholder = "Hızlı ara… (mahalle, ilçe, şehir)",
+            emptyText         = "Henüz mahalle tanımlanmamış",
+            actions = new object[]
+            {
+                new { id = "new", label = "Yeni Mahalle", icon = "Plus", variant = "primary",
+                      url = "/GeneralDefs/NeighborhoodEdit" },
+            },
+            masterWidgets = new List<object>
+            {
+                new { id = "w_district", type = "data", dataType = "options", label = "İlçe", options = districtOptions },
+                new { id = "w_city",     type = "data", dataType = "options", label = "Şehir" },
+                new { id = "w_villages", type = "data", dataType = "numeric", label = "Köy" },
+            },
+            entities,
+        };
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // Köyler
+    // ══════════════════════════════════════════════════════════════════
+    [HttpGet("Villages")]
+    public async Task<IActionResult> Villages(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildVillagesBoardConfigAsync(ct);
+        return View();
+    }
+
+    [HttpGet("VillagesBoardConfig")]
+    public async Task<IActionResult> VillagesBoardConfig(CancellationToken ct)
+        => Json(await BuildVillagesBoardConfigAsync(ct));
+
+    private async Task<object> BuildVillagesBoardConfigAsync(CancellationToken ct)
+    {
+        var rows = await _repo.ListAllVillagesAsync(ct);
+        var districtOptions = rows.Select(r => r.DistrictName).Distinct().OrderBy(x => x)
+            .Select(x => new { value = x, label = x }).Cast<object>().ToList();
+
+        var entities = rows.Select(v => new
+        {
+            id          = v.Id,
+            title       = v.Name,
+            subtitle    = v.NeighborhoodName is not null
+                ? $"{v.NeighborhoodName} Mah. / {v.DistrictName}"
+                : $"{v.DistrictName} / {v.CityName}",
+            statusBadge = (object)new { label = "Aktif", color = "emerald" },
+            widgets = new object[]
+            {
+                new { id = "w_parent",   type = "data", dataType = "text",    label = "Bağlı Olduğu",
+                      value = v.NeighborhoodName ?? "İlçe (mahalle ile aynı hiza)",
+                      color = v.NeighborhoodName is not null ? "emerald" : "slate" },
+                new { id = "w_district", type = "data", dataType = "options", label = "İlçe",
+                      value = v.DistrictName, color = "violet" },
+                new { id = "w_city",     type = "data", dataType = "options", label = "Şehir",
+                      value = v.CityName, color = "blue" },
+            },
+            primaryAction = new
+            {
+                label = "Düzenle", icon = "Edit", color = "amber",
+                url = $"/GeneralDefs/VillageEdit?id={v.Id}",
+                hideButton = true,
+            },
+            secondaryAction = new
+            {
+                label     = "Sil", icon = "Trash2",
+                apiUrl    = $"/GeneralDefs/DeleteVillageJson?id={v.Id}",
+                apiMethod = "POST",
+                confirm   = $"Bu köyü silmek istediğinize emin misiniz? ({v.Name})",
+            },
+        }).ToArray();
+
+        return new
+        {
+            boardKey          = "generaldefs-villages",
+            title             = "Köy Tanımlamaları",
+            subtitle          = $"{rows.Count} köy",
+            icon              = "Trees",
+            iconColor         = "emerald",
+            refreshUrl        = "/GeneralDefs/VillagesBoardConfig",
+            searchPlaceholder = "Hızlı ara… (köy, mahalle, ilçe, şehir)",
+            emptyText         = "Henüz köy tanımlanmamış",
+            actions = new object[]
+            {
+                new { id = "new", label = "Yeni Köy", icon = "Plus", variant = "primary",
+                      url = "/GeneralDefs/VillageEdit" },
+            },
+            masterWidgets = new List<object>
+            {
+                new { id = "w_parent",   type = "data", dataType = "text",    label = "Bağlı Olduğu" },
+                new { id = "w_district", type = "data", dataType = "options", label = "İlçe", options = districtOptions },
+                new { id = "w_city",     type = "data", dataType = "options", label = "Şehir" },
+            },
+            entities,
+        };
+    }
+
+    // ══════════════════════════════════════════════════════════════════
     // Edit sayfaları
     // ══════════════════════════════════════════════════════════════════
     [HttpGet("CountryEdit")]
@@ -272,8 +428,38 @@ public sealed class GeneralDefsController : Controller
         DistrictDto? item = id is > 0 ? await _repo.GetDistrictAsync(id.Value, ct) : null;
         if (id is > 0 && item is null) return NotFound();
         ViewBag.Item = item;
-        // Cascade ön seçimi için ilçenin şehri üzerinden ülke id'si
         ViewBag.CountryId = item is not null ? (await _repo.GetCityAsync(item.CityId, ct))?.CountryId : null;
+        return View();
+    }
+
+    [HttpGet("NeighborhoodEdit")]
+    public async Task<IActionResult> NeighborhoodEdit(int? id, CancellationToken ct)
+    {
+        NeighborhoodDto? item = id is > 0 ? await _repo.GetNeighborhoodAsync(id.Value, ct) : null;
+        if (id is > 0 && item is null) return NotFound();
+        ViewBag.Item = item;
+        // Cascade ön seçimleri: ilçe → şehir → ülke
+        if (item is not null)
+        {
+            var district = await _repo.GetDistrictAsync(item.DistrictId, ct);
+            ViewBag.CityId = district?.CityId;
+            ViewBag.CountryId = district is not null ? (await _repo.GetCityAsync(district.CityId, ct))?.CountryId : null;
+        }
+        return View();
+    }
+
+    [HttpGet("VillageEdit")]
+    public async Task<IActionResult> VillageEdit(int? id, CancellationToken ct)
+    {
+        VillageDto? item = id is > 0 ? await _repo.GetVillageAsync(id.Value, ct) : null;
+        if (id is > 0 && item is null) return NotFound();
+        ViewBag.Item = item;
+        if (item is not null)
+        {
+            var district = await _repo.GetDistrictAsync(item.DistrictId, ct);
+            ViewBag.CityId = district?.CityId;
+            ViewBag.CountryId = district is not null ? (await _repo.GetCityAsync(district.CityId, ct))?.CountryId : null;
+        }
         return View();
     }
 
@@ -292,14 +478,40 @@ public sealed class GeneralDefsController : Controller
         return Json(rows.Select(c => new { id = c.Id, name = c.Name }));
     }
 
+    [HttpGet("DistrictsLookup")]
+    public async Task<IActionResult> DistrictsLookup(int cityId, CancellationToken ct)
+    {
+        var rows = await _repo.ListDistrictsAsync(cityId, ct);
+        return Json(rows.Select(d => new { id = d.Id, name = d.Name }));
+    }
+
+    [HttpGet("NeighborhoodsLookup")]
+    public async Task<IActionResult> NeighborhoodsLookup(int districtId, CancellationToken ct)
+    {
+        var rows = await _repo.ListNeighborhoodsAsync(districtId, ct);
+        return Json(rows.Select(n => new { id = n.Id, name = n.Name }));
+    }
+
+    [HttpGet("CurrenciesLookup")]
+    public async Task<IActionResult> CurrenciesLookup(CancellationToken ct)
+    {
+        var rows = await _repo.ListCurrenciesLookupAsync(ct);
+        return Json(rows.Select(c => new { id = c.Id, code = c.Code, name = c.Name }));
+    }
+
     // ══════════════════════════════════════════════════════════════════
-    // Kaydet / Sil
+    // Kaydet
     // ══════════════════════════════════════════════════════════════════
     [HttpPost("SaveCountry")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveCountry([FromBody] SaveAddressDefRequest request, CancellationToken ct)
     {
-        try { return Json(new { ok = true, id = await _repo.SaveCountryAsync(request?.Id, request?.Name ?? "", GetUserId(), ct) }); }
+        try
+        {
+            var id = await _repo.SaveCountryAsync(
+                request?.Id, request?.Name ?? "", request?.Code, request?.CurrencyId, request?.ForeignName, GetUserId(), ct);
+            return Json(new { ok = true, id });
+        }
         catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
     }
 
@@ -307,7 +519,12 @@ public sealed class GeneralDefsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveCity([FromBody] SaveAddressDefRequest request, CancellationToken ct)
     {
-        try { return Json(new { ok = true, id = await _repo.SaveCityAsync(request?.Id, request?.ParentId ?? 0, request?.Name ?? "", GetUserId(), ct) }); }
+        try
+        {
+            var id = await _repo.SaveCityAsync(
+                request?.Id, request?.ParentId ?? 0, request?.Name ?? "", request?.PlateCode, GetUserId(), ct);
+            return Json(new { ok = true, id });
+        }
         catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
     }
 
@@ -319,7 +536,31 @@ public sealed class GeneralDefsController : Controller
         catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
     }
 
-    // SmartCard sil aksiyonları — apiUrl query-id pattern'i (DeleteMachineJson benzeri)
+    [HttpPost("SaveNeighborhood")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveNeighborhood([FromBody] SaveAddressDefRequest request, CancellationToken ct)
+    {
+        try { return Json(new { ok = true, id = await _repo.SaveNeighborhoodAsync(request?.Id, request?.ParentId ?? 0, request?.Name ?? "", GetUserId(), ct) }); }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    [HttpPost("SaveVillage")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveVillage([FromBody] SaveAddressDefRequest request, CancellationToken ct)
+    {
+        try
+        {
+            // ParentId = DistrictId; NeighborhoodId doluysa köy mahalle altına bağlanır
+            var id = await _repo.SaveVillageAsync(
+                request?.Id, request?.ParentId ?? 0, request?.NeighborhoodId, request?.Name ?? "", GetUserId(), ct);
+            return Json(new { ok = true, id });
+        }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // SmartCard sil aksiyonları (apiUrl query-id pattern'i)
+    // ══════════════════════════════════════════════════════════════════
     [HttpPost("DeleteCountryJson")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteCountryJson(int id, CancellationToken ct)
@@ -341,6 +582,22 @@ public sealed class GeneralDefsController : Controller
     public async Task<IActionResult> DeleteDistrictJson(int id, CancellationToken ct)
     {
         try { await _repo.DeleteDistrictAsync(id, ct); return Json(new { ok = true }); }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    [HttpPost("DeleteNeighborhoodJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteNeighborhoodJson(int id, CancellationToken ct)
+    {
+        try { await _repo.DeleteNeighborhoodAsync(id, ct); return Json(new { ok = true }); }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    [HttpPost("DeleteVillageJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteVillageJson(int id, CancellationToken ct)
+    {
+        try { await _repo.DeleteVillageAsync(id, ct); return Json(new { ok = true }); }
         catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
     }
 }

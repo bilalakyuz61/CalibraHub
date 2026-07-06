@@ -1,0 +1,88 @@
+﻿@using System.Text.Json
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@{
+    ViewData["Title"] = "Mahalle Tanımlamaları";
+    ViewData["BodyClass"] = "page-gdf-neighborhoods";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = ViewBag.BoardConfig != null
+        ? JsonSerializer.Serialize(ViewBag.BoardConfig, jsonOpts)
+        : "null";
+}
+
+<partial name="_GeneralDefsTabs" model='"neighborhoods"' />
+
+<div id="pdt-tab-content" data-pdt-key="neighborhoods" data-pdt-body-class="page-gdf-neighborhoods">
+<style>
+    .page-gdf-neighborhoods .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-gdf-neighborhoods .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-gdf-neighborhoods .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-gdf-neighborhoods .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+</style>
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+<script>
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) return;
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:#f87171;font-size:14px;gap:12px;">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayı Yenile</button>'
+            + '</div>';
+    }
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard mount fonksiyonu bulunamadı'); return; }
+        try { window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG); }
+        catch (ex) { showError('Mount hatası: ' + (ex.message || ex)); }
+    }
+    function loadCss() {
+        if (document.querySelector('link[data-gdf-sb]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-gdf-sb', '1');
+        document.head.appendChild(link);
+    }
+    function loadScript(cb) {
+        if (document.querySelector('script[data-gdf-sb]')) { cb(); return; }
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL;
+        s.setAttribute('data-gdf-sb', '1');
+        s.onload = function () { setTimeout(cb, 0); };
+        s.onerror = function () { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(s);
+    }
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
+    else loadScript(doMount);
+})();
+</script>
+</div>

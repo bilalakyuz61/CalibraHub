@@ -4,6 +4,9 @@
     ViewData["Title"] = item is null ? "Yeni Ülke" : "Ülke Düzenle";
     var itemId = item?.Id ?? 0;
     var itemName = item?.Name ?? "";
+    var itemCode = item?.Code ?? "";
+    var itemForeignName = item?.ForeignName ?? "";
+    var itemCurrencyId = item?.CurrencyId ?? 0;
 }
 @Html.AntiForgeryToken()
 
@@ -14,11 +17,23 @@
 <div class="gde-wrap">
     <div class="gde-card">
         <div class="gde-title">@(item is null ? "Yeni Ülke" : "Ülke Düzenle")</div>
-        <div class="gde-sub">Ad benzersizdir; kod otomatik türetilir.</div>
+        <div class="gde-sub">Ad benzersizdir; ülke kodu ve para birimi entegrasyonlarda kullanılır.</div>
 
         <div class="gde-row">
             <label class="gde-label" for="gdeName">Ülke Adı</label>
             <input type="text" id="gdeName" class="gde-input" maxlength="100" value="@itemName" placeholder="Örn. Almanya" autofocus />
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeCode">Ülke Kodu</label>
+            <input type="text" id="gdeCode" class="gde-input" maxlength="10" value="@itemCode" placeholder="Örn. DE" style="text-transform:uppercase;max-width:140px;" />
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeForeignName">Yabancı İsmi</label>
+            <input type="text" id="gdeForeignName" class="gde-input" maxlength="100" value="@itemForeignName" placeholder="Örn. Germany" />
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeCurrency">Para Birimi</label>
+            <select id="gdeCurrency" class="gde-select"></select>
         </div>
 
         <div class="gde-actions">
@@ -33,8 +48,25 @@
 <script>
 (function () {
     var ID = @itemId;
+    var CURRENCY_ID = @itemCurrencyId;
     function csrf() { var t = document.querySelector('input[name="__RequestVerificationToken"]'); return t ? t.value : ''; }
     var msg = document.getElementById('gdeMsg');
+    var currencySel = document.getElementById('gdeCurrency');
+
+    async function loadCurrencies() {
+        try {
+            var r = await fetch('/GeneralDefs/CurrenciesLookup', { credentials: 'same-origin' });
+            var rows = await r.json();
+            currencySel.innerHTML = '<option value="">— Seçilmedi —</option>';
+            (rows || []).forEach(function (c) {
+                var o = document.createElement('option');
+                o.value = c.id;
+                o.textContent = c.code + (c.name ? ' — ' + c.name : '');
+                currencySel.appendChild(o);
+            });
+            if (CURRENCY_ID > 0) currencySel.value = String(CURRENCY_ID);
+        } catch (e) { /* para birimi listesi opsiyonel — sessiz geç */ }
+    }
 
     document.getElementById('gdeBack').addEventListener('click', function () {
         window.location.href = '/GeneralDefs/Countries?workspace=1';
@@ -42,12 +74,18 @@
 
     async function save() {
         var name = (document.getElementById('gdeName').value || '').trim();
+        var code = (document.getElementById('gdeCode').value || '').trim();
+        var foreignName = (document.getElementById('gdeForeignName').value || '').trim();
+        var currencyId = parseInt(currencySel.value, 10) || null;
         if (!name) { msg.textContent = 'Ülke adı boş olamaz.'; msg.className = 'gde-msg err'; return; }
         try {
             var r = await fetch('/GeneralDefs/SaveCountry', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
-                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: null, name: name }),
+                body: JSON.stringify({
+                    id: ID > 0 ? ID : null, parentId: null, name: name,
+                    code: code || null, currencyId: currencyId, foreignName: foreignName || null,
+                }),
             });
             var d = await r.json();
             if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
@@ -56,6 +94,8 @@
     }
     document.getElementById('gdeSave').addEventListener('click', save);
     document.getElementById('gdeName').addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+
+    loadCurrencies();
 })();
 </script>
 }

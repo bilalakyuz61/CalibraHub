@@ -8711,12 +8711,14 @@ END;";
     }
 
     /// <summary>
-    /// Adres tanimlamalari (2026-07-06): Country -> City -> District hiyerarsisi.
+    /// Adres tanimlamalari (2026-07-06): Country -> City -> District -> Neighborhood/Village.
     /// Genel Tanimlamalar sayfasindaki "Adres Tanimlama" grubu yonetir; ileride
     /// ContactEdit Il/Ilce alanlari buradan beslenecek (PTT katalogu yerine).
-    /// Kod alani kullanicidan alinmaz (CLAUDE.md) — Name uniqueness hiyerarsik:
-    /// Country global, City (CountryId+Name), District (CityId+Name).
-    /// Turkiye idempotent seed edilir (Code='TR').
+    /// Ulke kodu KULLANICI girisli (acik talep — CLAUDE.md kod-girilmez kuralinin
+    /// bilinçli istisnasi); CurrencyId Currency tablosuna FK; ForeignName uluslararasi ad.
+    /// City.PlateCode il plaka kodu. Koy (Village): DistrictId zorunlu, NeighborhoodId
+    /// opsiyonel — koy hem ilce altinda mahalle ile ayni hizada hem mahalle altinda olabilir.
+    /// Name uniqueness hiyerarsik. Turkiye idempotent seed edilir (Code='TR').
     /// </summary>
     private async Task EnsureAddressDefinitionTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
@@ -8729,6 +8731,8 @@ END;";
                     [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Country] PRIMARY KEY,
                     [Code]        NVARCHAR(10)  NULL,
                     [Name]        NVARCHAR(100) NOT NULL,
+                    [ForeignName] NVARCHAR(100) NULL,
+                    [CurrencyId]  INT           NULL,
                     [IsActive]    BIT           NOT NULL CONSTRAINT [DF_Country_IsActive] DEFAULT(1),
                     [CreatedById] INT           NULL,
                     [Created]     DATETIME      NOT NULL CONSTRAINT [DF_Country_Created] DEFAULT SYSUTCDATETIME(),
@@ -8738,6 +8742,14 @@ END;";
                 CREATE UNIQUE INDEX [UX_Country_Name] ON [{s}].[Country]([Name]);
             END;
 
+            -- Migration: ForeignName + CurrencyId (ilk kurulumdan sonra eklendi — 2026-07-06)
+            IF OBJECT_ID(N'[{s}].[Country]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.Country', N'ForeignName') IS NULL
+                ALTER TABLE [{s}].[Country] ADD [ForeignName] NVARCHAR(100) NULL;
+            IF OBJECT_ID(N'[{s}].[Country]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.Country', N'CurrencyId') IS NULL
+                ALTER TABLE [{s}].[Country] ADD [CurrencyId] INT NULL;
+
             IF OBJECT_ID(N'[{s}].[City]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[City]
@@ -8746,6 +8758,7 @@ END;";
                     [CountryId]   INT           NOT NULL,
                     [Code]        NVARCHAR(50)  NULL,
                     [Name]        NVARCHAR(100) NOT NULL,
+                    [PlateCode]   NVARCHAR(10)  NULL,
                     [IsActive]    BIT           NOT NULL CONSTRAINT [DF_City_IsActive] DEFAULT(1),
                     [CreatedById] INT           NULL,
                     [Created]     DATETIME      NOT NULL CONSTRAINT [DF_City_Created] DEFAULT SYSUTCDATETIME(),
@@ -8756,6 +8769,11 @@ END;";
                 CREATE UNIQUE INDEX [UX_City_Country_Name] ON [{s}].[City]([CountryId], [Name]);
                 CREATE INDEX [IX_City_Country] ON [{s}].[City]([CountryId]);
             END;
+
+            -- Migration: PlateCode (2026-07-06)
+            IF OBJECT_ID(N'[{s}].[City]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.City', N'PlateCode') IS NULL
+                ALTER TABLE [{s}].[City] ADD [PlateCode] NVARCHAR(10) NULL;
 
             IF OBJECT_ID(N'[{s}].[District]', N'U') IS NULL
             BEGIN
@@ -8776,9 +8794,56 @@ END;";
                 CREATE INDEX [IX_District_City] ON [{s}].[District]([CityId]);
             END;
 
+            -- ── Neighborhood: mahalle (ilce altinda) ─────────────────────────
+            IF OBJECT_ID(N'[{s}].[Neighborhood]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[Neighborhood]
+                (
+                    [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Neighborhood] PRIMARY KEY,
+                    [DistrictId]  INT           NOT NULL,
+                    [Code]        NVARCHAR(50)  NULL,
+                    [Name]        NVARCHAR(150) NOT NULL,
+                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_Neighborhood_IsActive] DEFAULT(1),
+                    [CreatedById] INT           NULL,
+                    [Created]     DATETIME      NOT NULL CONSTRAINT [DF_Neighborhood_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT           NULL,
+                    [Updated]     DATETIME      NULL,
+                    CONSTRAINT [FK_Neighborhood_District] FOREIGN KEY ([DistrictId]) REFERENCES [{s}].[District]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_Neighborhood_District_Name] ON [{s}].[Neighborhood]([DistrictId], [Name]);
+                CREATE INDEX [IX_Neighborhood_District] ON [{s}].[Neighborhood]([DistrictId]);
+            END;
+
+            -- ── Village: koy — DistrictId zorunlu; NeighborhoodId doluysa mahalle
+            --    altinda, bos ise ilce altinda (mahalle ile ayni hizada) ──────
+            IF OBJECT_ID(N'[{s}].[Village]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[Village]
+                (
+                    [Id]             INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Village] PRIMARY KEY,
+                    [DistrictId]     INT           NOT NULL,
+                    [NeighborhoodId] INT           NULL,
+                    [Code]           NVARCHAR(50)  NULL,
+                    [Name]           NVARCHAR(150) NOT NULL,
+                    [IsActive]       BIT           NOT NULL CONSTRAINT [DF_Village_IsActive] DEFAULT(1),
+                    [CreatedById]    INT           NULL,
+                    [Created]        DATETIME      NOT NULL CONSTRAINT [DF_Village_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]    INT           NULL,
+                    [Updated]        DATETIME      NULL,
+                    CONSTRAINT [FK_Village_District] FOREIGN KEY ([DistrictId]) REFERENCES [{s}].[District]([Id]),
+                    CONSTRAINT [FK_Village_Neighborhood] FOREIGN KEY ([NeighborhoodId]) REFERENCES [{s}].[Neighborhood]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_Village_District_Name] ON [{s}].[Village]([DistrictId], [Name])
+                    WHERE [NeighborhoodId] IS NULL;
+                CREATE UNIQUE INDEX [UX_Village_Neighborhood_Name] ON [{s}].[Village]([NeighborhoodId], [Name])
+                    WHERE [NeighborhoodId] IS NOT NULL;
+                CREATE INDEX [IX_Village_District] ON [{s}].[Village]([DistrictId]);
+                CREATE INDEX [IX_Village_Neighborhood] ON [{s}].[Village]([NeighborhoodId]) WHERE [NeighborhoodId] IS NOT NULL;
+            END;
+
             -- Seed: Türkiye (idempotent)
             IF NOT EXISTS (SELECT 1 FROM [{s}].[Country] WHERE [Name] = N'Türkiye')
-                INSERT INTO [{s}].[Country] ([Code],[Name]) VALUES (N'TR', N'Türkiye');
+                INSERT INTO [{s}].[Country] ([Code],[Name],[ForeignName]) VALUES (N'TR', N'Türkiye', N'Turkey');
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;

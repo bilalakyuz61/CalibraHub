@@ -5,6 +5,7 @@
     var itemId = item?.Id ?? 0;
     var itemName = item?.Name ?? "";
     var itemCountryId = item?.CountryId ?? 0;
+    var itemPlateCode = item?.PlateCode ?? "";
 }
 @Html.AntiForgeryToken()
 
@@ -24,6 +25,10 @@
         <div class="gde-row">
             <label class="gde-label" for="gdeName">Şehir Adı</label>
             <input type="text" id="gdeName" class="gde-input" maxlength="100" value="@itemName" placeholder="Örn. Trabzon" />
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdePlate">Plaka Kodu</label>
+            <input type="text" id="gdePlate" class="gde-input" maxlength="10" value="@itemPlateCode" placeholder="Örn. 61" style="max-width:140px;" />
         </div>
 
         <div class="gde-actions">
@@ -66,13 +71,14 @@
     async function save() {
         var countryId = parseInt(countrySel.value, 10) || 0;
         var name = (document.getElementById('gdeName').value || '').trim();
+        var plate = (document.getElementById('gdePlate').value || '').trim();
         if (!countryId) { msg.textContent = 'Ülke seçilmelidir.'; msg.className = 'gde-msg err'; return; }
         if (!name) { msg.textContent = 'Şehir adı boş olamaz.'; msg.className = 'gde-msg err'; return; }
         try {
             var r = await fetch('/GeneralDefs/SaveCity', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
-                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: countryId, name: name }),
+                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: countryId, name: name, plateCode: plate || null }),
             });
             var d = await r.json();
             if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
