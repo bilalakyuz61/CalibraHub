@@ -1,13 +1,13 @@
 @*
-   Genel Tanımlamalar sekme barı — _ProductionDefsTabs (pdt-tabs) pattern'i birebir.
-   2026-07-06: Adres Tanımlama grubu — Ülkeler / Şehirler / İlçeler ekranları tek
-   kavramsal "Genel Tanımlamalar" altında sekmeyle gezilir. İleride yeni genel
-   tanım grupları buraya sekme olarak eklenir.
+   Genel Tanımlamalar sekme barı — iki katman:
+     1) Grup sekmeleri (tabsheet): "Adres Tanımlamaları" (ileride yeni gruplar buraya eklenir)
+     2) Alt sekmeler: seçili grubun ekranları (Ülkeler / Şehirler / İlçeler / Mahalleler / Köyler)
 
    Her view üst kısma çağırır:
        <partial name="_GeneralDefsTabs" model='"countries"' />
-   model = aktif tab key. pdt-* class + data attribute'ları korunur — mevcut
-   PJAX (production-defs-pjax.js) aynı mekanizmayla bu sekmelerde de çalışır.
+   model = aktif alt-sekme key. Tüm adres alt sekmeleri "Adres Tanımlamaları"
+   grubuna aittir; grup sekmesi bu sayfalarda hep aktiftir. pdt-* data
+   attribute'ları korunur — mevcut PJAX mekanizması alt sekmelerde çalışır.
 *@
 @model string
 
@@ -44,9 +44,61 @@
     body.app-theme-dark .pdt-tab.active { color: #a5b4fc; border-bottom-color: #a5b4fc; }
     body.app-theme-dark .pdt-tab:hover  { color: #a5b4fc; }
     .pdt-tab svg { opacity: 0.85; }
+
+    /* ── Grup katmanı (tabsheet) — üst seviye, daha belirgin ── */
+    .gdt-groups {
+        display: flex; gap: 4px; padding: 8px 16px 0;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        flex-shrink: 0;
+    }
+    .gdt-group-tab {
+        padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+        text-decoration: none;
+        display: inline-flex; align-items: center; gap: 8px;
+        color: rgba(148, 163, 184, 0.85);
+        border: 1px solid transparent; border-bottom: none;
+        border-radius: 10px 10px 0 0;
+        margin-bottom: -1px;
+        transition: color .12s, background .12s, border-color .12s;
+    }
+    .gdt-group-tab:hover { color: #6366f1; }
+    .gdt-group-tab.active {
+        color: #6366f1;
+        background: rgba(99, 102, 241, 0.06);
+        border-color: rgba(148, 163, 184, 0.25);
+        border-bottom: 1px solid transparent;
+    }
+    body.app-theme-dark .gdt-group-tab.active {
+        color: #a5b4fc;
+        background: rgba(99, 102, 241, 0.10);
+        border-color: rgba(255, 255, 255, 0.10);
+    }
+    body.app-theme-dark .gdt-group-tab:hover { color: #a5b4fc; }
+    .gdt-group-tab svg { opacity: 0.85; }
+
+    /* Alt sekme barı grup içinde — hafif zemin tonu, girinti */
+    .pdt-tabs--sub {
+        padding-left: 24px;
+        background: rgba(99, 102, 241, 0.03);
+    }
+    body.app-theme-dark .pdt-tabs--sub { background: rgba(99, 102, 241, 0.05); }
+    .pdt-tabs--sub .pdt-tab { padding: 8px 14px; font-size: 12.5px; }
 </style>
 
-<div class="pdt-tabs" data-pdt-tabbar="1">
+@* 1. katman — grup sekmeleri (tabsheet). İleride yeni grup: buraya bir
+   .gdt-group-tab + kendi alt sekme barı eklenir. *@
+<div class="gdt-groups">
+    <a href="/GeneralDefs/Countries" class="gdt-group-tab active" data-workspace-ignore>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/>
+            <circle cx="12" cy="10" r="3"/>
+        </svg>
+        Adres Tanımlamaları
+    </a>
+</div>
+
+@* 2. katman — seçili grubun alt sekmeleri *@
+<div class="pdt-tabs pdt-tabs--sub" data-pdt-tabbar="1">
     <a href="/GeneralDefs/Countries" class="@TabClass("countries")" data-pdt-tab="countries" data-pdt-body-class="page-gdf-countries" data-workspace-ignore>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
