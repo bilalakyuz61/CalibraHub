@@ -8841,9 +8841,12 @@ END;";
                 CREATE INDEX [IX_Village_Neighborhood] ON [{s}].[Village]([NeighborhoodId]) WHERE [NeighborhoodId] IS NOT NULL;
             END;
 
-            -- Seed: Türkiye (idempotent)
+            -- Seed: Türkiye (idempotent). Deferred EXEC: ForeignName kolonu aynı batch'te
+            -- ALTER ile eklendiğinden düz INSERT parse-time 207 verir (BridgeMsgId dersi).
             IF NOT EXISTS (SELECT 1 FROM [{s}].[Country] WHERE [Name] = N'Türkiye')
-                INSERT INTO [{s}].[Country] ([Code],[Name],[ForeignName]) VALUES (N'TR', N'Türkiye', N'Turkey');
+                EXEC(N'INSERT INTO [{s}].[Country] ([Code],[Name],[ForeignName]) VALUES (N''TR'', N''Türkiye'', N''Turkey'');');
+            -- Mevcut Türkiye kaydına ForeignName doldur (kolon yeni eklendiyse)
+            EXEC(N'UPDATE [{s}].[Country] SET [ForeignName] = N''Turkey'' WHERE [Name] = N''Türkiye'' AND [ForeignName] IS NULL;');
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
