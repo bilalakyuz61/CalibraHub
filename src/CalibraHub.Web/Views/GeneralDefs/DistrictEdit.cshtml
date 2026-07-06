@@ -1,0 +1,111 @@
+@using CalibraHub.Application.Contracts
+@{
+    var item = ViewBag.Item as DistrictDto;
+    ViewData["Title"] = item is null ? "Yeni İlçe" : "İlçe Düzenle";
+    var itemId = item?.Id ?? 0;
+    var itemName = item?.Name ?? "";
+    var itemCityId = item?.CityId ?? 0;
+    var itemCountryId = (int?)(ViewBag.CountryId) ?? 0;
+}
+@Html.AntiForgeryToken()
+
+<partial name="_GeneralDefsTabs" model='"districts"' />
+
+<partial name="_GeneralDefsEditStyles" />
+
+<div class="gde-wrap">
+    <div class="gde-card">
+        <div class="gde-title">@(item is null ? "Yeni İlçe" : "İlçe Düzenle")</div>
+        <div class="gde-sub">Ad, seçili şehir içinde benzersizdir.</div>
+
+        <div class="gde-row">
+            <label class="gde-label" for="gdeCountry">Ülke</label>
+            <select id="gdeCountry" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeCity">Şehir</label>
+            <select id="gdeCity" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeName">İlçe Adı</label>
+            <input type="text" id="gdeName" class="gde-input" maxlength="100" value="@itemName" placeholder="Örn. Ortahisar" />
+        </div>
+
+        <div class="gde-actions">
+            <button type="button" class="gde-btn gde-btn--ghost" id="gdeBack">Vazgeç</button>
+            <button type="button" class="gde-btn gde-btn--primary" id="gdeSave">Kaydet</button>
+        </div>
+        <div class="gde-msg" id="gdeMsg"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var ID = @itemId;
+    var CITY_ID = @itemCityId;
+    var COUNTRY_ID = @itemCountryId;
+    function csrf() { var t = document.querySelector('input[name="__RequestVerificationToken"]'); return t ? t.value : ''; }
+    var msg = document.getElementById('gdeMsg');
+    var countrySel = document.getElementById('gdeCountry');
+    var citySel = document.getElementById('gdeCity');
+
+    async function loadCountries() {
+        var r = await fetch('/GeneralDefs/CountriesLookup', { credentials: 'same-origin' });
+        var rows = await r.json();
+        countrySel.innerHTML = '<option value="">Ülke seçin...</option>';
+        (rows || []).forEach(function (c) {
+            var o = document.createElement('option');
+            o.value = c.id; o.textContent = c.name;
+            countrySel.appendChild(o);
+        });
+        if (COUNTRY_ID > 0) countrySel.value = String(COUNTRY_ID);
+        else if ((rows || []).length > 0) countrySel.value = String(rows[0].id); // Türkiye başta
+    }
+
+    async function loadCities() {
+        var countryId = parseInt(countrySel.value, 10) || 0;
+        citySel.innerHTML = '<option value="">Şehir seçin...</option>';
+        if (!countryId) return;
+        var r = await fetch('/GeneralDefs/CitiesLookup?countryId=' + countryId, { credentials: 'same-origin' });
+        var rows = await r.json();
+        (rows || []).forEach(function (c) {
+            var o = document.createElement('option');
+            o.value = c.id; o.textContent = c.name;
+            citySel.appendChild(o);
+        });
+        if (CITY_ID > 0) citySel.value = String(CITY_ID);
+    }
+
+    countrySel.addEventListener('change', loadCities);
+
+    document.getElementById('gdeBack').addEventListener('click', function () {
+        window.location.href = '/GeneralDefs/Districts?workspace=1';
+    });
+
+    async function save() {
+        var cityId = parseInt(citySel.value, 10) || 0;
+        var name = (document.getElementById('gdeName').value || '').trim();
+        if (!cityId) { msg.textContent = 'Şehir seçilmelidir.'; msg.className = 'gde-msg err'; return; }
+        if (!name) { msg.textContent = 'İlçe adı boş olamaz.'; msg.className = 'gde-msg err'; return; }
+        try {
+            var r = await fetch('/GeneralDefs/SaveDistrict', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: cityId, name: name }),
+            });
+            var d = await r.json();
+            if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
+            window.location.href = '/GeneralDefs/Districts?workspace=1';
+        } catch (e) { msg.textContent = 'Hata: ' + e.message; msg.className = 'gde-msg err'; }
+    }
+    document.getElementById('gdeSave').addEventListener('click', save);
+    document.getElementById('gdeName').addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+
+    (async function () {
+        try { await loadCountries(); await loadCities(); }
+        catch (e) { msg.textContent = 'Listeler yüklenemedi.'; msg.className = 'gde-msg err'; }
+    })();
+})();
+</script>
+}

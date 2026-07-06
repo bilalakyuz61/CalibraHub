@@ -1,0 +1,42 @@
+@* Genel Tanımlamalar edit sayfaları ortak stil — tema token'lı kompakt form kartı. *@
+<style>
+    html body {
+        --gde-surface: #ffffff;
+        --gde-border: #e2e8f0;
+        --gde-text: #0f172a;
+        --gde-muted: #64748b;
+    }
+    body.app-theme-dark {
+        --gde-surface: #0f172a;
+        --gde-border: rgba(255,255,255,.08);
+        --gde-text: #e2e8f0;
+        --gde-muted: #94a3b8;
+    }
+    .gde-wrap { padding: 26px 16px; display: flex; justify-content: center; }
+    .gde-card {
+        width: min(480px, 94vw); border-radius: 14px; padding: 22px;
+        background: var(--gde-surface); border: 1px solid var(--gde-border);
+        box-shadow: 0 8px 30px rgba(15,23,42,.08);
+    }
+    body.app-theme-dark .gde-card { box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+    .gde-title { font-size: .98rem; font-weight: 700; color: var(--gde-text); }
+    .gde-sub { font-size: .76rem; color: var(--gde-muted); margin: 3px 0 16px; }
+    .gde-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .gde-label { font-size: .76rem; font-weight: 600; color: var(--gde-muted); }
+    .gde-input, .gde-select {
+        padding: 8px 11px; border-radius: 9px; font-size: .86rem;
+        border: 1px solid var(--gde-border); background: var(--gde-surface); color: var(--gde-text);
+    }
+    .gde-input:focus, .gde-select:focus { outline: none; border-color: #818cf8; }
+    .gde-actions { display: flex; gap: 10px; margin-top: 6px; }
+    .gde-btn {
+        flex: 1; padding: 9px 14px; border-radius: 9px; font-size: .84rem; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+    }
+    .gde-btn--primary { background: #6366f1; color: #fff; }
+    .gde-btn--primary:hover { background: #4f46e5; }
+    .gde-btn--ghost { background: transparent; color: var(--gde-text); border-color: var(--gde-border); }
+    .gde-btn--ghost:hover { border-color: #818cf8; color: #6366f1; }
+    .gde-msg { margin-top: 10px; font-size: .78rem; min-height: 18px; }
+    .gde-msg.err { color: #ef4444; }
+</style>

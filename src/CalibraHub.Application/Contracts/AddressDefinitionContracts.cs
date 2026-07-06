@@ -12,3 +12,9 @@ public sealed record DistrictDto(int Id, int CityId, string? Code, string Name, 
 /// <summary>Ülke/Şehir/İlçe ortak kaydetme isteği — Id null/0 ise yeni kayıt.
 /// ParentId: City için CountryId, District için CityId; Country'de kullanılmaz.</summary>
 public sealed record SaveAddressDefRequest(int? Id, int? ParentId, string Name);
+
+/// <summary>Şehir board satırı — ülke adı + ilçe sayısıyla (tüm şehirler listesi).</summary>
+public sealed record CityListDto(int Id, int CountryId, string CountryName, string Name, int DistrictCount);
+
+/// <summary>İlçe board satırı — şehir + ülke adlarıyla (tüm ilçeler listesi).</summary>
+public sealed record DistrictListDto(int Id, int CityId, string CityName, string CountryName, string Name);

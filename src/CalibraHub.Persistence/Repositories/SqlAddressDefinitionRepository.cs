@@ -254,4 +254,87 @@ public sealed class SqlAddressDefinitionRepository : IAddressDefinitionRepositor
         cmd.Parameters.AddWithValue("@Id", id);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    // ── SmartBoard listeleri + edit tekil fetch'leri ─────────────────────
+    public async Task<CountryDto?> GetCountryAsync(int id, CancellationToken ct)
+    {
+        await using var conn = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT c.[Id], c.[Code], c.[Name], c.[IsActive],
+                   (SELECT COUNT(*) FROM {_city} s WHERE s.[CountryId] = c.[Id]) AS CityCount
+            FROM {_country} c WHERE c.[Id]=@Id;
+            """;
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct)
+            ? new CountryDto(r.GetInt32(0), r.IsDBNull(1) ? null : r.GetString(1), r.GetString(2), r.GetBoolean(3), r.GetInt32(4))
+            : null;
+    }
+
+    public async Task<CityDto?> GetCityAsync(int id, CancellationToken ct)
+    {
+        await using var conn = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT c.[Id], c.[CountryId], c.[Code], c.[Name], c.[IsActive],
+                   (SELECT COUNT(*) FROM {_district} d WHERE d.[CityId] = c.[Id]) AS DistrictCount
+            FROM {_city} c WHERE c.[Id]=@Id;
+            """;
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct)
+            ? new CityDto(r.GetInt32(0), r.GetInt32(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetString(3), r.GetBoolean(4), r.GetInt32(5))
+            : null;
+    }
+
+    public async Task<DistrictDto?> GetDistrictAsync(int id, CancellationToken ct)
+    {
+        await using var conn = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT [Id],[CityId],[Code],[Name],[IsActive] FROM {_district} WHERE [Id]=@Id;";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct)
+            ? new DistrictDto(r.GetInt32(0), r.GetInt32(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetString(3), r.GetBoolean(4))
+            : null;
+    }
+
+    public async Task<IReadOnlyList<CityListDto>> ListAllCitiesAsync(CancellationToken ct)
+    {
+        await using var conn = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT c.[Id], c.[CountryId], co.[Name] AS CountryName, c.[Name],
+                   (SELECT COUNT(*) FROM {_district} d WHERE d.[CityId] = c.[Id]) AS DistrictCount
+            FROM {_city} c
+            INNER JOIN {_country} co ON co.[Id] = c.[CountryId]
+            WHERE c.[IsActive] = 1
+            ORDER BY co.[Name], c.[Name];
+            """;
+        var list = new List<CityListDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            list.Add(new CityListDto(r.GetInt32(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetInt32(4)));
+        return list;
+    }
+
+    public async Task<IReadOnlyList<DistrictListDto>> ListAllDistrictsAsync(CancellationToken ct)
+    {
+        await using var conn = await _factory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT d.[Id], d.[CityId], c.[Name] AS CityName, co.[Name] AS CountryName, d.[Name]
+            FROM {_district} d
+            INNER JOIN {_city} c ON c.[Id] = d.[CityId]
+            INNER JOIN {_country} co ON co.[Id] = c.[CountryId]
+            WHERE d.[IsActive] = 1
+            ORDER BY co.[Name], c.[Name], d.[Name];
+            """;
+        var list = new List<DistrictListDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            list.Add(new DistrictListDto(r.GetInt32(0), r.GetInt32(1), r.GetString(2), r.GetString(3), r.GetString(4)));
+        return list;
+    }
 }

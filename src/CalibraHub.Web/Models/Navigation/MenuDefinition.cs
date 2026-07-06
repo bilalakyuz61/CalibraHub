@@ -227,8 +227,8 @@ public static class MenuDefinition
             // ────────────── 7. Tanımlamalar / Definitions ──────────────
             new("generaldefs", isEn ? "Definitions" : "Tanımlamalar", "Settings2", null, new List<MenuNode>
             {
-                new("gendef.general",     isEn ? "General Definitions"    : "Genel Tanımlamalar",      "BookOpen",    "/GeneralDefs", null,
-                    PermissionFormCode: FormCodes.GeneralDefs),
+                new("gendef.general",     isEn ? "General Definitions"    : "Genel Tanımlamalar",      "BookOpen",    "/GeneralDefs/Countries", null,
+                    MatchPath: "/GeneralDefs", PermissionFormCode: FormCodes.GeneralDefs),
                 new("gendef.salesreps",   isEn ? "Sales Representatives"  : "Satış Temsilcileri",      "UserCircle",  "/GeneralDefinitions/SalesRepresentatives", null,
                     PermissionFormCode: FormCodes.SalesReps),
                 new("gendef.currencies",  isEn ? "Currency Definitions"   : "Döviz Tanımlamaları",     "DollarSign",  "/GeneralDefinitions/Currencies",           null,

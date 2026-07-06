@@ -1,0 +1,61 @@
+@using CalibraHub.Application.Contracts
+@{
+    var item = ViewBag.Item as CountryDto;
+    ViewData["Title"] = item is null ? "Yeni Ülke" : "Ülke Düzenle";
+    var itemId = item?.Id ?? 0;
+    var itemName = item?.Name ?? "";
+}
+@Html.AntiForgeryToken()
+
+<partial name="_GeneralDefsTabs" model='"countries"' />
+
+<partial name="_GeneralDefsEditStyles" />
+
+<div class="gde-wrap">
+    <div class="gde-card">
+        <div class="gde-title">@(item is null ? "Yeni Ülke" : "Ülke Düzenle")</div>
+        <div class="gde-sub">Ad benzersizdir; kod otomatik türetilir.</div>
+
+        <div class="gde-row">
+            <label class="gde-label" for="gdeName">Ülke Adı</label>
+            <input type="text" id="gdeName" class="gde-input" maxlength="100" value="@itemName" placeholder="Örn. Almanya" autofocus />
+        </div>
+
+        <div class="gde-actions">
+            <button type="button" class="gde-btn gde-btn--ghost" id="gdeBack">Vazgeç</button>
+            <button type="button" class="gde-btn gde-btn--primary" id="gdeSave">Kaydet</button>
+        </div>
+        <div class="gde-msg" id="gdeMsg"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var ID = @itemId;
+    function csrf() { var t = document.querySelector('input[name="__RequestVerificationToken"]'); return t ? t.value : ''; }
+    var msg = document.getElementById('gdeMsg');
+
+    document.getElementById('gdeBack').addEventListener('click', function () {
+        window.location.href = '/GeneralDefs/Countries?workspace=1';
+    });
+
+    async function save() {
+        var name = (document.getElementById('gdeName').value || '').trim();
+        if (!name) { msg.textContent = 'Ülke adı boş olamaz.'; msg.className = 'gde-msg err'; return; }
+        try {
+            var r = await fetch('/GeneralDefs/SaveCountry', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: null, name: name }),
+            });
+            var d = await r.json();
+            if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
+            window.location.href = '/GeneralDefs/Countries?workspace=1';
+        } catch (e) { msg.textContent = 'Hata: ' + e.message; msg.className = 'gde-msg err'; }
+    }
+    document.getElementById('gdeSave').addEventListener('click', save);
+    document.getElementById('gdeName').addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+})();
+</script>
+}

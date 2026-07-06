@@ -1,0 +1,88 @@
+@using CalibraHub.Application.Contracts
+@{
+    var item = ViewBag.Item as CityDto;
+    ViewData["Title"] = item is null ? "Yeni Şehir" : "Şehir Düzenle";
+    var itemId = item?.Id ?? 0;
+    var itemName = item?.Name ?? "";
+    var itemCountryId = item?.CountryId ?? 0;
+}
+@Html.AntiForgeryToken()
+
+<partial name="_GeneralDefsTabs" model='"cities"' />
+
+<partial name="_GeneralDefsEditStyles" />
+
+<div class="gde-wrap">
+    <div class="gde-card">
+        <div class="gde-title">@(item is null ? "Yeni Şehir" : "Şehir Düzenle")</div>
+        <div class="gde-sub">Ad, seçili ülke içinde benzersizdir.</div>
+
+        <div class="gde-row">
+            <label class="gde-label" for="gdeCountry">Ülke</label>
+            <select id="gdeCountry" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeName">Şehir Adı</label>
+            <input type="text" id="gdeName" class="gde-input" maxlength="100" value="@itemName" placeholder="Örn. Trabzon" />
+        </div>
+
+        <div class="gde-actions">
+            <button type="button" class="gde-btn gde-btn--ghost" id="gdeBack">Vazgeç</button>
+            <button type="button" class="gde-btn gde-btn--primary" id="gdeSave">Kaydet</button>
+        </div>
+        <div class="gde-msg" id="gdeMsg"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var ID = @itemId;
+    var COUNTRY_ID = @itemCountryId;
+    function csrf() { var t = document.querySelector('input[name="__RequestVerificationToken"]'); return t ? t.value : ''; }
+    var msg = document.getElementById('gdeMsg');
+    var countrySel = document.getElementById('gdeCountry');
+
+    async function loadCountries() {
+        try {
+            var r = await fetch('/GeneralDefs/CountriesLookup', { credentials: 'same-origin' });
+            var rows = await r.json();
+            countrySel.innerHTML = '<option value="">Ülke seçin...</option>';
+            (rows || []).forEach(function (c) {
+                var o = document.createElement('option');
+                o.value = c.id; o.textContent = c.name;
+                countrySel.appendChild(o);
+            });
+            if (COUNTRY_ID > 0) countrySel.value = String(COUNTRY_ID);
+            else if ((rows || []).length === 1) countrySel.value = String(rows[0].id);
+            else if ((rows || []).length > 0) countrySel.value = String(rows[0].id); // Türkiye listenin başında
+        } catch (e) { msg.textContent = 'Ülke listesi yüklenemedi.'; msg.className = 'gde-msg err'; }
+    }
+
+    document.getElementById('gdeBack').addEventListener('click', function () {
+        window.location.href = '/GeneralDefs/Cities?workspace=1';
+    });
+
+    async function save() {
+        var countryId = parseInt(countrySel.value, 10) || 0;
+        var name = (document.getElementById('gdeName').value || '').trim();
+        if (!countryId) { msg.textContent = 'Ülke seçilmelidir.'; msg.className = 'gde-msg err'; return; }
+        if (!name) { msg.textContent = 'Şehir adı boş olamaz.'; msg.className = 'gde-msg err'; return; }
+        try {
+            var r = await fetch('/GeneralDefs/SaveCity', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: countryId, name: name }),
+            });
+            var d = await r.json();
+            if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
+            window.location.href = '/GeneralDefs/Cities?workspace=1';
+        } catch (e) { msg.textContent = 'Hata: ' + e.message; msg.className = 'gde-msg err'; }
+    }
+    document.getElementById('gdeSave').addEventListener('click', save);
+    document.getElementById('gdeName').addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+
+    loadCountries();
+})();
+</script>
+}

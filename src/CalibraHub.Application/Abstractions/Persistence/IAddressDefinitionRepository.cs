@@ -20,4 +20,15 @@ public interface IAddressDefinitionRepository
     Task<IReadOnlyList<DistrictDto>> ListDistrictsAsync(int cityId, CancellationToken ct);
     Task<int> SaveDistrictAsync(int? id, int cityId, string name, int? userId, CancellationToken ct);
     Task DeleteDistrictAsync(int id, CancellationToken ct);
+
+    // ── SmartBoard listeleri + edit sayfası tekil fetch'leri (2026-07-06) ──
+    Task<CountryDto?> GetCountryAsync(int id, CancellationToken ct);
+    Task<CityDto?> GetCityAsync(int id, CancellationToken ct);
+    Task<DistrictDto?> GetDistrictAsync(int id, CancellationToken ct);
+
+    /// <summary>Tüm şehirler — ülke adı + ilçe sayısıyla (board listesi).</summary>
+    Task<IReadOnlyList<CityListDto>> ListAllCitiesAsync(CancellationToken ct);
+
+    /// <summary>Tüm ilçeler — şehir + ülke adlarıyla (board listesi).</summary>
+    Task<IReadOnlyList<DistrictListDto>> ListAllDistrictsAsync(CancellationToken ct);
 }
