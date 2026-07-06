@@ -1,4 +1,4 @@
-@using CalibraHub.Application.Contracts
+﻿@using CalibraHub.Application.Contracts
 @{
     var item = ViewBag.Item as VillageDto;
     ViewData["Title"] = item is null ? "Yeni Köy" : "Köy Düzenle";
@@ -11,7 +11,7 @@
 }
 @Html.AntiForgeryToken()
 
-<partial name="_GeneralDefsTabs" model='"villages"' />
+<partial name="_GeneralDefsTabs" model='"localities"' />
 
 <partial name="_GeneralDefsEditStyles" />
 
@@ -110,7 +110,7 @@
     districtSel.addEventListener('change', loadNeighborhoods);
 
     document.getElementById('gdeBack').addEventListener('click', function () {
-        window.location.href = '/GeneralDefs/Villages?workspace=1';
+        window.location.href = '/GeneralDefs/Localities?workspace=1';
     });
 
     async function save() {
@@ -127,7 +127,7 @@
             });
             var d = await r.json();
             if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
-            window.location.href = '/GeneralDefs/Villages?workspace=1';
+            window.location.href = '/GeneralDefs/Localities?workspace=1';
         } catch (e) { msg.textContent = 'Hata: ' + e.message; msg.className = 'gde-msg err'; }
     }
     document.getElementById('gdeSave').addEventListener('click', save);

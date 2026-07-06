@@ -251,155 +251,141 @@ public sealed class GeneralDefsController : Controller
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // Mahalleler
+    // Mahalle / Köy — aynı idari düzey, TEK birleşik board (tür rozetiyle)
     // ══════════════════════════════════════════════════════════════════
-    [HttpGet("Neighborhoods")]
-    public async Task<IActionResult> Neighborhoods(CancellationToken ct)
+    [HttpGet("Localities")]
+    public async Task<IActionResult> Localities(CancellationToken ct)
     {
-        ViewBag.BoardConfig = await BuildNeighborhoodsBoardConfigAsync(ct);
+        ViewBag.BoardConfig = await BuildLocalitiesBoardConfigAsync(ct);
         return View();
     }
 
-    [HttpGet("NeighborhoodsBoardConfig")]
-    public async Task<IActionResult> NeighborhoodsBoardConfig(CancellationToken ct)
-        => Json(await BuildNeighborhoodsBoardConfigAsync(ct));
+    [HttpGet("LocalitiesBoardConfig")]
+    public async Task<IActionResult> LocalitiesBoardConfig(CancellationToken ct)
+        => Json(await BuildLocalitiesBoardConfigAsync(ct));
 
-    private async Task<object> BuildNeighborhoodsBoardConfigAsync(CancellationToken ct)
+    // Eski ayrı sekme rotaları — birleşik ekrana yönlendir (kayıtlı tab/link'ler kırılmasın)
+    [HttpGet("Neighborhoods")]
+    public IActionResult Neighborhoods() => Redirect("/GeneralDefs/Localities");
+
+    [HttpGet("Villages")]
+    public IActionResult Villages() => Redirect("/GeneralDefs/Localities");
+
+    private async Task<object> BuildLocalitiesBoardConfigAsync(CancellationToken ct)
     {
-        var rows = await _repo.ListAllNeighborhoodsAsync(ct);
-        var districtOptions = rows.Select(r => r.DistrictName).Distinct().OrderBy(x => x)
-            .Select(x => new { value = x, label = x }).Cast<object>().ToList();
+        var neighborhoods = await _repo.ListAllNeighborhoodsAsync(ct);
+        var villages = await _repo.ListAllVillagesAsync(ct);
 
-        var entities = rows.Select(n => new
+        var districtOptions = neighborhoods.Select(r => r.DistrictName)
+            .Concat(villages.Select(r => r.DistrictName))
+            .Distinct().OrderBy(x => x)
+            .Select(x => new { value = x, label = x }).Cast<object>().ToList();
+        var typeOptions = new List<object>
         {
-            id          = n.Id,
-            title       = n.Name,
-            subtitle    = $"{n.DistrictName} / {n.CityName}",
-            statusBadge = (object)new { label = "Aktif", color = "emerald" },
-            widgets = new object[]
+            new { value = "Mahalle", label = "Mahalle" },
+            new { value = "Köy",     label = "Köy" },
+        };
+
+        // Entity id çakışmasın diye tür ön ekli string id ("n5" / "v3") kullanılır —
+        // SmartBoard id'yi yalnızca React key + highlight karşılaştırmasında kullanır.
+        var entities = new List<object>();
+        foreach (var n in neighborhoods)
+        {
+            entities.Add(new
             {
-                new { id = "w_district", type = "data", dataType = "options", label = "İlçe",
-                      value = n.DistrictName, color = "violet" },
-                new { id = "w_city",     type = "data", dataType = "options", label = "Şehir",
-                      value = n.CityName, color = "blue" },
-                new { id = "w_villages", type = "data", dataType = "numeric", label = "Köy",
-                      value = n.VillageCount.ToString(), detail = "köy", color = "indigo" },
-            },
-            primaryAction = new
+                id          = $"n{n.Id}",
+                title       = n.Name,
+                subtitle    = $"{n.DistrictName} / {n.CityName}",
+                statusBadge = (object)new { label = "Mahalle", color = "emerald" },
+                widgets = new object[]
+                {
+                    new { id = "w_type",     type = "data", dataType = "options", label = "Tür",
+                          value = "Mahalle", color = "emerald" },
+                    new { id = "w_district", type = "data", dataType = "options", label = "İlçe",
+                          value = n.DistrictName, color = "violet" },
+                    new { id = "w_city",     type = "data", dataType = "options", label = "Şehir",
+                          value = n.CityName, color = "blue" },
+                    new { id = "w_info",     type = "data", dataType = "text",    label = "Bağlı Köy",
+                          value = n.VillageCount.ToString(), detail = "köy", color = "indigo" },
+                },
+                primaryAction = new
+                {
+                    label = "Düzenle", icon = "Edit", color = "amber",
+                    url = $"/GeneralDefs/NeighborhoodEdit?id={n.Id}",
+                    hideButton = true,
+                },
+                secondaryAction = new
+                {
+                    label     = "Sil", icon = "Trash2",
+                    apiUrl    = $"/GeneralDefs/DeleteNeighborhoodJson?id={n.Id}",
+                    apiMethod = "POST",
+                    confirm   = $"Bu mahalleyi silmek istediğinize emin misiniz? ({n.Name})",
+                },
+            });
+        }
+        foreach (var v in villages)
+        {
+            entities.Add(new
             {
-                label = "Düzenle", icon = "Edit", color = "amber",
-                url = $"/GeneralDefs/NeighborhoodEdit?id={n.Id}",
-                hideButton = true,
-            },
-            secondaryAction = new
-            {
-                label     = "Sil", icon = "Trash2",
-                apiUrl    = $"/GeneralDefs/DeleteNeighborhoodJson?id={n.Id}",
-                apiMethod = "POST",
-                confirm   = $"Bu mahalleyi silmek istediğinize emin misiniz? ({n.Name})",
-            },
-        }).ToArray();
+                id          = $"v{v.Id}",
+                title       = v.Name,
+                subtitle    = v.NeighborhoodName is not null
+                    ? $"{v.NeighborhoodName} Mah. / {v.DistrictName}"
+                    : $"{v.DistrictName} / {v.CityName}",
+                statusBadge = (object)new { label = "Köy", color = "amber" },
+                widgets = new object[]
+                {
+                    new { id = "w_type",     type = "data", dataType = "options", label = "Tür",
+                          value = "Köy", color = "amber" },
+                    new { id = "w_district", type = "data", dataType = "options", label = "İlçe",
+                          value = v.DistrictName, color = "violet" },
+                    new { id = "w_city",     type = "data", dataType = "options", label = "Şehir",
+                          value = v.CityName, color = "blue" },
+                    new { id = "w_info",     type = "data", dataType = "text",    label = "Bağlı Olduğu",
+                          value = v.NeighborhoodName ?? "İlçe altında", detail = (string?)null,
+                          color = v.NeighborhoodName is not null ? "emerald" : "slate" },
+                },
+                primaryAction = new
+                {
+                    label = "Düzenle", icon = "Edit", color = "amber",
+                    url = $"/GeneralDefs/VillageEdit?id={v.Id}",
+                    hideButton = true,
+                },
+                secondaryAction = new
+                {
+                    label     = "Sil", icon = "Trash2",
+                    apiUrl    = $"/GeneralDefs/DeleteVillageJson?id={v.Id}",
+                    apiMethod = "POST",
+                    confirm   = $"Bu köyü silmek istediğinize emin misiniz? ({v.Name})",
+                },
+            });
+        }
 
         return new
         {
-            boardKey          = "generaldefs-neighborhoods",
-            title             = "Mahalle Tanımlamaları",
-            subtitle          = $"{rows.Count} mahalle",
+            boardKey          = "generaldefs-localities",
+            title             = "Mahalle / Köy Tanımlamaları",
+            subtitle          = $"{neighborhoods.Count} mahalle · {villages.Count} köy",
             icon              = "Home",
             iconColor         = "emerald",
-            refreshUrl        = "/GeneralDefs/NeighborhoodsBoardConfig",
-            searchPlaceholder = "Hızlı ara… (mahalle, ilçe, şehir)",
-            emptyText         = "Henüz mahalle tanımlanmamış",
+            refreshUrl        = "/GeneralDefs/LocalitiesBoardConfig",
+            searchPlaceholder = "Hızlı ara… (mahalle, köy, ilçe, şehir)",
+            emptyText         = "Henüz mahalle veya köy tanımlanmamış",
             actions = new object[]
             {
-                new { id = "new", label = "Yeni Mahalle", icon = "Plus", variant = "primary",
+                new { id = "newNg", label = "Yeni Mahalle", icon = "Plus", variant = "primary",
                       url = "/GeneralDefs/NeighborhoodEdit" },
-            },
-            masterWidgets = new List<object>
-            {
-                new { id = "w_district", type = "data", dataType = "options", label = "İlçe", options = districtOptions },
-                new { id = "w_city",     type = "data", dataType = "options", label = "Şehir" },
-                new { id = "w_villages", type = "data", dataType = "numeric", label = "Köy" },
-            },
-            entities,
-        };
-    }
-
-    // ══════════════════════════════════════════════════════════════════
-    // Köyler
-    // ══════════════════════════════════════════════════════════════════
-    [HttpGet("Villages")]
-    public async Task<IActionResult> Villages(CancellationToken ct)
-    {
-        ViewBag.BoardConfig = await BuildVillagesBoardConfigAsync(ct);
-        return View();
-    }
-
-    [HttpGet("VillagesBoardConfig")]
-    public async Task<IActionResult> VillagesBoardConfig(CancellationToken ct)
-        => Json(await BuildVillagesBoardConfigAsync(ct));
-
-    private async Task<object> BuildVillagesBoardConfigAsync(CancellationToken ct)
-    {
-        var rows = await _repo.ListAllVillagesAsync(ct);
-        var districtOptions = rows.Select(r => r.DistrictName).Distinct().OrderBy(x => x)
-            .Select(x => new { value = x, label = x }).Cast<object>().ToList();
-
-        var entities = rows.Select(v => new
-        {
-            id          = v.Id,
-            title       = v.Name,
-            subtitle    = v.NeighborhoodName is not null
-                ? $"{v.NeighborhoodName} Mah. / {v.DistrictName}"
-                : $"{v.DistrictName} / {v.CityName}",
-            statusBadge = (object)new { label = "Aktif", color = "emerald" },
-            widgets = new object[]
-            {
-                new { id = "w_parent",   type = "data", dataType = "text",    label = "Bağlı Olduğu",
-                      value = v.NeighborhoodName ?? "İlçe (mahalle ile aynı hiza)",
-                      color = v.NeighborhoodName is not null ? "emerald" : "slate" },
-                new { id = "w_district", type = "data", dataType = "options", label = "İlçe",
-                      value = v.DistrictName, color = "violet" },
-                new { id = "w_city",     type = "data", dataType = "options", label = "Şehir",
-                      value = v.CityName, color = "blue" },
-            },
-            primaryAction = new
-            {
-                label = "Düzenle", icon = "Edit", color = "amber",
-                url = $"/GeneralDefs/VillageEdit?id={v.Id}",
-                hideButton = true,
-            },
-            secondaryAction = new
-            {
-                label     = "Sil", icon = "Trash2",
-                apiUrl    = $"/GeneralDefs/DeleteVillageJson?id={v.Id}",
-                apiMethod = "POST",
-                confirm   = $"Bu köyü silmek istediğinize emin misiniz? ({v.Name})",
-            },
-        }).ToArray();
-
-        return new
-        {
-            boardKey          = "generaldefs-villages",
-            title             = "Köy Tanımlamaları",
-            subtitle          = $"{rows.Count} köy",
-            icon              = "Trees",
-            iconColor         = "emerald",
-            refreshUrl        = "/GeneralDefs/VillagesBoardConfig",
-            searchPlaceholder = "Hızlı ara… (köy, mahalle, ilçe, şehir)",
-            emptyText         = "Henüz köy tanımlanmamış",
-            actions = new object[]
-            {
-                new { id = "new", label = "Yeni Köy", icon = "Plus", variant = "primary",
+                new { id = "newVl", label = "Yeni Köy", icon = "Trees",
                       url = "/GeneralDefs/VillageEdit" },
             },
             masterWidgets = new List<object>
             {
-                new { id = "w_parent",   type = "data", dataType = "text",    label = "Bağlı Olduğu" },
+                new { id = "w_type",     type = "data", dataType = "options", label = "Tür", options = typeOptions },
                 new { id = "w_district", type = "data", dataType = "options", label = "İlçe", options = districtOptions },
                 new { id = "w_city",     type = "data", dataType = "options", label = "Şehir" },
+                new { id = "w_info",     type = "data", dataType = "text",    label = "Bağlı Olduğu" },
             },
-            entities,
+            entities = entities.ToArray(),
         };
     }
 

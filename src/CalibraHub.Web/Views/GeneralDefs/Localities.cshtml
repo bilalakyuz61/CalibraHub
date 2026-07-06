@@ -1,8 +1,8 @@
 ﻿@using System.Text.Json
 @inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @{
-    ViewData["Title"] = "Mahalle Tanımlamaları";
-    ViewData["BodyClass"] = "page-gdf-neighborhoods";
+    ViewData["Title"] = "Mahalle / Köy Tanımlamaları";
+    ViewData["BodyClass"] = "page-gdf-localities";
 
     var jsonOpts = new JsonSerializerOptions
     {
@@ -15,27 +15,27 @@
         : "null";
 }
 
-<partial name="_GeneralDefsTabs" model='"neighborhoods"' />
+<partial name="_GeneralDefsTabs" model='"localities"' />
 
-<div id="pdt-tab-content" data-pdt-key="neighborhoods" data-pdt-body-class="page-gdf-neighborhoods">
+<div id="pdt-tab-content" data-pdt-key="localities" data-pdt-body-class="page-gdf-localities">
 <style>
-    .page-gdf-neighborhoods .integrator-dashboard {
+    .page-gdf-localities .integrator-dashboard {
         height: 100% !important; min-height: 0 !important;
         padding: 0 !important; max-width: none !important;
         background: transparent !important; box-shadow: none !important;
         border: none !important; border-radius: 0 !important;
     }
-    .page-gdf-neighborhoods .integrator-dashboard__content {
+    .page-gdf-localities .integrator-dashboard__content {
         display: flex !important; flex-direction: column !important;
         width: 100% !important; max-width: none !important;
         min-height: 0 !important; padding: 0 !important;
         margin: 0 !important; overflow: hidden !important;
     }
-    .workspace-frame-body.page-gdf-neighborhoods .app-content-area--workspace-frame {
+    .workspace-frame-body.page-gdf-localities .app-content-area--workspace-frame {
         height: 100dvh; display: flex; flex-direction: column;
         overflow: hidden; padding: 0;
     }
-    .workspace-frame-body.page-gdf-neighborhoods .integrator-dashboard {
+    .workspace-frame-body.page-gdf-localities .integrator-dashboard {
         flex: 1 1 auto; min-height: 0; height: 100%;
     }
 </style>
