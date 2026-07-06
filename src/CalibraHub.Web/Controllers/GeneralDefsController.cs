@@ -8,8 +8,9 @@ namespace CalibraHub.Web.Controllers;
 
 /// <summary>
 /// Genel Tanımlamalar — Üretim Tanımlamaları pattern'i: _GeneralDefsTabs sekme barı +
-/// her sekme bir SmartBoard (C-Grid) listesi. Adres Tanımlama grubu:
-/// Ülkeler / Şehirler / İlçeler / Mahalleler / Köyler.
+/// her sekme bir SmartBoard (C-Grid) listesi. İki grup:
+/// 1) Adres Tanımlamaları: Ülkeler / Şehirler / İlçeler / Mahalle-Köy (birleşik).
+/// 2) Lokasyon Tanımlamaları: Bölümler / Alt Bölümler.
 /// Köy hem ilçe altında (mahalle ile aynı hizada) hem mahalle altında tanımlanabilir.
 /// </summary>
 [Authorize]
@@ -18,10 +19,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class GeneralDefsController : Controller
 {
     private readonly IAddressDefinitionRepository _repo;
+    private readonly ILocationSectionRepository _sections;
 
-    public GeneralDefsController(IAddressDefinitionRepository repo)
+    public GeneralDefsController(IAddressDefinitionRepository repo, ILocationSectionRepository sections)
     {
         _repo = repo;
+        _sections = sections;
     }
 
     private int? GetUserId() =>
@@ -584,6 +587,197 @@ public sealed class GeneralDefsController : Controller
     public async Task<IActionResult> DeleteVillageJson(int id, CancellationToken ct)
     {
         try { await _repo.DeleteVillageAsync(id, ct); return Json(new { ok = true }); }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // LOKASYON TANIMLAMALARI — Bölümler
+    // ══════════════════════════════════════════════════════════════════
+    [HttpGet("Sections")]
+    public async Task<IActionResult> Sections(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildSectionsBoardConfigAsync(ct);
+        return View();
+    }
+
+    [HttpGet("SectionsBoardConfig")]
+    public async Task<IActionResult> SectionsBoardConfig(CancellationToken ct)
+        => Json(await BuildSectionsBoardConfigAsync(ct));
+
+    private async Task<object> BuildSectionsBoardConfigAsync(CancellationToken ct)
+    {
+        var rows = await _sections.ListSectionsAsync(ct);
+        var entities = rows.Select(s => new
+        {
+            id          = s.Id,
+            title       = s.Name,
+            subtitle    = s.SubSectionCount > 0 ? $"{s.SubSectionCount} alt bölüm" : "Alt bölüm yok",
+            statusBadge = (object)new { label = "Aktif", color = "emerald" },
+            widgets = new object[]
+            {
+                new { id = "w_subs", type = "data", dataType = "numeric", label = "Alt Bölüm",
+                      value = s.SubSectionCount.ToString(), detail = "alt bölüm", color = "indigo" },
+            },
+            primaryAction = new
+            {
+                label = "Düzenle", icon = "Edit", color = "amber",
+                url = $"/GeneralDefs/SectionEdit?id={s.Id}",
+                hideButton = true,
+            },
+            secondaryAction = new
+            {
+                label     = "Sil", icon = "Trash2",
+                apiUrl    = $"/GeneralDefs/DeleteSectionJson?id={s.Id}",
+                apiMethod = "POST",
+                confirm   = $"Bu bölümü silmek istediğinize emin misiniz? ({s.Name})",
+            },
+        }).ToArray();
+
+        return new
+        {
+            boardKey          = "generaldefs-sections",
+            title             = "Bölüm Tanımlamaları",
+            subtitle          = $"{rows.Count} bölüm",
+            icon              = "LayoutGrid",
+            iconColor         = "indigo",
+            refreshUrl        = "/GeneralDefs/SectionsBoardConfig",
+            searchPlaceholder = "Hızlı ara… (bölüm adı)",
+            emptyText         = "Henüz bölüm tanımlanmamış",
+            actions = new object[]
+            {
+                new { id = "new", label = "Yeni Bölüm", icon = "Plus", variant = "primary",
+                      url = "/GeneralDefs/SectionEdit" },
+            },
+            masterWidgets = new List<object>
+            {
+                new { id = "w_subs", type = "data", dataType = "numeric", label = "Alt Bölüm" },
+            },
+            entities,
+        };
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // LOKASYON TANIMLAMALARI — Alt Bölümler
+    // ══════════════════════════════════════════════════════════════════
+    [HttpGet("SubSections")]
+    public async Task<IActionResult> SubSections(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildSubSectionsBoardConfigAsync(ct);
+        return View();
+    }
+
+    [HttpGet("SubSectionsBoardConfig")]
+    public async Task<IActionResult> SubSectionsBoardConfig(CancellationToken ct)
+        => Json(await BuildSubSectionsBoardConfigAsync(ct));
+
+    private async Task<object> BuildSubSectionsBoardConfigAsync(CancellationToken ct)
+    {
+        var rows = await _sections.ListAllSubSectionsAsync(ct);
+        var sectionOptions = rows.Select(r => r.SectionName).Distinct().OrderBy(x => x)
+            .Select(x => new { value = x, label = x }).Cast<object>().ToList();
+
+        var entities = rows.Select(x => new
+        {
+            id          = x.Id,
+            title       = x.Name,
+            subtitle    = x.SectionName,
+            statusBadge = (object)new { label = "Aktif", color = "emerald" },
+            widgets = new object[]
+            {
+                new { id = "w_section", type = "data", dataType = "options", label = "Bölüm",
+                      value = x.SectionName, color = "violet" },
+            },
+            primaryAction = new
+            {
+                label = "Düzenle", icon = "Edit", color = "amber",
+                url = $"/GeneralDefs/SubSectionEdit?id={x.Id}",
+                hideButton = true,
+            },
+            secondaryAction = new
+            {
+                label     = "Sil", icon = "Trash2",
+                apiUrl    = $"/GeneralDefs/DeleteSubSectionJson?id={x.Id}",
+                apiMethod = "POST",
+                confirm   = $"Bu alt bölümü silmek istediğinize emin misiniz? ({x.Name})",
+            },
+        }).ToArray();
+
+        return new
+        {
+            boardKey          = "generaldefs-subsections",
+            title             = "Alt Bölüm Tanımlamaları",
+            subtitle          = $"{rows.Count} alt bölüm",
+            icon              = "Grid3x3",
+            iconColor         = "violet",
+            refreshUrl        = "/GeneralDefs/SubSectionsBoardConfig",
+            searchPlaceholder = "Hızlı ara… (alt bölüm, bölüm)",
+            emptyText         = "Henüz alt bölüm tanımlanmamış",
+            actions = new object[]
+            {
+                new { id = "new", label = "Yeni Alt Bölüm", icon = "Plus", variant = "primary",
+                      url = "/GeneralDefs/SubSectionEdit" },
+            },
+            masterWidgets = new List<object>
+            {
+                new { id = "w_section", type = "data", dataType = "options", label = "Bölüm", options = sectionOptions },
+            },
+            entities,
+        };
+    }
+
+    // ── Lokasyon edit sayfaları + lookup + kaydet/sil ─────────────────
+    [HttpGet("SectionEdit")]
+    public async Task<IActionResult> SectionEdit(int? id, CancellationToken ct)
+    {
+        ViewBag.Item = id is > 0 ? await _sections.GetSectionAsync(id.Value, ct) : null;
+        if (id is > 0 && ViewBag.Item is null) return NotFound();
+        return View();
+    }
+
+    [HttpGet("SubSectionEdit")]
+    public async Task<IActionResult> SubSectionEdit(int? id, CancellationToken ct)
+    {
+        ViewBag.Item = id is > 0 ? await _sections.GetSubSectionAsync(id.Value, ct) : null;
+        if (id is > 0 && ViewBag.Item is null) return NotFound();
+        return View();
+    }
+
+    [HttpGet("SectionsLookup")]
+    public async Task<IActionResult> SectionsLookup(CancellationToken ct)
+    {
+        var rows = await _sections.ListSectionsAsync(ct);
+        return Json(rows.Select(s => new { id = s.Id, name = s.Name }));
+    }
+
+    [HttpPost("SaveSection")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveSection([FromBody] SaveAddressDefRequest request, CancellationToken ct)
+    {
+        try { return Json(new { ok = true, id = await _sections.SaveSectionAsync(request?.Id, request?.Name ?? "", GetUserId(), ct) }); }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    [HttpPost("SaveSubSection")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveSubSection([FromBody] SaveAddressDefRequest request, CancellationToken ct)
+    {
+        try { return Json(new { ok = true, id = await _sections.SaveSubSectionAsync(request?.Id, request?.ParentId ?? 0, request?.Name ?? "", GetUserId(), ct) }); }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    [HttpPost("DeleteSectionJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteSectionJson(int id, CancellationToken ct)
+    {
+        try { await _sections.DeleteSectionAsync(id, ct); return Json(new { ok = true }); }
+        catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
+    }
+
+    [HttpPost("DeleteSubSectionJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteSubSectionJson(int id, CancellationToken ct)
+    {
+        try { await _sections.DeleteSubSectionAsync(id, ct); return Json(new { ok = true }); }
         catch (Exception ex) { return Json(new { ok = false, error = ex.Message }); }
     }
 }

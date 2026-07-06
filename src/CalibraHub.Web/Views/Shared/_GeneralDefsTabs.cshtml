@@ -1,18 +1,20 @@
 @*
    Genel Tanımlamalar sekme barı — iki katman:
-     1) Grup sekmeleri (tabsheet): "Adres Tanımlamaları" (ileride yeni gruplar buraya eklenir)
-     2) Alt sekmeler: seçili grubun ekranları (Ülkeler / Şehirler / İlçeler / Mahalleler / Köyler)
+     1) Grup sekmeleri (tabsheet): "Adres Tanımlamaları" | "Lokasyon Tanımlamaları"
+     2) Alt sekmeler: seçili grubun ekranları
 
    Her view üst kısma çağırır:
        <partial name="_GeneralDefsTabs" model='"countries"' />
-   model = aktif alt-sekme key. Tüm adres alt sekmeleri "Adres Tanımlamaları"
-   grubuna aittir; grup sekmesi bu sayfalarda hep aktiftir. pdt-* data
-   attribute'ları korunur — mevcut PJAX mekanizması alt sekmelerde çalışır.
+   model = aktif alt-sekme key. Grup, alt-sekme key'inden türetilir:
+     adres    → countries / cities / districts / localities
+     lokasyon → sections / subsections
+   pdt-* data attribute'ları korunur — mevcut PJAX mekanizması alt sekmelerde çalışır.
 *@
 @model string
 
 @{
     var current = (Model ?? string.Empty).ToLowerInvariant();
+    var isLokasyon = current is "sections" or "subsections";
     string TabClass(string key) =>
         string.Equals(key, current, StringComparison.OrdinalIgnoreCase) ? "pdt-tab active" : "pdt-tab";
 }
@@ -85,19 +87,30 @@
     .pdt-tabs--sub .pdt-tab { padding: 8px 14px; font-size: 12.5px; }
 </style>
 
-@* 1. katman — grup sekmeleri (tabsheet). İleride yeni grup: buraya bir
-   .gdt-group-tab + kendi alt sekme barı eklenir. *@
+@* 1. katman — grup sekmeleri (tabsheet). Grup değişimi tam sayfa geçiştir
+   (PJAX değil) — her grubun alt sekme barı farklıdır. *@
 <div class="gdt-groups">
-    <a href="/GeneralDefs/Countries" class="gdt-group-tab active" data-workspace-ignore>
+    <a href="/GeneralDefs/Countries" class="gdt-group-tab @(isLokasyon ? "" : "active")" data-workspace-ignore>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/>
             <circle cx="12" cy="10" r="3"/>
         </svg>
         Adres Tanımlamaları
     </a>
+    <a href="/GeneralDefs/Sections" class="gdt-group-tab @(isLokasyon ? "active" : "")" data-workspace-ignore>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="7" height="7" x="3" y="3" rx="1"/>
+            <rect width="7" height="7" x="14" y="3" rx="1"/>
+            <rect width="7" height="7" x="14" y="14" rx="1"/>
+            <rect width="7" height="7" x="3" y="14" rx="1"/>
+        </svg>
+        Lokasyon Tanımlamaları
+    </a>
 </div>
 
 @* 2. katman — seçili grubun alt sekmeleri *@
+@if (!isLokasyon)
+{
 <div class="pdt-tabs pdt-tabs--sub" data-pdt-tabbar="1">
     <a href="/GeneralDefs/Countries" class="@TabClass("countries")" data-pdt-tab="countries" data-pdt-body-class="page-gdf-countries" data-workspace-ignore>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -135,3 +148,27 @@
         Mahalle / Köy
     </a>
 </div>
+}
+else
+{
+<div class="pdt-tabs pdt-tabs--sub" data-pdt-tabbar="1">
+    <a href="/GeneralDefs/Sections" class="@TabClass("sections")" data-pdt-tab="sections" data-pdt-body-class="page-gdf-sections" data-workspace-ignore>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2"/>
+            <path d="M3 9h18"/>
+            <path d="M9 21V9"/>
+        </svg>
+        Bölümler
+    </a>
+    <a href="/GeneralDefs/SubSections" class="@TabClass("subsections")" data-pdt-tab="subsections" data-pdt-body-class="page-gdf-subsections" data-workspace-ignore>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2"/>
+            <path d="M3 9h18"/>
+            <path d="M3 15h18"/>
+            <path d="M9 9v12"/>
+            <path d="M15 9v12"/>
+        </svg>
+        Alt Bölümler
+    </a>
+</div>
+}

@@ -527,6 +527,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDecimal
 // Adres tanimlamalari — Ulke/Sehir/Ilce (Genel Tanimlamalar sayfasi — 2026-07-06)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAddressDefinitionRepository,
     CalibraHub.Persistence.Repositories.SqlAddressDefinitionRepository>();
+// Lokasyon tanimlamalari — Bolum/Alt Bolum (Genel Tanimlamalar ikinci grup — 2026-07-06)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILocationSectionRepository,
+    CalibraHub.Persistence.Repositories.SqlLocationSectionRepository>();
 
 // Faz 1: Uretim Is Emri
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository,

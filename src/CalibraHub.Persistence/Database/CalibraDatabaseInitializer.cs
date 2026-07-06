@@ -683,6 +683,7 @@ END;";
             await EnsureCodeRuleTablesAsync(connection, cancellationToken);
             await EnsureDecimalSettingTableAsync(connection, cancellationToken);
             await EnsureAddressDefinitionTablesAsync(connection, cancellationToken);
+            await EnsureLocationSectionTablesAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
@@ -810,6 +811,7 @@ END;";
             await EnsureCodeRuleTablesAsync(connection, cancellationToken);
             await EnsureDecimalSettingTableAsync(connection, cancellationToken);
             await EnsureAddressDefinitionTablesAsync(connection, cancellationToken);
+            await EnsureLocationSectionTablesAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
@@ -8847,6 +8849,59 @@ END;";
                 EXEC(N'INSERT INTO [{s}].[Country] ([Code],[Name],[ForeignName]) VALUES (N''TR'', N''Türkiye'', N''Turkey'');');
             -- Mevcut Türkiye kaydına ForeignName doldur (kolon yeni eklendiyse)
             EXEC(N'UPDATE [{s}].[Country] SET [ForeignName] = N''Turkey'' WHERE [Name] = N''Türkiye'' AND [ForeignName] IS NULL;');
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Lokasyon Tanimlamalari grubu (2026-07-06): LocationSection (Bolum) ->
+    /// LocationSubSection (Alt Bolum). Genel Tanimlamalar sayfasindaki ikinci grup.
+    /// NOT: Depo raf agaci (Location tablosu, Depo>Kat>Kor>Raf>Goz) AYRI sistemdir
+    /// ve dokunulmaz — bu tablolar genel amacli bolum/alt bolum tanimlaridir.
+    /// Name uniqueness: Bolum global, Alt Bolum (SectionId+Name).
+    /// </summary>
+    private async Task EnsureLocationSectionTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[LocationSection]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[LocationSection]
+                (
+                    [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_LocationSection] PRIMARY KEY,
+                    [Code]        NVARCHAR(50)  NULL,
+                    [Name]        NVARCHAR(150) NOT NULL,
+                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_LocationSection_IsActive] DEFAULT(1),
+                    [CreatedById] INT           NULL,
+                    [Created]     DATETIME      NOT NULL CONSTRAINT [DF_LocationSection_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT           NULL,
+                    [Updated]     DATETIME      NULL
+                );
+                CREATE UNIQUE INDEX [UX_LocationSection_Name] ON [{s}].[LocationSection]([Name]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[LocationSubSection]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[LocationSubSection]
+                (
+                    [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_LocationSubSection] PRIMARY KEY,
+                    [SectionId]   INT           NOT NULL,
+                    [Code]        NVARCHAR(50)  NULL,
+                    [Name]        NVARCHAR(150) NOT NULL,
+                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_LocationSubSection_IsActive] DEFAULT(1),
+                    [CreatedById] INT           NULL,
+                    [Created]     DATETIME      NOT NULL CONSTRAINT [DF_LocationSubSection_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT           NULL,
+                    [Updated]     DATETIME      NULL,
+                    CONSTRAINT [FK_LocationSubSection_Section]
+                        FOREIGN KEY ([SectionId]) REFERENCES [{s}].[LocationSection]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_LocationSubSection_Section_Name]
+                    ON [{s}].[LocationSubSection]([SectionId], [Name]);
+                CREATE INDEX [IX_LocationSubSection_Section] ON [{s}].[LocationSubSection]([SectionId]);
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;

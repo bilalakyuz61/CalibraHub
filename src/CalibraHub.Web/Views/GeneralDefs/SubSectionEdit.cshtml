@@ -1,0 +1,87 @@
+@using CalibraHub.Application.Contracts
+@{
+    var item = ViewBag.Item as LocationSubSectionDto;
+    ViewData["Title"] = item is null ? "Yeni Alt Bölüm" : "Alt Bölüm Düzenle";
+    var itemId = item?.Id ?? 0;
+    var itemName = item?.Name ?? "";
+    var itemSectionId = item?.SectionId ?? 0;
+}
+@Html.AntiForgeryToken()
+
+<partial name="_GeneralDefsTabs" model='"subsections"' />
+
+<partial name="_GeneralDefsEditStyles" />
+
+<div class="gde-wrap">
+    <div class="gde-card">
+        <div class="gde-title">@(item is null ? "Yeni Alt Bölüm" : "Alt Bölüm Düzenle")</div>
+        <div class="gde-sub">Ad, seçili bölüm içinde benzersizdir.</div>
+
+        <div class="gde-row">
+            <label class="gde-label" for="gdeSection">Bölüm</label>
+            <select id="gdeSection" class="gde-select"></select>
+        </div>
+        <div class="gde-row">
+            <label class="gde-label" for="gdeName">Alt Bölüm Adı</label>
+            <input type="text" id="gdeName" class="gde-input" maxlength="150" value="@itemName" placeholder="Örn. Montaj Hattı 1" />
+        </div>
+
+        <div class="gde-actions">
+            <button type="button" class="gde-btn gde-btn--ghost" id="gdeBack">Vazgeç</button>
+            <button type="button" class="gde-btn gde-btn--primary" id="gdeSave">Kaydet</button>
+        </div>
+        <div class="gde-msg" id="gdeMsg"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var ID = @itemId;
+    var SECTION_ID = @itemSectionId;
+    function csrf() { var t = document.querySelector('input[name="__RequestVerificationToken"]'); return t ? t.value : ''; }
+    var msg = document.getElementById('gdeMsg');
+    var sectionSel = document.getElementById('gdeSection');
+
+    async function loadSections() {
+        var r = await fetch('/GeneralDefs/SectionsLookup', { credentials: 'same-origin' });
+        var rows = await r.json();
+        sectionSel.innerHTML = '<option value="">Bölüm seçin...</option>';
+        (rows || []).forEach(function (s) {
+            var o = document.createElement('option');
+            o.value = s.id; o.textContent = s.name;
+            sectionSel.appendChild(o);
+        });
+        if (SECTION_ID > 0) sectionSel.value = String(SECTION_ID);
+    }
+
+    document.getElementById('gdeBack').addEventListener('click', function () {
+        window.location.href = '/GeneralDefs/SubSections?workspace=1';
+    });
+
+    async function save() {
+        var sectionId = parseInt(sectionSel.value, 10) || 0;
+        var name = (document.getElementById('gdeName').value || '').trim();
+        if (!sectionId) { msg.textContent = 'Bölüm seçilmelidir.'; msg.className = 'gde-msg err'; return; }
+        if (!name) { msg.textContent = 'Alt bölüm adı boş olamaz.'; msg.className = 'gde-msg err'; return; }
+        try {
+            var r = await fetch('/GeneralDefs/SaveSubSection', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify({ id: ID > 0 ? ID : null, parentId: sectionId, name: name }),
+            });
+            var d = await r.json();
+            if (!d.ok) { msg.textContent = d.error || 'Kaydedilemedi.'; msg.className = 'gde-msg err'; return; }
+            window.location.href = '/GeneralDefs/SubSections?workspace=1';
+        } catch (e) { msg.textContent = 'Hata: ' + e.message; msg.className = 'gde-msg err'; }
+    }
+    document.getElementById('gdeSave').addEventListener('click', save);
+    document.getElementById('gdeName').addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+
+    (async function () {
+        try { await loadSections(); }
+        catch (e) { msg.textContent = 'Bölüm listesi yüklenemedi.'; msg.className = 'gde-msg err'; }
+    })();
+})();
+</script>
+}
