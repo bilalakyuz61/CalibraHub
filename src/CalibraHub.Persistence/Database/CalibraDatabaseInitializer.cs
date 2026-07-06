@@ -682,6 +682,7 @@ END;";
             await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
             await EnsureCodeRuleTablesAsync(connection, cancellationToken);
             await EnsureDecimalSettingTableAsync(connection, cancellationToken);
+            await EnsureAddressDefinitionTablesAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
@@ -808,6 +809,7 @@ END;";
             await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
             await EnsureCodeRuleTablesAsync(connection, cancellationToken);
             await EnsureDecimalSettingTableAsync(connection, cancellationToken);
+            await EnsureAddressDefinitionTablesAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
@@ -3325,6 +3327,8 @@ END;";
                 IF LEN(@dropFkSql) > 0 EXEC(@dropFkSql);
 
                 -- Step 2: Drop tables (order: children first)
+                IF OBJECT_ID(N'[{schemaForSql}].[WidgetTraLog]', N'U') IS NOT NULL
+                    DROP TABLE [{schemaForSql}].[WidgetTraLog];
                 IF OBJECT_ID(N'[{schemaForSql}].[WidgetTra]', N'U') IS NOT NULL
                     DROP TABLE [{schemaForSql}].[WidgetTra];
                 IF OBJECT_ID(N'[{schemaForSql}].[WidgetMas]', N'U') IS NOT NULL
@@ -8707,6 +8711,81 @@ END;";
     }
 
     /// <summary>
+    /// Adres tanimlamalari (2026-07-06): Country -> City -> District hiyerarsisi.
+    /// Genel Tanimlamalar sayfasindaki "Adres Tanimlama" grubu yonetir; ileride
+    /// ContactEdit Il/Ilce alanlari buradan beslenecek (PTT katalogu yerine).
+    /// Kod alani kullanicidan alinmaz (CLAUDE.md) — Name uniqueness hiyerarsik:
+    /// Country global, City (CountryId+Name), District (CityId+Name).
+    /// Turkiye idempotent seed edilir (Code='TR').
+    /// </summary>
+    private async Task EnsureAddressDefinitionTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[Country]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[Country]
+                (
+                    [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Country] PRIMARY KEY,
+                    [Code]        NVARCHAR(10)  NULL,
+                    [Name]        NVARCHAR(100) NOT NULL,
+                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_Country_IsActive] DEFAULT(1),
+                    [CreatedById] INT           NULL,
+                    [Created]     DATETIME      NOT NULL CONSTRAINT [DF_Country_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT           NULL,
+                    [Updated]     DATETIME      NULL
+                );
+                CREATE UNIQUE INDEX [UX_Country_Name] ON [{s}].[Country]([Name]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[City]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[City]
+                (
+                    [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_City] PRIMARY KEY,
+                    [CountryId]   INT           NOT NULL,
+                    [Code]        NVARCHAR(50)  NULL,
+                    [Name]        NVARCHAR(100) NOT NULL,
+                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_City_IsActive] DEFAULT(1),
+                    [CreatedById] INT           NULL,
+                    [Created]     DATETIME      NOT NULL CONSTRAINT [DF_City_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT           NULL,
+                    [Updated]     DATETIME      NULL,
+                    CONSTRAINT [FK_City_Country] FOREIGN KEY ([CountryId]) REFERENCES [{s}].[Country]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_City_Country_Name] ON [{s}].[City]([CountryId], [Name]);
+                CREATE INDEX [IX_City_Country] ON [{s}].[City]([CountryId]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[District]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[District]
+                (
+                    [Id]          INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_District] PRIMARY KEY,
+                    [CityId]      INT           NOT NULL,
+                    [Code]        NVARCHAR(50)  NULL,
+                    [Name]        NVARCHAR(100) NOT NULL,
+                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_District_IsActive] DEFAULT(1),
+                    [CreatedById] INT           NULL,
+                    [Created]     DATETIME      NOT NULL CONSTRAINT [DF_District_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT           NULL,
+                    [Updated]     DATETIME      NULL,
+                    CONSTRAINT [FK_District_City] FOREIGN KEY ([CityId]) REFERENCES [{s}].[City]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_District_City_Name] ON [{s}].[District]([CityId], [Name]);
+                CREATE INDEX [IX_District_City] ON [{s}].[District]([CityId]);
+            END;
+
+            -- Seed: Türkiye (idempotent)
+            IF NOT EXISTS (SELECT 1 FROM [{s}].[Country] WHERE [Name] = N'Türkiye')
+                INSERT INTO [{s}].[Country] ([Code],[Name]) VALUES (N'TR', N'Türkiye');
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// AR-GE modulu tablolari (greenfield). AR-GE projesi 'arge_proje' tipinde bir Document
     /// satiridir; ArgeProject companion tablosu o belgeye 1-1 baglanir (statu/sorumlu/hedef/ilerleme).
     /// ArgePrototype/ArgeTest projenin prototip ve test kayitlarini tutar.
@@ -11205,6 +11284,7 @@ END;";
             ("PRICE_GROUPS",        "Gruplar",                          "Genel Tanımlamalar",   "Fiyat Listesi",            755,  true),
             ("CARD_GROUPS",         "Grup Tanımlamaları",               "Genel Tanımlamalar",   null,                       760,  true),
             ("DEPARTMENTS",         "Departman Tanımlamaları",          "Genel Tanımlamalar",   null,                       770,  true),
+            ("GENERAL_DEFS",        "Genel Tanımlamalar",               "Genel Tanımlamalar",   null,                       775,  false), // Adres Tanımlama (Ülke/Şehir/İlçe) + gelecek genel gruplar
 
             // ── Varlık Yönetimi ───────────────────────────────────────────────
             // ASSETS: hem liste/edit ekranı PermissionScope'u hem de widget (Alan Rehberi)
@@ -11343,6 +11423,8 @@ END;";
                     [RecordId]        NVARCHAR(60)  NOT NULL,
                     [ParentRecordId]  NVARCHAR(60)  NULL,
                     [Value]           NVARCHAR(MAX) NULL,
+                    [CreatedBy]       NVARCHAR(120) NULL,
+                    [UpdatedBy]       NVARCHAR(120) NULL,
                     [CreatedAt]       DATETIME  NOT NULL CONSTRAINT [df_WidgetTra_Created] DEFAULT(SYSUTCDATETIME()),
                     [UpdatedAt]       DATETIME  NOT NULL CONSTRAINT [df_WidgetTra_Updated] DEFAULT(SYSUTCDATETIME()),
                     CONSTRAINT [fk_WidgetTra_Widget]
@@ -11360,6 +11442,45 @@ END;";
                AND COL_LENGTH(N'[{s}].[WidgetTra]', N'ParentRecordId') IS NULL
             BEGIN
                 ALTER TABLE [{s}].[WidgetTra] ADD [ParentRecordId] NVARCHAR(60) NULL;
+            END;
+
+            -- Alan bazli audit: CreatedBy/UpdatedBy kolonlari (2026-07-06)
+            -- Idempotent. "Son yazan kim" bilgisi; tam degisiklik gecmisi WidgetTraLog'da.
+            IF OBJECT_ID(N'[{s}].[WidgetTra]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[WidgetTra]', N'CreatedBy') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[WidgetTra] ADD [CreatedBy] NVARCHAR(120) NULL;
+            END;
+            IF OBJECT_ID(N'[{s}].[WidgetTra]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[WidgetTra]', N'UpdatedBy') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[WidgetTra] ADD [UpdatedBy] NVARCHAR(120) NULL;
+            END;
+
+            -- WidgetTraLog: alan bazli degisiklik gecmisi (2026-07-06)
+            -- Her save'de yalnizca GERCEKTEN degisen degerler loglanir (eski→yeni + kim + ne zaman).
+            -- WidgetId'ye kasitli olarak FK YOK — widget silinse de audit kaydi yasar;
+            -- WidgetCode/FormId snapshot'lari log'u widget'siz da okunur kilar.
+            IF OBJECT_ID(N'[{s}].[WidgetTraLog]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[WidgetTraLog]
+                (
+                    [Id]              BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_WidgetTraLog] PRIMARY KEY,
+                    [FormId]          INT            NOT NULL,
+                    [WidgetId]        INT            NOT NULL,
+                    [WidgetCode]      NVARCHAR(100)  NOT NULL,
+                    [RecordId]        NVARCHAR(60)   NOT NULL,
+                    [ParentRecordId]  NVARCHAR(60)   NULL,
+                    [OldValue]        NVARCHAR(MAX)  NULL,
+                    [NewValue]        NVARCHAR(MAX)  NULL,
+                    [ChangedBy]       NVARCHAR(120)  NULL,
+                    [ChangedAt]       DATETIME       NOT NULL CONSTRAINT [df_WidgetTraLog_Changed] DEFAULT(SYSUTCDATETIME())
+                );
+                CREATE INDEX [ix_WidgetTraLog_Form_Record]
+                    ON [{s}].[WidgetTraLog]([FormId], [RecordId], [ChangedAt]);
+                CREATE INDEX [ix_WidgetTraLog_Parent]
+                    ON [{s}].[WidgetTraLog]([ParentRecordId])
+                    WHERE [ParentRecordId] IS NOT NULL;
             END;
 
             -- Rule Engine: RulesJSON kolonu (Faz G — kural ve formul motoru)

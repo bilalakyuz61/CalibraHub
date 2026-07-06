@@ -524,6 +524,10 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDeci
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDecimalSettingService,
     CalibraHub.Application.Services.DecimalSettingService>();
 
+// Adres tanimlamalari — Ulke/Sehir/Ilce (Genel Tanimlamalar sayfasi — 2026-07-06)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAddressDefinitionRepository,
+    CalibraHub.Persistence.Repositories.SqlAddressDefinitionRepository>();
+
 // Faz 1: Uretim Is Emri
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository,
     CalibraHub.Persistence.Repositories.SqlWorkOrderRepository>();
