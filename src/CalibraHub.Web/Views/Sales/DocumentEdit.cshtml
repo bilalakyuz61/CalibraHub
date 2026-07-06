@@ -46,7 +46,7 @@
 }
 
 @section Styles {
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
+@* flatpickr css + CalibraHub takvim teması artık _Layout'tan global gelir (calibra-datepicker) *@
 <style>
     /* Sayfa genelinde number input spinner'larini gizle (yukari/asagi ok tuslari) */
     .page-sales-quote-edit input[type="number"]::-webkit-outer-spin-button,
@@ -1997,89 +1997,7 @@
         transition: min-height 0.1s;
     }
 
-    /* ── flatpickr CalibraHub temasi — kurumsal yumusak hat ── */
-    .flatpickr-calendar {
-        border-radius: 14px !important;
-        box-shadow: 0 16px 48px rgba(15,23,42,.16), 0 4px 12px rgba(15,23,42,.06) !important;
-        border: 1px solid rgba(99,102,241,.16) !important;
-        font-family: inherit !important;
-        background: #ffffff !important;
-        overflow: hidden !important;
-    }
-    .flatpickr-calendar.arrowTop:before { border-bottom-color: rgba(99,102,241,.16) !important; }
-    .flatpickr-calendar.arrowTop:after { border-bottom-color: #ffffff !important; }
-    .flatpickr-months .flatpickr-month { background: transparent !important; height: 42px !important; color: #1e293b !important; }
-    .flatpickr-current-month {
-        color: #1e293b !important;
-        font-weight: 700 !important;
-        font-size: 0.95rem !important;
-        padding-top: 8px !important;
-    }
-    .flatpickr-current-month input.cur-year { color: #1e293b !important; font-weight: 700 !important; }
-    .flatpickr-monthDropdown-months { color: #1e293b !important; font-weight: 700 !important; }
-    .flatpickr-weekdays, .flatpickr-weekdaycontainer { background: transparent !important; }
-    span.flatpickr-weekday {
-        color: #94a3b8 !important; font-weight: 600 !important;
-        background: transparent !important; font-size: 0.75rem !important;
-    }
-    .dayContainer { padding: 2px 0 6px !important; }
-    .flatpickr-day {
-        border-radius: 9px !important;
-        color: #334155 !important;
-        font-weight: 500 !important;
-        transition: background .15s, color .15s !important;
-        border-color: transparent !important;
-    }
-    .flatpickr-day:hover, .flatpickr-day:focus {
-        background: rgba(99,102,241,.10) !important;
-        border-color: transparent !important;
-        color: #4f46e5 !important;
-    }
-    .flatpickr-day.today {
-        border-color: #6366f1 !important;
-        color: #6366f1 !important;
-        font-weight: 700 !important;
-    }
-    .flatpickr-day.today:hover { background: rgba(99,102,241,.16) !important; color: #4f46e5 !important; border-color: #6366f1 !important; }
-    .flatpickr-day.selected, .flatpickr-day.selected:hover {
-        background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
-        border-color: #4f46e5 !important;
-        color: #ffffff !important;
-        font-weight: 700 !important;
-        box-shadow: 0 4px 12px rgba(79,70,229,.32) !important;
-    }
-    .flatpickr-day.flatpickr-disabled, .flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay { color: #cbd5e1 !important; }
-    .flatpickr-prev-month svg, .flatpickr-next-month svg { fill: #6366f1 !important; }
-    .flatpickr-prev-month:hover svg, .flatpickr-next-month:hover svg { fill: #4f46e5 !important; }
-    .numInputWrapper:hover { background: rgba(99,102,241,.06) !important; }
-    .numInputWrapper span.arrowUp:after { border-bottom-color: #6366f1 !important; }
-    .numInputWrapper span.arrowDown:after { border-top-color: #6366f1 !important; }
-
-    /* Dark mode */
-    body.app-theme-dark .flatpickr-calendar {
-        background: #1e293b !important;
-        border-color: rgba(165,180,252,.20) !important;
-        box-shadow: 0 16px 48px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.3) !important;
-    }
-    body.app-theme-dark .flatpickr-calendar.arrowTop:after { border-bottom-color: #1e293b !important; }
-    body.app-theme-dark .flatpickr-calendar.arrowTop:before { border-bottom-color: rgba(165,180,252,.20) !important; }
-    body.app-theme-dark .flatpickr-months .flatpickr-month,
-    body.app-theme-dark .flatpickr-current-month,
-    body.app-theme-dark .flatpickr-current-month input.cur-year,
-    body.app-theme-dark .flatpickr-monthDropdown-months { color: #f1f5f9 !important; }
-    body.app-theme-dark span.flatpickr-weekday { color: rgba(255,255,255,.55) !important; }
-    body.app-theme-dark .flatpickr-day { color: #cbd5e1 !important; }
-    body.app-theme-dark .flatpickr-day:hover, body.app-theme-dark .flatpickr-day:focus {
-        background: rgba(165,180,252,.20) !important; color: #c7d2fe !important;
-    }
-    body.app-theme-dark .flatpickr-day.today { border-color: #a5b4fc !important; color: #c7d2fe !important; }
-    body.app-theme-dark .flatpickr-day.flatpickr-disabled,
-    body.app-theme-dark .flatpickr-day.prevMonthDay,
-    body.app-theme-dark .flatpickr-day.nextMonthDay { color: #475569 !important; }
-    body.app-theme-dark .flatpickr-monthDropdown-months,
-    body.app-theme-dark .flatpickr-monthDropdown-months option { background: #1e293b !important; }
-    body.app-theme-dark .flatpickr-prev-month svg,
-    body.app-theme-dark .flatpickr-next-month svg { fill: #a5b4fc !important; }
+    /* flatpickr takvim teması: global calibra-datepicker.css'e taşındı (2026-07-06) */
 </style>
 }
 
@@ -2522,10 +2440,12 @@
 
 @Html.AntiForgeryToken()
 @section Scripts {
-<!-- flatpickr — kurumsal date picker (CDN) -->
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/tr.js"></script>
 <script>
+    /* Tarih inputlari global standarttan flatpickr olur (calibra-datepicker.js):
+       TR locale + altInput d.m.Y + click-only open. Takvim secimi orijinal input'a
+       'input' event'i yansitir — sqQuoteDate/sqValidUntil inline oninput recalc'lari
+       (sqRecalcValidFromDays / sqRecalcDaysFromValid) ayni sekilde calisir. */
+
     /* sqSetDateValue: programatik deger atamada flatpickr-uyumlu helper.
        Flatpickr binding varsa setDate() kullanir; yoksa native value. */
     window.sqSetDateValue = function (id, isoValue) {
@@ -2534,55 +2454,6 @@
         if (el._flatpickr) el._flatpickr.setDate(isoValue || null, false);
         else el.value = isoValue || '';
     };
-
-    /* Tarih inputlarinda flatpickr'i aktive et (TR locale + altInput d.m.Y) */
-    (function () {
-        function initSqPickers() {
-            if (typeof flatpickr === 'undefined') return;
-            var locale = (flatpickr.l10ns && flatpickr.l10ns.tr) || 'default';
-            var common = {
-                locale: locale,
-                dateFormat: 'Y-m-d',
-                altInput: true,
-                altFormat: 'd.m.Y',
-                altInputClass: 'form-control form-control-sm sqe-hinput sqe-fp-input',
-                allowInput: true,
-                disableMobile: true,
-                appendTo: document.body
-            };
-
-            /* Yardimci: flatpickr'i olustur ve takvimin sadece tiklamayla
-               acilmasini garantile — focus/tab ile otomatik acilmaz.       */
-            function makePicker(el, extraOpts) {
-                if (!el || el._flatpickr) return;
-                var _clickPending = false;
-                var cfg = Object.assign({}, common, extraOpts || {}, {
-                    onOpen: function (dates, dateStr, instance) {
-                        /* Mousedown onceden isaretlenmediyse focus/tab ile acildi — kapat */
-                        if (!_clickPending) {
-                            instance.close();
-                            return;
-                        }
-                        _clickPending = false;
-                    }
-                });
-                var fp = flatpickr(el, cfg);
-                /* mousedown: kullanici tiklamaya basladi — izni ver */
-                fp.altInput.addEventListener('mousedown', function () {
-                    _clickPending = true;
-                    /* 200 ms icinde open gelmezse flag'i temizle */
-                    setTimeout(function () { _clickPending = false; }, 200);
-                });
-            }
-
-            var dateEl  = document.getElementById('sqQuoteDate');
-            var validEl = document.getElementById('sqValidUntil');
-            makePicker(dateEl,  { onChange: function () { if (typeof window.sqRecalcValidFromDays === 'function') window.sqRecalcValidFromDays(); } });
-            makePicker(validEl, { onChange: function () { if (typeof window.sqRecalcDaysFromValid  === 'function') window.sqRecalcDaysFromValid();  } });
-        }
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSqPickers);
-        else initSqPickers();
-    })();
 </script>
 <script>
     // ══════════════════════════════════════════════════════════════

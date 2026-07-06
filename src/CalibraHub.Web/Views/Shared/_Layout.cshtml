@@ -257,6 +257,9 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/tokens.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/calibra-actionbar.css" asp-append-version="true" />
+    @* Tarih alanı standardı — flatpickr (lokal vendor) + CalibraHub teması *@
+    <link rel="stylesheet" href="~/lib/flatpickr/flatpickr.min.css" />
+    <link rel="stylesheet" href="~/css/calibra-datepicker.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/CalibraHub.Web.styles.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
     @if (isWorkspaceFrame)
@@ -890,6 +893,11 @@ else
 <script src="~/js/site.js" asp-append-version="true" defer></script>
 <script src="~/js/calibraAlert.js" asp-append-version="true"></script>
 <script src="~/js/confirm-modal.js" asp-append-version="true"></script>
+@* Tarih alanı standardı — tüm input[type=date] otomatik flatpickr olur.
+   defer YOK: sayfa script'leri (RenderSection) window.flatpickr'ı senkron görebilmeli. *@
+<script src="~/lib/flatpickr/flatpickr.min.js"></script>
+<script src="~/lib/flatpickr/l10n/tr.js"></script>
+<script src="~/js/calibra-datepicker.js" asp-append-version="true"></script>
 <script src="~/js/autofocus-first-input.js" asp-append-version="true" defer></script>
 <script src="~/js/production-defs-pjax.js" asp-append-version="true" defer></script>
 <script src="~/js/calibra-permissions.js" asp-append-version="true" defer></script>

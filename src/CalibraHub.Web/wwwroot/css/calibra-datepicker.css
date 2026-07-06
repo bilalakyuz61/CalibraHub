@@ -1,0 +1,142 @@
+/* ═══════════════════════════════════════════════════════════════════
+   CalibraHub Tarih Alanı Standardı (calibra-datepicker.css)
+   ---------------------------------------------------------------
+   Program genelinde tüm tarih alanları flatpickr ile açılır takvime
+   çevrilir (bkz. js/calibra-datepicker.js). Bu dosya iki şeyi taşır:
+     1) Standart input görünümü: genişlik + takvim ikonu (.calibra-date-input)
+     2) flatpickr takvim popup'ının CalibraHub teması (light default +
+        body.app-theme-dark override — referans: Sales/DocumentEdit)
+   Ekran bazlı ince ayar gerekiyorsa daha yüksek specificity ile ezilir
+   (örn. .sqe-hform kuralları flex-basis ile genişliği yönetmeye devam eder).
+   ═══════════════════════════════════════════════════════════════════ */
+
+html body {
+    --cdp-input-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+}
+body.app-theme-dark {
+    --cdp-input-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
+}
+
+/* ── 1) Standart tarih inputu (flatpickr altInput) ─────────────────── */
+input.calibra-date-input {
+    cursor: pointer;
+    background-image: var(--cdp-input-icon);
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 15px 15px;
+}
+/* Genişlik + ikon boşluğu: ekranların `input[type="text"] { width:100% }`
+   tarzı (0,2,1) kurallarını ezebilmek için aynı specificity + geç yükleme.
+   (flatpickr altInput'a type="text" attribute'unu yazar.) */
+input[type="text"].calibra-date-input {
+    width: 176px;
+    max-width: 100%;
+    padding-right: 34px;
+}
+input.calibra-date-input:disabled,
+input.calibra-date-input[readonly] {
+    cursor: default;
+    opacity: .65;
+}
+/* Tablo/grid hücresinde hücre genişliğine uy */
+table input[type="text"].calibra-date-input,
+td input[type="text"].calibra-date-input {
+    width: 100%;
+    min-width: 110px;
+}
+
+/* Henüz enhance edilmemiş veya React yöneten native tarih inputları —
+   en azından genişlik standardına uysunlar (popup'ları native kalır) */
+input[type="date"]:not(.flatpickr-input) {
+    width: 176px;
+    max-width: 100%;
+}
+table input[type="date"]:not(.flatpickr-input),
+td input[type="date"]:not(.flatpickr-input) {
+    width: 100%;
+    min-width: 110px;
+}
+
+/* ── 2) flatpickr CalibraHub teması — kurumsal yumuşak hat ─────────── */
+.flatpickr-calendar {
+    border-radius: 14px !important;
+    box-shadow: 0 16px 48px rgba(15,23,42,.16), 0 4px 12px rgba(15,23,42,.06) !important;
+    border: 1px solid rgba(99,102,241,.16) !important;
+    font-family: inherit !important;
+    background: #ffffff !important;
+    overflow: hidden !important;
+}
+.flatpickr-calendar.arrowTop:before { border-bottom-color: rgba(99,102,241,.16) !important; }
+.flatpickr-calendar.arrowTop:after { border-bottom-color: #ffffff !important; }
+.flatpickr-months .flatpickr-month { background: transparent !important; height: 42px !important; color: #1e293b !important; }
+.flatpickr-current-month {
+    color: #1e293b !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    padding-top: 8px !important;
+}
+.flatpickr-current-month input.cur-year { color: #1e293b !important; font-weight: 700 !important; }
+.flatpickr-monthDropdown-months { color: #1e293b !important; font-weight: 700 !important; }
+.flatpickr-weekdays, .flatpickr-weekdaycontainer { background: transparent !important; }
+span.flatpickr-weekday {
+    color: #94a3b8 !important; font-weight: 600 !important;
+    background: transparent !important; font-size: 0.75rem !important;
+}
+.dayContainer { padding: 2px 0 6px !important; }
+.flatpickr-day {
+    border-radius: 9px !important;
+    color: #334155 !important;
+    font-weight: 500 !important;
+    transition: background .15s, color .15s !important;
+    border-color: transparent !important;
+}
+.flatpickr-day:hover, .flatpickr-day:focus {
+    background: rgba(99,102,241,.10) !important;
+    border-color: transparent !important;
+    color: #4f46e5 !important;
+}
+.flatpickr-day.today {
+    border-color: #6366f1 !important;
+    color: #6366f1 !important;
+    font-weight: 700 !important;
+}
+.flatpickr-day.today:hover { background: rgba(99,102,241,.16) !important; color: #4f46e5 !important; border-color: #6366f1 !important; }
+.flatpickr-day.selected, .flatpickr-day.selected:hover {
+    background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+    border-color: #4f46e5 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 12px rgba(79,70,229,.32) !important;
+}
+.flatpickr-day.flatpickr-disabled, .flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay { color: #cbd5e1 !important; }
+.flatpickr-prev-month svg, .flatpickr-next-month svg { fill: #6366f1 !important; }
+.flatpickr-prev-month:hover svg, .flatpickr-next-month:hover svg { fill: #4f46e5 !important; }
+.numInputWrapper:hover { background: rgba(99,102,241,.06) !important; }
+.numInputWrapper span.arrowUp:after { border-bottom-color: #6366f1 !important; }
+.numInputWrapper span.arrowDown:after { border-top-color: #6366f1 !important; }
+
+/* Dark mode */
+body.app-theme-dark .flatpickr-calendar {
+    background: #1e293b !important;
+    border-color: rgba(165,180,252,.20) !important;
+    box-shadow: 0 16px 48px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.3) !important;
+}
+body.app-theme-dark .flatpickr-calendar.arrowTop:after { border-bottom-color: #1e293b !important; }
+body.app-theme-dark .flatpickr-calendar.arrowTop:before { border-bottom-color: rgba(165,180,252,.20) !important; }
+body.app-theme-dark .flatpickr-months .flatpickr-month,
+body.app-theme-dark .flatpickr-current-month,
+body.app-theme-dark .flatpickr-current-month input.cur-year,
+body.app-theme-dark .flatpickr-monthDropdown-months { color: #f1f5f9 !important; }
+body.app-theme-dark span.flatpickr-weekday { color: rgba(255,255,255,.55) !important; }
+body.app-theme-dark .flatpickr-day { color: #cbd5e1 !important; }
+body.app-theme-dark .flatpickr-day:hover, body.app-theme-dark .flatpickr-day:focus {
+    background: rgba(165,180,252,.20) !important; color: #c7d2fe !important;
+}
+body.app-theme-dark .flatpickr-day.today { border-color: #a5b4fc !important; color: #c7d2fe !important; }
+body.app-theme-dark .flatpickr-day.flatpickr-disabled,
+body.app-theme-dark .flatpickr-day.prevMonthDay,
+body.app-theme-dark .flatpickr-day.nextMonthDay { color: #475569 !important; }
+body.app-theme-dark .flatpickr-monthDropdown-months,
+body.app-theme-dark .flatpickr-monthDropdown-months option { background: #1e293b !important; }
+body.app-theme-dark .flatpickr-prev-month svg,
+body.app-theme-dark .flatpickr-next-month svg { fill: #a5b4fc !important; }
