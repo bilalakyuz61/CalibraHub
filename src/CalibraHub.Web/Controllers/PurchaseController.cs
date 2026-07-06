@@ -707,10 +707,10 @@ public sealed class PurchaseController : Controller
             LEFT JOIN (
                 SELECT sdl.[ItemId],
                        SUM(CASE
-                           WHEN sdl.[MovementType] IN (2,3) AND sdl.[LocationId]     IS NOT NULL THEN  sdl.[Quantity]
-                           WHEN sdl.[MovementType] IN (1,3) AND sdl.[FromLocationId] IS NOT NULL THEN -sdl.[Quantity]
-                           WHEN sdl.[MovementType] = 4 AND sdl.[LocationId]     IS NOT NULL THEN  sdl.[Quantity]
-                           WHEN sdl.[MovementType] = 4 AND sdl.[FromLocationId] IS NOT NULL THEN -sdl.[Quantity]
+                           WHEN sdl.[MovementType] IN (2,3) AND sdl.[LocationId]     IS NOT NULL THEN  sdl.[BaseQuantity]
+                           WHEN sdl.[MovementType] IN (1,3) AND sdl.[FromLocationId] IS NOT NULL THEN -sdl.[BaseQuantity]
+                           WHEN sdl.[MovementType] = 4 AND sdl.[LocationId]     IS NOT NULL THEN  sdl.[BaseQuantity]
+                           WHEN sdl.[MovementType] = 4 AND sdl.[FromLocationId] IS NOT NULL THEN -sdl.[BaseQuantity]
                            ELSE 0
                        END) AS [Balance]
                 FROM [{s}].[DocumentLine] sdl
@@ -851,8 +851,8 @@ public sealed class PurchaseController : Controller
         // STOCK_EFFECT_{code}=false olan belge türleri bakiye dışı bırakılır (seFilter).
         cmd.CommandText = $"""
             WITH Combined AS (
-                -- Receipt: hedef lokasyona +miktar
-                SELECT dl.ItemId, dl.LocationId, dl.Quantity AS Bal
+                -- Receipt: hedef lokasyona +miktar (ana birim)
+                SELECT dl.ItemId, dl.LocationId, dl.BaseQuantity AS Bal
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 2
@@ -860,8 +860,8 @@ public sealed class PurchaseController : Controller
 
                 UNION ALL
 
-                -- Issue: kaynak lokasyondan -miktar
-                SELECT dl.ItemId, dl.FromLocationId, -dl.Quantity
+                -- Issue: kaynak lokasyondan -miktar (ana birim)
+                SELECT dl.ItemId, dl.FromLocationId, -dl.BaseQuantity
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 1
@@ -869,8 +869,8 @@ public sealed class PurchaseController : Controller
 
                 UNION ALL
 
-                -- Transfer: hedef +miktar
-                SELECT dl.ItemId, dl.LocationId, dl.Quantity
+                -- Transfer: hedef +miktar (ana birim)
+                SELECT dl.ItemId, dl.LocationId, dl.BaseQuantity
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 3 AND dl.LocationId IS NOT NULL
@@ -878,8 +878,8 @@ public sealed class PurchaseController : Controller
 
                 UNION ALL
 
-                -- Transfer: kaynak -miktar
-                SELECT dl.ItemId, dl.FromLocationId, -dl.Quantity
+                -- Transfer: kaynak -miktar (ana birim)
+                SELECT dl.ItemId, dl.FromLocationId, -dl.BaseQuantity
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 3 AND dl.FromLocationId IS NOT NULL
@@ -887,8 +887,8 @@ public sealed class PurchaseController : Controller
 
                 UNION ALL
 
-                -- Adjust (Sayim farki): LocationId doluysa +miktar (fazla cikti)
-                SELECT dl.ItemId, dl.LocationId, dl.Quantity
+                -- Adjust (Sayim farki): LocationId doluysa +miktar (fazla cikti, ana birim)
+                SELECT dl.ItemId, dl.LocationId, dl.BaseQuantity
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 4 AND dl.LocationId IS NOT NULL
@@ -896,8 +896,8 @@ public sealed class PurchaseController : Controller
 
                 UNION ALL
 
-                -- Adjust (Sayim farki): FromLocationId doluysa -miktar (eksik cikti)
-                SELECT dl.ItemId, dl.FromLocationId, -dl.Quantity
+                -- Adjust (Sayim farki): FromLocationId doluysa -miktar (eksik cikti, ana birim)
+                SELECT dl.ItemId, dl.FromLocationId, -dl.BaseQuantity
                 FROM [{s}].[DocumentLine] dl
                 JOIN [{s}].[Document] d ON d.id = dl.DocumentId
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 4 AND dl.FromLocationId IS NOT NULL

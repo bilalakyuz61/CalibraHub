@@ -511,10 +511,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         insCmd.Transaction = tx;
         insCmd.CommandText = $"""
             INSERT INTO {_lineTable}
-                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[UnitPrice],[DiscountRate],[LineTotal],
+                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
                  [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotNo],[Notes])
             VALUES
-                (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,0,0,0,
+                (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{StockUnitSql.BaseQtyExpr($"[{_schema}].[Items]", $"[{_schema}].[ItemUnits]", "@Quantity", "@ItemId", "@UnitId")},0,0,0,
                  @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotNo,@Notes);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;

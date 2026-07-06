@@ -7564,6 +7564,10 @@ END;";
                     [ItemId]          INT              NOT NULL,
                     [UnitId]          INT              NULL,
                     [Quantity]        DECIMAL(18,4)    NOT NULL DEFAULT(0),
+                    -- Ana birime (Items.UnitId) cevrilmis miktar. Tum stok bakiye/hareket
+                    -- hesaplari bunu kullanir; UnitId = girilen birim (gosterim). Yazimda
+                    -- Quantity * ItemUnits.Multiplier ile hesaplanir (bkz. StockUnitSql).
+                    [BaseQuantity]    DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [UnitPrice]       DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [DiscountRate]    DECIMAL(5,2)     NOT NULL DEFAULT(0),
                     [LineTotal]       DECIMAL(18,4)    NOT NULL DEFAULT(0),
@@ -7630,6 +7634,25 @@ END;";
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[DocumentLine]', N'LotNo') IS NULL
                 ALTER TABLE [{s}].[DocumentLine] ADD [LotNo] NVARCHAR(50) NULL;
+
+            -- 2026-07-06: Baz-birim normalizasyonu — BaseQuantity kolonu + tek seferlik backfill.
+            -- Farkli olcu birimleriyle (adet/metre/koli) girilen stok hareketleri baz birimde
+            -- tutarli toplansin. Girilen birim = ana birim olan mevcut satirlarda carpan 1 →
+            -- BaseQuantity = Quantity (davranis degismez). Backfill deferred EXEC: yeni kolon
+            -- ayni batch'te parse-time dogrulanamaz (SqlException 207 — BridgeMsgId dersi).
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'BaseQuantity') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DocumentLine] ADD [BaseQuantity] DECIMAL(18,4) NOT NULL
+                    CONSTRAINT [DF_DocumentLine_BaseQuantity] DEFAULT(0);
+                EXEC(N'UPDATE dl SET dl.[BaseQuantity] = dl.[Quantity] * ISNULL((
+                        SELECT TOP 1 CASE WHEN dl.[UnitId] IS NULL OR i.[UnitId] = dl.[UnitId] THEN 1
+                                          ELSE ISNULL(iu.[Multiplier], 1) END
+                        FROM [{s}].[Items] i
+                        LEFT JOIN [{s}].[ItemUnits] iu ON iu.[ItemId] = i.[Id] AND iu.[UnitId] = dl.[UnitId]
+                        WHERE i.[Id] = dl.[ItemId]), 1)
+                     FROM [{s}].[DocumentLine] dl;');
+            END
 
             -- Stok bakiyesi sorgusu (StockBalances) ItemId+LocationId+MovementType bazinda
             -- filtreli calisir — veri boskken index olusturmak ucuz, sonradan pahali.

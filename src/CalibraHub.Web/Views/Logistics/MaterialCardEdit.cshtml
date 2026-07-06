@@ -2007,11 +2007,12 @@
                                     <th>Hareket</th>
                                     <th style="text-align:right;">Miktar</th>
                                     <th>Birim</th>
+                                    <th style="text-align:right;">Baz Miktar</th>
                                     <th>Kaynak Lok.</th>
                                     <th>Hedef Lok.</th>
                                     <th style="text-align:right;">Birim Maliyet</th>
                                     <th>Lot / Parti</th>
-                                    <th style="text-align:right;">Bakiye</th>
+                                    <th style="text-align:right;" title="Ana birim cinsinden koşan bakiye">Bakiye</th>
                                     <th>Kullanıcı</th>
                                 </tr>
                             </thead>
@@ -5291,6 +5292,15 @@
                 } else {
                     qtyCell = '<span class="smv-qty--out">-' + fmt(m.quantity) + '</span>';
                 }
+                // Ana birime çevrilmiş miktar (bakiye tabanı)
+                var baseCell;
+                if (m.movementType === 3) {
+                    baseCell = '<span class="smv-muted">' + fmt(m.baseQuantity) + '</span>';
+                } else if (m.baseSignedQuantity >= 0) {
+                    baseCell = '<span class="smv-qty--in">+' + fmt(m.baseQuantity) + '</span>';
+                } else {
+                    baseCell = '<span class="smv-qty--out">-' + fmt(m.baseQuantity) + '</span>';
+                }
                 var fromLoc = locText(m.fromLocationCode, m.fromLocationName);
                 var toLoc = locText(m.toLocationCode, m.toLocationName);
 
@@ -5322,11 +5332,12 @@
                 { id: 'dir', label: 'Hareket' },
                 { id: 'signedQty', label: 'Miktar' },
                 { id: 'unit', label: 'Birim' },
+                { id: 'baseQty', label: 'Baz Miktar' },
                 { id: 'fromLoc', label: 'Kaynak Lokasyon' },
                 { id: 'toLoc', label: 'Hedef Lokasyon' },
                 { id: 'unitCost', label: 'Birim Maliyet' },
                 { id: 'lot', label: 'Lot / Parti' },
-                { id: 'balance', label: 'Bakiye' },
+                { id: 'balance', label: 'Bakiye (Ana Birim)' },
                 { id: 'user', label: 'Kullanıcı' }
             ];
             var rows = _rows.map(function (m) {
@@ -5337,6 +5348,7 @@
                     dir: m.movementLabel || '',
                     signedQty: m.movementType === 3 ? m.quantity : m.signedQuantity, // sayı
                     unit: m.unitCode || '',
+                    baseQty: m.movementType === 3 ? m.baseQuantity : m.baseSignedQuantity, // ana birim
                     fromLoc: locText(m.fromLocationCode, m.fromLocationName),
                     toLoc: locText(m.toLocationCode, m.toLocationName),
                     unitCost: (m.unitCost == null ? '' : m.unitCost),

@@ -281,12 +281,13 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
 
                 await using var insCmd = conn.CreateCommand();
                 insCmd.Transaction = tx;
+                var baseQtyExpr = StockUnitSql.BaseQtyExpr($"[{s}].[Items]", $"[{s}].[ItemUnits]", "@Quantity", "@ItemId", "@UnitId");
                 insCmd.CommandText = $"""
                     INSERT INTO {lineTable}
-                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[UnitPrice],[DiscountRate],[LineTotal],
+                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
                          [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotNo],[Notes])
                     VALUES
-                        (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,0,0,0,
+                        (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{baseQtyExpr},0,0,0,
                          @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotNo,@Notes);
                     """;
                 insCmd.Parameters.AddWithValue("@DocumentId", stockLine.DocumentId);

@@ -176,7 +176,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                        l.[CountedQty], l.[ConfigId],
                        cfg.[RecordCode] AS combination_code,
                        l.[Notes],
-                       ic.[LocationId], loc.[LocationName] AS FromLocationName,
+                       COALESCE(l.[LocationId], ic.[LocationId]) AS FromLocationId,
+                       loc.[LocationName] AS FromLocationName,
                        NULL AS ToLocationId, NULL AS ToLocationName,
                        NULL AS UnitCost, NULL AS LotNo
                 FROM {T("InventoryCountLine")} l
@@ -184,7 +185,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 LEFT JOIN {T("Items")} i ON i.[Id] = l.[ItemId]
                 LEFT JOIN {T("Unit")} u ON u.[Id] = l.[UnitId]
                 LEFT JOIN {T("ItemConfiguration")} cfg ON cfg.[Id] = l.[ConfigId]
-                LEFT JOIN {T("Location")} loc ON loc.[Id] = ic.[LocationId]
+                LEFT JOIN {T("Location")} loc ON loc.[Id] = COALESCE(l.[LocationId], ic.[LocationId])
                 WHERE ic.[DocumentId] = @DocId
                 ORDER BY l.[Id];
                 """;
@@ -306,10 +307,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Transaction = tx;
                 lineIns.CommandText = $"""
                     INSERT INTO {T("DocumentLine")}
-                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[UnitPrice],[DiscountRate],[LineTotal],
+                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
                          [CombinationId],[FromLocationId],[LocationId],[MovementType],[UnitCost],[LotNo],[Notes])
                     VALUES
-                        (@DocId,@LineNo,@ItemId,@UnitId,@Qty,0,0,0,
+                        (@DocId,@LineNo,@ItemId,@UnitId,@Qty,{StockUnitSql.BaseQtyExpr(T("Items"), T("ItemUnits"), "@Qty", "@ItemId", "@UnitId")},0,0,0,
                          @CombId,@FromLoc,@ToLoc,@MovementType,
                          COALESCE(@UnitCost, (SELECT TOP 1 pl.[Price] FROM {T("PriceList")} pl
                                               WHERE pl.[ItemId] = @ItemId AND pl.[PriceType] = N'm' AND pl.[IsActive] = 1
@@ -441,9 +442,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Transaction = tx;
                 lineIns.CommandText = $"""
                     INSERT INTO {T("InventoryCountLine")}
-                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes])
+                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes],[LocationId])
                     VALUES
-                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes);
+                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId);
                     """;
                 lineIns.Parameters.AddWithValue("@CountId", countId);
                 lineIns.Parameters.AddWithValue("@ItemId", line.ItemId.Value);
@@ -451,6 +452,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@UnitId", (object?)line.UnitId ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@Qty", line.Qty);
                 lineIns.Parameters.AddWithValue("@Notes", (object?)line.Notes ?? DBNull.Value);
+                // Kalem bazinda depo — satirda yoksa header (sayim deposu) devralinir
+                lineIns.Parameters.AddWithValue("@LocId", (object?)(line.FromLocationId ?? request.FromLocationId) ?? DBNull.Value);
                 await lineIns.ExecuteNonQueryAsync(ct);
             }
 

@@ -16,9 +16,11 @@ public sealed record ItemStockMovementRowDto(
     string? DocTypeName,
     byte MovementType,          // 1=Çıkış 2=Giriş 3=Transfer 4=Düzeltme
     string MovementLabel,
-    decimal Quantity,           // ham (her zaman pozitif)
-    decimal SignedQuantity,     // itemin toplam bakiyesine katkı (+/−; transfer=0)
-    decimal RunningBalance,     // o ana kadarki koşan toplam bakiye (tüm geçmiş üzerinden)
+    decimal Quantity,           // ham girilen miktar (girilen birimde, her zaman pozitif)
+    decimal SignedQuantity,     // girilen birimde işaretli (+/−; transfer=0) — gösterim
+    decimal BaseQuantity,       // ana birime çevrilmiş miktar (ham, pozitif)
+    decimal BaseSignedQuantity, // ana birimde işaretli (+/−; transfer=0) — bakiye tabanı
+    decimal RunningBalance,     // ana birimde koşan toplam bakiye (tüm geçmiş üzerinden)
     string? UnitCode,
     int? FromLocationId,
     string? FromLocationCode,

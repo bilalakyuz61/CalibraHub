@@ -21,6 +21,10 @@ public sealed class DocumentLine
     public int? UnitId { get; set; }
 
     public decimal Quantity { get; set; }
+
+    [Description("Miktarın ana birime (Item.UnitId) çevrilmiş hali. Yazımda Quantity * ItemUnits.Multiplier ile hesaplanır (UnitId ana birim/NULL ise = Quantity). TÜM stok bakiye/hareket hesapları bunu kullanır — farklı birimlerden hareketler tutarlı toplanır. UnitId = girilen birim (gösterim).")]
+    public decimal BaseQuantity { get; set; }
+
     public decimal UnitPrice { get; set; }
     public decimal DiscountRate { get; set; }
     public decimal LineTotal { get; set; }

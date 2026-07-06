@@ -61,7 +61,8 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                     l.[LocationId],     tl.[LocationCode] AS ToLocCode,   tl.[LocationName] AS ToLocName,
                     l.[UnitCost], l.[LotNo], l.[Notes],
                     cfg.[RecordCode] AS CombinationCode,
-                    usr.[FullName] AS CreatedByName
+                    usr.[FullName] AS CreatedByName,
+                    l.[BaseQuantity]
                 FROM {T("DocumentLine")} l
                 INNER JOIN {T("Document")} d        ON d.[Id]  = l.[DocumentId]
                 LEFT  JOIN {T("DocumentType")} dt   ON dt.[Id] = d.[DocumentTypeId]
@@ -84,10 +85,13 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
             {
                 var mt = r.IsDBNull(6) ? (byte)0 : r.GetByte(6);
                 var qty = r.GetDecimal(7);
+                var baseQty = r.IsDBNull(20) ? qty : r.GetDecimal(20);
                 int? fromLoc = r.IsDBNull(9) ? null : r.GetInt32(9);
                 int? toLoc = r.IsDBNull(12) ? null : r.GetInt32(12);
-                // İşaret: hangi lokasyon dolu → giriş/çıkış (bakiye formülüyle tutarlı)
+                // İşaret: hangi lokasyon dolu → giriş/çıkış (bakiye formülüyle tutarlı).
+                // Girilen birim gösterim için; baz birim koşan bakiye + özet için.
                 var signed = (toLoc.HasValue ? qty : 0m) - (fromLoc.HasValue ? qty : 0m);
+                var baseSigned = (toLoc.HasValue ? baseQty : 0m) - (fromLoc.HasValue ? baseQty : 0m);
 
                 raw.Add(new Raw
                 {
@@ -99,6 +103,7 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                     DocTypeName = r.IsDBNull(5) ? null : r.GetString(5),
                     MovementType = mt,
                     Quantity = qty,
+                    BaseQuantity = baseQty,
                     UnitCode = r.IsDBNull(8) ? null : r.GetString(8),
                     FromLocationId = fromLoc,
                     FromLocationCode = r.IsDBNull(10) ? null : r.GetString(10),
@@ -112,18 +117,20 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                     CombinationCode = r.IsDBNull(18) ? null : r.GetString(18),
                     CreatedByName = r.IsDBNull(19) ? null : r.GetString(19),
                     SignedDelta = signed,
+                    BaseSignedDelta = baseSigned,
                 });
             }
         }
 
-        // 1) Koşan bakiye — tüm geçmiş, kronolojik (artan)
+        // 1) Koşan bakiye — tüm geçmiş, kronolojik (artan). BAZ BİRİMDE hesaplanır ki
+        // farklı ölçü birimleriyle girilen hareketler tutarlı toplansın.
         var running = 0m;
         foreach (var row in raw)
         {
-            running += row.SignedDelta;
+            running += row.BaseSignedDelta;
             row.RunningBalance = running;
         }
-        var currentBalance = running; // son (en yeni) hareketin bakiyesi = gerçek güncel stok
+        var currentBalance = running; // son (en yeni) hareketin baz bakiyesi = gerçek güncel stok
 
         // 2) Filtre dropdown'u — tüm hareketlerde geçen benzersiz lokasyonlar
         var locMap = new Dictionary<int, string>();
@@ -152,9 +159,9 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
 
         var filtered = q.ToList();
 
-        // 4) Özet — filtrelenmiş (gösterilen) satırlar üzerinden
-        var totalIn = filtered.Where(x => x.SignedDelta > 0).Sum(x => x.Quantity);
-        var totalOut = filtered.Where(x => x.SignedDelta < 0).Sum(x => x.Quantity);
+        // 4) Özet — filtrelenmiş (gösterilen) satırlar, BAZ BİRİMDE (bakiyeyle tutarlı)
+        var totalIn = filtered.Where(x => x.BaseSignedDelta > 0).Sum(x => x.BaseQuantity);
+        var totalOut = filtered.Where(x => x.BaseSignedDelta < 0).Sum(x => x.BaseQuantity);
 
         // 5) DTO — yeni→eski göster (her satır gerçek koşan bakiyesini korur)
         var rows = filtered
@@ -163,7 +170,7 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
             .Select(x => new ItemStockMovementRowDto(
                 x.LineId, x.DocumentId, x.DocumentNumber, x.MovementDate,
                 x.DocTypeCode, x.DocTypeName, x.MovementType, LabelFor(x.MovementType),
-                x.Quantity, x.SignedDelta, x.RunningBalance, x.UnitCode,
+                x.Quantity, x.SignedDelta, x.BaseQuantity, x.BaseSignedDelta, x.RunningBalance, x.UnitCode,
                 x.FromLocationId, x.FromLocationCode, x.FromLocationName,
                 x.ToLocationId, x.ToLocationCode, x.ToLocationName,
                 x.UnitCost, x.LotNo, x.CombinationCode, x.Notes, x.CreatedByName))
@@ -182,6 +189,7 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
         public string? DocTypeName;
         public byte MovementType;
         public decimal Quantity;
+        public decimal BaseQuantity;
         public string? UnitCode;
         public int? FromLocationId;
         public string? FromLocationCode;
@@ -195,6 +203,7 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
         public string? CombinationCode;
         public string? CreatedByName;
         public decimal SignedDelta;
+        public decimal BaseSignedDelta;
         public decimal RunningBalance;
     }
 }

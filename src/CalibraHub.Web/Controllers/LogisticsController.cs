@@ -601,6 +601,8 @@ public sealed class LogisticsController : Controller
                     m.MovementLabel,
                     m.Quantity,
                     m.SignedQuantity,
+                    m.BaseQuantity,
+                    m.BaseSignedQuantity,
                     m.RunningBalance,
                     m.UnitCode,
                     m.FromLocationId,
