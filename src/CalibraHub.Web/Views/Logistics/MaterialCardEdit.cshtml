@@ -835,6 +835,12 @@
     }
     body.app-theme-light .mce-label { color: #64748b; }
 
+    /* Ölçü Birimleri oran etiketi: "1 {birim} = [çarpan] {ana birim}" */
+    .mce-unit-prefix, .mce-unit-suffix { font-variant-numeric: tabular-nums; }
+    .mce-unit-suffix { min-width: 34px; }
+    body.app-theme-light .mce-unit-prefix,
+    body.app-theme-light .mce-unit-suffix { color: #475569 !important; }
+
     .mce-dyn-group__title {
         color: rgba(255,255,255,0.7);
     }
@@ -1731,32 +1737,37 @@
                     <div class="mce-row" data-unit-line="1">
                         <label>Birim 1</label>
                         <select class="mce-select mce-unit-code" style="max-width:160px;"><option value="">Seciniz</option></select>
-                        <span style="font-size:.78rem;color:rgba(255,255,255,.45);flex-shrink:0">Çarpan</span>
-                        <input type="number" class="mce-input mce-unit-mult" style="max-width:100px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-prefix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">1 birim =</span>
+                        <input type="number" class="mce-input mce-unit-mult" style="max-width:90px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-suffix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">—</span>
                     </div>
                     <div class="mce-row" data-unit-line="2">
                         <label>Birim 2</label>
                         <select class="mce-select mce-unit-code" style="max-width:160px;"><option value="">Seciniz</option></select>
-                        <span style="font-size:.78rem;color:rgba(255,255,255,.45);flex-shrink:0">Çarpan</span>
-                        <input type="number" class="mce-input mce-unit-mult" style="max-width:100px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-prefix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">1 birim =</span>
+                        <input type="number" class="mce-input mce-unit-mult" style="max-width:90px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-suffix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">—</span>
                     </div>
                     <div class="mce-row" data-unit-line="3">
                         <label>Birim 3</label>
                         <select class="mce-select mce-unit-code" style="max-width:160px;"><option value="">Seciniz</option></select>
-                        <span style="font-size:.78rem;color:rgba(255,255,255,.45);flex-shrink:0">Çarpan</span>
-                        <input type="number" class="mce-input mce-unit-mult" style="max-width:100px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-prefix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">1 birim =</span>
+                        <input type="number" class="mce-input mce-unit-mult" style="max-width:90px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-suffix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">—</span>
                     </div>
                     <div class="mce-row" data-unit-line="4">
                         <label>Birim 4</label>
                         <select class="mce-select mce-unit-code" style="max-width:160px;"><option value="">Seciniz</option></select>
-                        <span style="font-size:.78rem;color:rgba(255,255,255,.45);flex-shrink:0">Çarpan</span>
-                        <input type="number" class="mce-input mce-unit-mult" style="max-width:100px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-prefix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">1 birim =</span>
+                        <input type="number" class="mce-input mce-unit-mult" style="max-width:90px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-suffix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">—</span>
                     </div>
                     <div class="mce-row" data-unit-line="5">
                         <label>Birim 5</label>
                         <select class="mce-select mce-unit-code" style="max-width:160px;"><option value="">Seciniz</option></select>
-                        <span style="font-size:.78rem;color:rgba(255,255,255,.45);flex-shrink:0">Çarpan</span>
-                        <input type="number" class="mce-input mce-unit-mult" style="max-width:100px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-prefix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">1 birim =</span>
+                        <input type="number" class="mce-input mce-unit-mult" style="max-width:90px;text-align:right" step="any" min="0" placeholder="0" />
+                        <span class="mce-unit-suffix" style="font-size:.8rem;color:rgba(255,255,255,.6);flex-shrink:0;white-space:nowrap">—</span>
                     </div>
                 </div>
                 <div id="mceUnitError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
@@ -3736,6 +3747,30 @@
         return ok;
     }
 
+    // Ölçü Birimleri "1 {satır birimi} = [çarpan] {ana birim}" oran etiketleri.
+    // Çarpan salt sayı yerine okunur oran gösterir (örn. "1 kg = 5 ad"): satırın
+    // birimi öneke, malzemenin ana birimi (Genel Bilgiler → #mceUnitId) çarpandan
+    // sonraki soneke yazılır. Kod _availableUnits'ten id ile çözülür.
+    function mceUnitCodeById(id) {
+        if (!id) return '';
+        var u = _availableUnits.find(function(x) { return String(x.id) === String(id); });
+        return u ? (u.unitCode || '') : '';
+    }
+    window.mceUpdateUnitRatioLabels = function() {
+        var masterEl = document.getElementById('mceUnitId');
+        var baseCode = masterEl ? mceUnitCodeById(masterEl.value) : '';
+        for (var i = 1; i <= 5; i++) {
+            var row = document.querySelector('[data-unit-line="' + i + '"]');
+            if (!row) continue;
+            var codeEl = row.querySelector('.mce-unit-code');
+            var pre = row.querySelector('.mce-unit-prefix');
+            var suf = row.querySelector('.mce-unit-suffix');
+            var rowCode = codeEl ? mceUnitCodeById(codeEl.value) : '';
+            if (pre) pre.textContent = '1 ' + (rowCode || 'birim') + ' =';
+            if (suf) suf.textContent = baseCode || '—';
+        }
+    };
+
     window.mceUnitLoad = function() {
         // Kaydedilmis kayit varsa conversions da gelir; yeni kartta sadece availableUnits cekilir
         var url = currentId && currentId > 0
@@ -3778,6 +3813,7 @@
                 // Dropdown'larda tekrari engelle + change listener'lari bagla (bir kez)
                 mceUnitRefreshSelects();
                 mceUnitBindListenersOnce();
+                window.mceUpdateUnitRatioLabels();
             })
             .catch(function(e) { console.error('[MCE] unit load error:', e); });
     };
@@ -3795,7 +3831,7 @@
         // Ana Birim degistiginde alternatlerin disabled state'ini yenile
         var masterEl = document.getElementById('mceUnitId');
         if (masterEl) {
-            masterEl.addEventListener('change', function() { mceUnitRefreshSelects(); });
+            masterEl.addEventListener('change', function() { mceUnitRefreshSelects(); window.mceUpdateUnitRatioLabels(); });
         }
 
         // Her satir: kod degistiginde dropdown'lari yenile + carpana odaklan.
@@ -3809,6 +3845,7 @@
                 if (codeEl) {
                     codeEl.addEventListener('change', function() {
                         mceUnitRefreshSelects();
+                        window.mceUpdateUnitRatioLabels();
                         // Onceden isaretlenmis is-invalid (kaydet sirasindan kalma) varsa temizle
                         if (multEl) multEl.classList.remove('is-invalid');
                         if (codeEl.value) {
