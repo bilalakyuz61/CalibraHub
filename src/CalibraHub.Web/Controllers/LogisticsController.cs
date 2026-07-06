@@ -555,6 +555,83 @@ public sealed class LogisticsController : Controller
         return View();
     }
 
+    /// <summary>
+    /// Malzeme kartı "Stok Hareketleri" sekmesi verisi. DocumentLine (MovementType dolu)
+    /// tabanlı hareket ekstresi + koşan bakiye + özet + filtre lokasyonları. Filtreler
+    /// opsiyonel; koşan bakiye tüm geçmiş üzerinden hesaplanır, filtreler sadece gösterimi
+    /// daraltır. Excel export gösterilen satırlardan client tarafında üretilir.
+    /// </summary>
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
+    public async Task<IActionResult> ItemStockMovements(
+        int itemId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        byte? movementType,
+        int? locationId,
+        [FromServices] Application.Abstractions.Persistence.IStockMovementQueryRepository stockMovements,
+        CancellationToken cancellationToken)
+    {
+        if (itemId <= 0)
+            return Json(new { ok = false, error = "Malzeme kartı ID gerekli." });
+
+        try
+        {
+            var filter = new ItemStockMovementFilter(
+                itemId,
+                fromDate,
+                toDate,
+                movementType is >= 1 and <= 4 ? movementType : null,
+                locationId is > 0 ? locationId : null);
+
+            var result = await stockMovements.ListForItemAsync(filter, cancellationToken);
+
+            return Json(new
+            {
+                ok = true,
+                rows = result.Rows.Select(m => new
+                {
+                    m.LineId,
+                    m.DocumentId,
+                    m.DocumentNumber,
+                    movementDate = m.MovementDate.ToString("yyyy-MM-dd"),
+                    m.DocTypeCode,
+                    m.DocTypeName,
+                    m.MovementType,
+                    m.MovementLabel,
+                    m.Quantity,
+                    m.SignedQuantity,
+                    m.RunningBalance,
+                    m.UnitCode,
+                    m.FromLocationId,
+                    m.FromLocationCode,
+                    m.FromLocationName,
+                    m.ToLocationId,
+                    m.ToLocationCode,
+                    m.ToLocationName,
+                    m.UnitCost,
+                    m.LotNo,
+                    m.CombinationCode,
+                    m.Notes,
+                    m.CreatedByName,
+                }),
+                locations = result.Locations.Select(l => new { l.Id, l.Label }),
+                summary = new
+                {
+                    result.TotalIn,
+                    result.TotalOut,
+                    result.CurrentBalance,
+                    result.MovementCount,
+                },
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ItemStockMovements] itemId={ItemId} hareket sorgusu hatası", itemId);
+            return Json(new { ok = false, error = "Stok hareketleri yüklenemedi." });
+        }
+    }
+
     // NOT: BOM (Urun Agaci/Recete) endpoint'leri BomController'a tasindi (rapor �2.3).
     // Tasinmis: BOMs, BOMEdit, GetBOMsPage, GetBOM, GetBOMById, DeleteBOMJson, SaveBOM.
     // GetMaterialCost burada kaldi (PriceListService + CurrencyService + CardGroupRepo bagimliligi).

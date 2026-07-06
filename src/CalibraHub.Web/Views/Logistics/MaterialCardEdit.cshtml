@@ -1629,6 +1629,11 @@
                 Lokasyonlar
                 <span class="mce-nav-count is-empty" id="mceLocCount">0</span>
             </button>
+            <button type="button" class="mce-nav-btn" id="mceNavStockMov">
+                <span class="mce-nav-dot"></span>
+                Stok Hareketleri
+                <span class="mce-nav-count is-empty" id="mceStockMovCount">0</span>
+            </button>
             <button type="button" class="mce-nav-btn" id="mceNavFeatures" style="display:none;">
                 <span class="mce-nav-dot"></span>
                 Özellikler
@@ -1823,6 +1828,203 @@
                 <div id="mceLocError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
                 <div style="margin-top:10px;font-size:.72rem;color:rgba(255,255,255,.45);">
                     Değişiklikler malzeme kartı kaydedildiğinde otomatik uygulanır.
+                </div>
+            </div>
+
+            <!-- ═══════════════ Stok Hareketleri ═══════════════ -->
+            <div class="mce-card mce-section-anchor" id="mceStockMovCard" style="display:none;">
+                <style>
+                    .smv-summary { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+                    .smv-sum {
+                        flex:1 1 150px; min-width:140px;
+                        padding:12px 14px; border-radius:12px;
+                        background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+                    }
+                    body.app-theme-light .smv-sum { background:#f8fafc; border-color:#e2e8f0; }
+                    .smv-sum__label {
+                        font-size:.68rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+                        color:rgba(255,255,255,.45); margin-bottom:5px;
+                    }
+                    body.app-theme-light .smv-sum__label { color:#94a3b8; }
+                    .smv-sum__val { font-size:1.05rem; font-weight:700; font-variant-numeric:tabular-nums; }
+                    .smv-sum--in  .smv-sum__val { color:#34d399; }
+                    .smv-sum--out .smv-sum__val { color:#f87171; }
+                    .smv-sum--bal .smv-sum__val { color:#a5b4fc; }
+                    body.app-theme-light .smv-sum--in  .smv-sum__val { color:#059669; }
+                    body.app-theme-light .smv-sum--out .smv-sum__val { color:#dc2626; }
+                    body.app-theme-light .smv-sum--bal .smv-sum__val { color:#4f46e5; }
+                    .smv-sum__val small { font-size:.68rem; font-weight:500; opacity:.6; margin-left:3px; }
+
+                    .smv-filters {
+                        display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;
+                        padding:12px 14px; border-radius:12px; margin-bottom:14px;
+                        background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07);
+                    }
+                    body.app-theme-light .smv-filters { background:#fff; border-color:#e2e8f0; }
+                    .smv-fgroup { display:flex; flex-direction:column; gap:4px; }
+                    .smv-fgroup > label {
+                        font-size:.68rem; font-weight:600; color:rgba(148,163,184,.9);
+                        letter-spacing:.02em;
+                    }
+                    .smv-fgroup input, .smv-fgroup select {
+                        padding:7px 10px; border-radius:8px; font-size:.8rem;
+                        background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
+                        color:rgba(255,255,255,0.9); outline:none; min-width:150px;
+                    }
+                    body.app-theme-light .smv-fgroup input, body.app-theme-light .smv-fgroup select {
+                        background:#fff; border-color:#e2e8f0; color:#1e293b;
+                    }
+                    .smv-fgroup input:focus, .smv-fgroup select:focus {
+                        border-color:rgba(99,102,241,.55); box-shadow:0 0 0 3px rgba(99,102,241,.12);
+                    }
+                    .smv-fbtn {
+                        display:inline-flex; align-items:center; gap:6px;
+                        padding:8px 14px; border-radius:9px; border:1px solid transparent;
+                        font-size:.78rem; font-weight:600; cursor:pointer; transition:all .15s;
+                    }
+                    .smv-fbtn--apply { background:#6366f1; border-color:#4f46e5; color:#fff; }
+                    .smv-fbtn--apply:hover { background:#4f46e5; }
+                    .smv-fbtn--ghost {
+                        background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.14); color:rgba(255,255,255,0.75);
+                    }
+                    body.app-theme-light .smv-fbtn--ghost { background:#fff; border-color:#e2e8f0; color:#475569; }
+                    .smv-fbtn--ghost:hover { background:rgba(255,255,255,0.1); }
+                    body.app-theme-light .smv-fbtn--ghost:hover { background:#f1f5f9; }
+                    .smv-fbtn--excel {
+                        background:rgba(16,185,129,0.14); border-color:rgba(16,185,129,0.4); color:#34d399; margin-left:auto;
+                    }
+                    body.app-theme-light .smv-fbtn--excel { color:#059669; background:rgba(16,185,129,0.08); border-color:rgba(16,185,129,0.3); }
+                    .smv-fbtn--excel:hover:not(:disabled) { background:rgba(16,185,129,0.24); }
+                    .smv-fbtn:disabled { opacity:.5; cursor:not-allowed; }
+
+                    .smv-table { width:100%; border-collapse:collapse; font-size:.78rem; }
+                    .smv-table thead th {
+                        position:sticky; top:0; z-index:1;
+                        text-align:left; padding:9px 12px; white-space:nowrap;
+                        font-weight:700; font-size:.72rem;
+                        color:#a5b4fc; background:var(--app-surface,#1a1f2e);
+                        border-bottom:1px solid rgba(255,255,255,0.08);
+                    }
+                    body.app-theme-light .smv-table thead th { color:#4f46e5; background:#f8fafc; border-bottom-color:#e2e8f0; }
+                    .smv-table tbody td {
+                        padding:8px 12px; white-space:nowrap;
+                        color:rgba(255,255,255,0.82);
+                        border-bottom:1px solid rgba(255,255,255,0.05);
+                    }
+                    body.app-theme-light .smv-table tbody td { color:#334155; border-bottom-color:#f1f5f9; }
+                    .smv-table tbody tr:hover td { background:rgba(99,102,241,0.06); }
+                    .smv-num { text-align:right; font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,Consolas,monospace; }
+                    .smv-badge {
+                        display:inline-flex; align-items:center; gap:4px;
+                        padding:2px 9px; border-radius:20px; font-size:.68rem; font-weight:600;
+                    }
+                    .smv-badge--in  { background:rgba(16,185,129,.15); color:#34d399; }
+                    .smv-badge--out { background:rgba(239,68,68,.15); color:#f87171; }
+                    .smv-badge--tr  { background:rgba(59,130,246,.15); color:#60a5fa; }
+                    .smv-badge--adj { background:rgba(139,92,246,.15); color:#a78bfa; }
+                    body.app-theme-light .smv-badge--in  { color:#059669; }
+                    body.app-theme-light .smv-badge--out { color:#dc2626; }
+                    body.app-theme-light .smv-badge--tr  { color:#2563eb; }
+                    body.app-theme-light .smv-badge--adj { color:#7c3aed; }
+                    .smv-qty--in  { color:#34d399; font-weight:600; }
+                    .smv-qty--out { color:#f87171; font-weight:600; }
+                    body.app-theme-light .smv-qty--in  { color:#059669; }
+                    body.app-theme-light .smv-qty--out { color:#dc2626; }
+                    .smv-docno { font-family:ui-monospace,Menlo,Consolas,monospace; color:#93c5fd; }
+                    body.app-theme-light .smv-docno { color:#2563eb; }
+                    .smv-muted { color:rgba(255,255,255,0.35); }
+                    body.app-theme-light .smv-muted { color:#94a3b8; }
+                </style>
+
+                <p class="mce-card-title">Stok Hareketleri</p>
+
+                <!-- Kaydedilmemiş malzeme uyarısı -->
+                <div id="smvNeedsSave" style="display:none;padding:22px;text-align:center;color:rgba(255,255,255,.45);font-size:.85rem;">
+                    Stok hareketlerini görüntülemek için önce malzeme kartını kaydedin.
+                </div>
+
+                <div id="smvMain">
+                    <!-- Özet şeridi -->
+                    <div class="smv-summary">
+                        <div class="smv-sum smv-sum--in">
+                            <div class="smv-sum__label">Toplam Giriş</div>
+                            <div class="smv-sum__val" id="smvTotalIn">0</div>
+                        </div>
+                        <div class="smv-sum smv-sum--out">
+                            <div class="smv-sum__label">Toplam Çıkış</div>
+                            <div class="smv-sum__val" id="smvTotalOut">0</div>
+                        </div>
+                        <div class="smv-sum smv-sum--bal">
+                            <div class="smv-sum__label">Güncel Bakiye</div>
+                            <div class="smv-sum__val" id="smvBalance">0</div>
+                        </div>
+                        <div class="smv-sum">
+                            <div class="smv-sum__label">Hareket Sayısı</div>
+                            <div class="smv-sum__val" id="smvCount">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Filtre barı -->
+                    <div class="smv-filters">
+                        <div class="smv-fgroup">
+                            <label for="smvFrom">Başlangıç Tarihi</label>
+                            <input type="date" id="smvFrom" />
+                        </div>
+                        <div class="smv-fgroup">
+                            <label for="smvTo">Bitiş Tarihi</label>
+                            <input type="date" id="smvTo" />
+                        </div>
+                        <div class="smv-fgroup">
+                            <label for="smvType">Hareket Tipi</label>
+                            <select id="smvType">
+                                <option value="">Tümü</option>
+                                <option value="2">Giriş</option>
+                                <option value="1">Çıkış</option>
+                                <option value="3">Transfer</option>
+                                <option value="4">Düzeltme</option>
+                            </select>
+                        </div>
+                        <div class="smv-fgroup">
+                            <label for="smvLoc">Lokasyon</label>
+                            <select id="smvLoc"><option value="">Tümü</option></select>
+                        </div>
+                        <button type="button" class="smv-fbtn smv-fbtn--apply" id="smvApply">Filtrele</button>
+                        <button type="button" class="smv-fbtn smv-fbtn--ghost" id="smvClear">Temizle</button>
+                        <button type="button" class="smv-fbtn smv-fbtn--excel" id="smvExport">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Excel'e Aktar
+                        </button>
+                    </div>
+
+                    <!-- Tablo -->
+                    <div style="overflow-x:auto;">
+                        <table class="smv-table" id="smvTable">
+                            <thead>
+                                <tr>
+                                    <th>Tarih</th>
+                                    <th>Belge No</th>
+                                    <th>Belge Tipi</th>
+                                    <th>Hareket</th>
+                                    <th style="text-align:right;">Miktar</th>
+                                    <th>Birim</th>
+                                    <th>Kaynak Lok.</th>
+                                    <th>Hedef Lok.</th>
+                                    <th style="text-align:right;">Birim Maliyet</th>
+                                    <th>Lot / Parti</th>
+                                    <th style="text-align:right;">Bakiye</th>
+                                    <th>Kullanıcı</th>
+                                </tr>
+                            </thead>
+                            <tbody id="smvBody"></tbody>
+                        </table>
+                    </div>
+                    <div id="smvEmpty" style="display:none;padding:22px;text-align:center;color:rgba(255,255,255,.35);font-size:.82rem;font-style:italic;">
+                        Bu kriterlere uygun stok hareketi bulunamadı.
+                    </div>
+                    <div id="smvLoading" style="display:none;padding:22px;text-align:center;color:rgba(148,163,184,.8);font-size:.82rem;">
+                        Yükleniyor…
+                    </div>
+                    <div id="smvError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
                 </div>
             </div>
 
@@ -2945,6 +3147,10 @@
             var locCard = document.getElementById('mceLocationsCard');
             if (locCard) locCard.style.display = (key === 'locations') ? '' : 'none';
 
+            // Stok Hareketleri karti
+            var stockMovCard = document.getElementById('mceStockMovCard');
+            if (stockMovCard) stockMovCard.style.display = (key === 'stockmov') ? '' : 'none';
+
             // Ozellikler karti
             var featuresCard = document.getElementById('mceFeaturesCard');
             if (featuresCard) featuresCard.style.display = (key === 'features') ? '' : 'none';
@@ -3003,6 +3209,18 @@
                 setActive(navLocations);
                 activateSection('locations');
                 if (currentId > 0) mceLocLoad();
+            });
+        }
+
+        // Stok Hareketleri butonu
+        var navStockMov = document.getElementById('mceNavStockMov');
+        if (navStockMov) {
+            navStockMov.addEventListener('click', function() {
+                setActive(navStockMov);
+                activateSection('stockmov');
+                if (typeof window.mceStockMovActivate === 'function') {
+                    window.mceStockMovActivate(currentId);
+                }
             });
         }
 
@@ -4844,5 +5062,255 @@
     });
 
 })();
+</script>
+
+<script>
+    /* ═══════════════ Stok Hareketleri sekmesi ═══════════════
+       Kaynak: /Logistics/ItemStockMovements (DocumentLine tabanlı hareket ekstresi).
+       Koşan bakiye backend'de tüm geçmiş üzerinden hesaplanır; filtreler yalnız gösterimi
+       daraltır. Tarih inputları global calibra-datepicker ile takvime döner (ISO değer).
+       Excel export gösterilen satırlardan form-POST ile /api/export/smartboard-excel. */
+    (function () {
+        var _itemId = 0;
+        var _loaded = false;      // ilk yükleme yapıldı mı (tekrar tab'a dönünce yeniden çekmemek için)
+        var _locFilled = false;   // lokasyon dropdown'u dolduruldu mu
+        var _rows = [];           // son çekilen (gösterilen) satırlar — export için
+
+        function $(id) { return document.getElementById(id); }
+
+        // tr-TR sayı biçimi — miktarlar 0-4 ondalık, maliyet 2 ondalık
+        function fmt(n, maxDec) {
+            if (n === null || n === undefined || isNaN(n)) return '';
+            return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: (maxDec == null ? 4 : maxDec) });
+        }
+        function fmtDate(iso) {
+            if (!iso) return '';
+            var p = String(iso).substring(0, 10).split('-');
+            return p.length === 3 ? (p[2] + '.' + p[1] + '.' + p[0]) : iso;
+        }
+        function esc(s) {
+            if (s === null || s === undefined) return '';
+            return String(s).replace(/[&<>"]/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+            });
+        }
+        function badgeClass(mt) {
+            return mt === 2 ? 'smv-badge--in' : mt === 1 ? 'smv-badge--out'
+                : mt === 3 ? 'smv-badge--tr' : 'smv-badge--adj';
+        }
+
+        function setError(msg) {
+            var e = $('smvError');
+            if (!e) return;
+            if (msg) { e.textContent = msg; e.style.display = ''; } else { e.style.display = 'none'; }
+        }
+
+        // Nav'dan çağrılır — sekme aktifleşince
+        window.mceStockMovActivate = function (itemId) {
+            _itemId = itemId || 0;
+            var needsSave = $('smvNeedsSave');
+            var main = $('smvMain');
+            if (_itemId <= 0) {
+                if (needsSave) needsSave.style.display = '';
+                if (main) main.style.display = 'none';
+                return;
+            }
+            if (needsSave) needsSave.style.display = 'none';
+            if (main) main.style.display = '';
+            if (!_loaded) load();
+        };
+
+        function buildQuery() {
+            var p = ['itemId=' + encodeURIComponent(_itemId)];
+            var from = $('smvFrom') && $('smvFrom').value;
+            var to = $('smvTo') && $('smvTo').value;
+            var type = $('smvType') && $('smvType').value;
+            var loc = $('smvLoc') && $('smvLoc').value;
+            if (from) p.push('fromDate=' + encodeURIComponent(from));
+            if (to) p.push('toDate=' + encodeURIComponent(to));
+            if (type) p.push('movementType=' + encodeURIComponent(type));
+            if (loc) p.push('locationId=' + encodeURIComponent(loc));
+            return p.join('&');
+        }
+
+        function load() {
+            if (_itemId <= 0) return;
+            setError('');
+            var body = $('smvBody');
+            var empty = $('smvEmpty');
+            var loading = $('smvLoading');
+            if (empty) empty.style.display = 'none';
+            if (loading) loading.style.display = '';
+            if (body) body.innerHTML = '';
+
+            fetch('/Logistics/ItemStockMovements?' + buildQuery(), { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (loading) loading.style.display = 'none';
+                    if (!data || !data.ok) { setError((data && data.error) || 'Stok hareketleri yüklenemedi.'); return; }
+                    _loaded = true;
+                    _rows = data.rows || [];
+                    renderSummary(data.summary || {});
+                    fillLocations(data.locations || []);
+                    renderRows(_rows);
+                    updateNavCount(data.summary ? data.summary.movementCount : _rows.length);
+                })
+                .catch(function (e) {
+                    if (loading) loading.style.display = 'none';
+                    setError('Stok hareketleri yüklenemedi: ' + (e && e.message ? e.message : e));
+                });
+        }
+
+        function renderSummary(s) {
+            if ($('smvTotalIn')) $('smvTotalIn').innerHTML = fmt(s.totalIn || 0);
+            if ($('smvTotalOut')) $('smvTotalOut').innerHTML = fmt(s.totalOut || 0);
+            if ($('smvBalance')) $('smvBalance').innerHTML = fmt(s.currentBalance || 0);
+            if ($('smvCount')) $('smvCount').textContent = (s.movementCount || 0);
+        }
+
+        function updateNavCount(n) {
+            var badge = $('mceStockMovCount');
+            if (!badge) return;
+            badge.textContent = n || 0;
+            badge.classList.toggle('is-empty', !n);
+        }
+
+        // Lokasyon dropdown'u yalnız bir kez doldurulur (filtreden bağımsız tam liste)
+        function fillLocations(locs) {
+            if (_locFilled) return;
+            var sel = $('smvLoc');
+            if (!sel) return;
+            var cur = sel.value;
+            var html = '<option value="">Tümü</option>';
+            for (var i = 0; i < locs.length; i++) {
+                html += '<option value="' + locs[i].id + '">' + esc(locs[i].label) + '</option>';
+            }
+            sel.innerHTML = html;
+            if (cur) sel.value = cur;
+            _locFilled = true;
+        }
+
+        function locText(code, name) {
+            var c = code ? String(code).trim() : '';
+            var n = name ? String(name).trim() : '';
+            if (c && n) return c + ' - ' + n;
+            return n || c || '';
+        }
+
+        function renderRows(rows) {
+            var body = $('smvBody');
+            var empty = $('smvEmpty');
+            if (!body) return;
+            if (!rows.length) {
+                body.innerHTML = '';
+                if (empty) empty.style.display = '';
+                return;
+            }
+            if (empty) empty.style.display = 'none';
+
+            var html = '';
+            for (var i = 0; i < rows.length; i++) {
+                var m = rows[i];
+                var qtyCell;
+                if (m.movementType === 3) {
+                    // Transfer: nötr (net 0), taşınan miktar gösterilir
+                    qtyCell = '<span class="smv-muted">' + fmt(m.quantity) + '</span>';
+                } else if (m.signedQuantity >= 0) {
+                    qtyCell = '<span class="smv-qty--in">+' + fmt(m.quantity) + '</span>';
+                } else {
+                    qtyCell = '<span class="smv-qty--out">-' + fmt(m.quantity) + '</span>';
+                }
+                var fromLoc = locText(m.fromLocationCode, m.fromLocationName);
+                var toLoc = locText(m.toLocationCode, m.toLocationName);
+
+                html += '<tr>'
+                    + '<td>' + fmtDate(m.movementDate) + '</td>'
+                    + '<td><span class="smv-docno">' + esc(m.documentNumber) + '</span></td>'
+                    + '<td>' + esc(m.docTypeName || m.docTypeCode || '') + '</td>'
+                    + '<td><span class="smv-badge ' + badgeClass(m.movementType) + '">' + esc(m.movementLabel) + '</span></td>'
+                    + '<td class="smv-num">' + qtyCell + '</td>'
+                    + '<td>' + esc(m.unitCode || '') + '</td>'
+                    + '<td>' + (fromLoc ? esc(fromLoc) : '<span class="smv-muted">—</span>') + '</td>'
+                    + '<td>' + (toLoc ? esc(toLoc) : '<span class="smv-muted">—</span>') + '</td>'
+                    + '<td class="smv-num">' + (m.unitCost != null ? fmt(m.unitCost, 2) : '<span class="smv-muted">—</span>') + '</td>'
+                    + '<td>' + (m.lotNo ? esc(m.lotNo) : '<span class="smv-muted">—</span>') + '</td>'
+                    + '<td class="smv-num">' + fmt(m.runningBalance) + '</td>'
+                    + '<td>' + (m.createdByName ? esc(m.createdByName) : '<span class="smv-muted">—</span>') + '</td>'
+                    + '</tr>';
+            }
+            body.innerHTML = html;
+        }
+
+        // Excel — gösterilen satırlardan server-side .xlsx (form-POST, iframe-safe)
+        function exportExcel() {
+            if (!_rows.length) return;
+            var headers = [
+                { id: 'date', label: 'Tarih' },
+                { id: 'docNo', label: 'Belge No' },
+                { id: 'docType', label: 'Belge Tipi' },
+                { id: 'dir', label: 'Hareket' },
+                { id: 'signedQty', label: 'Miktar' },
+                { id: 'unit', label: 'Birim' },
+                { id: 'fromLoc', label: 'Kaynak Lokasyon' },
+                { id: 'toLoc', label: 'Hedef Lokasyon' },
+                { id: 'unitCost', label: 'Birim Maliyet' },
+                { id: 'lot', label: 'Lot / Parti' },
+                { id: 'balance', label: 'Bakiye' },
+                { id: 'user', label: 'Kullanıcı' }
+            ];
+            var rows = _rows.map(function (m) {
+                return {
+                    date: m.movementDate,                              // ISO → Excel date
+                    docNo: m.documentNumber || '',
+                    docType: m.docTypeName || m.docTypeCode || '',
+                    dir: m.movementLabel || '',
+                    signedQty: m.movementType === 3 ? m.quantity : m.signedQuantity, // sayı
+                    unit: m.unitCode || '',
+                    fromLoc: locText(m.fromLocationCode, m.fromLocationName),
+                    toLoc: locText(m.toLocationCode, m.toLocationName),
+                    unitCost: (m.unitCost == null ? '' : m.unitCost),
+                    lot: m.lotNo || '',
+                    balance: m.runningBalance,
+                    user: m.createdByName || ''
+                };
+            });
+            var code = (document.getElementById('mceMaterialCode') && document.getElementById('mceMaterialCode').value) || ('item' + _itemId);
+            var stamp = new Date().toISOString().substring(0, 10).replace(/-/g, '');
+            var payload = {
+                fileName: 'stok-hareketleri_' + code + '_' + stamp + '.xlsx',
+                sheetName: 'Stok Hareketleri',
+                headers: headers,
+                rows: rows
+            };
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/api/export/smartboard-excel';
+            form.style.display = 'none';
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payload';
+            input.value = JSON.stringify(payload);
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+            setTimeout(function () { document.body.removeChild(form); }, 1200);
+        }
+
+        // Filtre butonları
+        document.addEventListener('DOMContentLoaded', function () {
+            var apply = $('smvApply');
+            if (apply) apply.addEventListener('click', function () { _loaded = false; load(); });
+            var clear = $('smvClear');
+            if (clear) clear.addEventListener('click', function () {
+                if ($('smvFrom')) window.CalibraDate ? window.CalibraDate.setValue($('smvFrom'), '') : ($('smvFrom').value = '');
+                if ($('smvTo')) window.CalibraDate ? window.CalibraDate.setValue($('smvTo'), '') : ($('smvTo').value = '');
+                if ($('smvType')) $('smvType').value = '';
+                if ($('smvLoc')) $('smvLoc').value = '';
+                _loaded = false; load();
+            });
+            var exp = $('smvExport');
+            if (exp) exp.addEventListener('click', exportExcel);
+        });
+    })();
 </script>
 }
