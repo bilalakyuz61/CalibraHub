@@ -2032,10 +2032,26 @@
             <div class="mce-card mce-section-anchor" id="mceFeaturesCard" style="display:none;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;">
                     <p class="mce-card-title" style="margin:0;">Özellik Eşleştirme</p>
-                    <button type="button" class="mce-btn mce-btn--secondary" id="mceGoToCombGenBtn" onclick="mceGoToCombinationGenerator()" style="font-size:.75rem;padding:5px 12px;">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-                        Kombinasyon Üretici
-                    </button>
+                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                        @* Özellik Tanımlama kısayolu — global özellik ikonu (Sliders); yetki: PRODUCT_CONFIG VIEW *@
+                        <button type="button" class="mce-btn mce-btn--secondary" id="mceGoToFeatureDefBtn"
+                                onclick="mceGoToFeatureDefinition()" disabled
+                                data-mce-shortcut-perm="PRODUCT_CONFIG"
+                                data-tip-allowed="Özellik Tanımlama ekranını aç"
+                                title="Özellik Tanımlama ekranını aç" aria-label="Özellik Tanımlama"
+                                style="padding:6px 9px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
+                        </button>
+                        @* Kombinasyon Üretici kısayolu — yetki: PRODUCT_COMBINATIONS VIEW *@
+                        <button type="button" class="mce-btn mce-btn--secondary" id="mceGoToCombGenBtn"
+                                onclick="mceGoToCombinationGenerator()" disabled
+                                data-mce-shortcut-perm="PRODUCT_COMBINATIONS"
+                                data-tip-allowed="Kombinasyon Üretici'yi aç"
+                                title="Kombinasyon Üretici'yi aç" aria-label="Kombinasyon Üretici"
+                                style="padding:6px 9px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div style="font-size:.78rem;color:rgba(255,255,255,.45);margin-bottom:12px;">
                     Bu malzeme kartında kombinasyon üretirken hangi özellikler kullanılabilsin? Aşağıdan seçiniz ve kaydediniz.
@@ -2062,10 +2078,26 @@
             <div class="mce-card mce-section-anchor" id="mceCombinationsCard" style="display:none;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;">
                     <p class="mce-card-title" style="margin:0;">Kombinasyonlar</p>
-                    <button type="button" class="mce-btn mce-btn--secondary" id="mceGoToCombGenBtnCombos" onclick="mceGoToCombinationGenerator()" style="font-size:.75rem;padding:5px 12px;">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
-                        Kombinasyon Üretici
-                    </button>
+                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                        @* Özellik Tanımlama kısayolu — global özellik ikonu (Sliders); yetki: PRODUCT_CONFIG VIEW *@
+                        <button type="button" class="mce-btn mce-btn--secondary" id="mceGoToFeatureDefBtnCombos"
+                                onclick="mceGoToFeatureDefinition()" disabled
+                                data-mce-shortcut-perm="PRODUCT_CONFIG"
+                                data-tip-allowed="Özellik Tanımlama ekranını aç"
+                                title="Özellik Tanımlama ekranını aç" aria-label="Özellik Tanımlama"
+                                style="padding:6px 9px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
+                        </button>
+                        @* Kombinasyon Üretici kısayolu — yetki: PRODUCT_COMBINATIONS VIEW *@
+                        <button type="button" class="mce-btn mce-btn--secondary" id="mceGoToCombGenBtnCombos"
+                                onclick="mceGoToCombinationGenerator()" disabled
+                                data-mce-shortcut-perm="PRODUCT_COMBINATIONS"
+                                data-tip-allowed="Kombinasyon Üretici'yi aç"
+                                title="Kombinasyon Üretici'yi aç" aria-label="Kombinasyon Üretici"
+                                style="padding:6px 9px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div id="mceCombBody"></div>
             </div>
@@ -3014,6 +3046,45 @@
 
         window.location.href = url;
     };
+
+    // Özellik Tanımlama ekranı kısayolu (global özellik/kombinasyon tanım sayfası)
+    window.mceGoToFeatureDefinition = function() {
+        var url = '/Logistics/ProductConfiguration';
+        try {
+            if (window.top && window.top !== window) {
+                window.top.location.href = url;
+                return;
+            }
+        } catch (e) { /* cross-origin sessiz fallback */ }
+        window.location.href = url;
+    };
+
+    /* Özellik Tanımlama / Kombinasyon Üretici kısayolları — hedef ekranın VIEW
+       yetkisine göre aktifleşir. Butonlar disabled başlar (default deny); yetki
+       varsa enable + açıklayıcı tooltip, yoksa disabled + "yetkiniz yok" tooltip. */
+    (function mceGateShortcutButtons() {
+        function apply() {
+            if (!window.CalibraHub || typeof window.CalibraHub.loadPermissions !== 'function') return;
+            window.CalibraHub.loadPermissions().then(function() {
+                document.querySelectorAll('[data-mce-shortcut-perm]').forEach(function(btn) {
+                    var form = btn.getAttribute('data-mce-shortcut-perm');
+                    var allowed = window.CalibraHub.hasPermission(form, 'VIEW');
+                    if (allowed) {
+                        btn.disabled = false;
+                        btn.removeAttribute('data-perm-denied');
+                        var tip = btn.getAttribute('data-tip-allowed');
+                        if (tip) btn.setAttribute('title', tip);
+                    } else {
+                        btn.disabled = true;
+                        btn.setAttribute('data-perm-denied', '1');
+                        btn.setAttribute('title', 'Bu ekran için yetkiniz yok.');
+                    }
+                });
+            });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+        else apply();
+    })();
 
     // ── Grup katlanma durumu persist (localStorage) ───────────────
     // Kullanici hangi gruplari acik/kapali birakmissa ekrani tekrar actiginda
