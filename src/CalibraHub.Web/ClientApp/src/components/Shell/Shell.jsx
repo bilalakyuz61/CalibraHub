@@ -466,7 +466,14 @@ export default function Shell(props) {
     if (!Array.isArray(stored)) return []
 
     // Kullanici tum tab'lari kapatmis → kapali kalsin (EmptyState)
-    if (stored.length === 0) return []
+    // ANCAK: direkt URL navigasyonu (bookmark, refresh, adres çubuğu) varsa o sayfayı aç.
+    // Örn. /Admin/ViewSettings'teyken tüm tabları kap → refresh → Dashboard değil ViewSettings görünmeli.
+    if (stored.length === 0) {
+      if (!isHomePage(initialUrl)) {
+        return [{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTitle(initialUrl) }]
+      }
+      return []
+    }
 
     // Kayitli tab'lar var; aralarinda mevcut URL var mi? Ana sayfa ise ekleme
     if (!isHomePage(initialUrl)) {
@@ -915,6 +922,7 @@ export default function Shell(props) {
                 onTabClick={function(key) {
                     // Popover ACIK KALSIN — kullanici baska bir sayfaya da hemen gecebilsin.
                     // Kapatma sadece disariya tiklama (backdrop) veya kapat butonu ile olur.
+                    setShowDashboard(false)
                     setActiveTabKey(key)
                 }}
                 onTabClose={closeTab}
@@ -1616,7 +1624,13 @@ function SidebarNode(props) {
         onKeyDown={handleKeyDown}
         onFocus={function() { props.setFocusedKey && props.setFocusedKey(node.key) }}
         className={base + ' ' + variant + focusRing + ' select-none focus:outline-none'}
-        style={{ marginLeft: level * 12, marginBottom: 2, userSelect: 'none', WebkitUserSelect: 'none' }}
+        style={{
+          marginLeft: level * 12,
+          // w-full margin'i hesaba katmaz → girintili öğe sağdan taşar ve aktif
+          // vurgu çerçevesi sidebar kenarında kırpılır. Genişlik girinti kadar kısılır.
+          width: 'calc(100% - ' + (level * 12) + 'px)',
+          marginBottom: 2, userSelect: 'none', WebkitUserSelect: 'none',
+        }}
       >
         <Icon
           size={level === 0 ? 17 : 15}
