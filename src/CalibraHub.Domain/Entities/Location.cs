@@ -16,4 +16,11 @@ public sealed class Location
     public bool IsActive { get; init; } = true;
     public bool IsMachinePark { get; init; }
     public bool IsStorageArea { get; init; }
+
+    /// <summary>
+    /// Depo bazında eksi bakiye izni (üç durumlu): null = Stok parametresindeki varsayılanı
+    /// devral, true = bu depoda eksi bakiyeye izin ver, false = engelle. Yalnızca şirket ana
+    /// anahtarı (NEG_BALANCE_CONTROL) açıkken dikkate alınır.
+    /// </summary>
+    public bool? AllowNegativeBalance { get; init; }
 }

@@ -337,6 +337,10 @@ public sealed class WarehouseController : Controller
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
             return Json(new { success = true, id, docNo });
         }
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
+        {
+            return Json(new { success = false, message = nbex.Message });
+        }
         catch (Exception ex)
         {
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });

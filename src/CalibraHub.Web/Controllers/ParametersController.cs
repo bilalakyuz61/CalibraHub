@@ -108,6 +108,12 @@ public sealed class ParametersController : Controller
                     ?.ParamValue != "false"))
             .ToList();
 
+        // Eksi bakiye kontrolü bayrakları (default: kapalı / engelli)
+        ViewData["NegBalanceControl"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceControlKey)?.ParamValue == "true";
+        ViewData["NegBalanceAllowDefault"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceAllowDefaultKey)?.ParamValue == "true";
+
         return View("~/Views/Admin/Parameters.cshtml");
     }
 
@@ -268,25 +274,24 @@ public sealed class ParametersController : Controller
     {
         try
         {
-            if (input.Types is null || input.Types.Count == 0)
-                return Json(new { ok = false, error = "Kaydedilecek parametre yok." });
+            var form = CalibraHub.Application.Constants.StockParameters.FormCode;
 
-            // Whitelist: yalnızca MovementCapableTypes'ta tanımlı belge türü kodları kabul edilir.
-            var validCodes = CalibraHub.Application.Constants.StockParameters.MovementCapableTypes
-                .Select(t => t.Code)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // Eksi bakiye kontrolü ana anahtarı + kendi ayarı olmayan depolar için varsayılan izin
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                form, CalibraHub.Application.Constants.StockParameters.NegBalanceControlKey,
+                input.NegControl ? "true" : "false",
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                form, CalibraHub.Application.Constants.StockParameters.NegBalanceAllowDefaultKey,
+                input.NegDefault ? "true" : "false",
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
 
-            foreach (var item in input.Types)
-            {
-                if (string.IsNullOrWhiteSpace(item.Code) || !validCodes.Contains(item.Code))
-                    continue;
-
-                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
-                    CalibraHub.Application.Constants.StockParameters.FormCode,
-                    CalibraHub.Application.Constants.StockParameters.EffectKey(item.Code),
-                    item.Enabled ? "true" : "false",
-                    CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
-            }
+            // Çekirdek belge türleri artık HER ZAMAN stok bakiyesini etkiler — eski
+            // STOCK_EFFECT_{code} switch'leri kaldırıldı; kalıntı "false" değerlerini temizle
+            // (aksi halde StockEffectHelper o türü bakiye dışı bırakmaya devam eder).
+            foreach (var t in CalibraHub.Application.Constants.StockParameters.MovementCapableTypes)
+                await _companyParameters.DeleteAsync(
+                    form, CalibraHub.Application.Constants.StockParameters.EffectKey(t.Code), ct);
 
             return Json(new { ok = true });
         }
@@ -301,7 +306,7 @@ public sealed class ParametersController : Controller
     public sealed record ApprovalKindInput(string Kind, bool Enabled);
     public sealed record ApprovalKindState(string Code, string Label, bool Enabled);
     public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts, bool BomAllowDuplicateComponents = false);
-    public sealed record StockParametersInput(List<StockEffectInput> Types);
+    public sealed record StockParametersInput(bool NegControl, bool NegDefault);
     public sealed record StockEffectInput(string Code, bool Enabled);
     public sealed record StockEffectState(string Code, string Label, string Description, bool Enabled);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);

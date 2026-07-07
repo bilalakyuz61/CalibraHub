@@ -2734,6 +2734,7 @@ END;";
                     [IsActive] BIT NOT NULL CONSTRAINT [df_Locations_IsActive] DEFAULT(1),
                     [IsMachinePark] BIT NOT NULL CONSTRAINT [df_Locations_IsMachinePark] DEFAULT(0),
                     [IsStorageArea] BIT NOT NULL CONSTRAINT [df_Locations_IsStorageArea] DEFAULT(0),
+                    [AllowNegativeBalance] BIT NULL,
                     CONSTRAINT [FK_Location_Parent]
                         FOREIGN KEY ([ParentId]) REFERENCES [{schemaForSql}].[Location]([Id])
                 );
@@ -2836,6 +2837,14 @@ END;";
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Location]
                 ADD [IsStorageArea] BIT NOT NULL CONSTRAINT [df_Locations_IsStorageArea] DEFAULT(0);
+            END;
+
+            -- Eksi bakiye kontrolü: depo bazında izin (üç durumlu: NULL=devral, 1=izin, 0=engelle)
+            IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Location]', N'AllowNegativeBalance') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Location]
+                ADD [AllowNegativeBalance] BIT NULL;
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL

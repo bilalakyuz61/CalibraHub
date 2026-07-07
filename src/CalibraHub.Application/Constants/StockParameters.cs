@@ -17,6 +17,21 @@ public static class StockParameters
 
     public static string EffectKey(string docTypeCode) => EffectKeyPrefix + docTypeCode;
 
+    // ── Eksi bakiye kontrolü (negative balance control) ──
+    // Katmanlı çözümleme: Şirket ana anahtarı KAPALI → hiç kontrol yok.
+    // AÇIK → lokasyonun kendi AllowNegativeBalance ayarı varsa o, yoksa aşağıdaki varsayılan.
+    // İhlalde ENGELLE (kayıt olmaz). Tarih bazlı: hareket tarihinden itibaren hiçbir
+    // noktada bakiye negatife düşmemeli (ileriye dönük zincirleme kontrol).
+
+    /// <summary>Eksi bakiye kontrolü ana anahtarı (Bool, default false=kapalı). Kapalıyken hiç kontrol yapılmaz — mevcut davranış korunur.</summary>
+    public const string NegBalanceControlKey = "NEG_BALANCE_CONTROL";
+
+    /// <summary>Kontrol açıkken, kendi ayarı olmayan lokasyonlar için varsayılan: eksi bakiyeye izin ver mi (Bool, default false=engelle).</summary>
+    public const string NegBalanceAllowDefaultKey = "NEG_BALANCE_ALLOW_DEFAULT";
+
+    /// <summary>Satış siparişi stok bakiyesini rezervasyonla etkiler mi (Bool, default false). Açıkken açık sipariş miktarları kullanılabilir bakiyeyi düşürür (Faz 2).</summary>
+    public const string SalesOrderAffectsStockKey = "SALES_ORDER_AFFECTS_STOCK";
+
     /// <summary>
     /// Stok hareketi (DocumentLine.MovementType) üretebilen belge türleri —
     /// parametre ekranındaki switch listesi. Code = DocumentType.Code.

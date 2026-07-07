@@ -298,9 +298,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             }
 
             var lineNo = 1;
+            // Eksi bakiye kontrolü: azaltılan (item, kaynak lokasyon) çiftleri (STOCK_OUT / TRANSFER)
+            var decreases = new HashSet<(int ItemId, int LocationId)>();
             foreach (var line in request.Lines ?? [])
             {
-                if (!line.ItemId.HasValue || line.ItemId.Value <= 0) continue;
+                var itemId = line.ItemId;
+                if ((!itemId.HasValue || itemId.Value <= 0) && !string.IsNullOrWhiteSpace(line.MaterialCode))
+                    itemId = await ResolveItemIdByCodeAsync(conn, tx, line.MaterialCode!, ct);
+                if (!itemId.HasValue || itemId.Value <= 0) continue;
                 if (line.Qty <= 0) continue;
 
                 await using var lineIns = conn.CreateCommand();
@@ -332,7 +337,18 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@Notes", (object?)line.Notes ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@DocDate", request.DocDate.Date);
                 await lineIns.ExecuteNonQueryAsync(ct);
+
+                // Azaltıcı hareket (çıkış=1 / transfer-kaynak=3) → kaynak lokasyonu kontrol kuyruğuna al
+                if (movementType is 1 or 3)
+                {
+                    var fromLoc = line.FromLocationId ?? request.FromLocationId;
+                    if (fromLoc is > 0) decreases.Add((itemId.Value, fromLoc.Value));
+                }
             }
+
+            // Tüm satırlar tx içinde yazıldı → eksi bakiye kontrolü (yeni satırlar hesaba dahil)
+            foreach (var (dItem, dLoc) in decreases)
+                await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, dItem, dLoc, request.DocDate.Date, ct);
 
             await tx.CommitAsync(ct);
             return (docId, docNo);

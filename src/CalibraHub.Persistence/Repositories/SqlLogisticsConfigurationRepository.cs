@@ -1318,7 +1318,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [VolumeCapacity],
                    [IsActive],
                    ISNULL([IsMachinePark], 0),
-                   ISNULL([IsStorageArea], 0)
+                   ISNULL([IsStorageArea], 0),
+                   [AllowNegativeBalance]
             FROM {_warehouseLocationsTableName}
             ORDER BY [SortOrder], [LocationTypeCode], [LocationCode];
             """;
@@ -1338,7 +1339,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 VolumeCapacity = reader.IsDBNull(7) ? null : reader.GetDecimal(7),
                 IsActive = !reader.IsDBNull(8) && reader.GetBoolean(8),
                 IsMachinePark = !reader.IsDBNull(9) && reader.GetBoolean(9),
-                IsStorageArea = !reader.IsDBNull(10) && reader.GetBoolean(10)
+                IsStorageArea = !reader.IsDBNull(10) && reader.GetBoolean(10),
+                AllowNegativeBalance = reader.IsDBNull(11) ? (bool?)null : reader.GetBoolean(11)
             });
         }
 
@@ -1483,9 +1485,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_warehouseLocationsTableName}
-                ([ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive], [IsMachinePark], [IsStorageArea])
+                ([ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive], [IsMachinePark], [IsStorageArea], [AllowNegativeBalance])
             VALUES
-                (@ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive, @IsMachinePark, @IsStorageArea);
+                (@ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive, @IsMachinePark, @IsStorageArea, @AllowNegativeBalance);
             """;
 
         command.Parameters.Add(new SqlParameter("@ParentId", (object?)location.ParentId ?? DBNull.Value));
@@ -1498,6 +1500,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@IsActive", location.IsActive));
         command.Parameters.Add(new SqlParameter("@IsMachinePark", location.IsMachinePark));
         command.Parameters.Add(new SqlParameter("@IsStorageArea", location.IsStorageArea));
+        command.Parameters.Add(new SqlParameter("@AllowNegativeBalance", (object?)location.AllowNegativeBalance ?? DBNull.Value));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1518,7 +1521,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [VolumeCapacity] = @VolumeCapacity,
                 [IsActive] = @IsActive,
                 [IsMachinePark] = @IsMachinePark,
-                [IsStorageArea] = @IsStorageArea
+                [IsStorageArea] = @IsStorageArea,
+                [AllowNegativeBalance] = @AllowNegativeBalance
             WHERE [Id] = @Id;
             """;
 

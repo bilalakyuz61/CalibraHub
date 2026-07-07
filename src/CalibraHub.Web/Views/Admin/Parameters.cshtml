@@ -6,6 +6,8 @@
     var bomAllowDup = ViewData["BomAllowDuplicateComponents"] as bool? ?? false;
     var stockEffects = ViewData["StockEffectStates"]
         as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
+    var negControl = ViewData["NegBalanceControl"] as bool? ?? false;
+    var negDefault = ViewData["NegBalanceAllowDefault"] as bool? ?? false;
 }
 
 @section Styles {
@@ -512,31 +514,53 @@ body.app-theme-dark .ap-wrapper {
             <section class="ap-pane" id="ap-pane-stok">
                 <h2>Stok</h2>
                 <div class="ap-hint">
-                    Belge türü bazında stok bakiyesi etkisi. Kapatılan türün hareketleri
-                    (DocumentLine) stok bakiyesi hesabına dahil edilmez — karşılama merkezi,
-                    depo sayım beklenen miktarı ve stok sorguları bu ayara uyar.
+                    Depo giriş/çıkış, transfer, sayım ve iş emri hareketleri stok bakiyesini
+                    <strong>her zaman</strong> etkiler. Aşağıdaki ayarlar eksi (negatif) bakiye
+                    kontrolünü yönetir. Satış siparişinin stoğu etkilemesi ayrı sekmeden ayarlanır.
                 </div>
 
-                @foreach (var se in stockEffects)
-                {
-                    <div class="ap-row">
-                        <div class="ap-row-main">
-                            <div class="ap-row-title">@se.Label</div>
-                            <div class="ap-row-desc">@se.Description</div>
-                        </div>
-                        <div class="ap-row-control">
-                            <label class="ap-switch">
-                                <input type="checkbox" class="ap-stock-switch" id="ap-stock-@se.Code"
-                                       data-code="@se.Code" @(se.Enabled ? "checked" : null) />
-                                <span class="ap-switch-track @(se.Enabled ? "is-on" : "")">
-                                    <span class="ap-switch-thumb"></span>
-                                </span>
-                                <span class="ap-switch-label @(se.Enabled ? "is-active" : "")"
-                                      id="ap-stock-@se.Code-label">@(se.Enabled ? "Etkiler" : "Etkilemez")</span>
-                            </label>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Eksi Bakiye Kontrolü</div>
+                        <div class="ap-row-desc">
+                            Açıkken, stok bakiyesini negatife düşürecek çıkış / transfer / üretim sarfı
+                            hareketleri engellenir (tarih bazlı, ileriye dönük). Kapalıyken kontrol yapılmaz.
                         </div>
                     </div>
-                }
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-neg-control"
+                                   data-on="Açık" data-off="Kapalı" @(negControl ? "checked" : null) />
+                            <span class="ap-switch-track @(negControl ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(negControl ? "is-active" : "")"
+                                  id="ap-neg-control-label">@(negControl ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Varsayılan: Eksi Bakiyeye İzin</div>
+                        <div class="ap-row-desc">
+                            Kontrol açıkken, kendi ayarı olmayan depolar için varsayılan davranış.
+                            Engelli = eksiye düşürtme (önerilen), İzinli = eksiye izin ver.
+                            Depo bazında istisna Lokasyon Tanımlamaları ekranından verilir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-neg-default"
+                                   data-on="İzinli" data-off="Engelli" @(negDefault ? "checked" : null) />
+                            <span class="ap-switch-track @(negDefault ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(negDefault ? "is-active" : "")"
+                                  id="ap-neg-default-label">@(negDefault ? "İzinli" : "Engelli")</span>
+                        </label>
+                    </div>
+                </div>
             </section>
 
         </main>
@@ -618,13 +642,13 @@ body.app-theme-dark .ap-wrapper {
     document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
         wireSwitch(cb.id, cb.id + '-label');
     });
-    // Stok etkisi switch'leri — etiket "Etkiler"/"Etkilemez"
-    document.querySelectorAll('.ap-stock-switch').forEach(function (cb) {
+    // Eksi bakiye switch'leri — etiket data-on / data-off'tan alınır
+    document.querySelectorAll('.ap-neg-switch').forEach(function (cb) {
         cb.addEventListener('change', function () {
             var on = cb.checked;
             cb.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', on);
             var lbl = document.getElementById(cb.id + '-label');
-            if (lbl) { lbl.textContent = on ? 'Etkiler' : 'Etkilemez'; lbl.classList.toggle('is-active', on); }
+            if (lbl) { lbl.textContent = on ? (cb.dataset.on || 'Açık') : (cb.dataset.off || 'Kapalı'); lbl.classList.toggle('is-active', on); }
         });
     });
 
@@ -698,15 +722,13 @@ body.app-theme-dark .ap-wrapper {
                 if (ok) flash('Kaydedildi.', true);
                 else    flash((d1.error || d2.error || d3.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
-                var types = [];
-                document.querySelectorAll('.ap-stock-switch').forEach(function (cb) {
-                    types.push({ code: cb.dataset.code, enabled: cb.checked });
-                });
+                var negCtrlEl = document.getElementById('ap-neg-control');
+                var negDefEl  = document.getElementById('ap-neg-default');
                 var rs = await fetch('/Admin/SaveStockParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ types: types })
+                    body: JSON.stringify({ negControl: !!(negCtrlEl && negCtrlEl.checked), negDefault: !!(negDefEl && negDefEl.checked) })
                 });
                 var datas = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!datas.ok;

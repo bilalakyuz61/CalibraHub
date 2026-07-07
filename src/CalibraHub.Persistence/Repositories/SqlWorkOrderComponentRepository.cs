@@ -204,6 +204,13 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 await insCmd.ExecuteNonQueryAsync(ct);
             }
 
+            // Eksi bakiye kontrolü — üretim sarfı (Issue) kaynak depoyu azaltır (tarih: bugün)
+            if (warehouseLocationId is > 0)
+            {
+                var companyId = _connectionFactory.ResolveCurrentCompanyId();
+                await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, itemId, warehouseLocationId.Value, DateTime.Today, ct);
+            }
+
             await tx.CommitAsync(ct);
         }
         catch
