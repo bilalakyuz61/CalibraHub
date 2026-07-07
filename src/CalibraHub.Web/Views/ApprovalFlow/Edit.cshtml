@@ -12,7 +12,10 @@
         id               = flowId,
         name             = Model?.Name ?? "",
         description      = Model?.Description ?? "",
-        documentKind     = Model?.DocumentKind ?? "Document",
+        // Yeni akışta documentKind boş bırakılır — JS ilk spesifik belge türünü seçer.
+        // "Document" (Tüm Belgeler) default'u kaldırıldı: wildcard yalnızca eski kayıtlı
+        // akışlarda (legacy) görünür, yeni akışta seçenek olarak sunulmaz.
+        documentKind     = Model?.DocumentKind ?? "",
         isActive         = Model?.IsActive ?? true,
         rules       = (Model?.Rules ?? Array.Empty<ApprovalFlowRuleDto>()).Select(r => new {
             id        = r.Id,

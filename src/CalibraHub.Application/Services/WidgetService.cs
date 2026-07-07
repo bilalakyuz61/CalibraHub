@@ -300,7 +300,7 @@ public sealed class WidgetService : IWidgetService
         var dataType = (request.DataType ?? string.Empty).Trim().ToLowerInvariant();
         if (!IsValidDataType(dataType))
         {
-            throw new ArgumentException($"Gecersiz DataType '{request.DataType}'. Izinli: text, numeric, date, boolean, dropdown, multi-select, group, link, lookup, grid, guide-list.");
+            throw new ArgumentException($"Gecersiz DataType '{request.DataType}'. Izinli: text, textarea, numeric, date, boolean, dropdown, multi-select, group, link, lookup, grid, guide-list, attachment.");
         }
 
         // ParentId kontrolu — varsa gercekten grup olmali
@@ -653,34 +653,332 @@ public sealed class WidgetService : IWidgetService
                 ? "standard"      // inline -> standard'a don
                 : (widget.LabelStyle ?? "standard"));  // mevcut tutarini koru
 
-        var updated = new Domain.Entities.WidgetDefinition
+        // CloneWith tum alanlari DB'den kopyalar — onceki elle-klon IsSystemField/
+        // EntityColumn/IsPermissionControlled'i atladigi icin sistem alanlarinda
+        // sessiz veri silme yapiyordu (repository UPDATE tum kolonlari yazar).
+        await _repository.UpsertWidgetAsync(CloneWith(widget, labelStyle: nextLabelStyle), ct);
+    }
+
+    public async Task ReorderWidgetsAsync(IReadOnlyCollection<WidgetSortOrderItem> items, CancellationToken ct)
+    {
+        if (items == null || items.Count == 0) return;
+
+        foreach (var item in items)
         {
-            Id             = widget.Id,
-            FormId         = widget.FormId,
-            ParentId       = widget.ParentId,
-            WidgetCode     = widget.WidgetCode,
-            Label          = widget.Label,
-            DataType       = widget.DataType,
-            MaxLength      = widget.MaxLength,
-            MinLength      = widget.MinLength,
-            ExpectedLength = widget.ExpectedLength,
-            MinValue       = widget.MinValue,
-            MaxValue       = widget.MaxValue,
-            SortOrder      = widget.SortOrder,
-            OptionsJson    = widget.OptionsJson,
-            RulesJson      = widget.RulesJson,
-            // IsPlainField artik turetilmis deger: LabelStyle == 'inline' ile senkron.
-            IsPlainField   = string.Equals(nextLabelStyle, "inline", StringComparison.OrdinalIgnoreCase),
-            IsRequired     = widget.IsRequired,
-            IsActive       = widget.IsActive,
-            ColorType      = widget.ColorType,
-            ColorValue     = widget.ColorValue,
-            ColSpan        = widget.ColSpan,
+            var widget = await _repository.GetWidgetByIdAsync(item.Id, ct)
+                ?? throw new KeyNotFoundException($"Widget {item.Id} bulunamadi.");
+            if (widget.SortOrder == item.SortOrder) continue;
+
+            await _repository.UpsertWidgetAsync(CloneWith(widget, sortOrder: item.SortOrder), ct);
+        }
+    }
+
+    public async Task SetWidgetActiveAsync(int widgetId, bool isActive, CancellationToken ct)
+    {
+        var widget = await _repository.GetWidgetByIdAsync(widgetId, ct)
+            ?? throw new KeyNotFoundException($"Widget {widgetId} bulunamadi.");
+        if (widget.IsActive == isActive) return;
+
+        await _repository.UpsertWidgetAsync(CloneWith(widget, isActive: isActive), ct);
+    }
+
+    public async Task<IReadOnlyCollection<WidgetValueLogDto>?> GetValueHistoryAsync(
+        string formCode,
+        string recordId,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(formCode) || string.IsNullOrWhiteSpace(recordId)) return null;
+
+        var form = await _repository.GetFormByCodeAsync(formCode, ct);
+        if (form == null) return null;
+
+        var logs = await _repository.GetValueLogsAsync(form.Id, recordId, top: 300, ct);
+        if (logs.Count == 0) return Array.Empty<WidgetValueLogDto>();
+
+        // Label haritasi — loglar master form + grid child formlarinin widget'larina
+        // referans verebilir (child loglar kendi FormId'lerini tasir). Widget hala
+        // mevcutsa guncel Label, silinmisse WidgetCode snapshot fallback.
+        var labelById = new Dictionary<int, string>();
+        foreach (var fid in logs.Select(l => l.FormId).Distinct())
+        {
+            var widgets = await _repository.GetWidgetsByFormAsync(fid, ct, includeInactive: true);
+            foreach (var w in widgets) labelById[w.Id] = w.Label;
+        }
+
+        return logs.Select(l => new WidgetValueLogDto(
+                l.Id,
+                l.WidgetCode,
+                labelById.TryGetValue(l.WidgetId, out var label) ? label : l.WidgetCode,
+                l.OldValue,
+                l.NewValue,
+                l.ChangedBy,
+                l.ChangedAt,
+                // Master kaydin kendi logu ise null; grid child loguysa child'in
+                // RecordId'si — UI "hangi kalem" bilgisini gosterebilsin.
+                string.Equals(l.RecordId, recordId, StringComparison.Ordinal) ? null : l.RecordId))
+            .ToArray();
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // Widget tanim transport (export/import) — 2026-07-06
+    // ══════════════════════════════════════════════════════════
+
+    public async Task<WidgetPackageDto?> ExportWidgetPackageAsync(string formCode, CancellationToken ct)
+    {
+        var form = await _repository.GetFormByCodeAsync(formCode, ct);
+        if (form == null) return null;
+
+        var widgets = await _repository.GetWidgetsByFormAsync(form.Id, ct, includeInactive: true);
+
+        // Grup Id → WidgetCode haritasi (ParentCode cozumu icin)
+        var codeById = widgets.ToDictionary(w => w.Id, w => w.WidgetCode);
+
+        var items = widgets
+            // Sistem alanlari pakete girmez — hedef ortamda discovery kendi
+            // EntityColumn eslesmesiyle seed eder; paketten yazmak yanlis baglar.
+            .Where(w => !w.IsSystemField)
+            .OrderBy(w => w.SortOrder)
+            .Select(w => new WidgetPackageItemDto(
+                w.WidgetCode,
+                w.Label,
+                w.DataType,
+                w.ParentId.HasValue && codeById.TryGetValue(w.ParentId.Value, out var pc) ? pc : null,
+                w.MaxLength,
+                w.MinLength,
+                w.ExpectedLength,
+                w.MinValue,
+                w.MaxValue,
+                w.SortOrder,
+                w.OptionsJson,
+                w.RulesJson,
+                w.IsRequired,
+                w.IsActive,
+                w.ColorType,
+                w.ColorValue,
+                w.ColSpan,
+                w.LabelStyle,
+                w.IsPermissionControlled))
+            .ToArray();
+
+        return new WidgetPackageDto(
+            CalibraWidgetPackage: 1,
+            FormCode: form.FormCode,
+            FormLabel: form.FormName,
+            ExportedAt: DateTime.UtcNow,
+            Widgets: items);
+    }
+
+    public async Task<WidgetImportResultDto> ImportWidgetPackageAsync(
+        string formCode,
+        WidgetPackageDto package,
+        CancellationToken ct)
+    {
+        if (package == null) throw new ArgumentException("Paket govdesi bos.");
+        if (package.CalibraWidgetPackage != 1)
+            throw new ArgumentException($"Desteklenmeyen paket surumu: {package.CalibraWidgetPackage} (beklenen 1).");
+        if (package.Widgets == null || package.Widgets.Count == 0)
+            throw new ArgumentException("Pakette widget tanimi yok.");
+
+        var form = await _repository.GetFormByCodeAsync(formCode, ct)
+            ?? throw new ArgumentException($"Form bulunamadi: '{formCode}'");
+
+        var existing = await _repository.GetWidgetsByFormAsync(form.Id, ct, includeInactive: true);
+        var existingByCode = existing.ToDictionary(w => w.WidgetCode, StringComparer.OrdinalIgnoreCase);
+        // Grup WidgetCode → hedef Id (mevcutlar + import sirasinda yeni olusanlar)
+        var groupIdByCode = existing
+            .Where(w => string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(w => w.WidgetCode, w => w.Id, StringComparer.OrdinalIgnoreCase);
+
+        var created = 0;
+        var updated = 0;
+        var skipped = new List<string>();
+        var now = DateTime.Now;
+
+        // Once gruplar (field'larin ParentCode cozumu icin), sonra digerleri.
+        var ordered = package.Widgets
+            .OrderBy(i => string.Equals(i.DataType?.Trim(), "group", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(i => i.SortOrder)
+            .ToArray();
+
+        foreach (var item in ordered)
+        {
+            var dt = (item.DataType ?? string.Empty).Trim().ToLowerInvariant();
+            if (!IsValidDataType(dt))
+            {
+                skipped.Add($"{item.WidgetCode}: gecersiz veri tipi '{item.DataType}'");
+                continue;
+            }
+
+            string code;
+            try { code = NormalizeWidgetCode(item.WidgetCode); }
+            catch (ArgumentException ex)
+            {
+                skipped.Add($"{item.WidgetCode}: {ex.Message}");
+                continue;
+            }
+
+            // Hedefte ayni kodlu SISTEM alani varsa dokunma — EntityColumn baglantisi
+            // paketten gelen tanimla ezilirse save yanlis kolona yazar.
+            existingByCode.TryGetValue(code, out var target);
+            if (target is { IsSystemField: true })
+            {
+                skipped.Add($"{code}: hedefte ayni kodlu sistem alani var, atlandi");
+                continue;
+            }
+
+            // Grid: childFormCode hedef ortamda mevcut olmali
+            if (dt == "grid")
+            {
+                var childCode = TryReadMetadataValue(item.OptionsJson, "childFormCode");
+                if (string.IsNullOrWhiteSpace(childCode)
+                    || await _repository.GetFormByCodeAsync(childCode, ct) == null)
+                {
+                    skipped.Add($"{code}: alt form '{childCode}' hedefte bulunamadi");
+                    continue;
+                }
+            }
+
+            // OptionsJson gecerlilik — bozuksa null'a dusur (kayit yine olusur)
+            var optionsJson = item.OptionsJson;
+            if (!string.IsNullOrWhiteSpace(optionsJson) && !IsValidJson(optionsJson))
+                optionsJson = null;
+
+            // RulesJson — parse + sanitize pipeline'indan yeniden gecir (gecersiz
+            // ifadeler ayiklanir; kaynak DB sanitize etmis olsa da pakete elle
+            // mudahale edilmis olabilir).
+            string? rulesJson = null;
+            var parsedRules = ParseRules(item.RulesJson);
+            if (parsedRules != null)
+            {
+                var sanitized = SanitizeRules(parsedRules);
+                if (sanitized is { Count: > 0 })
+                    rulesJson = JsonSerializer.Serialize(sanitized);
+            }
+
+            int? parentId = null;
+            if (!string.IsNullOrWhiteSpace(item.ParentCode)
+                && groupIdByCode.TryGetValue(item.ParentCode, out var pid))
+            {
+                parentId = pid;
+            }
+
+            var labelStyle = (item.LabelStyle ?? "standard").Trim().ToLowerInvariant();
+            if (labelStyle != "modern" && labelStyle != "inline") labelStyle = "standard";
+
+            var entity = new Domain.Entities.WidgetDefinition
+            {
+                Id             = target?.Id ?? 0,
+                FormId         = form.Id,
+                ParentId       = dt == "group" ? null : parentId,
+                WidgetCode     = code,
+                Label          = string.IsNullOrWhiteSpace(item.Label) ? code : item.Label.Trim(),
+                DataType       = dt,
+                MaxLength      = item.MaxLength,
+                MinLength      = item.MinLength,
+                ExpectedLength = item.ExpectedLength,
+                MinValue       = item.MinValue,
+                MaxValue       = item.MaxValue,
+                SortOrder      = item.SortOrder,
+                OptionsJson    = optionsJson,
+                RulesJson      = rulesJson,
+                IsPlainField   = labelStyle == "inline",
+                IsRequired     = item.IsRequired,
+                IsActive       = item.IsActive,
+                ColorType      = item.ColorType,
+                ColorValue     = string.IsNullOrWhiteSpace(item.ColorValue) ? null : item.ColorValue.Trim(),
+                ColSpan        = item.ColSpan is >= 1 and <= 24 ? item.ColSpan : 12,
+                LabelStyle     = labelStyle,
+                IsSystemField  = false,
+                EntityColumn   = null,
+                IsPermissionControlled = item.IsPermissionControlled,
+                CreatedAt      = target?.CreatedAt ?? now,
+                UpdatedAt      = now,
+            };
+
+            var newId = await _repository.UpsertWidgetAsync(entity, ct);
+            if (target == null) created++; else updated++;
+            if (dt == "group") groupIdByCode[code] = newId;
+
+            // Yetkilendirilebilir alan — izin kaydini aninda senkronla
+            await _permDiscovery.SyncFieldPermissionAsync(
+                form.FormCode,
+                form.FormName ?? form.FormCode,
+                code,
+                entity.Label,
+                entity.IsPermissionControlled,
+                ct);
+        }
+
+        // Flat view'i tek seferde tazele (her widget icin ayri regen israf olur)
+        await RegenerateFlattenedViewSafeAsync(form.Id, ct);
+
+        return new WidgetImportResultDto(created, updated, skipped);
+    }
+
+    /// <summary>OptionsJSON object shape'inden tek anahtar okur (grid childFormCode gibi).</summary>
+    private static string? TryReadMetadataValue(string? optionsJson, string key)
+    {
+        if (string.IsNullOrWhiteSpace(optionsJson)) return null;
+        try
+        {
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(optionsJson);
+            return dict != null && dict.TryGetValue(key, out var v) ? v : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static bool IsValidJson(string s)
+    {
+        try { using var _ = JsonDocument.Parse(s); return true; }
+        catch (JsonException) { return false; }
+    }
+
+    /// <summary>
+    /// DB'den okunan widget'in tam kopyasini uretir; yalnizca verilen alanlar degisir.
+    /// OptionsJSON/RulesJSON/IsSystemField/EntityColumn dahil hicbir alan client-side
+    /// yeniden insa edilmez — tekil guncelleme metodlarinin (reorder, aktif/pasif,
+    /// label stili) veri kaybetmemesini saglar. Repository UPDATE'i tum kolonlari
+    /// yazdigi icin eksik alan kopyalamak sessiz veri silme demektir.
+    /// </summary>
+    private static Domain.Entities.WidgetDefinition CloneWith(
+        Domain.Entities.WidgetDefinition w,
+        int? sortOrder = null,
+        bool? isActive = null,
+        string? labelStyle = null)
+    {
+        var nextLabelStyle = labelStyle ?? w.LabelStyle;
+        return new Domain.Entities.WidgetDefinition
+        {
+            Id             = w.Id,
+            FormId         = w.FormId,
+            ParentId       = w.ParentId,
+            WidgetCode     = w.WidgetCode,
+            Label          = w.Label,
+            DataType       = w.DataType,
+            MaxLength      = w.MaxLength,
+            MinLength      = w.MinLength,
+            ExpectedLength = w.ExpectedLength,
+            MinValue       = w.MinValue,
+            MaxValue       = w.MaxValue,
+            SortOrder      = sortOrder ?? w.SortOrder,
+            OptionsJson    = w.OptionsJson,
+            RulesJson      = w.RulesJson,
+            // IsPlainField turetilmis deger: LabelStyle == 'inline' ile senkron.
+            IsPlainField   = labelStyle != null
+                ? string.Equals(nextLabelStyle, "inline", StringComparison.OrdinalIgnoreCase)
+                : w.IsPlainField,
+            IsRequired     = w.IsRequired,
+            IsActive       = isActive ?? w.IsActive,
+            ColorType      = w.ColorType,
+            ColorValue     = w.ColorValue,
+            ColSpan        = w.ColSpan,
             LabelStyle     = nextLabelStyle,
-            CreatedAt      = widget.CreatedAt,
+            IsSystemField  = w.IsSystemField,
+            EntityColumn   = w.EntityColumn,
+            IsPermissionControlled = w.IsPermissionControlled,
+            CreatedAt      = w.CreatedAt,
             UpdatedAt      = DateTime.Now,
         };
-        await _repository.UpsertWidgetAsync(updated, ct);
     }
 
     public async Task DeleteWidgetAsync(int widgetId, CancellationToken ct)
@@ -751,9 +1049,9 @@ public sealed class WidgetService : IWidgetService
     }
 
     private static bool IsValidDataType(string dt) =>
-        dt == "text" || dt == "numeric" || dt == "date" || dt == "boolean" ||
+        dt == "text" || dt == "textarea" || dt == "numeric" || dt == "date" || dt == "boolean" ||
         dt == "dropdown" || dt == "multi-select" || dt == "group" ||
-        dt == "link" || dt == "lookup" || dt == "grid" || dt == "guide-list";
+        dt == "link" || dt == "lookup" || dt == "grid" || dt == "guide-list" || dt == "attachment";
 
     // ══════════════════════════════════════════════════════════
     // Save values (Faz A — degisiklik yok)
@@ -800,12 +1098,139 @@ public sealed class WidgetService : IWidgetService
             serialized[widget.Id] = asString;
         }
 
+        // 2026-07-06 — Zorunlu alan kontrolu artik server'da da yapilir. Frontend
+        // kontrolu UX icindir; API'ye dogrudan yazan entegrasyonlar/istemciler
+        // requiredIf/IsRequired kurallarini atlayamaz. Bos serialized (grid-only
+        // update) kontrol disidir — deger yazilmayan cagri required'i tetiklemez.
+        // request.EnforceRequired=false: kismi deger yazan ic akislar (import) atlar.
+        if (request.EnforceRequired)
+            EnforceRequired(widgets, serialized);
+
         await _repository.UpsertValuesAsync(
             request.FormId,
             request.RecordId,
             serialized,
             ct,
             request.ParentRecordId);
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // Server-side required enforcement (statik IsRequired + requiredIf)
+    // ══════════════════════════════════════════════════════════
+
+    private static readonly string[] NonValueDataTypes = { "group", "grid", "guide-list" };
+
+    private static bool IsNonValueType(string? dataType) =>
+        NonValueDataTypes.Contains((dataType ?? string.Empty).Trim().ToLowerInvariant());
+
+    /// <summary>
+    /// Frontend save() validasyonunun server paritesi:
+    ///   effectiveRequired = IsRequired || eval(requiredIf)
+    /// Kural degerlendirme hatasi frontend'deki gibi fail-open'dir (required=false) —
+    /// ornegin child form kurali parent widget'ina referans veriyorsa scope'ta
+    /// bulunamaz, statik IsRequired yine de uygulanir. Bos/eksik deger tespitinde
+    /// '[]' (bos multi-select) de bos sayilir. Eksikler tek ArgumentException ile
+    /// raporlanir (controller 400 doner).
+    /// </summary>
+    private static void EnforceRequired(
+        IReadOnlyCollection<Domain.Entities.WidgetDefinition> widgets,
+        IReadOnlyDictionary<int, string?> serialized)
+    {
+        if (serialized.Count == 0) return;
+
+        // Eval scope: WidgetCode → coerced deger (frontend coerceForScope paritesi).
+        Dictionary<string, object?>? scope = null;
+        Dictionary<string, object?> BuildScope()
+        {
+            var s = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var w in widgets)
+            {
+                if (IsNonValueType(w.DataType)) continue;
+                serialized.TryGetValue(w.Id, out var raw);
+                s[w.WidgetCode] = CoerceForRuleScope(raw, w.DataType);
+            }
+            return s;
+        }
+
+        var missing = new List<string>();
+        foreach (var w in widgets)
+        {
+            if (!w.IsActive || IsNonValueType(w.DataType)) continue;
+
+            var effRequired = w.IsRequired;
+            if (!effRequired)
+            {
+                var requiredIf = ParseRules(w.RulesJson)?.RequiredIf;
+                if (!string.IsNullOrWhiteSpace(requiredIf))
+                {
+                    scope ??= BuildScope();
+                    effRequired = EvaluateRuleBool(requiredIf, scope);
+                }
+            }
+            if (!effRequired) continue;
+
+            serialized.TryGetValue(w.Id, out var val);
+            if (string.IsNullOrWhiteSpace(val) || val.Trim() == "[]")
+                missing.Add(string.IsNullOrWhiteSpace(w.Label) ? w.WidgetCode : w.Label);
+        }
+
+        if (missing.Count > 0)
+            throw new ArgumentException("Zorunlu alanlar boş bırakılamaz: " + string.Join(", ", missing));
+    }
+
+    /// <summary>
+    /// Frontend ruleEngine.coerceForScope ile ayni tip donusumu: numeric → double
+    /// (bos: 0), boolean → bool (bos: false), diger → string (bos: ''). Multi-select
+    /// ham JSON string kalir — kural ifadelerinde nadiren gecer; uyusmazlik NCalc
+    /// exception'i uretir ve fail-open calisir.
+    /// </summary>
+    private static object CoerceForRuleScope(string? raw, string? dataType)
+    {
+        var dt = (dataType ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(raw))
+        {
+            return dt switch
+            {
+                "numeric" => 0d,
+                "boolean" => false,
+                _ => string.Empty,
+            };
+        }
+        switch (dt)
+        {
+            case "numeric":
+                return double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : 0d;
+            case "boolean":
+            {
+                var s = raw.Trim().ToLowerInvariant();
+                return s is "true" or "1" or "on" or "yes";
+            }
+            default:
+                return raw;
+        }
+    }
+
+    /// <summary>
+    /// requiredIf ifadesini NCalc ile degerlendirir. Bilinmeyen tanimlayici, syntax
+    /// farki veya tip hatasi → false (fail-open; frontend rr.ok=false paritesi).
+    /// Ifadeler admin tarafindan tanimlanir ve upsert'te RuleCharsRegex +
+    /// ForbiddenKeywords suzgecinden gecmistir.
+    /// </summary>
+    private static bool EvaluateRuleBool(string expression, IReadOnlyDictionary<string, object?> scope)
+    {
+        try
+        {
+            var expr = new NCalc.Expression(expression);
+            foreach (var kv in scope)
+                expr.Parameters[kv.Key] = kv.Value;
+            var result = expr.Evaluate();
+            return result is bool b && b;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     // ══════════════════════════════════════════════════════════
@@ -1111,6 +1536,7 @@ public sealed class WidgetService : IWidgetService
         switch (widget.DataType.ToLowerInvariant())
         {
             case "text":
+            case "textarea":
             case "dropdown":
             case "link":
             case "lookup":
@@ -1211,6 +1637,19 @@ public sealed class WidgetService : IWidgetService
                 return string.IsNullOrEmpty(single)
                     ? null
                     : JsonSerializer.Serialize(new[] { single });
+            }
+
+            case "attachment":
+            {
+                // Deger = merkezi Attachment tablosundaki kayit Id'si (upload endpoint'i
+                // uretir). ID-tabanli eslestirme kurali: dosya adi degil Id saklanir.
+                var s = Convert.ToString(rawValue, CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(s)) return null;
+                if (!long.TryParse(s.Trim(), out var attId) || attId <= 0)
+                {
+                    throw new ArgumentException($"'{widget.Label}' icin gecersiz dosya referansi.");
+                }
+                return attId.ToString(CultureInfo.InvariantCulture);
             }
 
             case "group":

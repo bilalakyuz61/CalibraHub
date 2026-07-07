@@ -9,8 +9,9 @@ public sealed record ExcelTable(
     IReadOnlyList<string> Headers,
     IReadOnlyList<IReadOnlyList<string>> Rows);
 
-/// <summary>İndirilebilir boş şablon (Excel) için tek bir kolon tanımı.</summary>
-public sealed record ExcelTemplateColumn(string Header, string? Hint, bool Required, IReadOnlyList<string>? AllowedValues = null, bool CanBeMatchKey = false);
+/// <summary>İndirilebilir boş şablon (Excel) için tek bir kolon tanımı.
+/// DataType ("string"/"decimal"/"int"/"date"/"bool") + MaxLength hücre veri doğrulaması üretir.</summary>
+public sealed record ExcelTemplateColumn(string Header, string? Hint, bool Required, IReadOnlyList<string>? AllowedValues = null, bool CanBeMatchKey = false, string DataType = "string", int? MaxLength = null);
 
 /// <summary>
 /// Excel (.xlsx) ve CSV dosyalarını salt-okunur ayrıştırır. ClosedXML tabanlı (Infrastructure).

@@ -204,42 +204,63 @@
     @@keyframes invSpin { to { transform: rotate(360deg); } }
     .inv-loading-mask__text { font-size: .8rem; color: #64748b; }
     body.app-theme-dark .inv-loading-mask__text { color: rgba(255,255,255,.55); }
+
+    /* ── İşlemler sekmesi ─────────────────────────────────────────────── */
+    .inv-ops-hint {
+        padding: 10px 14px; border-radius: 10px; font-size: .8rem;
+        border: 1px solid var(--app-border, #e2e8f0);
+        background: var(--app-muted-surface, #f8fafc);
+        color: var(--app-text-muted, #64748b);
+    }
+    body.app-theme-dark .inv-ops-hint {
+        border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.03); color: rgba(255,255,255,.6);
+    }
+    .inv-ops-card {
+        padding: 14px 16px; border-radius: 12px; border: 1px dashed;
+    }
+    .inv-ops-card--danger { border-color: rgba(239,68,68,.4);  background: rgba(239,68,68,.04); }
+    .inv-ops-card--warn   { border-color: rgba(139,92,246,.35); background: rgba(139,92,246,.04); }
+    .inv-ops-title {
+        display: flex; align-items: center; gap: 6px;
+        font-size: .82rem; font-weight: 600; margin-bottom: 8px;
+    }
+    .inv-ops-card--danger .inv-ops-title { color: #f87171; }
+    body.app-theme-light .inv-ops-card--danger .inv-ops-title { color: #dc2626; }
+    .inv-ops-card--warn .inv-ops-title { color: #a78bfa; }
+    body.app-theme-light .inv-ops-card--warn .inv-ops-title { color: #6d28d9; }
+    .inv-ops-desc {
+        font-size: .78rem; line-height: 1.5; margin-bottom: 10px;
+        color: rgba(255,255,255,.5);
+    }
+    body.app-theme-light .inv-ops-desc { color: #64748b; }
+    .inv-ops-btn:disabled { opacity: .45; cursor: not-allowed; }
 </style>
+}
+
+@{
+    // Sayım "Yansıt" — standart action bar'ın ExtraButtonsHtml slotunda render edilir.
+    // Yalnızca kayıtlı (edit) sayımda görünür; JS updateOpsState() ile devre kontrolü yapılır.
+    var invExtraBtns = isEdit
+        ? "<button type=\"button\" class=\"pte-btn pte-btn--violet pte-btn--icon\" id=\"invApplyBtn\" " +
+          "title=\"Sayım farklarını stok hareketine yansıtır — bu işlem sonrası sayım düzenlenemez\" aria-label=\"Yansıt\">" +
+          "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 12a9 9 0 11-9-9c2.52 0 4.85.99 6.57 2.64L21 8\"/><path d=\"M21 3v5h-5\"/></svg>" +
+          "<span class=\"pte-btn__label\">Yansıt</span></button>"
+        : "";
 }
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
 
-  <!-- Aksiyon Seridi -->
-  <div class="inv-action-bar" id="invActionBar">
-    <button type="button" class="inv-btn inv-btn--primary" id="invSaveBtn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Kaydet
-    </button>
-    <a href="/Warehouse/Inventory" class="inv-btn inv-btn--secondary">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      Listeye Dön
-    </a>
-    @if (isEdit)
-    {
-        <button type="button" class="inv-btn inv-btn--danger" id="invDeleteBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-          Sil
-        </button>
-        <button type="button" class="inv-btn inv-btn--primary" id="invApplyBtn" title="Sayım farklarını stok hareketine yansıtır — bu işlem sonrası sayım düzenlenemez">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.85.99 6.57 2.64L21 8"/><path d="M21 3v5h-5"/></svg>
-          Yansıt
-        </button>
-    }
-
-    <!-- Belge no + rozet -->
-    <div class="inv-docinfo">
-      <span class="inv-docno" id="invDocNoDisplay"></span>
-      <span class="inv-badge">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-        Sayım
-      </span>
-    </div>
-  </div>
+  <!-- Aksiyon Şeridi — CalibraHub standart action bar -->
+  @await Html.PartialAsync("_CalibraActionBar", new ViewDataDictionary(ViewData)
+  {
+      ["Title"]           = "Sayım",
+      ["ListUrl"]         = "/Warehouse/Inventory",
+      ["ShowNew"]         = false,
+      ["ShowDelete"]      = isEdit,
+      ["SaveBtnId"]       = "invSaveBtn",
+      ["DeleteBtnId"]     = "invDeleteBtn",
+      ["ExtraButtonsHtml"] = invExtraBtns,
+  })
 
   <!-- Sol tab + sağ içerik -->
   <div class="inv-body" style="position:relative;">
@@ -254,6 +275,8 @@
               onclick="invSwitchTab('general')">Üst Bilgi</button>
       <button type="button" class="inv-tab-btn" data-inv-tab="lines"
               onclick="invSwitchTab('lines')">Kalem Bilgileri</button>
+      <button type="button" class="inv-tab-btn" data-inv-tab="ops"
+              onclick="invSwitchTab('ops')">İşlemler</button>
     </nav>
 
     <div class="inv-tab-content" id="invTabContent">
@@ -312,6 +335,51 @@
         <div id="reactInvLineGrid" style="height:100%;"></div>
       </div>
 
+      <!-- TAB 3: İşlemler -->
+      <div class="inv-tab-pane" data-inv-pane="ops">
+        <div class="inv-hform" style="max-width:760px;">
+
+          <div class="inv-ops-hint" id="invOpsHint" style="display:none;">
+            İşlemleri kullanabilmek için önce sayım belgesini depo seçerek kaydedin.
+          </div>
+
+          <!-- Sayım bağlantısız bakiye sıfırlama -->
+          <div class="inv-ops-card inv-ops-card--danger">
+            <div class="inv-ops-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              Sayım Bağlantısız Bakiye Sıfırlama
+            </div>
+            <div class="inv-ops-desc">
+              Sayım deposundaki <strong>tüm güncel stok bakiyeleri</strong> — sayım kalemlerinden bağımsız olarak —
+              sıfırlanacak şekilde düzeltme (Adjust) satırları yazılır. Genellikle sayım öncesi depoyu temiz bir
+              başlangıca çekmek için kullanılır; ardından Yansıt ile sayılan miktarlar sıfır baz üzerine işlenir.
+            </div>
+            <button type="button" class="inv-btn inv-btn--danger inv-ops-btn" id="invZeroAllBtn" style="font-size:0.78rem;padding:7px 12px;">
+              Bakiyeleri Sıfırla
+            </button>
+            <div class="inv-load-status" id="invZeroAllStatus"></div>
+          </div>
+
+          <!-- Sayılmayan stokların sıfırlanması -->
+          <div class="inv-ops-card inv-ops-card--warn">
+            <div class="inv-ops-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              Sayılmayan Stokların Sıfırlanması
+            </div>
+            <div class="inv-ops-desc">
+              Sayım deposunda bakiyesi görünen ancak <strong>sayım kalemlerinde yer almayan</strong> stoklar için
+              sıfırlama düzeltme satırları yazılır. Fiziksel sayımda bulunmayan stokların sistem bakiyesini temizler;
+              genellikle Yansıt işleminin ardından kullanılır.
+            </div>
+            <button type="button" class="inv-btn inv-btn--violet inv-ops-btn" id="invZeroUncountedBtn" style="font-size:0.78rem;padding:7px 12px;">
+              Sayılmayanları Sıfırla
+            </button>
+            <div class="inv-load-status" id="invZeroUncountedStatus"></div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -337,6 +405,19 @@
       <div class="inv-modal__actions">
         <button type="button" class="inv-modal__cancel" id="invApplyModalCancel">Vazgeç</button>
         <button type="button" class="inv-modal__ok"     id="invApplyModalOk">Yansıt</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- İşlemler onay modal (genel — başlık/mesaj JS ile set edilir) -->
+  <div id="invOpsModal" class="inv-modal-backdrop" style="display:none;">
+    <div class="inv-modal">
+      <div class="inv-modal__icon">⚠️</div>
+      <h3 class="inv-modal__title" id="invOpsModalTitle"></h3>
+      <p class="inv-modal__msg" id="invOpsModalMsg"></p>
+      <div class="inv-modal__actions">
+        <button type="button" class="inv-modal__cancel" id="invOpsModalCancel">Vazgeç</button>
+        <button type="button" class="inv-modal__ok"     id="invOpsModalOk"></button>
       </div>
     </div>
   </div>
@@ -467,7 +548,7 @@
             if (doc) {
                 var noEl = document.getElementById('invDocNoInput');
                 if (noEl) noEl.value = doc.docNo || '';
-                document.getElementById('invDocNoDisplay').textContent = doc.docNo || '';
+                invSetMeta(doc.docNo || '');
 
                 var dateFp = document.getElementById('invDocDate')?._flatpickr;
                 if (dateFp && doc.docDate) dateFp.setDate(doc.docDate.substring(0, 10));
@@ -505,6 +586,18 @@
     function hideMask() {
         var m = document.getElementById('invLoadingMask');
         if (m) m.classList.add('is-hidden');
+    }
+
+    // Standart action bar .pte-meta alanına belge no + "Sayım" rozeti yazar.
+    function invSetMeta(docNo) {
+        var meta = document.querySelector('.pte-action-bar .pte-meta');
+        if (!meta) return;
+        var no = (docNo || '').trim();
+        meta.innerHTML =
+            (no ? '<span style="font-weight:700;color:var(--text-strong,#1e293b);margin-right:8px;">' + no + '</span>' : '') +
+            '<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;' +
+            'background:rgba(139,92,246,.14);color:#7c3aed;">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Sayım</span>';
     }
 
     // ── Grid satırları ────────────────────────────────────────────────
@@ -577,14 +670,15 @@
             if (json && json.success) {
                 var noEl = document.getElementById('invDocNoInput');
                 if (noEl) noEl.value = json.docNo || '';
-                document.getElementById('invDocNoDisplay').textContent = json.docNo || '';
+                invSetMeta(json.docNo || '');
                 if (!DOC_ID) {
                     DOC_ID = json.id;
                     history.replaceState(null, '', window.location.pathname + '?id=' + DOC_ID);
                     var delBtn = document.getElementById('invDeleteBtn');
                     if (delBtn) delBtn.style.display = '';
+                    updateOpsState();
                 }
-                var bar = document.getElementById('invActionBar');
+                var bar = document.querySelector('.pte-action-bar');
                 if (bar) {
                     bar.classList.remove('is-save-flash');
                     void bar.offsetWidth;
@@ -663,6 +757,69 @@
             if (window.CalibraHub && window.CalibraHub.toast)
                 window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
         }
+    }
+
+    // ── İşlemler: sıfırlama operasyonları ────────────────────────────
+    var _opsConfirmCb = null;
+    function showOpsModal(title, msg, okLabel, cb) {
+        document.getElementById('invOpsModalTitle').textContent = title;
+        document.getElementById('invOpsModalMsg').textContent   = msg;
+        document.getElementById('invOpsModalOk').textContent    = okLabel;
+        _opsConfirmCb = cb;
+        document.getElementById('invOpsModal').style.display = 'flex';
+        document.getElementById('invOpsModalOk').focus();
+    }
+    function hideOpsModal() {
+        document.getElementById('invOpsModal').style.display = 'none';
+        _opsConfirmCb = null;
+    }
+
+    function setOpsStatus(elId, msg, type) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        el.textContent = msg;
+        el.className   = 'inv-load-status' + (type ? ' inv-load-status--' + type : '');
+    }
+
+    async function runZeroOp(url, btnId, statusId) {
+        if (!DOC_ID) return;
+        var btn = document.getElementById(btnId);
+        if (btn) btn.disabled = true;
+        setOpsStatus(statusId, 'Çalışıyor…', '');
+        try {
+            var resp = await fetch(url + '?id=' + DOC_ID, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': TOKEN },
+            });
+            var json = await resp.json();
+            if (json && json.ok) {
+                var msg = json.writtenCount > 0
+                    ? json.writtenCount + ' düzeltme satırı yazıldı.'
+                    : 'Sıfırlanacak bakiye bulunamadı — işlem satır yazmadı.';
+                setOpsStatus(statusId, msg, 'ok');
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(msg, 'ok');
+            } else {
+                var err = (json && json.error) || 'İşlem başarısız.';
+                setOpsStatus(statusId, err, 'err');
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(err, 'err');
+            }
+        } catch (ex) {
+            setOpsStatus(statusId, 'Hata: ' + (ex.message || ex), 'err');
+        } finally {
+            if (btn) btn.disabled = !DOC_ID;
+        }
+    }
+
+    function updateOpsState() {
+        var enabled = !!DOC_ID;
+        var hint = document.getElementById('invOpsHint');
+        if (hint) hint.style.display = enabled ? 'none' : '';
+        ['invZeroAllBtn', 'invZeroUncountedBtn'].forEach(function(id) {
+            var b = document.getElementById(id);
+            if (b) b.disabled = !enabled;
+        });
     }
 
     // ── Line Grid ────────────────────────────────────────────────────
@@ -786,8 +943,37 @@
         document.getElementById('invApplyModal')?.addEventListener('click', function(e) {
             if (e.target === this) hideApplyModal();
         });
+
+        // İşlemler sekmesi butonları
+        document.getElementById('invZeroAllBtn')?.addEventListener('click', function() {
+            showOpsModal(
+                'Bakiyeleri Sıfırla',
+                'Sayım deposundaki TÜM güncel stok bakiyeleri sıfırlanacak şekilde düzeltme satırları yazılacak. Bu işlem sayım kalemlerinden bağımsız çalışır ve geri alınamaz. Devam edilsin mi?',
+                'Sıfırla',
+                function() { runZeroOp('/Warehouse/ZeroLocationBalancesJson', 'invZeroAllBtn', 'invZeroAllStatus'); }
+            );
+        });
+        document.getElementById('invZeroUncountedBtn')?.addEventListener('click', function() {
+            showOpsModal(
+                'Sayılmayanları Sıfırla',
+                'Sayım deposunda bakiyesi olup sayım kalemlerinde yer almayan stoklar için sıfırlama düzeltme satırları yazılacak. Bu işlem geri alınamaz. Devam edilsin mi?',
+                'Sıfırla',
+                function() { runZeroOp('/Warehouse/ZeroUncountedJson', 'invZeroUncountedBtn', 'invZeroUncountedStatus'); }
+            );
+        });
+        document.getElementById('invOpsModalCancel')?.addEventListener('click', hideOpsModal);
+        document.getElementById('invOpsModalOk')?.addEventListener('click', function() {
+            var cb = _opsConfirmCb;
+            hideOpsModal();
+            if (cb) cb();
+        });
+        document.getElementById('invOpsModal')?.addEventListener('click', function(e) {
+            if (e.target === this) hideOpsModal();
+        });
+        updateOpsState();
+
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { hideDeleteModal(); hideApplyModal(); }
+            if (e.key === 'Escape') { hideDeleteModal(); hideApplyModal(); hideOpsModal(); }
         });
         if (!DOC_ID) {
             if (delBtn) delBtn.style.display = 'none';

@@ -66,5 +66,12 @@ public sealed class Note : Entity
     /// </summary>
     public string? OcrText { get; set; }
 
+    /// <summary>
+    /// Not listesi kartlarında gösterilen kısa düz-metin özet (~300 karakter).
+    /// İçerik at-rest şifreli olduğundan SQL'de üretilemez; kayıt anında HTML'den
+    /// çıkarılır ve Protect'li saklanır. E2E şifreli notlarda NULL'dır.
+    /// </summary>
+    public string? Snippet { get; set; }
+
     public void MarkDeleted() => IsDeleted = true;
 }

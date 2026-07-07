@@ -104,6 +104,49 @@ public interface IWidgetService
     Task ToggleIsPlainFieldAsync(int widgetId, bool isPlainField, CancellationToken ct);
 
     /// <summary>
+    /// Yalnizca SortOrder gunceller — diger tum alanlar (OptionsJSON dahil) DB'deki
+    /// haliyle korunur. Admin UI reorder islemleri icin tam upsert yerine bu kullanilir;
+    /// boylece lookup/grid metadata'sinin client tarafinda kayipli yeniden insasi gerekmez.
+    /// Listede bulunamayan widget varsa KeyNotFoundException firlatir.
+    /// </summary>
+    Task ReorderWidgetsAsync(IReadOnlyCollection<WidgetSortOrderItem> items, CancellationToken ct);
+
+    /// <summary>
+    /// Yalnizca IsActive gunceller — diger tum alanlar DB'deki haliyle korunur.
+    /// Admin UI aktif/pasif toggle'i icin tam upsert yerine bu kullanilir.
+    /// Widget bulunamazsa KeyNotFoundException firlatir.
+    /// </summary>
+    Task SetWidgetActiveAsync(int widgetId, bool isActive, CancellationToken ct);
+
+    /// <summary>
+    /// Bir kaydin widget degeri degisiklik gecmisi (alan bazli audit) — yeni→eski
+    /// sirali, widget etiketleri guncel Label ile zenginlestirilmis. Grid child
+    /// satirlarinin degisiklikleri de dahildir. Form bulunamazsa null doner.
+    /// </summary>
+    Task<IReadOnlyCollection<WidgetValueLogDto>?> GetValueHistoryAsync(
+        string formCode,
+        string recordId,
+        CancellationToken ct);
+
+    /// <summary>
+    /// Bir formun custom widget tanimlarini transport paketi olarak doner
+    /// (IsSystemField=true alanlar haric). Form bulunamazsa null.
+    /// </summary>
+    Task<WidgetPackageDto?> ExportWidgetPackageAsync(string formCode, CancellationToken ct);
+
+    /// <summary>
+    /// Transport paketini hedef forma uygular — WidgetCode uzerinden upsert
+    /// (mevcut kod guncellenir, yeni kod olusturulur). Grup iliskileri ParentCode
+    /// ile cozulur; gecersiz dataType, cozulmeyen grid childFormCode veya hedefte
+    /// ayni kodlu SISTEM alani olan kayitlar atlanip raporlanir.
+    /// Form bulunamazsa ArgumentException.
+    /// </summary>
+    Task<WidgetImportResultDto> ImportWidgetPackageAsync(
+        string formCode,
+        WidgetPackageDto package,
+        CancellationToken ct);
+
+    /// <summary>
     /// Toplu required kontrolu — bir formdaki tum IsRequired=true widget'lari, verilen
     /// recordId'lerin degerleriyle kesistirip bos olanlari bulur. SALES_QUOTE_LINES
     /// gibi satir-bazli formlar icin save oncesi dogrulama amacli.

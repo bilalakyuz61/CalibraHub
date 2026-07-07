@@ -34,23 +34,25 @@ public sealed class ContactImportHandler : RowImportHandlerBase
     {
         var fields = new List<ImportTargetFieldDto>
         {
-        new ImportTargetFieldDto("AccountTitle",   "Cari Unvanı",   "string", true,  false, "Kurum veya kişi adı (zorunlu)"),
-        new ImportTargetFieldDto("AccountCode",    "Cari Kodu",     "string", true,  true,  "Benzersiz cari kodu (zorunlu); eşleştirme anahtarı olabilir"),
+        // MaxLength'ler Contact tablosunun NVARCHAR uzunluklarıyla birebir (Excel şablonunda
+        // metin-uzunluk doğrulaması üretir; sunucu tarafı doğrulama ayrıca çalışır).
+        new ImportTargetFieldDto("AccountTitle",   "Cari Unvanı",   "string", true,  false, "Kurum veya kişi adı (zorunlu)", MaxLength: 200),
+        new ImportTargetFieldDto("AccountCode",    "Cari Kodu",     "string", true,  true,  "Benzersiz cari kodu (zorunlu); eşleştirme anahtarı olabilir", MaxLength: 20),
         new ImportTargetFieldDto("AccountType",    "Cari Tipi",     "type",   false, false, "Müşteri / Satıcı / Her İkisi (boşsa Müşteri)", new[] { "Müşteri", "Satıcı", "Her İkisi" }),
-        new ImportTargetFieldDto("TaxNumber",      "Vergi No",      "string", false, true,  "10 hane; eşleştirme anahtarı olabilir"),
-        new ImportTargetFieldDto("TaxOffice",      "Vergi Dairesi", "string", false, false, null),
-        new ImportTargetFieldDto("IdentityNumber", "TC Kimlik No",  "string", false, false, "11 hane"),
-        new ImportTargetFieldDto("Phone",          "Telefon",       "string", false, false, null),
-        new ImportTargetFieldDto("Mobile",         "Cep Telefonu",  "string", false, false, null),
-        new ImportTargetFieldDto("Email",          "E-posta",       "string", false, false, null),
-        new ImportTargetFieldDto("Website",        "Web Sitesi",    "string", false, false, null),
-        new ImportTargetFieldDto("Address",        "Adres",         "string", false, false, null),
-        new ImportTargetFieldDto("City",           "İl",            "string", false, false, null),
-        new ImportTargetFieldDto("District",       "İlçe",          "string", false, false, null),
-        new ImportTargetFieldDto("Neighborhood",   "Mahalle",       "string", false, false, null),
-        new ImportTargetFieldDto("PostalCode",     "Posta Kodu",    "string", false, false, null),
-        new ImportTargetFieldDto("CountryCode",    "Ülke Kodu",     "string", false, false, "TR, DE, US..."),
-        new ImportTargetFieldDto("ContactPerson",  "İlgili Kişi",   "string", false, false, null),
+        new ImportTargetFieldDto("TaxNumber",      "Vergi No",      "string", false, true,  "10 hane; eşleştirme anahtarı olabilir", MaxLength: 10),
+        new ImportTargetFieldDto("TaxOffice",      "Vergi Dairesi", "string", false, false, null, MaxLength: 100),
+        new ImportTargetFieldDto("IdentityNumber", "TC Kimlik No",  "string", false, false, "11 hane", MaxLength: 11),
+        new ImportTargetFieldDto("Phone",          "Telefon",       "string", false, false, null, MaxLength: 30),
+        new ImportTargetFieldDto("Mobile",         "Cep Telefonu",  "string", false, false, null, MaxLength: 30),
+        new ImportTargetFieldDto("Email",          "E-posta",       "string", false, false, null, MaxLength: 200),
+        new ImportTargetFieldDto("Website",        "Web Sitesi",    "string", false, false, null, MaxLength: 200),
+        new ImportTargetFieldDto("Address",        "Adres",         "string", false, false, null, MaxLength: 500),
+        new ImportTargetFieldDto("City",           "İl",            "string", false, false, null, MaxLength: 100),
+        new ImportTargetFieldDto("District",       "İlçe",          "string", false, false, null, MaxLength: 100),
+        new ImportTargetFieldDto("Neighborhood",   "Mahalle",       "string", false, false, null, MaxLength: 150),
+        new ImportTargetFieldDto("PostalCode",     "Posta Kodu",    "string", false, false, null, MaxLength: 20),
+        new ImportTargetFieldDto("CountryCode",    "Ülke Kodu",     "string", false, false, "TR, DE, US...", MaxLength: 2),
+        new ImportTargetFieldDto("ContactPerson",  "İlgili Kişi",   "string", false, false, null, MaxLength: 150),
         new ImportTargetFieldDto("SalesRepresentative", "Satış Temsilcisi", "string", false, false, "Mevcut satış temsilcisi adı (opsiyonel; verilirse eşleşmeli)"),
         new ImportTargetFieldDto("ContactGroup", "Cari Grubu", "string", false, false, "Cari grup KODU veya adı — Toptan/Perakende/VIP vb. (opsiyonel; verilirse eşleşmeli)"),
         };
@@ -154,7 +156,9 @@ public sealed class ContactImportHandler : RowImportHandlerBase
             if (values.Count > 0)
             {
                 // RecordId = Contact.Id (FinanceController batch render ile aynı konvansiyon; AccountCode DEĞİL).
-                try { await _widget.SaveValuesAsync(new SaveWidgetValuesRequest(_form.Id, dto.Id.ToString(), values), ct); }
+                // EnforceRequired: false — import satiri yalnizca esleştirilmis widget kolonlarini
+                // tasir (kismi dict); form'daki diger zorunlu widget'lar bu akista aranmaz.
+                try { await _widget.SaveValuesAsync(new SaveWidgetValuesRequest(_form.Id, dto.Id.ToString(), values, EnforceRequired: false), ct); }
                 catch (Exception ex) { return (false, $"Cari kaydedildi, özel alanlar kaydedilemedi: {ex.Message}", dto.Id); }
             }
         }

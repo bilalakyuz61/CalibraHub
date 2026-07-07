@@ -168,8 +168,10 @@ public static class MenuDefinition
                 {
                     new("logistics.transfer",       isEn ? "Transfer"          : "Transfer",              "ArrowLeftRight", "/Warehouse/Transfer",   null,
                         PermissionFormCode: FormCodes.Transfer),
-                    new("logistics.stockentry",     isEn ? "Stock Entry/Exit"  : "Ambar Giriş / Çıkış",  "PackageCheck",   "/Warehouse/StockEntry", null,
+                    new("logistics.stockin",        isEn ? "Stock In"          : "Ambar Giriş",           "PackagePlus",    "/Warehouse/StockIn",    null,
                         PermissionFormCode: FormCodes.StockIn),
+                    new("logistics.stockout",       isEn ? "Stock Out"         : "Ambar Çıkış",           "PackageMinus",   "/Warehouse/StockOut",   null,
+                        PermissionFormCode: FormCodes.StockOut),
                     new("logistics.inventorycount", isEn ? "Inventory Count"   : "Sayım",                 "ClipboardCheck", "/Warehouse/Inventory",  null,
                         PermissionFormCode: FormCodes.InventoryCount),
                 }),

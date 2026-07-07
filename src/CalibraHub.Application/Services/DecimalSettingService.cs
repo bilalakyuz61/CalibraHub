@@ -17,6 +17,21 @@ public sealed class DecimalSettingService : IDecimalSettingService
 {
     public const string DefaultFormCode = "*";
 
+    /// <summary>
+    /// Belge ailesi normalizasyonu — üst/kalem/yeni/düzenleme ekran kodları tek belge
+    /// koduna iner (SALES_QUOTE_LINES → SALES_QUOTE, STOCK_IN_LINES → STOCK_IN).
+    /// Kullanıcı belge başına TEK ondalık tanımı yapar; grid'lerin lineFormCode'u ile
+    /// backend'in kök kodu aynı ayara düşer. Kayıt/silme/çözümleme/liste hepsi bu
+    /// kökle çalışır — alias kod ile kayıt oluşmaz.
+    /// </summary>
+    public static string NormalizeFormCode(string code)
+    {
+        if (code.EndsWith("_LINES", StringComparison.OrdinalIgnoreCase)) return code[..^6];
+        if (code.EndsWith("_EDIT",  StringComparison.OrdinalIgnoreCase)) return code[..^5];
+        if (code.EndsWith("_NEW",   StringComparison.OrdinalIgnoreCase)) return code[..^4];
+        return code;
+    }
+
     private readonly IDecimalSettingRepository _repository;
     private readonly IFormRepository _formRepository;
     private readonly ICurrentCompanyProvider _currentCompany;
@@ -37,7 +52,7 @@ public sealed class DecimalSettingService : IDecimalSettingService
     public async Task<EffectiveDecimalsDto> GetEffectiveAsync(string? formCode, CancellationToken ct)
     {
         var companyId = _currentCompany.GetCurrentCompanyId();
-        var code = string.IsNullOrWhiteSpace(formCode) ? DefaultFormCode : formCode.Trim();
+        var code = string.IsNullOrWhiteSpace(formCode) ? DefaultFormCode : NormalizeFormCode(formCode.Trim());
         if (companyId <= 0) return EffectiveDecimalsDto.Fallback(code);
 
         var gen = GetGeneration(companyId);
@@ -84,12 +99,31 @@ public sealed class DecimalSettingService : IDecimalSettingService
                 defaults.AmountDecimals, defaults.RateDecimals, defaults.ExchangeRateDecimals),
         };
 
-        foreach (var form in forms.Where(f => f.IsActive).OrderBy(f => f.Module).ThenBy(f => f.SortOrder).ThenBy(f => f.FormCode))
+        // Belge ailesi konsolidasyonu: SALES_QUOTE + _NEW/_EDIT/_LINES → tek "Satış Teklifi"
+        // satırı. Üst/kalem için ayrı tanım yok — belge bazında tek tanım (2026-07-07 talebi).
+        // Aile etiketi: çok üyeli ailede belge adı SubModule'de taşınır ("Ambar Giriş",
+        // "İhtiyaç Kaydı"); üye FormName'leri "Üst Bilgi"/"Kalem Bilgisi" olduğundan kullanılmaz.
+        var families = forms
+            .Where(f => f.IsActive)
+            .GroupBy(f => NormalizeFormCode(f.FormCode), StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var primary = g.OrderBy(f => f.SortOrder).ThenBy(f => f.FormCode, StringComparer.OrdinalIgnoreCase).First();
+                var label = g.Count() > 1
+                    ? g.Select(f => f.SubModule).FirstOrDefault(sm => !string.IsNullOrWhiteSpace(sm)) ?? primary.FormName
+                    : primary.FormName;
+                return (RootCode: g.Key, Label: label, primary.Module, primary.SortOrder);
+            })
+            .OrderBy(x => x.Module)
+            .ThenBy(x => x.SortOrder)
+            .ThenBy(x => x.RootCode, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var family in families)
         {
-            var has = byCode.TryGetValue(form.FormCode, out var s);
+            var has = byCode.TryGetValue(family.RootCode, out var s);
             var src = has ? s! : defaults;
             rows.Add(new DecimalSettingRowDto(
-                form.FormCode, form.FormName, form.Module, has,
+                family.RootCode, family.Label, family.Module, has,
                 src.QuantityDecimals, src.UnitPriceDecimals, src.FxUnitPriceDecimals,
                 src.AmountDecimals, src.RateDecimals, src.ExchangeRateDecimals));
         }
@@ -100,7 +134,7 @@ public sealed class DecimalSettingService : IDecimalSettingService
     {
         var companyId = _currentCompany.GetCurrentCompanyId();
         if (companyId <= 0) throw new InvalidOperationException("Şirket kimliği çözümlenemedi.");
-        var code = string.IsNullOrWhiteSpace(request.FormCode) ? DefaultFormCode : request.FormCode.Trim();
+        var code = string.IsNullOrWhiteSpace(request.FormCode) ? DefaultFormCode : NormalizeFormCode(request.FormCode.Trim());
 
         await _repository.UpsertAsync(new DecimalSetting
         {
@@ -125,6 +159,7 @@ public sealed class DecimalSettingService : IDecimalSettingService
         var code = (formCode ?? string.Empty).Trim();
         if (code.Length == 0 || code == DefaultFormCode)
             throw new InvalidOperationException("Genel varsayılan silinemez; değerlerini güncelleyin.");
+        code = NormalizeFormCode(code);
         await _repository.DeleteAsync(companyId, code, ct);
         BumpGeneration(companyId);
     }

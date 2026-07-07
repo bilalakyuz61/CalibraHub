@@ -491,18 +491,19 @@ public sealed class NotesController : Controller
         return Json(new { success = true });
     }
 
-    // POST /Notes/MoveNote — Notu farklı klasöre taşı (sürükle-bırak)
+    // POST /Notes/MoveNoteJson — Notu farklı klasöre taşı (menü + sürükle-bırak).
+    // React JSON API pattern'i (SaveJson ile aynı): antiforgery yerine JSON body + same-origin cookie.
     [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> MoveNote([FromBody] MoveNoteRequest req, CancellationToken cancellationToken)
+    public async Task<IActionResult> MoveNoteJson([FromBody] MoveNoteRequest req, CancellationToken cancellationToken)
     {
         var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(req.NoteId, cancellationToken);
         if (note is null || note.UserId != userId || note.CompanyId != companyId)
-            return NotFound();
+            return Json(new { success = false, message = "Not bulunamadı." });
         note.FolderId = req.FolderId;
+        note.UpdatedAt = DateTime.Now;
         await _noteRepository.SaveAsync(note, cancellationToken);
-        return Ok();
+        return Json(new { success = true });
     }
 
     // ── React JSON API ─────────────────────────────────────────────────────
@@ -546,6 +547,7 @@ public sealed class NotesController : Controller
                 shareIsPublic            = n.ShareIsPublic,
                 shareIncludeAttachments  = n.ShareIncludeAttachments,
                 ocrText                  = n.OcrText,
+                snippet                  = n.Snippet,
             }),
         });
     }

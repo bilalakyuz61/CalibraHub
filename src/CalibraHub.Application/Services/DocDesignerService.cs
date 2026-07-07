@@ -93,6 +93,62 @@ public sealed partial class DocDesignerService : IDocDesignerService
             _cache.Remove(DesignProviderCacheKeys.Default(existing.DocType));
     }
 
+    /// <summary>
+    /// 2026-06-03 — Mevcut layout'un kopyasını oluşturur. Yeni layout'ta:
+    ///   - Name = "{original.Name} (Kopya)"
+    ///   - Code = "{original.Code}_kopya_{yyyyMMddHHmmss}"
+    ///   - IsDefault = false (klon her zaman kullanıcı tasarımı)
+    ///   - OwnerUserId = 0 (persistence katmanı gerçek user'ı doldurur)
+    ///   - Aynı bantlar (layoutJson) + aynı dataSources (yeni id ile)
+    /// Kullanıcı klonu açıp özelleştirir; orijinal sistem varsayılanı korunur.
+    /// </summary>
+    public async Task<int> CloneAsync(int sourceId, CancellationToken ct)
+    {
+        var source = await _repo.GetByIdAsync(sourceId, ct);
+        if (source == null)
+            throw new InvalidOperationException($"Kopyalanacak tasarım bulunamadı (Id={sourceId}).");
+
+        var sourceDs = await _repo.GetDataSourcesAsync(sourceId, ct);
+        // Domain DocLayoutDs → SaveRequest DTO (Id ve LayoutId sıfır: yeni layout için)
+        var cloneDsList = sourceDs.Select(ds => new DocLayoutDsDto(
+            Id: 0, LayoutId: 0,
+            Alias: ds.Alias, Role: ds.Role,
+            ViewId: ds.ViewId, AdHocSql: ds.AdHocSql,
+            JoinOn: ds.JoinOn, ParentAlias: ds.ParentAlias,
+            Ordinal: ds.Ordinal)).ToList();
+
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        var cloneReq = new SaveDocLayoutRequest(
+            Id:           0,
+            Code:         $"{source.Code}_kopya_{timestamp}",
+            Name:         $"{source.Name} (Kopya)",
+            DocType:      source.DocType,
+            Description:  source.Description,
+            LayoutJson:   source.LayoutJson,
+            PageW:        source.PageW,
+            PageH:        source.PageH,
+            MarginTop:    source.MarginTop,
+            MarginBot:    source.MarginBot,
+            MarginLeft:   source.MarginLeft,
+            MarginRight:  source.MarginRight,
+            IsDefault:    false,
+            DataSources:  cloneDsList,
+            DocumentTypeId: source.DocumentTypeId,
+            OutputFormat: source.OutputFormat,
+            DefaultSubject:        source.DefaultSubject,
+            DefaultBody:           source.DefaultBody,
+            DefaultsViewName:      source.DefaultsViewName,
+            DefaultsSubjectColumn: source.DefaultsSubjectColumn,
+            DefaultsBodyColumn:    source.DefaultsBodyColumn,
+            DefaultsWhere:         source.DefaultsWhere,
+            UseAsMailTemplate:     source.UseAsMailTemplate
+        );
+
+        var newId = await _repo.UpsertAsync(cloneReq, 0, ct);
+        await _repo.ReplaceDataSourcesAsync(newId, cloneReq.DataSources, ct);
+        return newId;
+    }
+
     public async Task<byte[]> RenderPdfAsync(DocLayoutRunRequest req, CancellationToken ct)
     {
         var (layout, data, meta) = await LoadLayoutWithDataAsync(req, ct);

@@ -60,6 +60,10 @@ export function cloneNote(noteId) {
   return postJson(BASE + '/CloneNoteJson', { noteId: noteId })
 }
 
+export function moveNote(noteId, folderId) {
+  return postJson(BASE + '/MoveNoteJson', { noteId: noteId, folderId: folderId || null })
+}
+
 export function deleteNote(id) {
   return postJson(BASE + '/DeleteJson', { id: id })
 }

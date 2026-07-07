@@ -168,7 +168,10 @@ public sealed record LocationDto(
     decimal? VolumeCapacity,
     bool IsActive,
     bool IsMachinePark,
-    bool IsStorageArea);
+    bool IsStorageArea,
+    // Depo bazında eksi bakiye izni (üç durumlu): null=şirket varsayılanını devral,
+    // true=izin ver (kontrol kapalı), false=engelle (kontrol açık).
+    bool? AllowNegativeBalance = null);
 
 public sealed record UnitDto(
     int Id,
@@ -221,7 +224,8 @@ public sealed record CreateLocationRequest(
     decimal? VolumeCapacity,
     bool IsActive,
     bool IsMachinePark,
-    bool IsStorageArea);
+    bool IsStorageArea,
+    bool? AllowNegativeBalance = null);
 
 public sealed record CreateUnitRequest(
     string Code,
@@ -241,7 +245,8 @@ public sealed record UpdateLocationRequest(
     decimal? VolumeCapacity,
     bool IsActive,
     bool IsMachinePark,
-    bool IsStorageArea);
+    bool IsStorageArea,
+    bool? AllowNegativeBalance = null);
 
 public sealed record UpdateUnitRequest(
     int Id,

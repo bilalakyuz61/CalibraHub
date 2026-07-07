@@ -404,6 +404,32 @@ body.app-theme-dark .lt-root {
 .lt-fi-sw.is-on .lt-fi-sw-track { background: var(--lt-indigo-color); }
 .lt-fi-sw.is-on .lt-fi-sw-thumb { transform: translateX(12px); }
 
+/* Inline form — eksi bakiye üç-durumlu kontrol (Devral / Engelle / İzin Ver) */
+.lt-fi-neg {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 3px 6px 3px 9px; border-radius: 6px;
+  border: 1px solid var(--lt-border); background: var(--lt-bg); user-select: none;
+}
+.lt-fi-neg.is-disabled { opacity: .45; }
+.lt-fi-neg-lbl { font-size: 11px; font-weight: 500; color: var(--lt-muted); white-space: nowrap; }
+.lt-fi-seg {
+  display: inline-flex; border: 1px solid var(--lt-line);
+  border-radius: 6px; overflow: hidden;
+}
+.lt-seg-btn {
+  appearance: none; border: none; background: transparent;
+  padding: 3px 9px; font-size: 11px; font-weight: 500; line-height: 1.5;
+  color: var(--lt-muted); cursor: pointer; white-space: nowrap;
+  border-left: 1px solid var(--lt-line);
+  transition: background .12s, color .12s;
+}
+.lt-seg-btn:first-child { border-left: none; }
+.lt-seg-btn:hover:not(:disabled):not(.is-active) { background: var(--lt-indigo-bg); color: var(--lt-text); }
+.lt-seg-btn:disabled { cursor: not-allowed; }
+.lt-seg-btn.is-active { font-weight: 600; background: var(--lt-indigo-bg); color: var(--lt-indigo-color); }
+.lt-seg-btn--block.is-active { background: var(--lt-emerald-bg); color: var(--lt-emerald-color); }
+.lt-seg-btn--allow.is-active { background: var(--lt-amber-bg); color: var(--lt-amber-color); }
+
 /* Standalone switch (form içi tek başına) */
 .lt-sw {
   position: relative; display: inline-block;

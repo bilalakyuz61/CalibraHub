@@ -1,4 +1,5 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -19,11 +20,16 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlStockDocRepository : IStockDocRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IDocumentNumberService _numberService;
     private readonly string _schema;
 
-    public SqlStockDocRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
+    public SqlStockDocRepository(
+        SqlServerConnectionFactory connectionFactory,
+        IDocumentNumberService numberService,
+        CalibraDatabaseOptions options)
     {
         _connectionFactory = connectionFactory;
+        _numberService = numberService;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
     }
 
@@ -170,7 +176,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                SELECT l.[Id], ic.[DocumentId], CAST(ROW_NUMBER() OVER (ORDER BY l.[Id]) AS INT) AS LineNo, l.[ItemId],
+                SELECT l.[Id], ic.[DocumentId], CAST(ROW_NUMBER() OVER (ORDER BY l.[Id]) AS INT) AS [LineNo], l.[ItemId],
                        i.[Code] AS material_code, i.[Name] AS material_name,
                        l.[UnitId], u.[Code] AS unit_code,
                        l.[CountedQty], l.[ConfigId],
@@ -264,7 +270,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             }
             else
             {
-                docNo = await GenerateDocNoAsync(conn, tx, request.DocType, ct);
+                docNo = await ResolveDocNoAsync(conn, tx, request.DocType, createdById, request.DocDate, ct);
                 await using var ins = conn.CreateCommand();
                 ins.Transaction = tx;
                 ins.CommandText = $"""
@@ -325,7 +331,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     """;
                 lineIns.Parameters.AddWithValue("@DocId", docId);
                 lineIns.Parameters.AddWithValue("@LineNo", lineNo++);
-                lineIns.Parameters.AddWithValue("@ItemId", line.ItemId.Value);
+                lineIns.Parameters.AddWithValue("@ItemId", itemId.Value);
                 lineIns.Parameters.AddWithValue("@UnitId", (object?)line.UnitId ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@Qty", line.Qty);
                 lineIns.Parameters.AddWithValue("@CombId", (object?)line.CombinationId ?? DBNull.Value);
@@ -404,7 +410,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             }
             else
             {
-                docNo = await GenerateDocNoAsync(conn, tx, request.DocType, ct);
+                docNo = await ResolveDocNoAsync(conn, tx, request.DocType, createdById, request.DocDate, ct);
                 await using (var ins = conn.CreateCommand())
                 {
                     ins.Transaction = tx;
@@ -451,8 +457,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
             foreach (var line in request.Lines ?? [])
             {
-                if (!line.ItemId.HasValue || line.ItemId.Value <= 0) continue;
-                if (line.Qty <= 0) continue;
+                // ItemId gelmemişse MaterialCode'dan çöz — rehber modal bazı akışlarda
+                // yalnızca kod alanını doldurur (Id kolonu görünmeyen rehber view'ları).
+                var itemId = line.ItemId;
+                if ((!itemId.HasValue || itemId.Value <= 0) && !string.IsNullOrWhiteSpace(line.MaterialCode))
+                    itemId = await ResolveItemIdByCodeAsync(conn, tx, line.MaterialCode!, ct);
+                if (!itemId.HasValue || itemId.Value <= 0) continue;
+                // Sıfır sayım geçerli giriştir ("saydım, yok") — yalnızca negatif atlanır.
+                if (line.Qty < 0) continue;
 
                 await using var lineIns = conn.CreateCommand();
                 lineIns.Transaction = tx;
@@ -463,7 +475,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId);
                     """;
                 lineIns.Parameters.AddWithValue("@CountId", countId);
-                lineIns.Parameters.AddWithValue("@ItemId", line.ItemId.Value);
+                lineIns.Parameters.AddWithValue("@ItemId", itemId.Value);
                 lineIns.Parameters.AddWithValue("@ConfigId", (object?)line.CombinationId ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@UnitId", (object?)line.UnitId ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@Qty", line.Qty);
@@ -503,6 +515,17 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         cmd.CommandText = $"SELECT COUNT(1) FROM {T("InventoryCount")} WHERE [DocumentId] = @Id;";
         cmd.Parameters.AddWithValue("@Id", documentId);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    /// <summary>Items.Code → Items.Id çözümü (ID tabanlı eşleştirme kuralı — kod yalnızca display).</summary>
+    private async Task<int?> ResolveItemIdByCodeAsync(SqlConnection conn, SqlTransaction tx, string code, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"SELECT TOP 1 [Id] FROM {T("Items")} WHERE [Code] = @Code;";
+        cmd.Parameters.AddWithValue("@Code", code.Trim());
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is int id ? id : null;
     }
 
     private static string? CombineNotesWithRef(string? notes, string? refNo)
@@ -560,6 +583,29 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         return result;
     }
 
+    /// <summary>
+    /// Belge numarası çözümü: önce Tasarım Kuralları → Numara Kuralı motoru (belge tipine
+    /// tanımlı aktif kural varsa), yoksa sabit "PREFIX-YIL-SIRA" fallback üreteci.
+    /// </summary>
+    private async Task<string> ResolveDocNoAsync(
+        SqlConnection conn, SqlTransaction tx, string docType, int? createdById, DateTime docDate, CancellationToken ct)
+    {
+        await using (var typeCmd = conn.CreateCommand())
+        {
+            typeCmd.Transaction = tx;
+            typeCmd.CommandText = $"SELECT [Id] FROM {T("DocumentType")} WHERE [Code] = @Code;";
+            typeCmd.Parameters.AddWithValue("@Code", TypeCodeFor(docType));
+            var typeIdObj = await typeCmd.ExecuteScalarAsync(ct);
+            if (typeIdObj is int typeId)
+            {
+                var ruleNo = await _numberService.GenerateNextAsync(
+                    new DocumentNumberContext(typeId, null, null, createdById, null, docDate), ct);
+                if (!string.IsNullOrWhiteSpace(ruleNo)) return ruleNo;
+            }
+        }
+        return await GenerateDocNoAsync(conn, tx, docType, ct);
+    }
+
     private async Task<string> GenerateDocNoAsync(SqlConnection conn, SqlTransaction tx, string docType, CancellationToken ct)
     {
         var prefix = docType switch
@@ -572,10 +618,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         };
         var year = DateTime.Now.Year;
 
+        // Sıra numarası "PREFIX-YYYY-" bloğundan sonra başlar → LEN(prefix) + 7. karakter
+        // (önceki +6 off-by-one: "-000" okuyup hep 1 üretiyordu → duplicate key).
+        // TRY_CAST: kural motorundan gelen farklı formatlı numaralar LIKE'a takılırsa NULL sayılır.
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = $"""
-            SELECT ISNULL(MAX(CAST(SUBSTRING([DocumentNumber], LEN(@Prefix)+6, 4) AS INT)), 0) + 1
+            SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([DocumentNumber], LEN(@Prefix) + 7, 10) AS INT)), 0) + 1
             FROM {T("Document")}
             WHERE [DocumentNumber] LIKE @Prefix + '-' + CAST(@Year AS NVARCHAR(4)) + '-%';
             """;

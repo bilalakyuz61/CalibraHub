@@ -239,10 +239,14 @@ public sealed class PermissionServiceTests
         public Task<IReadOnlyList<PermissionGrant>> ListByDepartmentAsync(int departmentId, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<PermissionGrant>>(grants.Where(g => g.DepartmentId == departmentId).ToList());
 
+        public Task<IReadOnlyList<PermissionGrant>> ListByGroupAsync(int groupId, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<PermissionGrant>>(grants.Where(g => g.GroupId == groupId).ToList());
+
         public Task<PermissionGrant?> GetByIdAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<PermissionGrant>> ListByUserAsync(int userId, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> SaveAsync(PermissionGrant entity, CancellationToken ct) => throw new NotSupportedException();
         public Task BulkReplaceForOwnerAsync(int? userId, int? departmentId, IReadOnlyList<PermissionGrant> entities, CancellationToken ct) => throw new NotSupportedException();
+        public Task BulkReplaceForGroupAsync(int groupId, IReadOnlyList<PermissionGrant> entities, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteAsync(int id, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteByUserAsync(int userId, CancellationToken ct) => throw new NotSupportedException();
         public Task DeleteByDepartmentAsync(int departmentId, CancellationToken ct) => throw new NotSupportedException();

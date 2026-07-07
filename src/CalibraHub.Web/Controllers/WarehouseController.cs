@@ -81,7 +81,8 @@ public sealed class WarehouseController : Controller
     {
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
         Response.Headers["Pragma"] = "no-cache";
-        var gridConfig = BuildLineGridConfig("TRANSFER");
+        var bindings = await GetLineGuideBindingsAsync(FormCodes.TransferLines, ct);
+        var gridConfig = BuildLineGridConfig("TRANSFER", bindings);
         var vm = new StockDocEditViewModel
         {
             DocId   = id,
@@ -89,6 +90,18 @@ public sealed class WarehouseController : Controller
             LineGridConfigJson = JsonSerializer.Serialize(gridConfig, BoardJsonOpts),
         };
         return View("StockDocEdit", vm);
+    }
+
+    /// <summary>
+    /// Kalem grid'i rehber (tip-1) bağlantıları: önce formun kendi kodu, kayıt yoksa
+    /// SALES_QUOTE_LINES varsayılanından devral — kalem yapıları özdeş (Sales ile aynı fallback).
+    /// </summary>
+    private async Task<IReadOnlyCollection<FieldGuideBindingDto>> GetLineGuideBindingsAsync(string lineFormCode, CancellationToken ct)
+    {
+        var bindings = await _fieldSettings.GetGuideBindingsForFormAsync(lineFormCode, ct);
+        if (bindings.Count == 0)
+            bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
+        return bindings;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -113,9 +126,7 @@ public sealed class WarehouseController : Controller
     {
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
         Response.Headers["Pragma"] = "no-cache";
-        var bindings = await _fieldSettings.GetGuideBindingsForFormAsync("INVENTORY_COUNT_LINES", ct);
-        if (bindings.Count == 0)
-            bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
+        var bindings = await GetLineGuideBindingsAsync("INVENTORY_COUNT_LINES", ct);
         var gridConfig = BuildInventoryLineGridConfig(bindings);
         var vm = new InventoryEditViewModel
         {
@@ -225,9 +236,10 @@ public sealed class WarehouseController : Controller
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
             return Json(new { success = true, id, docNo });
         }
-        catch
+        catch (Exception ex)
         {
-            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
+            Console.Error.WriteLine($"[SaveInventoryJson] HATA: {ex}");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu: " + ex.Message });
         }
     }
 
@@ -271,6 +283,48 @@ public sealed class WarehouseController : Controller
         }
     }
 
+    /// <summary>Sayım bağlantısız bakiye sıfırlama — depodaki TÜM canlı bakiyeleri sıfırlayan Adjust satırları yazar.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> ZeroLocationBalancesJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            var writtenCount = await _inventoryCountRepo.ZeroLocationBalancesAsync(id, ct);
+            return Json(new { ok = true, writtenCount });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+        catch
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>Sayılmayan stokların sıfırlanması — sayım kalemlerinde yer almayan bakiyeleri sıfırlar.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> ZeroUncountedJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            var writtenCount = await _inventoryCountRepo.ZeroUncountedAsync(id, ct);
+            return Json(new { ok = true, writtenCount });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+        catch
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // AMBAR GİRİ�? / ÇIKI�?
     // ═══════════════════════════════════════════════════════════════════════
@@ -279,13 +333,41 @@ public sealed class WarehouseController : Controller
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> StockEntry(CancellationToken ct)
     {
-        var config = await BuildStockEntryBoardConfigAsync(ct);
+        var config = await BuildStockEntryBoardConfigAsync(null, ct);
         return View(new WarehouseBoardViewModel { BoardConfig = config });
     }
 
     [HttpGet("/Warehouse/StockEntryBoardConfig")]
     public async Task<IActionResult> StockEntryBoardConfig(CancellationToken ct)
-        => Json(await BuildStockEntryBoardConfigAsync(ct));
+        => Json(await BuildStockEntryBoardConfigAsync(null, ct));
+
+    // 2026-07-06: Ambar Giriş / Çıkış menüde ayrıldı — her tip kendi listesini açar.
+    // StockEntry (birleşik) eski link/dashboard'lar için backward-compat korunur.
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
+    public async Task<IActionResult> StockIn(CancellationToken ct)
+    {
+        ViewData["Title"] = "Ambar Giriş";
+        var config = await BuildStockEntryBoardConfigAsync("in", ct);
+        return View("StockEntry", new WarehouseBoardViewModel { BoardConfig = config });
+    }
+
+    [HttpGet("/Warehouse/StockInBoardConfig")]
+    public async Task<IActionResult> StockInBoardConfig(CancellationToken ct)
+        => Json(await BuildStockEntryBoardConfigAsync("in", ct));
+
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockOut)]
+    public async Task<IActionResult> StockOut(CancellationToken ct)
+    {
+        ViewData["Title"] = "Ambar Çıkış";
+        var config = await BuildStockEntryBoardConfigAsync("out", ct);
+        return View("StockEntry", new WarehouseBoardViewModel { BoardConfig = config });
+    }
+
+    [HttpGet("/Warehouse/StockOutBoardConfig")]
+    public async Task<IActionResult> StockOutBoardConfig(CancellationToken ct)
+        => Json(await BuildStockEntryBoardConfigAsync("out", ct));
 
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
@@ -303,7 +385,9 @@ public sealed class WarehouseController : Controller
             if (existing != null) docType = existing.DocType;
         }
 
-        var gridConfig = BuildLineGridConfig(docType);
+        var lineFormCode = docType == "STOCK_OUT" ? FormCodes.StockOutLines : FormCodes.StockInLines;
+        var bindings = await GetLineGuideBindingsAsync(lineFormCode, ct);
+        var gridConfig = BuildLineGridConfig(docType, bindings);
         var vm = new StockDocEditViewModel
         {
             DocId   = id,
@@ -503,9 +587,17 @@ public sealed class WarehouseController : Controller
         };
     }
 
-    private async Task<object> BuildStockEntryBoardConfigAsync(CancellationToken ct)
+    /// <summary>
+    /// type: "in" → yalnız Ambar Giriş, "out" → yalnız Ambar Çıkış, null → birleşik liste
+    /// (eski /Warehouse/StockEntry linki için backward-compat). Her mod kendi boardKey'ini
+    /// taşır — widget/filtre tercihleri localStorage'da ayrı saklanır.
+    /// </summary>
+    private async Task<object> BuildStockEntryBoardConfigAsync(string? type, CancellationToken ct)
     {
-        var docs = await _stockDocRepo.GetByTypesAsync(["STOCK_IN", "STOCK_OUT"], ct);
+        var isIn  = string.Equals(type, "in",  StringComparison.OrdinalIgnoreCase);
+        var isOut = string.Equals(type, "out", StringComparison.OrdinalIgnoreCase);
+        string[] docTypes = isIn ? ["STOCK_IN"] : isOut ? ["STOCK_OUT"] : ["STOCK_IN", "STOCK_OUT"];
+        var docs = await _stockDocRepo.GetByTypesAsync(docTypes, ct);
         var tr = CultureInfo.GetCultureInfo("tr-TR");
         var typeOptions = SmartBoardFilterHelpers.ToOptionsList(new[] { "Giriş", "Çıkış" });
         var masterWidgets = new List<object>
@@ -549,23 +641,35 @@ public sealed class WarehouseController : Controller
             },
         }).ToList();
 
-        return new
-        {
-            boardKey          = "warehouse-stock-entry",
-            title             = "Ambar Giriş / Çıkış",
-            subtitle          = $"{entities.Count} belge",
-            icon              = "Warehouse",
-            iconColor         = "emerald",
-            refreshUrl        = "/Warehouse/StockEntryBoardConfig",
-            searchPlaceholder = "Belge no ara…",
-            emptyText         = "Henüz ambar belgesi oluşturulmamış",
-            actions = new object[]
+        var actions = isIn
+            ? new object[] { new { id = "new-in",  label = "Giriş Belgesi", icon = "Plus", variant = "primary",
+                                   url = "/Warehouse/StockEntryEdit?type=in" } }
+            : isOut
+            ? new object[] { new { id = "new-out", label = "Çıkış Belgesi", icon = "Plus", variant = "primary",
+                                   url = "/Warehouse/StockEntryEdit?type=out" } }
+            : new object[]
             {
                 new { id = "new-in",  label = "Giriş Belgesi",  icon = "Plus", variant = "primary",
                       url = "/Warehouse/StockEntryEdit?type=in" },
                 new { id = "new-out", label = "Çıkış Belgesi",  icon = "Plus", variant = "secondary",
                       url = "/Warehouse/StockEntryEdit?type=out" },
-            },
+            };
+
+        return new
+        {
+            boardKey          = isIn ? "warehouse-stock-in" : isOut ? "warehouse-stock-out" : "warehouse-stock-entry",
+            title             = isIn ? "Ambar Giriş" : isOut ? "Ambar Çıkış" : "Ambar Giriş / Çıkış",
+            subtitle          = $"{entities.Count} belge",
+            icon              = isIn ? "PackagePlus" : isOut ? "PackageMinus" : "Warehouse",
+            iconColor         = isOut ? "rose" : "emerald",
+            refreshUrl        = isIn ? "/Warehouse/StockInBoardConfig"
+                              : isOut ? "/Warehouse/StockOutBoardConfig"
+                              : "/Warehouse/StockEntryBoardConfig",
+            searchPlaceholder = "Belge no ara…",
+            emptyText         = isIn ? "Henüz giriş belgesi oluşturulmamış"
+                              : isOut ? "Henüz çıkış belgesi oluşturulmamış"
+                              : "Henüz ambar belgesi oluşturulmamış",
+            actions,
             masterWidgets,
             entities,
         };
@@ -575,9 +679,18 @@ public sealed class WarehouseController : Controller
     // Line grid config — CalibraLineItemsGrid için server-side JSON
     // ═══════════════════════════════════════════════════════════════════════
 
-    private static object BuildLineGridConfig(string docType)
+    private static object BuildLineGridConfig(string docType, IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
     {
         var isTransfer = docType == "TRANSFER";
+        var bindingMap = (bindings ?? [])
+            .ToDictionary(b => b.FieldKey, b => b, StringComparer.OrdinalIgnoreCase);
+        bindingMap.TryGetValue("materialCode", out var matBinding);
+        var lineFormCode = docType switch
+        {
+            "TRANSFER"  => FormCodes.TransferLines,
+            "STOCK_OUT" => FormCodes.StockOutLines,
+            _           => FormCodes.StockInLines,
+        };
 
         var locationCols = isTransfer ? new object[]
         {
@@ -614,7 +727,11 @@ public sealed class WarehouseController : Controller
                 key            = "materialCode",
                 label          = "Malzeme Kodu",
                 type           = "text-lookup",
-                lookupUrl      = "/Warehouse/GetMaterialsJson",
+                guideCode      = matBinding?.GuideCode,
+                filterJson     = matBinding?.FilterJson,
+                formCode       = lineFormCode,
+                formatJson     = matBinding?.FormatJson,
+                lookupUrl      = matBinding == null ? "/Warehouse/GetMaterialsJson" : (string?)null,
                 lookupValueKey = "materialCode",
                 lookupLabelKey = "materialName",
                 lookupFillMap  = new Dictionary<string, string>
@@ -759,6 +876,9 @@ public sealed class WarehouseController : Controller
         return new
         {
             schemaVersion = "v1",
+            // Ondalık: lineFormCode yok — sayım ailesinin kök kodu açıkça verilmezse
+            // grid SALES_QUOTE_LINES varsayılanına düşer (yanlış aile).
+            decimalFormCode = FormCodes.InventoryCount,
             columns = new object[]
             {
             new

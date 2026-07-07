@@ -132,6 +132,27 @@ public sealed class DocDesignerController : Controller
         }
     }
 
+    /// <summary>
+    /// 2026-06-03 — Klonla: mevcut layout'un bir kopyasını oluşturur.
+    /// Yeni layout: Name = "{Ad} (Kopya)", Code = "{orig_code}_kopya_{timestamp}",
+    /// IsDefault = false, OwnerUserId = current user. Aynı bantlar + dataSources.
+    /// Kullanıcı bunu açıp özelleştirebilir; orijinal sistem varsayılanı korunur.
+    /// </summary>
+    [HttpPost("CloneJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CloneJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            var newId = await _svc.CloneAsync(id, ct);
+            return Json(new { ok = true, id = newId, redirectUrl = $"/DocDesigner/Edit/{newId}" });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
     [HttpPost("SetDefaultJson")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetDefaultJson(int id, CancellationToken ct)
@@ -212,20 +233,9 @@ public sealed class DocDesignerController : Controller
                     apiMethod = "POST",
                     confirm   = $"Şablonu silmek istediğinize emin misiniz? ({l.Name})",
                 },
-                extraActions = l.IsDefault
-                    ? Array.Empty<object>()
-                    : new object[]
-                    {
-                        new
-                        {
-                            type    = "api-post",
-                            label   = "Varsayılan Yap",
-                            icon    = "Star",
-                            color   = "emerald",
-                            url     = $"/DocDesigner/SetDefaultJson?id={l.Id}",
-                            confirm = $"\"{l.Name}\" şablonu {docLabel} için varsayılan olarak ayarlansın mı?",
-                        },
-                    },
+                // 2026-06-03: Her tasarım için "Klonla" ekstra aksiyonu. Kullanıcı
+                // varsayılan sistem tasarımını klonlayıp özelleştirir; orijinal korunur.
+                extraActions = BuildExtraActions(l, docLabel),
             };
         }).ToList();
 
@@ -246,5 +256,39 @@ public sealed class DocDesignerController : Controller
             masterWidgets,
             entities,
         };
+    }
+
+    /// <summary>
+    /// SmartBoard extraActions listesi — Klonla + (Varsayılan Yap opsiyonel).
+    /// Klonla her tasarım için gösterilir; kullanıcı varsayılanı klonlayıp
+    /// özelleştirmek istediğinde tek tıkla yeni Edit ekranına yönlenir.
+    /// </summary>
+    private static object[] BuildExtraActions(CalibraHub.Application.Contracts.DocLayoutSummaryDto l, string docLabel)
+    {
+        var actions = new List<object>
+        {
+            new
+            {
+                type    = "api-post",
+                label   = "Klonla",
+                icon    = "Copy",
+                color   = "indigo",
+                url     = $"/DocDesigner/CloneJson?id={l.Id}",
+                confirm = (string?)null,
+            },
+        };
+        if (!l.IsDefault)
+        {
+            actions.Add(new
+            {
+                type    = "api-post",
+                label   = "Varsayılan Yap",
+                icon    = "Star",
+                color   = "emerald",
+                url     = $"/DocDesigner/SetDefaultJson?id={l.Id}",
+                confirm = (string?)$"\"{l.Name}\" şablonu {docLabel} için varsayılan olarak ayarlansın mı?",
+            });
+        }
+        return actions.ToArray();
     }
 }

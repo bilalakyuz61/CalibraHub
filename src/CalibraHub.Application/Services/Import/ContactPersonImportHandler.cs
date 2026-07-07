@@ -25,12 +25,13 @@ public sealed class ContactPersonImportHandler : RowImportHandlerBase
 
     public override IReadOnlyList<ImportTargetFieldDto> GetFields() => new[]
     {
+        // MaxLength'ler ContactPerson tablosu NVARCHAR uzunluklarıyla birebir.
         new ImportTargetFieldDto("ParentCode", "Cari Kodu",     "string", true,  false, "Kişinin bağlı olduğu carinin kodu (zorunlu)"),
-        new ImportTargetFieldDto("FullName",   "Ad Soyad",      "string", true,  false, "İletişim kişisinin adı (zorunlu)"),
+        new ImportTargetFieldDto("FullName",   "Ad Soyad",      "string", true,  false, "İletişim kişisinin adı (zorunlu)", MaxLength: 150),
         new ImportTargetFieldDto("Title",      "Unvan",         "string", false, false, "Satış Müdürü, CFO... (mevcut unvanla eşleşir)"),
-        new ImportTargetFieldDto("Phone",      "Telefon",       "string", false, false, null),
-        new ImportTargetFieldDto("Email",      "E-posta",       "string", false, false, null),
-        new ImportTargetFieldDto("Notes",      "Notlar",        "string", false, false, null),
+        new ImportTargetFieldDto("Phone",      "Telefon",       "string", false, false, null, MaxLength: 40),
+        new ImportTargetFieldDto("Email",      "E-posta",       "string", false, false, null, MaxLength: 200),
+        new ImportTargetFieldDto("Notes",      "Notlar",        "string", false, false, null, MaxLength: 1000),
         new ImportTargetFieldDto("IsPrimary",  "Birincil mi?",  "bool",   false, false, "Evet/Hayır — birincil iletişim kişisi"),
     };
 

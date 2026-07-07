@@ -33,6 +33,7 @@ public sealed class WidgetsController : ControllerBase
     private readonly IIntegrationRepository _integrationRepo;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly CalibraHub.Application.Abstractions.Services.IPermissionService _permService;
+    private readonly IAttachmentRepository _attachments;
 
     // Not: Faz B-D'de kullanilan AdminFormWhitelist HashSet'i kaldirildi.
     // Tek dogruluk kaynagi artik dbo.Forms tablosu. Yeni form eklemek icin sadece
@@ -43,12 +44,14 @@ public sealed class WidgetsController : ControllerBase
         IWidgetService widgetService,
         IIntegrationRepository integrationRepo,
         IServiceScopeFactory scopeFactory,
-        CalibraHub.Application.Abstractions.Services.IPermissionService permService)
+        CalibraHub.Application.Abstractions.Services.IPermissionService permService,
+        IAttachmentRepository attachments)
     {
         _widgetService = widgetService;
         _integrationRepo = integrationRepo;
         _scopeFactory = scopeFactory;
         _permService = permService;
+        _attachments = attachments;
     }
 
     /// <summary>
@@ -278,6 +281,21 @@ public sealed class WidgetsController : ControllerBase
         return Ok(record);
     }
 
+    // GET /api/widgets/forms/{formCode}/records/{recordId}/history
+    // Alan bazli degisiklik gecmisi (audit) — eski deger → yeni deger + kim + ne zaman.
+    // Grid child satirlarinin degisiklikleri de dahildir (childRecordId dolu gelir).
+    [HttpGet("forms/{formCode}/records/{recordId}/history")]
+    public async Task<IActionResult> GetRecordHistory(
+        string formCode,
+        string recordId,
+        CancellationToken ct)
+    {
+        var history = await _widgetService.GetValueHistoryAsync(formCode, recordId, ct);
+        if (history == null)
+            return NotFound(new { success = false, message = "Form bulunamadi." });
+        return Ok(history);
+    }
+
     // POST /api/widgets/forms/{formCode}/records/{recordId}
     // Body: SaveRecordRequest { values, grids? }
     [HttpPost("forms/{formCode}/records/{recordId}")]
@@ -397,6 +415,201 @@ public sealed class WidgetsController : ControllerBase
             return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
+
+    // PATCH /api/widgets/widgets/sort-orders
+    // Body: [{ "id": 12, "sortOrder": 20 }, { "id": 15, "sortOrder": 10 }]
+    // Yalnizca SortOrder gunceller — reorder icin tam upsert gondermek OptionsJSON'un
+    // client tarafinda kayipli yeniden insasini gerektiriyordu (lookup/grid metadata'si).
+    [HttpPatch("widgets/sort-orders")]
+    public async Task<IActionResult> PatchSortOrders(
+        [FromBody] IReadOnlyCollection<WidgetSortOrderItem>? items,
+        CancellationToken ct)
+    {
+        if (items == null || items.Count == 0)
+            return BadRequest(new { success = false, message = "En az bir siralama kaydi gerekli." });
+        try
+        {
+            await _widgetService.ReorderWidgetsAsync(items, ct);
+            return Ok(new { success = true });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    // PATCH /api/widgets/widgets/{widgetId}/active
+    // Body: { "isActive": true/false }
+    // Yalnizca IsActive gunceller — toggle icin tam upsert gondermek lookup/grid/rehber
+    // bagli widget'larda metadata kaybina yol aciyordu.
+    [HttpPatch("widgets/{widgetId:int}/active")]
+    public async Task<IActionResult> PatchActive(int widgetId, [FromBody] PatchWidgetActiveRequest? req, CancellationToken ct)
+    {
+        if (req == null)
+            return BadRequest(new { success = false, message = "Request govdesi bos." });
+        try
+        {
+            await _widgetService.SetWidgetActiveAsync(widgetId, req.IsActive, ct);
+            return Ok(new { success = true });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // Widget tanim transport (export/import) — 2026-07-06
+    // ══════════════════════════════════════════════════════════
+
+    // GET /api/widgets/forms/{formCode}/export
+    // Formun custom widget tanimlarini JSON dosyasi olarak indirir
+    // (sirketler arasi kopyalama + test→canli tasima).
+    [HttpGet("forms/{formCode}/export")]
+    public async Task<IActionResult> ExportWidgetPackage(string formCode, CancellationToken ct)
+    {
+        var package = await _widgetService.ExportWidgetPackageAsync(formCode, ct);
+        if (package == null)
+            return NotFound(new { success = false, message = "Form bulunamadi." });
+
+        var json = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(package,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                WriteIndented = true,
+            });
+        var fileName = $"calibra-widgets-{package.FormCode.ToLowerInvariant()}-{DateTime.UtcNow:yyyyMMdd}.json";
+        return File(json, "application/json", fileName);
+    }
+
+    // POST /api/widgets/forms/{formCode}/import
+    // Body: WidgetPackageDto (export ciktisi). WidgetCode uzerinden upsert.
+    [HttpPost("forms/{formCode}/import")]
+    public async Task<IActionResult> ImportWidgetPackage(
+        string formCode,
+        [FromBody] WidgetPackageDto? package,
+        CancellationToken ct)
+    {
+        if (package == null)
+            return BadRequest(new { success = false, message = "Paket govdesi bos veya JSON okunamadi." });
+        try
+        {
+            var result = await _widgetService.ImportWidgetPackageAsync(formCode, package, ct);
+            return Ok(new { success = true, created = result.Created, updated = result.Updated, skipped = result.Skipped });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { success = false, message = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // Attachment widget tipi — dosya yukle/indir (2026-07-06)
+    // Depo: merkezi dbo.Attachment (system DB), FormId=WidgetAttachment,
+    // RefId=WidgetMas.Id. Kayit bagi WidgetTra.Value = Attachment.Id.
+    // ══════════════════════════════════════════════════════════
+
+    private static readonly string[] BlockedAttachmentExtensions =
+    {
+        ".exe", ".dll", ".bat", ".cmd", ".ps1", ".msi", ".scr", ".com", ".vbs", ".jar", ".sh",
+    };
+
+    private int? CurrentUserIdOrNull()
+    {
+        var raw = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+        return int.TryParse(raw, out var id) && id > 0 ? id : null;
+    }
+
+    // POST /api/widgets/attachments  (multipart/form-data: widgetId, file)
+    [HttpPost("attachments")]
+    [RequestSizeLimit(25 * 1024 * 1024)]
+    public async Task<IActionResult> UploadWidgetAttachment(
+        [FromForm] int widgetId,
+        [FromForm] IFormFile? file,
+        CancellationToken ct)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { success = false, message = "Dosya secilmedi." });
+
+        var fileName = Path.GetFileName(file.FileName ?? "dosya");
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        if (BlockedAttachmentExtensions.Contains(ext))
+            return BadRequest(new { success = false, message = $"'{ext}' uzantili dosyalar guvenlik nedeniyle yuklenemez." });
+
+        await using var ms = new MemoryStream();
+        await file.CopyToAsync(ms, ct);
+
+        var id = await _attachments.AddAsync(new CalibraHub.Domain.Entities.Attachment
+        {
+            FormId        = CalibraHub.Application.Constants.AttachmentFormIds.WidgetAttachment,
+            RefId         = widgetId,
+            FileName      = fileName,
+            ContentType   = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+            FileSize      = ms.Length,
+            CreatedById   = CurrentUserIdOrNull(),
+            BinaryContent = ms.ToArray(),
+        }, ct);
+
+        return Ok(new { success = true, id, fileName, fileSize = ms.Length, contentType = file.ContentType });
+    }
+
+    // GET /api/widgets/attachments/{id} — meta (dosya adi/boyut; binary yok)
+    [HttpGet("attachments/{id:int}")]
+    public async Task<IActionResult> GetWidgetAttachmentMeta(int id, CancellationToken ct)
+    {
+        var att = await _attachments.GetByIdAsync(id, ct);
+        if (att == null || !att.IsActive || att.FormId != CalibraHub.Application.Constants.AttachmentFormIds.WidgetAttachment)
+            return NotFound(new { success = false, message = "Dosya bulunamadi." });
+        return Ok(new { success = true, id = att.Id, fileName = att.FileName, fileSize = att.FileSize, contentType = att.ContentType });
+    }
+
+    // GET /api/widgets/attachments/{id}/download?inline=1
+    // inline: gorsel/pdf onizleme icin Content-Disposition inline.
+    [HttpGet("attachments/{id:int}/download")]
+    public async Task<IActionResult> DownloadWidgetAttachment(int id, [FromQuery] bool inline, CancellationToken ct)
+    {
+        var att = await _attachments.GetByIdAsync(id, ct);
+        if (att == null || !att.IsActive || att.FormId != CalibraHub.Application.Constants.AttachmentFormIds.WidgetAttachment)
+            return NotFound(new { success = false, message = "Dosya bulunamadi." });
+
+        var bytes = await _attachments.GetBinaryAsync(id, ct);
+        if (bytes == null || bytes.Length == 0)
+            return NotFound(new { success = false, message = "Dosya icerigi bulunamadi." });
+
+        var contentType = string.IsNullOrWhiteSpace(att.ContentType) ? "application/octet-stream" : att.ContentType;
+        if (inline)
+        {
+            Response.Headers.Append("Content-Disposition",
+                $"inline; filename*=UTF-8''{Uri.EscapeDataString(att.FileName)}");
+            return File(bytes, contentType);
+        }
+        return File(bytes, contentType, att.FileName);
+    }
+
+    // DELETE /api/widgets/attachments/{id} — soft-delete (deger degistirilince eski dosya)
+    [HttpDelete("attachments/{id:int}")]
+    public async Task<IActionResult> DeleteWidgetAttachment(int id, CancellationToken ct)
+    {
+        var att = await _attachments.GetByIdAsync(id, ct);
+        if (att == null || att.FormId != CalibraHub.Application.Constants.AttachmentFormIds.WidgetAttachment)
+            return NotFound(new { success = false, message = "Dosya bulunamadi." });
+        await _attachments.DeleteAsync(id, ct);
+        return Ok(new { success = true });
+    }
 }
 
 public sealed record PatchIsPlainFieldRequest(bool IsPlainField);
+
+public sealed record PatchWidgetActiveRequest(bool IsActive);

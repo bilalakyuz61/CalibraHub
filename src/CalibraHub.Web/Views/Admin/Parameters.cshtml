@@ -8,6 +8,7 @@
         as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
     var negControl = ViewData["NegBalanceControl"] as bool? ?? false;
     var negDefault = ViewData["NegBalanceAllowDefault"] as bool? ?? false;
+    var salesOrderAffects = ViewData["SalesOrderAffectsStock"] as bool? ?? false;
 }
 
 @section Styles {
@@ -285,6 +286,7 @@ body.app-theme-dark .ap-wrapper {
             <button type="button" class="ap-tab"           data-pane="salesquote" data-label="Satış Teklifi">Satış Teklifi</button>
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
+            <button type="button" class="ap-tab"           data-pane="satissiparis" data-label="Satış Sipariş">Satış Sipariş</button>
         </aside>
 
         <main class="ap-content">
@@ -563,6 +565,37 @@ body.app-theme-dark .ap-wrapper {
                 </div>
             </section>
 
+            @* ── Satış Sipariş ───────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-satissiparis">
+                <h2>Satış Sipariş</h2>
+                <div class="ap-hint">
+                    Açıkken, açık (teslim edilmemiş) satış siparişi miktarları o depodaki
+                    <strong>kullanılabilir</strong> bakiyeyi düşürür — fiziksel stok değişmez.
+                    Eksi bakiye kontrolü, açıkken kullanılabilir bakiyeye (fiziksel − rezerve) göre
+                    çalışır. Rezervasyon siparişin kendi deposuna (satır, yoksa belge) uygulanır ve
+                    teslim edildikçe azalır.
+                </div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satış Siparişi Stoğu Etkiler (Rezervasyon)</div>
+                        <div class="ap-row-desc">
+                            Kapalıyken satış siparişi stok bakiyesi üzerinde etkisizdir (ticari belge).
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-so-affects"
+                                   data-on="Açık" data-off="Kapalı" @(salesOrderAffects ? "checked" : null) />
+                            <span class="ap-switch-track @(salesOrderAffects ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(salesOrderAffects ? "is-active" : "")"
+                                  id="ap-so-affects-label">@(salesOrderAffects ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
         </main>
     </div>
 </div>
@@ -734,6 +767,18 @@ body.app-theme-dark .ap-wrapper {
                 ok = !!datas.ok;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(datas.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'satissiparis') {
+                var soEl = document.getElementById('ap-so-affects');
+                var rso = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'STOCK', paramKey: 'SALES_ORDER_AFFECTS_STOCK', paramValue: (soEl && soEl.checked) ? 'true' : 'false', dataType: 3 })
+                });
+                var dso = await rso.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!dso.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(dso.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'approval') {
                 var kinds = [];
                 document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {

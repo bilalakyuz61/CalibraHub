@@ -24,6 +24,7 @@ public sealed class ExcelReader : IExcelReader
         using var ms = new MemoryStream(data);
         using var wb = new XLWorkbook(ms);
         return wb.Worksheets
+            .Where(ws => !IsHelpSheet(ws))   // şablonun "Aciklama" yardım sayfası içe aktarıma sunulmaz
             .Select(ws => new ExcelSheet(ws.Name, ws.RangeUsed()?.RowCount() ?? 0))
             .ToList();
     }
@@ -40,6 +41,8 @@ public sealed class ExcelReader : IExcelReader
     // ── Boş şablon üretimi (.xlsx) ────────────────────────────────────────
     public byte[] WriteTemplate(string sheetName, IReadOnlyList<ExcelTemplateColumn> columns)
     {
+        const int DvLastRow = MaxRows + 1;   // doğrulama kapsamı: başlık + MaxRows veri satırı
+
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add(string.IsNullOrWhiteSpace(sheetName) ? "Veri" : sheetName);
 
@@ -61,14 +64,15 @@ public sealed class ExcelReader : IExcelReader
         }
 
         // 2) TEK "Aciklama" sayfası — TRANSPOZE: her alan bir SÜTUN; A sütunu satır etiketleri
-        //    (Kolon / Açıklama / Zorunlu / Değerler). Sınırlı-değerli alanların değerleri
-        //    "Değerler" satırından itibaren AŞAĞI doğru, her biri ayrı hücre.
+        //    (Kolon / Açıklama / Tip / Zorunlu / Anahtar / Değerler). Sınırlı-değerli alanların
+        //    değerleri "Değerler" satırından itibaren AŞAĞI doğru, her biri ayrı hücre.
         var help = wb.Worksheets.Add("Aciklama");
-        const int valuesStartRow = 5;
+        const int valuesStartRow = 6;
         help.Cell(1, 1).Value = "Kolon";
         help.Cell(2, 1).Value = "Açıklama";
-        help.Cell(3, 1).Value = "Zorunlu";
-        help.Cell(4, 1).Value = "Anahtar";
+        help.Cell(3, 1).Value = "Tip";
+        help.Cell(4, 1).Value = "Zorunlu";
+        help.Cell(5, 1).Value = "Anahtar";
         help.Cell(valuesStartRow, 1).Value = "Değerler";
         help.Range(1, 1, valuesStartRow, 1).Style.Font.Bold = true;
         help.Column(1).Style.Fill.BackgroundColor = XLColor.FromHtml("#F1F5F9");
@@ -83,31 +87,97 @@ public sealed class ExcelReader : IExcelReader
             head.Style.Font.Bold = true;
             head.Style.Fill.BackgroundColor = XLColor.FromHtml(col.Required ? "#E0E7FF" : "#F1F5F9");
             help.Cell(2, c).Value = col.Hint ?? "";
-            help.Cell(3, c).Value = col.Required ? "Evet" : "Hayır";
-            help.Cell(4, c).Value = col.CanBeMatchKey ? "Evet" : "Hayır";
+            help.Cell(3, c).Value = TypeLabel(col);
+            help.Cell(4, c).Value = col.Required ? "Evet" : "Hayır";
+            help.Cell(5, c).Value = col.CanBeMatchKey ? "Evet" : "Hayır";
 
+            // 3) Hücre veri doğrulaması — enum→liste, sayısal→sayı, tarih→tarih, metin→uzunluk.
+            //    Not: Excel doğrulaması YAZARKEN devreye girer (yapıştırılan hücreleri Excel
+            //    denetlemez); sunucu tarafı doğrulama her durumda ayrıca çalışır.
             if (col.AllowedValues is { Count: > 0 } av)
             {
                 for (int r = 0; r < av.Count; r++)
                     help.Cell(valuesStartRow + r, c).Value = av[r];
 
                 // Veri sayfasındaki kolona açılır liste — kısa → satır içi, uzun → bu sayfadaki değer aralığı
-                var dv = ws.Range(2, i + 1, 1001, i + 1).CreateDataValidation();
+                var dv = ws.Range(2, i + 1, DvLastRow, i + 1).CreateDataValidation();
                 var inline = "\"" + string.Join(",", av) + "\"";
                 if (inline.Length <= 250)
                     dv.List(inline, true);
                 else
                     dv.List(help.Range(valuesStartRow, c, valuesStartRow + av.Count - 1, c), true);
                 dv.IgnoreBlanks = true;
-                dv.ErrorStyle = XLErrorStyle.Warning;   // liste dışına uyar ama engelleme (eş anlamlılar serbest)
+                dv.ErrorStyle = XLErrorStyle.Stop;      // yalnızca listedeki değerler (enum kilidi)
+                dv.ShowErrorMessage = true;
+                dv.ErrorTitle = "Geçersiz Değer";
+                dv.ErrorMessage = "Bu alana yalnızca listedeki değerlerden biri girilebilir: "
+                                  + string.Join(", ", av.Take(12)) + (av.Count > 12 ? "…" : "");
+            }
+            else
+            {
+                var type = (col.DataType ?? "string").ToLowerInvariant();
+                bool needsDv = type is "decimal" or "number" or "int" or "date" || col.MaxLength is > 0;
+                if (!needsDv) continue;
+
+                var dv = ws.Range(2, i + 1, DvLastRow, i + 1).CreateDataValidation();
+                dv.IgnoreBlanks = true;
+                dv.ErrorStyle = XLErrorStyle.Stop;
+                dv.ShowErrorMessage = true;
+                switch (type)
+                {
+                    case "decimal":
+                    case "number":
+                        dv.Decimal.Between(-999_999_999_999d, 999_999_999_999d);
+                        dv.ErrorTitle = "Sayısal Değer";
+                        dv.ErrorMessage = "Bu alana yalnızca sayısal değer girilebilir (örn. 12,50).";
+                        break;
+                    case "int":
+                        dv.WholeNumber.Between(-2_000_000_000, 2_000_000_000);
+                        dv.ErrorTitle = "Tam Sayı";
+                        dv.ErrorMessage = "Bu alana yalnızca tam sayı girilebilir.";
+                        break;
+                    case "date":
+                        dv.Date.Between(new DateTime(1900, 1, 1), new DateTime(2100, 12, 31));
+                        dv.ErrorTitle = "Tarih";
+                        dv.ErrorMessage = "Bu alana yalnızca tarih girilebilir (gg.aa.yyyy).";
+                        dv.ShowInputMessage = true;
+                        dv.InputTitle = "Tarih";
+                        dv.InputMessage = "gg.aa.yyyy biçiminde girin.";
+                        break;
+                    default:   // string + MaxLength
+                        dv.TextLength.EqualOrLessThan(col.MaxLength!.Value);
+                        dv.ErrorTitle = "Uzunluk Sınırı";
+                        dv.ErrorMessage = $"Bu alana en fazla {col.MaxLength.Value} karakter girilebilir.";
+                        break;
+                }
             }
         }
         help.SheetView.FreezeColumns(1);   // etiket sütunu sabit kalsın
         help.Columns().AdjustToContents();
 
+        // 4) Aciklama sayfası salt-okunur — özet/yardım bilgileri yanlışlıkla silinip bozulmasın.
+        //    (Parola gizlilik değil, kazara düzenleme koruması içindir; içe aktarım bu sayfayı
+        //    zaten okumaz — bkz. IsHelpSheet.)
+        help.Protect("CalibraHub");
+
         using var ms = new MemoryStream();
         wb.SaveAs(ms);
         return ms.ToArray();
+    }
+
+    /// <summary>Aciklama sayfası "Tip" satırı etiketi.</summary>
+    private static string TypeLabel(ExcelTemplateColumn col)
+    {
+        var t = (col.DataType ?? "string").ToLowerInvariant();
+        if (t == "bool") return "Evet/Hayır";
+        if (col.AllowedValues is { Count: > 0 }) return "Liste";
+        return t switch
+        {
+            "decimal" or "number" => "Sayı",
+            "int" => "Tam Sayı",
+            "date" => "Tarih",
+            _ => col.MaxLength is > 0 ? $"Metin (en çok {col.MaxLength})" : "Metin",
+        };
     }
 
     // ── XLSX (ClosedXML) ─────────────────────────────────────────────────
@@ -117,8 +187,8 @@ public sealed class ExcelReader : IExcelReader
         using var wb = new XLWorkbook(ms);
 
         var ws = !string.IsNullOrWhiteSpace(sheetName)
-            ? wb.Worksheets.FirstOrDefault(w => string.Equals(w.Name, sheetName, StringComparison.OrdinalIgnoreCase)) ?? wb.Worksheet(1)
-            : wb.Worksheet(1);
+            ? wb.Worksheets.FirstOrDefault(w => string.Equals(w.Name, sheetName, StringComparison.OrdinalIgnoreCase)) ?? DefaultDataSheet(wb)
+            : DefaultDataSheet(wb);
 
         var used = ws.RangeUsed();
         if (used is null)
@@ -237,4 +307,15 @@ public sealed class ExcelReader : IExcelReader
 
     private static bool IsCsv(string fileName) =>
         (fileName ?? "").EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Varsayılan veri sayfası: şablonun "Aciklama" yardım sayfası atlanır —
+    /// yardım sayfaları içe aktarımı etkilemez.</summary>
+    private static IXLWorksheet DefaultDataSheet(XLWorkbook wb)
+        => wb.Worksheets.FirstOrDefault(w => !IsHelpSheet(w)) ?? wb.Worksheet(1);
+
+    /// <summary>Bizim ürettiğimiz yardım sayfası mı? (adı "Aciklama" + A1 hücresinde "Kolon" imzası —
+    /// kullanıcının kendi dosyasındaki aynı adlı GERÇEK veri sayfaları imza tutmayacağı için etkilenmez.)</summary>
+    private static bool IsHelpSheet(IXLWorksheet ws)
+        => string.Equals(ws.Name, "Aciklama", StringComparison.OrdinalIgnoreCase)
+           && string.Equals(ws.Cell(1, 1).GetString().Trim(), "Kolon", StringComparison.OrdinalIgnoreCase);
 }

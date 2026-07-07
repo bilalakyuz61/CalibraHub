@@ -2,7 +2,9 @@
 @using System.Text.Json
 @{
     ViewData["Title"] = "Malzeme Kartlari";
-    ViewData["FormCode"] = "ITEMS";
+    @* 2026-07-06: ITEMS → MATERIAL_CARD_EDIT — SmartBoard filtre paneli widget
+       formCode'unu body data-form-code'dan okur; ITEMS formu artik seed edilmiyor. *@
+    ViewData["FormCode"] = "MATERIAL_CARD_EDIT";
     ViewData["BodyClass"] = "page-material-cards";
     ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
         + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Items</td><td style='padding:6px 8px;'>Malzeme karti master bilgileri</td></tr>"

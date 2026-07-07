@@ -48,7 +48,15 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
     const [mutedConvs, setMutedConvs] = useState(() => {
         try { return new Set(JSON.parse(localStorage.getItem('wa-muted') || '[]')) } catch { return new Set() }
     })
+    const [pinnedConvs, setPinnedConvs] = useState(() => {
+        try { return new Set(JSON.parse(localStorage.getItem('wa-pinned') || '[]')) } catch { return new Set() }
+    })
     const [showArchived, setShowArchived] = useState(false)
+    // Gerçek profil fotoğrafları: { [phone]: url | null }
+    const [avatarMap, setAvatarMap] = useState({})
+    const avatarFetchingRef = useRef(new Set())
+    // Bridge bağlantı durumu (üst banner): ready|cloud|awaiting_qr|connecting|unreachable|disabled|not_configured
+    const [bridgeState, setBridgeState] = useState('ready')
     // Sohbet sağ-tık menüsü
     const [convMenu, setConvMenu] = useState(null) // { phone, displayName, x, y } | null
     // Grup bilgi paneli
@@ -161,6 +169,16 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         }
     }, [])
 
+    // ── LID hedef çözümü ────────────────────────────────────────────────
+    // 14 haneli LID rakamları gerçek telefonla karışır; bridge'e gönderirken
+    // LID sohbetlerinde tam JID (…@lid) verilmeli — yoksa "Numara WhatsApp'ta
+    // kayıtlı değil" hatası oluşur. Grup JID'leri zaten '@' içerir, dokunulmaz.
+    const lidTarget = useCallback((phone) => {
+        if (!phone || phone.includes('@')) return phone
+        const c = conversations.find(x => x.phone === phone)
+        return c?.isLid ? phone + '@lid' : phone
+    }, [conversations])
+
     // ── Kişi arama (searchTerm değişince tetiklenir) ─────────────────────
     const searchContactsByTerm = useCallback((q, existingConvPhones) => {
         clearTimeout(contactSearchTimerRef.current)
@@ -238,6 +256,14 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             ))
         })
 
+        hub.on('MessageDeleted', ({ messageId }) => {
+            setMessages(prev => prev.map(msg =>
+                msg.bridgeMsgId === messageId
+                    ? { ...msg, isDeleted: true, body: null }
+                    : msg
+            ))
+        })
+
         hub.start().catch(err => console.warn('[WaHub] Bağlantı hatası:', err))
         hubRef.current = hub
 
@@ -286,6 +312,108 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         return () => clearTimeout(t)
     }, [selectedPhone])
 
+    // ── Bridge bağlantı durumu (üst banner) — 30sn'de bir kontrol ───────
+    useEffect(() => {
+        let alive = true
+        const check = async () => {
+            try {
+                const r = await fetch('/Whatsapp/BridgeStatus', { credentials: 'same-origin', cache: 'no-store' })
+                const d = await r.json()
+                if (alive) setBridgeState(d.state || 'unreachable')
+            } catch { if (alive) setBridgeState('unreachable') }
+        }
+        check()
+        const t = setInterval(() => { if (!document.hidden) check() }, 30000)
+        return () => { alive = false; clearInterval(t) }
+    }, [])
+
+    // ── Gerçek profil fotoğrafları — görünen sohbetler için lazy yükle ──
+    useEffect(() => {
+        let cache = {}
+        try { cache = JSON.parse(localStorage.getItem('wa-avatars') || '{}') } catch { /* boş */ }
+        const now = Date.now()
+        const DAY = 24 * 60 * 60 * 1000
+        const targets = conversations.slice(0, 60)
+            .map(c => c.phone)
+            .filter(p => p && avatarMap[p] === undefined && !avatarFetchingRef.current.has(p))
+        if (targets.length === 0) return
+
+        const fromCache = {}
+        const toFetch = []
+        for (const p of targets) {
+            const entry = cache[p]
+            if (entry && now - entry.ts < DAY) fromCache[p] = entry.url
+            else toFetch.push(p)
+        }
+        if (Object.keys(fromCache).length > 0) setAvatarMap(prev => ({ ...prev, ...fromCache }))
+
+        toFetch.slice(0, 10).forEach(async p => {
+            avatarFetchingRef.current.add(p)
+            try {
+                const r = await fetch('/Whatsapp/Avatar?phone=' + encodeURIComponent(p), { credentials: 'same-origin' })
+                const d = await r.json()
+                const url = d?.url || null
+                setAvatarMap(prev => ({ ...prev, [p]: url }))
+                try {
+                    const c2 = JSON.parse(localStorage.getItem('wa-avatars') || '{}')
+                    c2[p] = { url, ts: Date.now() }
+                    localStorage.setItem('wa-avatars', JSON.stringify(c2))
+                } catch { /* quota — önemsiz */ }
+            } catch {
+                setAvatarMap(prev => ({ ...prev, [p]: null }))
+            }
+        })
+    }, [conversations, avatarMap])
+
+    // ── Okundu bildirimi: sohbet açıkken gelen mesajlar için karşıya mavi tik ──
+    const readReceiptSentRef = useRef(new Set())
+    useEffect(() => {
+        if (!selectedPhone || messages.length === 0 || document.hidden) return
+        const ids = messages
+            .filter(m => m.direction === 0 && m.bridgeMsgId && !readReceiptSentRef.current.has(m.bridgeMsgId))
+            .slice(-30)
+            .map(m => m.bridgeMsgId)
+        if (ids.length === 0) return
+        ids.forEach(id => readReceiptSentRef.current.add(id))
+        fetch('/Whatsapp/SendReadReceipt?phone=' + encodeURIComponent(lidTarget(selectedPhone)), {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken || '' },
+            body: JSON.stringify({ messageIds: ids }),
+        }).catch(() => { /* opsiyonel */ })
+    }, [messages, selectedPhone, csrfToken, lidTarget])
+
+    // ── Taslak koruma: sohbet değişince önceki taslağı sakla, yenisini yükle ──
+    const draftPrevPhoneRef = useRef(null)
+    const composeTextRef = useRef('')
+    useEffect(() => { composeTextRef.current = composeText }, [composeText])
+    useEffect(() => {
+        try {
+            const drafts = JSON.parse(localStorage.getItem('wa-drafts') || '{}')
+            const prev = draftPrevPhoneRef.current
+            if (prev) {
+                const t = composeTextRef.current
+                if (t && t.trim()) drafts[prev] = t
+                else delete drafts[prev]
+                localStorage.setItem('wa-drafts', JSON.stringify(drafts))
+            }
+            setComposeText(selectedPhone ? (drafts[selectedPhone] || '') : '')
+        } catch { setComposeText('') }
+        draftPrevPhoneRef.current = selectedPhone
+    }, [selectedPhone])
+    // Yazarken taslağı canlı senkronla (400ms debounce) — gönderince otomatik temizlenir
+    useEffect(() => {
+        if (!selectedPhone) return
+        const t = setTimeout(() => {
+            try {
+                const drafts = JSON.parse(localStorage.getItem('wa-drafts') || '{}')
+                if (composeText && composeText.trim()) drafts[selectedPhone] = composeText
+                else delete drafts[selectedPhone]
+                localStorage.setItem('wa-drafts', JSON.stringify(drafts))
+            } catch { /* quota */ }
+        }, 400)
+        return () => clearTimeout(t)
+    }, [composeText, selectedPhone])
+
     // ── Yeni mesaj gelince otomatik aşağı kaydir ────────────────────────
     useEffect(() => {
         if (!threadEndRef.current || !messages.length) return
@@ -317,14 +445,14 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             loadConversations()
         } catch { /* sessizce gec */ }
 
-        // Presence subscribe — bridge'e haber ver, SSE üzerinden güncel durum gelecek
+        // Presence subscribe — bridge'e haber ver, hub üzerinden güncel durum gelecek
         try {
-            await fetch('/Whatsapp/SendTyping?phone=' + encodeURIComponent(phone) + '&isTyping=false', {
+            await fetch('/Whatsapp/SendTyping?phone=' + encodeURIComponent(lidTarget(phone)) + '&isTyping=false', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'RequestVerificationToken': csrfToken || '' },
             })
         } catch { /* opsiyonel */ }
-    }, [csrfToken, loadConversations])
+    }, [csrfToken, loadConversations, lidTarget])
 
     const reallyDeleteConversation = useCallback(async (phone) => {
         // Optimistik: istek tamamlanmadan önce listeden kaldır
@@ -392,7 +520,7 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         setSending(true)
         try {
             const fd = new FormData()
-            fd.append('phone', selectedPhone)
+            fd.append('phone', lidTarget(selectedPhone))
             fd.append('caption', (caption || '').trim())
             fd.append('file', file)
             fd.append('__RequestVerificationToken', csrfToken || '')
@@ -414,7 +542,7 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         } finally {
             setSending(false)
         }
-    }, [selectedPhone, sending, csrfToken, loadMessages, clearPendingFile, showToast])
+    }, [selectedPhone, sending, csrfToken, loadMessages, clearPendingFile, showToast, lidTarget])
 
     // ── Sade metin / alıntılı yanıt gönder ─────────────────────────────
     const sendTextOnly = useCallback(async (text) => {
@@ -423,9 +551,10 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         try {
             const isReply = !!replyingTo?.bridgeMsgId
             const url = isReply ? '/Whatsapp/SendReply' : '/Whatsapp/Send'
+            const target = lidTarget(selectedPhone)
             const payload = isReply
-                ? { phone: selectedPhone, text, quotedId: replyingTo.bridgeMsgId, quotedBody: replyingTo.body, quotedFromMe: replyingTo.direction === 1 }
-                : { phone: selectedPhone, text }
+                ? { phone: target, text, quotedId: replyingTo.bridgeMsgId, quotedBody: replyingTo.body, quotedFromMe: replyingTo.direction === 1 }
+                : { phone: target, text }
             const r = await fetch(url, {
                 method: 'POST',
                 credentials: 'same-origin',
@@ -445,7 +574,7 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         } finally {
             setSending(false)
         }
-    }, [selectedPhone, sending, csrfToken, loadMessages, showToast, replyingTo])
+    }, [selectedPhone, sending, csrfToken, loadMessages, showToast, replyingTo, lidTarget])
 
     // ── Reaksiyon gönder ────────────────────────────────────────────────
     const sendReaction = useCallback(async (bridgeMsgId, fromMe, emoji) => {
@@ -455,12 +584,12 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             await fetch('/Whatsapp/SendReaction', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken || '' },
-                body: JSON.stringify({ phone: selectedPhone, messageId: bridgeMsgId, emoji, fromMe }),
+                body: JSON.stringify({ phone: lidTarget(selectedPhone), messageId: bridgeMsgId, emoji, fromMe }),
             })
             setMessages(prev => prev.map(m =>
                 m.bridgeMsgId === bridgeMsgId ? { ...m, reactionEmoji: emoji || null } : m))
         } catch { /* sessizce geç */ }
-    }, [selectedPhone, csrfToken])
+    }, [selectedPhone, csrfToken, lidTarget])
 
     // ── Mesaj sil ───────────────────────────────────────────────────────
     const deleteMessage = useCallback(async (bridgeMsgId, fromMe) => {
@@ -469,12 +598,12 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             await fetch('/Whatsapp/DeleteMessage', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken || '' },
-                body: JSON.stringify({ phone: selectedPhone, messageId: bridgeMsgId, fromMe }),
+                body: JSON.stringify({ phone: lidTarget(selectedPhone), messageId: bridgeMsgId, fromMe }),
             })
             setMessages(prev => prev.map(m =>
                 m.bridgeMsgId === bridgeMsgId ? { ...m, isDeleted: true, body: null } : m))
         } catch (err) { showToast('Silinemedi: ' + err.message) }
-    }, [selectedPhone, csrfToken, showToast])
+    }, [selectedPhone, csrfToken, showToast, lidTarget])
 
     // Send butonu: dosya bekliyorsa dosya+caption, yoksa metin gonder
     const sendMessage = useCallback(async () => {
@@ -490,11 +619,11 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
     // Yazıyor göstergesi gönder (debounced — 3sn sonra "durdu")
     const sendTypingIndicator = useCallback((isTyping) => {
         if (!selectedPhone) return
-        fetch('/Whatsapp/SendTyping?phone=' + encodeURIComponent(selectedPhone) + '&isTyping=' + isTyping, {
+        fetch('/Whatsapp/SendTyping?phone=' + encodeURIComponent(lidTarget(selectedPhone)) + '&isTyping=' + isTyping, {
             method: 'POST', credentials: 'same-origin',
             headers: { 'RequestVerificationToken': csrfToken || '' },
         }).catch(() => {})
-    }, [selectedPhone, csrfToken])
+    }, [selectedPhone, csrfToken, lidTarget])
 
     const handleComposeKey = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -548,6 +677,18 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             if (next.has(phone)) next.delete(phone)
             else next.add(phone)
             localStorage.setItem('wa-muted', JSON.stringify([...next]))
+            return next
+        })
+        setConvMenu(null)
+    }, [])
+
+    // Sohbet sabitleme (pin)
+    const togglePin = useCallback((phone) => {
+        setPinnedConvs(prev => {
+            const next = new Set(prev)
+            if (next.has(phone)) next.delete(phone)
+            else next.add(phone)
+            localStorage.setItem('wa-pinned', JSON.stringify([...next]))
             return next
         })
         setConvMenu(null)
@@ -635,13 +776,13 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             const r = await fetch('/Whatsapp/ForwardMessage', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken || '' },
-                body: JSON.stringify({ toPhone, messageId: forwardMsg.bridgeMsgId }),
+                body: JSON.stringify({ toPhone: lidTarget(toPhone), messageId: forwardMsg.bridgeMsgId }),
             })
             const d = await r.json()
             if (d.success) { showToast('İletildi', 'info'); setForwardMsg(null) }
             else showToast('İletilemedi: ' + (d.message || 'hata'))
         } catch (err) { showToast('Hata: ' + err.message) }
-    }, [forwardMsg, csrfToken, showToast])
+    }, [forwardMsg, csrfToken, showToast, lidTarget])
 
     // Seçim modu toggle
     const toggleSelectMsg = useCallback((id) => {
@@ -672,6 +813,11 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         return (c.displayName || '').toLowerCase().includes(q)
             || (c.phone || '').includes(q)
             || (c.lastBody || '').toLowerCase().includes(q)
+    }).sort((a, b) => {
+        // Sabitlenenler en üstte; kendi içlerinde server sırası (son mesaj) korunur
+        const ap = pinnedConvs.has(a.phone) ? 0 : 1
+        const bp = pinnedConvs.has(b.phone) ? 0 : 1
+        return ap - bp
     })
 
     const selectedConv = conversations.find(c => c.phone === selectedPhone)
@@ -745,6 +891,13 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             {convMenu && (
                 <div className="wa-conv-menu" style={{ top: convMenu.y, left: convMenu.x }}
                     onClick={e => e.stopPropagation()}>
+                    <button className="wa-conv-menu__item" onClick={() => { togglePin(convMenu.phone) }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="17" x2="12" y2="22"/>
+                            <path d="M5 17h14l-1.5-5.5L19 8V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3l1.5 3.5z"/>
+                        </svg>
+                        <span>{pinnedConvs.has(convMenu.phone) ? 'Sabitlemeyi kaldır' : 'Sohbeti sabitle'}</span>
+                    </button>
                     <button className="wa-conv-menu__item" onClick={() => { toggleArchive(convMenu.phone); setConvMenu(null) }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
@@ -866,6 +1019,18 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             )}
             {/* ───── Sol panel: sohbet listesi ──────────────────────── */}
             <div className="wa-msg-sidebar">
+                {!['ready', 'cloud'].includes(bridgeState) && (
+                    <div className={'wa-bridge-banner' + (bridgeState === 'unreachable' ? ' is-error' : '')}>
+                        <span className="wa-bridge-banner__dot" />
+                        {bridgeState === 'unreachable' && 'Bridge\'e ulaşılamıyor — WhatsApp servisi çalışmıyor olabilir.'}
+                        {bridgeState === 'connecting' && 'WhatsApp\'a bağlanılıyor…'}
+                        {bridgeState === 'awaiting_qr' && 'Telefon bağlantısı yok — Şirket Ayarları → WhatsApp\'tan QR tarayın.'}
+                        {bridgeState === 'disabled' && 'WhatsApp entegrasyonu pasif — Şirket Ayarları\'ndan etkinleştirin.'}
+                        {bridgeState === 'not_configured' && 'Bridge URL ayarlanmamış — Şirket Ayarları → WhatsApp.'}
+                        {!['unreachable', 'connecting', 'awaiting_qr', 'disabled', 'not_configured'].includes(bridgeState)
+                            && 'WhatsApp bağlantı durumu: ' + bridgeState}
+                    </div>
+                )}
                 <div className="wa-msg-sidebar__head">
                     <div className="wa-msg-sidebar__title-row">
                         <div className="wa-msg-sidebar__title">Sohbetler</div>
@@ -935,16 +1100,20 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                                 }}
                             >
                                 <div className={'wa-msg-conv__avatar' + (c.isGroup ? ' is-group' : '')} aria-hidden="true">
-                                    {c.isGroup
-                                        ? '👥'
-                                        : c.isLid && (!c.displayName || c.displayName.startsWith('Bilinmeyen'))
-                                            ? '?'
-                                            : (c.displayName || formatPhoneOrLid(c.phone) || '?').slice(0, 1).toUpperCase()}
+                                    {avatarMap[c.phone]
+                                        ? <img src={avatarMap[c.phone]} alt="" loading="lazy"
+                                            onError={() => setAvatarMap(prev => ({ ...prev, [c.phone]: null }))} />
+                                        : c.isGroup
+                                            ? '👥'
+                                            : c.isLid && (!c.displayName || c.displayName.startsWith('Bilinmeyen'))
+                                                ? '?'
+                                                : (c.displayName || formatPhoneOrLid(c.phone) || '?').slice(0, 1).toUpperCase()}
                                 </div>
                                 <div className="wa-msg-conv__body">
                                     <div className="wa-msg-conv__row">
                                         <span className="wa-msg-conv__name">
                                             {c.displayName || formatPhoneOrLid(c.phone)}
+                                            {pinnedConvs.has(c.phone) && <span className="wa-pin-icon" title="Sabitlendi">📌</span>}
                                             {mutedConvs.has(c.phone) && <span className="wa-mute-icon" title="Sessize alındı">🔇</span>}
                                             {archivedConvs.has(c.phone) && <span className="wa-archive-icon" title="Arşivlendi">📁</span>}
                                         </span>
@@ -1016,11 +1185,14 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                     <>
                         <div className="wa-msg-thread__head">
                             <div className={'wa-msg-thread__avatar' + (selectedConv?.isGroup ? ' is-group' : '')}>
-                                {selectedConv?.isGroup
-                                    ? '👥'
-                                    : selectedConv?.isLid && (!selectedConv?.displayName || selectedConv?.displayName.startsWith('Bilinmeyen'))
-                                        ? '?'
-                                        : (selectedConv?.displayName || selectedPhone).slice(0, 1).toUpperCase()}
+                                {avatarMap[selectedPhone]
+                                    ? <img src={avatarMap[selectedPhone]} alt=""
+                                        onError={() => setAvatarMap(prev => ({ ...prev, [selectedPhone]: null }))} />
+                                    : selectedConv?.isGroup
+                                        ? '👥'
+                                        : selectedConv?.isLid && (!selectedConv?.displayName || selectedConv?.displayName.startsWith('Bilinmeyen'))
+                                            ? '?'
+                                            : (selectedConv?.displayName || selectedPhone).slice(0, 1).toUpperCase()}
                             </div>
                             <div className="wa-msg-thread__info">
                                 <div className="wa-msg-thread__name"

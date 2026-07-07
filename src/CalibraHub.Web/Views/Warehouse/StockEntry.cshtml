@@ -1,7 +1,7 @@
 @model CalibraHub.Web.Models.Warehouse.WarehouseBoardViewModel
 @using System.Text.Json
 @{
-    ViewData["Title"] = "Ambar Giriş / Çıkış";
+    ViewData["Title"] = (ViewData["Title"] as string) ?? "Ambar Giriş / Çıkış";
     ViewData["BodyClass"] = "page-wh-stockentry";
 
     var jsonOpts = new JsonSerializerOptions

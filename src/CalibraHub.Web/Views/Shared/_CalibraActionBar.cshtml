@@ -88,6 +88,16 @@
         </button>
     }
 
+    @*
+        ExtraButtonsHtml — ekrana özgü ek aksiyon butonları (ör. Sayım "Yansıt").
+        Standart .pte-btn--icon markup'ıyla yazılır; renk için .pte-btn--violet vb.
+        kullanılabilir. Liste/Kaydet/Sil'den SONRA, meta'dan ÖNCE render edilir.
+    *@
+    @if (ViewData["ExtraButtonsHtml"] is string _extraBtns && !string.IsNullOrWhiteSpace(_extraBtns))
+    {
+        @Html.Raw(_extraBtns)
+    }
+
     <span class="pte-meta"></span>
 
     @if (ab_showActions)

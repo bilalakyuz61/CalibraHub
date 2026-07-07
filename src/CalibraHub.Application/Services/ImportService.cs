@@ -120,12 +120,12 @@ public sealed class ImportService : IImportService
                     // TÜM alanları dahil et — şablonda eşlenmemiş (sonradan eklenen) alanlar da görünsün + değerleri gelsin.
                     var c = t.Columns.FirstOrDefault(x => string.Equals(x.TargetKey, f.Key, StringComparison.OrdinalIgnoreCase));
                     var header = c is not null && !string.IsNullOrWhiteSpace(c.SourceColumn) ? c.SourceColumn! : f.Label;
-                    cols.Add(new ExcelTemplateColumn(header, f.Hint, f.IsRequired, AllowedValuesFor(f), f.CanBeMatchKey));
+                    cols.Add(new ExcelTemplateColumn(header, f.Hint, f.IsRequired, AllowedValuesFor(f), f.CanBeMatchKey, f.DataType, f.MaxLength));
                 }
             }
         }
         if (cols.Count == 0)
-            cols = fields.Select(f => new ExcelTemplateColumn(f.Label, f.Hint, f.IsRequired, AllowedValuesFor(f), f.CanBeMatchKey)).ToList();
+            cols = fields.Select(f => new ExcelTemplateColumn(f.Label, f.Hint, f.IsRequired, AllowedValuesFor(f), f.CanBeMatchKey, f.DataType, f.MaxLength)).ToList();
 
         // Anahtar (eşleştirme) alanları Excel'de ilk kolon(lar)a al — kullanıcı önce kodu girsin (stable sort).
         cols = cols.OrderByDescending(c => c.CanBeMatchKey).ToList();

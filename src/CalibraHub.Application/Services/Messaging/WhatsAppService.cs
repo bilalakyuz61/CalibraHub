@@ -196,7 +196,11 @@ public sealed class WhatsAppService : IWhatsAppService
             await Task.Delay(delay, cancellationToken);
         }
 
-        var to = NormalizePhone(toPhone);
+        // JID hedefleri (xxx@lid, xxx@g.us) normalize edilmez — rakama indirgemek
+        // LID/grup bilgisini yok eder; bridge JID'i oldugu gibi kabul eder.
+        // 14 haneli LID'ler rakam olarak gonderilirse "gercek telefon" sanilir
+        // ve onWhatsApp dogrulamasinda "kayitli degil" hatasi olusur.
+        var to = toPhone.Contains('@') ? toPhone.Trim() : NormalizePhone(toPhone);
 
         // Web QR provider: Bridge'e POST /send
         if (cfg.Provider == Domain.Entities.WhatsAppProviderType.WebQr)
@@ -371,6 +375,9 @@ public sealed class WhatsAppService : IWhatsAppService
             }, ct);
 
             // wa_inbox insert (Bridge: echo polling ile dedup sağlanır — InsertIfNotExistsAsync)
+            // Sohbet anahtarı: grup ise tam JID (@g.us), LID/telefon ise rakamlar —
+            // '905...@lid' anahtarıyla insert ayrı bir sohbet satırı doğururdu.
+            var contactKey = WaPhoneNormalizer.IsGroup(to) ? to : (WaPhoneNormalizer.Normalize(to) ?? to);
             var bridgeNow = DateTime.UtcNow;
             try
             {
@@ -378,7 +385,7 @@ public sealed class WhatsAppService : IWhatsAppService
                 {
                     BridgeMsgId  = msgId ?? $"bridge-{bridgeNow.Ticks}",
                     Direction    = 1,
-                    ContactPhone = to,
+                    ContactPhone = contactKey,
                     Body         = message,
                     MediaType    = "chat",
                     HasMedia     = false,

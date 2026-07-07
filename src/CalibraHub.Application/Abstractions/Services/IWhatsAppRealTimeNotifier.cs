@@ -19,4 +19,7 @@ public interface IWhatsAppRealTimeNotifier
 
     /// <summary>Karşı taraftan gelen reaksiyon güncellemesini UI'a push eder. emoji null = reaksiyon kaldırıldı.</summary>
     Task ReactionUpdatedAsync(string targetMsgId, string phone, string? emoji, CancellationToken ct = default);
+
+    /// <summary>Bir mesaj silindi (revoke) — UI mesajı "silindi" olarak işaretler.</summary>
+    Task MessageDeletedAsync(string messageId, string phone, CancellationToken ct = default);
 }

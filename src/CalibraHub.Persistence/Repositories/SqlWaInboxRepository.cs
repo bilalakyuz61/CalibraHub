@@ -42,12 +42,12 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                 ([BridgeMsgId],[Direction],[ContactPhone],[ContactId],[ContactName],
                  [Body],[MediaType],[HasMedia],[ReceivedAt],[Created],[ReadAt],
                  [MediaPath],[MediaMime],[MediaFilename],[MediaSize],[is_lid],[wa_contact_id],
-                 [group_jid],[sender_jid],[SenderName])
+                 [group_jid],[sender_jid],[SenderName],[quoted_msg_id])
             OUTPUT INSERTED.[Id]
             VALUES (@BridgeMsgId,@Direction,@Phone,@ContactId,@Name,
                     @Body,@MediaType,@HasMedia,@ReceivedAt,@CreatedAt,NULL,
                     @MediaPath,@MediaMime,@MediaFileName,@MediaSize,@IsLid,@WaContactId,
-                    @GroupJid,@SenderJid,@SenderName);
+                    @GroupJid,@SenderJid,@SenderName,@QuotedMsgId);
             """;
         cmd.Parameters.Add(new SqlParameter("@BridgeMsgId",   (object?)m.BridgeMsgId    ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Direction",     m.Direction));
@@ -68,6 +68,7 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         cmd.Parameters.Add(new SqlParameter("@GroupJid",      (object?)m.GroupJid       ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SenderJid",     (object?)m.SenderJid      ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SenderName",    (object?)m.SenderName     ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@QuotedMsgId",   (object?)m.QuotedMsgId    ?? DBNull.Value));
 
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         if (result is null || result is DBNull) return null;

@@ -135,17 +135,36 @@ export async function discoverFields(formId, opts) {
 
 /**
  * Runtime: form icin rehber baglantilari.
+ *
+ * 2026-07-05 — per-formCode promise memoizasyonu:
+ * mountFixedFieldLookups 1 kez + her FixedFieldLookupBridge alani 1 kez ayni
+ * endpoint'i cekiyordu (recete sayfasinda 4 istek). Ayrica sayfa <head>'i
+ * `window.__CALIBRA_PREFETCH_BINDINGS[formCode] = fetch(...).then(r=>r.json())`
+ * ile prefetch baslatirsa, bundle exec'ini beklemeden paralel inen sonuc
+ * buradan tuketilir (BOMEdit acilis hizlandirmasi). Hatali sonuc cache'lenmez.
  * @param {string} formCode
  * @returns {Promise<Array<{fieldKey,fieldLabel,guideCode,filterJson,isRequired}>>}
  */
-export async function getRuntimeBindings(formCode) {
-  var resp = await fetch(API + '/runtime/' + encodeURIComponent(formCode), {
-    method: 'GET',
-    credentials: 'same-origin',
-    headers: { 'Accept': 'application/json' },
-  })
-  if (!resp.ok) throw new Error('getRuntimeBindings HTTP ' + resp.status)
-  return await resp.json()
+var _runtimeBindingsCache = {}
+export function getRuntimeBindings(formCode) {
+  if (!_runtimeBindingsCache[formCode]) {
+    var prefetched = (typeof window !== 'undefined' && window.__CALIBRA_PREFETCH_BINDINGS)
+      ? window.__CALIBRA_PREFETCH_BINDINGS[formCode]
+      : null
+    var p = prefetched
+      ? Promise.resolve(prefetched)
+      : fetch(API + '/runtime/' + encodeURIComponent(formCode), {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' },
+        }).then(function (resp) {
+          if (!resp.ok) throw new Error('getRuntimeBindings HTTP ' + resp.status)
+          return resp.json()
+        })
+    _runtimeBindingsCache[formCode] = p
+    p.catch(function () { delete _runtimeBindingsCache[formCode] })
+  }
+  return _runtimeBindingsCache[formCode]
 }
 
 /**

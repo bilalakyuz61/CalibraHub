@@ -28,12 +28,19 @@ public sealed class SqlWidgetRepository : IWidgetRepository
     private readonly string _formsTable;
     private readonly string _widgetMasTable;
     private readonly string _widgetTraTable;
+    private readonly string _widgetTraLogTable;
 
     // 2026-06-08 — IsPermissionControlled kolonu DB'de var mı? İlk çağrıda kontrol edilir,
     // sonrasında cache'lenir. Yoksa SELECT/INSERT/UPDATE'lerde bu kolon atlanır — bu sayede
     // ALTER TABLE çalıştırılmadan da uygulama hata vermez (graceful degradation).
     private static bool? _hasPermCtlColumn;
     private static readonly object _hasPermCtlLock = new();
+
+    // 2026-07-06 — Alan bazli audit altyapisi (WidgetTra.CreatedBy + WidgetTraLog) DB'de
+    // var mi? Ayni graceful-degradation pattern'i: migration calismadiysa save'ler audit'siz
+    // ama hatasiz devam eder.
+    private static bool? _hasValueAudit;
+    private static readonly object _hasValueAuditLock = new();
 
     public SqlWidgetRepository(
         SqlServerConnectionFactory connectionFactory,
@@ -46,6 +53,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         _formsTable     = $"[{schema}].[Forms]";
         _widgetMasTable = $"[{schema}].[WidgetMas]";
         _widgetTraTable = $"[{schema}].[WidgetTra]";
+        _widgetTraLogTable = $"[{schema}].[WidgetTraLog]";
     }
 
     /// <summary>
@@ -77,6 +85,41 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                 return id;
         }
         return 0;
+    }
+
+    /// <summary>
+    /// Audit icin mevcut kullanici adi (Identity.Name, yoksa email claim).
+    /// Background/integration cagrilarinda (HTTP context yok) null doner —
+    /// audit satirinda ChangedBy bos kalir, kayit yine yazilir.
+    /// </summary>
+    private string? GetCurrentUserName()
+    {
+        var user = _httpContextAccessor.HttpContext?.User;
+        if (user?.Identity?.IsAuthenticated != true) return null;
+        var name = user.Identity!.Name;
+        if (!string.IsNullOrWhiteSpace(name)) return name.Length > 120 ? name[..120] : name;
+        var email = user.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrWhiteSpace(email)) return null;
+        return email.Length > 120 ? email[..120] : email;
+    }
+
+    /// <summary>
+    /// 2026-07-06 — Audit altyapisi hazir mi? (WidgetTraLog tablosu + WidgetTra.CreatedBy
+    /// kolonu). Process-lifetime cache; initializer startup'ta calistigi icin normalde true.
+    /// </summary>
+    private async Task<bool> HasValueAuditAsync(SqlConnection conn, CancellationToken ct)
+    {
+        if (_hasValueAudit.HasValue) return _hasValueAudit.Value;
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT CASE WHEN OBJECT_ID(N'{_widgetTraLogTable}', N'U') IS NOT NULL
+                         AND COL_LENGTH(N'{_widgetTraTable}', N'CreatedBy') IS NOT NULL
+                        THEN 1 ELSE 0 END;
+            """;
+        var result = await cmd.ExecuteScalarAsync(ct);
+        var exists = result != null && Convert.ToInt32(result) == 1;
+        lock (_hasValueAuditLock) { _hasValueAudit = exists; }
+        return exists;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -384,9 +427,41 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         if (valuesByWidgetId.Count == 0) return;
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        // Audit kontrolu transaction ACILMADAN once — pending tx varken transaction'siz
+        // komut calistirmak SqlClient'ta InvalidOperationException uretir.
+        var hasAudit = await HasValueAuditAsync(conn, ct);
+        var userName = hasAudit ? GetCurrentUserName() : null;
+
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            // Audit: DELETE oncesi eski degerlerin fotografi + WidgetCode haritasi.
+            // (WidgetCode log satirlarina snapshot yazilir — widget silinse de log okunur.)
+            var oldValues = new Dictionary<int, string?>();
+            var codeById  = new Dictionary<int, string>();
+            if (hasAudit)
+            {
+                await using var snap = conn.CreateCommand();
+                snap.Transaction = tx;
+                snap.CommandText = $"""
+                    SELECT m.[Id], m.[WidgetCode], t.[Value]
+                    FROM {_widgetMasTable} m
+                    LEFT JOIN {_widgetTraTable} t
+                           ON t.[WidgetId] = m.[Id] AND t.[RecordId] = @RecordId
+                    WHERE m.[FormId] = @FormId;
+                    """;
+                snap.Parameters.Add(new SqlParameter("@FormId", formId));
+                snap.Parameters.Add(new SqlParameter("@RecordId", recordId));
+                await using var r = await snap.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                {
+                    var wid = r.GetInt32(0);
+                    codeById[wid] = r.GetString(1);
+                    if (!r.IsDBNull(2)) oldValues[wid] = r.GetString(2);
+                }
+            }
+
             // Scope: sadece bu RecordId (master) veya (RecordId + ParentRecordId) (child).
             // DELETE + INSERT. Kardes child satirlarina dokunulmaz cunku RecordId tek kayda ait.
             await using (var del = conn.CreateCommand())
@@ -404,6 +479,8 @@ public sealed class SqlWidgetRepository : IWidgetRepository
 
             // Yeni degerleri ekle (null olmayanlar)
             var now = DateTime.Now;
+            var userCols = hasAudit ? ",[CreatedBy],[UpdatedBy]" : string.Empty;
+            var userVals = hasAudit ? ", @UserName, @UserName" : string.Empty;
             foreach (var kv in valuesByWidgetId)
             {
                 if (kv.Value == null) continue; // null = silindi sayilir
@@ -411,9 +488,9 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                 ins.Transaction = tx;
                 ins.CommandText = $"""
                     INSERT INTO {_widgetTraTable}
-                        ([WidgetId],[RecordId],[ParentRecordId],[Value],[CreatedAt],[UpdatedAt])
+                        ([WidgetId],[RecordId],[ParentRecordId],[Value],[CreatedAt],[UpdatedAt]{userCols})
                     VALUES
-                        (@WidgetId, @RecordId, @ParentRecordId, @Value, @CreatedAt, @UpdatedAt);
+                        (@WidgetId, @RecordId, @ParentRecordId, @Value, @CreatedAt, @UpdatedAt{userVals});
                     """;
                 ins.Parameters.Add(new SqlParameter("@WidgetId", kv.Key));
                 ins.Parameters.Add(new SqlParameter("@RecordId", recordId));
@@ -421,7 +498,56 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                 ins.Parameters.Add(new SqlParameter("@Value", (object?)kv.Value ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@CreatedAt", now));
                 ins.Parameters.Add(new SqlParameter("@UpdatedAt", now));
+                if (hasAudit)
+                    ins.Parameters.Add(new SqlParameter("@UserName", (object?)userName ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);
+            }
+
+            // Audit: diff → yalnizca GERCEKTEN degisen degerler icin log satiri.
+            // Uc durum: eski var + yeni farkli (degisti), eski var + yeni yok/null
+            // (silindi), eski yok + yeni var (eklendi). Esit degerler loglanmaz —
+            // "kaydet"e her basista gurultu olusmaz.
+            if (hasAudit)
+            {
+                var changed = new List<(int WidgetId, string? Old, string? New)>();
+                var seen = new HashSet<int>();
+                foreach (var kv in valuesByWidgetId)
+                {
+                    seen.Add(kv.Key);
+                    oldValues.TryGetValue(kv.Key, out var oldVal);
+                    if (!string.Equals(oldVal, kv.Value, StringComparison.Ordinal))
+                        changed.Add((kv.Key, oldVal, kv.Value));
+                }
+                // Incoming dict'te hic olmayan ama eski degeri olan widget'lar:
+                // DELETE ile veri kayboldu → old → null olarak logla.
+                foreach (var old in oldValues)
+                {
+                    if (!seen.Contains(old.Key) && old.Value != null)
+                        changed.Add((old.Key, old.Value, null));
+                }
+
+                foreach (var c in changed)
+                {
+                    await using var log = conn.CreateCommand();
+                    log.Transaction = tx;
+                    log.CommandText = $"""
+                        INSERT INTO {_widgetTraLogTable}
+                            ([FormId],[WidgetId],[WidgetCode],[RecordId],[ParentRecordId],[OldValue],[NewValue],[ChangedBy],[ChangedAt])
+                        VALUES
+                            (@FormId, @WidgetId, @WidgetCode, @RecordId, @ParentRecordId, @OldValue, @NewValue, @ChangedBy, @ChangedAt);
+                        """;
+                    log.Parameters.Add(new SqlParameter("@FormId", formId));
+                    log.Parameters.Add(new SqlParameter("@WidgetId", c.WidgetId));
+                    log.Parameters.Add(new SqlParameter("@WidgetCode",
+                        codeById.TryGetValue(c.WidgetId, out var code) ? code : $"#{c.WidgetId}"));
+                    log.Parameters.Add(new SqlParameter("@RecordId", recordId));
+                    log.Parameters.Add(new SqlParameter("@ParentRecordId", (object?)parentRecordId ?? DBNull.Value));
+                    log.Parameters.Add(new SqlParameter("@OldValue", (object?)c.Old ?? DBNull.Value));
+                    log.Parameters.Add(new SqlParameter("@NewValue", (object?)c.New ?? DBNull.Value));
+                    log.Parameters.Add(new SqlParameter("@ChangedBy", (object?)userName ?? DBNull.Value));
+                    log.Parameters.Add(new SqlParameter("@ChangedAt", now));
+                    await log.ExecuteNonQueryAsync(ct);
+                }
             }
 
             await tx.CommitAsync(ct);
@@ -448,10 +574,13 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var hasAudit = await HasValueAuditAsync(conn, ct);
+        var userCols = hasAudit ? ", [CreatedBy], [UpdatedBy]" : string.Empty;
+        var userVals = hasAudit ? ", @UserName, @UserName" : string.Empty;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_widgetTraTable} ([WidgetId], [RecordId], [ParentRecordId], [Value], [CreatedAt], [UpdatedAt])
-            SELECT t.[WidgetId], @Target, NULL, t.[Value], @Now, @Now
+            INSERT INTO {_widgetTraTable} ([WidgetId], [RecordId], [ParentRecordId], [Value], [CreatedAt], [UpdatedAt]{userCols})
+            SELECT t.[WidgetId], @Target, NULL, t.[Value], @Now, @Now{userVals}
             FROM {_widgetTraTable} t
             INNER JOIN {_widgetMasTable} m ON m.[Id] = t.[WidgetId]
             WHERE m.[FormId] = @FormId
@@ -462,7 +591,60 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         cmd.Parameters.Add(new SqlParameter("@Source", sourceRecordId));
         cmd.Parameters.Add(new SqlParameter("@Target", targetRecordId));
         cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
+        if (hasAudit)
+            cmd.Parameters.Add(new SqlParameter("@UserName", (object?)GetCurrentUserName() ?? DBNull.Value));
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Alan bazli degisiklik gecmisi — yeni→eski sirali. Master kaydin kendi
+    /// loglari (FormId + RecordId) ile grid child satirlarinin loglari
+    /// (ParentRecordId = recordId) birlikte doner. Audit tablosu heniz yoksa
+    /// (migration calismamis eski DB) bos liste — cagiran taraf hata gormez.
+    /// </summary>
+    public async Task<IReadOnlyCollection<WidgetValueLog>> GetValueLogsAsync(
+        int formId,
+        string recordId,
+        int top,
+        CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        if (!await HasValueAuditAsync(conn, ct)) return Array.Empty<WidgetValueLog>();
+
+        if (top <= 0) top = 200;
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP (@Top)
+                   [Id],[FormId],[WidgetId],[WidgetCode],[RecordId],[ParentRecordId],
+                   [OldValue],[NewValue],[ChangedBy],[ChangedAt]
+            FROM {_widgetTraLogTable}
+            WHERE ([FormId] = @FormId AND [RecordId] = @RecordId)
+               OR [ParentRecordId] = @RecordId
+            ORDER BY [ChangedAt] DESC, [Id] DESC;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Top", top));
+        cmd.Parameters.Add(new SqlParameter("@FormId", formId));
+        cmd.Parameters.Add(new SqlParameter("@RecordId", recordId));
+
+        var list = new List<WidgetValueLog>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new WidgetValueLog
+            {
+                Id             = r.GetInt64(0),
+                FormId         = r.GetInt32(1),
+                WidgetId       = r.GetInt32(2),
+                WidgetCode     = r.GetString(3),
+                RecordId       = r.GetString(4),
+                ParentRecordId = r.IsDBNull(5) ? null : r.GetString(5),
+                OldValue       = r.IsDBNull(6) ? null : r.GetString(6),
+                NewValue       = r.IsDBNull(7) ? null : r.GetString(7),
+                ChangedBy      = r.IsDBNull(8) ? null : r.GetString(8),
+                ChangedAt      = r.GetDateTime(9),
+            });
+        }
+        return list;
     }
 
     // ══════════════════════════════════════════════════════════

@@ -1099,7 +1099,7 @@ public sealed class SalesController : Controller
         var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(materialCode)) return map;
 
-        var record = await _widgetService.GetRecordByCodeAsync("ITEMS", materialCode, ct);
+        var record = await _widgetService.GetRecordByCodeAsync("MATERIAL_CARD_EDIT", materialCode, ct);
         if (record == null) return map;
 
         foreach (var w in record.Widgets)

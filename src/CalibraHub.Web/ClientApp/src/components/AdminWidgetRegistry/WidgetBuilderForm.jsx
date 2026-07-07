@@ -180,6 +180,8 @@ function recommendedColSpanFor(ctx) {
   // Her zaman tam satir gereken tipler — diger faktorler etkilemez
   if (dt === 'grid' || dt === 'group')   return 24
   if (dt === 'multi-select')             return 24
+  if (dt === 'textarea')                 return 24  // cok satirli — tam genislik dogal
+  if (dt === 'attachment')               return 12  // dosya chip'i — 1/2 satir yeterli
 
   // 1) Veri tipi tabani
   var base
@@ -561,13 +563,18 @@ export default function WidgetBuilderForm(props) {
         && dataType !== 'lookup' && dataType !== 'grid') {
       setOptions([])
     }
-    if (dataType !== 'text') {
+    if (dataType !== 'text' && dataType !== 'textarea') {
       setMinLength('')
       setExpectedLength('')
       setTextGuideCode('')
       if (!editingField || (editingField && editingField.dataType !== dataType)) {
         setMaxLength('')
       }
+    }
+    // textarea: rehber baglanamaz + tam-uzunluk kisiti anlamsiz (cok satirli metin)
+    if (dataType === 'textarea') {
+      setExpectedLength('')
+      setTextGuideCode('')
     }
     // textConstraints HEM text+rehber HEM de lookup'da kullanilir.
     // Sadece bu iki tip disindaysa temizle.
@@ -856,10 +863,10 @@ export default function WidgetBuilderForm(props) {
         widgetCode: fieldKey.trim(),
         label: fieldLabel.trim(),
         dataType: dataType,                    // lowercase: text, numeric, ...
-        maxLength: (dataType === 'text' && maxLength !== '' && !isNaN(parseInt(maxLength, 10)))
+        maxLength: ((dataType === 'text' || dataType === 'textarea') && maxLength !== '' && !isNaN(parseInt(maxLength, 10)))
           ? Math.max(1, Math.min(8000, parseInt(maxLength, 10)))
           : null,
-        minLength: (dataType === 'text' && minLength !== '' && !isNaN(parseInt(minLength, 10)))
+        minLength: ((dataType === 'text' || dataType === 'textarea') && minLength !== '' && !isNaN(parseInt(minLength, 10)))
           ? Math.max(1, Math.min(8000, parseInt(minLength, 10)))
           : null,
         expectedLength: (dataType === 'text' && expectedLength !== '' && !isNaN(parseInt(expectedLength, 10)))
@@ -1052,9 +1059,9 @@ export default function WidgetBuilderForm(props) {
         </div>
       </Row>
 
-      {/* Maks. Uzunluk — sadece text tipi. Beklenen uzunluk doluysa disabled.
+      {/* Maks. Uzunluk — text ve textarea tipleri. Beklenen uzunluk doluysa disabled.
           Uzunluk negatif olamaz: '-' karakteri onChange'de atilir. */}
-      {dataType === 'text' && (
+      {(dataType === 'text' || dataType === 'textarea') && (
         <Row label="Maks. Uzunluk" hint="karakter (opsiyonel)">
           <input
             type="number"
@@ -1070,9 +1077,9 @@ export default function WidgetBuilderForm(props) {
         </Row>
       )}
 
-      {/* Min. Uzunluk — sadece text tipi. Beklenen uzunluk doluysa disabled.
+      {/* Min. Uzunluk — text ve textarea tipleri. Beklenen uzunluk doluysa disabled.
           Uzunluk negatif olamaz. */}
-      {dataType === 'text' && (
+      {(dataType === 'text' || dataType === 'textarea') && (
         <Row label="Min. Uzunluk" hint="karakter (opsiyonel)">
           <input
             type="number"

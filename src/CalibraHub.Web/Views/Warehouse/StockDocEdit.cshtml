@@ -275,54 +275,19 @@
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
 
-  <!-- Aksiyon Seridi -->
-  <div class="sqe-action-bar" id="wdeActionBar">
-    <button type="button" class="sqe-btn sqe-btn--primary" id="wdeSaveBtn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Kaydet
-    </button>
-    <a href="@listUrl" class="sqe-btn sqe-btn--secondary">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      Listeye Dön
-    </a>
-    @if (isEdit)
-    {
-        <button type="button" class="sqe-btn sqe-btn--danger" id="wdeDeleteBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-          Sil
-        </button>
-    }
+  <!-- Aksiyon Şeridi — CalibraHub standart action bar -->
+  @await Html.PartialAsync("_CalibraActionBar", new ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isTransfer ? "Transfer" : isStockIn ? "Ambar Giriş" : "Ambar Çıkış",
+      ["ListUrl"]     = listUrl,
+      ["ShowNew"]     = false,
+      ["ShowDelete"]  = isEdit,
+      ["ShowActions"] = true,
+      ["SaveBtnId"]   = "wdeSaveBtn",
+      ["DeleteBtnId"] = "wdeDeleteBtn",
+  })
 
-    <!-- Belge no + tür rozeti -->
-    <div class="wde-docinfo">
-      <span class="wde-docno" id="wdeDocNoDisplay"></span>
-      @if (isTransfer)
-      {
-          <span class="wde-type-badge wde-type-badge--transfer">Transfer</span>
-      }
-      else if (isStockIn)
-      {
-          <span class="wde-type-badge wde-type-badge--stock-in">Ambar Giriş</span>
-      }
-      else
-      {
-          <span class="wde-type-badge wde-type-badge--stock-out">Ambar Çıkış</span>
-      }
-    </div>
-
-    <!-- İşlemler menüsü -->
-    <div class="sqe-actions-menu" id="wdeActionsMenu">
-      <button type="button" class="sqe-actions-btn" id="wdeActionsBtn"
-              aria-haspopup="menu" aria-expanded="false"
-              onclick="wdeToggleActionsMenu(event)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>İşlemler</span>
-        <svg class="sqe-actions-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- İşlemler Dropdown -->
+  <!-- İşlemler Dropdown (standart action bar'daki ptBtnActions butonu açar) -->
   <div class="sqe-actions-dropdown" id="wdeActionsDropdown">
     <button type="button" class="sqe-actions-item" onclick="wdePrint()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -463,30 +428,43 @@
         }
     };
 
-    // ── İşlemler dropdown ─────────────────────────────────────────────
+    // ── İşlemler dropdown (standart action bar ptBtnActions butonu açar) ──
     window.wdeToggleActionsMenu = function(e) {
-        e.stopPropagation();
-        var menu = document.getElementById('wdeActionsMenu');
+        if (e) e.stopPropagation();
         var drop = document.getElementById('wdeActionsDropdown');
-        var isOpen = menu.classList.toggle('is-open');
-        var btn = document.getElementById('wdeActionsBtn');
-        btn.setAttribute('aria-expanded', isOpen);
+        var btn  = document.getElementById('ptBtnActions');
+        if (!drop || !btn) return;
+        var isOpen = drop.classList.toggle('is-open');
+        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         if (isOpen) {
             var rect = btn.getBoundingClientRect();
             drop.style.top  = (rect.bottom + 6) + 'px';
-            drop.style.left = rect.left + 'px';
-            drop.classList.add('is-open');
-        } else {
-            drop.classList.remove('is-open');
+            // Sağa hizala — buton sağ kenarına yasla (taşma olursa min 8px)
+            drop.style.left = Math.max(8, rect.right - (drop.offsetWidth || 240)) + 'px';
         }
     };
     document.addEventListener('click', function(e) {
         var drop = document.getElementById('wdeActionsDropdown');
-        if (!document.getElementById('wdeActionsMenu').contains(e.target)) {
-            document.getElementById('wdeActionsMenu').classList.remove('is-open');
-            if (drop) drop.classList.remove('is-open');
-        }
+        var btn  = document.getElementById('ptBtnActions');
+        if (!drop) return;
+        if ((btn && btn.contains(e.target)) || drop.contains(e.target)) return;
+        drop.classList.remove('is-open');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
     });
+
+    // Standart action bar .pte-meta alanına belge no + tür rozeti yazar.
+    function wdeSetMeta(docNo) {
+        var meta = document.querySelector('.pte-action-bar .pte-meta');
+        if (!meta) return;
+        var typeInfo = DOC_TYPE === 'TRANSFER'  ? { t: 'Transfer',    c: '#4f46e5', bg: 'rgba(99,102,241,.14)' }
+                     : DOC_TYPE === 'STOCK_IN'  ? { t: 'Ambar Giriş', c: '#059669', bg: 'rgba(16,185,129,.14)' }
+                     :                            { t: 'Ambar Çıkış', c: '#dc2626', bg: 'rgba(239,68,68,.12)' };
+        var no = (docNo || '').trim();
+        meta.innerHTML =
+            (no ? '<span style="font-weight:700;color:var(--text-strong,#1e293b);margin-right:8px;">' + no + '</span>' : '') +
+            '<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;' +
+            'background:' + typeInfo.bg + ';color:' + typeInfo.c + ';">' + typeInfo.t + '</span>';
+    }
 
     window.wdePrint = function() {
         window.print();
@@ -543,7 +521,7 @@
             if (doc) {
                 var noEl = document.getElementById('wdeDocNoInput');
                 if (noEl) noEl.value = doc.docNo || '';
-                document.getElementById('wdeDocNoDisplay').textContent = doc.docNo || '';
+                wdeSetMeta(doc.docNo || '');
 
                 var dateFp = document.getElementById('wdeDocDate')?._flatpickr;
                 if (dateFp && doc.docDate) dateFp.setDate(doc.docDate.substring(0, 10));
@@ -669,7 +647,7 @@
             if (json && json.success) {
                 var noEl = document.getElementById('wdeDocNoInput');
                 if (noEl) noEl.value = json.docNo || '';
-                document.getElementById('wdeDocNoDisplay').textContent = json.docNo || '';
+                wdeSetMeta(json.docNo || '');
                 if (!DOC_ID) {
                     DOC_ID = json.id;
                     history.replaceState(null, '', window.location.pathname + '?id=' + DOC_ID);
@@ -686,7 +664,7 @@
                     }
                 }
                 // K.I.T.T. flash
-                var bar = document.getElementById('wdeActionBar');
+                var bar = document.querySelector('.pte-action-bar');
                 if (bar) {
                     bar.classList.remove('is-save-flash');
                     void bar.offsetWidth;
@@ -837,6 +815,7 @@
 
         // Buton olayları
         document.getElementById('wdeSaveBtn')?.addEventListener('click', save);
+        document.getElementById('ptBtnActions')?.addEventListener('click', wdeToggleActionsMenu);
         var delBtn = document.getElementById('wdeDeleteBtn');
         if (delBtn) delBtn.addEventListener('click', showDeleteModal);
         document.getElementById('wdeModalCancel')?.addEventListener('click', hideDeleteModal);

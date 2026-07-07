@@ -102,8 +102,14 @@ public interface ILogisticsConfigurationService
     /// alanlarina yazilir (rapor 2026-05-17 madde 3.5). Cycle korumasi (madde 3.1):
     /// kayit oncesi BFS ile dongusel bagimlilik kontrol edilir; tespit edilirse
     /// ArgumentException firlatilir, DB'ye yazilmaz.
+    /// <paramref name="allowDuplicateComponents"/>: BOM_ALLOW_DUPLICATE_COMPONENTS
+    /// sirket parametresi (Admin → Parametreler → Üretim) — true ise ayni
+    /// (ItemId+ConfigId) bilesen farkli satirlarda tekrar edebilir. Caller
+    /// (BomController) parametreyi okuyup gecer; import gibi diger cagrilar
+    /// default false ile mevcut davranisi korur.
     /// </summary>
-    Task<int> SaveBOMAsync(SaveBOMRequest request, int? userId, CancellationToken cancellationToken);
+    Task<int> SaveBOMAsync(SaveBOMRequest request, int? userId, CancellationToken cancellationToken,
+        bool allowDuplicateComponents = false);
 
     /// <summary>
     /// Soft delete — IsActive=0 (rapor 2026-05-17 madde 3.6). <paramref name="userId"/>

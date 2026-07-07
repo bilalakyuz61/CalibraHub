@@ -1003,3 +1003,197 @@ body.app-theme-light .dwr-sidetabs__badge {
     border-bottom-color: #6366f1;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════
+   Degisiklik Gecmisi (alan bazli audit) — WidgetHistoryModal
+   Light default token'lar + dark override (proje standardi).
+   ═══════════════════════════════════════════════════ */
+html body {
+  --wfh-backdrop:   rgba(15, 23, 42, 0.45);
+  --wfh-surface:    #ffffff;
+  --wfh-border:     #e2e8f0;
+  --wfh-title:      #0f172a;
+  --wfh-muted:      #64748b;
+  --wfh-row-border: #f1f5f9;
+  --wfh-old-bg:     rgba(239, 68, 68, 0.07);
+  --wfh-old-text:   #b91c1c;
+  --wfh-new-bg:     rgba(16, 185, 129, 0.09);
+  --wfh-new-text:   #047857;
+  --wfh-chip-bg:    #eef2ff;
+  --wfh-chip-text:  #4338ca;
+}
+body.app-theme-dark {
+  --wfh-backdrop:   rgba(2, 6, 23, 0.65);
+  --wfh-surface:    #0f172a;
+  --wfh-border:     rgba(255, 255, 255, 0.1);
+  --wfh-title:      #f1f5f9;
+  --wfh-muted:      rgba(255, 255, 255, 0.55);
+  --wfh-row-border: rgba(255, 255, 255, 0.06);
+  --wfh-old-bg:     rgba(248, 113, 113, 0.12);
+  --wfh-old-text:   #fca5a5;
+  --wfh-new-bg:     rgba(52, 211, 153, 0.12);
+  --wfh-new-text:   #6ee7b7;
+  --wfh-chip-bg:    rgba(129, 140, 248, 0.15);
+  --wfh-chip-text:  #a5b4fc;
+}
+
+.wf-history-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--wf-border);
+  background: var(--wf-bg);
+  color: var(--wf-label-color);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.wf-history-trigger:hover {
+  border-color: var(--wf-border-hover);
+  color: var(--wf-border-focus);
+}
+
+.wf-history-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--wfh-backdrop);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.wf-history-card {
+  width: 100%;
+  max-width: 720px;
+  max-height: min(78vh, 640px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1px solid var(--wfh-border);
+  background: var(--wfh-surface);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.wf-history-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--wfh-border);
+}
+.wf-history-head-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--wfh-title);
+}
+.wf-history-head-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--wfh-muted);
+  margin-top: 2px;
+}
+.wf-history-close {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--wfh-muted);
+  cursor: pointer;
+}
+.wf-history-close:hover {
+  border-color: var(--wfh-border);
+  color: var(--wfh-title);
+}
+
+.wf-history-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 18px 16px;
+}
+
+.wf-history-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--wfh-row-border);
+}
+.wf-history-row:last-child { border-bottom: none; }
+
+.wf-history-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wf-history-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--wfh-title);
+}
+.wf-history-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--wfh-chip-bg);
+  color: var(--wfh-chip-text);
+}
+.wf-history-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--wfh-muted);
+  white-space: nowrap;
+}
+
+.wf-history-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.wf-history-old,
+.wf-history-new {
+  padding: 2px 8px;
+  border-radius: 6px;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-history-old {
+  background: var(--wfh-old-bg);
+  color: var(--wfh-old-text);
+  text-decoration: line-through;
+}
+.wf-history-new {
+  background: var(--wfh-new-bg);
+  color: var(--wfh-new-text);
+}
+.wf-history-arrow {
+  color: var(--wfh-muted);
+  font-size: 11px;
+}
+
+.wf-history-empty {
+  padding: 36px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--wfh-muted);
+}

@@ -23,12 +23,14 @@
  *                               { save(opts), getValues(), getHasWidgets() }
  */
 import { useState, useEffect, useImperativeHandle, forwardRef, useRef, useCallback } from 'react'
-import { Settings, X } from 'lucide-react'
+import { Settings, X, History } from 'lucide-react'
 import { getRecord, saveRecord, guideResolve } from './dynamicWidgetService'
 import LookupFieldInput from './LookupFieldInput'
 import GuideListField from './GuideListField'
 import GridFieldInput from './GridFieldInput'
 import WidgetFieldShell from './WidgetFieldShell'
+import WidgetHistoryModal from './WidgetHistoryModal'
+import AttachmentFieldInput from './AttachmentFieldInput'
 import { buildRuleGraph, recomputeAll, propagateChange } from './ruleEngine'
 import { resolveTokens as resolveAllTokens } from '../../utils/fieldTokens'
 
@@ -139,6 +141,9 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   function isWidgetEnabled() { return true }
   var [configOpen, setConfigOpen] = useState(false)
   var configPanelRef = useRef(null)
+  // Alan bazli degisiklik gecmisi (audit) modali — sadece kayitli (recordId dolu)
+  // kayitlarda tetiklenebilir; yeni kayitta gecmis olamaz.
+  var [historyOpen, setHistoryOpen] = useState(false)
   // Zorunlu alan validasyonu — save denemesinde bos kalan zorunlu widgetId listesi.
   // handleChange'de temizlenir; save basarili olunca da sifirlanir.
   var [saveAttemptErrors, setSaveAttemptErrors] = useState([])
@@ -733,6 +738,18 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
     return null
   }
 
+  // Degisiklik gecmisi tetigi — sadece mevcut (kaydedilmis) kayitta anlamli.
+  // '-' dummy recordId'si (yeni kayit route eslesmesi) gecmissiz sayilir.
+  var canShowHistory = !!activeRecordId && activeRecordId !== '-'
+  var historyModal = canShowHistory ? (
+    <WidgetHistoryModal
+      isOpen={historyOpen}
+      onClose={function () { setHistoryOpen(false) }}
+      formCode={formCode}
+      recordId={activeRecordId}
+    />
+  ) : null
+
   // ── Sidetabs layout: sol nav (grup adlari) + sag content (aktif grup field'lari) ──
   if (layoutMode === 'sidetabs') {
     var activeTab = sideTabs.find(function (t) { return t.key === activeGroupKey }) || sideTabs[0] || null
@@ -758,6 +775,18 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
               </button>
             )
           })}
+          {canShowHistory && (
+            <button
+              type="button"
+              className="wf-history-trigger"
+              style={{ marginTop: 'auto', justifyContent: 'center' }}
+              onClick={function () { setHistoryOpen(true) }}
+              title="Ek alanlarda yapılan değişikliklerin geçmişi"
+            >
+              <History size={13} />
+              Değişiklik Geçmişi
+            </button>
+          )}
         </aside>
         <section className="dwr-sidetabs__content" role="tabpanel">
           {activeTab ? (
@@ -793,12 +822,29 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
             })}
           </div>
         )}
+
+        {historyModal}
       </div>
     )
   }
 
   return (
     <div className={classPrefix + '-dyn-root'} data-widget-renderer>
+
+      {/* Degisiklik gecmisi — sag ustte kompakt tetik (yalniz kayitli kayitta) */}
+      {canShowHistory && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button
+            type="button"
+            className="wf-history-trigger"
+            onClick={function () { setHistoryOpen(true) }}
+            title="Ek alanlarda yapılan değişikliklerin geçmişi"
+          >
+            <History size={13} />
+            Değişiklik Geçmişi
+          </button>
+        </div>
+      )}
 
       {/* Grup'lara gore ayri kartlar — `${classPrefix}-card` page chrome (cam efekti),
           `wf-grid` ise widget renderer'in kendi 24-col grid'i. */}
@@ -865,6 +911,8 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           })}
         </div>
       )}
+
+      {historyModal}
     </div>
   )
 })
@@ -993,6 +1041,37 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
           />
         )
       }
+      break
+    }
+    case 'attachment': {
+      // Dosya/gorsel ek — deger merkezi Attachment tablosunun Id'si. Upload,
+      // meta ve indirme AttachmentFieldInput icinde; burada sadece baglama.
+      inputEl = (
+        <AttachmentFieldInput
+          inputId={'dyn_' + w.widgetId}
+          widgetDbId={w.id}
+          value={value != null ? value : ''}
+          isInvalid={hasReqError}
+          onChange={function (v) { onChange(w.widgetId, v) }}
+        />
+      )
+      break
+    }
+    case 'textarea': {
+      // Uzun metin — cok satirli. Yukseklik auto-resize yok (sabit 3 satir
+      // baslangic); kullanici tarayicinin native resize tutamacini kullanabilir.
+      inputEl = (
+        <textarea
+          id={'dyn_' + w.widgetId}
+          className={'wf-textarea' + reqCls}
+          data-widget-code={w.widgetId}
+          value={value != null ? value : ''}
+          onChange={function (e) { onChange(w.widgetId, e.target.value) }}
+          maxLength={w.maxLength > 0 ? w.maxLength : undefined}
+          rows={3}
+          style={{ height: 'auto', minHeight: 84, resize: 'vertical', paddingTop: 8, paddingBottom: 8 }}
+        />
+      )
       break
     }
     case 'numeric': {

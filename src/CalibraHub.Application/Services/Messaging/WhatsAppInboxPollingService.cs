@@ -33,8 +33,6 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WhatsAppInboxPollingService> _logger;
-    private readonly IWhatsAppRealTimeNotifier _notifier;
-    private readonly IMessageBus _bus;
 
     private DateTime _sinceCursor = DateTime.MinValue; // ilk tickte DB'den restore edilir
     private bool _backfillDone = false;                 // session basina bir kez calissin
@@ -42,15 +40,11 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
     public WhatsAppInboxPollingService(
         IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
-        ILogger<WhatsAppInboxPollingService> logger,
-        IWhatsAppRealTimeNotifier notifier,
-        IMessageBus bus)
+        ILogger<WhatsAppInboxPollingService> logger)
     {
         _scopeFactory       = scopeFactory;
         _httpClientFactory  = httpClientFactory;
         _logger             = logger;
-        _notifier           = notifier;
-        _bus                = bus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -150,8 +144,8 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
                 if (bytes.Length == 0) continue;
 
                 var mime = resp.Content.Headers.ContentType?.MediaType;
-                var ext = MimeToExtension(mime);
-                var safeId = SafeId(msgId);
+                var ext = WaMediaFiles.MimeToExtension(mime);
+                var safeId = WaMediaFiles.SafeId(msgId);
                 var receivedAt = DateTime.UtcNow; // exact tarih unutuldu, simdiki ay klasoru
                 var wwwroot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
                 var subPath = Path.Combine("uploads", "whatsapp", receivedAt.Year.ToString(), receivedAt.Month.ToString("D2"));
@@ -192,324 +186,22 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
         if (payload?.Messages is null || payload.Messages.Count == 0) return;
 
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var inbox      = scope.ServiceProvider.GetRequiredService<IWaInboxRepository>();
-        var resolver   = scope.ServiceProvider.GetRequiredService<IWaContactResolver>();
-        var groupRepo  = scope.ServiceProvider.GetRequiredService<IWaGroupRepository>();
+        var processor = scope.ServiceProvider.GetRequiredService<WhatsAppInboundProcessor>();
 
-        var now   = DateTime.UtcNow;
         var maxTs = _sinceCursor;
 
         foreach (var m in payload.Messages)
         {
-            if (string.IsNullOrWhiteSpace(m.From)) continue;
-
-            // Bridge'in gönderdiği tam JID (varsa); yoksa eski fallback
-            var jid   = m.Jid ?? (m.From.Contains('@') ? m.From : m.From + "@s.whatsapp.net");
-            var isLid = m.IsLid || WaPhoneNormalizer.IsLid(jid);
-            var phone = WaPhoneNormalizer.Normalize(m.From) ?? string.Empty;
-            if (string.IsNullOrEmpty(phone)) continue;
-
-            var ts = DateTimeOffset.FromUnixTimeMilliseconds(m.Timestamp).UtcDateTime;
-            if (ts > maxTs) maxTs = ts;
-
-            // WaContact çöz veya oluştur
-            int? waContactId = null;
-            try
-            {
-                // LID ise önce Bridge'ten phone resolve dene
-                if (isLid)
-                {
-                    var resolvedPhoneJid = await resolver.ResolveLidToPhoneJidAsync(jid, bridgeBase, ct);
-                    if (resolvedPhoneJid is not null)
-                    {
-                        var resolvedPhone = WaPhoneNormalizer.Normalize(resolvedPhoneJid);
-                        if (resolvedPhone is not null)
-                        {
-                            phone = resolvedPhone;
-                            jid   = resolvedPhoneJid;
-                            isLid = false;
-                        }
-                    }
-                }
-
-                var waContact = await resolver.GetOrCreateAsync(jid, m.FromName, ct);
-                waContactId = waContact.Id;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug("[WaPolling] WaContact resolve hatası ({jid}): {msg}", jid, ex.Message);
-            }
-
-            // ── Grup mesajı — contact_phone = groupJid, grup kaydı lazım ──────
-            var isGroupMessage = !string.IsNullOrWhiteSpace(m.GroupJid);
-            if (isGroupMessage)
-            {
-                var groupSubject = m.SenderName ?? m.GroupJid!;
-                try
-                {
-                    await groupRepo.GetOrCreateAsync(m.GroupJid!, groupSubject, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug("[WaPolling] Grup kayıt hatası ({jid}): {msg}", m.GroupJid, ex.Message);
-                }
-                // Grup mesajında contact_phone = groupJid; phone değişkeni düzeltme
-                phone = m.GroupJid!;
-            }
-
-            // ── Reaksiyon mesajı — normal insert değil, hedef mesajı güncelle ──
-            if (m.MediaType == "reaction" && !string.IsNullOrWhiteSpace(m.ReactionTargetId))
-            {
-                var emoji = string.IsNullOrEmpty(m.Body) ? null : m.Body;
-                try
-                {
-                    await inbox.UpdateReactionAsync(m.ReactionTargetId, emoji, ct);
-                    await _notifier.ReactionUpdatedAsync(m.ReactionTargetId, phone, emoji, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug("[WaPolling] Reaction update hatası ({id}): {msg}", m.ReactionTargetId, ex.Message);
-                }
-                if (ts > maxTs) maxTs = ts;
-                continue;
-            }
-
-            // Medyayi indir + diske kaydet (varsa)
-            string? mediaPath = null;
-            if (m.IsMedia && !string.IsNullOrWhiteSpace(m.MediaUrl) && !string.IsNullOrWhiteSpace(m.Id))
-            {
-                mediaPath = await TryDownloadAndSaveMediaAsync(bridgeBase, m.Id, m.MediaUrl, m.MediaMime, ts, ct);
-            }
-
-            try
-            {
-                var insertedId = await inbox.InsertIfNotExistsAsync(new WaInboxMessage
-                {
-                    BridgeMsgId   = m.Id,
-                    Direction     = m.FromMe ? (byte)1 : (byte)0,
-                    ContactPhone  = phone,
-                    ContactId     = waContactId,
-                    ContactName   = m.FromName,
-                    Body          = m.Body,
-                    MediaType     = m.MediaType ?? "chat",
-                    HasMedia      = m.IsMedia,
-                    ReceivedAt    = ts,
-                    CreatedAt     = now,
-                    MediaPath     = mediaPath,
-                    MediaMime     = m.MediaMime,
-                    MediaFileName = m.MediaFileName,
-                    MediaSize     = m.MediaSize,
-                    IsLid         = isLid,
-                    GroupJid      = m.GroupJid,
-                    SenderJid     = m.SenderJid,
-                    SenderName    = m.SenderName,
-                }, ct);
-
-                // Hub'a push sadece gerçekten yeni eklenen mesajlar için yapılır.
-                // insertedId == null → kayıt zaten vardı (SendMedia/Send tarafından eklendi);
-                // tekrar push etmek frontend'de çift mesaj balonuna yol açar.
-                if (insertedId.HasValue)
-                {
-                    await _notifier.MessageReceivedAsync(
-                        phone, m.Id ?? string.Empty, m.FromMe ? 1 : 0,
-                        m.Body, m.MediaType ?? "chat", m.IsMedia,
-                        mediaPath, m.MediaMime, m.MediaFileName, m.MediaSize,
-                        ts, ct);
-                    await _notifier.ConversationUpdatedAsync(phone, ct);
-                    await _bus.PublishAsync(new WhatsAppMessageReceived
-                    {
-                        ContactPhone = phone,
-                        Body         = m.Body,
-                        IsIncoming   = !m.FromMe,
-                        MediaType    = m.MediaType ?? "chat",
-                        BridgeMsgId  = m.Id,
-                        At           = ts,
-                    }, ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[WaPolling] insert basarisiz: {id}", m.Id);
-            }
+            var ts = await processor.ProcessMessageAsync(m, bridgeBase, ct);
+            if (ts.HasValue && ts.Value > maxTs) maxTs = ts.Value;
         }
 
         if (maxTs > _sinceCursor) _sinceCursor = maxTs;
     }
 
-    /// <summary>
-    /// Bridge'den medya bytelarini indirir, wwwroot/uploads/whatsapp/yyyy/MM/<id>.<ext> kaydeder,
-    /// '/uploads/whatsapp/yyyy/MM/<id>.<ext>' relative URL'ini doner (UI direkt erisir).
-    /// </summary>
-    private async Task<string?> TryDownloadAndSaveMediaAsync(
-        string bridgeBase, string msgId, string mediaPathOnBridge, string? mime, DateTime receivedAt, CancellationToken ct)
-    {
-        try
-        {
-            // Idempotency: dosya disk'te zaten varsa indirme — her polling tick'inde
-            // aynı mesaj geliyor ve medya tekrar tekrar indiriliyordu (saatte 100+
-            // 500 KB allocation = memory churn + disk I/O + RAM şişmesi).
-            var effectiveMime = mime; // mime bilinmiyorsa indir + Content-Type'tan al
-            if (!string.IsNullOrEmpty(effectiveMime))
-            {
-                var preExt   = MimeToExtension(effectiveMime);
-                var preSafeId = SafeId(msgId);
-                var preSubPath = Path.Combine("uploads", "whatsapp",
-                    receivedAt.Year.ToString(), receivedAt.Month.ToString("D2"));
-                var preFullPath = Path.Combine(
-                    Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"),
-                    preSubPath, $"{preSafeId}.{preExt}");
-                if (File.Exists(preFullPath))
-                {
-                    // Zaten kayıtlı, log spam'i ve allocation atla
-                    return "/" + preSubPath.Replace('\\', '/') + "/" + preSafeId + "." + preExt;
-                }
-            }
-
-            // bridgeBase = http://127.0.0.1:61100, mediaPathOnBridge = /media/<id>
-            var url = bridgeBase + mediaPathOnBridge;
-            using var http = _httpClientFactory.CreateClient();
-            http.Timeout = TimeSpan.FromSeconds(30); // Buyuk dosyalar icin 30sn
-            using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-            if (!resp.IsSuccessStatusCode) return null;
-
-            var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
-            if (bytes.Length == 0) return null;
-
-            // Content-Type header'dan mime'i da yakala (yedek)
-            effectiveMime = mime ?? resp.Content.Headers.ContentType?.MediaType;
-            var ext = MimeToExtension(effectiveMime);
-            var safeId = SafeId(msgId);
-
-            // wwwroot/uploads/whatsapp/yyyy/MM/<id>.<ext>
-            var wwwroot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-            var subPath = Path.Combine("uploads", "whatsapp",
-                receivedAt.Year.ToString(), receivedAt.Month.ToString("D2"));
-            var dir = Path.Combine(wwwroot, subPath);
-            Directory.CreateDirectory(dir);
-            var fullPath = Path.Combine(dir, $"{safeId}.{ext}");
-            // Mime bilinmediği için yukarıdaki guard çalışmadıysa, son şans:
-            // dosya yine de varsa skip (yeniden yazmaya gerek yok)
-            if (File.Exists(fullPath))
-            {
-                Array.Clear(bytes, 0, bytes.Length);
-                return "/" + subPath.Replace('\\', '/') + "/" + safeId + "." + ext;
-            }
-            await File.WriteAllBytesAsync(fullPath, bytes, ct);
-
-            // UI'a verilecek relative URL — Forward slash, leading /
-            var urlPath = "/" + subPath.Replace('\\', '/') + "/" + safeId + "." + ext;
-            _logger.LogInformation("[WaPolling] medya kaydedildi: {url} ({size} byte)", urlPath, bytes.Length);
-            return urlPath;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[WaPolling] medya indirilemedi: {id}", msgId);
-            return null;
-        }
-    }
-
-    private static string SafeId(string id)
-    {
-        var sb = new System.Text.StringBuilder(id.Length);
-        foreach (var c in id)
-            sb.Append(char.IsLetterOrDigit(c) || c == '_' || c == '-' ? c : '_');
-        return sb.ToString();
-    }
-
-    private static string MimeToExtension(string? mime)
-    {
-        if (string.IsNullOrWhiteSpace(mime)) return "bin";
-        var m = mime.Split(';')[0].Trim().ToLowerInvariant();
-        return m switch
-        {
-            "image/jpeg" => "jpg",
-            "image/png" => "png",
-            "image/webp" => "webp",
-            "image/gif" => "gif",
-            "video/mp4" => "mp4",
-            "video/3gpp" => "3gp",
-            "video/quicktime" => "mov",
-            "audio/ogg" => "ogg",
-            "audio/mpeg" => "mp3",
-            "audio/mp4" => "m4a",
-            "audio/aac" => "aac",
-            "audio/wav" => "wav",
-            "application/pdf" => "pdf",
-            "application/msword" => "doc",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
-            "application/vnd.ms-excel" => "xls",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
-            "text/plain" => "txt",
-            _ => m.Contains('/') ? m.Split('/')[1] : "bin",
-        };
-    }
-
     private sealed class BridgeMessagesResponse
     {
         [System.Text.Json.Serialization.JsonPropertyName("messages")]
-        public List<BridgeMessage>? Messages { get; set; }
-    }
-
-    private sealed class BridgeMessage
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("id")]
-        public string? Id { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("from")]
-        public string? From { get; set; }
-
-        /// <summary>Tam JID: 905...@s.whatsapp.net veya 178...@lid. Bridge'in yeni versiyonunda gönderilir.</summary>
-        [System.Text.Json.Serialization.JsonPropertyName("jid")]
-        public string? Jid { get; set; }
-
-        /// <summary>LID identifier mı (gerçek telefon numarası değil)?</summary>
-        [System.Text.Json.Serialization.JsonPropertyName("isLid")]
-        public bool IsLid { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("fromName")]
-        public string? FromName { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("fromMe")]
-        public bool FromMe { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("body")]
-        public string? Body { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
-        public long Timestamp { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("isMedia")]
-        public bool IsMedia { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("mediaType")]
-        public string? MediaType { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("mediaUrl")]
-        public string? MediaUrl { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("mediaMime")]
-        public string? MediaMime { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("mediaFileName")]
-        public string? MediaFileName { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("mediaSize")]
-        public int? MediaSize { get; set; }
-
-        /// <summary>Reaksiyon mesajı: hedef mesajın bridge ID'si.</summary>
-        [System.Text.Json.Serialization.JsonPropertyName("reactionTargetId")]
-        public string? ReactionTargetId { get; set; }
-
-        /// <summary>Grup mesajı: grubun JID'i (@g.us). Null ise 1:1 sohbet.</summary>
-        [System.Text.Json.Serialization.JsonPropertyName("groupJid")]
-        public string? GroupJid { get; set; }
-
-        /// <summary>Grup mesajı: mesajı gönderen üyenin JID'i.</summary>
-        [System.Text.Json.Serialization.JsonPropertyName("senderJid")]
-        public string? SenderJid { get; set; }
-
-        /// <summary>Grup mesajı: mesajı gönderen üyenin adı (pushName).</summary>
-        [System.Text.Json.Serialization.JsonPropertyName("senderName")]
-        public string? SenderName { get; set; }
+        public List<BridgeInboundMessage>? Messages { get; set; }
     }
 }

@@ -51,14 +51,21 @@ public class BOM
     /// Satir ekler. Duplicate (ayni ItemId+ConfigId) korumasi var; line invariant'i
     /// satirin kendisi tarafindan kontrol edilir (BOMLine.EnsureValid).
     /// Kullanici dostu mesajlar (rapor 2026-05-17 madde 3.11) — teknik ID ifsa edilmez.
+    /// 2026-07-05: allowDuplicate — sirket parametresi BOM_ALLOW_DUPLICATE_COMPONENTS
+    /// aciksa ayni bilesen farkli satirlarda tekrar edebilir (farkli fire/aciklama
+    /// pozisyonlari icin). Parametre okumasi Application katmanindadir; domain yalniz
+    /// bayragi uygular.
     /// </summary>
-    public void AddLine(BOMLine line)
+    public void AddLine(BOMLine line, bool allowDuplicate = false)
     {
         DomainException.ThrowIf(line is null, "Bilesen bilgisi eksik.");
         line!.EnsureValid();
-        DomainException.ThrowIf(
-            Lines.Any(l => l.ItemId == line.ItemId && (l.ConfigId ?? 0) == (line.ConfigId ?? 0)),
-            "Ayni bilesen birden fazla kez eklenemez. Lutfen bilesen listesini gozden geciriniz.");
+        if (!allowDuplicate)
+        {
+            DomainException.ThrowIf(
+                Lines.Any(l => l.ItemId == line.ItemId && (l.ConfigId ?? 0) == (line.ConfigId ?? 0)),
+                "Ayni bilesen birden fazla kez eklenemez. Lutfen bilesen listesini gozden geciriniz.");
+        }
         Lines.Add(line);
     }
 
@@ -89,8 +96,9 @@ public class BOM
     /// <summary>
     /// Tum BOM seviyesi invariant'lari — save oncesi son kontrol noktasi.
     /// Cycle check ayri (EnsureNoCycle), cunku repository delegate'i lazim.
+    /// allowDuplicateLines: BOM_ALLOW_DUPLICATE_COMPONENTS parametresi (bkz. AddLine).
     /// </summary>
-    public void EnsureValid()
+    public void EnsureValid(bool allowDuplicateLines = false)
     {
         DomainException.ThrowIf(ItemId <= 0,
             "Mamul secmek zorunludur. Listeden bir mamul kodu seciniz.");
@@ -99,12 +107,15 @@ public class BOM
 
         // Duplicate koruma — AddLine zaten ekleme aninda kontrol eder, ama service
         // entity'yi koleksiyon initializer ile dogrudan kursaydi AddLine cagrilmazdi.
-        // Bu defansif tarama o senaryoyu da kapsiyor.
-        var hasDup = Lines
-            .GroupBy(l => (l.ItemId, l.ConfigId ?? 0))
-            .Any(g => g.Count() > 1);
-        DomainException.ThrowIf(hasDup,
-            "Recetede ayni bilesen birden fazla kez var. Lutfen bilesen listesini gozden geciriniz.");
+        // Bu defansif tarama o senaryoyu da kapsiyor. (Parametre acikken atlanir.)
+        if (!allowDuplicateLines)
+        {
+            var hasDup = Lines
+                .GroupBy(l => (l.ItemId, l.ConfigId ?? 0))
+                .Any(g => g.Count() > 1);
+            DomainException.ThrowIf(hasDup,
+                "Recetede ayni bilesen birden fazla kez var. Lutfen bilesen listesini gozden geciriniz.");
+        }
 
         // Her satirin kendi invariant'i (negatif quantity/scrap, ItemId<=0 vs.)
         foreach (var line in Lines)

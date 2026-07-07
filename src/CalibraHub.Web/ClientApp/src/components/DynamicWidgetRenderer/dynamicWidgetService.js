@@ -36,6 +36,76 @@ export async function getRecord(formCode, recordId) {
 }
 
 /**
+ * Attachment widget tipi — dosya yukler. widgetDbId: WidgetMas.Id (int).
+ * Donus: { success, id, fileName, fileSize } — id, WidgetTra degerine yazilir.
+ */
+export async function uploadWidgetAttachment(widgetDbId, file) {
+  if (!widgetDbId || !file) throw new Error('widgetDbId ve file zorunlu')
+  var fd = new FormData()
+  fd.append('widgetId', String(widgetDbId))
+  fd.append('file', file)
+  var resp = await fetch(API_BASE + '/attachments', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: fd,
+  })
+  var data = null
+  try { data = await resp.json() } catch (e) { /* not json */ }
+  if (!resp.ok || !data || data.success === false) {
+    throw new Error((data && data.message) || ('upload HTTP ' + resp.status))
+  }
+  return data
+}
+
+/** Attachment meta (dosya adi/boyut) — deger yuklu kayit acilinca chip icin. */
+export async function getWidgetAttachmentMeta(id) {
+  if (!id) return null
+  var resp = await fetch(API_BASE + '/attachments/' + encodeURIComponent(id), {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { 'Accept': 'application/json' },
+  })
+  if (!resp.ok) return null
+  var data = await resp.json()
+  return data && data.success !== false ? data : null
+}
+
+/** Attachment soft-delete — deger degistirilince/temizlenince eski dosya. Best-effort. */
+export async function deleteWidgetAttachment(id) {
+  if (!id) return
+  try {
+    await fetch(API_BASE + '/attachments/' + encodeURIComponent(id), {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    })
+  } catch (e) { /* best-effort — deger zaten kopuyor */ }
+}
+
+/** Attachment indirme URL'i. inline=true → tarayicida onizleme (gorsel/pdf). */
+export function widgetAttachmentUrl(id, inline) {
+  return API_BASE + '/attachments/' + encodeURIComponent(id) + '/download' + (inline ? '?inline=1' : '')
+}
+
+/**
+ * Kaydin alan bazli degisiklik gecmisini (audit) ceker — yeni→eski sirali.
+ * Her satir: { id, widgetCode, label, oldValue, newValue, changedBy, changedAt, childRecordId }
+ * childRecordId dolu ise degisiklik bir grid kalemine aittir.
+ */
+export async function getRecordHistory(formCode, recordId) {
+  if (!formCode || !recordId) return []
+  var url = API_BASE + '/forms/' + encodeURIComponent(formCode) +
+            '/records/' + encodeURIComponent(recordId) + '/history'
+  var resp = await fetch(url, {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { 'Accept': 'application/json' },
+  })
+  if (!resp.ok) throw new Error('getRecordHistory HTTP ' + resp.status)
+  var data = await resp.json()
+  return Array.isArray(data) ? data : []
+}
+
+/**
  * Kaydin widget degerlerini + grid child satirlarini kaydeder.
  * Faz E — master-detail save payload shape:
  *   {

@@ -27,4 +27,7 @@ public sealed class CompanyConnectionRegistry : ICompanyConnectionRegistry
         connectionString = string.Empty;
         return false;
     }
+
+    /// <summary>Kayıtlı şirket ID'leri — anonim endpoint'lerin şirket taraması için (bridge-events vb.).</summary>
+    public IReadOnlyCollection<int> GetCompanyIds() => _map.Keys.ToArray();
 }

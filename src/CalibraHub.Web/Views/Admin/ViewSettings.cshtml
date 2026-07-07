@@ -17,12 +17,14 @@
     // Eski Razor SelectedScreenCode ITEMS, CONTACTS gibi FormMas kodlarina donusur.
     var legacyToFormCodeMap = new Dictionary<string, string>
     {
-        ["items"]        = "ITEMS",
+        // 2026-07-06: ITEMS formu Forms seed'inden kaldirildi (taze DB'lerde yok);
+        // malzeme kartlarinin widget formu MATERIAL_CARD_EDIT.
+        ["items"]        = "MATERIAL_CARD_EDIT",
         ["contacts"]      = "CONTACTS",
         ["documents"]          = "SALES_QUOTE_EDIT",
         ["product_configuration"] = "PRODUCT_CONFIG",
     };
-    var initialFormCode = "ITEMS";
+    var initialFormCode = "MATERIAL_CARD_EDIT";
     if (!string.IsNullOrWhiteSpace(Model.SelectedScreenCode) &&
         legacyToFormCodeMap.TryGetValue(Model.SelectedScreenCode, out var mappedCode))
     {
@@ -529,7 +531,7 @@
                     if (window.CalibraHub && window.CalibraHub.mountAdminWidgetRegistry) {
                         clearInterval(timer);
                         doMount();
-                    } else if (tries >= 30) {
+                    } else if (tries >= 150) {
                         clearInterval(timer);
                         showError('React bileseni yuklenemedi (timeout)');
                     }

@@ -40,7 +40,8 @@ import {
   Factory, Network, Coins, Users, Settings2,
   DollarSign, MapPin, Ruler, Tag, Settings,
   Plug, Mail, Database, Zap, UserCog,
-  BookOpen, Clock
+  BookOpen, Clock,
+  Warehouse, ArrowLeftRight, PackagePlus, PackageMinus, PackageCheck, ClipboardCheck
 } from 'lucide-react'
 
 /* ══════════════════════════════════════════════════════════════
@@ -122,6 +123,9 @@ var ICON_MAP = {
   Ruler: Ruler, Tag: Tag, Settings: Settings, Plug: Plug,
   Mail: Mail, Database: Database, Zap: Zap, UserCog: UserCog,
   BookOpen: BookOpen, Clock: Clock,
+  Warehouse: Warehouse, ArrowLeftRight: ArrowLeftRight,
+  PackagePlus: PackagePlus, PackageMinus: PackageMinus,
+  PackageCheck: PackageCheck, ClipboardCheck: ClipboardCheck,
 }
 
 function resolveIcon(name) {

@@ -663,6 +663,82 @@ public sealed class WhatsAppController : Controller
         public string? Role { get; set; }
     }
 
+    // ── Avatar (profil fotoğrafı) proxy — bridge /avatar, 6 saat in-memory cache ──
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string? Url, DateTime Ts)>
+        AvatarCache = new();
+    private static readonly TimeSpan AvatarTtl = TimeSpan.FromHours(6);
+
+    /// <summary>Kişinin WhatsApp profil fotoğrafı URL'ini döndürür (bridge üzerinden, cache'li).</summary>
+    [HttpGet("/Whatsapp/Avatar")]
+    public async Task<IActionResult> Avatar(
+        [FromServices] IWhatsAppConfigRepository configRepo,
+        [FromServices] IHttpClientFactory httpClientFactory,
+        [FromQuery] string phone,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return Json(new { url = (string?)null });
+
+        var key = SafePhone(phone);
+        if (AvatarCache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.Ts < AvatarTtl)
+            return Json(new { url = cached.Url });
+
+        var cfg = await configRepo.GetAsync(ct);
+        if (cfg is null || !cfg.IsEnabled || string.IsNullOrWhiteSpace(cfg.WebQrBridgeUrl))
+            return Json(new { url = (string?)null });
+
+        try
+        {
+            using var client = httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
+            var resp = await client.GetAsync(
+                cfg.WebQrBridgeUrl.TrimEnd('/') + "/avatar?phone=" + Uri.EscapeDataString(key), ct);
+            string? url = null;
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct);
+                url = json.TryGetProperty("url", out var u) && u.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? u.GetString() : null;
+            }
+            AvatarCache[key] = (url, DateTime.UtcNow);
+            return Json(new { url });
+        }
+        catch
+        {
+            AvatarCache[key] = (null, DateTime.UtcNow);
+            return Json(new { url = (string?)null });
+        }
+    }
+
+    /// <summary>Bridge bağlantı durumu — UI üst banner'ı için (ready/awaiting_qr/connecting/unreachable).</summary>
+    [HttpGet("/Whatsapp/BridgeStatus")]
+    public async Task<IActionResult> BridgeStatus(
+        [FromServices] IWhatsAppConfigRepository configRepo,
+        [FromServices] IHttpClientFactory httpClientFactory,
+        CancellationToken ct)
+    {
+        var cfg = await configRepo.GetAsync(ct);
+        if (cfg is null || !cfg.IsEnabled)
+            return Json(new { ok = false, state = "disabled" });
+        if (cfg.Provider != Domain.Entities.WhatsAppProviderType.WebQr)
+            return Json(new { ok = true, state = "cloud" }); // Cloud API — bridge yok, webhook push
+        if (string.IsNullOrWhiteSpace(cfg.WebQrBridgeUrl))
+            return Json(new { ok = false, state = "not_configured" });
+
+        try
+        {
+            using var client = httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(3);
+            var json = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(
+                cfg.WebQrBridgeUrl.TrimEnd('/') + "/status", ct);
+            var state = json.TryGetProperty("state", out var s) ? s.GetString() ?? "unknown" : "unknown";
+            return Json(new { ok = state == "ready", state });
+        }
+        catch
+        {
+            return Json(new { ok = false, state = "unreachable" });
+        }
+    }
+
     /// <summary>JID (@g.us, @s.whatsapp.net) içeriyorsa olduğu gibi bırak; normal telefon ise normalize et.</summary>
     private static string SafePhone(string input)
         => input.Contains('@') ? input : (WaPhoneNormalizer.Normalize(input) ?? string.Empty);

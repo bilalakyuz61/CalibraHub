@@ -16,7 +16,8 @@ public sealed record ImportTargetFieldDto(
     bool IsRequired,        // unvan zorunlu
     bool CanBeMatchKey,     // upsert anahtarı olabilir mi
     string? Hint = null,
-    IReadOnlyList<string>? AllowedValues = null);   // enum/bool → boş şablonda açılır liste + yardımcı sayfa
+    IReadOnlyList<string>? AllowedValues = null,    // enum/bool → boş şablonda açılır liste + yardımcı sayfa
+    int? MaxLength = null);                         // string alanda DB kolon uzunluğu → Excel metin-uzunluk doğrulaması
 
 // ── Bir şablondaki tek kolon eşlemesi ────────────────────────────────────
 public sealed record ImportColumnMapDto(

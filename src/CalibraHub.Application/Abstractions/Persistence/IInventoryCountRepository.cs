@@ -15,4 +15,19 @@ public interface IInventoryCountRepository
     /// Dönen değer: yazılan fark satırı sayısı.
     /// </summary>
     Task<int> ApplyAsync(int documentId, CancellationToken ct);
+
+    /// <summary>
+    /// Sayım bağlantısız bakiye sıfırlama — sayım deposundaki TÜM canlı bakiyeleri
+    /// (sayım kalemlerinden bağımsız) sıfırlayan Adjust satırlarını bu belgeye yazar.
+    /// Doğal idempotent: ikinci çağrıda bakiyeler zaten 0 olduğundan satır yazılmaz.
+    /// Sayım deposu seçilmemişse InvalidOperationException. Dönen değer: yazılan satır sayısı.
+    /// </summary>
+    Task<int> ZeroLocationBalancesAsync(int documentId, CancellationToken ct);
+
+    /// <summary>
+    /// Sayılmayan stokların sıfırlanması — sayım deposunda bakiyesi olup sayım kalemlerinde
+    /// YER ALMAYAN (ItemId + ConfigId eşleşmesi) stoklar için sıfırlama Adjust satırları yazar.
+    /// Doğal idempotent. Dönen değer: yazılan satır sayısı.
+    /// </summary>
+    Task<int> ZeroUncountedAsync(int documentId, CancellationToken ct);
 }

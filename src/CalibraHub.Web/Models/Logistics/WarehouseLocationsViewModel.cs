@@ -61,4 +61,7 @@ public sealed class LocationInput
     public bool IsMachinePark { get; set; }
 
     public bool IsStorageArea { get; set; }
+
+    // Eksi bakiye izni (üç durumlu): null=devral, true=izin (kontrol kapalı), false=engelle (kontrol açık).
+    public bool? AllowNegativeBalance { get; set; }
 }

@@ -10,4 +10,5 @@ public static class AttachmentFormIds
     public const int Asset           = 2;  // Varlık belgeleri
     public const int AssetImage      = 3;  // Varlık kapak görseli
     public const int AssetAssignment = 4;  // Zimmet imzası / belgesi
+    public const int WidgetAttachment = 5; // EAV widget 'attachment' tipi — RefId = WidgetMas.Id, kayit bagi WidgetTra.Value (attachment Id)
 }

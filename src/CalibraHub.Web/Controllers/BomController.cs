@@ -37,17 +37,32 @@ public sealed class BomController : Controller
     private readonly IWidgetService _widgetService;
     private readonly IPriceListService _priceListService;
     private readonly ICurrencyService _currencyService;
+    private readonly ICompanyParameterService _companyParameters;
 
     public BomController(
         ILogisticsConfigurationService logisticsConfigurationService,
         IWidgetService widgetService,
         IPriceListService priceListService,
-        ICurrencyService currencyService)
+        ICurrencyService currencyService,
+        ICompanyParameterService companyParameters)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _widgetService = widgetService;
         _priceListService = priceListService;
         _currencyService = currencyService;
+        _companyParameters = companyParameters;
+    }
+
+    /// <summary>
+    /// BOM_ALLOW_DUPLICATE_COMPONENTS sirket parametresi (Admin → Parametreler →
+    /// Üretim). true → ayni bilesen recetede farkli satirlarda tekrar edebilir.
+    /// Tanimsiz/false → mevcut davranis (UI birlestirir, domain mukerrer reddeder).
+    /// </summary>
+    private async Task<bool> GetAllowDuplicateComponentsAsync(CancellationToken ct)
+    {
+        var prms = await _companyParameters.ListAsync(ProductionParameters.FormCode, ct);
+        return prms.FirstOrDefault(p => p.ParamKey == ProductionParameters.BomAllowDuplicateComponentsKey)
+            ?.ParamValue == "true";
     }
 
     // ── Board config + helpers ────────────────────────────────────────
@@ -192,11 +207,13 @@ public sealed class BomController : Controller
     }
 
     [HttpGet]
-    public IActionResult BOMEdit(int? id, CancellationToken ct)
+    public async Task<IActionResult> BOMEdit(int? id, CancellationToken ct)
     {
         ViewData["BOMEditId"] = id ?? 0;
         ViewBag.Title = "Ürün Ağacı / Reçete Düzenle";
         ViewBag.BOMId = id is > 0 ? id.Value.ToString() : string.Empty;
+        // UI davranisi (birlestir vs. ayri satir) bu bayraga gore dallanir.
+        ViewBag.AllowDupComponents = await GetAllowDuplicateComponentsAsync(ct);
         return View("~/Views/Logistics/BOMEdit.cshtml");
     }
 
@@ -268,7 +285,9 @@ public sealed class BomController : Controller
 
         try
         {
-            var id = await _logisticsConfigurationService.SaveBOMAsync(request, CurrentUserId(), ct);
+            // Mukerrer bilesen izni server-side parametreden okunur — client'a guvenilmez.
+            var allowDup = await GetAllowDuplicateComponentsAsync(ct);
+            var id = await _logisticsConfigurationService.SaveBOMAsync(request, CurrentUserId(), ct, allowDup);
             return Ok(new { success = true, id });
         }
         catch (ArgumentException ex)

@@ -58,4 +58,7 @@ public sealed class SignalRWhatsAppNotifier : IWhatsAppRealTimeNotifier
 
     public Task ReactionUpdatedAsync(string targetMsgId, string phone, string? emoji, CancellationToken ct = default)
         => _hub.Clients.All.SendAsync("ReactionUpdated", new { targetMsgId, phone, emoji }, ct);
+
+    public Task MessageDeletedAsync(string messageId, string phone, CancellationToken ct = default)
+        => _hub.Clients.All.SendAsync("MessageDeleted", new { messageId, phone }, ct);
 }

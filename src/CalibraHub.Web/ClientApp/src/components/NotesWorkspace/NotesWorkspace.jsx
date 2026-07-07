@@ -51,7 +51,7 @@ import {
   RefreshCw, Download,
   Globe, Keyboard,
   Mic, PenLine, Camera,
-  Clock, ArrowUpAZ, ArrowDownAZ, CalendarDays
+  Clock, ArrowUpAZ, ArrowDownAZ, CalendarDays, FolderInput
 } from 'lucide-react'
 import * as api from '../../services/notesService'
 
@@ -163,6 +163,16 @@ function sortNotes(list, order) {
 
 var MAX_FOLDER_DEPTH = 5
 
+/* Klasör ağacını "Deftere Taşı" seçicisi için düz listeye indirger */
+function flattenFolders(folders, parentId, depth) {
+  var out = []
+  getChildren(folders, parentId).forEach(function (f) {
+    out.push({ id: f.id, name: f.name, depth: depth })
+    out = out.concat(flattenFolders(folders, f.id, depth + 1))
+  })
+  return out
+}
+
 function getFolderDepth(folders, folderId) {
   var depth = 0
   var current = folderId
@@ -194,6 +204,7 @@ function FolderTree(props) {
   var onRenameSubmit = props.onRenameSubmit
   var onRenameCancel = props.onRenameCancel
   var onFolderContextMenu = props.onFolderContextMenu
+  var onNoteDrop = props.onNoteDrop
 
   var items = getChildren(folders, parentId)
   if (items.length === 0) return null
@@ -214,6 +225,19 @@ function FolderTree(props) {
           data-allow-context-menu="1"
           onClick={function () { if (!isRenaming) onSelect(f.id) }}
           onContextMenu={function (e) { onFolderContextMenu && onFolderContextMenu(e, f.id, f.name) }}
+          onDragOver={function (e) {
+            if (!onNoteDrop) return
+            if ([].indexOf.call(e.dataTransfer.types, 'text/nw-note-id') === -1) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            e.currentTarget.classList.add('nw-drop-target')
+          }}
+          onDragLeave={function (e) { e.currentTarget.classList.remove('nw-drop-target') }}
+          onDrop={function (e) {
+            e.currentTarget.classList.remove('nw-drop-target')
+            var nid = e.dataTransfer.getData('text/nw-note-id')
+            if (nid && onNoteDrop) { e.preventDefault(); onNoteDrop(f.id, nid) }
+          }}
         >
           {hasChildren ? (
             <button
@@ -259,6 +283,7 @@ function FolderTree(props) {
             renamingRef={renamingRef} onRenameChange={onRenameChange}
             onRenameSubmit={onRenameSubmit} onRenameCancel={onRenameCancel}
             onFolderContextMenu={onFolderContextMenu}
+            onNoteDrop={onNoteDrop}
           />
         )}
       </div>
@@ -1028,6 +1053,10 @@ function NoteActionsMenu(props) {
         <Copy size={15} />
         <span>Notu Kopyala</span>
       </button>
+      <button className="nw-actions-item" onClick={props.onMoveTo}>
+        <FolderInput size={15} />
+        <span>Deftere Taşı</span>
+      </button>
       <div className="nw-actions-sep" />
       <button className="nw-actions-item" onClick={onExportPdf}>
         <FileDown size={15} />
@@ -1278,6 +1307,10 @@ export default function NotesWorkspace() {
   var [sortOrder, setSortOrder] = useState('updatedDesc') // updatedDesc | updatedAsc | titleAsc | titleDesc | createdDesc
   var [sortDropOpen, setSortDropOpen] = useState(false)
   var sortDropRef = useRef(null)
+  var [selectedTag, setSelectedTag] = useState(null)       // sidebar etiket filtresi
+  var [movePickerOpen, setMovePickerOpen] = useState(false) // "Deftere Taşı" klasör seçici
+  var [toast, setToast] = useState(null)                    // { msg, ok }
+  var toastTimerRef = useRef(null)
   var [contentLoadedTick, setContentLoadedTick] = useState(0) // not seçilince lazy-load tamamlandığında artar
   var [contentLoading, setContentLoading] = useState(false)   // içerik yüklenirken editor read-only
   var notesRef = useRef([])                                    // notes'un güncel değeri (stale closure önlemi)
@@ -1348,14 +1381,29 @@ export default function NotesWorkspace() {
     if (q) {
       return notes.filter(function (n) {
         if ((n.title || '').toLowerCase().indexOf(q) !== -1) return true
-        var plainContent = (n.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')
+        if ((n.tags || []).some(function (t) { return (t || '').toLowerCase().indexOf(q) !== -1 })) return true
+        var plainContent = (n.content || n.snippet || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')
         if (plainContent.toLowerCase().indexOf(q) !== -1) return true
         return (n.ocrText || '').toLowerCase().indexOf(q) !== -1
       })
     }
+    if (selectedTag) {
+      return notes.filter(function (n) { return (n.tags || []).indexOf(selectedTag) !== -1 })
+    }
     return selectedFolderId
       ? notes.filter(function (n) { return n.folderId === selectedFolderId })
       : notes
+  })()
+
+  // Sidebar etiket tarayıcısı — tüm notlardan benzersiz etiket + sayı
+  var allTags = (function () {
+    var map = {}
+    notes.forEach(function (n) {
+      (n.tags || []).forEach(function (t) { if (t) map[t] = (map[t] || 0) + 1 })
+    })
+    return Object.keys(map)
+      .sort(function (a, b) { return a.localeCompare(b, 'tr') })
+      .map(function (t) { return { tag: t, count: map[t] } })
   })()
 
   var selectedNote = notes.find(function (n) { return n.id === selectedNoteId }) || trashedNotes.find(function (n) { return n.id === selectedNoteId }) || null
@@ -1574,6 +1622,7 @@ export default function NotesWorkspace() {
             shareToken:                n.shareToken || null,
             shareIncludeAttachments:   !!n.shareIncludeAttachments,
             ocrText:                   n.ocrText    || null,
+            snippet:                   n.snippet    || null,  // server-side liste özeti
           }
         })
         setFolders(flds)
@@ -1752,7 +1801,7 @@ export default function NotesWorkspace() {
   }, [selectedNoteId, editor, unlockedNoteIds, contentLoadedTick])
 
   /* ── Handlers ─────────────────────────────────────── */
-  var handleSelectFolder = useCallback(function (fid) { setSelectedFolderId(fid) }, [])
+  var handleSelectFolder = useCallback(function (fid) { setSelectedFolderId(fid); setSelectedTag(null) }, [])
 
   var handleToggleFolder = useCallback(function (fid) {
     setExpandedFolders(function (prev) {
@@ -1816,6 +1865,7 @@ export default function NotesWorkspace() {
               linkedEntityLabel: n.linkedEntityLabel || null,
               visibility:        n.visibility        || 0,
               isOwner:           n.isOwner !== false,
+              snippet:           n.snippet           || null,
             }
           })
           setFolders(flds)
@@ -2539,8 +2589,9 @@ export default function NotesWorkspace() {
 
   // Helper: mesaj bar (mevcut showMsg yoksa basit alert fallback)
   function showMsg(msg, ok) {
-    // NotesWorkspace'te toast yoksa console'a düş; editor üstü minik toast ileride eklenebilir
-    console.log((ok ? '[OK] ' : '[ERR] ') + msg)
+    setToast({ msg: msg, ok: ok !== false })
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(function () { setToast(null) }, 2600)
   }
 
   /* ── Insert handler (Tiptap commands) ──────────────── */
@@ -2726,6 +2777,24 @@ export default function NotesWorkspace() {
       .catch(function (e) { console.error('[cloneNote]', e) })
   }, [selectedNoteId])
 
+  /* ── Deftere taşı (menü + sürükle-bırak ortak yolu) ──── */
+  var handleMoveNoteTo = useCallback(function (noteId, folderId) {
+    var target = folderId || null
+    var note = notesRef.current.find(function (x) { return x.id === noteId })
+    if (!note || (note.folderId || null) === target) return
+    api.moveNote(noteId, target)
+      .then(function (res) {
+        if (res && res.success === false) { showMsg(res.message || 'Not taşınamadı.', false); return }
+        setNotes(function (prev) {
+          return prev.map(function (x) { return x.id === noteId ? { ...x, folderId: target } : x })
+        })
+        var fname = target
+          ? ((folders.find(function (f) { return f.id === target }) || {}).name || 'Defter')
+          : 'Tüm Notlar'
+        showMsg('Not taşındı: ' + fname, true)
+      })
+      .catch(function () { showMsg('Not taşınamadı.', false) })
+  }, [folders])
 
   /* ── Tags ────────────────────────────────────────────── */
   var handleTagAdd = useCallback(function (rawTag) {
@@ -2925,8 +2994,20 @@ export default function NotesWorkspace() {
         {/* Üst Navigasyon */}
         <div className="nw-sidebar-nav">
           <div
-            className={'nw-sidebar-nav-item' + (selectedFolderId === null && !searchQuery ? ' nw-sidebar-nav-item--active' : '')}
+            className={'nw-sidebar-nav-item' + (selectedFolderId === null && !searchQuery && !selectedTag ? ' nw-sidebar-nav-item--active' : '')}
             onClick={function () { handleSelectFolder(null); setSearchQuery('') }}
+            onDragOver={function (e) {
+              if ([].indexOf.call(e.dataTransfer.types, 'text/nw-note-id') === -1) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              e.currentTarget.classList.add('nw-drop-target')
+            }}
+            onDragLeave={function (e) { e.currentTarget.classList.remove('nw-drop-target') }}
+            onDrop={function (e) {
+              e.currentTarget.classList.remove('nw-drop-target')
+              var nid = e.dataTransfer.getData('text/nw-note-id')
+              if (nid) { e.preventDefault(); handleMoveNoteTo(nid, null) }
+            }}
           >
             <Home size={14} className="nw-folder-ico" />
             <span className="nw-folder-label">Tüm Notlar</span>
@@ -2954,7 +3035,35 @@ export default function NotesWorkspace() {
             onRenameSubmit={handleRenameSubmit}
             onRenameCancel={handleRenameCancel}
             onFolderContextMenu={handleFolderContextMenu}
+            onNoteDrop={function (folderId, noteId) { handleMoveNoteTo(noteId, folderId) }}
           />
+
+          {/* Etiket tarayıcı — Evernote tarzı */}
+          {allTags.length > 0 && (
+            <>
+              <div className="nw-sidebar-section-hdr nw-sidebar-section-hdr--tags">
+                <span>Etiketler</span>
+              </div>
+              {allTags.map(function (t) {
+                var tagActive = selectedTag === t.tag
+                return (
+                  <div
+                    key={t.tag}
+                    className={'nw-tag-item' + (tagActive ? ' nw-tag-item--active' : '')}
+                    onClick={function () {
+                      setSelectedTag(function (p) { return p === t.tag ? null : t.tag })
+                      setSelectedFolderId(null)
+                      setSearchQuery('')
+                    }}
+                  >
+                    <Tag size={13} className="nw-folder-ico" />
+                    <span className="nw-folder-label">{t.tag}</span>
+                    <span className="nw-folder-count">{t.count}</span>
+                  </div>
+                )
+              })}
+            </>
+          )}
         </div>
 
         {/* Alt: Ayarlar + Çöp Kutusu */}
@@ -2999,6 +3108,18 @@ export default function NotesWorkspace() {
           <div
             className={'nw-folder-item nw-folder-item--trash' + (selectedFolderId === '__trash' ? ' nw-folder-item--active-trash' : '')}
             onClick={function () { handleSelectFolder('__trash') }}
+            onDragOver={function (e) {
+              if ([].indexOf.call(e.dataTransfer.types, 'text/nw-note-id') === -1) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              e.currentTarget.classList.add('nw-drop-target')
+            }}
+            onDragLeave={function (e) { e.currentTarget.classList.remove('nw-drop-target') }}
+            onDrop={function (e) {
+              e.currentTarget.classList.remove('nw-drop-target')
+              var nid = e.dataTransfer.getData('text/nw-note-id')
+              if (nid) { e.preventDefault(); handleDeleteNote(nid) }
+            }}
           >
             <span style={{ width: 18, flexShrink: 0 }} />
             <Trash2 size={15} className="nw-folder-ico" />
@@ -3014,10 +3135,21 @@ export default function NotesWorkspace() {
             <h4 className="nw-list-title">
               {selectedFolderId === '__trash'
                 ? 'Çöp Kutusu'
-                : selectedFolderId
-                  ? (folders.find(function (f) { return f.id === selectedFolderId }) || {}).name || 'Notlar'
-                  : 'Tüm Notlar'}
+                : selectedTag
+                  ? '#' + selectedTag
+                  : selectedFolderId
+                    ? (folders.find(function (f) { return f.id === selectedFolderId }) || {}).name || 'Notlar'
+                    : 'Tüm Notlar'}
             </h4>
+            {selectedTag && (
+              <button
+                className="nw-tag-clear-btn"
+                title="Etiket filtresini kaldır"
+                onClick={function () { setSelectedTag(null) }}
+              >
+                <X size={11} />
+              </button>
+            )}
             {filteredNotes.length > 0 && (
               <span className="nw-list-count">{filteredNotes.length}</span>
             )}
@@ -3103,6 +3235,11 @@ export default function NotesWorkspace() {
                     key={n.id}
                     className={'nw-note-card' + (active ? ' nw-note-card--active' : '') + (n.isPinned && !isTrash ? ' nw-note-card--pinned' : '') + (isTrash ? ' nw-note-card--trash' : '')}
                     onClick={function () { handleSelectNote(n.id) }}
+                    draggable={!isTrash}
+                    onDragStart={function (e) {
+                      e.dataTransfer.setData('text/nw-note-id', n.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
                   >
                     <div className="nw-note-card-top">
                       <h5 className="nw-note-card-title">{n.title || 'Başlıksız Not'}</h5>
@@ -3157,7 +3294,33 @@ export default function NotesWorkspace() {
                     {n.linkedEntityLabel && (
                       <span className="nw-list-entity-badge">{n.linkedEntityLabel}</span>
                     )}
-                    <div className="nw-note-card-snippet">{snippet(n.content, 120, n.isFullyEncrypted)}</div>
+                    <div className="nw-note-card-snippet">
+                      {snippet(n.content, 120, n.isFullyEncrypted) || (n.snippet || '').slice(0, 120)}
+                    </div>
+                    {!isTrash && (n.tags || []).length > 0 && (
+                      <div className="nw-note-card-tags">
+                        {n.tags.slice(0, 3).map(function (t) {
+                          return (
+                            <span
+                              key={t}
+                              className="nw-card-tag"
+                              title={'#' + t + ' etiketine filtrele'}
+                              onClick={function (e) {
+                                e.stopPropagation()
+                                setSelectedTag(t)
+                                setSelectedFolderId(null)
+                                setSearchQuery('')
+                              }}
+                            >
+                              {t}
+                            </span>
+                          )
+                        })}
+                        {n.tags.length > 3 && (
+                          <span className="nw-card-tag nw-card-tag--more">+{n.tags.length - 3}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })
@@ -3247,6 +3410,7 @@ export default function NotesWorkspace() {
                       onReminders={function () { setActionsMenuOpen(false); setRemindersOpen(true) }}
                       onTogglePin={function () { setActionsMenuOpen(false); handleTogglePin(selectedNoteId) }}
                       onClone={handleCloneNote}
+                      onMoveTo={function () { setActionsMenuOpen(false); setMovePickerOpen(true) }}
                       reminderCount={reminders.length}
                       isPinned={selectedNote && selectedNote.isPinned}
                       onEncryptWhole={handleOpenEncryptWholeNote}
@@ -3654,6 +3818,49 @@ export default function NotesWorkspace() {
             <Trash2 size={14} /> Tabloyu sil
           </button>
         </div>
+      )}
+
+      {/* ═══ Deftere Taşı seçicisi ═══ */}
+      {movePickerOpen && selectedNote && (
+        <div className="nw-enc-backdrop" onMouseDown={function () { setMovePickerOpen(false) }}>
+          <div className="nw-move-card" onMouseDown={function (e) { e.stopPropagation() }}>
+            <div className="nw-move-hdr">
+              <FolderInput size={16} />
+              <span>Deftere Taşı</span>
+            </div>
+            <div className="nw-move-list">
+              <button
+                className={'nw-move-item' + (!selectedNote.folderId ? ' nw-move-item--current' : '')}
+                disabled={!selectedNote.folderId}
+                onClick={function () { handleMoveNoteTo(selectedNote.id, null); setMovePickerOpen(false) }}
+              >
+                <Home size={14} />
+                <span>Tüm Notlar (deftersiz)</span>
+              </button>
+              {flattenFolders(folders, null, 0).map(function (f) {
+                var isCurrent = selectedNote.folderId === f.id
+                return (
+                  <button
+                    key={f.id}
+                    className={'nw-move-item' + (isCurrent ? ' nw-move-item--current' : '')}
+                    disabled={isCurrent}
+                    style={{ paddingLeft: 10 + f.depth * 16 }}
+                    onClick={function () { handleMoveNoteTo(selectedNote.id, f.id); setMovePickerOpen(false) }}
+                  >
+                    <FolderClosed size={14} />
+                    <span>{f.name}</span>
+                    {isCurrent && <span className="nw-move-current-label">mevcut</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Toast ═══ */}
+      {toast && (
+        <div className={'nw-toast' + (toast.ok ? '' : ' nw-toast--err')}>{toast.msg}</div>
       )}
 
       {/* ═══ Sifreleme Modallari (Mod 1 + Mod 2) ═══ */}

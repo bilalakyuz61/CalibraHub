@@ -15,9 +15,9 @@
  * ayri FormMas kaydidir. Grup hiyerarsisi WidgetMas.ParentId self-FK ile kurulur:
  * DataType='group' olan satirlar root, field'lar ParentId ile onlara baglanir.
  */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus, Download, Upload } from 'lucide-react'
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 import WidgetBuilderForm from './WidgetBuilderForm'
 import WidgetRegistryList from './WidgetRegistryList'
@@ -29,6 +29,9 @@ import {
   getSchema as getSchemaApi,
   upsertWidget as upsertWidgetApi,
   deleteWidget as deleteWidgetApi,
+  patchSortOrders as patchSortOrdersApi,
+  patchWidgetActive as patchWidgetActiveApi,
+  patchIsPlainField as patchIsPlainFieldApi,
 } from './adminRegistryService'
 import { discoverFields as discoverFieldsApi, getFieldsByForm as getFieldsByFormApi } from '../../services/fieldSettingService'
 
@@ -43,7 +46,9 @@ var FORM_PARENTS = {
 }
 
 export default function AdminWidgetRegistryPanel(props) {
-  var initialFormCode = props.initialFormCode || props.screenCode || 'ITEMS'
+  // Fallback MATERIAL_CARD_EDIT — ITEMS formu artik seed edilmiyor (2026-07-06);
+  // liste'de bulunamazsa boot() zaten formList[0]'a duser.
+  var initialFormCode = props.initialFormCode || props.screenCode || 'MATERIAL_CARD_EDIT'
 
   // ── State ─────────────────────────────────
   var [forms, setForms]                 = useState([])      // whitelist form katalogu
@@ -68,6 +73,10 @@ export default function AdminWidgetRegistryPanel(props) {
   var [searchQuery, setSearchQuery]     = useState('')
   var [pendingDelete, setPendingDelete] = useState(null)   // { id, label } — silme onay modalı
   var [groupModalOpen, setGroupModalOpen] = useState(false)
+  // Tanim transport — { package, fileName } dolu ise onay modalı acik
+  var [importPending, setImportPending] = useState(null)
+  var [importing, setImporting] = useState(false)
+  var importFileRef = useRef(null)
 
   // Sol sidebar arama
   var [sidebarSearch, setSidebarSearch] = useState('')
@@ -90,6 +99,15 @@ export default function AdminWidgetRegistryPanel(props) {
     setTimeout(function() { setToast(null) }, 3200)
   }
 
+  // ── Schema yukleme yaris korumasi ──────────────
+  // Her loadSchemaFor cagrisi sayaci arttirir; async adimlar arasinda sayac
+  // degistiyse o cagri "bayat" demektir ve state'e yazmaz. Onceki cancelledFlag
+  // parametresi primitive by-value kopyalandigi icin HICBIR ZAMAN true olmuyordu:
+  // hizli form gecisinde eski formun yavas gelen yaniti yeni formun alanlarini
+  // eziyordu (stale data). Unmount'ta da sayac arttirilir — tum in-flight
+  // yuklemeler gecersizlesir.
+  var loadSeqRef = useRef(0)
+
   // ── Initial load: forms + initial schema ──
   useEffect(function() {
     var cancelled = false
@@ -106,7 +124,7 @@ export default function AdminWidgetRegistryPanel(props) {
           setLoadingSchema(false)
           return
         }
-        await loadSchemaFor(startForm.formCode, cancelled, formList)
+        await loadSchemaFor(startForm.formCode, formList)
       } catch (e) {
         if (!cancelled) {
           showToast('error', 'Formlar yuklenemedi: ' + e.message)
@@ -115,7 +133,10 @@ export default function AdminWidgetRegistryPanel(props) {
       }
     }
     boot()
-    return function() { cancelled = true }
+    return function() {
+      cancelled = true
+      loadSeqRef.current++   // in-flight loadSchemaFor cagrilarini gecersiz kil
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -124,11 +145,14 @@ export default function AdminWidgetRegistryPanel(props) {
   // boot() ilk çağrıda formList'i argüman olarak geçer; sonraki çağrılarda
   // (kullanıcı form değiştirince) forms state günceli olduğu için 2. parametre
   // olarak yeniden geçilir.
-  async function loadSchemaFor(formCode, cancelledFlag, formList) {
+  async function loadSchemaFor(formCode, formList) {
+    var mySeq = ++loadSeqRef.current
+    function isStale() { return mySeq !== loadSeqRef.current }
+
     setLoadingSchema(true)
     try {
       var schema = await getSchemaApi(formCode)
-      if (cancelledFlag) return
+      if (isStale()) return
       setCurrentFormId(schema.formId)
       // Kullanicinin sectigi formCode'u state'e yazariz; schema response'undan
       // gelen alan farkli case/null olursa form beklenmedik sekilde degismesin.
@@ -159,7 +183,7 @@ export default function AdminWidgetRegistryPanel(props) {
             return []
           }),
         ]).then(function(results) {
-          if (cancelledFlag) return
+          if (isStale()) return
           var cols = Array.isArray(results[0]) ? results[0] : []
           var mapped = Array.isArray(results[1]) ? results[1] : []
           // fieldKey → fieldLabel haritasi (case-insensitive)
@@ -190,7 +214,7 @@ export default function AdminWidgetRegistryPanel(props) {
           var pCode = parentCodes[i]
           try {
             var pSchema = await getSchemaApi(pCode)
-            if (cancelledFlag) return
+            if (isStale()) return
             var parentFormLabel = pSchema.formLabel || pSchema.formCode || pCode
             ;(pSchema.widgets || []).forEach(function(w) {
               // Group tipini dahil etme — rule'da kullanilamaz
@@ -206,19 +230,22 @@ export default function AdminWidgetRegistryPanel(props) {
             console.warn('[AdminRegistry] Parent schema load failed:', pCode, e)
           }
         }
+        if (isStale()) return
         setParentFormWidgets(parentWidgetsAccum)
       }
     } catch (e) {
-      showToast('error', 'Schema yuklenemedi: ' + e.message)
+      if (!isStale()) showToast('error', 'Schema yuklenemedi: ' + e.message)
     } finally {
-      setLoadingSchema(false)
+      // Bayat cagri loading state'e dokunmaz — daha yeni cagri kendi yasam
+      // dongusunu yonetiyor; erken false yazmak yarim icerigi "yuklendi" gosterir.
+      if (!isStale()) setLoadingSchema(false)
     }
   }
 
   /* ── Form (modul) degistirme — page reload YOK ── */
   var handleFormChange = useCallback(function(newFormCode) {
     if (!newFormCode || newFormCode === currentFormCode) return
-    loadSchemaFor(newFormCode, false, forms)
+    loadSchemaFor(newFormCode, forms)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFormCode, forms])
 
@@ -255,8 +282,11 @@ export default function AdminWidgetRegistryPanel(props) {
         // renderer CSS grid-column span'ine cevirir.
         colSpan: (typeof payload.colSpan === 'number' && payload.colSpan >= 1 && payload.colSpan <= 24)
           ? payload.colSpan : null,
-        // Etiket gorunum stili — 'standard' (default) veya 'modern' (floating).
-        labelStyle: payload.labelStyle === 'modern' ? 'modern' : 'standard',
+        // Etiket gorunum stili — 'standard' (default) / 'modern' (floating) / 'inline' (sade).
+        // Dikkat: onceki surum 'inline'i whitelist'e almadigi icin kullanicinin
+        // "Sade" secimi sessizce 'standard'a donusuyordu (WidgetBuilderForm 3 deger yollar).
+        labelStyle: (payload.labelStyle === 'modern' || payload.labelStyle === 'inline')
+          ? payload.labelStyle : 'standard',
       }
 
       var result = await upsertWidgetApi(apiPayload)
@@ -266,7 +296,7 @@ export default function AdminWidgetRegistryPanel(props) {
       }
 
       // Schema'yi yeniden cek (id generated + server validation sonuclari icin)
-      await loadSchemaFor(currentFormCode, false)
+      await loadSchemaFor(currentFormCode)
       try {
         localStorage.setItem('calibra:widget-schema-changed', String(Date.now()))
         // Aynı tab'da listener'lari da uyandir (storage event sadece DIGER tab'lere gider).
@@ -281,47 +311,17 @@ export default function AdminWidgetRegistryPanel(props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFormId, currentFormCode, widgets])
 
-  // lookup → metadata.guideCode, grid → metadata.childFormCode olarak saklanir;
-  // options dizisi null gelir. Upsert payload'u icin dogru options'i cikar.
-  function resolveWidgetOptions(widget) {
-    var dt = String(widget.dataType || '').toLowerCase()
-    if (dt === 'lookup') {
-      var gc = widget.metadata && widget.metadata.guideCode
-      return gc ? [gc] : widget.options || null
-    }
-    if (dt === 'grid') {
-      var cfc = widget.metadata && widget.metadata.childFormCode
-      return cfc ? [cfc] : widget.options || null
-    }
-    return widget.options || null
-  }
-
   /* ── Toggle aktif/pasif ─────────────────────── */
+  // PATCH /widgets/{id}/active — yalnizca IsActive degisir. Onceki surum tam
+  // upsert gonderiyordu; lookup/grid/rehber-bagli widget'larda OptionsJSON'un
+  // client tarafinda yeniden insasi kayipliydi (guideConfig/displayScope/
+  // constraints kayboluyordu, text+rehber baglantisi tamamen siliniyordu).
   var handleToggle = useCallback(async function(widget) {
     var wid = widget.id
     setSavingId(wid)
     try {
       var nextActive = !(widget.isActive !== false)
-      var result = await upsertWidgetApi({
-        id: wid,
-        formId: currentFormId,
-        parentId: widget.parentId != null ? widget.parentId : null,
-        widgetCode: widget.widgetCode,
-        label: widget.label,
-        dataType: widget.dataType,
-        maxLength: widget.maxLength != null ? widget.maxLength : null,
-        minLength: widget.minLength != null ? widget.minLength : null,
-        expectedLength: widget.expectedLength != null ? widget.expectedLength : null,
-        minValue: widget.minValue != null ? widget.minValue : null,
-        maxValue: widget.maxValue != null ? widget.maxValue : null,
-        sortOrder: widget.sortOrder || 0,
-        options: resolveWidgetOptions(widget),
-        isActive: nextActive,
-        isPlainField: widget.isPlainField === true,
-        isRequired: widget.isRequired === true,
-        isPermissionControlled: widget.isPermissionControlled === true,
-        rules: widget.rules || null,     // Faz G — mevcut kurallari koru (toggle sadece aktif/pasif)
-      })
+      var result = await patchWidgetActiveApi(wid, nextActive)
       if (!result.success) {
         showToast('error', 'Durum degistirilemedi: ' + (result.message || ''))
         return
@@ -404,7 +404,7 @@ export default function AdminWidgetRegistryPanel(props) {
     }
 
     // Schema yeniden cek ki gercek id alinsin
-    await loadSchemaFor(currentFormCode, false)
+    await loadSchemaFor(currentFormCode)
     showToast('success', 'Grup olusturuldu: ' + payload.groupLabel)
 
     // WidgetBuilderForm bu grubu secsin diye dondur — ama yeni id schema reload
@@ -415,34 +415,27 @@ export default function AdminWidgetRegistryPanel(props) {
   }, [currentFormId, currentFormCode, widgets])
 
   /* ── "Sadece Alan" toggle ──────────────────────── */
+  // PATCH /widgets/{id}/is-plain-field — backend LabelStyle otoriter alanini
+  // gunceller (true → 'inline', false → inline ise 'standard') ve IsPlainField'i
+  // senkron tutar. Onceki tam upsert lookup/grid metadata'sini kaybediyordu.
   var handlePlainFieldToggle = useCallback(async function(widget) {
     var wid = widget.id
     setSavingId(wid)
     try {
       var nextPlain = !(widget.isPlainField === true)
-      var result = await upsertWidgetApi({
-        id: wid,
-        formId: currentFormId,
-        parentId: widget.parentId != null ? widget.parentId : null,
-        widgetCode: widget.widgetCode,
-        label: widget.label,
-        dataType: widget.dataType,
-        maxLength: widget.maxLength != null ? widget.maxLength : null,
-        sortOrder: widget.sortOrder || 0,
-        options: resolveWidgetOptions(widget),
-        isActive: widget.isActive !== false,
-        isPlainField: nextPlain,
-        isRequired: widget.isRequired === true,
-        isPermissionControlled: widget.isPermissionControlled === true,
-        rules: widget.rules || null,
-      })
+      var result = await patchIsPlainFieldApi(wid, nextPlain)
       if (!result.success) {
         showToast('error', 'Durum degistirilemedi: ' + (result.message || ''))
         return
       }
       setWidgets(function(prev) {
         return prev.map(function(w) {
-          return w.id === wid ? Object.assign({}, w, { isPlainField: nextPlain }) : w
+          if (w.id !== wid) return w
+          // Backend'in LabelStyle senkron mantigini lokalde aynala
+          var nextLs = nextPlain
+            ? 'inline'
+            : (String(w.labelStyle || '').toLowerCase() === 'inline' ? 'standard' : (w.labelStyle || 'standard'))
+          return Object.assign({}, w, { isPlainField: nextPlain, labelStyle: nextLs })
         })
       })
       showToast('success', nextPlain ? '"Düz alan" modu aktif' : '"Gruplu" moda geri döndü')
@@ -451,7 +444,7 @@ export default function AdminWidgetRegistryPanel(props) {
     } finally {
       setSavingId(null)
     }
-  }, [currentFormId])
+  }, [])
 
   /* ── "Listede Göster" toggle — kaldirildi, widget aktifse her yerde gorunur ── */
   var handleListableToggle = useCallback(function() {}, [])
@@ -471,112 +464,143 @@ export default function AdminWidgetRegistryPanel(props) {
   var editingId = editingField ? editingField.id : null
 
   /* ── Reorder — iki widget'in sortOrder'ini takas et ──── */
-  // Grup sirasini swap et — sortOrder degerlerini iki grup arasinda yer
-  // degistirir. UpsertWidget required alanlari: WidgetCode, Label, DataType,
-  // SortOrder, FormId. Raw widget objesinden alip yeni sortOrder ile gonderiyoruz.
-  var handleGroupReorder = useCallback(async function(groupA, groupB) {
-    if (!groupA || !groupB || !currentFormId) return
-    var rawA = widgets.find(function(w) { return w.id === groupA.id })
-    var rawB = widgets.find(function(w) { return w.id === groupB.id })
-    if (!rawA || !rawB) {
-      console.warn('[GroupReorder] raw widget bulunamadi', { groupA, groupB })
-      return
-    }
-
-    var sortA = rawA.sortOrder != null ? rawA.sortOrder : 0
-    var sortB = rawB.sortOrder != null ? rawB.sortOrder : 0
-    if (sortA === sortB) sortB = sortA + 1
-
-    // Optimistic UI update
-    setWidgets(function(prev) {
-      return prev.map(function(w) {
-        if (w.id === rawA.id) return Object.assign({}, w, { sortOrder: sortB })
-        if (w.id === rawB.id) return Object.assign({}, w, { sortOrder: sortA })
-        return w
-      })
-    })
-
-    function buildPayload(raw, newSort) {
-      return {
-        id: raw.id,
-        formId: currentFormId,
-        parentId: raw.parentId != null ? raw.parentId : null,
-        widgetCode: raw.widgetCode,
-        label: raw.label,
-        dataType: raw.dataType,
-        maxLength: raw.maxLength != null ? raw.maxLength : null,
-        sortOrder: newSort,
-        options: Array.isArray(raw.options) ? raw.options.map(function(o){ return typeof o === 'string' ? o : (o.optionCode || o.code || '') }).filter(Boolean) : null,
-        isActive: raw.isActive !== false,
-        rules: raw.rules || null,
-        isPlainField: !!raw.isPlainField,
-        isRequired: !!raw.isRequired,
-        isPermissionControlled: !!raw.isPermissionControlled,
-        minLength: raw.minLength != null ? raw.minLength : null,
-        expectedLength: raw.expectedLength != null ? raw.expectedLength : null,
-        minValue: raw.minValue != null ? raw.minValue : null,
-        maxValue: raw.maxValue != null ? raw.maxValue : null,
-        colorType: raw.colorType || 0,
-        colorValue: raw.colorValue || null,
-        colSpan: raw.colSpan != null ? raw.colSpan : null,
-        labelStyle: raw.labelStyle || null
-      }
-    }
-
-    try {
-      var resA = await upsertWidgetApi(buildPayload(rawA, sortB))
-      console.debug('[GroupReorder] A->', resA)
-      var resB = await upsertWidgetApi(buildPayload(rawB, sortA))
-      console.debug('[GroupReorder] B->', resB)
-      if (!resA || resA.success === false) throw new Error((resA && resA.message) || 'Grup A kaydedilemedi')
-      if (!resB || resB.success === false) throw new Error((resB && resB.message) || 'Grup B kaydedilemedi')
-    } catch (e) {
-      console.error('[GroupReorder] error:', e)
-      // Rollback
-      setWidgets(function(prev) {
-        return prev.map(function(w) {
-          if (w.id === rawA.id) return Object.assign({}, w, { sortOrder: sortA })
-          if (w.id === rawB.id) return Object.assign({}, w, { sortOrder: sortB })
-          return w
-        })
-      })
-    }
-  }, [currentFormId, widgets])
-
-  var handleReorder = useCallback(async function(fieldA, fieldB) {
-    if (!fieldA || !fieldB || !currentFormId) return
-    var sortA = fieldA.sortOrder != null ? fieldA.sortOrder : 0
-    var sortB = fieldB.sortOrder != null ? fieldB.sortOrder : 0
+  // PATCH /widgets/sort-orders — yalnizca siralama degisir. Onceki surum tam
+  // upsert gonderiyordu: lookup/grid widget'larda schema'daki options=null
+  // oldugu icin backend "guideCode zorunludur" hatasi veriyordu (reorder hep
+  // rollback oluyordu) ve dropdown options'in client-side yeniden insasi
+  // (o.optionCode || o.code — yanlis property adlari) veri kaybina acikti.
+  // Ortak yardimci: swap + optimistic update + hata durumunda rollback.
+  var swapSortOrders = useCallback(async function(itemA, itemB, logTag) {
+    var sortA = itemA.sortOrder != null ? itemA.sortOrder : 0
+    var sortB = itemB.sortOrder != null ? itemB.sortOrder : 0
     // Ayni sortOrder ise birini 1 artir
     if (sortA === sortB) sortB = sortA + 1
 
     // Optimistic UI update
     setWidgets(function(prev) {
       return prev.map(function(w) {
-        if (w.id === fieldA.id) return Object.assign({}, w, { sortOrder: sortB })
-        if (w.id === fieldB.id) return Object.assign({}, w, { sortOrder: sortA })
+        if (w.id === itemA.id) return Object.assign({}, w, { sortOrder: sortB })
+        if (w.id === itemB.id) return Object.assign({}, w, { sortOrder: sortA })
         return w
       })
     })
 
-    // Backend'e her iki widget'i da kaydet
     try {
-      await Promise.all([
-        upsertWidgetApi(Object.assign({}, fieldA, { formId: currentFormId, sortOrder: sortB })),
-        upsertWidgetApi(Object.assign({}, fieldB, { formId: currentFormId, sortOrder: sortA })),
+      var result = await patchSortOrdersApi([
+        { id: itemA.id, sortOrder: sortB },
+        { id: itemB.id, sortOrder: sortA },
       ])
+      if (!result.success) throw new Error(result.message || 'Siralama kaydedilemedi')
     } catch (e) {
-      console.error('[Reorder] error:', e)
-      // Hata olursa geri al
+      console.error('[' + logTag + '] error:', e)
+      showToast('error', 'Sıralama kaydedilemedi: ' + (e.message || ''))
+      // Rollback
       setWidgets(function(prev) {
         return prev.map(function(w) {
-          if (w.id === fieldA.id) return Object.assign({}, w, { sortOrder: sortA })
-          if (w.id === fieldB.id) return Object.assign({}, w, { sortOrder: sortB })
+          if (w.id === itemA.id) return Object.assign({}, w, { sortOrder: sortA })
+          if (w.id === itemB.id) return Object.assign({}, w, { sortOrder: sortB })
           return w
         })
       })
     }
-  }, [currentFormId])
+  }, [])
+
+  var handleGroupReorder = useCallback(function(groupA, groupB) {
+    if (!groupA || !groupB) return
+    var rawA = widgets.find(function(w) { return w.id === groupA.id })
+    var rawB = widgets.find(function(w) { return w.id === groupB.id })
+    if (!rawA || !rawB) {
+      console.warn('[GroupReorder] raw widget bulunamadi', { groupA, groupB })
+      return
+    }
+    return swapSortOrders(rawA, rawB, 'GroupReorder')
+  }, [widgets, swapSortOrders])
+
+  var handleReorder = useCallback(function(fieldA, fieldB) {
+    if (!fieldA || !fieldB) return
+    return swapSortOrders(fieldA, fieldB, 'Reorder')
+  }, [swapSortOrders])
+
+  /* ── Tanim transport: dışa/içe aktar ────────────────────────
+     Export: formun custom widget tanimlari JSON dosyasi olarak iner
+     (sistem alanlari haric). Import: dosya secilir → client-side JSON
+     dogrulama → onay modali → POST → WidgetCode uzerinden upsert. */
+  async function handleExportDefinitions() {
+    if (!currentFormCode) return
+    try {
+      var resp = await fetch('/api/widgets/forms/' + encodeURIComponent(currentFormCode) + '/export', {
+        credentials: 'same-origin',
+      })
+      if (!resp.ok) throw new Error('HTTP ' + resp.status)
+      var blob = await resp.blob()
+      var url = URL.createObjectURL(blob)
+      var a = document.createElement('a')
+      a.href = url
+      a.download = 'calibra-widgets-' + currentFormCode.toLowerCase() + '.json'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(function() { URL.revokeObjectURL(url) }, 2000)
+      showToast('success', 'Widget tanımları dışa aktarıldı')
+    } catch (e) {
+      showToast('error', 'Dışa aktarım hatası: ' + e.message)
+    }
+  }
+
+  function handleImportFilePick(e) {
+    var file = e.target.files && e.target.files[0]
+    e.target.value = ''  // ayni dosya tekrar secilebilsin
+    if (!file) return
+    var reader = new FileReader()
+    reader.onload = function() {
+      try {
+        var pkg = JSON.parse(String(reader.result))
+        if (!pkg || pkg.calibraWidgetPackage !== 1 || !Array.isArray(pkg.widgets)) {
+          showToast('error', 'Geçersiz paket dosyası — Alan Rehberi dışa aktarım çıktısı bekleniyor')
+          return
+        }
+        setImportPending({ package: pkg, fileName: file.name })
+      } catch (err) {
+        showToast('error', 'JSON okunamadı: ' + err.message)
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  async function confirmImportDefinitions() {
+    if (!importPending || !currentFormCode) return
+    setImporting(true)
+    try {
+      var resp = await fetch('/api/widgets/forms/' + encodeURIComponent(currentFormCode) + '/import', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(importPending.package),
+      })
+      var data = null
+      try { data = await resp.json() } catch (e2) { /* not json */ }
+      if (!resp.ok || !data || data.success === false) {
+        throw new Error((data && data.message) || ('HTTP ' + resp.status))
+      }
+      var msg = data.created + ' yeni, ' + data.updated + ' güncellendi'
+      if (data.skipped && data.skipped.length > 0) {
+        msg += ', ' + data.skipped.length + ' atlandı'
+        // eslint-disable-next-line no-console
+        console.warn('[WidgetImport] atlananlar:', data.skipped)
+      }
+      showToast('success', 'İçe aktarım tamamlandı: ' + msg)
+      setImportPending(null)
+      await loadSchemaFor(currentFormCode)
+      try {
+        localStorage.setItem('calibra:widget-schema-changed', String(Date.now()))
+        window.dispatchEvent(new CustomEvent('calibra:widget-schema-changed'))
+      } catch (_) { /* ignore */ }
+    } catch (e) {
+      showToast('error', 'İçe aktarım hatası: ' + e.message)
+    } finally {
+      setImporting(false)
+    }
+  }
 
   // ── Widgets'i group + field olarak bucket'la ──
   // WidgetRegistryList ve GroupSelector icin derived state:
@@ -855,7 +879,7 @@ export default function AdminWidgetRegistryPanel(props) {
               variants={currentEntity.variants}
               activeFormCode={currentFormCode}
               onPick={function(fc) {
-                if (fc && fc !== currentFormCode) loadSchemaFor(fc, false)
+                if (fc && fc !== currentFormCode) loadSchemaFor(fc)
               }}
             />
           )}
@@ -884,6 +908,33 @@ export default function AdminWidgetRegistryPanel(props) {
               </button>
             )}
           </div>
+
+          {/* Tanim transport — dışa/içe aktar */}
+          <input
+            ref={importFileRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={handleImportFilePick}
+          />
+          <button
+            type="button"
+            onClick={handleExportDefinitions}
+            disabled={!currentFormId}
+            className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Widget tanımlarını dışa aktar (JSON) — şirketler arası kopyalama / test→canlı taşıma"
+          >
+            <Download size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={function() { if (importFileRef.current) importFileRef.current.click() }}
+            disabled={!currentFormId}
+            className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Widget tanımlarını içe aktar (JSON paketi)"
+          >
+            <Upload size={14} />
+          </button>
 
           {/* Yeni Grup */}
           <button
@@ -961,6 +1012,49 @@ export default function AdminWidgetRegistryPanel(props) {
         }}
         saving={savingGlobal}
       />
+
+      {/* ── İçe aktarım onay modalı ──────────────── */}
+      <AdminMiniModal
+        isOpen={!!importPending}
+        onClose={function() { if (!importing) setImportPending(null) }}
+        title="Widget Tanımları İçe Aktarılacak"
+        subtitle={importPending
+          ? '"' + importPending.fileName + '" — ' + importPending.package.widgets.length +
+            ' tanım. Aynı kodlu mevcut widget\'lar güncellenecek, yeni kodlar oluşturulacak. Kayıtlı veriler silinmez.'
+          : ''}
+        icon={Upload}
+        iconColor="indigo"
+        maxWidth="max-w-sm"
+        footer={
+          <>
+            <div className="flex-1" />
+            <button
+              type="button"
+              disabled={importing}
+              onClick={function() { setImportPending(null) }}
+              className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-xs font-medium text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white/85 transition-all disabled:opacity-40"
+            >
+              Vazgeç
+            </button>
+            <button
+              type="button"
+              disabled={importing}
+              onClick={confirmImportDefinitions}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-500/25 dark:hover:bg-indigo-500/35 border border-indigo-500 dark:border-indigo-400/30 text-xs font-semibold text-white dark:text-indigo-200 transition-all shadow-sm disabled:opacity-60"
+            >
+              {importing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} strokeWidth={2.4} />}
+              İçe Aktar
+            </button>
+          </>
+        }
+      >
+        <p className="text-[12px] text-slate-500 dark:text-white/50 leading-relaxed">
+          Paket <strong>{importPending ? (importPending.package.formCode || '?') : ''}</strong> formundan
+          dışa aktarılmış{currentFormCode && importPending && importPending.package.formCode !== currentFormCode
+            ? ' — bu formda (' + currentFormCode + ') uygulanacak'
+            : ''}. Sistem alanları ve hedefte bulunamayan alt formlar otomatik atlanır.
+        </p>
+      </AdminMiniModal>
 
       {/* ── Silme onay modalı ──────────────── */}
       <AdminMiniModal

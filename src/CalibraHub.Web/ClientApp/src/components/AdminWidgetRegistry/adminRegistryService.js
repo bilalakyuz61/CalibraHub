@@ -89,6 +89,80 @@ export async function deleteWidget(widgetId) {
   return { success: true }
 }
 
+/**
+ * Yalnizca siralama gunceller — OptionsJSON/RulesJSON dahil diger alanlara
+ * dokunmaz. Reorder icin tam upsertWidget cagirmak lookup/grid/rehber
+ * metadata'sinin kayipli yeniden insasini gerektiriyordu; bu endpoint o
+ * hata sinifini ortadan kaldirir.
+ * @param {Array<{id:number, sortOrder:number}>} items
+ */
+export async function patchSortOrders(items) {
+  if (!Array.isArray(items) || items.length === 0) throw new Error('items bos olamaz')
+  var resp = await fetch(API_BASE + '/widgets/sort-orders', {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(items),
+  })
+  var data = null
+  try { data = await resp.json() } catch (e) { /* not json */ }
+  if (!resp.ok) {
+    var msg = (data && data.message) || ('patchSortOrders HTTP ' + resp.status)
+    return { success: false, message: msg }
+  }
+  return { success: true }
+}
+
+/**
+ * Yalnizca aktif/pasif durumunu gunceller — diger alanlara dokunmaz.
+ */
+export async function patchWidgetActive(widgetId, isActive) {
+  if (!widgetId || widgetId <= 0) throw new Error('widgetId gecersiz')
+  var resp = await fetch(API_BASE + '/widgets/' + widgetId + '/active', {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({ isActive: isActive === true }),
+  })
+  var data = null
+  try { data = await resp.json() } catch (e) { /* not json */ }
+  if (!resp.ok) {
+    var msg = (data && data.message) || ('patchWidgetActive HTTP ' + resp.status)
+    return { success: false, message: msg }
+  }
+  return { success: true }
+}
+
+/**
+ * Yalnizca "Sade alan" (LabelStyle inline<->standard) toggle'i — backend
+ * LabelStyle otoriter alanini gunceller, IsPlainField'i senkron tutar.
+ */
+export async function patchIsPlainField(widgetId, isPlainField) {
+  if (!widgetId || widgetId <= 0) throw new Error('widgetId gecersiz')
+  var resp = await fetch(API_BASE + '/widgets/' + widgetId + '/is-plain-field', {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({ isPlainField: isPlainField === true }),
+  })
+  var data = null
+  try { data = await resp.json() } catch (e) { /* not json */ }
+  if (!resp.ok) {
+    var msg = (data && data.message) || ('patchIsPlainField HTTP ' + resp.status)
+    return { success: false, message: msg }
+  }
+  return { success: true }
+}
+
 // ═══════════════════════════════════════════════════════════
 // Legacy exports — artik kullanilmayan ama import kiran olmayalim
 // AdminWidgetRegistryPanel tarafinda referanslari Faz B'de temizliyoruz.

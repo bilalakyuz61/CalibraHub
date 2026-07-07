@@ -7577,6 +7577,8 @@ END;";
                     -- hesaplari bunu kullanir; UnitId = girilen birim (gosterim). Yazimda
                     -- Quantity * ItemUnits.Multiplier ile hesaplanir (bkz. StockUnitSql).
                     [BaseQuantity]    DECIMAL(18,4)    NOT NULL DEFAULT(0),
+                    -- Satış siparişi rezervasyonu (Faz 2): teslim edilen ana-birim miktar (açık = BaseQuantity - DeliveredQuantity)
+                    [DeliveredQuantity] DECIMAL(18,4)  NOT NULL DEFAULT(0),
                     [UnitPrice]       DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [DiscountRate]    DECIMAL(5,2)     NOT NULL DEFAULT(0),
                     [LineTotal]       DECIMAL(18,4)    NOT NULL DEFAULT(0),
@@ -7625,6 +7627,11 @@ END;";
                AND COL_LENGTH(N'[{s}].[DocumentLine]', N'FulfillmentStatus') IS NULL
                 ALTER TABLE [{s}].[DocumentLine] ADD [FulfillmentStatus] TINYINT NOT NULL
                     CONSTRAINT [DF_DocumentLine_FulfillmentStatus] DEFAULT(0);
+            -- Satış siparişi rezervasyonu (Faz 2): teslim edilen ana-birim miktar
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'DeliveredQuantity') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [DeliveredQuantity] DECIMAL(18,4) NOT NULL
+                    CONSTRAINT [DF_DocumentLine_DeliveredQuantity] DEFAULT(0);
 
             -- 2026-07-02: Stok hareketi konsolidasyonu — DocumentLine artik fiilen stok
             -- hareketi yaratan satirlari da tasir (StockMovementType enum reuse: 1=Issue,
@@ -8742,6 +8749,53 @@ END;";
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Migration (2026-07-07): belge-ailesi konsolidasyonu — üst/kalem/yeni/düzenleme
+        // kodlarına (X_LINES/X_EDIT/X_NEW) kaydedilmiş ayarlar tek kök koda (X) indirgenir.
+        // DecimalSettingService.NormalizeFormCode ile aynı kural. Kök kaydı olmayan
+        // şirketlerde en anlamlı alias (_LINES > _EDIT > _NEW) köke kopyalanır; alias
+        // satırları her durumda silinir. Idempotent — ikinci çalışmada alias kalmaz.
+        // Ayrı komut: FxUnitPriceDecimals ALTER'ı ile aynı batch'te kolon referansı
+        // compile hatası vermesin diye.
+        var consolidateSql = $"""
+            IF OBJECT_ID(N'[{s}].[DecimalSetting]', N'U') IS NOT NULL
+            BEGIN
+                ;WITH alias AS (
+                    SELECT *,
+                        CASE
+                            WHEN [FormCode] LIKE N'%[_]LINES' THEN LEFT([FormCode], LEN([FormCode]) - 6)
+                            WHEN [FormCode] LIKE N'%[_]EDIT'  THEN LEFT([FormCode], LEN([FormCode]) - 5)
+                            ELSE LEFT([FormCode], LEN([FormCode]) - 4)
+                        END AS [RootCode],
+                        CASE
+                            WHEN [FormCode] LIKE N'%[_]LINES' THEN 0
+                            WHEN [FormCode] LIKE N'%[_]EDIT'  THEN 1
+                            ELSE 2
+                        END AS [Pri]
+                    FROM [{s}].[DecimalSetting]
+                    WHERE [FormCode] LIKE N'%[_]LINES' OR [FormCode] LIKE N'%[_]EDIT' OR [FormCode] LIKE N'%[_]NEW'
+                ),
+                best AS (
+                    SELECT *, ROW_NUMBER() OVER (PARTITION BY [CompanyId], [RootCode] ORDER BY [Pri]) AS rn
+                    FROM alias
+                )
+                INSERT INTO [{s}].[DecimalSetting]
+                    ([CompanyId],[FormCode],[QuantityDecimals],[UnitPriceDecimals],[FxUnitPriceDecimals],
+                     [AmountDecimals],[RateDecimals],[ExchangeRateDecimals],[CreatedById],[UpdatedById])
+                SELECT b.[CompanyId], b.[RootCode], b.[QuantityDecimals], b.[UnitPriceDecimals], b.[FxUnitPriceDecimals],
+                       b.[AmountDecimals], b.[RateDecimals], b.[ExchangeRateDecimals], b.[CreatedById], b.[UpdatedById]
+                FROM best b
+                WHERE b.rn = 1
+                  AND NOT EXISTS (SELECT 1 FROM [{s}].[DecimalSetting] r
+                                  WHERE r.[CompanyId] = b.[CompanyId] AND r.[FormCode] = b.[RootCode]);
+
+                DELETE FROM [{s}].[DecimalSetting]
+                WHERE [FormCode] LIKE N'%[_]LINES' OR [FormCode] LIKE N'%[_]EDIT' OR [FormCode] LIKE N'%[_]NEW';
+            END;
+            """;
+        await using var consolidateCmd = connection.CreateCommand();
+        consolidateCmd.CommandText = consolidateSql;
+        await consolidateCmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -11793,6 +11847,35 @@ END;";
                    SET [IsPlainField] = 1
                  WHERE [LabelStyle] = N'inline'
                    AND [IsPlainField] = 0;
+            END;
+
+            -- 2026-07-06: Malzeme karti widget formu ITEMS → MATERIAL_CARD_EDIT tasimasi.
+            -- ITEMS formu 2026-06-08 kararıyla seed'den cikarildi/pasiflestirildi; taze
+            -- DB'lerde satiri hic yok (MaterialCardEdit DWR schema 404 aliyordu, Ek
+            -- Sahalar hic yuklenmiyordu). MaterialCardEdit + LogisticsController +
+            -- SalesController + Alan Rehberi artik MATERIAL_CARD_EDIT kullanir. Eski
+            -- DB'lerde ITEMS altinda tanimlanmis widget'lar hedefe tasinir — WidgetTra'ya
+            -- dokunulmaz (FK WidgetMas.Id uzerinden; FormId degisince degerler korunur).
+            -- Cakisan WidgetCode (hedefte ayni kod zaten var) TASINMAZ — hedef kazanir.
+            IF OBJECT_ID(N'[{s}].[Forms]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[WidgetMas]', N'U') IS NOT NULL
+            BEGIN
+                DECLARE @wmItemsFormId INT =
+                    (SELECT TOP 1 [Id] FROM [{s}].[Forms] WHERE [FormCode] = N'ITEMS');
+                DECLARE @wmMceFormId INT =
+                    (SELECT TOP 1 [Id] FROM [{s}].[Forms] WHERE [FormCode] = N'MATERIAL_CARD_EDIT');
+                IF @wmItemsFormId IS NOT NULL AND @wmMceFormId IS NOT NULL
+                BEGIN
+                    UPDATE w
+                       SET w.[FormId] = @wmMceFormId
+                      FROM [{s}].[WidgetMas] w
+                     WHERE w.[FormId] = @wmItemsFormId
+                       AND NOT EXISTS (
+                           SELECT 1 FROM [{s}].[WidgetMas] t
+                            WHERE t.[FormId] = @wmMceFormId
+                              AND t.[CompanyId] = w.[CompanyId]
+                              AND t.[WidgetCode] = w.[WidgetCode]);
+                END;
             END;
 
             -- ── Sprint 1 (Universal Form Engine — Phase 0B) ─────────────────

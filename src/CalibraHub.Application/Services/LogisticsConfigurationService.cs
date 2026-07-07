@@ -351,7 +351,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 x.VolumeCapacity,
                 x.IsActive,
                 x.IsMachinePark,
-                x.IsStorageArea))
+                x.IsStorageArea,
+                x.AllowNegativeBalance))
             .ToArray();
     }
 
@@ -1245,7 +1246,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             VolumeCapacity = volumeCapacity,
             IsActive = request.IsActive,
             IsMachinePark = request.IsMachinePark,
-            IsStorageArea = request.IsStorageArea
+            IsStorageArea = request.IsStorageArea,
+            AllowNegativeBalance = request.AllowNegativeBalance
         };
 
         await _repository.AddLocationAsync(location, cancellationToken);
@@ -1322,6 +1324,9 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var hasChildren = locations.Any(x => x.ParentId == request.Id);
         var isMachinePark = hasChildren ? false : request.IsMachinePark;
         var isStorageArea = hasChildren ? false : request.IsStorageArea;
+        // Eksi bakiye ayarı yalnızca yaprak (stok tutan) lokasyonda anlamlı — alt
+        // kırılımı olan lokasyonda "devral" (null) durumuna zorlanır.
+        var allowNegativeBalance = hasChildren ? (bool?)null : request.AllowNegativeBalance;
 
         // Maks 7 kırılım — yeni parent zincirinde derinlik kontrolü
         if (request.ParentId.HasValue && request.ParentId.Value > 0)
@@ -1345,7 +1350,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             VolumeCapacity = volumeCapacity,
             IsActive = request.IsActive,
             IsMachinePark = isMachinePark,
-            IsStorageArea = isStorageArea
+            IsStorageArea = isStorageArea,
+            AllowNegativeBalance = allowNegativeBalance
         };
 
         await _repository.UpdateLocationAsync(location, cancellationToken);
@@ -2865,7 +2871,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         return await _repository.GetBOMByItemAsync(match.ItemId, match.ConfigId, cancellationToken);
     }
 
-    public async Task<int> SaveBOMAsync(SaveBOMRequest request, int? userId, CancellationToken cancellationToken)
+    public async Task<int> SaveBOMAsync(SaveBOMRequest request, int? userId, CancellationToken cancellationToken,
+        bool allowDuplicateComponents = false)
     {
         // 1) Items lookup — sadece bu kayda dahil olabilecek ID/Code'lari oku.
         //    Eski "tum tabloyu cek" (50K satir) yaklasimi atildi (rapor madde 3.10).
@@ -3066,8 +3073,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         try
         {
             foreach (var l in resolvedLines)
-                entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Qty, l.Scrap, userId, l.Note));
-            entity.EnsureValid();
+                entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Qty, l.Scrap, userId, l.Note), allowDuplicateComponents);
+            entity.EnsureValid(allowDuplicateComponents);
         }
         catch (CalibraHub.Domain.Common.DomainException dex)
         {

@@ -118,20 +118,33 @@ public sealed class LocationController : Controller
                 await _logisticsConfigurationService.UpdateLocationAsync(
                     new UpdateLocationRequest(input.Id.Value, input.ParentId, typeCode, input.LocationCode,
                         input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity,
-                        input.IsActive, input.IsMachinePark, input.IsStorageArea), ct);
+                        input.IsActive, input.IsMachinePark, input.IsStorageArea, input.AllowNegativeBalance), ct);
             }
             else
             {
                 await _logisticsConfigurationService.CreateLocationAsync(
                     new CreateLocationRequest(input.ParentId, typeCode, input.LocationCode,
                         input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity,
-                        input.IsActive, input.IsMachinePark, input.IsStorageArea), ct);
+                        input.IsActive, input.IsMachinePark, input.IsStorageArea, input.AllowNegativeBalance), ct);
             }
             return Json(new { success = true });
         }
         catch (ArgumentException ex)
         {
             return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex) when (ex.GetType().Name == "SqlException")
+        {
+            var msg = ex.Message ?? "";
+            string friendly = msg.Contains("Invalid column name", StringComparison.OrdinalIgnoreCase)
+                ? "Veritabani semasi guncel degil (eksik kolon): " + msg
+                : "Veritabani hatasi: " + msg;
+            return Json(new { success = false, message = friendly });
+        }
+        catch (Exception ex)
+        {
+            var detail = ex.InnerException?.Message ?? ex.Message;
+            return Json(new { success = false, message = "Lokasyon kaydedilemedi: " + detail });
         }
     }
 

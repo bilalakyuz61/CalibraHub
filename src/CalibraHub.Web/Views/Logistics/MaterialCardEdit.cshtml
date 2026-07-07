@@ -1945,9 +1945,97 @@
                     body.app-theme-light .smv-docno { color:#2563eb; }
                     .smv-muted { color:rgba(255,255,255,0.35); }
                     body.app-theme-light .smv-muted { color:#94a3b8; }
+
+                    /* ── Kart başlık araç çubuğu (Yenile + Sütun Ayarları) ── */
+                    .smv-hd { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
+                    .smv-tools { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+                    .smv-ic-btn {
+                        display:inline-flex; align-items:center; justify-content:center;
+                        width:32px; height:32px; padding:0; border-radius:8px; cursor:pointer;
+                        background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
+                        color:rgba(255,255,255,0.72); transition:all .15s;
+                    }
+                    body.app-theme-light .smv-ic-btn { background:#fff; border-color:#e2e8f0; color:#475569; }
+                    .smv-ic-btn:hover { background:rgba(99,102,241,.12); border-color:rgba(99,102,241,.4); color:#a5b4fc; }
+                    body.app-theme-light .smv-ic-btn:hover { color:#4f46e5; }
+                    .smv-ic-btn svg { width:16px; height:16px; }
+                    .smv-ic-btn.is-spin svg { animation:smvSpin .6s linear; }
+                    @@keyframes smvSpin { from { transform:rotate(0); } to { transform:rotate(360deg); } }
+
+                    /* ── Sütun Ayarları çekmecesi ── */
+                    .smv-col-backdrop {
+                        position:fixed; inset:0; z-index:9982; background:transparent;
+                        opacity:0; pointer-events:none; transition:opacity 60ms;
+                    }
+                    .smv-col-backdrop.open { opacity:1; pointer-events:auto; }
+                    .smv-col-panel {
+                        position:fixed; top:0; right:0; bottom:0; z-index:9983;
+                        width:min(320px,100vw);
+                        background:rgba(13,18,34,.97); border-left:1px solid rgba(255,255,255,.09);
+                        transform:translateX(100%);
+                        transition:transform 280ms cubic-bezier(.23,1,.32,1), box-shadow 280ms;
+                        display:flex; flex-direction:column; overflow:hidden;
+                    }
+                    .smv-col-panel.open { transform:translateX(0); box-shadow:-16px 0 48px rgba(0,0,0,.4); }
+                    body.app-theme-light .smv-col-panel { background:rgba(255,255,255,.98); border-left-color:#e2e8f0; }
+                    body.app-theme-light .smv-col-panel.open { box-shadow:-16px 0 48px rgba(15,23,42,.15); }
+                    .smv-col-hd { display:flex; align-items:center; gap:10px; padding:14px 14px 12px; border-bottom:1px solid rgba(255,255,255,.07); }
+                    body.app-theme-light .smv-col-hd { border-bottom-color:#eef2f7; }
+                    .smv-col-hd-ic {
+                        width:30px; height:30px; border-radius:8px; flex-shrink:0;
+                        display:flex; align-items:center; justify-content:center;
+                        background:rgba(99,102,241,.14); color:#818cf8;
+                    }
+                    .smv-col-hd-tx { flex:1; min-width:0; }
+                    .smv-col-hd-tx strong { display:block; font-size:.9rem; font-weight:600; color:#e2e8f0; }
+                    body.app-theme-light .smv-col-hd-tx strong { color:#1e293b; }
+                    .smv-col-hd-tx small { display:block; font-size:.72rem; color:#64748b; margin-top:1px; }
+                    .smv-col-reset {
+                        border:none; background:transparent; cursor:pointer; font-size:.72rem; font-weight:600;
+                        color:#818cf8; padding:4px 8px; border-radius:6px; transition:background .1s;
+                    }
+                    .smv-col-reset:hover { background:rgba(99,102,241,.1); }
+                    .smv-col-close {
+                        width:28px; height:28px; padding:0; border:none; background:transparent; cursor:pointer;
+                        color:#64748b; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+                    }
+                    .smv-col-close:hover { background:rgba(255,255,255,.06); color:#cbd5e1; }
+                    body.app-theme-light .smv-col-close:hover { background:#f1f5f9; color:#334155; }
+                    .smv-col-rows { overflow-y:auto; flex:1; padding:6px 0; }
+                    .smv-cfg-row {
+                        display:flex; align-items:center; gap:8px;
+                        padding:7px 12px; cursor:grab; border-radius:7px; margin:1px 6px;
+                        transition:background .1s;
+                    }
+                    .smv-cfg-row:hover { background:rgba(99,102,241,.08); }
+                    .smv-cfg-row.is-hidden { opacity:.45; }
+                    .smv-cfg-row.drag-over { outline:2px solid #6366f1; outline-offset:-2px; }
+                    .smv-cfg-row.dragging { opacity:.4; }
+                    .smv-cfg-grip { color:#475569; flex-shrink:0; display:flex; align-items:center; }
+                    .smv-cfg-grip svg { width:11px; height:15px; }
+                    .smv-cfg-eye {
+                        width:26px; height:26px; padding:0; border:none; background:transparent; cursor:pointer;
+                        display:flex; align-items:center; justify-content:center;
+                        color:#6366f1; border-radius:6px; flex-shrink:0; transition:background .1s;
+                    }
+                    .smv-cfg-eye.is-off { color:#475569; }
+                    .smv-cfg-eye:hover { background:rgba(99,102,241,.1); }
+                    .smv-cfg-eye svg { width:15px; height:15px; }
+                    .smv-cfg-label { flex:1; font-size:.86rem; font-weight:500; color:#cbd5e1; }
+                    body.app-theme-light .smv-cfg-label { color:#334155; }
                 </style>
 
-                <p class="mce-card-title">Stok Hareketleri</p>
+                <div class="smv-hd">
+                    <p class="mce-card-title" style="margin:0;">Stok Hareketleri</p>
+                    <div class="smv-tools" id="smvTools" style="display:none;">
+                        <button type="button" class="smv-ic-btn" id="smvRefreshBtn" title="Yenile" aria-label="Yenile">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+                        </button>
+                        <button type="button" class="smv-ic-btn" id="smvColBtn" title="Sütun Ayarları" aria-label="Sütun Ayarları">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
+                        </button>
+                    </div>
+                </div>
 
                 <!-- Kaydedilmemiş malzeme uyarısı -->
                 <div id="smvNeedsSave" style="display:none;padding:22px;text-align:center;color:rgba(255,255,255,.45);font-size:.85rem;">
@@ -2011,21 +2099,7 @@
                     <div style="overflow-x:auto;">
                         <table class="smv-table" id="smvTable">
                             <thead>
-                                <tr>
-                                    <th>Tarih</th>
-                                    <th>Belge No</th>
-                                    <th>Belge Tipi</th>
-                                    <th>Hareket</th>
-                                    <th style="text-align:right;">Miktar</th>
-                                    <th>Birim</th>
-                                    <th style="text-align:right;">Baz Miktar</th>
-                                    <th>Kaynak Lok.</th>
-                                    <th>Hedef Lok.</th>
-                                    <th style="text-align:right;">Birim Maliyet</th>
-                                    <th>Lot / Parti</th>
-                                    <th style="text-align:right;" title="Ana birim cinsinden koşan bakiye">Bakiye</th>
-                                    <th>Kullanıcı</th>
-                                </tr>
+                                <tr id="smvHeadRow"></tr>
                             </thead>
                             <tbody id="smvBody"></tbody>
                         </table>
@@ -2148,10 +2222,14 @@
                 </div>
             </div>
 
-            @* Ek Alanlar — DynamicWidgetRenderer grupları buraya render edilir. *@
+            @* Ek Alanlar — DynamicWidgetRenderer grupları buraya render edilir.
+               FormCode 2026-07-06'da ITEMS → MATERIAL_CARD_EDIT'e taşındı: ITEMS
+               formu 2026-06-08 kararıyla Forms seed'inden çıkarıldı (taze DB'lerde
+               satır hiç yok → schema 404 → Ek Sahalar hiç yüklenmiyordu). Alan
+               Rehberi de malzeme kartı alanlarını MATERIAL_CARD_EDIT altında tanımlar. *@
             <div id="mceDynamicWidgetsCard" style="display:none">
                 <div id="mceDynamicWidgets"
-                     data-form-code="ITEMS"
+                     data-form-code="MATERIAL_CARD_EDIT"
                      data-record-id="@(ViewBag.ItemId ?? string.Empty)">
                 </div>
             </div>
@@ -3462,7 +3540,7 @@
             }
             try {
                 window._mceDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
-                    formCode: el.getAttribute('data-form-code') || 'ITEMS',
+                    formCode: el.getAttribute('data-form-code') || 'MATERIAL_CARD_EDIT',
                     recordId: el.getAttribute('data-record-id') || '',
                     classPrefix: 'mce',
                     containerId: 'mceDynamicWidgetsCard'
@@ -5208,6 +5286,143 @@
                 : mt === 3 ? 'smv-badge--tr' : 'smv-badge--adj';
         }
 
+        // ── İşaretli miktar hücreleri (girilen birim + ana birim) ──
+        function qtyCell(m) {
+            if (m.movementType === 3) return '<span class="smv-muted">' + fmt(m.quantity) + '</span>';
+            if (m.signedQuantity >= 0) return '<span class="smv-qty--in">+' + fmt(m.quantity) + '</span>';
+            return '<span class="smv-qty--out">-' + fmt(m.quantity) + '</span>';
+        }
+        function baseCell(m) {
+            if (m.movementType === 3) return '<span class="smv-muted">' + fmt(m.baseQuantity) + '</span>';
+            if (m.baseSignedQuantity >= 0) return '<span class="smv-qty--in">+' + fmt(m.baseQuantity) + '</span>';
+            return '<span class="smv-qty--out">-' + fmt(m.baseQuantity) + '</span>';
+        }
+
+        // ── Kolon tanımları — görünürlük + sıralama, localStorage'da kalıcı ──
+        //    cell(m): tablo hücresi HTML'i · xv(m): Excel için ham değer
+        var COLS_DEFAULT = [
+            { key: 'date',     label: 'Tarih',         cell: function (m) { return fmtDate(m.movementDate); }, xv: function (m) { return m.movementDate; } },
+            { key: 'docNo',    label: 'Belge No',      cell: function (m) { return '<span class="smv-docno">' + esc(m.documentNumber) + '</span>'; }, xv: function (m) { return m.documentNumber || ''; } },
+            { key: 'docType',  label: 'Belge Tipi',    cell: function (m) { return esc(m.docTypeName || m.docTypeCode || ''); }, xv: function (m) { return m.docTypeName || m.docTypeCode || ''; } },
+            { key: 'dir',      label: 'Hareket',       cell: function (m) { return '<span class="smv-badge ' + badgeClass(m.movementType) + '">' + esc(m.movementLabel) + '</span>'; }, xv: function (m) { return m.movementLabel || ''; } },
+            { key: 'qty',      label: 'Miktar',        num: true, cell: qtyCell, xv: function (m) { return m.movementType === 3 ? m.quantity : m.signedQuantity; } },
+            { key: 'unit',     label: 'Birim',         cell: function (m) { return esc(m.unitCode || ''); }, xv: function (m) { return m.unitCode || ''; } },
+            { key: 'baseQty',  label: 'Baz Miktar',    num: true, cell: baseCell, xv: function (m) { return m.movementType === 3 ? m.baseQuantity : m.baseSignedQuantity; } },
+            { key: 'fromLoc',  label: 'Kaynak Lok.',   cell: function (m) { var f = locText(m.fromLocationCode, m.fromLocationName); return f ? esc(f) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return locText(m.fromLocationCode, m.fromLocationName); } },
+            { key: 'toLoc',    label: 'Hedef Lok.',    cell: function (m) { var t = locText(m.toLocationCode, m.toLocationName); return t ? esc(t) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return locText(m.toLocationCode, m.toLocationName); } },
+            { key: 'unitCost', label: 'Birim Maliyet', num: true, cell: function (m) { return m.unitCost != null ? fmt(m.unitCost, 2) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return m.unitCost == null ? '' : m.unitCost; } },
+            { key: 'lot',      label: 'Lot / Parti',   cell: function (m) { return m.lotNo ? esc(m.lotNo) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return m.lotNo || ''; } },
+            { key: 'balance',  label: 'Bakiye',        num: true, title: 'Ana birim cinsinden koşan bakiye', xlabel: 'Bakiye (Ana Birim)', cell: function (m) { return fmt(m.runningBalance); }, xv: function (m) { return m.runningBalance; } },
+            { key: 'user',     label: 'Kullanıcı',     cell: function (m) { return m.createdByName ? esc(m.createdByName) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return m.createdByName || ''; } }
+        ];
+        var LS_COLS = 'mce-smv-cols-v1';
+        var _cols = COLS_DEFAULT.slice();          // aktif sıra + görünürlük
+        function isVis(c) { return c.visible !== false; }
+
+        function loadColPrefs() {
+            _cols = COLS_DEFAULT.slice();
+            try {
+                var raw = localStorage.getItem(LS_COLS);
+                if (!raw) return;
+                var saved = JSON.parse(raw);
+                if (!Array.isArray(saved) || !saved.length) return;
+                var map = {}; COLS_DEFAULT.forEach(function (c) { map[c.key] = c; });
+                var ordered = [];
+                saved.forEach(function (s) {
+                    var c = map[s.key];
+                    if (c && ordered.indexOf(c) < 0) { c.visible = (s.visible !== false); ordered.push(c); }
+                });
+                COLS_DEFAULT.forEach(function (c) { if (ordered.indexOf(c) < 0) ordered.push(c); });
+                if (ordered.length) _cols = ordered;
+            } catch (e) { }
+        }
+        function saveColPrefs() {
+            try { localStorage.setItem(LS_COLS, JSON.stringify(_cols.map(function (c) { return { key: c.key, visible: isVis(c) }; }))); } catch (e) { }
+        }
+
+        function renderHead() {
+            var head = $('smvHeadRow'); if (!head) return;
+            var h = '';
+            _cols.forEach(function (c) {
+                if (!isVis(c)) return;
+                h += '<th' + (c.num ? ' style="text-align:right;"' : '') + (c.title ? ' title="' + esc(c.title) + '"' : '') + '>' + esc(c.label) + '</th>';
+            });
+            head.innerHTML = h;
+        }
+
+        // ── Sütun Ayarları çekmecesi (body'e eklenir — clipping riski yok) ──
+        var _panelEl = null, _backdropEl = null, _dragIdx = -1;
+        var _GRIP = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
+        var _EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+        var _EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-6.5 0-10-8-10-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+
+        function ensurePanel() {
+            if (_panelEl) return;
+            _backdropEl = document.createElement('div');
+            _backdropEl.className = 'smv-col-backdrop';
+            _backdropEl.addEventListener('click', closeColPanel);
+            _panelEl = document.createElement('div');
+            _panelEl.className = 'smv-col-panel';
+            _panelEl.innerHTML =
+                '<div class="smv-col-hd">' +
+                    '<div class="smv-col-hd-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg></div>' +
+                    '<div class="smv-col-hd-tx"><strong>Sütun Ayarları</strong><small>Görünürlük ve sıralama</small></div>' +
+                    '<button type="button" class="smv-col-reset" id="smvColReset">Sıfırla</button>' +
+                    '<button type="button" class="smv-col-close" id="smvColClose"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
+                '</div>' +
+                '<div class="smv-col-rows" id="smvColRows"></div>';
+            document.body.appendChild(_backdropEl);
+            document.body.appendChild(_panelEl);
+            _panelEl.querySelector('#smvColClose').addEventListener('click', closeColPanel);
+            _panelEl.querySelector('#smvColReset').addEventListener('click', function () {
+                try { localStorage.removeItem(LS_COLS); } catch (e) { }
+                COLS_DEFAULT.forEach(function (c) { c.visible = true; });
+                _cols = COLS_DEFAULT.slice();
+                renderColPanel(); renderHead(); renderRows(_rows);
+            });
+        }
+
+        function renderColPanel() {
+            var box = _panelEl && _panelEl.querySelector('#smvColRows');
+            if (!box) return;
+            var html = '';
+            _cols.forEach(function (c, i) {
+                html += '<div class="smv-cfg-row' + (isVis(c) ? '' : ' is-hidden') + '" data-idx="' + i + '" data-key="' + c.key + '" draggable="true">' +
+                    '<span class="smv-cfg-grip">' + _GRIP + '</span>' +
+                    '<button type="button" class="smv-cfg-eye' + (isVis(c) ? '' : ' is-off') + '" data-key="' + c.key + '" title="' + (isVis(c) ? 'Gizle' : 'Göster') + '">' + (isVis(c) ? _EYE : _EYEOFF) + '</button>' +
+                    '<span class="smv-cfg-label">' + esc(c.label) + '</span>' +
+                    '</div>';
+            });
+            box.innerHTML = html;
+            box.querySelectorAll('.smv-cfg-eye').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var key = btn.getAttribute('data-key');
+                    var def = _cols.find(function (d) { return d.key === key; });
+                    if (!def) return;
+                    if (isVis(def) && _cols.filter(isVis).length <= 1) return;   // en az bir kolon kalsın
+                    def.visible = !isVis(def);
+                    saveColPrefs(); renderColPanel(); renderHead(); renderRows(_rows);
+                });
+            });
+            box.querySelectorAll('.smv-cfg-row').forEach(function (row) {
+                row.addEventListener('dragstart', function () { _dragIdx = +row.getAttribute('data-idx'); row.classList.add('dragging'); });
+                row.addEventListener('dragend', function () { _dragIdx = -1; row.classList.remove('dragging'); box.querySelectorAll('.drag-over').forEach(function (r) { r.classList.remove('drag-over'); }); });
+                row.addEventListener('dragover', function (e) { e.preventDefault(); row.classList.add('drag-over'); });
+                row.addEventListener('dragleave', function () { row.classList.remove('drag-over'); });
+                row.addEventListener('drop', function (e) {
+                    e.preventDefault(); row.classList.remove('drag-over');
+                    var to = +row.getAttribute('data-idx');
+                    if (_dragIdx < 0 || _dragIdx === to) return;
+                    var moved = _cols.splice(_dragIdx, 1)[0];
+                    _cols.splice(to, 0, moved);
+                    saveColPrefs(); renderColPanel(); renderHead(); renderRows(_rows);
+                });
+            });
+        }
+        function openColPanel() { ensurePanel(); renderColPanel(); _backdropEl.classList.add('open'); _panelEl.classList.add('open'); }
+        function closeColPanel() { if (_panelEl) _panelEl.classList.remove('open'); if (_backdropEl) _backdropEl.classList.remove('open'); }
+
         function setError(msg) {
             var e = $('smvError');
             if (!e) return;
@@ -5219,13 +5434,16 @@
             _itemId = itemId || 0;
             var needsSave = $('smvNeedsSave');
             var main = $('smvMain');
+            var tools = $('smvTools');
             if (_itemId <= 0) {
                 if (needsSave) needsSave.style.display = '';
                 if (main) main.style.display = 'none';
+                if (tools) tools.style.display = 'none';
                 return;
             }
             if (needsSave) needsSave.style.display = 'none';
             if (main) main.style.display = '';
+            if (tools) tools.style.display = 'flex';
             if (!_loaded) load();
         };
 
@@ -5245,6 +5463,7 @@
         function load() {
             if (_itemId <= 0) return;
             setError('');
+            renderHead();
             var body = $('smvBody');
             var empty = $('smvEmpty');
             var loading = $('smvLoading');
@@ -5317,82 +5536,28 @@
             }
             if (empty) empty.style.display = 'none';
 
+            var vis = _cols.filter(isVis);
             var html = '';
             for (var i = 0; i < rows.length; i++) {
                 var m = rows[i];
-                var qtyCell;
-                if (m.movementType === 3) {
-                    // Transfer: nötr (net 0), taşınan miktar gösterilir
-                    qtyCell = '<span class="smv-muted">' + fmt(m.quantity) + '</span>';
-                } else if (m.signedQuantity >= 0) {
-                    qtyCell = '<span class="smv-qty--in">+' + fmt(m.quantity) + '</span>';
-                } else {
-                    qtyCell = '<span class="smv-qty--out">-' + fmt(m.quantity) + '</span>';
+                html += '<tr>';
+                for (var j = 0; j < vis.length; j++) {
+                    html += '<td' + (vis[j].num ? ' class="smv-num"' : '') + '>' + vis[j].cell(m) + '</td>';
                 }
-                // Ana birime çevrilmiş miktar (bakiye tabanı)
-                var baseCell;
-                if (m.movementType === 3) {
-                    baseCell = '<span class="smv-muted">' + fmt(m.baseQuantity) + '</span>';
-                } else if (m.baseSignedQuantity >= 0) {
-                    baseCell = '<span class="smv-qty--in">+' + fmt(m.baseQuantity) + '</span>';
-                } else {
-                    baseCell = '<span class="smv-qty--out">-' + fmt(m.baseQuantity) + '</span>';
-                }
-                var fromLoc = locText(m.fromLocationCode, m.fromLocationName);
-                var toLoc = locText(m.toLocationCode, m.toLocationName);
-
-                html += '<tr>'
-                    + '<td>' + fmtDate(m.movementDate) + '</td>'
-                    + '<td><span class="smv-docno">' + esc(m.documentNumber) + '</span></td>'
-                    + '<td>' + esc(m.docTypeName || m.docTypeCode || '') + '</td>'
-                    + '<td><span class="smv-badge ' + badgeClass(m.movementType) + '">' + esc(m.movementLabel) + '</span></td>'
-                    + '<td class="smv-num">' + qtyCell + '</td>'
-                    + '<td>' + esc(m.unitCode || '') + '</td>'
-                    + '<td>' + (fromLoc ? esc(fromLoc) : '<span class="smv-muted">—</span>') + '</td>'
-                    + '<td>' + (toLoc ? esc(toLoc) : '<span class="smv-muted">—</span>') + '</td>'
-                    + '<td class="smv-num">' + (m.unitCost != null ? fmt(m.unitCost, 2) : '<span class="smv-muted">—</span>') + '</td>'
-                    + '<td>' + (m.lotNo ? esc(m.lotNo) : '<span class="smv-muted">—</span>') + '</td>'
-                    + '<td class="smv-num">' + fmt(m.runningBalance) + '</td>'
-                    + '<td>' + (m.createdByName ? esc(m.createdByName) : '<span class="smv-muted">—</span>') + '</td>'
-                    + '</tr>';
+                html += '</tr>';
             }
             body.innerHTML = html;
         }
 
-        // Excel — gösterilen satırlardan server-side .xlsx (form-POST, iframe-safe)
+        // Excel — gösterilen (görünür) sütunlardan server-side .xlsx (form-POST, iframe-safe)
         function exportExcel() {
             if (!_rows.length) return;
-            var headers = [
-                { id: 'date', label: 'Tarih' },
-                { id: 'docNo', label: 'Belge No' },
-                { id: 'docType', label: 'Belge Tipi' },
-                { id: 'dir', label: 'Hareket' },
-                { id: 'signedQty', label: 'Miktar' },
-                { id: 'unit', label: 'Birim' },
-                { id: 'baseQty', label: 'Baz Miktar' },
-                { id: 'fromLoc', label: 'Kaynak Lokasyon' },
-                { id: 'toLoc', label: 'Hedef Lokasyon' },
-                { id: 'unitCost', label: 'Birim Maliyet' },
-                { id: 'lot', label: 'Lot / Parti' },
-                { id: 'balance', label: 'Bakiye (Ana Birim)' },
-                { id: 'user', label: 'Kullanıcı' }
-            ];
+            var vis = _cols.filter(isVis);
+            var headers = vis.map(function (c) { return { id: c.key, label: c.xlabel || c.label }; });
             var rows = _rows.map(function (m) {
-                return {
-                    date: m.movementDate,                              // ISO → Excel date
-                    docNo: m.documentNumber || '',
-                    docType: m.docTypeName || m.docTypeCode || '',
-                    dir: m.movementLabel || '',
-                    signedQty: m.movementType === 3 ? m.quantity : m.signedQuantity, // sayı
-                    unit: m.unitCode || '',
-                    baseQty: m.movementType === 3 ? m.baseQuantity : m.baseSignedQuantity, // ana birim
-                    fromLoc: locText(m.fromLocationCode, m.fromLocationName),
-                    toLoc: locText(m.toLocationCode, m.toLocationName),
-                    unitCost: (m.unitCost == null ? '' : m.unitCost),
-                    lot: m.lotNo || '',
-                    balance: m.runningBalance,
-                    user: m.createdByName || ''
-                };
+                var o = {};
+                vis.forEach(function (c) { o[c.key] = c.xv(m); });
+                return o;
             });
             var code = (document.getElementById('mceMaterialCode') && document.getElementById('mceMaterialCode').value) || ('item' + _itemId);
             var stamp = new Date().toISOString().substring(0, 10).replace(/-/g, '');
@@ -5416,8 +5581,9 @@
             setTimeout(function () { document.body.removeChild(form); }, 1200);
         }
 
-        // Filtre butonları
+        // Filtre + araç butonları
         document.addEventListener('DOMContentLoaded', function () {
+            loadColPrefs();
             var apply = $('smvApply');
             if (apply) apply.addEventListener('click', function () { _loaded = false; load(); });
             var clear = $('smvClear');
@@ -5430,6 +5596,18 @@
             });
             var exp = $('smvExport');
             if (exp) exp.addEventListener('click', exportExcel);
+            var refreshBtn = $('smvRefreshBtn');
+            if (refreshBtn) refreshBtn.addEventListener('click', function () {
+                refreshBtn.classList.remove('is-spin');
+                void refreshBtn.offsetWidth;             // reflow → spin animasyonu tekrar tetiklensin
+                refreshBtn.classList.add('is-spin');
+                _loaded = false; load();
+            });
+            var colBtn = $('smvColBtn');
+            if (colBtn) colBtn.addEventListener('click', openColPanel);
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && _panelEl && _panelEl.classList.contains('open')) closeColPanel();
+            });
         });
     })();
 </script>

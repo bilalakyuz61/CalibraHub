@@ -1657,3 +1657,62 @@ body.app-theme-dark .wa-starred-item__body { color: #e2e8f0; }
 .wa-contact-item { cursor: pointer; }
 .wa-contact-item .wa-msg-conv__avatar { background: #10b981; }
 body.app-theme-dark .wa-contact-section { border-color: rgba(255,255,255,.08); }
+
+/* ── Gerçek profil fotoğrafları ─────────────────────────────────────── */
+.wa-msg-conv__avatar img,
+.wa-msg-thread__avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    display: block;
+}
+.wa-msg-conv__avatar { overflow: hidden; }
+.wa-msg-thread__avatar { overflow: hidden; flex-shrink: 0; }
+
+/* ── Sohbet sabitleme (pin) ─────────────────────────────────────────── */
+.wa-pin-icon {
+    font-size: 0.7rem;
+    margin-left: 4px;
+    opacity: 0.65;
+}
+
+/* ── Bridge bağlantı durumu banner'ı ────────────────────────────────── */
+.wa-bridge-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    background: var(--wa-banner-bg, #fef3c7);
+    color: var(--wa-banner-text, #92400e);
+    border-bottom: 1px solid var(--wa-banner-border, #fde68a);
+    line-height: 1.35;
+}
+.wa-bridge-banner.is-error {
+    background: var(--wa-banner-err-bg, #fee2e2);
+    color: var(--wa-banner-err-text, #991b1b);
+    border-bottom-color: var(--wa-banner-err-border, #fecaca);
+}
+.wa-bridge-banner__dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+    animation: wa-banner-pulse 1.6s ease-in-out infinite;
+}
+@keyframes wa-banner-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+body.app-theme-dark .wa-bridge-banner {
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    border-bottom-color: rgba(245, 158, 11, 0.25);
+}
+body.app-theme-dark .wa-bridge-banner.is-error {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border-bottom-color: rgba(239, 68, 68, 0.25);
+}

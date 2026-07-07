@@ -140,6 +140,13 @@ export default function DocDesignerApp({ layoutId }) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         dispatch({ type: 'PASTE_ELEMENTS' }); return
       }
+      // Undo/Redo — Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
+        e.preventDefault(); dispatch({ type: 'UNDO' }); return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
+        e.preventDefault(); dispatch({ type: 'REDO' }); return
+      }
 
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key) && activeIds.length) {
         e.preventDefault()

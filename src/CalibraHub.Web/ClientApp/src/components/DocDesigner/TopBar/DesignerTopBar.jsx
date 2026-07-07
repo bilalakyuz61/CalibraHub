@@ -3,8 +3,11 @@ import DataSourceModal from './DataSourceModal'
 import { buildMockPreviewHtml } from '../utils/mockPreview'
 
 export default function DesignerTopBar({ state, dispatch, zoom, onZoomChange, onSave, onPreview, onPdf }) {
-  const { meta, bands, dataSources, saving, dirty, previewing } = state
+  const { meta, bands, dataSources, saving, dirty, previewing, past = [], future = [] } = state
   const [showDsModal, setShowDsModal] = useState(false)
+
+  const canUndo = past.length > 0
+  const canRedo = future.length > 0
 
   // Çoklu seçim hizalama çubuğu kaldırıldı; sağ PropertiesPanel'den yönetiliyor.
 
@@ -38,6 +41,21 @@ export default function DesignerTopBar({ state, dispatch, zoom, onZoomChange, on
 
         {dirty && <span style={{ fontSize: 11, color: '#f59e0b', flexShrink: 0 }}>●</span>}
 
+        {/* Undo / Redo — 2026-06-03 */}
+        <div style={divider} />
+        <button
+          onClick={() => dispatch({ type: 'UNDO' })}
+          disabled={!canUndo}
+          style={{ ...iconBtn, opacity: canUndo ? 1 : 0.35, cursor: canUndo ? 'pointer' : 'not-allowed' }}
+          title={`Geri Al (Ctrl+Z) — ${past.length} adım`}
+        >↶</button>
+        <button
+          onClick={() => dispatch({ type: 'REDO' })}
+          disabled={!canRedo}
+          style={{ ...iconBtn, opacity: canRedo ? 1 : 0.35, cursor: canRedo ? 'pointer' : 'not-allowed' }}
+          title={`Yinele (Ctrl+Y) — ${future.length} adım`}
+        >↷</button>
+
         <div style={{ flex: 1 }} />
 
         {/* Zoom */}
@@ -48,6 +66,32 @@ export default function DesignerTopBar({ state, dispatch, zoom, onZoomChange, on
           </button>
           <button onClick={() => onZoomChange(0.1)}  style={zBtn}>+</button>
         </div>
+
+        <div style={divider} />
+
+        {/* Grid + Snap toggle — 2026-06-03 */}
+        <button
+          onClick={() => dispatch({ type: 'SET_META', payload: { gridEnabled: !meta.gridEnabled } })}
+          style={{
+            ...iconBtn,
+            background: meta.gridEnabled ? 'var(--dd-accent-soft, rgba(99,102,241,0.10))' : 'var(--dd-surface, #fff)',
+            borderColor: meta.gridEnabled ? 'var(--dd-accent, #6366f1)' : 'var(--dd-border, #e5e7eb)',
+            color: meta.gridEnabled ? 'var(--dd-accent, #4338ca)' : 'var(--dd-text, #374151)',
+            fontSize: 13,
+          }}
+          title={`Grid ${meta.gridEnabled ? 'açık' : 'kapalı'} (${meta.gridSize ?? 1}mm)`}
+        >⊞</button>
+        <button
+          onClick={() => dispatch({ type: 'SET_META', payload: { snapToGrid: !meta.snapToGrid } })}
+          style={{
+            ...iconBtn,
+            background: meta.snapToGrid ? 'var(--dd-accent-soft, rgba(99,102,241,0.10))' : 'var(--dd-surface, #fff)',
+            borderColor: meta.snapToGrid ? 'var(--dd-accent, #6366f1)' : 'var(--dd-border, #e5e7eb)',
+            color: meta.snapToGrid ? 'var(--dd-accent, #4338ca)' : 'var(--dd-text, #374151)',
+            fontSize: 12, fontWeight: 700,
+          }}
+          title={`Grid'e yapış ${meta.snapToGrid ? 'açık' : 'kapalı'}`}
+        >⧈</button>
 
         <div style={divider} />
 
@@ -114,4 +158,11 @@ const zBtn = {
   width: 26, height: 26, border: '1px solid var(--dd-border, #e5e7eb)', borderRadius: 4,
   background: 'var(--dd-surface, #fff)', cursor: 'pointer', fontSize: 14, fontWeight: 700,
   display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--dd-text, #374151)',
+}
+
+const iconBtn = {
+  width: 30, height: 30, border: '1px solid var(--dd-border, #e5e7eb)', borderRadius: 6,
+  background: 'var(--dd-surface, #fff)', fontSize: 18, fontWeight: 600,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: 'var(--dd-text, #374151)', flexShrink: 0,
 }

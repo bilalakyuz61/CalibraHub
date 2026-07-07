@@ -163,6 +163,15 @@ const defaultMeta = {
   pageW: 210, pageH: 297,
   marginTop: 10, marginBot: 10, marginLeft: 15, marginRight: 10,
   isDefault: false,
+  // ── Snap-to-grid — 2026-06-03 ────────────────────────────────────
+  // gridEnabled: canvas'ta noktalı grid göster
+  // gridSize: mm cinsinden grid aralığı (1mm hassas / 5mm hızlı)
+  // snapToGrid: element sürükleme/resize sırasında gridSize'e yuvarla
+  // snapToGuides: kardeş element kenarlarına yakınlaşınca "smart guide" göster
+  gridEnabled: true,
+  gridSize: 1,
+  snapToGrid: true,
+  snapToGuides: true,
   // 2026-05-20: outputFormat artik 'pdf'e sabit (UI dropdown'i kaldirildi); legacy
   // defaultSubject/Body ve defaultsView*/Where alanlari backward-compat icin tutulur
   // ama Save sirasinda null olarak gonderilir. Mail sablonu kullanim niyeti yeni
@@ -192,6 +201,33 @@ export const initialState = {
   previewing: false,
   previewHtml: null,
   error: null,
+  // ── History (Undo/Redo) — 2026-06-03 ───────────────────────────────────
+  // past[] ve future[] içinde { meta, bands, dataSources } snapshot'ları
+  // tutulur. Ctrl+Z pop past → push future; Ctrl+Y tersi. Selection/clipboard
+  // history'ye dahil değil (kullanıcı Undo sonrası seçimini kaybetmesin).
+  // Max 50 snapshot; en eskisi silinir.
+  past: [],
+  future: [],
+}
+
+const HISTORY_LIMIT = 50
+
+// Bir action'ın state'i "içerik olarak" değiştirip değiştirmediğini kontrol eder.
+// Sadece seçim/hata gibi ephemeral değişiklikler history'ye eklenmez.
+const HISTORY_TRACKED_ACTIONS = new Set([
+  'SET_META', 'ADD_BAND', 'UPDATE_BAND', 'RESIZE_BAND', 'DELETE_BAND',
+  'ADD_ELEMENT', 'UPDATE_ELEMENT', 'UPDATE_ELEMENTS_BULK',
+  'MOVE_ELEMENT', 'RESIZE_ELEMENT', 'NUDGE_ELEMENT', 'DELETE_ELEMENT',
+  'ALIGN_ELEMENTS', 'DISTRIBUTE_ELEMENTS', 'PASTE_ELEMENTS',
+  'ADD_DATASOURCE', 'UPDATE_DATASOURCE', 'REMOVE_DATASOURCE',
+])
+
+function captureSnapshot(state) {
+  return {
+    meta: state.meta,
+    bands: state.bands,
+    dataSources: state.dataSources,
+  }
 }
 
 // 0.1mm hassasiyetinde yuvarlama — kullanıcı fareyle bıraktığı yer korunur,
@@ -207,7 +243,9 @@ function allElements(state) {
   return state.bands.flatMap(b => b.elements)
 }
 
-export function reducer(state, action) {
+// İç reducer — history tracking olmadan action'ı işler.
+// Dışarıdan çağrılan reducer() bu wrapper'ı sarmalar (UNDO/REDO + otomatik snapshot).
+function baseReducer(state, action) {
   switch (action.type) {
 
     case 'LOAD': {
@@ -304,17 +342,21 @@ export function reducer(state, action) {
     }
 
     case 'MOVE_ELEMENT': {
+      // 2026-06-03: snapToGrid meta.snapToGrid true ise meta.gridSize'e yuvarlar
+      // (default 1mm). false ise 0.1mm float temizliği kalır (eski davranış).
+      const grid = state.meta.snapToGrid ? (state.meta.gridSize ?? 1) : 0.1
       const bands = state.bands.map(b => ({
         ...b,
         elements: b.elements.map(e =>
           e.id === action.elementId
-            ? { ...e, x: snapToGrid(action.x), y: snapToGrid(action.y) }
+            ? { ...e, x: snapToGrid(action.x, grid), y: snapToGrid(action.y, grid) }
             : e),
       }))
       return { ...state, bands, dirty: true }
     }
 
     case 'RESIZE_ELEMENT': {
+      const grid = state.meta.snapToGrid ? (state.meta.gridSize ?? 1) : 0.1
       const bands = state.bands.map(b => ({
         ...b,
         elements: b.elements.map(e =>
@@ -322,7 +364,7 @@ export function reducer(state, action) {
             // Min 0.5mm (Konva boundBoxFunc'ta zaten enforce ediliyor — burada da
             // güvenlik için aynı). 5×3mm clamp kaldırıldı; ince çizgi elementleri
             // (imza altı, sayfa altı) tasarımcıda küçültülebilsin.
-            ? { ...e, w: Math.max(0.5, snapToGrid(action.w)), h: Math.max(0.5, snapToGrid(action.h)) }
+            ? { ...e, w: Math.max(0.5, snapToGrid(action.w, grid)), h: Math.max(0.5, snapToGrid(action.h, grid)) }
             : e),
       }))
       return { ...state, bands, dirty: true }
@@ -498,6 +540,64 @@ export function reducer(state, action) {
 
     default: return state
   }
+}
+
+// ── History-aware wrapper (Undo/Redo) ─────────────────────────────────────
+// Dışarıdan çağrılan reducer. HISTORY_TRACKED_ACTIONS listesindeki action'ları
+// işlemeden önce mevcut state'i past[]'e ekler, future[]'yi temizler.
+// UNDO/REDO action'ları past/future arasında snapshot taşır — content restore edilir,
+// selection/clipboard/dirty korunur.
+export function reducer(state, action) {
+  // UNDO ─ past'ten çek, mevcut state'i future'a ekle
+  if (action.type === 'UNDO') {
+    if (state.past.length === 0) return state
+    const previous = state.past[state.past.length - 1]
+    const newPast  = state.past.slice(0, -1)
+    return {
+      ...state,
+      ...previous,
+      past: newPast,
+      future: [captureSnapshot(state), ...state.future],
+      // Selection'ı temizle — undo'lanmış element'te seçili element artık olmayabilir
+      selectedElementId: null,
+      selectedElementIds: [],
+      editingElementId: null,
+      dirty: true,
+    }
+  }
+
+  // REDO ─ future'dan çek, mevcut state'i past'a ekle
+  if (action.type === 'REDO') {
+    if (state.future.length === 0) return state
+    const next    = state.future[0]
+    const newFut  = state.future.slice(1)
+    return {
+      ...state,
+      ...next,
+      past: [...state.past, captureSnapshot(state)],
+      future: newFut,
+      selectedElementId: null,
+      selectedElementIds: [],
+      editingElementId: null,
+      dirty: true,
+    }
+  }
+
+  const nextState = baseReducer(state, action)
+
+  // İçerik değiştiren action ise history'ye ekle
+  if (HISTORY_TRACKED_ACTIONS.has(action.type) && nextState !== state) {
+    const newPast = [...state.past, captureSnapshot(state)]
+    if (newPast.length > HISTORY_LIMIT) newPast.shift()
+    return { ...nextState, past: newPast, future: [] }
+  }
+
+  // LOAD sonrası history reset
+  if (action.type === 'LOAD') {
+    return { ...nextState, past: [], future: [] }
+  }
+
+  return nextState
 }
 
 // ── Serialization ─────────────────────────────────────────────────────────────

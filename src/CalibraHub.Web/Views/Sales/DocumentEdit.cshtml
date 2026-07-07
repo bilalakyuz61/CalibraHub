@@ -2012,36 +2012,20 @@
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
 
-    <!-- Aksiyon Seridi — sabit + lock banner host -->
+    <!-- Aksiyon Şeridi — CalibraHub standart butonlar (.pte-btn--icon).
+         Container .sqe-action-bar korundu: KITT flash + collaboration lock banner
+         host + status akışı buna bağlı. Sadece butonlar standart tile'a çevrildi. -->
     <div class="sqe-action-bar" data-no-proxy data-collaboration-banner-host>
-        <!-- Islemler menusu butonu — sol bas, sadece cark ikonu (kompakt).
-             Dropdown asagida ayri bir div olarak konumlandirilir. -->
-        <div class="sqe-actions-menu sqe-actions-menu--leading" id="sqActionsMenu">
-            <button type="button"
-                    class="sqe-actions-btn sqe-actions-btn--icon-only"
-                    id="sqActionsBtn"
-                    aria-haspopup="menu"
-                    aria-expanded="false"
-                    data-collaboration-allow
-                    title="Islemler"
-                    onclick="sqToggleActionsMenu(event)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-            </button>
-        </div>
-        <button type="button" class="sqe-btn sqe-btn--primary" data-collaboration-write="true" onclick="sqSave({ validate: true })">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Kaydet
-        </button>
-        <a href="@listReturnUrl" class="sqe-btn sqe-btn--secondary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            Listeye Don
+        <a href="@listReturnUrl" class="pte-btn pte-btn--secondary pte-btn--icon" id="ptBtnList" aria-label="Liste" title="Liste">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </a>
-        <button type="button" class="sqe-btn sqe-btn--danger" id="sqBtnDelete" data-collaboration-write="true" disabled onclick="sqDelete()">
+        <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" data-collaboration-write="true" onclick="sqSave({ validate: true })" aria-label="Kaydet">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+            <span class="pte-btn__label">Kaydet</span>
+        </button>
+        <button type="button" class="pte-btn pte-btn--danger pte-btn--icon" id="sqBtnDelete" data-collaboration-write="true" disabled onclick="sqDelete()" aria-label="Sil">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            Sil
+            <span class="pte-btn__label">Sil</span>
         </button>
         <!-- Status select gizli — UI uzerinden direkt degistirilmiyor; sqActionStatus
              (Islemler dropdown'undan) deger atayip change tetikliyor. Badge gorunur kaldi. -->
@@ -2054,6 +2038,24 @@
         </select>
         <span id="sqStatusBadge"></span>
         <span class="sqe-meta" id="sqMeta"></span>
+        <!-- İşlemler menüsü butonu — standart tile, meta'dan sonra sağda. -->
+        <div class="sqe-actions-menu" id="sqActionsMenu">
+            <button type="button"
+                    class="pte-btn pte-btn--actions pte-btn--icon"
+                    id="sqActionsBtn"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    data-collaboration-allow
+                    title="İşlemler"
+                    onclick="sqToggleActionsMenu(event)"
+                    aria-label="İşlemler">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span class="pte-btn__label">İşlemler</span>
+            </button>
+        </div>
     </div>
 
     <!-- Islemler Dropdown — aksiyon sertinin DISINDA ki backdrop-filter +

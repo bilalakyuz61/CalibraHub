@@ -1537,6 +1537,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@IsActive", location.IsActive));
         command.Parameters.Add(new SqlParameter("@IsMachinePark", location.IsMachinePark));
         command.Parameters.Add(new SqlParameter("@IsStorageArea", location.IsStorageArea));
+        command.Parameters.Add(new SqlParameter("@AllowNegativeBalance", (object?)location.AllowNegativeBalance ?? DBNull.Value));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

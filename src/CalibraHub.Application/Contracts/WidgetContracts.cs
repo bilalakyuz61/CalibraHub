@@ -148,7 +148,12 @@ public sealed record SaveWidgetValuesRequest(
     int FormId,
     string RecordId,
     IReadOnlyDictionary<string, object?> Values,
-    string? ParentRecordId = null);
+    string? ParentRecordId = null,
+    // 2026-07-06 — Zorunlu alan kontrolu (IsRequired + requiredIf) server'da da yapilir.
+    // Varsayilan true (guvenli). false yalnizca KISMI deger yazan ic akislar icindir
+    // (orn. import handler'i sadece esleştirilmis kolonlari gonderir); UI/API record
+    // save akislari her zaman true kalir.
+    bool EnforceRequired = true);
 
 /// <summary>
 /// Faz E — master-detail save payload. Ana form save endpoint'i bu shape'i
@@ -240,6 +245,84 @@ public sealed record UpsertWidgetRequest(
     bool IsPermissionControlled = false);
 
 public sealed record UpsertWidgetResponse(int Id);
+
+/// <summary>
+/// PATCH /api/widgets/widgets/sort-orders body elemani — yalnizca SortOrder
+/// gunceller. Reorder icin tam UpsertWidgetRequest gondermek OptionsJSON'un
+/// client tarafinda yeniden insasini gerektiriyordu; lookup/grid/text-rehber
+/// tiplerinde metadata (guideCode/guideConfig/childFormCode) kayipli
+/// donusuyordu. Bu kontrat o hata sinifini tamamen ortadan kaldirir.
+/// </summary>
+public sealed record WidgetSortOrderItem(int Id, int SortOrder);
+
+/// <summary>
+/// Alan bazli degisiklik gecmisi satiri — GET .../records/{recordId}/history.
+/// Label: widget hala mevcutsa guncel etiketi, silinmisse WidgetCode snapshot'i.
+/// ParentRecordId dolu ise satir bir grid child kaydina aittir (ChildRecordId
+/// hangi kalem oldugunu gosterir).
+/// </summary>
+public sealed record WidgetValueLogDto(
+    long Id,
+    string WidgetCode,
+    string Label,
+    string? OldValue,
+    string? NewValue,
+    string? ChangedBy,
+    DateTime ChangedAt,
+    string? ChildRecordId);
+
+// ═══════════════════════════════════════════════════
+// Widget tanim transport (export/import) — 2026-07-06
+// ═══════════════════════════════════════════════════
+
+/// <summary>
+/// Bir formun widget tanim paketi — sirketler arasi kopyalama ve test→canli
+/// tasima icin JSON dosyasi olarak indirilir/yuklenir.
+///
+/// Tasarim notlari:
+///   - ParentCode: grup iliskisi Id degil WidgetCode ile tasinir (hedef DB'de
+///     Id'ler farklidir).
+///   - IsSystemField=true widget'lar pakete dahil EDILMEZ — sistem alanlari
+///     hedef ortamda discovery tarafindan kendi EntityColumn eslesmesiyle
+///     seed edilir; paketten yazmak yanlis baglama riski tasir.
+///   - OptionsJson/RulesJson ham tasinir (kayipsiz); import sirasinda JSON
+///     gecerliligi + rule sanitizasyonu yeniden uygulanir.
+/// </summary>
+public sealed record WidgetPackageDto(
+    int CalibraWidgetPackage,          // format versiyonu — su an 1
+    string FormCode,
+    string? FormLabel,
+    DateTime ExportedAt,
+    IReadOnlyCollection<WidgetPackageItemDto> Widgets);
+
+public sealed record WidgetPackageItemDto(
+    string WidgetCode,
+    string Label,
+    string DataType,
+    string? ParentCode,
+    int? MaxLength,
+    int? MinLength,
+    int? ExpectedLength,
+    decimal? MinValue,
+    decimal? MaxValue,
+    int SortOrder,
+    string? OptionsJson,
+    string? RulesJson,
+    bool IsRequired,
+    bool IsActive,
+    int ColorType,
+    string? ColorValue,
+    int ColSpan,
+    string? LabelStyle,
+    bool IsPermissionControlled);
+
+/// <summary>
+/// Import sonucu — kac widget olustu/guncellendi, hangileri neden atlandi.
+/// </summary>
+public sealed record WidgetImportResultDto(
+    int Created,
+    int Updated,
+    IReadOnlyCollection<string> Skipped);
 
 public sealed record FormCatalogItemDto(
     int Id,

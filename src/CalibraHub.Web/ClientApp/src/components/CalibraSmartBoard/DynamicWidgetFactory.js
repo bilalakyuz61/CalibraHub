@@ -46,6 +46,7 @@ import {
   Calendar, Clock, TrendingUp, Layers, FileText, Hash, ShieldCheck,
   User, Users, Building2, Phone, Mail, MapPin, Percent,
   AlertTriangle, CheckCircle, CheckCircle2, XCircle, CircleDot, Activity,
+  AlignLeft, Paperclip,
   // Link ikonlari
   ArrowUpRight, ExternalLink, ArrowRight, Link as LinkIcon,
   TreePine, Receipt, Send, FileCheck, History, BarChart3,
@@ -69,7 +70,7 @@ var iconMap = {
   Package: Package, DollarSign: DollarSign, Warehouse: Warehouse,
   Tag: Tag, Scale: Scale, Ruler: Ruler, Shuffle: Shuffle,
   Calendar: Calendar, Clock: Clock, TrendingUp: TrendingUp,
-  Layers: Layers, FileText: FileText, Hash: Hash,
+  Layers: Layers, FileText: FileText, Hash: Hash, AlignLeft: AlignLeft, Paperclip: Paperclip,
   ShieldCheck: ShieldCheck, User: User, Users: Users,
   Building2: Building2, Phone: Phone, Mail: Mail, MapPin: MapPin,
   Percent: Percent, AlertTriangle: AlertTriangle,

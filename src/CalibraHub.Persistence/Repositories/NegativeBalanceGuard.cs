@@ -34,13 +34,45 @@ internal static class NegativeBalanceGuard
         bool allowed = locAllow ?? await GetBoolParamAsync(conn, tx, schema, companyId, StockParameters.NegBalanceAllowDefaultKey, ct);
         if (allowed) return;
 
-        // 3) İleriye dönük en düşük bakiye
+        // 3) İleriye dönük en düşük FİZİKSEL bakiye
         decimal minForward = await MinForwardBalanceAsync(conn, tx, schema, companyId, itemId, locationId, fromDate.Date, ct);
+
+        // 3b) Satış siparişi rezervasyonu açıksa: kullanılabilir = fiziksel − rezerve.
+        //     Açık (teslim edilmemiş) satış siparişi miktarları o depoda bakiyeyi bağlar.
+        if (await GetBoolParamAsync(conn, tx, schema, companyId, StockParameters.SalesOrderAffectsStockKey, ct))
+            minForward -= await OpenSalesReservationAsync(conn, tx, schema, companyId, itemId, locationId, ct);
+
         if (minForward < 0m)
         {
             var (itemLabel, locLabel) = await FetchLabelsAsync(conn, tx, schema, itemId, locationId, ct);
             throw new NegativeBalanceException(itemLabel, locLabel, -minForward);
         }
+    }
+
+    /// <summary>Açık (Status ≠ İptal/Red, teslim edilmemiş) satış siparişi satırlarının bu depoya
+    /// rezerve ettiği toplam ana-birim miktar. Depo = satır LocationId, yoksa belge LocationId.</summary>
+    private static async Task<decimal> OpenSalesReservationAsync(
+        SqlConnection conn, SqlTransaction tx, string schema, int companyId, int itemId, int locationId, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT ISNULL(SUM(dl.[BaseQuantity] - dl.[DeliveredQuantity]), 0)
+            FROM [{schema}].[DocumentLine] dl
+            INNER JOIN [{schema}].[Document] doc ON doc.[Id] = dl.[DocumentId]
+            INNER JOIN [{schema}].[DocumentType] dt ON dt.[Id] = doc.[DocumentTypeId]
+            WHERE dt.[Code] = N'satis_siparisi'
+              AND doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
+              AND doc.[Status] NOT IN (3, 5)          -- Rejected(3), Cancelled(5) hariç = açık sipariş
+              AND dl.[ItemId] = @ItemId
+              AND ISNULL(dl.[LocationId], doc.[LocationId]) = @L
+              AND dl.[BaseQuantity] > dl.[DeliveredQuantity];
+            """;
+        cmd.Parameters.AddWithValue("@Cid", companyId);
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@L", locationId);
+        var r = await cmd.ExecuteScalarAsync(ct);
+        return r is null or DBNull ? 0m : Convert.ToDecimal(r);
     }
 
     private static async Task<bool> GetBoolParamAsync(

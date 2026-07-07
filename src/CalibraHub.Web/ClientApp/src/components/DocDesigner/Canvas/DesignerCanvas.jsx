@@ -221,6 +221,23 @@ export default function DesignerCanvas({ state, dispatch, zoom, onZoomChange }) 
                 pointerEvents: 'none', zIndex: 0,
               }} />
 
+              {/* Grid overlay — 2026-06-03. meta.gridEnabled ise noktalı grid
+                  gösterir. gridSize (mm) canvas zoom'una çarpılıp CSS bg pattern
+                  olarak render edilir. Kağıt yüzeyinin tamamını kaplar (padding
+                  dahil), non-interactive. */}
+              {meta.gridEnabled && (
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundImage: isDark
+                    ? 'radial-gradient(circle, rgba(255,255,255,0.10) 0.5px, transparent 0.5px)'
+                    : 'radial-gradient(circle, rgba(15,23,42,0.15) 0.5px, transparent 0.5px)',
+                  backgroundSize: `${(meta.gridSize ?? 1) * MM_TO_PX * zoom}px ${(meta.gridSize ?? 1) * MM_TO_PX * zoom}px`,
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                }} />
+              )}
+
               {/* Margin drag handles */}
               <MarginHandle side="top"    pos={padT * zoom}                  zoom={zoom} meta={meta} dispatch={dispatch} />
               <MarginHandle side="bottom" pos={paperCssH - padB * zoom}      zoom={zoom} meta={meta} dispatch={dispatch} />

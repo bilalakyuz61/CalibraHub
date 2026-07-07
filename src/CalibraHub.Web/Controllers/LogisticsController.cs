@@ -96,7 +96,7 @@ public sealed class LogisticsController : Controller
         // 2026-05-24: Schema'yi bir kez cek, hem master widget list hem de "admin'in
         // zaten cover ettigi plain field" set'ini cikar � boylece w_kod/w_ad sistem
         // widget'lari admin'in mevcut widget'lariyla cakistirmaz (cift gozukmez).
-        var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
+        var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("MATERIAL_CARD_EDIT", ct);
         // 2026-05-24: Multi-select filter alanlari:
         //   - 5 ayri Grup slotu (Grup 1..5) � her birinin kendi MaterialGroups kategorisi
         //   - Olcu Birimi � Units tanim listesi
@@ -233,7 +233,7 @@ public sealed class LogisticsController : Controller
         try
         {
             var (cards, totalCount) = await _logisticsConfigurationService.GetItemsPagedAsync(search, offset, pageSize, ct);
-            var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
+            var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("MATERIAL_CARD_EDIT", ct);
             var handledColumns = ExtractHandledEntityColumns(itemsSchema);
             var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
             var activeFeatures = snapshot.Features.Where(f => f.IsActive).OrderBy(f => f.Name).ToList();
@@ -248,7 +248,7 @@ public sealed class LogisticsController : Controller
 
     private async Task<List<object>> BuildItemsMasterWidgetsAsync(CancellationToken ct)
     {
-        var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
+        var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("MATERIAL_CARD_EDIT", ct);
         return BuildItemsMasterWidgetsFromSchema(itemsSchema);
     }
 
@@ -318,7 +318,7 @@ public sealed class LogisticsController : Controller
     {
         var recordIds = cards.Select(c => c.Id.ToString()).ToArray();
         var batchWidgets = recordIds.Length > 0
-            ? await _widgetService.GetBatchRenderModelsAsync("ITEMS", recordIds, ct)
+            ? await _widgetService.GetBatchRenderModelsAsync("MATERIAL_CARD_EDIT", recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<CalibraHub.Application.Contracts.WidgetRenderDto>>();
 
         // 2026-05-24: Batch query'ler (N+1 onlemek icin).
@@ -867,11 +867,13 @@ public sealed class LogisticsController : Controller
         var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(schema);
         var typeOptions  = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(types.Select(t => t.Name));
         var usageOptions = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(new[] { "Makine", "Depo", "Makine + Depo" });
-        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_type",     "Tip",       typeOptions));
-        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_status",   "Durum",     "boolean"));
-        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_usage",    "Kullanim",  usageOptions));
-        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_children", "Alt Sayi",  "numeric"));
-        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_depth",    "Seviye",    "numeric"));
+        var negBalOptions = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(new[] { "İzinli (Kontrol Kapalı)", "Engelli (Kontrol Açık)" });
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_type",     "Tip",         typeOptions));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_status",   "Durum",       "boolean"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_usage",    "Kullanim",    usageOptions));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_negbal",   "Eksi Bakiye", negBalOptions));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_children", "Alt Sayi",    "numeric"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_depth",    "Seviye",      "numeric"));
 
         // -- Batch widget degerleri � t�m lokasyonlar i�in tek seferde --
         var recordIds = all.Select(l => l.Id.ToString()).ToArray();
@@ -918,6 +920,12 @@ public sealed class LogisticsController : Controller
             if (usageLabel != null)
                 widgets.Add(new { id = "w_usage", type = "data", dataType = "text", label = "Kullanim", value = usageLabel, color = usageColor });
 
+            // Eksi bakiye — yalnızca lokasyonda AÇIKÇA ayarlanmışsa göster (null=devral → chip yok)
+            if (l.AllowNegativeBalance == true)
+                widgets.Add(new { id = "w_negbal", type = "data", dataType = "options", label = "Eksi Bakiye", value = "İzinli (Kontrol Kapalı)", color = "amber" });
+            else if (l.AllowNegativeBalance == false)
+                widgets.Add(new { id = "w_negbal", type = "data", dataType = "options", label = "Eksi Bakiye", value = "Engelli (Kontrol Açık)", color = "emerald" });
+
             var nChild = childCount.TryGetValue(l.Id, out var c) ? c : 0;
             if (nChild > 0)
                 widgets.Add(new { id = "w_children", type = "data", dataType = "numeric", label = "Alt", value = nChild.ToString(System.Globalization.CultureInfo.InvariantCulture), detail = "adet", color = "slate" });
@@ -954,6 +962,7 @@ public sealed class LogisticsController : Controller
                 ["isActive"]      = l.IsActive,
                 ["isMachinePark"] = l.IsMachinePark,
                 ["isStorageArea"] = l.IsStorageArea,
+                ["allowNegativeBalance"] = l.AllowNegativeBalance,
                 ["widgets"]       = widgets,
                 ["children"]      = new List<Dictionary<string, object?>>(),
             });

@@ -76,6 +76,21 @@ public interface IWidgetRepository
         string targetRecordId,
         CancellationToken ct);
 
+    // ── WidgetTraLog (alan bazli degisiklik gecmisi) ────────────
+
+    /// <summary>
+    /// Bir kaydin widget degeri degisiklik gecmisini yeni→eski sirali doner.
+    /// Master kaydin kendi degisiklikleri + (varsa) grid child satirlarinin
+    /// degisiklikleri birlikte gelir (child loglar ParentRecordId = recordId
+    /// ile yazilir). top: satir limiti (asiri buyuk gecmislere karsi guvence).
+    /// Audit tablosu heniz olusmadiysa (eski DB, migration calismadi) bos doner.
+    /// </summary>
+    Task<IReadOnlyCollection<WidgetValueLog>> GetValueLogsAsync(
+        int formId,
+        string recordId,
+        int top,
+        CancellationToken ct);
+
     // ── Master-Detail (Faz E — grid widget) ────────────
 
     /// <summary>

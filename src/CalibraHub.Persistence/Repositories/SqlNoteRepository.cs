@@ -89,7 +89,7 @@ public sealed class SqlNoteRepository : INoteRepository
                    n.[IsPinned], n.[IsFullyEncrypted], n.[EncryptionHint], n.[Tags],
                    n.[linked_entity_type], n.[linked_entity_id], n.[linked_entity_label],
                    n.[visibility], n.[share_token], n.[share_is_public], n.[share_include_attachments],
-                   n.[ocr_text]
+                   n.[ocr_text], n.[snippet]
             FROM {_notesTable} n
             WHERE n.[IsDeleted] = 0
               AND n.[CompanyId] = @CompanyId
@@ -111,24 +111,48 @@ public sealed class SqlNoteRepository : INoteRepository
     public async Task<(string Content, string? OcrText)?> GetContentByIdAsync(Guid noteId, int userId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT n.[Content], n.[ocr_text]
-            FROM {_notesTable} n
-            WHERE n.[Id] = @Id AND n.[IsDeleted] = 0
-              AND (n.[UserId] = @UserId
-                   OR n.[visibility] = 1
-                   OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[NoteId] = n.[Id] AND s.[SharedWithUserId] = @UserId));
-            """;
-        command.Parameters.Add(new SqlParameter("@Id", noteId));
-        command.Parameters.Add(new SqlParameter("@UserId", userId));
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken)) return null;
+        string content;
+        string? ocrText;
+        bool needsSnippetBackfill;
 
-        var rawContent = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
-        var content = _encryption.Unprotect(rawContent) ?? string.Empty;
-        var ocrText = reader.IsDBNull(1) ? null : reader.GetString(1);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"""
+                SELECT n.[Content], n.[ocr_text], n.[snippet], n.[IsFullyEncrypted]
+                FROM {_notesTable} n
+                WHERE n.[Id] = @Id AND n.[IsDeleted] = 0
+                  AND (n.[UserId] = @UserId
+                       OR n.[visibility] = 1
+                       OR EXISTS (SELECT 1 FROM {_sharesTable} s WHERE s.[NoteId] = n.[Id] AND s.[SharedWithUserId] = @UserId));
+                """;
+            command.Parameters.Add(new SqlParameter("@Id", noteId));
+            command.Parameters.Add(new SqlParameter("@UserId", userId));
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) return null;
+
+            var rawContent = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+            content = _encryption.Unprotect(rawContent) ?? string.Empty;
+            ocrText = reader.IsDBNull(1) ? null : reader.GetString(1);
+            var isFullyEncrypted = !reader.IsDBNull(3) && reader.GetBoolean(3);
+            // Snippet kolonu eklenmeden önceki kayıtlar için tek seferlik backfill
+            needsSnippetBackfill = reader.IsDBNull(2) && !isFullyEncrypted && content.Length > 0;
+        }
+
+        if (needsSnippetBackfill)
+        {
+            var snippetPlain = ComputeSnippet(content);
+            if (!string.IsNullOrEmpty(snippetPlain))
+            {
+                await using var update = connection.CreateCommand();
+                update.CommandText = $"UPDATE {_notesTable} SET [snippet] = @Snippet WHERE [Id] = @Id;";
+                update.Parameters.Add(new SqlParameter("@Snippet", _encryption.Protect(snippetPlain)));
+                update.Parameters.Add(new SqlParameter("@Id", noteId));
+                await update.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+
         return (content, ocrText);
     }
 
@@ -137,7 +161,7 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [Id], [CompanyId], [UserId], [Title], [Content], [Created], [Updated], [FolderId], [IsPinned], [IsFullyEncrypted], [EncryptionHint], [Tags], [linked_entity_type], [linked_entity_id], [linked_entity_label], [visibility]
+            SELECT [Id], [CompanyId], [UserId], [Title], [Content], [Created], [Updated], [FolderId], [IsPinned], [IsFullyEncrypted], [EncryptionHint], [Tags], [linked_entity_type], [linked_entity_id], [linked_entity_label], [visibility], [share_token], [share_is_public], [share_include_attachments], [ocr_text]
             FROM {_notesTable}
             WHERE [Id] = @Id AND [IsDeleted] = 0;
             """;
@@ -162,7 +186,7 @@ public sealed class SqlNoteRepository : INoteRepository
                     [Tags] = @Tags,
                     [linked_entity_type] = @LinkedEntityType, [linked_entity_id] = @LinkedEntityId,
                     [linked_entity_label] = @LinkedEntityLabel, [visibility] = @Visibility,
-                    [ocr_text] = @OcrText
+                    [ocr_text] = @OcrText, [snippet] = @Snippet
                 WHERE [Id] = @Id;
             ELSE
                 INSERT INTO {_notesTable}
@@ -170,13 +194,13 @@ public sealed class SqlNoteRepository : INoteRepository
                      [Created], [Updated], [IsDeleted], [IsPinned],
                      [IsFullyEncrypted], [EncryptionHint], [Tags],
                      [linked_entity_type], [linked_entity_id], [linked_entity_label], [visibility],
-                     [ocr_text])
+                     [ocr_text], [snippet])
                 VALUES
                     (@Id, @CompanyId, @UserId, @Title, @Content, @FolderId,
                      @CreatedAt, @UpdatedAt, 0, @IsPinned,
                      @IsFullyEncrypted, @EncryptionHint, @Tags,
                      @LinkedEntityType, @LinkedEntityId, @LinkedEntityLabel, @Visibility,
-                     @OcrText);
+                     @OcrText, @Snippet);
             """;
         command.Parameters.Add(new SqlParameter("@Id", note.Id));
         command.Parameters.Add(new SqlParameter("@CompanyId", note.CompanyId));
@@ -200,7 +224,36 @@ public sealed class SqlNoteRepository : INoteRepository
         command.Parameters.Add(new SqlParameter("@Visibility", note.Visibility));
         command.Parameters.Add(new SqlParameter("@OcrText", (object?)note.OcrText ?? DBNull.Value));
 
+        // Liste kartı özeti — E2E şifreli notta üretilmez (içerik ciphertext).
+        var snippetPlain = note.IsFullyEncrypted ? null : ComputeSnippet(note.Content);
+        var snippetProtected = string.IsNullOrEmpty(snippetPlain) ? null : _encryption.Protect(snippetPlain);
+        command.Parameters.Add(new SqlParameter("@Snippet", (object?)snippetProtected ?? DBNull.Value));
+
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// HTML içerikten liste kartı için düz-metin özet üretir (~300 karakter).
+    /// E2E şifreli inline bölümler (nw-encrypted span) kilit simgesiyle maskelenir.
+    /// </summary>
+    internal static string? ComputeSnippet(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return null;
+
+        // Mod 1 şifreli inline span'ları içerikleriyle birlikte maskele
+        var text = System.Text.RegularExpressions.Regex.Replace(
+            html, "<span[^>]*class=\"[^\"]*nw-encrypted[^\"]*\"[^>]*>[\\s\\S]*?</span>", " \U0001F512 ",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Base64 data URI'ları tag strip öncesi kısalt (regex backtracking maliyetini önle)
+        text = System.Text.RegularExpressions.Regex.Replace(text, "src=\"data:[^\"]*\"", "src=\"\"",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Tüm tag'leri boşlukla değiştir
+        text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]+>", " ");
+        text = System.Net.WebUtility.HtmlDecode(text);
+        text = System.Text.RegularExpressions.Regex.Replace(text, "\\s+", " ").Trim();
+
+        if (text.Length == 0) return null;
+        return text.Length > 300 ? text.Substring(0, 300) : text;
     }
 
     public async Task TogglePinAsync(Guid id, int userId, CancellationToken cancellationToken)
@@ -741,6 +794,7 @@ public sealed class SqlNoteRepository : INoteRepository
             ShareIsPublic            = reader.FieldCount > 16 && !reader.IsDBNull(16) && reader.GetBoolean(16),
             ShareIncludeAttachments  = reader.FieldCount > 17 && !reader.IsDBNull(17) && reader.GetBoolean(17),
             OcrText                  = reader.FieldCount > 18 && !reader.IsDBNull(18) ? reader.GetString(18) : null,
+            Snippet                  = reader.FieldCount > 19 && !reader.IsDBNull(19) ? _encryption.Unprotect(reader.GetString(19)) : null,
         };
     }
 

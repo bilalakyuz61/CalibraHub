@@ -248,33 +248,42 @@ body.app-theme-dark .pte-action-bar__title {
     transform: rotate(180deg) scale(1.1);
 }
 
-/* ── İŞLEMLER — slate (secondary) ── */
-#ptBtnActions.pte-btn--icon {
+/* ── İŞLEMLER — slate (secondary) ──
+   Hem #ptBtnActions (partial default id) hem .pte-btn--actions (class) ile
+   çalışır — böylece kendi id'sini koruyan ekranlar (ör. DocumentEdit
+   #sqActionsBtn) da aynı slate görünümü class üzerinden alır. */
+#ptBtnActions.pte-btn--icon,
+.pte-btn--actions.pte-btn--icon {
     background: #f1f5f9;
     border-color: #e2e8f0;
     color: #475569;
 }
-#ptBtnActions.pte-btn--icon:hover:not(:disabled) {
+#ptBtnActions.pte-btn--icon:hover:not(:disabled),
+.pte-btn--actions.pte-btn--icon:hover:not(:disabled) {
     background: #e2e8f0;
     border-color: #cbd5e1;
     color: #1e293b;
 }
-#ptBtnActions.pte-btn--icon > svg {
+#ptBtnActions.pte-btn--icon > svg,
+.pte-btn--actions.pte-btn--icon > svg {
     transition: transform .6s var(--motion-ease-out);
 }
-#ptBtnActions.pte-btn--icon:hover:not(:disabled) > svg {
+#ptBtnActions.pte-btn--icon:hover:not(:disabled) > svg,
+.pte-btn--actions.pte-btn--icon:hover:not(:disabled) > svg {
     transform: rotate(90deg);
 }
 
 /* Dark tema override — soft tinted'in tersi: koyu zemin + açık ikon */
 body.app-theme-dark #ptBtnList.pte-btn--icon,
-body.app-theme-dark #ptBtnActions.pte-btn--icon {
+body.app-theme-dark #ptBtnActions.pte-btn--icon,
+body.app-theme-dark .pte-btn--actions.pte-btn--icon {
     background: rgba(100,116,139,0.15);
     border-color: rgba(148,163,184,0.25);
     color: #cbd5e1;
 }
 body.app-theme-dark #ptBtnList.pte-btn--icon:hover:not(:disabled),
-body.app-theme-dark #ptBtnActions.pte-btn--icon:hover:not(:disabled) {
+body.app-theme-dark #ptBtnActions.pte-btn--icon:hover:not(:disabled),
+body.app-theme-dark .pte-btn--actions.pte-btn--icon:hover:not(:disabled) {
     background: rgba(100,116,139,0.25);
     border-color: rgba(148,163,184,0.40);
     color: #f1f5f9;
@@ -357,4 +366,28 @@ body.app-theme-dark #ptBtnNew.pte-btn--icon:hover:not(:disabled) {
     padding: 5px 10px;
     font-size: 11.5px;
     border-radius: var(--radius-sm);
+}
+
+/* ── VİOLET — ekrana özgü özel aksiyon (ör. Sayım "Yansıt") ──
+   Standart palette dışı, "commit/uygula" niyetli mor vurgu. Id yerine
+   class tabanlı; ExtraButtonsHtml slotunda kullanılır. */
+.pte-btn--violet.pte-btn--icon {
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+    color: #7c3aed;
+}
+.pte-btn--violet.pte-btn--icon:hover:not(:disabled) {
+    background: #ede9fe;
+    border-color: #c4b5fd;
+    color: #6d28d9;
+}
+body.app-theme-dark .pte-btn--violet.pte-btn--icon {
+    background: rgba(139,92,246,0.18);
+    border-color: rgba(167,139,250,0.35);
+    color: #c4b5fd;
+}
+body.app-theme-dark .pte-btn--violet.pte-btn--icon:hover:not(:disabled) {
+    background: rgba(139,92,246,0.28);
+    border-color: rgba(167,139,250,0.55);
+    color: #ddd6fe;
 }

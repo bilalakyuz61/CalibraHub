@@ -113,6 +113,8 @@ public sealed class ParametersController : Controller
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceControlKey)?.ParamValue == "true";
         ViewData["NegBalanceAllowDefault"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceAllowDefaultKey)?.ParamValue == "true";
+        ViewData["SalesOrderAffectsStock"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesOrderAffectsStockKey)?.ParamValue == "true";
 
         return View("~/Views/Admin/Parameters.cshtml");
     }

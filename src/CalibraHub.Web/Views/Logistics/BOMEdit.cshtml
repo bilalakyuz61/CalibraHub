@@ -11,6 +11,41 @@
 }
 
 @section Styles {
+<script>
+/* ===== ERKEN YUKLEME (head) — 2026-07-05 =====
+   Olcum: bundle istegi body-sonu loader ile ~640ms'de basliyor, binding fetch'i
+   bundle exec'ini bekliyordu → rehber kartlari ~2.4sn'de geliyordu.
+   1) Bundle <head>'de enjekte edilir (parse ile paralel indirme/cache).
+   2) Runtime binding'leri bundle'i BEKLEMEDEN prefetch edilir;
+      fieldSettingService.getRuntimeBindings ayni promise'i tuketir. */
+(function () {
+    window.__CALIBRA_PREFETCH_BINDINGS = window.__CALIBRA_PREFETCH_BINDINGS || {};
+    if (!window.__CALIBRA_PREFETCH_BINDINGS['PRODUCT_TREES']) {
+        window.__CALIBRA_PREFETCH_BINDINGS['PRODUCT_TREES'] =
+            fetch('/api/field-settings/runtime/PRODUCT_TREES', {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .catch(function () { return []; });
+    }
+    if ((window.CalibraHub && window.CalibraHub.openCombinationPicker) ||
+        document.querySelector('script[data-bom-react-bundle]')) return;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '@bundleCssUrl';
+    link.setAttribute('data-bom-react-bundle', '1');
+    document.head.appendChild(link);
+    var s = document.createElement('script');
+    s.src = '@bundleJsUrl';
+    s.setAttribute('data-bom-react-bundle', '1');
+    s.onload = function () {
+        try { window.dispatchEvent(new Event('calibrahub-bundle-ready')); } catch (e) { /* ignore */ }
+    };
+    s.onerror = function () { console.error('[BOM] React bundle yuklenemedi'); };
+    document.head.appendChild(s);
+})();
+</script>
 <style>
     /* ============================================================
        BOMEdit Premium Skin — token-based, Apple/Linear/Vercel grade
@@ -831,15 +866,42 @@
 
     /* ── Premium veri girişi (2026-07-05) ─────────────────────────── */
 
-    /* Rehber kartı mount olana kadar input'un sağında büyüteç görünür —
-       bundle yüklenirken alan "sonradan geliyor" hissi vermez; mount olunca
-       JS sınıfı kaldırır (kart kendi büyütecini getirir). */
+    /* Rehber kartı mount olana kadar input, kartın SON halini taklit eder:
+       sağda büyüteç + solda 3px indigo accent bar. Mount olunca JS sınıfı
+       kaldırır — görsel olarak hiçbir şey değişmez ("sonradan geldi" hissi yok). */
     .pte-lookup--pending .pte-input {
-        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgb(139,148,166)' stroke-width='2' stroke-linecap='round'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.3-4.3'/></svg>");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
-        background-size: 14px 14px;
+        background-image:
+            url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgb(139,148,166)' stroke-width='2' stroke-linecap='round'><circle cx='11' cy='11' r='8'/><path d='M21 21l-4.3-4.3'/></svg>"),
+            linear-gradient(180deg, rgba(99,102,241,0.85) 0%, rgba(79,70,229,0.85) 100%);
+        background-repeat: no-repeat, no-repeat;
+        background-position: right 10px center, left top;
+        background-size: 14px 14px, 3px 100%;
         padding-right: 34px;
+    }
+
+    /* Mount SONRASI kart, plain input ile piksel uyumlu — swap görünmez olur.
+       Ölçülen fark: kart 38px/10px-radius/.875rem (root 12.5px → 10.9px font),
+       input 35.5px/8px/13px + farklı arka plan. Bu blok kartı input'a eşitler. */
+    .pte-lookup .gl-card {
+        height: 35.5px;
+        border-radius: 8px;
+        background: var(--surface-elev-2);
+        border-color: var(--border-subtle);
+        box-shadow: none;
+    }
+    /* Tema kurali (body.app-theme-dark .gl-card) daha spesifik oldugu icin
+       arka plani eziyordu — ayni spesifiklikte pte-input paritesi korunur. */
+    body.app-theme-dark .pte-lookup .gl-card,
+    body.app-theme-light .pte-lookup .gl-card {
+        background: var(--surface-elev-2);
+        border-color: var(--border-subtle);
+        box-shadow: none;
+    }
+    .pte-lookup .gl-card__input {
+        font-size: 13px;
+        font-weight: var(--font-weight-medium);
+        letter-spacing: -0.005em;
+        color: var(--text-primary);
     }
 
     /* Toast içinde aksiyon butonu (Geri Al) — toast görünürken tıklanabilir olmalı */
@@ -1371,6 +1433,13 @@
 
 (function () {
 
+    /* ===== SIRKET PARAMETRESI: mukerrer bilesen izni =====
+       BOM_ALLOW_DUPLICATE_COMPONENTS (Admin → Parametreler → Üretim).
+       false: ayni (kod+kombinasyon) eklemede miktarlar birlestirilir (varsayilan).
+       true : ayni bilesen farkli satirlarda tekrar edebilir (farkli fire/aciklama).
+       Server-side dogrulama SaveBOM'da ayni parametre ile yapilir. */
+    var PT_ALLOW_DUP = @((ViewBag.AllowDupComponents as bool? ?? false) ? "true" : "false");
+
     /* ===== TOAST ===== */
     var ptMsgTimer = null;
     function showMsg(text, ok) {
@@ -1893,7 +1962,9 @@
         }
 
         var component = { code: code, name: name, qty: qty, scrap: scrap, hasConfig: hasConfig, cfgCode: cfgCode, cfgDesc: cfgDesc, note: note };
-        var dupIdx = ptFindDupIndex(code, hasConfig ? cfgCode : '', ptEditIndex >= 0 ? ptEditIndex : -1);
+        // Mukerrer bilesen davranisi parametrik: izin varsa birlestirme/engel yok,
+        // ayni kod yeni bir satir olarak eklenir (farkli fire/aciklama pozisyonlari).
+        var dupIdx = PT_ALLOW_DUP ? -1 : ptFindDupIndex(code, hasConfig ? cfgCode : '', ptEditIndex >= 0 ? ptEditIndex : -1);
 
         if (ptEditIndex >= 0) {
             if (dupIdx >= 0) {
@@ -2835,8 +2906,9 @@
     function ptPasteParse(text) {
         var lines = (text || '').split(/\r?\n/);
         var hasTab = lines.some(function(l) { return l.indexOf('\t') >= 0; });
-        var byCode = {};   // ayni kod pastede tekrar ederse miktarlar toplanir
+        var byCode = {};   // ayni kod pastede tekrar ederse miktarlar toplanir (izin modunda toplanmaz)
         var order = [];
+        var rows = [];     // PT_ALLOW_DUP: her satir ayri kayit
         lines.forEach(function(line) {
             var t = line.trim();
             if (!t) return;
@@ -2848,6 +2920,10 @@
             var scrap = ptParseQty(cols[2]);
             if (isNaN(scrap) || scrap < 0) scrap = 0;
             var note = (cols[3] || '').trim();
+            if (PT_ALLOW_DUP) {
+                rows.push({ code: code, qty: qty, scrap: scrap, note: note });
+                return;
+            }
             var key = code.toLowerCase();
             if (byCode[key]) {
                 byCode[key].qty = Math.round((byCode[key].qty + qty) * 10000) / 10000;
@@ -2858,7 +2934,7 @@
                 order.push(key);
             }
         });
-        return order.map(function(k) { return byCode[k]; });
+        return PT_ALLOW_DUP ? rows : order.map(function(k) { return byCode[k]; });
     }
 
     async function ptPasteParseAndResolve() {
@@ -2883,7 +2959,8 @@
             (resolved || []).forEach(function(r) { byCode[(r.code || '').toLowerCase()] = r; });
             var rows = ptPasteParsed.map(function(p) {
                 var r = byCode[p.code.toLowerCase()] || { found: false };
-                var dupIdx = r.found ? ptFindDupIndex(r.resolvedCode || p.code, '', -1) : -1;
+                // Izin modunda mevcut satirla birlestirme yok — hepsi yeni satir olur.
+                var dupIdx = (!PT_ALLOW_DUP && r.found) ? ptFindDupIndex(r.resolvedCode || p.code, '', -1) : -1;
                 return {
                     code: r.found ? (r.resolvedCode || p.code) : p.code,
                     name: r.found ? (r.name || '') : '',

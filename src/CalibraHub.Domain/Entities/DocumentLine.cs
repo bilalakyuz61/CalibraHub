@@ -25,6 +25,9 @@ public sealed class DocumentLine
     [Description("Miktarın ana birime (Item.UnitId) çevrilmiş hali. Yazımda Quantity * ItemUnits.Multiplier ile hesaplanır (UnitId ana birim/NULL ise = Quantity). TÜM stok bakiye/hareket hesapları bunu kullanır — farklı birimlerden hareketler tutarlı toplanır. UnitId = girilen birim (gösterim).")]
     public decimal BaseQuantity { get; set; }
 
+    [Description("Satış siparişi rezervasyonu (Faz 2): teslim edilen ana-birim miktar. Açık/rezerve miktar = BaseQuantity - DeliveredQuantity. Teslimat aksiyonuyla artar.")]
+    public decimal DeliveredQuantity { get; set; }
+
     public decimal UnitPrice { get; set; }
     public decimal DiscountRate { get; set; }
     public decimal LineTotal { get; set; }

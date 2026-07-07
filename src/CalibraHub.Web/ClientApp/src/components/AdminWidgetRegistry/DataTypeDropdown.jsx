@@ -23,12 +23,14 @@ import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFac
  */
 export var DATA_TYPES = [
   { value: 'text',         label: 'Metin',            icon: 'FileText',     color: 'slate' },
+  { value: 'textarea',     label: 'Uzun Metin',       icon: 'AlignLeft',    color: 'slate' },
   { value: 'numeric',      label: 'Sayi',             icon: 'Hash',         color: 'blue' },
   { value: 'date',         label: 'Tarih',            icon: 'Calendar',     color: 'cyan' },
   { value: 'boolean',      label: 'Evet / Hayir',     icon: 'CheckCircle',  color: 'emerald' },
   { value: 'dropdown',     label: 'Secim Listesi',    icon: 'List',         color: 'teal' },
   { value: 'multi-select', label: 'Coklu Secim',      icon: 'Layers',       color: 'teal' },
   { value: 'link',         label: 'Baglanti',         icon: 'ExternalLink', color: 'violet' },
+  { value: 'attachment',   label: 'Dosya / Görsel',   icon: 'Paperclip',    color: 'violet' },
   // 'lookup' ve 'grid' eski tipler — yeni tanim listesinden gizlendi (hidden:true).
   // Eski tanimlanmis widget'lar edit acilinca DATA_TYPES.find(...) ile yine bulunur,
   // ekranda dogru ikon/renk goster — sadece dropdown listesinde gorunmez.
