@@ -2027,6 +2027,55 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             <span class="pte-btn__label">Sil</span>
         </button>
+        @if (isOrder && Model.DocumentId.HasValue)
+        {
+            <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="sqBtnDeliver" data-collaboration-allow onclick="sqDeliverOrder()" title="Açık kalemleri teslim et — fiziksel stok çıkışı yazar, rezervasyonu serbest bırakır" aria-label="Teslim Et">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                <span class="pte-btn__label">Teslim Et</span>
+            </button>
+            <script>
+            function sqDeliverOrder() {
+                var oid = @(Model.DocumentId ?? 0);
+                if (!oid) return;
+                _sqDlvConfirm('Bu siparişin açık (teslim edilmemiş) kalemleri teslim edilecek: fiziksel stok çıkışı yazılacak ve rezervasyon serbest kalacak. Devam edilsin mi?', function () {
+                    var tokEl = document.querySelector('input[name="__RequestVerificationToken"]');
+                    var btn = document.getElementById('sqBtnDeliver'); if (btn) btn.disabled = true;
+                    fetch('/Warehouse/DeliverSalesOrderJson?orderId=' + oid, {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'RequestVerificationToken': tokEl ? tokEl.value : '' }
+                    }).then(function (r) { return r.json(); }).then(function (d) {
+                        if (d && d.success) { _sqDlvToast('Teslimat oluşturuldu: ' + (d.docNo || ('#' + d.id)) + '. Stok çıkışı yazıldı, rezervasyon güncellendi.', true); setTimeout(function () { window.location.reload(); }, 1100); }
+                        else { _sqDlvToast((d && d.message) || 'Teslimat başarısız.', false); if (btn) btn.disabled = false; }
+                    }).catch(function (e) { _sqDlvToast('Teslimat sırasında hata: ' + e, false); if (btn) btn.disabled = false; });
+                });
+            }
+            function _sqDlvConfirm(msg, onOk) {
+                var bd = document.createElement('div');
+                bd.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;';
+                bd.innerHTML = '<div style="max-width:420px;width:92%;background:var(--app-surface,#1a1f2e);border:1px solid var(--app-border,#334155);border-radius:14px;padding:20px;color:var(--bs-body-color,#e2e8f0);box-shadow:0 20px 60px rgba(0,0,0,.5)">'
+                    + '<div style="font-size:1rem;font-weight:700;margin-bottom:8px">Siparişi Teslim Et</div>'
+                    + '<div style="font-size:.86rem;line-height:1.5;opacity:.85;margin-bottom:18px"></div>'
+                    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+                    + '<button id="_sqDlvCancel" style="padding:8px 14px;border-radius:8px;border:1px solid var(--app-border,#334155);background:transparent;color:inherit;cursor:pointer;font-weight:600">Vazgeç</button>'
+                    + '<button id="_sqDlvOk" style="padding:8px 16px;border-radius:8px;border:none;background:#10b981;color:#fff;cursor:pointer;font-weight:600">Teslim Et</button>'
+                    + '</div></div>';
+                bd.querySelector('div > div').textContent = msg;
+                document.body.appendChild(bd);
+                function close() { if (bd.parentNode) bd.parentNode.removeChild(bd); }
+                bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+                bd.querySelector('#_sqDlvCancel').onclick = close;
+                bd.querySelector('#_sqDlvOk').onclick = function () { close(); onOk(); };
+                bd.querySelector('#_sqDlvOk').focus();
+            }
+            function _sqDlvToast(msg, ok) {
+                var t = document.createElement('div');
+                t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:100001;padding:12px 18px;border-radius:10px;font-size:.85rem;font-weight:600;color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:90%;background:' + (ok ? '#10b981' : '#ef4444');
+                t.textContent = msg;
+                document.body.appendChild(t);
+                setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 4000);
+            }
+            </script>
+        }
         <!-- Status select gizli — UI uzerinden direkt degistirilmiyor; sqActionStatus
              (Islemler dropdown'undan) deger atayip change tetikliyor. Badge gorunur kaldi. -->
         <select id="sqStatusSelect" class="form-select form-select-sm" style="display:none;" onchange="sqChangeStatus()">

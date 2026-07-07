@@ -6,9 +6,10 @@ namespace CalibraHub.Persistence.Repositories;
 
 /// <summary>
 /// Eksi bakiye kontrolü — stok-azaltıcı hareket yazan transaction İÇİNDE çağrılır (yeni
-/// satırlar zaten INSERT edildiğinden hesaba dahil olur). Katmanlı çözümleme:
+/// satırlar zaten INSERT edildiğinden hesaba dahil olur). İki katmanlı çözümleme:
 ///   1) Şirket ana anahtarı (STOCK / NEG_BALANCE_CONTROL) kapalı → hiç kontrol yok (no-op).
-///   2) Açık → Location.AllowNegativeBalance (null ise STOCK / NEG_BALANCE_ALLOW_DEFAULT).
+///   2) Açık → Location.AllowNegativeBalance. Deponun kendi ayarı yoksa (null) VARSAYILAN ENGELLE.
+///      İzin, yalnızca deponun switch'i açıkça İzin (true) ise verilir (Lokasyon Tanımlamaları).
 ///   3) İzin yoksa: hareket tarihinden İTİBAREN ileriye dönük en düşük bakiye negatifse
 ///      NegativeBalanceException fırlatır (tarih bazlı zincirleme kontrol → tx geri alınır).
 ///
@@ -29,10 +30,10 @@ internal static class NegativeBalanceGuard
         if (!await GetBoolParamAsync(conn, tx, schema, companyId, StockParameters.NegBalanceControlKey, ct))
             return;
 
-        // 2) Depo izni (null → şirket varsayılanı)
+        // 2) Depo izni — deponun kendi ayarı yoksa (null) varsayılan ENGELLE.
+        //    Yalnızca deponun switch'i açıkça İzin (true) ise eksi bakiyeye izin verilir.
         bool? locAllow = await GetLocationAllowAsync(conn, tx, schema, locationId, ct);
-        bool allowed = locAllow ?? await GetBoolParamAsync(conn, tx, schema, companyId, StockParameters.NegBalanceAllowDefaultKey, ct);
-        if (allowed) return;
+        if (locAllow == true) return;
 
         // 3) İleriye dönük en düşük FİZİKSEL bakiye
         decimal minForward = await MinForwardBalanceAsync(conn, tx, schema, companyId, itemId, locationId, fromDate.Date, ct);
@@ -63,7 +64,7 @@ internal static class NegativeBalanceGuard
             INNER JOIN [{schema}].[DocumentType] dt ON dt.[Id] = doc.[DocumentTypeId]
             WHERE dt.[Code] = N'satis_siparisi'
               AND doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
-              AND doc.[Status] NOT IN (3, 5)          -- Rejected(3), Cancelled(5) hariç = açık sipariş
+              AND doc.[Status] NOT IN (N'Rejected', N'Cancelled')   -- açık sipariş (Status string tutulur: enum adı)
               AND dl.[ItemId] = @ItemId
               AND ISNULL(dl.[LocationId], doc.[LocationId]) = @L
               AND dl.[BaseQuantity] > dl.[DeliveredQuantity];

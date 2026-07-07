@@ -7,7 +7,6 @@
     var stockEffects = ViewData["StockEffectStates"]
         as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
     var negControl = ViewData["NegBalanceControl"] as bool? ?? false;
-    var negDefault = ViewData["NegBalanceAllowDefault"] as bool? ?? false;
     var salesOrderAffects = ViewData["SalesOrderAffectsStock"] as bool? ?? false;
 }
 
@@ -542,26 +541,10 @@ body.app-theme-dark .ap-wrapper {
                     </div>
                 </div>
 
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Varsayılan: Eksi Bakiyeye İzin</div>
-                        <div class="ap-row-desc">
-                            Kontrol açıkken, kendi ayarı olmayan depolar için varsayılan davranış.
-                            Engelli = eksiye düşürtme (önerilen), İzinli = eksiye izin ver.
-                            Depo bazında istisna Lokasyon Tanımlamaları ekranından verilir.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" class="ap-neg-switch" id="ap-neg-default"
-                                   data-on="İzinli" data-off="Engelli" @(negDefault ? "checked" : null) />
-                            <span class="ap-switch-track @(negDefault ? "is-on" : "")">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label @(negDefault ? "is-active" : "")"
-                                  id="ap-neg-default-label">@(negDefault ? "İzinli" : "Engelli")</span>
-                        </label>
-                    </div>
+                <div class="ap-hint" style="margin-top:.75rem;">
+                    Depo bazında eksi bakiye izni <strong>Lokasyon Tanımlamaları</strong> ekranından,
+                    ilgili deponun <em>Eksi Bakiye İzni</em> switch'i ile verilir. Kendi ayarı olmayan
+                    depolarda varsayılan davranış <strong>engelle</strong>'dir.
                 </div>
             </section>
 
@@ -756,12 +739,11 @@ body.app-theme-dark .ap-wrapper {
                 else    flash((d1.error || d2.error || d3.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
                 var negCtrlEl = document.getElementById('ap-neg-control');
-                var negDefEl  = document.getElementById('ap-neg-default');
                 var rs = await fetch('/Admin/SaveStockParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ negControl: !!(negCtrlEl && negCtrlEl.checked), negDefault: !!(negDefEl && negDefEl.checked) })
+                    body: JSON.stringify({ negControl: !!(negCtrlEl && negCtrlEl.checked) })
                 });
                 var datas = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!datas.ok;

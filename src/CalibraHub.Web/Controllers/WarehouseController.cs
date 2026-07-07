@@ -431,6 +431,31 @@ public sealed class WarehouseController : Controller
         }
     }
 
+    /// <summary>Satış siparişi teslimatı — açık kalemler için fiziksel çıkış yazar + rezervasyonu serbest bırakır (Faz 2).</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeliverSalesOrderJson(int orderId, CancellationToken ct)
+    {
+        if (orderId <= 0) return Json(new { success = false, message = "Sipariş bulunamadı." });
+        try
+        {
+            var (id, docNo) = await _stockDocRepo.DeliverSalesOrderAsync(orderId, CurrentUserId(), ct);
+            return Json(new { success = true, id, docNo });
+        }
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
+        {
+            return Json(new { success = false, message = nbex.Message });
+        }
+        catch (InvalidOperationException ioex)
+        {
+            return Json(new { success = false, message = ioex.Message });
+        }
+        catch (Exception)
+        {
+            return Json(new { success = false, message = "Teslimat sırasında bir hata oluştu." });
+        }
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]

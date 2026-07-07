@@ -106,11 +106,10 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
   const [name, setName]         = useState(initial?.name || '')
   const [isMP, setIsMP]         = useState(!!initial?.isMachinePark)
   const [isSA, setIsSA]         = useState(!!initial?.isStorageArea)
-  // Eksi bakiye — üç durumlu: null=devral, false=engelle (kontrol açık), true=izin (kontrol kapalı)
-  const [allowNeg, setAllowNeg] = useState(
-    initial?.allowNegativeBalance === true ? true
-      : initial?.allowNegativeBalance === false ? false : null
-  )
+  // Eksi bakiye izni — yalnızca depo (isStorageArea) lokasyonlarda anlamlı, iki durumlu:
+  // Açık = bu depoda stok eksiye düşebilir · Kapalı = eksiye düşecek hareket engellenir.
+  // Şirket ana anahtarı (Eksi Bakiye Kontrolü) kapalıyken bu ayarın etkisi yoktur.
+  const [allowNeg, setAllowNeg] = useState(initial?.allowNegativeBalance === true)
   const [saving, setSaving]     = useState(false)
   const codeRef = useRef(null)
   useEffect(() => { codeRef.current?.focus() }, [])
@@ -129,7 +128,8 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
         typeCode, code: c, name: name.trim(),
         isMachinePark: flagsAllowed && isMP,
         isStorageArea: flagsAllowed && isSA,
-        allowNegativeBalance: flagsAllowed ? allowNeg : null,
+        // Eksi bakiye ayarı yalnızca depoda saklanır; depo değilse null (ayar yok → varsayılan engelle).
+        allowNegativeBalance: (flagsAllowed && isSA) ? allowNeg : null,
       })
     } finally { setSaving(false) }
   }
@@ -167,26 +167,15 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
         </span>
         <Boxes size={11} /> Depo
       </label>
-      <div className={'lt-fi-neg' + (flagsAllowed ? '' : ' is-disabled')}
-           title={flagsAllowed
-             ? 'Eksi bakiye kontrolü (yalnızca şirket ana ayarı açıkken etkindir). Devral: şirket varsayılanını kullan · Engelle: bu depoda eksi bakiyeyi engelle · İzin Ver: bu depoda eksi bakiyeye izin ver (kontrol kapalı)'
-             : 'Alt kırılımı olan lokasyonda eksi bakiye ayarı yapılamaz'}>
-        <span className="lt-fi-neg-lbl">Eksi Bakiye</span>
-        <div className="lt-fi-seg" role="group">
-          <button type="button"
-                  className={'lt-seg-btn' + (allowNeg === null ? ' is-active' : '')}
-                  onClick={() => flagsAllowed && !saving && setAllowNeg(null)}
-                  disabled={!flagsAllowed || saving}>Devral</button>
-          <button type="button"
-                  className={'lt-seg-btn lt-seg-btn--block' + (allowNeg === false ? ' is-active' : '')}
-                  onClick={() => flagsAllowed && !saving && setAllowNeg(false)}
-                  disabled={!flagsAllowed || saving}>Engelle</button>
-          <button type="button"
-                  className={'lt-seg-btn lt-seg-btn--allow' + (allowNeg === true ? ' is-active' : '')}
-                  onClick={() => flagsAllowed && !saving && setAllowNeg(true)}
-                  disabled={!flagsAllowed || saving}>İzin Ver</button>
-        </div>
-      </div>
+      {flagsAllowed && isSA && (
+        <label className={'lt-fi-sw' + (allowNeg ? ' is-on' : '')}
+               title="Eksi bakiye izni — yalnızca şirket ana ayarı (Eksi Bakiye Kontrolü) açıkken etkindir. Açık: bu depoda stok eksiye düşebilir · Kapalı: eksiye düşecek çıkış / transfer / sarf engellenir.">
+          <span className="lt-fi-sw-track" onClick={() => !saving && setAllowNeg(v => !v)}>
+            <span className="lt-fi-sw-thumb" />
+          </span>
+          <AlertTriangle size={11} /> Eksi Bakiye İzni
+        </label>
+      )}
       <button className="lt-fi-ok" onClick={handleSave} disabled={saving} title="Kaydet (Enter)">
         <Check size={13} />
       </button>

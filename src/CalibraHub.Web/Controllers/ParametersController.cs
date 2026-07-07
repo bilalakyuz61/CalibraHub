@@ -108,11 +108,10 @@ public sealed class ParametersController : Controller
                     ?.ParamValue != "false"))
             .ToList();
 
-        // Eksi bakiye kontrolü bayrakları (default: kapalı / engelli)
+        // Eksi bakiye kontrolü ana anahtarı (default: kapalı). Depo bazlı izin artık
+        // Lokasyon Tanımlamaları ekranındaki switch'te — şirket geneli varsayılan kaldırıldı.
         ViewData["NegBalanceControl"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceControlKey)?.ParamValue == "true";
-        ViewData["NegBalanceAllowDefault"] = stockParams.FirstOrDefault(p =>
-            p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceAllowDefaultKey)?.ParamValue == "true";
         ViewData["SalesOrderAffectsStock"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesOrderAffectsStockKey)?.ParamValue == "true";
 
@@ -278,15 +277,16 @@ public sealed class ParametersController : Controller
         {
             var form = CalibraHub.Application.Constants.StockParameters.FormCode;
 
-            // Eksi bakiye kontrolü ana anahtarı + kendi ayarı olmayan depolar için varsayılan izin
+            // Eksi bakiye kontrolü ana anahtarı. Depo bazlı izin Lokasyon Tanımlamaları'nda.
             await _companyParameters.SetAsync(new SetCompanyParameterRequest(
                 form, CalibraHub.Application.Constants.StockParameters.NegBalanceControlKey,
                 input.NegControl ? "true" : "false",
                 CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
-            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
-                form, CalibraHub.Application.Constants.StockParameters.NegBalanceAllowDefaultKey,
-                input.NegDefault ? "true" : "false",
-                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+
+            // Kaldırılan "şirket geneli varsayılan izin" parametresinin eski kalıntısını temizle
+            // (aksi halde NegativeBalanceGuard'ın artık okumadığı bir kayıt DB'de asılı kalır).
+            await _companyParameters.DeleteAsync(
+                form, CalibraHub.Application.Constants.StockParameters.NegBalanceAllowDefaultKey, ct);
 
             // Çekirdek belge türleri artık HER ZAMAN stok bakiyesini etkiler — eski
             // STOCK_EFFECT_{code} switch'leri kaldırıldı; kalıntı "false" değerlerini temizle
@@ -308,7 +308,7 @@ public sealed class ParametersController : Controller
     public sealed record ApprovalKindInput(string Kind, bool Enabled);
     public sealed record ApprovalKindState(string Code, string Label, bool Enabled);
     public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts, bool BomAllowDuplicateComponents = false);
-    public sealed record StockParametersInput(bool NegControl, bool NegDefault);
+    public sealed record StockParametersInput(bool NegControl);
     public sealed record StockEffectInput(string Code, bool Enabled);
     public sealed record StockEffectState(string Code, string Label, string Description, bool Enabled);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);

@@ -18,15 +18,20 @@ public static class StockParameters
     public static string EffectKey(string docTypeCode) => EffectKeyPrefix + docTypeCode;
 
     // ── Eksi bakiye kontrolü (negative balance control) ──
-    // Katmanlı çözümleme: Şirket ana anahtarı KAPALI → hiç kontrol yok.
-    // AÇIK → lokasyonun kendi AllowNegativeBalance ayarı varsa o, yoksa aşağıdaki varsayılan.
+    // İki katmanlı çözümleme: Şirket ana anahtarı KAPALI → hiç kontrol yok.
+    // AÇIK → lokasyonun (deponun) kendi AllowNegativeBalance switch'i. Ayar yoksa (null)
+    // varsayılan ENGELLE; izin yalnızca deponun switch'i açıkça açıksa verilir.
     // İhlalde ENGELLE (kayıt olmaz). Tarih bazlı: hareket tarihinden itibaren hiçbir
     // noktada bakiye negatife düşmemeli (ileriye dönük zincirleme kontrol).
 
     /// <summary>Eksi bakiye kontrolü ana anahtarı (Bool, default false=kapalı). Kapalıyken hiç kontrol yapılmaz — mevcut davranış korunur.</summary>
     public const string NegBalanceControlKey = "NEG_BALANCE_CONTROL";
 
-    /// <summary>Kontrol açıkken, kendi ayarı olmayan lokasyonlar için varsayılan: eksi bakiyeye izin ver mi (Bool, default false=engelle).</summary>
+    /// <summary>
+    /// KALDIRILDI (2026-07-07): şirket geneli "varsayılan izin" parametresi. Artık her depo
+    /// kendi switch'ini taşır (Lokasyon Tanımlamaları); ayar yoksa varsayılan engelle.
+    /// Sabit yalnızca eski kayıtların temizliği (SaveStockParametersJson DeleteAsync) için tutulur.
+    /// </summary>
     public const string NegBalanceAllowDefaultKey = "NEG_BALANCE_ALLOW_DEFAULT";
 
     /// <summary>Satış siparişi stok bakiyesini rezervasyonla etkiler mi (Bool, default false). Açıkken açık sipariş miktarları kullanılabilir bakiyeyi düşürür (Faz 2).</summary>

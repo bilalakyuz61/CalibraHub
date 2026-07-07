@@ -495,6 +495,116 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         }
     }
 
+    public async Task<(int Id, string DocNo)> DeliverSalesOrderAsync(int salesOrderId, int? createdById, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // 1) Açık satırlar (ticari satır=MovementType NULL, açık = BaseQuantity - DeliveredQuantity > 0).
+            //    Depo = satır LocationId, yoksa siparişin belge LocationId'si.
+            var open = new List<(int LineId, int ItemId, int? CombId, int? LocId, decimal OpenBase)>();
+            await using (var sel = conn.CreateCommand())
+            {
+                sel.Transaction = tx;
+                sel.CommandText = $"""
+                    SELECT dl.[Id], dl.[ItemId], dl.[CombinationId],
+                           ISNULL(dl.[LocationId], doc.[LocationId]) AS LocId,
+                           (dl.[BaseQuantity] - dl.[DeliveredQuantity]) AS OpenBase
+                    FROM {T("DocumentLine")} dl
+                    INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
+                    WHERE dl.[DocumentId] = @OrderId AND doc.[CompanyId] = @Cid
+                      AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
+                      AND dl.[BaseQuantity] > dl.[DeliveredQuantity];
+                    """;
+                sel.Parameters.AddWithValue("@OrderId", salesOrderId);
+                sel.Parameters.AddWithValue("@Cid", companyId);
+                await using var r = await sel.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                    open.Add((r.GetInt32(0), r.GetInt32(1),
+                             r.IsDBNull(2) ? null : r.GetInt32(2),
+                             r.IsDBNull(3) ? null : r.GetInt32(3),
+                             r.GetDecimal(4)));
+            }
+            if (open.Count == 0)
+                throw new InvalidOperationException("Teslim edilecek açık kalem yok.");
+            foreach (var o in open)
+                if (!o.LocId.HasValue)
+                    throw new InvalidOperationException("Bazı sipariş kalemlerinde depo tanımlı değil; teslimat için kalem veya belge deposu gerekli.");
+
+            // 2) Yeni STOCK_OUT (depo_cikis) çıkış belgesi — siparişe ParentDocumentId ile bağlı
+            var docNo = await ResolveDocNoAsync(conn, tx, "STOCK_OUT", createdById, DateTime.Today, ct);
+            int docId;
+            await using (var ins = conn.CreateCommand())
+            {
+                ins.Transaction = tx;
+                ins.CommandText = $"""
+                    INSERT INTO {T("Document")}
+                        ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
+                         [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
+                    SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, NULL,
+                           @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @OrderId
+                    FROM {T("DocumentType")} dt WHERE dt.[Code] = N'depo_cikis';
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
+                    """;
+                ins.Parameters.AddWithValue("@CompanyId", companyId);
+                ins.Parameters.AddWithValue("@DocNo", docNo);
+                ins.Parameters.AddWithValue("@DocDate", DateTime.Today);
+                ins.Parameters.AddWithValue("@Notes", $"Satış siparişi teslimatı (#{salesOrderId})");
+                ins.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@OrderId", salesOrderId);
+                docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
+            }
+
+            // 3) Her açık satır → ana birimde çıkış hareketi (MovementType=1) + sipariş satırı DeliveredQuantity=BaseQuantity
+            var lineNo = 1;
+            var decreases = new HashSet<(int ItemId, int LocId)>();
+            foreach (var o in open)
+            {
+                await using (var li = conn.CreateCommand())
+                {
+                    li.Transaction = tx;
+                    li.CommandText = $"""
+                        INSERT INTO {T("DocumentLine")}
+                            ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                             [CombinationId],[FromLocationId],[LocationId],[MovementType],[Notes])
+                        VALUES
+                            (@DocId,@LineNo,@ItemId,NULL,@Qty,@Qty,0,0,0,@CombId,@FromLoc,NULL,1,@Notes);
+                        """;
+                    li.Parameters.AddWithValue("@DocId", docId);
+                    li.Parameters.AddWithValue("@LineNo", lineNo++);
+                    li.Parameters.AddWithValue("@ItemId", o.ItemId);
+                    li.Parameters.AddWithValue("@Qty", o.OpenBase);
+                    li.Parameters.AddWithValue("@CombId", (object?)o.CombId ?? DBNull.Value);
+                    li.Parameters.AddWithValue("@FromLoc", o.LocId!.Value);
+                    li.Parameters.AddWithValue("@Notes", $"Sipariş #{salesOrderId} teslimat");
+                    await li.ExecuteNonQueryAsync(ct);
+                }
+                await using (var upd = conn.CreateCommand())
+                {
+                    upd.Transaction = tx;
+                    upd.CommandText = $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [BaseQuantity] WHERE [Id] = @LineId;";
+                    upd.Parameters.AddWithValue("@LineId", o.LineId);
+                    await upd.ExecuteNonQueryAsync(ct);
+                }
+                decreases.Add((o.ItemId, o.LocId.Value));
+            }
+
+            // 4) Eksi bakiye kontrolü (fiziksel çıkış) — yeni satırlar + serbest kalan rezervasyon tx içinde
+            foreach (var (it, loc) in decreases)
+                await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, it, loc, DateTime.Today, ct);
+
+            await tx.CommitAsync(ct);
+            return (docId, docNo);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     public async Task DeleteAsync(int id, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
