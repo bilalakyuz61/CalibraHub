@@ -815,15 +815,10 @@ public sealed class WarehouseController : Controller
                 align     = "right",
                 icon      = "Sigma",
             },
-            new
-            {
-                key   = "notes",
-                label = "Notlar",
-                type  = "text",
-                width = 180,
-                align = "left",
-                icon  = "MessageSquare",
-            },
+            // Satır bazlı "Notlar" sütunu kaldırıldı (2026-07-07): belge notu üst
+            // bilgideki Notlar alanında tutulur. Kalem bazlı not gerekirse Admin →
+            // Widget Tanımları ile bu form code'a ("depo_giris/cikis/transfer_lines")
+            // alan tanımlanır — hardcoded kolon eklenmez.
         };
 
         return new

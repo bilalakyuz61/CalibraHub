@@ -619,8 +619,9 @@
 
     // ── Kaydet ───────────────────────────────────────────────────────
     async function save() {
+        // Standart .pte-btn--icon yapısını bozmadan yalnızca disabled ile loading göster.
         var btn = document.getElementById('invSaveBtn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor…'; }
+        if (btn) btn.disabled = true;
         try {
             var locEl   = document.getElementById('invLocation');
             var fromLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
@@ -698,10 +699,8 @@
                 window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
             else alert('Hata: ' + ex.message);
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Kaydet';
-            }
+            // Sadece disabled kaldırılır — buton içeriği (ikon + etiket) korunur.
+            if (btn) btn.disabled = false;
         }
     }
 
