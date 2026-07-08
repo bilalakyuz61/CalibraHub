@@ -52,12 +52,15 @@ public sealed class SqlDocumentSourceRepository : IDocumentSourceRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Zaman-damgası kolonu INSERT'te belirtilmez — tablonun bu kolonu (Created ya da
+        // CreatedAt, iki şema tanımı arasında farklılaşmış) NOT NULL DEFAULT GETDATE()
+        // olduğundan otomatik dolar. Böylece kolon adı farkı yazımı bozmaz (2026-07-08).
         cmd.CommandText = $"""
             IF NOT EXISTS (SELECT 1 FROM {_table}
                            WHERE [DocumentId] = @Doc AND [SourceDocumentId] = @Src)
             BEGIN
-                INSERT INTO {_table} ([DocumentId], [SourceDocumentId], [Created])
-                VALUES (@Doc, @Src, GETDATE());
+                INSERT INTO {_table} ([DocumentId], [SourceDocumentId])
+                VALUES (@Doc, @Src);
             END;
             """;
         cmd.Parameters.Add(new SqlParameter("@Doc", documentId));

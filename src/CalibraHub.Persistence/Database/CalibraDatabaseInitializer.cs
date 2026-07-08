@@ -12290,8 +12290,8 @@ END;";
         // metni olarak tutuyordu; bu metinden ilişkisel kenar (fiş=türetilen ← kaynak) türetilir.
         // Idempotent (NOT EXISTS) + guard'lı; STRING_SPLIT (SQL 2016+). Startup'ı bloklamaz.
         var backfillDocSrc = $"""
-            INSERT INTO [{s}].[DocumentSource] ([DocumentId],[SourceDocumentId],[Created])
-            SELECT DISTINCT sd.[Id], src.[Id], GETDATE()
+            INSERT INTO [{s}].[DocumentSource] ([DocumentId],[SourceDocumentId])
+            SELECT DISTINCT sd.[Id], src.[Id]
             FROM [{s}].[Document] sd
             INNER JOIN [{s}].[DocumentType] sdt ON sdt.[Id] = sd.[DocumentTypeId]
                 AND sdt.[Code] IN (N'depo_giris', N'depo_cikis', N'depo_transfer')
