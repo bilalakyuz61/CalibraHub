@@ -1943,6 +1943,8 @@
                     body.app-theme-light .smv-qty--out { color:#dc2626; }
                     .smv-docno { font-family:ui-monospace,Menlo,Consolas,monospace; color:#93c5fd; }
                     body.app-theme-light .smv-docno { color:#2563eb; }
+                    a.smv-doclink { cursor:pointer; text-decoration:none; }
+                    a.smv-doclink:hover { text-decoration:underline; }
                     .smv-muted { color:rgba(255,255,255,0.35); }
                     body.app-theme-light .smv-muted { color:#94a3b8; }
 
@@ -5300,9 +5302,27 @@
 
         // ── Kolon tanımları — görünürlük + sıralama, localStorage'da kalıcı ──
         //    cell(m): tablo hücresi HTML'i · xv(m): Excel için ham değer
+        // Belge no → ilgili belge ekranı (workspace tab). 4 depo tipi linklenir; diğerleri (iş emri vb.) düz metin.
+        function smvDocUrl(m) {
+            var id = m && m.documentId;
+            if (!id || id <= 0) return '';
+            switch (m.docTypeCode) {
+                case 'depo_giris':    return '/Warehouse/StockEntryEdit?id=' + id + '&type=in';
+                case 'depo_cikis':    return '/Warehouse/StockEntryEdit?id=' + id + '&type=out';
+                case 'depo_transfer': return '/Warehouse/TransferEdit?id=' + id;
+                case 'sayim':         return '/Warehouse/InventoryEdit?id=' + id;
+                default: return '';
+            }
+        }
+        function smvOpenDoc(url) {
+            if (!url) return;
+            if (location.search.indexOf('workspace=1') !== -1) url += (url.indexOf('?') > -1 ? '&' : '?') + 'workspace=1';
+            try { window.top.location.href = url; } catch (e) { window.location.href = url; }
+        }
+
         var COLS_DEFAULT = [
             { key: 'date',     label: 'Tarih',         cell: function (m) { return fmtDate(m.movementDate); }, xv: function (m) { return m.movementDate; } },
-            { key: 'docNo',    label: 'Belge No',      cell: function (m) { return '<span class="smv-docno">' + esc(m.documentNumber) + '</span>'; }, xv: function (m) { return m.documentNumber || ''; } },
+            { key: 'docNo',    label: 'Belge No',      cell: function (m) { var u = smvDocUrl(m); var t = esc(m.documentNumber || ''); return u ? '<a class="smv-docno smv-doclink" data-url="' + esc(u) + '" title="Belgeye git">' + t + '</a>' : '<span class="smv-docno">' + t + '</span>'; }, xv: function (m) { return m.documentNumber || ''; } },
             { key: 'docType',  label: 'Belge Tipi',    cell: function (m) { return esc(m.docTypeName || m.docTypeCode || ''); }, xv: function (m) { return m.docTypeName || m.docTypeCode || ''; } },
             { key: 'dir',      label: 'Hareket',       cell: function (m) { return '<span class="smv-badge ' + badgeClass(m.movementType) + '">' + esc(m.movementLabel) + '</span>'; }, xv: function (m) { return m.movementLabel || ''; } },
             { key: 'qty',      label: 'Miktar',        num: true, cell: qtyCell, xv: function (m) { return m.movementType === 3 ? m.quantity : m.signedQuantity; } },
@@ -5596,6 +5616,12 @@
             });
             var exp = $('smvExport');
             if (exp) exp.addEventListener('click', exportExcel);
+            // Belge no linkleri → workspace tab'da ilgili belgeyi aç (delege)
+            var body = $('smvBody');
+            if (body) body.addEventListener('click', function (e) {
+                var a = e.target && e.target.closest ? e.target.closest('.smv-doclink') : null;
+                if (a && a.getAttribute('data-url')) { e.preventDefault(); smvOpenDoc(a.getAttribute('data-url')); }
+            });
             var refreshBtn = $('smvRefreshBtn');
             if (refreshBtn) refreshBtn.addEventListener('click', function () {
                 refreshBtn.classList.remove('is-spin');
