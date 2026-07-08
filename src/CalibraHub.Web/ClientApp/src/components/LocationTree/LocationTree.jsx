@@ -158,14 +158,14 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
         <span className="lt-fi-sw-track" onClick={() => flagsAllowed && !saving && setIsMP(v => !v)}>
           <span className="lt-fi-sw-thumb" />
         </span>
-        <Cog size={11} /> Makine
+        <Cog size={11} /> Makine Parkuru
       </label>
       <label className={'lt-fi-sw' + (flagsAllowed ? '' : ' is-disabled') + (isSA ? ' is-on' : '')}
-             title={flagsAllowed ? 'Depolama alanı' : 'Alt kırılımı olan lokasyon depo olamaz'}>
+             title={flagsAllowed ? 'Fiziksel depo — stok tutulan gerçek ambar' : 'Alt kırılımı olan lokasyon fiziksel depo olamaz'}>
         <span className="lt-fi-sw-track" onClick={() => flagsAllowed && !saving && setIsSA(v => !v)}>
           <span className="lt-fi-sw-thumb" />
         </span>
-        <Boxes size={11} /> Depo
+        <Boxes size={11} /> Fiziksel Depo
       </label>
       {flagsAllowed && isSA && (
         <label className={'lt-fi-sw' + (allowNeg ? ' is-on' : '')}
