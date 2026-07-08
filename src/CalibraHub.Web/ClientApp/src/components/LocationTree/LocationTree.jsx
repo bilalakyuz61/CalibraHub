@@ -395,23 +395,38 @@ function DeleteModal({ node, onCancel, onConfirm, loading }) {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [onCancel])
+  const childCount = node.children?.length || 0
+  const blocked = childCount > 0   // alt kırılımı olan lokasyon FK nedeniyle silinemez
   return (
     <div className="lt-modal-bd" onClick={onCancel}>
       <div className="lt-modal" onClick={e => e.stopPropagation()}>
         <div className="lt-modal-icon"><AlertTriangle size={32} /></div>
-        <div className="lt-modal-title">Lokasyonu Sil</div>
+        <div className="lt-modal-title">{blocked ? 'Lokasyon Silinemez' : 'Lokasyonu Sil'}</div>
         <div className="lt-modal-msg">
-          <strong>{node.code}</strong>{node.name ? ` — ${node.name}` : ''} silinecek.
-          {node.children?.length > 0 && (
-            <> Ayrıca <strong>{node.children.length}</strong> alt lokasyon da etkilenir.</>
+          {blocked ? (
+            <>
+              <strong>{node.code}</strong>{node.name ? ` — ${node.name}` : ''} lokasyonunun{' '}
+              <strong>{childCount}</strong> alt lokasyonu var. Silmek için önce alt lokasyonları
+              silmelisiniz.
+            </>
+          ) : (
+            <>
+              <strong>{node.code}</strong>{node.name ? ` — ${node.name}` : ''} silinecek.
+              <br />Bu işlem geri alınamaz.
+            </>
           )}
-          <br />Bu işlem geri alınamaz.
         </div>
         <div className="lt-modal-actions">
-          <button className="lt-modal-cancel" onClick={onCancel}>Vazgeç</button>
-          <button className="lt-modal-del" onClick={onConfirm} disabled={loading}>
-            {loading ? 'Siliniyor…' : 'Sil'}
-          </button>
+          {blocked ? (
+            <button className="lt-modal-cancel" onClick={onCancel}>Tamam</button>
+          ) : (
+            <>
+              <button className="lt-modal-cancel" onClick={onCancel}>Vazgeç</button>
+              <button className="lt-modal-del" onClick={onConfirm} disabled={loading}>
+                {loading ? 'Siliniyor…' : 'Sil'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -748,6 +763,9 @@ export default function LocationTree({ config }) {
     startAdd:    spec => { setEditingId(null); setAddingFor(spec) },
     cancelAdd:   ()   => setAddingFor(null),
     startDelete: async (node) => {
+      // Alt kırılımı olan lokasyon FK nedeniyle silinemez → doğrudan "silinemez"
+      // modalına git; kullanım kontrolü / sil önerisi gösterme.
+      if ((node.children?.length || 0) > 0) { setDeleteTarget(node); return }
       if (config.usageCheckUrl) {
         try {
           const r = await fetch(`${config.usageCheckUrl}?id=${node.id}`, { credentials: 'same-origin' })
