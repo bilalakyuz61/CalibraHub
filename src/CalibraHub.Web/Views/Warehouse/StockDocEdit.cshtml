@@ -11,7 +11,14 @@
         "STOCK_OUT" => isEdit ? "Çıkış Belgesi Düzenle"    : "Yeni Çıkış Belgesi",
         _ => "Depo Belgesi",
     };
-    var listUrl    = isTransfer ? "/Warehouse/Transfer" : "/Warehouse/StockEntry";
+    // Geri-dön listesi belge tipine göre — birleşik /Warehouse/StockEntry artık Giriş'e redirect
+    // ettiği için Çıkış belgesinden "geri" yanlış ekrana düşmesin.
+    var listUrl = Model.DocType switch
+    {
+        "TRANSFER"  => "/Warehouse/Transfer",
+        "STOCK_OUT" => "/Warehouse/StockOut",
+        _           => "/Warehouse/StockIn",
+    };
     var bodyClass  = "page-wh-doc-edit";
 
     ViewData["Title"]     = pageTitle;

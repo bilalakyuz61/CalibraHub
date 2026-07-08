@@ -329,17 +329,19 @@ public sealed class WarehouseController : Controller
     // AMBAR GİRİ�? / ÇIKI�?
     // ═══════════════════════════════════════════════════════════════════════
 
+    // Legacy birleşik "Ambar Giriş / Çıkış" ekranı KALDIRILDI (2026-07-09): her ekran kendi
+    // tek "+" butonunu taşır (Giriş → Giriş Belgesi, Çıkış → Çıkış Belgesi). Menü zaten ayrık
+    // (/Warehouse/StockIn + /Warehouse/StockOut). Bu endpoint yalnız eski tab/bookmark/dashboard
+    // linkleri için korunur ve ayrık Giriş ekranına yönlendirir → iki-buton ekranı hiçbir yerden çıkmaz.
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
-    public async Task<IActionResult> StockEntry(CancellationToken ct)
-    {
-        var config = await BuildStockEntryBoardConfigAsync(null, ct);
-        return View(new WarehouseBoardViewModel { BoardConfig = config });
-    }
+    public IActionResult StockEntry() => Redirect("/Warehouse/StockIn");
 
+    // Eski birleşik board'un refreshUrl'i buraya gelir; hâlâ açık kalmış eski bir tab refresh
+    // olunca da tek-butonlu (Giriş) config alsın diye "in" döner (birleşik/null değil).
     [HttpGet("/Warehouse/StockEntryBoardConfig")]
     public async Task<IActionResult> StockEntryBoardConfig(CancellationToken ct)
-        => Json(await BuildStockEntryBoardConfigAsync(null, ct));
+        => Json(await BuildStockEntryBoardConfigAsync("in", ct));
 
     // 2026-07-06: Ambar Giriş / Çıkış menüde ayrıldı — her tip kendi listesini açar.
     // StockEntry (birleşik) eski link/dashboard'lar için backward-compat korunur.
