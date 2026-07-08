@@ -12284,6 +12284,41 @@ END;";
             await cmdDS.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // Backfill (2026-07-08): İlişkili Belgeler/Akış kenarları, DocumentSource'a yazan kod
+        // (LinkFulfillmentSourcesAsync) devreye girmeden ÖNCE yapılmış stok karşılamaları için.
+        // Eski depo giriş/çıkış/transfer fişleri kaynak İhtiyaç'ı yalnızca Notlar'da "[Ref: BELGE_NO]"
+        // metni olarak tutuyordu; bu metinden ilişkisel kenar (fiş=türetilen ← kaynak) türetilir.
+        // Idempotent (NOT EXISTS) + guard'lı; STRING_SPLIT (SQL 2016+). Startup'ı bloklamaz.
+        var backfillDocSrc = $"""
+            INSERT INTO [{s}].[DocumentSource] ([DocumentId],[SourceDocumentId],[Created])
+            SELECT DISTINCT sd.[Id], src.[Id], GETDATE()
+            FROM [{s}].[Document] sd
+            INNER JOIN [{s}].[DocumentType] sdt ON sdt.[Id] = sd.[DocumentTypeId]
+                AND sdt.[Code] IN (N'depo_giris', N'depo_cikis', N'depo_transfer')
+            CROSS APPLY (
+                SELECT LTRIM(RTRIM(value)) AS refno
+                FROM STRING_SPLIT(
+                    SUBSTRING(sd.[Notes],
+                        CHARINDEX('[Ref:', sd.[Notes]) + 5,
+                        CHARINDEX(']', sd.[Notes], CHARINDEX('[Ref:', sd.[Notes])) - CHARINDEX('[Ref:', sd.[Notes]) - 5),
+                    ',')
+            ) refs
+            INNER JOIN [{s}].[Document] src ON src.[DocumentNumber] = refs.refno AND src.[Id] <> sd.[Id]
+            WHERE sd.[IsActive] = 1
+              AND sd.[Notes] LIKE '%[[]Ref:%'
+              AND CHARINDEX(']', sd.[Notes], CHARINDEX('[Ref:', sd.[Notes])) > CHARINDEX('[Ref:', sd.[Notes])
+              AND NOT EXISTS (
+                    SELECT 1 FROM [{s}].[DocumentSource] ds
+                    WHERE ds.[DocumentId] = sd.[Id] AND ds.[SourceDocumentId] = src.[Id]);
+            """;
+        try
+        {
+            await using var cmdBf = connection.CreateCommand();
+            cmdBf.CommandText = backfillDocSrc;
+            await cmdBf.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch { /* backfill best-effort — startup asla bloklanmaz */ }
+
         // View 4: Satis Siparisi Rehberi — SADECE TEKLIFTEN OLUSTURULAN siparisler.
         // EXISTS document_source ile filtre (manuel "Yeni Siparis" girisleri haricte tutulur).
         // ValueColumn=Code, DisplayColumn=Name standart rehber kuralina uygun.
