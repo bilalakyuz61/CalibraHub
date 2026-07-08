@@ -1434,9 +1434,12 @@
 
     // Bir ihtiyaç belgesinin karşılama için seçilip seçilemeyeceği (tek karar noktası).
     function fc3DocCanSelect(r) {
+        // Açık onay süreci varsa (parametre sonradan kapatılsa bile) belge önce onayını
+        // tamamlamalı — her durumda seçilemez.
+        if (PENDING_APPROVAL_IDS.has(r.id)) return false;
         if (APPROVAL_REQUIRED) {
-            // Onay açık: onay sürecinde olmayan + durumu Onaylı olan belgeler
-            return !PENDING_APPROVAL_IDS.has(r.id) && r.status === 'Approved';
+            // Onay açık: yalnızca durumu Onaylı olan belgeler
+            return r.status === 'Approved';
         }
         // Onay kapalı: iptal/kapatılan/reddedilen dışında tümü
         return r.status !== 'Rejected' && r.status !== 'Cancelled' && r.status !== 'Closed';
@@ -1972,7 +1975,7 @@
             case 'who':    return r.requesterPersonnelName || r.contactName || '—';
             case 'dt':     return fmtDate(r.documentDate);
             case 'mat':    return l.materialName || l.materialCode || '—';
-            case 'fst':    return (PENDING_APPROVAL_IDS.has(r.id) && APPROVAL_REQUIRED) ? 'Onay Sürecinde' : (FSL[l.fulfillmentStatus] || 'Bekliyor');
+            case 'fst':    return PENDING_APPROVAL_IDS.has(r.id) ? 'Onay Sürecinde' : (FSL[l.fulfillmentStatus] || 'Bekliyor');
             case 'stk': {
                 var stkArr = _globalStockMap[l.itemId] || [];
                 var stkTot = stkArr.reduce(function(a, s) { return a + (s.balance || 0); }, 0);
@@ -2045,7 +2048,7 @@
             var remainColor = remain <= 0 ? '#34d399' : (totalStk >= remain ? '#fbbf24' : '#f87171');
             var canSelect = fc3DocCanSelect(r);
             var fstClass, fstLabel;
-            if (docHasApproval && APPROVAL_REQUIRED) {
+            if (docHasApproval) {
                 fstClass = 'fm-fst--approval'; fstLabel = 'Onay Sürecinde';
             } else if (r.status === 'Rejected') {
                 fstClass = 'fm-fst--rejected'; fstLabel = 'Reddedildi';
@@ -2096,7 +2099,7 @@
                 }
             }).join('');
 
-            var cbDisableTitle = (docHasApproval && APPROVAL_REQUIRED) ? 'Onay sürecinde — seçilemez'
+            var cbDisableTitle = docHasApproval ? 'Onay sürecinde — önce onay tamamlanmalı'
                                : (r.status === 'Rejected') ? 'Reddedilmiş — seçilemez'
                                : (r.status === 'Cancelled' || r.status === 'Closed') ? 'Kapatılmış — seçilemez'
                                : 'Yalnızca onaylı belgeler seçilebilir';

@@ -101,13 +101,21 @@ public sealed class PurchaseController : Controller
     {
         var kindEnabled = await _companyParams.GetStringAsync(
             ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
-        if (!kindEnabled) return null;
+
+        // Açık (Pending) onay süreci olan belgeler — parametre sonradan kapatılsa bile önce
+        // onay akışını tamamlamalı. Bu kontrol her durumda uygulanır.
+        var pendingIds = (await GetPendingApprovalDocIdsAsync(ct)).ToHashSet();
 
         foreach (var id in documentIds.Distinct())
         {
             var doc = await _documentService.GetQuoteByIdAsync(id, ct);
             if (doc == null) continue;
-            if (!string.Equals(doc.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+
+            if (pendingIds.Contains(id))
+                return $"{doc.DocumentNumber} onay sürecinde — karşılanmadan önce onay tamamlanmalı.";
+
+            // Onay tetikleme açıksa yalnızca Onaylı belgeler karşılanabilir.
+            if (kindEnabled && !string.Equals(doc.Status, "Approved", StringComparison.OrdinalIgnoreCase))
                 return $"{doc.DocumentNumber} onaylanmadan karşılama yapılamaz (durum: {TranslateStatus(doc.Status)}). " +
                        "İhtiyaç kayıtları onay akışına tabidir; belge onaylandıktan sonra karşılanabilir.";
         }
@@ -277,6 +285,12 @@ public sealed class PurchaseController : Controller
             ? await _widgetService.GetBatchRenderModelsAsync(formCode, recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
 
+        // İhtiyaç Kaydı onay tetikleme açık mı — "Onaya Gönder" butonu yalnızca açıkken gösterilir.
+        // (Liste boyunca sabit; döngü öncesi tek kez okunur.)
+        var purchaseReqApprovalEnabled = !string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase)
+            || await _companyParams.GetStringAsync(
+                   ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
+
         var entities = new List<object>();
         foreach (var doc in docs)
         {
@@ -351,9 +365,10 @@ public sealed class PurchaseController : Controller
             // İhtiyaç kartlarında "Onaya Gönder" extra aksiyon — diğer tiplerde yok.
             // Karşılama işlemi artık header "Karşılama Merkezi" butonu → FulfillmentCenter ekranından yapılır.
             var extraActionsList = new List<object>();
-            if (string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase) && purchaseReqApprovalEnabled)
             {
                 // "Onaya Gönder" — Draft belgeler için aktif, diğerleri için pasif (disabled).
+                // Onay tetikleme kapalıysa buton hiç gösterilmez (elle de onaya sokulamaz).
                 var isDraft = string.Equals(doc.Status, "Draft", StringComparison.OrdinalIgnoreCase);
                 extraActionsList.Add(new
                 {

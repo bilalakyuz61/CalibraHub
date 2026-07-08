@@ -27,6 +27,7 @@ public sealed class ApprovalFlowController : Controller
     private readonly IIntegrationService _integrationService;
     private readonly IDocumentRepository _documentRepo;
     private readonly IDocumentTypeRepository _documentTypeRepo;
+    private readonly ICompanyParameterService _companyParameters;
 
     public ApprovalFlowController(
         IApprovalFlowService service,
@@ -39,7 +40,8 @@ public sealed class ApprovalFlowController : Controller
         IApprovalEntityTypeRegistry entityRegistry,
         IIntegrationService integrationService,
         IDocumentRepository documentRepo,
-        IDocumentTypeRepository documentTypeRepo)
+        IDocumentTypeRepository documentTypeRepo,
+        ICompanyParameterService companyParameters)
     {
         _service = service;
         _userRepo = userRepo;
@@ -52,6 +54,7 @@ public sealed class ApprovalFlowController : Controller
         _integrationService = integrationService;
         _documentRepo = documentRepo;
         _documentTypeRepo = documentTypeRepo;
+        _companyParameters = companyParameters;
     }
 
     // ── Liste ─────────────────────────────────────────────────────────────────
@@ -443,6 +446,18 @@ public sealed class ApprovalFlowController : Controller
             {
                 var docType = await _documentTypeRepo.GetByIdAsync(document.DocumentTypeId.Value, ct);
                 kind = DocumentEntityTypes.ResolveKind(docType?.Code);
+            }
+
+            // Belge türü onay parametresi kapalıysa manuel "Onaya Gönder" de engellenir
+            // (DocumentService otomatik başlatma ile aynı kural; wildcard hariç). Onay sistemi
+            // açık/kapalı tek noktadan yönetilir: Parametreler → Onay İşlemleri.
+            if (kind != DocumentEntityTypes.WildcardKind)
+            {
+                var kindEnabled = await _companyParameters.GetBoolAsync(
+                    CalibraHub.Application.Constants.ApprovalParameters.FormCode,
+                    CalibraHub.Application.Constants.ApprovalParameters.EnabledKey(kind), ct) ?? true;
+                if (!kindEnabled)
+                    return Json(new { ok = false, error = "Bu belge türü için onay sistemi kapalı — onaya gönderilemez." });
             }
 
             decimal? totalAmount = document.GrandTotal > 0 ? document.GrandTotal : (decimal?)null;
