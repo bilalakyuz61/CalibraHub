@@ -72,7 +72,7 @@ body.app-theme-dark .lt-root {
   font-size: 11px; color: var(--lt-muted); margin-top: 1px; line-height: 1.2;
 }
 
-.lt-search-wrap { position: relative; flex: 1 1 auto; min-width: 140px; max-width: 460px; }
+.lt-search-wrap { position: relative; flex: 0 1 460px; min-width: 140px; }
 .lt-search-icon {
   position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
   color: var(--lt-muted); pointer-events: none;
@@ -443,7 +443,7 @@ body.app-theme-dark .lt-root {
 .lt-seg-btn--allow.is-active { background: var(--lt-amber-bg); color: var(--lt-amber-color); }
 
 /* Header hızlı filtre (radyo) — lt-fi-seg/lt-seg-btn tabanını yeniden kullanır */
-.lt-quick-seg { flex-shrink: 0; align-self: center; background: var(--lt-bg); }
+.lt-quick-seg { flex-shrink: 0; align-self: center; background: var(--lt-bg); margin-left: auto; }
 .lt-quick-seg .lt-seg-btn { padding: 5px 11px; font-size: 12px; color: var(--lt-muted); white-space: nowrap; }
 .lt-quick-seg .lt-seg-btn.is-active { color: var(--lt-indigo-color); }
 

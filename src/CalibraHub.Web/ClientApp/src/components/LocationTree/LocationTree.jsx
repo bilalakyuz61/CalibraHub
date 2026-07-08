@@ -782,6 +782,16 @@ export default function LocationTree({ config }) {
     return set
   }, [flatNodes, filters])
 
+  // Hızlı filtre (Tümü hariç) aktifken: parent'sız DÜZ liste — yalnızca eşleşen kayıtlar
+  const flatMatched = useMemo(() => {
+    if (quickFilter === 'all') return null
+    return flatNodes.filter(n =>
+      nodeMatchesQuick(n, quickFilter) &&
+      (!search || nodeMatches(n, search)) &&
+      (!matchedIds || matchedIds.has(n.id))
+    )
+  }, [flatNodes, quickFilter, search, matchedIds])
+
   // Filter aktifse: bir node ya kendisi eslesir ya da herhangi bir alt elemani eslesirse gorunur
   const nodeOrDescendantInFilter = useCallback((n) => {
     if (!matchedIds) return true
@@ -936,7 +946,7 @@ export default function LocationTree({ config }) {
       </div>
 
       <div className="lt-tree">
-        {isAddingRoot && (
+        {isAddingRoot && quickFilter === 'all' && (
           <div className="lt-node">
             <div className="lt-card lt-card-editing">
               <div className="lt-toggle-ph" />
@@ -950,7 +960,27 @@ export default function LocationTree({ config }) {
           </div>
         )}
 
-        {visibleRoots.length === 0 && !isAddingRoot ? (
+        {quickFilter !== 'all' ? (
+          /* Hızlı filtre aktif → parent'sız DÜZ liste (yalnızca eşleşen kayıtlar) */
+          flatMatched.length === 0 ? (
+            <div className="lt-empty">Seçili hızlı filtreye uygun kayıt yok.</div>
+          ) : (
+            flatMatched.map(n => (
+              <TreeNode
+                key={n.id}
+                node={{ ...n, children: [] }}
+                depth={0}
+                search={search}
+                types={types}
+                handlers={handlers}
+                recentIds={recentIds}
+                maxDepth={config.maxDepth || 7}
+                userCfg={userCfg}
+                quickFilter="all"
+              />
+            ))
+          )
+        ) : visibleRoots.length === 0 && !isAddingRoot ? (
           <div className="lt-empty">
             {search ? `"${search}" için sonuç bulunamadı` : 'Henüz lokasyon tanımlanmamış'}
           </div>
