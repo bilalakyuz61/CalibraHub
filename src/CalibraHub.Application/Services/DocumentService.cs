@@ -260,6 +260,31 @@ public sealed class DocumentService : IDocumentService
         request = request with { ContactId = resolvedContactId, ContactName = resolvedContactName };
 
         var isNew = !request.Id.HasValue || request.Id.Value == 0;
+
+        // ── Karşılama bağlantısı koruması (İhtiyaç Kaydı zinciri) ──────────────
+        // Bir kalem karşılandıysa (FulfilledFromStock + FulfilledByPurchase > 0):
+        //   • miktarı karşılanan miktarın altına düşürülemez,
+        //   • payload'dan çıkarılıp silinemez (kaynak kalem korunur).
+        // Fulfilled* yalnızca İhtiyaç Kaydı (alis_talebi) satırlarında dolduğundan
+        // kontrol sadece o belge türü güncellenirken çalıştırılır (gereksiz sorgu yok).
+        if (!isNew && request.Id.HasValue && isPurchaseRequest)
+        {
+            var existingLines = await GetQuoteLinesAsync(request.Id.Value, ct);
+            var incomingById = request.Lines
+                .Where(l => l.Id.HasValue && l.Id.Value > 0)
+                .GroupBy(l => l.Id!.Value)
+                .ToDictionary(g => g.Key, g => g.First());
+            foreach (var ex in existingLines)
+            {
+                var consumed = ex.FulfilledFromStock + ex.FulfilledByPurchase;
+                if (consumed <= 0) continue;
+                var name = ex.MaterialName ?? ex.MaterialCode ?? $"#{ex.Id}";
+                if (!incomingById.TryGetValue(ex.Id, out var inc))
+                    return (false, $"'{name}' kalemi {consumed:0.##} birim karşılandığı için silinemez. Önce karşılama belgelerini geri alın.", null, false);
+                if (inc.Quantity < consumed)
+                    return (false, $"'{name}' kalemi {consumed:0.##} birim karşılandığı için miktarı bunun altına düşürülemez (girilen: {inc.Quantity:0.##}).", null, false);
+            }
+        }
         var effectiveTypeIdForNumber = request.DocumentTypeId ?? await ResolveDefaultQuoteTypeIdAsync(ct) ?? 0;
         var quoteNumber = isNew
             ? await ResolveNextDocumentNumberAsync(
@@ -532,9 +557,16 @@ public sealed class DocumentService : IDocumentService
         return (true, null, MapDto(quote), approvalStarted);
     }
 
-    public async Task DeleteQuoteAsync(int id, CancellationToken ct)
+    public async Task<(bool Ok, string? Error)> DeleteQuoteAsync(int id, CancellationToken ct)
     {
+        // Karşılanmış kalem içeren belge silinemez (İhtiyaç Kaydı zinciri koruması).
+        // Diğer belge türlerinde Fulfilled* = 0 olduğundan bu kontrol no-op'tur.
+        var lines = await GetQuoteLinesAsync(id, ct);
+        if (lines.Any(l => l.FulfilledFromStock + l.FulfilledByPurchase > 0))
+            return (false, "Bu belge karşılanmış kalem(ler) içerdiği için silinemez. Önce karşılama belgelerini geri alın.");
+
         await _repo.DeleteAsync(id, ct);
+        return (true, null);
     }
 
     public async Task<(bool Success, string? Error)> ChangeStatusAsync(int id, string newStatus, CancellationToken ct)

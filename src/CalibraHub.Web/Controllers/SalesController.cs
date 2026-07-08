@@ -1296,7 +1296,8 @@ public sealed class SalesController : Controller
                     new[] { "DELETE_OWN", "DELETE_ALL" }, ct))
                 return Json(new { success = false, message = "Bu belgeyi silmek için yetkiniz bulunmuyor." });
         }
-        await _quoteService.DeleteQuoteAsync(body.Id, ct);
+        var (_dOk, _dErr) = await _quoteService.DeleteQuoteAsync(body.Id, ct);
+        if (!_dOk) return Json(new { success = false, message = _dErr });
         return Json(new { success = true });
     }
 
@@ -1323,7 +1324,8 @@ public sealed class SalesController : Controller
                         new[] { "DELETE_OWN", "DELETE_ALL" }, ct))
                     return Json(new { success = false, message = "Bu belgeyi silmek için yetkiniz bulunmuyor." });
             }
-            await _quoteService.DeleteQuoteAsync(id, ct);
+            var (_djOk, _djErr) = await _quoteService.DeleteQuoteAsync(id, ct);
+            if (!_djOk) return Json(new { success = false, message = _djErr });
             return Json(new { success = true });
         }
         catch (Exception ex)

@@ -24,7 +24,11 @@ public interface IDocumentService
     Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct);
     Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct);
-    Task DeleteQuoteAsync(int id, CancellationToken ct);
+    /// <summary>
+    /// Belgeyi soft-delete eder. Karşılanmış kalem içeriyorsa (İhtiyaç Kaydı zinciri
+    /// koruması) silinmez → (false, mesaj) döner.
+    /// </summary>
+    Task<(bool Ok, string? Error)> DeleteQuoteAsync(int id, CancellationToken ct);
     Task<(bool Success, string? Error)> ChangeStatusAsync(int id, string newStatus, CancellationToken ct);
     Task<string> GetNextDocumentNumberAsync(CancellationToken ct);
 
