@@ -122,6 +122,19 @@ public sealed class PurchaseController : Controller
         return null;
     }
 
+    /// <summary>
+    /// Karşılama fişinden (transfer / ambar çıkış / FIFO) kaynak İhtiyaç belgelerine
+    /// DocumentSource soyağacı kenarı yazar: türetilen = fiş (targetDocId), kaynak = İhtiyaç.
+    /// "İlişkili Belgeler / Akış" görünümü bu kenarlardan beslenir. Idempotent (UNIQUE INDEX).
+    /// </summary>
+    private async Task LinkFulfillmentSourcesAsync(int targetDocId, IReadOnlyList<int>? sourceDocIds, CancellationToken ct)
+    {
+        if (targetDocId <= 0 || sourceDocIds is not { Count: > 0 }) return;
+        await _docSourceRepo.EnsureSchemaAsync(ct);
+        foreach (var rid in sourceDocIds.Distinct())
+            if (rid > 0) await _docSourceRepo.AddAsync(targetDocId, rid, ct);
+    }
+
     [HttpGet("/Purchase/Requests")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseRequest)]
     public Task<IActionResult> Requests(CancellationToken ct) =>
@@ -1013,7 +1026,10 @@ public sealed class PurchaseController : Controller
                 ArgeProjectId:  null
             );
 
-            var (_, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+            var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+
+            // Belge soyağacı: transfer fişi ← kaynak İhtiyaç belge(ler)i (soyağacı akış görünümü)
+            await LinkFulfillmentSourcesAsync(newDocId, req.RequestIds, ct);
 
             // Fulfillment takibi: RequestLineId gönderilmiş satırların FulfilledFromStock artır
             var linesWithTracking = validLines
@@ -1111,7 +1127,10 @@ public sealed class PurchaseController : Controller
                 ArgeProjectId:  null
             );
 
-            var (_, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+            var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+
+            // Belge soyağacı: ambar çıkış fişi ← kaynak İhtiyaç belge(ler)i
+            await LinkFulfillmentSourcesAsync(newDocId, req.RequestIds, ct);
 
             // Fulfillment takibi: FulfilledFromStock artır
             var linesWithTracking = validLines
@@ -1411,7 +1430,10 @@ public sealed class PurchaseController : Controller
                                 UnitCost:       null)).ToList(),
             ArgeProjectId:  null);
 
-        var (_, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+        var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+
+        // Belge soyağacı: FIFO ambar çıkış fişi ← kaynak İhtiyaç belge(ler)i
+        await LinkFulfillmentSourcesAsync(newDocId, docIds, ct);
 
         // FulfilledFromStock güncelle
         var lineMap = lines.ToDictionary(l => l.LineId);
@@ -1504,6 +1526,10 @@ public sealed class PurchaseController : Controller
             var (success, error, doc, _) = await _documentService.SaveQuoteAsync(saveDocReq, CurrentUserId(), User?.Identity?.Name, ct);
             if (!success || doc == null)
                 return Json(new { ok = false, error = error ?? "Belge oluşturulamadı." });
+
+            // Belge soyağacı: sipariş ← TÜM kaynak İhtiyaç belgeleri (SaveQuoteAsync yalnız
+            // FromRequestId=ilkini bağlar; çoklu kaynak için hepsini idempotent ekle).
+            await LinkFulfillmentSourcesAsync(doc.Id, req.RequestIds, ct);
 
             // Fulfillment takibi: FulfilledByPurchase artır
             var linesWithTracking = validLines
@@ -1820,9 +1846,10 @@ public sealed class PurchaseController : Controller
             if (!success || doc == null)
                 return Json(new { ok = false, error = error ?? "Belge oluşturulamadı." });
 
-            // DocumentSource bağlantıları — her kaynak belge için
+            // DocumentSource bağlantıları — her kaynak belge için.
+            // Yön: AddAsync(türetilen=talep doc.Id, kaynak=İhtiyaç srcId). (2026-07-08 yön düzeltmesi)
             foreach (var srcId in sourceDocIds)
-                await _docSourceRepo.AddAsync(srcId, doc.Id, ct);
+                await _docSourceRepo.AddAsync(doc.Id, srcId, ct);
 
             // FulfilledByPurchase artır — FulfilledFromStock korunur (0'a EZME).
             foreach (var dl in demandLines)

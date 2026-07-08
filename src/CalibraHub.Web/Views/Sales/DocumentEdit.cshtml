@@ -2215,6 +2215,7 @@
             @if (Model.DocumentId.HasValue)
             {
                 <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="workflow" onclick="sqSwitchTab('workflow')">Onay Akışı</button>
+                <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="lineage" onclick="sqSwitchTab('lineage')">İlişkili Belgeler</button>
             }
         </nav>
         <div class="sqe-tab-content">
@@ -2483,6 +2484,11 @@
             <div class="sqe-tab-pane" data-sqe-pane="workflow">
                 <partial name="~/Views/Approval/_WorkflowPanel.cshtml" model="@Model.DocumentId.Value" />
             </div>
+            <div class="sqe-tab-pane" data-sqe-pane="lineage">
+                <div id="sqLineageHost" data-doc-id="@Model.DocumentId.Value">
+                    <div class="dlg-empty">Yükleniyor…</div>
+                </div>
+            </div>
         }
 
         </div><!-- /sqe-tab-content -->
@@ -2490,6 +2496,43 @@
 </section>
 
 @Html.AntiForgeryToken()
+
+<style>
+    /* İlişkili Belgeler / Akış paneli (belge soyağacı) */
+    #sqLineageHost { padding: 4px 2px; }
+    .dlg-hint { font-size: 12px; color: #64748b; margin-bottom: 14px; line-height: 1.5; }
+    body.app-theme-dark .dlg-hint { color: #94a3b8; }
+    .dlg-empty { padding: 32px 16px; text-align: center; color: #94a3b8; font-size: 13px; }
+    .dlg-flow { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+    .dlg-arrow { display: flex; align-items: center; color: #cbd5e1; flex-shrink: 0; }
+    body.app-theme-dark .dlg-arrow { color: #475569; }
+    .dlg-col { display: flex; flex-direction: column; gap: 8px; min-width: 190px; }
+    .dlg-col-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8; padding-left: 2px; }
+    .dlg-card { position: relative; border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; padding: 10px 12px; background: var(--app-surface, #fff); transition: border-color .12s, box-shadow .12s, transform .12s; }
+    body.app-theme-dark .dlg-card { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.1); }
+    .dlg-card--root { border-color: #6366f1; box-shadow: 0 0 0 1px #6366f1; }
+    .dlg-card--link { cursor: pointer; }
+    .dlg-card--link:hover { border-color: #818cf8; box-shadow: 0 4px 12px rgba(99,102,241,.15); transform: translateY(-1px); }
+    .dlg-card--noauth { opacity: .6; }
+    .dlg-card-type { font-size: 11px; font-weight: 600; color: #6366f1; margin-bottom: 2px; }
+    body.app-theme-dark .dlg-card-type { color: #a5b4fc; }
+    .dlg-card-no { font-size: 13px; font-weight: 700; color: var(--app-text, #1e293b); font-family: ui-monospace, Menlo, Consolas, monospace; }
+    body.app-theme-dark .dlg-card-no { color: #e2e8f0; }
+    .dlg-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+    .dlg-card-date { font-size: 11px; color: #94a3b8; }
+    .dlg-lock { font-size: 11px; }
+    .dlg-st { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
+    .dlg-st--ok { background: #d1fae5; color: #065f46; }
+    .dlg-st--rej { background: #fee2e2; color: #991b1b; }
+    .dlg-st--pend { background: #fef3c7; color: #92400e; }
+    .dlg-st--draft { background: #f1f5f9; color: #64748b; }
+    .dlg-st--mut { background: #f1f5f9; color: #94a3b8; }
+    body.app-theme-dark .dlg-st--ok { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    body.app-theme-dark .dlg-st--rej { background: rgba(239,68,68,.18); color: #fca5a5; }
+    body.app-theme-dark .dlg-st--pend { background: rgba(245,158,11,.18); color: #fcd34d; }
+    body.app-theme-dark .dlg-st--draft, body.app-theme-dark .dlg-st--mut { background: rgba(148,163,184,.12); color: #94a3b8; }
+</style>
+
 @section Scripts {
 <script>
     /* Tarih inputlari global standarttan flatpickr olur (calibra-datepicker.js):
@@ -2594,6 +2637,7 @@
     window.sqSwitchTab = function(tabKey) {
         sqActivateTab(tabKey);
         if (tabKey === 'attachments') sqAttLoad();
+        if (tabKey === 'lineage') sqLineageLoad();
         // Notlar sekmesi ilk kez acildiginda textarea gizliyken scrollHeight=0
         // donduruluyor ve sqLoadQuote icindeki autoResizeTextarea cagirisi boyu
         // dogru hesaplayamiyor. Gorunur hale geldiginde yeniden boyutlandir.
@@ -2608,6 +2652,79 @@
             window.sqProbeWidgets();
         }
     };
+
+    // ── İlişkili Belgeler / Akış (belge soyağacı) ─────────────────────────────
+    var _sqLineageLoaded = false;
+    window.sqLineageLoad = function() {
+        if (_sqLineageLoaded) return;
+        var host = document.getElementById('sqLineageHost');
+        if (!host) return;
+        var docId = host.getAttribute('data-doc-id');
+        if (!docId) return;
+        _sqLineageLoaded = true;
+        host.innerHTML = '<div class="dlg-empty">Yükleniyor…</div>';
+        fetch('/Document/Lineage?id=' + encodeURIComponent(docId), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { sqRenderLineage(host, data); })
+            .catch(function() { host.innerHTML = '<div class="dlg-empty">İlişkili belgeler yüklenemedi.</div>'; });
+    };
+
+    function sqLinEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+    function sqLinStatus(st) {
+        switch (st) {
+            case 'Approved':  return { label: 'Onaylandı',     cls: 'dlg-st--ok'    };
+            case 'Rejected':  return { label: 'Reddedildi',    cls: 'dlg-st--rej'   };
+            case 'Sent':      return { label: 'Onayda',        cls: 'dlg-st--pend'  };
+            case 'Cancelled': return { label: 'İptal',         cls: 'dlg-st--mut'   };
+            case 'Closed':    return { label: 'Kapalı',        cls: 'dlg-st--mut'   };
+            case 'Converted': return { label: 'Dönüştürüldü',  cls: 'dlg-st--mut'   };
+            default:          return { label: st || 'Taslak',  cls: 'dlg-st--draft' };
+        }
+    }
+
+    function sqRenderLineage(host, data) {
+        var nodes = (data && data.nodes) || [];
+        if (nodes.length <= 1) {
+            host.innerHTML = '<div class="dlg-empty">Bu belgeyle ilişkili başka belge yok.</div>';
+            return;
+        }
+        var byDepth = {};
+        nodes.forEach(function(n) { (byDepth[n.depth] = byDepth[n.depth] || []).push(n); });
+        var depths = Object.keys(byDepth).map(Number).sort(function(a, b) { return a - b; });
+        var html = '<div class="dlg-hint">Seçili belgenin öncesindeki (kaynak) ve sonrasındaki (türeyen) belgeler. Yetkiniz olan belgeye tıklayınca yeni sekmede açılır.</div>';
+        html += '<div class="dlg-flow">';
+        depths.forEach(function(dep, i) {
+            if (i > 0) html += '<div class="dlg-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>';
+            html += '<div class="dlg-col">';
+            var label = dep < 0 ? 'Önceki' : dep > 0 ? 'Sonraki' : 'Bu Belge';
+            html += '<div class="dlg-col-lbl">' + label + '</div>';
+            byDepth[dep].forEach(function(n) {
+                var si = sqLinStatus(n.status);
+                var clickable = n.canView && n.url && !n.isRoot;
+                var d = n.date ? new Date(n.date).toLocaleDateString('tr-TR') : '';
+                html += '<div class="dlg-card' + (n.isRoot ? ' dlg-card--root' : '') + (clickable ? ' dlg-card--link' : '') + (!n.canView ? ' dlg-card--noauth' : '') + '"'
+                    + (clickable ? ' data-url="' + sqLinEsc(n.url) + '" data-title="' + sqLinEsc(n.typeName + ' ' + n.documentNumber) + '"' : '')
+                    + (!n.canView ? ' title="Bu belgeyi görüntüleme yetkiniz yok"' : '') + '>'
+                    + '<div class="dlg-card-type">' + sqLinEsc(n.typeName) + '</div>'
+                    + '<div class="dlg-card-no">' + sqLinEsc(n.documentNumber || '—') + (!n.canView ? ' <span class="dlg-lock">🔒</span>' : '') + '</div>'
+                    + '<div class="dlg-card-meta"><span class="dlg-st ' + si.cls + '">' + sqLinEsc(si.label) + '</span>' + (d ? '<span class="dlg-card-date">' + d + '</span>' : '') + '</div>'
+                    + '</div>';
+            });
+            html += '</div>';
+        });
+        html += '</div>';
+        host.innerHTML = html;
+        host.querySelectorAll('.dlg-card--link').forEach(function(card) {
+            card.addEventListener('click', function() {
+                var url = card.getAttribute('data-url');
+                var title = card.getAttribute('data-title');
+                if (!url) return;
+                if (window.calibraOpenWorkspaceTab) window.calibraOpenWorkspaceTab(url, title);
+                else window.location.href = url;
+            });
+        });
+    }
 
     // ── Ekli Dosyalar yonetimi ──
     function sqFormatBytes(n) {
