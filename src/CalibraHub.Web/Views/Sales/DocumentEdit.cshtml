@@ -5036,13 +5036,21 @@
         });
         if (!ok) return;
         try {
-            await fetch('/Sales/DeleteDocument', {
+            var resp = await fetch('/Sales/DeleteDocument', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: currentQuoteId })
             });
+            var data = await resp.json().catch(function () { return { success: true }; });
+            // Sunucu guard'ı (ör. karşılanmış kalem) reddederse listeye DÖNME — uyarı göster.
+            if (data && data.success === false) {
+                CalibraAlert.error(data.message || 'Belge silinemedi.');
+                return;
+            }
             window.location.href = '@listReturnUrl';
-        } catch {}
+        } catch {
+            CalibraAlert.error('Belge silinemedi (bağlantı hatası).');
+        }
     };
 
     window.sqChangeStatus = async function () {
