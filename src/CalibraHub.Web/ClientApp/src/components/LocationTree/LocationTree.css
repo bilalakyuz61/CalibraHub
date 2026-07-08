@@ -216,6 +216,10 @@ body.app-theme-dark .lt-root {
 .lt-icon-btn--active {
   background: var(--lt-indigo-bg); color: var(--lt-indigo-color); border-color: var(--lt-indigo-color);
 }
+.lt-icon-btn--primary {
+  background: #6366f1; color: #fff; border-color: #6366f1;
+}
+.lt-icon-btn--primary:hover { background: #4f46e5; border-color: #4f46e5; color: #fff; }
 .lt-icon-btn__badge {
   position: absolute; top: -3px; right: -3px;
   min-width: 14px; height: 14px; padding: 0 3px;
@@ -437,6 +441,11 @@ body.app-theme-dark .lt-root {
 .lt-seg-btn.is-active { font-weight: 600; background: var(--lt-indigo-bg); color: var(--lt-indigo-color); }
 .lt-seg-btn--block.is-active { background: var(--lt-emerald-bg); color: var(--lt-emerald-color); }
 .lt-seg-btn--allow.is-active { background: var(--lt-amber-bg); color: var(--lt-amber-color); }
+
+/* Header hızlı filtre (radyo) — lt-fi-seg/lt-seg-btn tabanını yeniden kullanır */
+.lt-quick-seg { flex-shrink: 0; align-self: center; background: var(--lt-bg); }
+.lt-quick-seg .lt-seg-btn { padding: 5px 11px; font-size: 12px; color: var(--lt-muted); white-space: nowrap; }
+.lt-quick-seg .lt-seg-btn.is-active { color: var(--lt-indigo-color); }
 
 /* Standalone switch (form içi tek başına) */
 .lt-sw {

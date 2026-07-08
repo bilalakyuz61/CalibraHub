@@ -14,7 +14,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   ChevronRight, ChevronDown, MapPin, Plus, PlusCircle,
   Edit2, Trash2, Check, X, Search, AlertTriangle, Cog, Boxes, Settings2,
-  Filter, Download, Loader2,
+  Filter, Download, Loader2, RefreshCw, Tags,
 } from 'lucide-react'
 import SmartBoardConfigPanel from '../CalibraSmartBoard/SmartBoardConfigPanel'
 import SmartBoardFilterPanel, { entityMatchesFilters } from '../CalibraSmartBoard/SmartBoardFilterPanel'
@@ -40,6 +40,21 @@ function nodeMatches(node, q) {
   const lq = q.toLowerCase()
   return (node.code || '').toLowerCase().includes(lq) ||
          (node.name || '').toLowerCase().includes(lq)
+}
+
+// ── Hızlı filtre (radyo): 'all' | 'machine' | 'depot' | 'leaves' ───────────
+function nodeMatchesQuick(node, qf) {
+  switch (qf) {
+    case 'machine': return !!node.isMachinePark
+    case 'depot':   return !!node.isStorageArea
+    case 'leaves':  return (node.children || []).length === 0   // yaprak = alt tanım
+    default:        return true                                  // 'all'
+  }
+}
+function nodeOrDescendantQuick(node, qf) {
+  if (qf === 'all') return true
+  if (nodeMatchesQuick(node, qf)) return true
+  return (node.children || []).some(c => nodeOrDescendantQuick(c, qf))
 }
 
 // ── Widget chip — backend'den gelen dynamic widget'lari render eder ────────
@@ -479,7 +494,7 @@ function UsageWarningModal({ type, node, data, onConfirm, onCancel }) {
 }
 
 // ── Single tree node ──────────────────────────────────────────────────────
-function TreeNode({ node, depth, search, types, handlers, recentIds, maxDepth, parentTypeSortOrder = null, userCfg = null }) {
+function TreeNode({ node, depth, search, types, handlers, recentIds, maxDepth, parentTypeSortOrder = null, userCfg = null, quickFilter = 'all' }) {
   const [expanded, setExpanded] = useState(true)
   const hasChildren = (node.children || []).length > 0
   const isEditing      = handlers.editingId === node.id
@@ -497,8 +512,8 @@ function TreeNode({ node, depth, search, types, handlers, recentIds, maxDepth, p
   }, [node.children])
 
   const visibleChildren = useMemo(
-    () => (node.children || []).filter(c => nodeOrDescendantMatches(c, search)),
-    [node.children, search]
+    () => (node.children || []).filter(c => nodeOrDescendantMatches(c, search) && nodeOrDescendantQuick(c, quickFilter)),
+    [node.children, search, quickFilter]
   )
   const forceExpand = !!search
   const isExpanded  = forceExpand || expanded
@@ -600,6 +615,7 @@ function TreeNode({ node, depth, search, types, handlers, recentIds, maxDepth, p
               maxDepth={maxDepth}
               parentTypeSortOrder={myTypeSortOrder}
               userCfg={userCfg}
+              quickFilter={quickFilter}
             />
           ))}
         </div>
@@ -631,6 +647,7 @@ export default function LocationTree({ config }) {
   const [userCfg, setUserCfg]       = useState(() => loadWidgetConfig(boardKey))
   const [filters, setFilters]       = useState([])
   const [exporting, setExporting]   = useState(false)
+  const [quickFilter, setQuickFilter] = useState('all')   // hızlı filtre: all | machine | depot | leaves
 
   const refreshTree = useCallback(async (highlightId) => {
     try {
@@ -773,8 +790,8 @@ export default function LocationTree({ config }) {
   }, [matchedIds])
 
   const visibleRoots = useMemo(
-    () => roots.filter(r => nodeOrDescendantMatches(r, search) && nodeOrDescendantInFilter(r)),
-    [roots, search, nodeOrDescendantInFilter]
+    () => roots.filter(r => nodeOrDescendantMatches(r, search) && nodeOrDescendantInFilter(r) && nodeOrDescendantQuick(r, quickFilter)),
+    [roots, search, nodeOrDescendantInFilter, quickFilter]
   )
   const isAddingRoot = addingFor?.type === 'root'
   const handleRootAddSave = useCallback(async (vals) => {
@@ -877,6 +894,24 @@ export default function LocationTree({ config }) {
           <input className="lt-search" placeholder="Kod veya ada göre ara…"
                  value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        {/* Hızlı filtre — radyo (tek seçim) */}
+        <div className="lt-fi-seg lt-quick-seg" role="radiogroup" aria-label="Hızlı filtre">
+          {[
+            { k: 'all',     label: 'Tümü' },
+            { k: 'machine', label: 'Makine' },
+            { k: 'depot',   label: 'Depo' },
+            { k: 'leaves',  label: 'Alt Tanımlar' },
+          ].map(o => (
+            <button key={o.k} type="button" role="radio" aria-checked={quickFilter === o.k}
+                    className={'lt-seg-btn' + (quickFilter === o.k ? ' is-active' : '')}
+                    onClick={() => setQuickFilter(o.k)}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button className="lt-icon-btn" title="Yenile" onClick={() => refreshTree()}>
+          <RefreshCw size={15} />
+        </button>
         <button
           className={'lt-icon-btn' + (filters.length > 0 ? ' lt-icon-btn--active' : '')}
           title={filters.length > 0 ? `${filters.length} filtre aktif` : 'Filtreleme'}
@@ -891,11 +926,12 @@ export default function LocationTree({ config }) {
         <button className="lt-icon-btn" title="Widget Ayarları" onClick={() => setConfigOpen(true)}>
           <Settings2 size={15} />
         </button>
-        <button className="lt-btn-types" onClick={() => setShowTypes(true)} title="Bölüm Tiplerini Yönet">
-          <Cog size={13} /> Bölüm Tipleri
+        <button className="lt-icon-btn" title="Bölüm Tiplerini Yönet" onClick={() => setShowTypes(true)}>
+          <Tags size={15} />
         </button>
-        <button className="lt-btn-new" onClick={() => { setEditingId(null); setAddingFor({ type: 'root' }) }}>
-          <Plus size={14} /> Yeni Kök Lokasyon
+        <button className="lt-icon-btn lt-icon-btn--primary" title="Yeni Kök Lokasyon"
+                onClick={() => { setEditingId(null); setAddingFor({ type: 'root' }) }}>
+          <Plus size={15} />
         </button>
       </div>
 
@@ -930,6 +966,7 @@ export default function LocationTree({ config }) {
               recentIds={recentIds}
               maxDepth={config.maxDepth || 7}
               userCfg={userCfg}
+              quickFilter={quickFilter}
             />
           ))
         )}
