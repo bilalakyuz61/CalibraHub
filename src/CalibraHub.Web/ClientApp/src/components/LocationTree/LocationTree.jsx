@@ -904,22 +904,8 @@ export default function LocationTree({ config }) {
           <input className="lt-search" placeholder="Kod veya ada göre ara…"
                  value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        {/* Hızlı filtre — radyo (tek seçim) */}
-        <div className="lt-fi-seg lt-quick-seg" role="radiogroup" aria-label="Hızlı filtre">
-          {[
-            { k: 'all',     label: 'Tümü' },
-            { k: 'machine', label: 'Makine' },
-            { k: 'depot',   label: 'Depo' },
-            { k: 'leaves',  label: 'Alt Tanımlar' },
-          ].map(o => (
-            <button key={o.k} type="button" role="radio" aria-checked={quickFilter === o.k}
-                    className={'lt-seg-btn' + (quickFilter === o.k ? ' is-active' : '')}
-                    onClick={() => setQuickFilter(o.k)}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-        <button className="lt-icon-btn" title="Yenile" onClick={() => refreshTree()}>
+        {/* Araç butonları — Malzeme Kartları (SmartBoard) ile aynı konum/boyut */}
+        <button className="lt-icon-btn lt-tools-start" title="Yenile" onClick={() => refreshTree()}>
           <RefreshCw size={15} />
         </button>
         <button
@@ -943,6 +929,21 @@ export default function LocationTree({ config }) {
                 onClick={() => { setEditingId(null); setAddingFor({ type: 'root' }) }}>
           <Plus size={15} />
         </button>
+        {/* Hızlı filtre — radyo (tek seçim), banda SAĞA yaslı */}
+        <div className="lt-fi-seg lt-quick-seg" role="radiogroup" aria-label="Hızlı filtre">
+          {[
+            { k: 'all',     label: 'Tümü' },
+            { k: 'machine', label: 'Makine' },
+            { k: 'depot',   label: 'Depo' },
+            { k: 'leaves',  label: 'Alt Tanımlar' },
+          ].map(o => (
+            <button key={o.k} type="button" role="radio" aria-checked={quickFilter === o.k}
+                    className={'lt-seg-btn' + (quickFilter === o.k ? ' is-active' : '')}
+                    onClick={() => setQuickFilter(o.k)}>
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="lt-tree">
