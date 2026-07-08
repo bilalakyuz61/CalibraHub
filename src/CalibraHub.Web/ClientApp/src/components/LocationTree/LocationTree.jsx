@@ -865,15 +865,16 @@ export default function LocationTree({ config }) {
   return (
     <div className="lt-root">
       <div className="lt-toolbar">
-        <div className="lt-title">
-          <MapPin size={15} />
-          <span>Lokasyon Tanımlamaları</span>
-          <span className="lt-count">{roots.length} kök</span>
+        <div className="lt-header-id">
+          <div className="lt-header-icon"><MapPin size={17} /></div>
+          <div>
+            <div className="lt-header-title">Lokasyon Tanımlamaları</div>
+            <div className="lt-header-sub">{roots.length} kök</div>
+          </div>
         </div>
-        <div className="lt-spacer" />
         <div className="lt-search-wrap">
           <Search size={13} className="lt-search-icon" />
-          <input className="lt-search" placeholder="Hızlı ara…"
+          <input className="lt-search" placeholder="Kod veya ada göre ara…"
                  value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <button

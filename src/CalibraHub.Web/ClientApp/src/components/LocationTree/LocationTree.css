@@ -52,25 +52,33 @@ body.app-theme-dark .lt-root {
   background: var(--lt-surface);
   border-bottom: 1px solid var(--lt-border);
 }
-.lt-title {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 14px; font-weight: 600; color: var(--lt-text);
+/* Standart C-Grid başlık kimliği: ikon kutusu + başlık/alt başlık */
+.lt-header-id {
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0;
 }
-.lt-title svg { color: var(--lt-indigo-color); }
-.lt-count {
-  font-size: 11px; font-weight: 500; color: var(--lt-muted);
-  background: var(--lt-bg); padding: 2px 8px; border-radius: 6px;
-  margin-left: 4px;
+.lt-header-icon {
+  width: 36px; height: 36px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--lt-indigo-bg), var(--lt-indigo-bdr));
+  border: 1px solid var(--lt-indigo-bdr);
+  color: var(--lt-indigo-color);
 }
-.lt-spacer { flex: 1; min-width: 8px; }
+.lt-header-title {
+  font-size: 16px; font-weight: 700; color: var(--lt-text);
+  line-height: 1.2; letter-spacing: -0.01em;
+}
+.lt-header-sub {
+  font-size: 11px; color: var(--lt-muted); margin-top: 1px; line-height: 1.2;
+}
 
-.lt-search-wrap { position: relative; }
+.lt-search-wrap { position: relative; flex: 1 1 auto; min-width: 140px; max-width: 460px; }
 .lt-search-icon {
   position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
   color: var(--lt-muted); pointer-events: none;
 }
 .lt-search {
-  padding: 6px 10px 6px 30px; border-radius: 8px; width: 220px;
+  padding: 6px 10px 6px 30px; border-radius: 8px; width: 100%;
   border: 1px solid var(--lt-border); background: var(--lt-bg);
   color: var(--lt-text); font-size: 13px; outline: none;
   transition: border-color .15s;
@@ -80,11 +88,11 @@ body.app-theme-dark .lt-root {
 .lt-btn-new {
   display: flex; align-items: center; gap: 5px;
   padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
-  background: linear-gradient(135deg,#7c3aed,#6d28d9); color: #fff;
-  border: none; cursor: pointer; white-space: nowrap;
-  transition: filter .15s;
+  background: #6366f1; color: #fff;
+  border: 1px solid #6366f1; cursor: pointer; white-space: nowrap;
+  transition: background .15s, border-color .15s;
 }
-.lt-btn-new:hover { filter: brightness(1.1); }
+.lt-btn-new:hover { background: #4f46e5; border-color: #4f46e5; }
 
 .lt-btn-types {
   display: flex; align-items: center; gap: 5px;
