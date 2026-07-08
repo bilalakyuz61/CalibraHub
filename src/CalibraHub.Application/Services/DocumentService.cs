@@ -249,11 +249,16 @@ public sealed class DocumentService : IDocumentService
             return (false, "En az bir satir eklenmeli.", null, false);
 
         // Kombinasyon takibi acik olan stok icin kombinasyon ID zorunlu
-        foreach (var ln in request.Lines)
+        // Kombinasyon zorunlu kontrolü — mesajda satır numarası (opak ItemId değil).
+        // TrackCombinations bayrağı payload'dan gelir; frontend bunu stok kartı (master)
+        // değerinden doldurur (bkz. DocumentEdit save map, 2026-07-08 hizalama).
+        var lineList = request.Lines.ToList();
+        for (var i = 0; i < lineList.Count; i++)
         {
+            var ln = lineList[i];
             if (ln.TrackCombinations && (!ln.CombinationId.HasValue || ln.CombinationId.Value <= 0))
             {
-                return (false, $"Secili satir (Item #{ln.ItemId}) stokunda kombinasyon takibi acik; kombinasyon secilmelidir.", null, false);
+                return (false, $"{i + 1}. kalemde kombinasyon takibi açık; kombinasyon seçilmelidir.", null, false);
             }
         }
 

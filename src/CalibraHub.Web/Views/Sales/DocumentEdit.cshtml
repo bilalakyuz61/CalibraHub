@@ -4009,10 +4009,15 @@
                 // ItemId DB'de source-of-truth; materialCode/materialName tabloda tutulmaz,
                 // server JOIN ile Item'dan turetir. unitId, combinationId ve locationId ayni sekilde.
                 // Id dolu gelirse UPSERT (UPDATE) — widget kayitlari orphanlanmaz.
+                // trackCombinations: satirin (bayat olabilen) bayragi yerine MASTER (stok karti)
+                // degeri gonderilir — client dogrulamasi da master'a bakar; server payload'a
+                // guvendigi icin ikisi ayni kaynaktan gelmezse yanlis "kombinasyon secilmelidir"
+                // hatasi cikiyordu (2026-07-08).
+                var mCombo = (materials || []).find(function (x) { return x.materialCode === r.materialCode; });
                 return {
                     id:                 r.id != null && r.id !== '' && Number(r.id) > 0 ? Number(r.id) : null,
                     itemId:             r.stockCardId != null && r.stockCardId !== '' ? parseInt(r.stockCardId, 10) : 0,
-                    trackCombinations:  r.trackCombinations === true,
+                    trackCombinations:  mCombo ? mCombo.trackCombinations === true : (r.trackCombinations === true),
                     unitId:             r.unitId != null && r.unitId !== '' ? parseInt(r.unitId, 10) : null,
                     quantity:           Number(r.quantity) || 0,
                     unitPrice:          Number(r.unitPrice) || 0,
