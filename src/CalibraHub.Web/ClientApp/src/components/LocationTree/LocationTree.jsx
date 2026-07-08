@@ -106,9 +106,9 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
   const [name, setName]         = useState(initial?.name || '')
   const [isMP, setIsMP]         = useState(!!initial?.isMachinePark)
   const [isSA, setIsSA]         = useState(!!initial?.isStorageArea)
-  // Eksi bakiye izni — her yaprak (stok tutan) lokasyonda görünür, iki durumlu:
-  // Açık = bu lokasyonda stok eksiye düşebilir · Kapalı = eksiye düşecek hareket engellenir.
-  // Şirket ana anahtarı (Eksi Bakiye Kontrolü) kapalıyken bu ayarın etkisi yoktur.
+  // Eksi bakiye izni — her yaprak lokasyonda GÖRÜNÜR, ancak yalnızca Fiziksel Depo
+  // (isStorageArea) işaretliyken SEÇİLEBİLİR. İki durumlu: Açık = eksiye düşebilir,
+  // Kapalı = engellenir. Şirket ana anahtarı (Eksi Bakiye Kontrolü) kapalıyken etkisiz.
   const [allowNeg, setAllowNeg] = useState(initial?.allowNegativeBalance === true)
   const [saving, setSaving]     = useState(false)
   const codeRef = useRef(null)
@@ -128,8 +128,8 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
         typeCode, code: c, name: name.trim(),
         isMachinePark: flagsAllowed && isMP,
         isStorageArea: flagsAllowed && isSA,
-        // Eksi bakiye ayarı yaprak lokasyonda saklanır; yaprak değilse null (backend de zorlar).
-        allowNegativeBalance: flagsAllowed ? allowNeg : null,
+        // Eksi bakiye yalnızca Fiziksel Depo işaretli yaprakta saklanır; değilse null.
+        allowNegativeBalance: (flagsAllowed && isSA) ? allowNeg : null,
       })
     } finally { setSaving(false) }
   }
@@ -168,9 +168,11 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
         <Boxes size={11} /> Fiziksel Depo
       </label>
       {flagsAllowed && (
-        <label className={'lt-fi-sw' + (allowNeg ? ' is-on' : '')}
-               title="Eksi bakiye izni — yalnızca şirket ana ayarı (Eksi Bakiye Kontrolü) açıkken etkindir. Açık: bu lokasyonda stok eksiye düşebilir · Kapalı: eksiye düşecek çıkış / transfer / sarf engellenir.">
-          <span className="lt-fi-sw-track" onClick={() => !saving && setAllowNeg(v => !v)}>
+        <label className={'lt-fi-sw' + (isSA ? '' : ' is-disabled') + (isSA && allowNeg ? ' is-on' : '')}
+               title={isSA
+                 ? 'Eksi bakiye izni — yalnızca şirket ana ayarı (Eksi Bakiye Kontrolü) açıkken etkindir. Açık: bu lokasyonda stok eksiye düşebilir · Kapalı: eksiye düşecek çıkış / transfer / sarf engellenir.'
+                 : 'Önce "Fiziksel Depo"yu işaretleyin — eksi bakiye izni yalnızca fiziksel depolarda ayarlanır.'}>
+          <span className="lt-fi-sw-track" onClick={() => isSA && !saving && setAllowNeg(v => !v)}>
             <span className="lt-fi-sw-thumb" />
           </span>
           <AlertTriangle size={11} /> Eksi Bakiye İzni
