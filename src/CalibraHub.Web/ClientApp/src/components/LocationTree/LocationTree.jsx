@@ -329,23 +329,15 @@ function TypesModal({ onClose, onChanged }) {
               <table className="lt-types-table">
                 <thead>
                   <tr>
+                    <th style={{ width: 72 }}></th>
                     <th>Ad</th>
-                    <th style={{ width: 60 }}>Sıra</th>
                     <th style={{ width: 60 }}>Durum</th>
-                    <th style={{ width: 70 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {types.map(t => (
                     <tr key={t.id} className={editId === t.id ? 'is-sel' : ''}>
-                      <td>{t.name}</td>
-                      <td style={{ textAlign: 'center' }}>{t.sortOrder}</td>
-                      <td>
-                        <span className={'lt-types-status ' + (t.isActive ? 'is-on' : 'is-off')}>
-                          {t.isActive ? 'Aktif' : 'Pasif'}
-                        </span>
-                      </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <button className="lt-act" title="Düzenle" onClick={() => startEdit(t)}>
                           <Edit2 size={12} />
                         </button>
@@ -353,6 +345,12 @@ function TypesModal({ onClose, onChanged }) {
                                 onClick={() => setDel(t)}>
                           <Trash2 size={12} />
                         </button>
+                      </td>
+                      <td>{t.name}</td>
+                      <td>
+                        <span className={'lt-types-status ' + (t.isActive ? 'is-on' : 'is-off')}>
+                          {t.isActive ? 'Aktif' : 'Pasif'}
+                        </span>
                       </td>
                     </tr>
                   ))}
