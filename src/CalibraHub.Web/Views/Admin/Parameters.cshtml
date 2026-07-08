@@ -193,7 +193,7 @@ body.app-theme-dark .ap-wrapper {
     padding: 18px 24px; overflow-y: auto;
     background: var(--ap-bg);
 }
-.ap-content h2 { margin: 0 0 4px; font-size: 17px; color: var(--ap-text); font-weight:700; }
+.ap-content h2 { display: none; }   /* sayfa adı başlığı gizli — sol sekme zaten hangi sayfa olduğunu gösterir */
 .ap-content .ap-hint { color: var(--ap-text-muted); font-size: 12px; margin-bottom: 18px; }
 
 /* Bilgi notu — ayrı bir ayar olmayan, açıklama amaçlı callout */
@@ -452,14 +452,6 @@ body.app-theme-dark .ap-wrapper {
             <section class="ap-pane" id="ap-pane-ihtiyac">
                 <h2>İhtiyaç Kayıtları</h2>
                 <div class="ap-hint">İhtiyaç karşılama merkezi ("Depodan Karşıla") davranış parametreleri.</div>
-
-                <div class="ap-note-info">
-                    <strong>Karşılamada onay şartı</strong>, ayrı bir ayar değildir; doğrudan
-                    <em>Onay İşlemleri → İhtiyaç Kaydı</em> onayına bağlıdır. Onay açıkken Karşılama
-                    Merkezi'nde yalnızca <strong>onaylanmış</strong> ihtiyaçlar seçilip işlem görür;
-                    diğerleri bilgi amaçlı listede kalır ama seçilemez. Onay kapalıyken tüm ihtiyaçlar
-                    karşılanabilir.
-                </div>
 
                 <div class="ap-row">
                     <div class="ap-row-main">
