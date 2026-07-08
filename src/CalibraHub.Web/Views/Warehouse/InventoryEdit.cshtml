@@ -277,6 +277,8 @@
               onclick="invSwitchTab('lines')">Kalem Bilgileri</button>
       <button type="button" class="inv-tab-btn" data-inv-tab="ops"
               onclick="invSwitchTab('ops')">İşlemler</button>
+      <button type="button" class="inv-tab-btn" data-inv-tab="widgets"
+              onclick="invSwitchTab('widgets')">Ek Alanlar</button>
     </nav>
 
     <div class="inv-tab-content" id="invTabContent">
@@ -333,6 +335,16 @@
       <!-- TAB 2: Kalem Bilgileri -->
       <div class="inv-tab-pane inv-tab-pane--lines" data-inv-pane="lines">
         <div id="reactInvLineGrid" style="height:100%;"></div>
+      </div>
+
+      <!-- TAB 4: Ek Alanlar (Alan Yönetimi / dinamik widget'lar — INVENTORY_COUNT) -->
+      <div class="inv-tab-pane" data-inv-pane="widgets" style="padding:18px 4px;">
+        @await Html.PartialAsync("_DynamicWidgetHost", new CalibraHub.Web.Models.Shared.DynamicWidgetHostModel
+        {
+            FormCode = CalibraHub.Application.Constants.FormCodes.InventoryCount,
+            HostId   = "invWidgets",
+            RecordId = Model.DocId?.ToString(),
+        })
       </div>
 
       <!-- TAB 3: İşlemler -->
@@ -678,6 +690,11 @@
                     var delBtn = document.getElementById('invDeleteBtn');
                     if (delBtn) delBtn.style.display = '';
                     updateOpsState();
+                }
+                // Ek Alanlar (dinamik widget) değerlerini yeni/mevcut belge Id'sine yaz.
+                if (window.CalibraWidgetHost && DOC_ID) {
+                    try { await window.CalibraWidgetHost.save('invWidgets', DOC_ID); }
+                    catch (_) { /* widget save hatasi belge kaydini bloklamaz */ }
                 }
                 var bar = document.querySelector('.pte-action-bar');
                 if (bar) {

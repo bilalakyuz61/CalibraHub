@@ -1,0 +1,146 @@
+@model CalibraHub.Web.Models.Shared.DynamicWidgetHostModel
+@*
+    Paylaşılan Dinamik Widget Host (Alan Yönetimi / EAV alanları).
+
+    NEDEN: Her belge/tanım ekranı widget mount/reload/save JS'ini elle kopyalıyordu.
+    Ambar Giriş/Çıkış/Transfer/Sayım ekranları bu host'u eklemeyi UNUTTUĞU için
+    Alan Yönetimi'nde tanımlı alanlar sessizce görünmüyordu (2026-07-08). Bu partial
+    host'u tek include'a indirger — kart CSS'i de içeride, "cwh" prefix'i sabit.
+
+    HOST EKRANIN 3 ENTEGRASYON NOKTASI:
+      1) Bir sekme/panel içine include et:
+         @@await Html.PartialAsync("_DynamicWidgetHost", new DynamicWidgetHostModel {
+                    FormCode = "STOCK_OUT", HostId = "wdeWidgets", RecordId = Model.DocId?.ToString() })
+      2) Kayıt yüklenince (edit load):   window.CalibraWidgetHost.reload('wdeWidgets', recordId)
+      3) Belge kaydedilip Id alınınca:   await window.CalibraWidgetHost.save('wdeWidgets', recordId)
+
+    NOT: React bundle (calibrahub-widgets.js) sayfada zaten yüklü olmalı (grid vb. için).
+         Mount, bundle hazır olana kadar polling ile bekler.
+*@
+@{
+    var hostId = string.IsNullOrWhiteSpace(Model.HostId) ? "dynWidgetHost" : Model.HostId.Trim();
+    var recId  = Model.RecordId ?? "";
+    // CSS'i istek başına bir kez yaz (aynı sayfada birden çok host olsa da tek stil).
+    var cssKey = "__cwh_styles_emitted";
+    var emitCss = Context.Items[cssKey] is null;
+    if (emitCss) { Context.Items[cssKey] = true; }
+}
+
+@if (emitCss)
+{
+    <style>
+        /* Dinamik widget host — light default, dark override (CLAUDE.md tema kuralı). */
+        .cwh-wrap { display: block; color: var(--bs-body-color, #1e293b); }
+        .cwh-wrap .cwh-dyn-root { display: flex; flex-direction: column; gap: 26px; }
+
+        /* Grup kartları — şeffaf; başlık section header gibi. */
+        .cwh-wrap details.cwh-card,
+        .cwh-wrap .cwh-card {
+            background: transparent !important; border: none !important;
+            box-shadow: none !important; border-radius: 0 !important;
+            margin: 0 !important; padding: 0 !important; overflow: visible !important;
+            scroll-margin-top: 20px;
+        }
+        .cwh-wrap details.cwh-card > summary,
+        .cwh-wrap .cwh-card > summary.cwh-card-title {
+            display: flex !important; align-items: center; gap: 10px;
+            padding: 0 2px 12px 2px !important; margin: 0 0 12px 0 !important;
+            border-bottom: 1px solid var(--app-border, rgba(15,23,42,0.10));
+            font-size: 0.92rem; font-weight: 700;
+            color: var(--bs-body-color, #0f172a); letter-spacing: 0.01em;
+            list-style: none !important; cursor: default !important; user-select: none;
+        }
+        body.app-theme-dark .cwh-wrap details.cwh-card > summary,
+        body.app-theme-dark .cwh-wrap .cwh-card > summary.cwh-card-title {
+            border-bottom-color: rgba(255,255,255,0.10); color: #e2e8f0;
+        }
+        .cwh-wrap details.cwh-card > summary::-webkit-details-marker,
+        .cwh-wrap details.cwh-card > summary::marker { display: none; content: ''; }
+        .cwh-wrap details.cwh-card > summary::before {
+            content: ''; width: 3px; height: 14px; border-radius: 2px; flex-shrink: 0;
+            background: linear-gradient(180deg, #6366f1 0%, #a855f7 100%);
+        }
+
+        /* Alan yerleşimi: label + input aynı satırda; renderer'ın 12-kolon grid'ini bozma. */
+        .cwh-wrap .cwh-grid-2 { gap: 14px; margin-top: 0 !important; }
+        .cwh-wrap .cwh-field {
+            display: grid; grid-template-columns: minmax(0, max-content) 1fr;
+            align-items: center; column-gap: 10px; padding: 4px 2px;
+        }
+        .cwh-wrap .cwh-dyn-loading,
+        .cwh-wrap .cwh-dyn-error { padding: 14px; font-size: 0.78rem; opacity: 0.75; }
+
+        /* Boş / teşhis durumu */
+        .cwh-empty {
+            padding: 18px; font-size: 0.8rem; line-height: 1.5;
+            color: var(--app-muted-text, #64748b);
+            border: 1px dashed var(--app-border, #e2e8f0); border-radius: 10px;
+        }
+        body.app-theme-dark .cwh-empty { color: #94a3b8; border-color: rgba(255,255,255,0.12); }
+        .cwh-empty code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.72rem; opacity: 0.85; }
+    </style>
+}
+
+<div class="cwh-wrap" id="@(hostId)_wrap">
+    <div id="@hostId" class="cwh-root"
+         data-form-code="@Model.FormCode"
+         data-record-id="@recId"></div>
+</div>
+
+<script>
+(function () {
+    // ── Merkezi host registry (bir kez tanımlanır) ──────────────────────────
+    window.CalibraWidgetHost = window.CalibraWidgetHost || (function () {
+        var reg = {};
+        return {
+            _set: function (id, h) { reg[id] = h; },
+            get: function (id) { return reg[id] || null; },
+            reload: function (id, recordId) {
+                var h = reg[id];
+                if (h && h.reload) h.reload({ recordId: recordId != null ? String(recordId) : '' });
+            },
+            // Belge kaydedildikten SONRA çağrılır; renderer değerleri recordId'ye yazar.
+            save: function (id, recordId, opts) {
+                var h = reg[id];
+                if (!h || !h.save) return Promise.resolve({ success: true, skipped: true });
+                return h.save(Object.assign({ recordId: recordId != null ? String(recordId) : '' }, opts || {}));
+            },
+            validate: function (id) {
+                var h = reg[id];
+                return (h && h.validate) ? h.validate() : { valid: true, errors: [] };
+            },
+            hasWidgets: function (id) {
+                var h = reg[id];
+                return !!(h && h.getHasWidgets && h.getHasWidgets());
+            },
+        };
+    })();
+
+    var HOST_ID = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(hostId));
+    var el = document.getElementById(HOST_ID);
+    if (!el) return;
+
+    var tries = 0;
+    (function tryMount() {
+        if (window.CalibraWidgetHost.get(HOST_ID)) return; // zaten mount edildi
+        if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+            try {
+                var handle = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                    formCode: el.getAttribute('data-form-code'),
+                    recordId: el.getAttribute('data-record-id') || '',
+                    classPrefix: 'cwh'
+                });
+                window.CalibraWidgetHost._set(HOST_ID, handle);
+                var rid = el.getAttribute('data-record-id');
+                if (rid) window.CalibraWidgetHost.reload(HOST_ID, rid);
+                console.log('[CWH] host mount edildi:', HOST_ID, 'form=', el.getAttribute('data-form-code'));
+            } catch (e) {
+                console.warn('[CWH] mount hatasi (' + HOST_ID + '):', e);
+            }
+            return;
+        }
+        if (++tries <= 120) { setTimeout(tryMount, 50); }
+        else { console.warn('[CWH] React bundle yuklenemedi — host mount edilemedi: ' + HOST_ID); }
+    })();
+})();
+</script>

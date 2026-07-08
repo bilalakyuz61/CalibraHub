@@ -303,6 +303,8 @@
               onclick="wdeSwitchTab('general')">Üst Bilgi</button>
       <button type="button" class="sqe-tab-btn" data-wde-tab-btn="lines"
               onclick="wdeSwitchTab('lines')">Kalem Bilgileri</button>
+      <button type="button" class="sqe-tab-btn" data-wde-tab-btn="widgets"
+              onclick="wdeSwitchTab('widgets')">Ek Alanlar</button>
     </nav>
 
     <div class="sqe-tab-content" id="wdeTabContent">
@@ -358,6 +360,16 @@
       <!-- TAB 2: Kalem Bilgileri -->
       <div class="sqe-tab-pane sqe-tab-pane--lines" data-wde-pane="lines">
         <div id="reactDocLineGrid" style="height:100%;"></div>
+      </div>
+
+      <!-- TAB 3: Ek Alanlar (Alan Yönetimi / dinamik widget'lar — üst bilgi form kodu) -->
+      <div class="sqe-tab-pane" data-wde-pane="widgets" style="padding:18px 4px;">
+        @await Html.PartialAsync("_DynamicWidgetHost", new CalibraHub.Web.Models.Shared.DynamicWidgetHostModel
+        {
+            FormCode = Model.DocType,
+            HostId   = "wdeWidgets",
+            RecordId = Model.DocId?.ToString(),
+        })
       </div>
 
     </div><!-- /sqe-tab-content -->
@@ -645,6 +657,11 @@
                     if (window.CalibraHub && window.CalibraHub.scanIntegrationActionItems) {
                         try { window.CalibraHub.scanIntegrationActionItems(); } catch (_) {}
                     }
+                }
+                // Ek Alanlar (dinamik widget) değerlerini yeni/mevcut belge Id'sine yaz.
+                if (window.CalibraWidgetHost && DOC_ID) {
+                    try { await window.CalibraWidgetHost.save('wdeWidgets', DOC_ID); }
+                    catch (_) { /* widget save hatasi belge kaydini bloklamaz */ }
                 }
                 // K.I.T.T. flash
                 var bar = document.querySelector('.pte-action-bar');
