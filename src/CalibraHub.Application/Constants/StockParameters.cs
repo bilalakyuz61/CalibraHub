@@ -66,10 +66,10 @@ public static class FulfillmentParameters
     public const string LocationIdsKey = "FULFILLMENT_LOCATION_IDS";
 
     /// <summary>
-    /// Karşılama aksiyonları (depodan karşıla / transfer / çıkış fişi / satın alma
-    /// talebi-siparişi) yalnızca Onaylı ihtiyaç kayıtlarında çalışsın (Bool, default true).
-    /// İhtiyaç Kaydı türünde onay tetikleme kapalıysa
-    /// (APPROVAL_ENABLED_PurchaseRequest = false) bu şart uygulanmaz.
+    /// KALDIRILDI (2026-07-08): ayrı "karşılamada onay şartı" parametresi. Karşılama artık
+    /// doğrudan İhtiyaç Kaydı onay tetiklemesine (APPROVAL_ENABLED_PurchaseRequest) bağlıdır:
+    /// onay açıksa yalnızca Onaylı belgeler karşılanır, kapalıysa tümü. Sabit yalnızca eski
+    /// DB kayıtlarının artık okunmadığını belgelemek için tutulur; hiçbir runtime kodu tüketmez.
     /// </summary>
     public const string RequireApprovalKey = "FULFILLMENT_REQUIRE_APPROVAL";
 }

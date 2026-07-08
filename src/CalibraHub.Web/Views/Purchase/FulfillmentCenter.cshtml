@@ -57,6 +57,8 @@
 
     // Onay akışında bekleyen belge ID'leri
     var pendingApprovalIdsJson = ViewData["PendingApprovalDocIdsJson"] as string ?? "[]";
+    // İhtiyaç Kaydı onay tetikleme açık mı → seçim kapısı: açıkken yalnızca Onaylı seçilebilir.
+    var approvalRequired = ViewData["ApprovalRequired"] as bool? ?? true;
 }
 
 @section Styles {
@@ -1427,6 +1429,18 @@
     var ALL  = @Html.Raw(requestsJson);
     var LOCS = @Html.Raw(locsJson);
     var PENDING_APPROVAL_IDS = new Set(@Html.Raw(pendingApprovalIdsJson));
+    // Onay tetikleme açıksa yalnızca Onaylı belgeler seçilebilir; kapalıysa tümü.
+    var APPROVAL_REQUIRED = @(approvalRequired ? "true" : "false");
+
+    // Bir ihtiyaç belgesinin karşılama için seçilip seçilemeyeceği (tek karar noktası).
+    function fc3DocCanSelect(r) {
+        if (APPROVAL_REQUIRED) {
+            // Onay açık: onay sürecinde olmayan + durumu Onaylı olan belgeler
+            return !PENDING_APPROVAL_IDS.has(r.id) && r.status === 'Approved';
+        }
+        // Onay kapalı: iptal/kapatılan/reddedilen dışında tümü
+        return r.status !== 'Rejected' && r.status !== 'Cancelled' && r.status !== 'Closed';
+    }
 
     // ── Grup haritaları: contactId/docId → grup adı(ları) ───────────────────
     var CONTACT_GROUP_MAP = @Html.Raw(contactGroupMapJson);  // { "123": "Toptan" }
@@ -1958,7 +1972,7 @@
             case 'who':    return r.requesterPersonnelName || r.contactName || '—';
             case 'dt':     return fmtDate(r.documentDate);
             case 'mat':    return l.materialName || l.materialCode || '—';
-            case 'fst':    return PENDING_APPROVAL_IDS.has(r.id) ? 'Onay Sürecinde' : (FSL[l.fulfillmentStatus] || 'Bekliyor');
+            case 'fst':    return (PENDING_APPROVAL_IDS.has(r.id) && APPROVAL_REQUIRED) ? 'Onay Sürecinde' : (FSL[l.fulfillmentStatus] || 'Bekliyor');
             case 'stk': {
                 var stkArr = _globalStockMap[l.itemId] || [];
                 var stkTot = stkArr.reduce(function(a, s) { return a + (s.balance || 0); }, 0);
@@ -2029,21 +2043,23 @@
             }
 
             var remainColor = remain <= 0 ? '#34d399' : (totalStk >= remain ? '#fbbf24' : '#f87171');
+            var canSelect = fc3DocCanSelect(r);
             var fstClass, fstLabel;
-            if (docHasApproval) {
+            if (docHasApproval && APPROVAL_REQUIRED) {
                 fstClass = 'fm-fst--approval'; fstLabel = 'Onay Sürecinde';
-            } else if (r.status === 'Approved') {
-                fstClass = FS_CLASS[l.fulfillmentStatus] || FS_CLASS[0];
-                fstLabel = FS_LABEL[l.fulfillmentStatus] || FS_LABEL[0];
             } else if (r.status === 'Rejected') {
                 fstClass = 'fm-fst--rejected'; fstLabel = 'Reddedildi';
-            } else if (r.status === 'Cancelled') {
+            } else if (r.status === 'Cancelled' || r.status === 'Closed') {
                 fstClass = 'fm-fst--cancelled'; fstLabel = 'Kapatıldı / İptal';
+            } else if (canSelect) {
+                // İşlem yapılabilir belge → karşılama durumunu göster
+                fstClass = FS_CLASS[l.fulfillmentStatus] || FS_CLASS[0];
+                fstLabel = FS_LABEL[l.fulfillmentStatus] || FS_LABEL[0];
             } else {
+                // Onay açık ama belge henüz onaylanmamış → bilgi amaçlı, seçilemez
                 fstClass = 'fm-fst--draft'; fstLabel = 'Taslak';
             }
 
-            var canSelect = !docHasApproval && r.status === 'Approved';
             var isLineSel = canSelect && !!_lineSel[l.lineId];
             var cbOnClick = 'event.stopPropagation();fc3LineCheck(' + l.lineId + ',' + r.id + ',' + (l.itemId||0) + ')';
 
@@ -2080,9 +2096,10 @@
                 }
             }).join('');
 
-            var cbDisableTitle = docHasApproval ? 'Onay sürecinde — seçilemez'
-                               : r.status !== 'Approved' ? 'Yalnızca onaylı belgeler seçilebilir'
-                               : '';
+            var cbDisableTitle = (docHasApproval && APPROVAL_REQUIRED) ? 'Onay sürecinde — seçilemez'
+                               : (r.status === 'Rejected') ? 'Reddedilmiş — seçilemez'
+                               : (r.status === 'Cancelled' || r.status === 'Closed') ? 'Kapatılmış — seçilemez'
+                               : 'Yalnızca onaylı belgeler seçilebilir';
             return '<div class="fc3-flat-row" data-doc-id="' + r.id + '" data-line-id="' + l.lineId + '">'
                 + '<input type="checkbox" class="fc3-sub-cb" data-line-id="' + l.lineId + '"'
                 + (!canSelect ? ' disabled title="' + cbDisableTitle + '"' : '')
@@ -2292,7 +2309,7 @@
                     var gpath = cb.getAttribute('data-gpath');
                     var meta = groupMeta[gpath] || { pairs: [] };
                     meta.pairs.forEach(function(p) {
-                        if (PENDING_APPROVAL_IDS.has(p.r.id)) return;
+                        if (!fc3DocCanSelect(p.r)) return;
                         if (cb.checked) _lineSel[p.l.lineId] = { docId: p.r.id, itemId: p.l.itemId };
                         else delete _lineSel[p.l.lineId];
                         var domCb = el.querySelector('.fc3-sub-cb[data-line-id="' + p.l.lineId + '"]');
@@ -3142,7 +3159,9 @@
     });
 
     renderReqList('');             // Talep eden listesi ilk yükleme
-    renderStatList(['Approved']);  // Durum: Onaylı varsayılan seçili
+    // Durum varsayılanı: onay açıkken "Onaylı" (işlem yapılabilirler öne çıkar, diğerleri
+    // filtreden görünür); onay kapalıyken filtre yok (tüm belgeler zaten seçilebilir).
+    renderStatList(APPROVAL_REQUIRED ? ['Approved'] : []);
     _updateStatLbl();
 
     // Karşılama: Bekliyor + Kısmen varsayılan seçili (tamamlananlar gizli)

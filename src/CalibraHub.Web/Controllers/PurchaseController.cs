@@ -89,18 +89,16 @@ public sealed class PurchaseController : Controller
     }
 
     /// <summary>
-    /// FULFILLMENT_REQUIRE_APPROVAL açıkken (default) karşılama aksiyonlarına giren
-    /// ihtiyaç kayıtlarının Onaylı olmasını şart koşar. İhtiyaç Kaydı türünde onay
-    /// tetikleme tamamen kapalıysa (APPROVAL_ENABLED_PurchaseRequest=false) uygulanmaz.
+    /// Karşılama aksiyonlarının onay şartını tek kaynaktan çözer: İhtiyaç Kaydı türünde
+    /// onay tetikleme AÇIKsa (APPROVAL_ENABLED_PurchaseRequest != "false") yalnızca Onaylı
+    /// belgeler karşılanabilir; KAPALIysa şart uygulanmaz (tüm belgeler karşılanabilir).
+    /// Ayrı bir "karşılamada onay şartı" parametresi yoktur — davranış doğrudan onay
+    /// parametresine bağlıdır (2026-07-08 sadeleştirme).
     /// Hata varsa kullanıcıya gösterilecek mesaj, yoksa null döner.
     /// </summary>
     private async Task<string?> CheckFulfillmentApprovalGuardAsync(
         IEnumerable<int> documentIds, CancellationToken ct)
     {
-        var require = await _companyParams.GetBoolAsync(
-            FulfillmentParameters.FormCode, FulfillmentParameters.RequireApprovalKey, ct) ?? true;
-        if (!require) return null;
-
         var kindEnabled = await _companyParams.GetStringAsync(
             ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
         if (!kindEnabled) return null;
@@ -111,7 +109,7 @@ public sealed class PurchaseController : Controller
             if (doc == null) continue;
             if (!string.Equals(doc.Status, "Approved", StringComparison.OrdinalIgnoreCase))
                 return $"{doc.DocumentNumber} onaylanmadan karşılama yapılamaz (durum: {TranslateStatus(doc.Status)}). " +
-                       "Bu şartı Parametreler → İhtiyaç Kayıtları sekmesinden kapatabilirsiniz.";
+                       "İhtiyaç kayıtları onay akışına tabidir; belge onaylandıktan sonra karşılanabilir.";
         }
         return null;
     }
@@ -578,6 +576,11 @@ public sealed class PurchaseController : Controller
 
         var pendingApprovalDocIds = await GetPendingApprovalDocIdsAsync(ct);
         ViewData["PendingApprovalDocIdsJson"] = JsonSerializer.Serialize(pendingApprovalDocIds, fcJsonOpts);
+
+        // İhtiyaç Kaydı onay tetikleme açık mı → karşılama ekranında seçim kapısını belirler.
+        // Açık: yalnızca Onaylı belgeler seçilebilir. Kapalı: tümü seçilebilir.
+        ViewData["ApprovalRequired"] = await _companyParams.GetStringAsync(
+            ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
 
         return View("~/Views/Purchase/FulfillmentCenter.cshtml");
     }
@@ -1140,8 +1143,7 @@ public sealed class PurchaseController : Controller
         var ids     = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
                             .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
                             .Select(int.Parse).ToList();
-        var requireApproval = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.RequireApprovalKey, ct) ?? true;
-        return Json(new { mode, locationIds = ids, requireApproval });
+        return Json(new { mode, locationIds = ids });
     }
 
     /// <summary>

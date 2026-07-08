@@ -196,6 +196,16 @@ body.app-theme-dark .ap-wrapper {
 .ap-content h2 { margin: 0 0 4px; font-size: 17px; color: var(--ap-text); font-weight:700; }
 .ap-content .ap-hint { color: var(--ap-text-muted); font-size: 12px; margin-bottom: 18px; }
 
+/* Bilgi notu — ayrı bir ayar olmayan, açıklama amaçlı callout */
+.ap-note-info {
+    font-size: 12.5px; line-height: 1.55; color: var(--ap-text);
+    background: var(--ap-accent-soft); border: 1px solid var(--ap-accent-soft);
+    border-left: 3px solid var(--ap-accent);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;
+}
+.ap-note-info strong { color: var(--ap-text); font-weight: 600; }
+.ap-note-info em { font-style: normal; font-weight: 600; color: var(--ap-accent); }
+
 /* ── Pane'ler ── */
 .ap-pane { display:none; }
 .ap-pane.is-active { display:block; }
@@ -443,25 +453,12 @@ body.app-theme-dark .ap-wrapper {
                 <h2>İhtiyaç Kayıtları</h2>
                 <div class="ap-hint">İhtiyaç karşılama merkezi ("Depodan Karşıla") davranış parametreleri.</div>
 
-                <div class="ap-row">
-                    <div class="ap-row-main">
-                        <div class="ap-row-title">Karşılamada Onay Şartı</div>
-                        <div class="ap-row-desc">
-                            Açıkken karşılama aksiyonları (Depodan Karşıla, Depo Transferi, Ambar Çıkış
-                            Fişi, Satın Alma Talebi) yalnızca <strong>Onaylı</strong> ihtiyaç kayıtlarında
-                            çalışır. İhtiyaç Kaydı türünde onay tetikleme tamamen kapalıysa bu şart
-                            uygulanmaz. Kapatıldığında taslak/onay bekleyen kayıtlar da karşılanabilir.
-                        </div>
-                    </div>
-                    <div class="ap-row-control">
-                        <label class="ap-switch">
-                            <input type="checkbox" id="ap-fc-req-approval" checked />
-                            <span class="ap-switch-track is-on">
-                                <span class="ap-switch-thumb"></span>
-                            </span>
-                            <span class="ap-switch-label is-active" id="ap-fc-req-approval-label">Aktif</span>
-                        </label>
-                    </div>
+                <div class="ap-note-info">
+                    <strong>Karşılamada onay şartı</strong>, ayrı bir ayar değildir; doğrudan
+                    <em>Onay İşlemleri → İhtiyaç Kaydı</em> onayına bağlıdır. Onay açıkken Karşılama
+                    Merkezi'nde yalnızca <strong>onaylanmış</strong> ihtiyaçlar seçilip işlem görür;
+                    diğerleri bilgi amaçlı listede kalır ama seçilemez. Onay kapalıyken tüm ihtiyaçlar
+                    karşılanabilir.
                 </div>
 
                 <div class="ap-row">
@@ -653,7 +650,6 @@ body.app-theme-dark .ap-wrapper {
     }
     wireSwitch('ap-edoc-approval', 'ap-edoc-approval-label');
     wireSwitch('ap-bom-allow-dup', 'ap-bom-allow-dup-label');
-    wireSwitch('ap-fc-req-approval', 'ap-fc-req-approval-label');
     // Belge türü onay switch'leri — dinamik liste (data-kind attribute'lu)
     document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
         wireSwitch(cb.id, cb.id + '-label');
@@ -712,7 +708,6 @@ body.app-theme-dark .ap-wrapper {
                         ids.push(cb.value);
                     });
                 }
-                var reqApprEl = document.getElementById('ap-fc-req-approval');
                 var r1 = await fetch('/Admin/SaveParameter', {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -727,16 +722,9 @@ body.app-theme-dark .ap-wrapper {
                     body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_LOCATION_IDS', paramValue: ids.join(','), dataType: 1 })
                 });
                 var d2 = await r2.json();
-                var r3 = await fetch('/Admin/SaveParameter', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_REQUIRE_APPROVAL', paramValue: (reqApprEl && reqApprEl.checked) ? 'true' : 'false', dataType: 3 })
-                });
-                var d3 = await r3.json();
-                ok = !!d1.ok && !!d2.ok && !!d3.ok;
+                ok = !!d1.ok && !!d2.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash((d1.error || d2.error || d3.error || 'Kaydetme basarisiz.'), false);
+                else    flash((d1.error || d2.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
                 var negCtrlEl = document.getElementById('ap-neg-control');
                 var rs = await fetch('/Admin/SaveStockParametersJson', {
@@ -824,16 +812,6 @@ body.app-theme-dark .ap-wrapper {
             var modeEl = document.getElementById(cfg.mode === 'ITEM_DEFAULT' ? 'apFcLocDefault' : 'apFcLocSpecific');
             if (modeEl) modeEl.checked = true;
             fcModeChange();
-
-            // Karşılamada onay şartı switch'i (default: açık)
-            var reqAppr = cfg.requireApproval !== false;
-            var raEl = document.getElementById('ap-fc-req-approval');
-            if (raEl) {
-                raEl.checked = reqAppr;
-                raEl.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', reqAppr);
-                var raLbl = document.getElementById('ap-fc-req-approval-label');
-                if (raLbl) { raLbl.textContent = reqAppr ? 'Aktif' : 'Pasif'; raLbl.classList.toggle('is-active', reqAppr); }
-            }
 
             var locs = await (await fetch('/Warehouse/GetLocationsJson')).json();
             _fcLocs = locs || [];
