@@ -504,11 +504,16 @@ public sealed class WarehouseController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetMaterialsJson(CancellationToken ct)
+    public async Task<IActionResult> GetMaterialsJson(string? docType, CancellationToken ct)
     {
         var snapshot = await _logisticsService.GetSnapshotAsync(ct);
+
+        // Planlama: bu belge tipinde kilitli malzemeler lookup'ta gösterilmez ("o belgede seçilemesin")
+        var lockedIds = string.IsNullOrWhiteSpace(docType)
+            ? new HashSet<int>()
+            : (await _logisticsService.GetLockedItemIdsByDocTypeAsync(docType, ct)).ToHashSet();
         return Json(snapshot.Items
-            .Where(x => x.IsActive)
+            .Where(x => x.IsActive && !lockedIds.Contains(x.Id))
             .Select(x => new
             {
                 Id = x.Id,
@@ -718,6 +723,13 @@ public sealed class WarehouseController : Controller
             "STOCK_OUT" => FormCodes.StockOutLines,
             _           => FormCodes.StockInLines,
         };
+        // Planlama: kilit sorgusu için sistem belge tipi kodu (depo_giris/depo_cikis/depo_transfer)
+        var lockDocType = docType switch
+        {
+            "TRANSFER"  => "depo_transfer",
+            "STOCK_OUT" => "depo_cikis",
+            _           => "depo_giris",
+        };
 
         var locationCols = isTransfer ? new object[]
         {
@@ -758,7 +770,7 @@ public sealed class WarehouseController : Controller
                 filterJson     = matBinding?.FilterJson,
                 formCode       = lineFormCode,
                 formatJson     = matBinding?.FormatJson,
-                lookupUrl      = matBinding == null ? "/Warehouse/GetMaterialsJson" : (string?)null,
+                lookupUrl      = matBinding == null ? $"/Warehouse/GetMaterialsJson?docType={lockDocType}" : (string?)null,
                 lookupValueKey = "materialCode",
                 lookupLabelKey = "materialName",
                 lookupFillMap  = new Dictionary<string, string>
@@ -912,7 +924,7 @@ public sealed class WarehouseController : Controller
                 filterJson     = matBinding?.FilterJson,
                 formCode       = "INVENTORY_COUNT_LINES",
                 formatJson     = matBinding?.FormatJson,
-                lookupUrl      = matBinding == null ? "/Warehouse/GetMaterialsJson" : (string?)null,
+                lookupUrl      = matBinding == null ? "/Warehouse/GetMaterialsJson?docType=sayim" : (string?)null,
                 lookupValueKey = "materialCode",
                 lookupLabelKey = "materialName",
                 lookupFillMap  = new Dictionary<string, string>

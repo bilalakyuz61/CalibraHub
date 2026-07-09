@@ -174,6 +174,28 @@ public sealed class MaterialController : Controller
         }
     }
 
+    // ── Planlama: belge bazında malzeme kilidi ───────────────────────
+
+    [HttpGet]
+    public async Task<IActionResult> GetItemDocumentLocks(int itemId, CancellationToken ct)
+    {
+        var docTypes = itemId > 0
+            ? await _logisticsConfigurationService.GetItemDocumentLocksAsync(itemId, ct)
+            : [];
+        return Json(new { docTypes });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveItemDocumentLocks([FromBody] SaveItemDocumentLocksInput input, CancellationToken ct)
+    {
+        if (input.ItemId <= 0)
+            return Json(new { success = false, message = "Malzeme karti ID gerekli." });
+
+        await _logisticsConfigurationService.SaveItemDocumentLocksAsync(
+            input.ItemId, input.DocTypes ?? [], ct);
+        return Json(new { success = true });
+    }
+
     /// <summary>Service'ten gelen "stok" mesajlarini "malzeme" olarak kullaniciya gosterir.</summary>
     private static string ToMaterialMessage(string message)
     {
@@ -185,3 +207,6 @@ public sealed class MaterialController : Controller
             .Replace("stok", "malzeme");
     }
 }
+
+/// <summary>Planlama: belge bazında malzeme kilidi kaydetme girdisi (DocType kod listesi).</summary>
+public sealed record SaveItemDocumentLocksInput(int ItemId, string[]? DocTypes);

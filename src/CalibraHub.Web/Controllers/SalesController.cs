@@ -652,7 +652,7 @@ public sealed class SalesController : Controller
         if (bindings.Count == 0 && !string.Equals(lineFormCode, "SALES_QUOTE_LINES", StringComparison.OrdinalIgnoreCase))
             bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
         var hidePricing = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase);
-        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -794,7 +794,8 @@ public sealed class SalesController : Controller
     private object BuildDocumentLineGridConfig(
         IReadOnlyCollection<FieldGuideBindingDto>? bindings = null,
         string lineFormCode = "SALES_QUOTE_LINES",
-        bool hidePricing = false)
+        bool hidePricing = false,
+        string? documentTypeCode = null)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
         var bindingMap = (bindings ?? [])
@@ -815,7 +816,7 @@ public sealed class SalesController : Controller
                 filterJson     = matBinding?.FilterJson,
                 formCode       = lineFormCode,
                 formatJson     = matBinding?.FormatJson,
-                lookupUrl      = matBinding == null ? "/Sales/GetMaterials" : (string?)null,
+                lookupUrl      = matBinding == null ? $"/Sales/GetMaterials?docType={documentTypeCode}" : (string?)null,
                 lookupValueKey = "materialCode",
                 lookupLabelKey = "materialName",
                 lookupFillMap = new Dictionary<string, string>
@@ -969,9 +970,14 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetMaterials(CancellationToken ct)
+    public async Task<IActionResult> GetMaterials(string? docType, CancellationToken ct)
     {
         var snapshot = await _logisticsService.GetSnapshotAsync(ct);
+
+        // Planlama: bu belge tipinde kilitli malzemeler lookup'ta gösterilmez ("o belgede seçilemesin")
+        var lockedIds = string.IsNullOrWhiteSpace(docType)
+            ? new HashSet<int>()
+            : (await _logisticsService.GetLockedItemIdsByDocTypeAsync(docType, ct)).ToHashSet();
 
         // Batch: her malzeme icin varsayilan lokasyon (varsa) — belge satirina kalem
         // secildiginde location_id otomatik doldurulur.
@@ -990,7 +996,7 @@ public sealed class SalesController : Controller
         }
 
         var materials = snapshot.Items
-            .Where(x => x.IsActive)
+            .Where(x => x.IsActive && !lockedIds.Contains(x.Id))
             .Select(x => new
             {
                 x.Id,

@@ -1871,6 +1871,15 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         await _repository.SaveItemLocationsAsync(itemId, links, cancellationToken);
     }
 
+    public Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken)
+        => _repository.GetItemDocumentLocksAsync(itemId, cancellationToken);
+
+    public Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken)
+        => _repository.SaveItemDocumentLocksAsync(itemId, docTypes, cancellationToken);
+
+    public Task<IReadOnlyCollection<int>> GetLockedItemIdsByDocTypeAsync(string docType, CancellationToken cancellationToken)
+        => _repository.GetLockedItemIdsByDocTypeAsync(docType, cancellationToken);
+
     public async Task ConfigureItemAsync(ConfigureItemRequest request, CancellationToken cancellationToken)
     {
         if (request.ItemId <= 0)

@@ -2060,6 +2060,21 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     ON [{s}].[ItemLocation]([ItemId], [LocationId])
                     WHERE [LocationId] IS NOT NULL;
             END;
+
+            -- Planlama: belge bazında malzeme kilidi
+            IF OBJECT_ID(N'[{s}].[ItemDocumentLock]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemDocumentLock]
+                (
+                    [Id]      INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ItemDocumentLock] PRIMARY KEY,
+                    [ItemId]  INT NOT NULL,
+                    [DocType] NVARCHAR(50) NOT NULL
+                );
+                CREATE UNIQUE INDEX [UX_ItemDocumentLock_ItemId_DocType]
+                    ON [{s}].[ItemDocumentLock]([ItemId], [DocType]);
+                CREATE INDEX [IX_ItemDocumentLock_DocType]
+                    ON [{s}].[ItemDocumentLock]([DocType]);
+            END;
             """;
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -2152,6 +2167,66 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd.Parameters.Add(new SqlParameter("@MinStock", l.MinStock));
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
+    }
+
+    // ── Planlama: belge bazında malzeme kilidi ───────────────────────
+
+    public async Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        var result = new List<string>();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT [DocType] FROM [{_schema}].[ItemDocumentLock] WHERE [ItemId] = @ItemId;";
+        cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            result.Add(reader.GetString(0));
+        return result;
+    }
+
+    public async Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        // Strateji: sil + yeniden ekle
+        await using (var delCmd = connection.CreateCommand())
+        {
+            delCmd.CommandText = $"DELETE FROM [{_schema}].[ItemDocumentLock] WHERE [ItemId] = @ItemId;";
+            delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            await delCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dt in docTypes ?? [])
+        {
+            var code = dt?.Trim();
+            if (string.IsNullOrWhiteSpace(code) || !seen.Add(code)) continue;
+
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"INSERT INTO [{_schema}].[ItemDocumentLock] ([ItemId],[DocType]) VALUES (@ItemId, @DocType);";
+            cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            cmd.Parameters.Add(new SqlParameter("@DocType", code));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    public async Task<IReadOnlyCollection<int>> GetLockedItemIdsByDocTypeAsync(string docType, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(docType)) return [];
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        var result = new List<int>();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT [ItemId] FROM [{_schema}].[ItemDocumentLock] WHERE [DocType] = @DocType;";
+        cmd.Parameters.Add(new SqlParameter("@DocType", docType.Trim()));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            result.Add(reader.GetInt32(0));
+        return result;
     }
 
     // ── Location Types (dinamik tip sozlugu) ─────────────────────────
