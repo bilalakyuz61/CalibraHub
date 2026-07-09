@@ -749,13 +749,20 @@ builder.Services.AddAntiforgery(options =>
     options.HeaderName          = "RequestVerificationToken"; // JS fetch'ten header ile kabul et
 });
 
+// Oturum atalet backstop'u (sunucu tarafı) — appsettings Authentication:IdleMinutes (varsayılan 30).
+// SlidingExpiration ile: her istek cookie'yi tazeler; bu süre boyunca hiç istek gelmezse
+// cookie ölür → sonraki istek /Account/Login'e düşer (JS-kapalı / kapalı-tarayıcı senaryosu).
+// Aktif kullanıcı Shell'in throttle'lı KeepAlive ping'i ile cookie'yi taze tutar. Per-company
+// hassas idle (uyarı + kesin logout) client tarafında SECURITY/SESSION_IDLE_MINUTES ile uygulanır.
+var authIdleMinutes = builder.Configuration.GetValue<int?>("Authentication:IdleMinutes") ?? 30;
+if (authIdleMinutes < 5) authIdleMinutes = 5;   // aşırı düşük değerle aktif kullanıcıyı kilitleme
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         options.LoginPath           = "/Account/Login";
         options.AccessDeniedPath    = "/Account/Login";
         options.SlidingExpiration   = true;
-        options.ExpireTimeSpan      = TimeSpan.FromHours(8);
+        options.ExpireTimeSpan      = TimeSpan.FromMinutes(authIdleMinutes);
         options.Cookie.HttpOnly     = true;
         options.Cookie.SameSite     = SameSiteMode.Strict;
         // Development HTTP → SameAsRequest; production HTTPS termination → Secure gönderilir

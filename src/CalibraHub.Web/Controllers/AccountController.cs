@@ -611,6 +611,41 @@ public sealed class AccountController : Controller
         return RedirectToAction(nameof(Login));
     }
 
+    // ── Oturum idle-timeout ────────────────────────────────────────────────
+    // Client (Shell) idle-timer'ı bu politikayı okuyup geri sayımlı uyarı + logout uygular.
+    // Sunucu backstop'u ayrıdır (auth cookie ExpireTimeSpan = appsettings Authentication:IdleMinutes).
+
+    /// <summary>Per-company oturum atalet süresi (dk). 0 = kapalı. warnSeconds = kapanmadan önce uyarı süresi (sn).</summary>
+    [Authorize]
+    [HttpGet("/Account/SessionPolicy")]
+    public async Task<IActionResult> SessionPolicy(
+        [FromServices] CalibraHub.Application.Abstractions.Services.ICompanyParameterService companyParameters,
+        CancellationToken ct)
+    {
+        int idle;
+        try
+        {
+            idle = await companyParameters.GetIntAsync(
+                       CalibraHub.Application.Constants.SecurityParameters.FormCode,
+                       CalibraHub.Application.Constants.SecurityParameters.SessionIdleMinutesKey, ct)
+                   ?? CalibraHub.Application.Constants.SecurityParameters.DefaultSessionIdleMinutes;
+        }
+        catch { idle = CalibraHub.Application.Constants.SecurityParameters.DefaultSessionIdleMinutes; }
+        if (idle < 0) idle = 0;
+        return Json(new { idleMinutes = idle, warnSeconds = CalibraHub.Application.Constants.SecurityParameters.WarningSeconds });
+    }
+
+    /// <summary>
+    /// Keepalive — aktif kullanıcının Shell'i throttle'lı çağırır; [Authorize] isteği sliding
+    /// auth cookie'sini tazeler (ExpireTimeSpan yenilenir), böylece aktif ama sunucuya istek
+    /// atmayan (okuyan) kullanıcı backstop'a takılmaz. Gövdesiz; 204 döner. State değiştirmez
+    /// (yalnız cookie renewal) → CSRF açısından zararsız, IgnoreAntiforgeryToken.
+    /// </summary>
+    [Authorize]
+    [HttpPost("/Account/KeepAlive")]
+    [IgnoreAntiforgeryToken]
+    public IActionResult KeepAlive() => NoContent();
+
     // ── Veritabanı bağlantı ayarları (kurulum sihirbazı + sistem yönetimi) ──────────────────
     // Kurulum tamamlanmamışsa (hiç şirket yok) → anonim erişime açık.
     // Kurulum tamamsa → yalnızca giriş yapılmış kullanıcı erişebilir.

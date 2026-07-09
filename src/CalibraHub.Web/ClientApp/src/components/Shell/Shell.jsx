@@ -26,6 +26,7 @@ import * as notifApi from '../../services/notificationsService'
 // 2026-05-23 — Yapay zeka asistanı (sağ alt floating widget). Top-level Shell altında
 // global mount edilir → workspace tab iframe'lerinin DIŞINDA, her sayfada görünür.
 import AiFloatingButton from '../AiAssistant/AiFloatingButton'
+import SessionIdleGuard from './SessionIdleGuard'
 // 2026-06-14 — Ana sayfa özelleştirilebilir pano. Hiç sekme açık değilken
 // (isHomePage) EmptyState yerine doğrudan Shell içinde render edilir (iframe yok).
 import Dashboard from '../Dashboard/Dashboard'
@@ -1127,6 +1128,10 @@ export default function Shell(props) {
       {/* 2026-05-23 — Yapay Zeka Asistanı (sağ alt floating widget). Top-level mount —
           workspace tab iframe'lerinin DIŞINDA, her tab altında görünür kalır. */}
       <AiFloatingButton />
+
+      {/* Oturum atalet izleyici — per-company idle timeout + geri sayımlı uyarı + logout.
+          Top-level (Shell) mount; iframe aktiviteleri postMessage ile buraya iletilir. */}
+      <SessionIdleGuard />
     </div>
   )
 }

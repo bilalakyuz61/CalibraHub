@@ -115,6 +115,12 @@ public sealed class ParametersController : Controller
         ViewData["SalesOrderAffectsStock"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesOrderAffectsStockKey)?.ParamValue == "true";
 
+        // Güvenlik tab: oturum atalet süresi (dk). Tanımsız → varsayılan (30). 0 = kapalı.
+        ViewData["SessionIdleMinutes"] = await _companyParameters.GetIntAsync(
+            CalibraHub.Application.Constants.SecurityParameters.FormCode,
+            CalibraHub.Application.Constants.SecurityParameters.SessionIdleMinutesKey, cancellationToken)
+            ?? CalibraHub.Application.Constants.SecurityParameters.DefaultSessionIdleMinutes;
+
         return View("~/Views/Admin/Parameters.cshtml");
     }
 
@@ -302,6 +308,30 @@ public sealed class ParametersController : Controller
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
+
+    [HttpPost("/Admin/SaveSecurityParametersJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveSecurityParametersJson(
+        [FromBody] SecurityParametersInput input, CancellationToken ct)
+    {
+        try
+        {
+            // 0 = kapalı; negatif değer 0'a; aşırı yüksek değeri makul üst sınıra çek.
+            var idle = input.SessionIdleMinutes < 0 ? 0 : Math.Min(input.SessionIdleMinutes, 1440);
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                CalibraHub.Application.Constants.SecurityParameters.FormCode,
+                CalibraHub.Application.Constants.SecurityParameters.SessionIdleMinutesKey,
+                idle.ToString(),
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Int), ct);
+            return Json(new { ok = true });
+        }
+        catch (Exception)
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    public sealed record SecurityParametersInput(int SessionIdleMinutes);
 
     public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
     public sealed record ApprovalParametersInput(List<ApprovalKindInput> Kinds);

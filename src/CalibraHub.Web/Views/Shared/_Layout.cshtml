@@ -269,6 +269,24 @@
            SmartCard, SmartBoard, vanilla JS, <a> linkleri hepsini kapser. *@
         <script src="~/js/workspace-frame-nav-guard.js" asp-append-version="true"></script>
     }
+    @* Oturum atalet forwarder — iframe içi kullanıcı aktivitesini üst Shell'e (SessionIdleGuard)
+       ilet. Her zaman emit edilir; runtime'da yalnız iframe içinde çalışır (self-guard) —
+       böylece sunucu isWorkspaceFrame tespiti kaçsa bile aktivite iletimi garanti. *@
+    <script>
+    (function () {
+        if (window.self === window.top) return;   // yalnız iframe içinde
+        var last = 0, origin = window.location.origin;
+        function ping() {
+            var now = Date.now();
+            if (now - last < 15000) return;        // throttle ~15sn
+            last = now;
+            try { window.top.postMessage('calibra:activity', origin); } catch (e) { /* cross-origin */ }
+        }
+        ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'wheel'].forEach(function (e) {
+            window.addEventListener(e, ping, { passive: true });
+        });
+    })();
+    </script>
     @if (!string.IsNullOrEmpty(shellAntiforgeryToken))
     {
         <script>

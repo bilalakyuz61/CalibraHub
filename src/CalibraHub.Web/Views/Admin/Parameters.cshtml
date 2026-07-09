@@ -8,6 +8,7 @@
         as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
     var negControl = ViewData["NegBalanceControl"] as bool? ?? false;
     var salesOrderAffects = ViewData["SalesOrderAffectsStock"] as bool? ?? false;
+    var sessionIdle = ViewData["SessionIdleMinutes"] as int? ?? 30;
 }
 
 @section Styles {
@@ -296,6 +297,7 @@ body.app-theme-dark .ap-wrapper {
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
             <button type="button" class="ap-tab"           data-pane="satissiparis" data-label="Satış Sipariş">Satış Sipariş</button>
+            <button type="button" class="ap-tab"           data-pane="guvenlik"  data-label="Güvenlik">Güvenlik</button>
         </aside>
 
         <main class="ap-content">
@@ -568,6 +570,31 @@ body.app-theme-dark .ap-wrapper {
                 </div>
             </section>
 
+            @* ── Güvenlik ───────────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-guvenlik">
+                <h2>Güvenlik</h2>
+                <div class="ap-hint">
+                    Oturum güvenliği ayarları. Atalet süresi boyunca hiçbir işlem yapılmazsa
+                    kullanıcı, kapanmadan önce geri sayımlı bir uyarıyla bilgilendirilir ve süre
+                    dolunca oturumu güvenli şekilde sonlandırılıp giriş ekranına yönlendirilir.
+                </div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Oturum Atalet Süresi (dakika)</div>
+                        <div class="ap-row-desc">
+                            Kullanıcı bu süre boyunca fare/klavye ile işlem yapmazsa oturumu düşer.
+                            <strong>0 = kapalı</strong> (idle timeout uygulanmaz). Önerilen: 30.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <input type="number" id="ap-session-idle" class="form-control form-control-sm"
+                               min="0" max="1440" step="5" value="@sessionIdle"
+                               style="width:110px;text-align:right;" />
+                        <span style="margin-left:8px;font-size:0.8rem;opacity:.6;">dk</span>
+                    </div>
+                </div>
+            </section>
+
         </main>
     </div>
 </div>
@@ -588,7 +615,7 @@ body.app-theme-dark .ap-wrapper {
 
     // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok');
+        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'guvenlik');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -756,6 +783,20 @@ body.app-theme-dark .ap-wrapper {
                 ok = !!data2.ok;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(data2.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'guvenlik') {
+                var idleEl = document.getElementById('ap-session-idle');
+                var idleVal = parseInt(idleEl && idleEl.value, 10);
+                if (isNaN(idleVal) || idleVal < 0) idleVal = 0;
+                var rsec = await fetch('/Admin/SaveSecurityParametersJson', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ sessionIdleMinutes: idleVal })
+                });
+                var dsec = await rsec.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!dsec.ok;
+                if (ok) flash('Kaydedildi. Yeni süre bir sonraki oturum yenilemesinde geçerli olur.', true);
+                else    flash(dsec.error || 'Kaydetme basarisiz.', false);
             }
             // Yeni sekmeler eklendiginde buraya else if blogu ile bagla
             if (ok) flashSuccess();
