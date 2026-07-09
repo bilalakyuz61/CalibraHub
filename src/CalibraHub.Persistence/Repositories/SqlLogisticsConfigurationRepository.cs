@@ -84,7 +84,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [TypeId],
                    [UnitId],
                    [CompanyId],
-                   ISNULL([TrackingType], 'None') AS [TrackingType]
+                   ISNULL([TrackingType], 'None') AS [TrackingType],
+                   ISNULL([MinStock], 0) AS [MinStock]
             FROM {_stockCardsTableName} sc
             WHERE sc.[CompanyId] = @CompanyId
             {dv.Sql}
@@ -108,7 +109,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 TypeId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
                 UnitId = reader.IsDBNull(9) ? null : reader.GetInt32(9),
                 CompanyId = reader.GetInt32(10),
-                TrackingType = reader.IsDBNull(11) ? "None" : reader.GetString(11)
+                TrackingType = reader.IsDBNull(11) ? "None" : reader.GetString(11),
+                MinStock = reader.IsDBNull(12) ? 0m : reader.GetDecimal(12)
             };
 
             if (!reader.GetBoolean(3))

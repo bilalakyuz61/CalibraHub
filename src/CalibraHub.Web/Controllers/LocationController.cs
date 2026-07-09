@@ -347,7 +347,8 @@ public sealed class LocationController : Controller
                     locationTypeCode = l.LocationTypeCode,
                     locationPath = buildPath(l.LocationId.Value),
                     isDefault = l.IsDefault,
-                    sortOrder = l.SortOrder
+                    sortOrder = l.SortOrder,
+                    minStock = l.MinStock
                 }),
             availableLocations = allLocations
                 .Where(x => x.IsActive && !parentIds.Contains(x.Id))
@@ -371,7 +372,7 @@ public sealed class LocationController : Controller
 
         var items = (input.Items ?? [])
             .Where(x => x.LocationId > 0)
-            .Select(x => new SaveItemLocationItem(x.LocationId, x.IsDefault))
+            .Select(x => new SaveItemLocationItem(x.LocationId, x.IsDefault, x.MinStock))
             .ToList();
 
         // Tekrar eden lokasyon kontrolu

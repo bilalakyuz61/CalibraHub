@@ -105,4 +105,6 @@ public sealed class SaveMaterialCardJsonInput
     public bool Combinations { get; set; }
     public decimal TaxRate { get; set; } = 20m;
     public string? TrackingType { get; set; } = "None";
+    /// <summary>Planlama: genel asgari stok (ana birim).</summary>
+    public decimal? MinStock { get; set; }
 }

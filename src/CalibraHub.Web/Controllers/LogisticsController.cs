@@ -2579,7 +2579,7 @@ public sealed record SaveStockFeaturesInput(int ItemId, SaveStockFeatureItem[]? 
 public sealed record SaveStockFeatureItem(int FeatureId, bool PrintDescriptionInDesign, int[]? AllowedValueIds);
 
 public sealed record SaveItemLocationsInput(int ItemId, SaveItemLocationLineInput[]? Items);
-public sealed record SaveItemLocationLineInput(int LocationId, bool IsDefault);
+public sealed record SaveItemLocationLineInput(int LocationId, bool IsDefault, decimal MinStock = 0m);
 
 public sealed record SaveLocationTypeInput(int? Id, string? Code, string? Name, int SortOrder, bool IsActive);
 

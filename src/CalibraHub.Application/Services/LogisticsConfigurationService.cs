@@ -397,7 +397,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     x.UnitId,
                     x.Combinations,
                     x.TaxRate,
-                    TrackingType: x.TrackingType))
+                    TrackingType: x.TrackingType,
+                    MinStock: x.MinStock))
                 .ToArray(),
             Properties: properties
                 .Select(x => new FeatureDto(
@@ -1111,6 +1112,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             Combinations = request.Combinations,
             TaxRate = request.TaxRate,
             TrackingType = NormalizeTrackingType(request.TrackingType) ?? "None",
+            MinStock = request.MinStock,
             Created = DateTime.Now
         };
 
@@ -1161,6 +1163,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             Combinations = request.Combinations,
             TaxRate = request.TaxRate,
             TrackingType = NormalizeTrackingType(request.TrackingType) ?? existing.TrackingType ?? "None",
+            MinStock = request.MinStock,
             Created = existing.Created,
             Updated = DateTime.Now
         };
@@ -1736,7 +1739,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 loc?.LocationCode ?? "",
                 loc?.LocationName,
                 loc?.LocationTypeCode ?? "",
-                l.IsDefault, l.SortOrder);
+                l.IsDefault, l.SortOrder, l.MinStock);
         }).ToList();
     }
 
@@ -1855,6 +1858,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             ItemId = itemId,
             LocationId = x.LocationId,
             IsDefault = x.IsDefault,
+            MinStock = x.MinStock,
         }).ToList();
 
         // Hicbiri default degilse, ilk satiri varsayilan yap

@@ -70,7 +70,8 @@ public sealed record ItemDto(
     decimal TaxRate = 20m,
     int? CreatedById = null,
     int? UpdatedById = null,
-    string? TrackingType = "None");
+    string? TrackingType = "None",
+    decimal MinStock = 0m);
 
 public sealed record FeatureDto(
     int Id,
@@ -106,7 +107,8 @@ public sealed record CreateItemRequest(
     int? UnitId = null,
     bool Combinations = false,
     decimal TaxRate = 20m,
-    string? TrackingType = "None");
+    string? TrackingType = "None",
+    decimal MinStock = 0m);
 
 public sealed record UpdateItemRequest(
     int ItemId,
@@ -116,7 +118,8 @@ public sealed record UpdateItemRequest(
     int? UnitId = null,
     bool Combinations = false,
     decimal TaxRate = 20m,
-    string? TrackingType = "None");
+    string? TrackingType = "None",
+    decimal MinStock = 0m);
 
 public sealed record CreateFeatureRequest(
     string Name,
@@ -275,11 +278,13 @@ public sealed record ItemLocationDto(
     string? LocationName,
     string LocationTypeCode,
     bool IsDefault,
-    int SortOrder);
+    int SortOrder,
+    decimal MinStock = 0m);
 
 public sealed record SaveItemLocationItem(
     int LocationId,
-    bool IsDefault);
+    bool IsDefault,
+    decimal MinStock = 0m);
 
 public sealed record LocationTypeDto(
     int Id,
