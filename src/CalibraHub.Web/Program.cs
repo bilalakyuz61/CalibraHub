@@ -945,9 +945,12 @@ using (var scope = app.Services.CreateScope())
         registry.Set(c.Id, c.DatabaseConnectionString);
     }
 
-    // Per-company guide view tazeleme — CREATE OR ALTER VIEW idempotent,
-    // eski sema ile kurulmus sirket DB'lerinde cbv_Guide_* view'larini gunceller.
-    // Kolon ekleme/cikarma sonrasi rehber aramasinin calismasi icin zorunlu.
+    // Per-company DB tam şema migration — her şirket DB'si system DB ile aynı
+    // Ensure*/Seed* zincirinden geçer (InitializeForConnectionAsync → EnsureFullSchemaAsync;
+    // rename + notes + guide adımları da zincirin içinde). 2026-07-10 öncesi burada yalnızca
+    // rename/notes/guide parça migration'ları çalışıyordu; yeni tablo/kolonlar şirket
+    // DB'lerine hiç ulaşmıyordu ("Invalid column name" 500'leri). Zincir idempotent —
+    // güncel DB'de yalnızca metadata kontrolü yapar (şirket başına ~1-2 sn).
     if (!useInMemoryPersistence)
     {
         var dbInitForCompanies = scope.ServiceProvider.GetRequiredService<CalibraDatabaseInitializer>();
@@ -971,39 +974,21 @@ using (var scope = app.Services.CreateScope())
         {
             if (string.IsNullOrWhiteSpace(c.DatabaseConnectionString)) continue;
 
-            // 2026-07-05: snake_case → PascalCase tablo+kolon migration (document_types, currencies vb.)
+            // Tam şema pipeline — hata tek şirketi atlatır, startup'ı engellemez;
+            // idempotent olduğundan bir sonraki restart'ta kaldığı yerden tamamlanır.
             try
             {
-                await dbInitForCompanies.MigrateSchemaForConnectionAsync(
+                var initSw = System.Diagnostics.Stopwatch.StartNew();
+                await dbInitForCompanies.InitializeForConnectionAsync(
                     c.DatabaseConnectionString, CancellationToken.None);
+                app.Logger.LogInformation(
+                    "[Company Schema] Sirket {CompanyId} tam sema init tamamlandi ({ElapsedMs} ms)",
+                    c.Id, initSw.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
                 app.Logger.LogWarning(ex,
-                    "[Schema Migration] Sirket {CompanyId} icin tablo/kolon migration basarisiz", c.Id);
-            }
-
-            // Notes tablosu kolon migrasyonu — linked_entity_*, visibility vb.
-            try
-            {
-                await dbInitForCompanies.EnsureNotesSchemaForConnectionAsync(
-                    c.DatabaseConnectionString, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex,
-                    "[Notes Schema] Sirket {CompanyId} icin notes kolon migrasyonu basarisiz", c.Id);
-            }
-
-            try
-            {
-                await dbInitForCompanies.EnsureGuideSchemaForConnectionAsync(
-                    c.DatabaseConnectionString, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex,
-                    "[Guide Schema] Sirket {CompanyId} icin view tazeleme basarisiz", c.Id);
+                    "[Company Schema] Sirket {CompanyId} icin tam sema init basarisiz — sirket DB'si eski semada kalmis olabilir", c.Id);
             }
 
             // DocDesigner belge view'i — vw_ReportDocument + stored proc.

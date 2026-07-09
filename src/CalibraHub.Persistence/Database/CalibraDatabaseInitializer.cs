@@ -37,47 +37,11 @@ public sealed class CalibraDatabaseInitializer
         _bootstrapAdminOptions = bootstrapAdminOptions;
     }
 
-    /// <summary>
-    /// Belirli bir (sirket) connection string'i uzerinden rehber tablolarini +
-    /// cbv_Guide_* view'larini tazeler. CREATE OR ALTER VIEW idempotent —
-    /// eski sema ile olusturulmus company DB'lerini gunceller.
-    /// </summary>
-    public async Task EnsureGuideSchemaForConnectionAsync(
-        string connectionString, CancellationToken cancellationToken)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await EnsureGuideTablesAsync(connection, cancellationToken);
-    }
-
-    /// <summary>
-    /// Per-company DB'deki notes tablosuna yeni kolonlari idempotent olarak ekler.
-    /// Startup'ta per-company DB'ler icin cagrilir; sistem DB'sindeki gibi eksik kolonlari tamamlar.
-    /// </summary>
-    public async Task EnsureNotesSchemaForConnectionAsync(
-        string connectionString, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(connectionString)) return;
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await EnsureNotesTablesAsync(connection, cancellationToken);
-        await EnsureNoteExtensionsAsync(connection, cancellationToken);
-    }
-
-    /// <summary>
-    /// Mevcut per-company DB'lerde birikmiş eski snake_case tablo/kolon isimlerini
-    /// PascalCase'e çeker. Idempotent — zaten rename edilmişse no-op.
-    /// Program.cs startup per-company döngüsünden her şirket için çağrılır.
-    /// </summary>
-    public async Task MigrateSchemaForConnectionAsync(
-        string connectionString, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(connectionString)) return;
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await MigrateTableRenamesAsync(connection, cancellationToken);
-        await MigrateColumnRenamesAsync(connection, cancellationToken);
-    }
+    // 2026-07-10 — EnsureGuideSchemaForConnectionAsync / EnsureNotesSchemaForConnectionAsync /
+    // MigrateSchemaForConnectionAsync wrapper'ları KALDIRILDI. Parçalı entry point'ler şirket
+    // DB'lerinin yalnızca kısmi migration almasına yol açıyordu (yeni tablo/kolon Ensure*
+    // zinciri hiç çalışmıyordu → "Invalid column name" 500'leri). Per-company DB'ler artık
+    // system DB ile aynı tam zincirden geçer: InitializeForConnectionAsync → EnsureFullSchemaAsync.
 
     /// <summary>
     /// FastReport raporlari icin tek kapsamli belge view'i ve onu uretecek
@@ -638,112 +602,28 @@ END;";
     }
 
     /// <summary>
-    /// Belirli bir connection string üzerinde tam şema oluşturur.
-    /// InitializeAsync() ile aynı adımları çalıştırır; factory yerine doğrudan bağlantı kullanır.
-    /// Health check test DB'si gibi runtime'da oluşturulan veritabanları için tasarlanmıştır.
+    /// Belirli bir connection string üzerinde tam şema oluşturur/günceller.
+    /// InitializeAsync() ile AYNI zinciri (EnsureFullSchemaAsync) çalıştırır; factory yerine
+    /// doğrudan bağlantı kullanır. Startup per-company döngüsü ve health check test DB'si
+    /// buradan geçer. AutoCreateDatabaseOnStartup açıksa DB yoksa önce oluşturulur
+    /// (yeni kaydedilmiş şirketin DB'si ilk restart'ta kendiliğinden ayağa kalkar).
     /// </summary>
     public async Task InitializeForConnectionAsync(string connectionString, CancellationToken cancellationToken)
     {
-        await using var connection = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        if (_autoCreateDatabaseOnStartup)
+        {
+            await _connectionFactory.EnsureCompanyDatabaseExistsAsync(connectionString, cancellationToken);
+        }
+
+        await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         try
         {
-            await EnsureSchemaAndTablesAsync(connection, cancellationToken);
-            await EnsureIntegratorLoginColumnsAsync(connection, cancellationToken);
-            await EnsureCompanySchemaAsync(connection, cancellationToken);
-            // 2026-07-05: snake_case → PascalCase tablo/kolon rename'leri per-company DB'lere de uygulanir.
-            // InitializeAsync yalnizca system DB'yi migrate eder; per-company DB'ler buradan migrate edilir.
-            await MigrateTableRenamesAsync(connection, cancellationToken);
-            await MigrateColumnRenamesAsync(connection, cancellationToken);
-            await EnsurePltSystemLogTableAsync(connection, cancellationToken);
-            await EnsureNotesTablesAsync(connection, cancellationToken);
-            await EnsureNoteExtensionsAsync(connection, cancellationToken);
-            await EnsureBOMTablesAsync(connection, cancellationToken);
-            await EnsureMaterialGroupTablesAsync(connection, cancellationToken);
-            await EnsureFinanceTablesAsync(connection, cancellationToken);
-            await EnsureAddressTablesAsync(connection, cancellationToken);
-            await EnsureContactItemTableAsync(connection, cancellationToken);
-            await EnsureContactPersonTitleTableAsync(connection, cancellationToken);
-            await EnsureContactPersonTableAsync(connection, cancellationToken);
-            await EnsureMailSendBatchTableAsync(connection, cancellationToken);
-            await EnsureMailSendLogItemTableAsync(connection, cancellationToken);
-            await EnsureDesignTemplatesTableAsync(connection, cancellationToken);
-            await EnsureIntegrationApiProfilesTableAsync(connection, cancellationToken);
-            await EnsureIntegrationTablesAsync(connection, cancellationToken);
-            await EnsureIntegrationRecordStatusTableAsync(connection, cancellationToken);
-            await EnsureIntegrationLookupFunctionTablesAsync(connection, cancellationToken);
-            await EnsureIntegrationDocCatalogTablesAsync(connection, cancellationToken);
-            await EnsureAiTablesAsync(connection, cancellationToken);
-            await EnsureImportTablesAsync(connection, cancellationToken);
-            await EnsureDynamicFieldValuesTableAsync(connection, cancellationToken);
-            await EnsureDocumentTablesAsync(connection, cancellationToken);
-            await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
-            await EnsureDocumentTypesTableAsync(connection, cancellationToken);
-            await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
-            await EnsureCodeRuleTablesAsync(connection, cancellationToken);
-            await EnsureDecimalSettingTableAsync(connection, cancellationToken);
-            await EnsureAddressDefinitionTablesAsync(connection, cancellationToken);
-            await EnsureLocationSectionTablesAsync(connection, cancellationToken);
-            await EnsureArgeTablesAsync(connection, cancellationToken);
-            await EnsureReportTemplatesTableAsync(connection, cancellationToken);
-            await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
-            await EnsureScheduledTasksTableAsync(connection, cancellationToken);
-            await EnsureLicenseConfigTableAsync(connection, cancellationToken);
-            await EnsureGateCredentialsTableAsync(connection, cancellationToken);
-            await EnsureWhatsAppConfigTableAsync(connection, cancellationToken);
-            await SeedDocumentTypesAsync(connection, cancellationToken);
-            await SeedArgeNumberRuleAsync(connection, cancellationToken);
-            await EnsureCurrencyTablesAsync(connection, cancellationToken);
-            await SeedCurrenciesAsync(connection, cancellationToken);
-            await EnsureReportDataViewsAsync(connection, cancellationToken);
-            await EnsureUserSettingsTableAsync(connection, cancellationToken);
-            await EnsureSalesRepresentativeTableAsync(connection, cancellationToken);
-            await EnsureDocumentLineDetailsTableAsync(connection, cancellationToken);
-            await EnsurePriceListTablesAsync(connection, cancellationToken);
-            await SeedFieldsAsync(connection, cancellationToken);
-            await SeedScreenDesignLayoutsAsync(connection, cancellationToken);
-            await SeedDepartmentsAsync(connection, cancellationToken);
-            await SeedAdminUserAsync(connection, cancellationToken);
-            await EnsureDocLayoutTableAsync(connection, cancellationToken);
-            await EnsureDocLayoutDsTableAsync(connection, cancellationToken);
-            await EnsureDocLayoutRuleTableAsync(connection, cancellationToken);
-            await SeedDefaultDocLayoutsAsync(connection, cancellationToken);
-            await EnsureFormsTableAsync(connection, cancellationToken);
-            await SeedFormsAsync(connection, cancellationToken);
-            await EnsureWidgetEavTablesAsync(connection, cancellationToken);
-            await EnsureDataVisibilityTablesAsync(connection, cancellationToken);
-            await DropEngineSchemaIfExistsAsync(connection, cancellationToken);
-            await EnsureGuideTablesAsync(connection, cancellationToken);
-            await EnsureFieldSettingsTableAsync(connection, cancellationToken);
-            await EnsureContactColumnsAsync(connection, cancellationToken);
-            await EnsureOrgChartTablesAsync(connection, cancellationToken);
-            await EnsureOrgChartV2MigrationAsync(connection, cancellationToken);
-            await EnsureRptViewTableAsync(connection, cancellationToken);
-            await EnsureRptViewColumnTableAsync(connection, cancellationToken);
-            await EnsureRptDefinitionTableAsync(connection, cancellationToken);
-            await EnsureRptDefinitionRoleTableAsync(connection, cancellationToken);
-            await EnsureRptViewRoleTableAsync(connection, cancellationToken);
-            await EnsureRptRunLogTableAsync(connection, cancellationToken);
-            await SeedRptViewRegistryAsync(connection, cancellationToken);
-            await EnsureProductionInfrastructureAsync(connection, cancellationToken);
-            await EnsureAssetTablesAsync(connection, cancellationToken);
-            await EnsureInventoryCountTablesAsync(connection, cancellationToken);
-            await EnsureGlobalLockTableAsync(connection, cancellationToken);
-            await EnsureApprovalFlowTablesAsync(connection, cancellationToken);
-            await EnsureApprovalSqlQueryTablesAsync(connection, cancellationToken);
-            await EnsureWorkflowTablesAsync(connection, cancellationToken);
-            await EnsureWorkflowInstanceTablesAsync(connection, cancellationToken);
-            await EnsureAttachmentTableAsync(cancellationToken); // system DB'ye yazar (idempotent)
-            await EnsurePermissionTablesAsync(connection, cancellationToken);
-            await EnsurePermissionGroupTablesAsync(connection, cancellationToken);
-            await MigrateDateTime2ToDateTimeAsync(connection, cancellationToken);
-            await EnsureCalendarTablesAsync(connection, cancellationToken);
-            await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
-            await EnsureReportEngineTablesAsync(connection, cancellationToken);
-            await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
-            await EnsureViewMetaTableAsync(connection, cancellationToken);
+            await EnsureFullSchemaAsync(connection, cancellationToken);
         }
-        catch (Microsoft.Data.SqlClient.SqlException sqlEx)
+        catch (SqlException sqlEx)
         {
             Console.Error.WriteLine($"[DB INIT FOR CONN ERROR] SqlException {sqlEx.Number}: {sqlEx.Message}");
             throw;
@@ -758,6 +638,21 @@ END;";
         }
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureFullSchemaAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
+    /// Tam şema zinciri — hem system DB (InitializeAsync) hem per-company DB'ler
+    /// (InitializeForConnectionAsync) bu TEK listeden geçer. Yeni Ensure*/Seed*
+    /// çağrısını yalnızca buraya ekle. 2026-07-10 öncesinde bu liste iki kopya halinde
+    /// duruyordu ve startup şirket döngüsü yalnızca rename migration çalıştırıyordu;
+    /// sonradan eklenen tablo/kolonlar (BaseQuantity, MovementType, TrackingType, Lot vb.)
+    /// şirket DB'lerine hiç ulaşmıyordu → "Invalid column name" 500'leri.
+    /// Tüm adımlar idempotent (IF NOT EXISTS / CREATE OR ALTER / IF EXISTS sp_rename);
+    /// güncel bir DB'de yalnızca metadata kontrolü çalışır.
+    /// </summary>
+    private async Task EnsureFullSchemaAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
         try
         {
             // 2026-06-08 — Legacy migration zinciri kaldırıldı (proje henüz canlıda değil).
