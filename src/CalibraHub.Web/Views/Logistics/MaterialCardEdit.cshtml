@@ -1632,7 +1632,7 @@
             </button>
             <button type="button" class="mce-nav-btn" id="mceNavLocations">
                 <span class="mce-nav-dot"></span>
-                Lokasyonlar
+                Planlama
                 <span class="mce-nav-count is-empty" id="mceLocCount">0</span>
             </button>
             <button type="button" class="mce-nav-btn" id="mceNavStockMov">
@@ -1801,11 +1801,24 @@
                 <div id="mceGroupError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
             </div>
 
-            <!-- Lokasyonlar -->
+            <!-- Planlama -->
             <div class="mce-card mce-section-anchor" id="mceLocationsCard" style="display:none;">
-                <p class="mce-card-title">Lokasyonlar</p>
+                <p class="mce-card-title">Planlama</p>
+                <div style="font-size:.78rem;color:rgba(255,255,255,.45);margin-bottom:16px;">
+                    Asgari stok seviyelerini ve bu malzemenin hangi belge tiplerinde kullanılabileceğini yönetin.
+                </div>
+
+                <!-- Genel Asgari Stok -->
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);margin-bottom:22px;">
+                    <label for="mceGeneralMinStock" style="font-size:.8rem;color:rgba(148,163,184,.9);font-weight:600;">Genel Asgari Stok</label>
+                    <input type="number" step="any" min="0" id="mceGeneralMinStock" class="mce-input mce-no-negative" value="0" style="width:150px;text-align:right;" />
+                    <span style="font-size:.72rem;color:rgba(255,255,255,.4);flex:1 1 200px;">Ana birim cinsinden. Depo bazında ayrı bir asgari stok girilmezse bu değer geçerlidir.</span>
+                </div>
+
+                <!-- Depolar ve Asgari Stok -->
+                <p class="mce-card-title" style="font-size:.9rem;margin-bottom:6px;">Depolar ve Asgari Stok</p>
                 <div style="font-size:.78rem;color:rgba(255,255,255,.45);margin-bottom:12px;">
-                    Bu malzeme için lokasyon atayın. Birden fazla seçebilir, bunlardan birini varsayılan olarak işaretleyebilirsiniz.
+                    Bu malzeme için depo/lokasyon atayın; her biri için ayrı asgari stok tanımlayabilirsiniz. Birini varsayılan olarak işaretleyin.
                 </div>
 
                 <!-- Ekleme -->
@@ -1826,6 +1839,7 @@
                                 <th class="mce-comb-th" style="width:140px;">Kod</th>
                                 <th class="mce-comb-th">Ad</th>
                                 <th class="mce-comb-th" style="width:110px;">Tip</th>
+                                <th class="mce-comb-th" style="width:130px;">Asgari Stok</th>
                                 <th class="mce-comb-th" style="width:70px;"></th>
                             </tr>
                         </thead>
@@ -1833,12 +1847,21 @@
                     </table>
                 </div>
                 <div id="mceLocEmpty" style="padding:18px;text-align:center;color:rgba(255,255,255,.35);font-size:.82rem;font-style:italic;">
-                    Henüz atanmış lokasyon yok.
+                    Henüz atanmış depo yok.
                 </div>
 
                 <div id="mceLocError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
-                <div style="margin-top:10px;font-size:.72rem;color:rgba(255,255,255,.45);">
-                    Değişiklikler malzeme kartı kaydedildiğinde otomatik uygulanır.
+
+                <!-- Belge Kilitleri -->
+                <p class="mce-card-title" style="font-size:.9rem;margin:26px 0 6px;">Belge Kilitleri</p>
+                <div style="font-size:.78rem;color:rgba(255,255,255,.45);margin-bottom:12px;">
+                    Kilitlenen belge tiplerinde bu malzeme kalem olarak <strong>seçilemez</strong>. Örneğin satış teklifinde kullanılmasını istemiyorsanız kilitleyin.
+                </div>
+                <div id="mceDocLockGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;"></div>
+                <div id="mceDocLockError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
+
+                <div style="margin-top:14px;font-size:.72rem;color:rgba(255,255,255,.45);">
+                    Depo, asgari stok ve kilit değişiklikleri anında uygulanır. Genel asgari stok, malzeme kartı kaydedildiğinde uygulanır.
                 </div>
             </div>
 
@@ -2415,6 +2438,7 @@
             _setVal('mceMaterialTypeId',       data.materialTypeId != null ? String(data.materialTypeId) : '');
             _setChk('mceTrackCombinations',    !!data.trackCombinations);
             _setVal('mceTaxRate',              data.taxRate != null ? data.taxRate : 20);
+            _setVal('mceGeneralMinStock',      data.minStock != null ? data.minStock : 0);
             (function (tt) {
                 var on = tt && tt !== 'None';
                 if ($('mceTraceability')) $('mceTraceability').checked = on;
@@ -2947,6 +2971,7 @@
             unitId: unitIdRaw ? parseInt(unitIdRaw) : null,
             combinations: $('mceTrackCombinations').checked,
             taxRate: parseFloat($('mceTaxRate').value || '20'),
+            minStock: parseFloat(($('mceGeneralMinStock') && $('mceGeneralMinStock').value) || '0') || 0,
             trackingType: (($('mceTraceability') && $('mceTraceability').checked) ? (($('mceTrackingMode') && $('mceTrackingMode').checked) ? 'Serial' : 'Lot') : 'None')
         };
 
