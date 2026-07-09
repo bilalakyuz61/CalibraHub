@@ -306,6 +306,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             var lineNo = 1;
             // Eksi bakiye kontrolü: azaltılan (item, kaynak lokasyon) çiftleri (STOCK_OUT / TRANSFER)
             var decreases = new HashSet<(int ItemId, int LocationId)>();
+            // Lot bakiye kontrolü: azaltılan (item, lot, kaynak lokasyon) üçlüleri
+            var lotDecreases = new HashSet<(int ItemId, int LotId, int LocationId)>();
             foreach (var line in request.Lines ?? [])
             {
                 var itemId = line.ItemId;
@@ -314,12 +316,17 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if (!itemId.HasValue || itemId.Value <= 0) continue;
                 if (line.Qty <= 0) continue;
 
+                // Lot çözümleme — lot-takipli stokta (TrackingType='Lot') zorunlu:
+                // girişte yoksa oluşturulur, çıkış/transferde mevcut lot şarttır.
+                var (lotId, lotNo) = await ResolveLotForLineAsync(
+                    conn, tx, itemId.Value, line.MaterialCode, line.LotNo, movementType, createdById, ct);
+
                 await using var lineIns = conn.CreateCommand();
                 lineIns.Transaction = tx;
                 lineIns.CommandText = $"""
                     INSERT INTO {T("DocumentLine")}
                         ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                         [CombinationId],[FromLocationId],[LocationId],[MovementType],[UnitCost],[LotNo],[Notes])
+                         [CombinationId],[FromLocationId],[LocationId],[MovementType],[UnitCost],[LotId],[LotNo],[Notes])
                     VALUES
                         (@DocId,@LineNo,@ItemId,@UnitId,@Qty,{StockUnitSql.BaseQtyExpr(T("Items"), T("ItemUnits"), "@Qty", "@ItemId", "@UnitId")},0,0,0,
                          @CombId,@FromLoc,@ToLoc,@MovementType,
@@ -327,7 +334,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                                               WHERE pl.[ItemId] = @ItemId AND pl.[PriceType] = N'm' AND pl.[IsActive] = 1
                                                 AND pl.[ValidFrom] <= @DocDate AND (pl.[ValidTo] IS NULL OR pl.[ValidTo] >= @DocDate)
                                               ORDER BY pl.[ValidFrom] DESC)),
-                         @LotNo, @Notes);
+                         @LotId, @LotNo, @Notes);
                     """;
                 lineIns.Parameters.AddWithValue("@DocId", docId);
                 lineIns.Parameters.AddWithValue("@LineNo", lineNo++);
@@ -339,7 +346,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@ToLoc", (object?)(line.ToLocationId ?? request.ToLocationId) ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@MovementType", (object?)movementType ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@UnitCost", (object?)line.UnitCost ?? DBNull.Value);
-                lineIns.Parameters.AddWithValue("@LotNo", (object?)line.LotNo ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@Notes", (object?)line.Notes ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@DocDate", request.DocDate.Date);
                 await lineIns.ExecuteNonQueryAsync(ct);
@@ -348,13 +356,20 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if (movementType is 1 or 3)
                 {
                     var fromLoc = line.FromLocationId ?? request.FromLocationId;
-                    if (fromLoc is > 0) decreases.Add((itemId.Value, fromLoc.Value));
+                    if (fromLoc is > 0)
+                    {
+                        decreases.Add((itemId.Value, fromLoc.Value));
+                        if (lotId.HasValue) lotDecreases.Add((itemId.Value, lotId.Value, fromLoc.Value));
+                    }
                 }
             }
 
             // Tüm satırlar tx içinde yazıldı → eksi bakiye kontrolü (yeni satırlar hesaba dahil)
             foreach (var (dItem, dLoc) in decreases)
                 await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, dItem, dLoc, request.DocDate.Date, ct);
+            // Lot bakiyesi: azaltılan her lot kaynak lokasyonda eksiye düşemez (yeni satırlar dahil)
+            foreach (var (dItem, dLot, dLoc) in lotDecreases)
+                await EnsureLotBalanceAsync(conn, tx, companyId, dItem, dLot, dLoc, ct);
 
             await tx.CommitAsync(ct);
             return (docId, docNo);
@@ -625,6 +640,103 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         cmd.CommandText = $"SELECT COUNT(1) FROM {T("InventoryCount")} WHERE [DocumentId] = @Id;";
         cmd.Parameters.AddWithValue("@Id", documentId);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    /// <summary>
+    /// Lot-takipli stokta (Items.TrackingType='Lot') satır lotunu çözer: giriş (2) → lot yoksa
+    /// oluşturur; çıkış/transfer (1/3) → mevcut lot şart (yazım hatası yeni lot üretmesin).
+    /// Lot-takipli değilse serbest metin LotNo aynen korunur (legacy davranış, LotId=null).
+    /// Dönen LotNo, DocumentLine'a yazılacak denormalize display kopyasıdır.
+    /// </summary>
+    private async Task<(int? LotId, string? LotNo)> ResolveLotForLineAsync(
+        SqlConnection conn, SqlTransaction tx, int itemId, string? materialCode,
+        string? rawLotNo, byte? movementType, int? createdById, CancellationToken ct)
+    {
+        var lotNo = string.IsNullOrWhiteSpace(rawLotNo) ? null : rawLotNo.Trim();
+
+        await using (var typeCmd = conn.CreateCommand())
+        {
+            typeCmd.Transaction = tx;
+            typeCmd.CommandText = $"SELECT ISNULL([TrackingType], 'None') FROM {T("Items")} WHERE [Id] = @Id;";
+            typeCmd.Parameters.AddWithValue("@Id", itemId);
+            var tracking = await typeCmd.ExecuteScalarAsync(ct) as string;
+            if (!string.Equals(tracking, "Lot", StringComparison.OrdinalIgnoreCase))
+                return (null, lotNo);
+        }
+
+        var label = string.IsNullOrWhiteSpace(materialCode) ? $"#{itemId}" : materialCode.Trim();
+        if (lotNo is null)
+            throw new InvalidOperationException(
+                $"'{label}' lot takipli bir stok — satırda Lot / Parti No girilmesi zorunlu.");
+
+        await using (var find = conn.CreateCommand())
+        {
+            find.Transaction = tx;
+            find.CommandText = $"SELECT TOP 1 [Id] FROM {T("Lot")} WHERE [ItemId] = @ItemId AND [LotNo] = @LotNo;";
+            find.Parameters.AddWithValue("@ItemId", itemId);
+            find.Parameters.AddWithValue("@LotNo", lotNo);
+            if (await find.ExecuteScalarAsync(ct) is int existingId)
+                return (existingId, lotNo);
+        }
+
+        if (movementType is 1 or 3)
+            throw new InvalidOperationException(
+                $"'{label}' için '{lotNo}' lotu bulunamadı — çıkış/transfer yalnızca mevcut bir lottan yapılabilir. " +
+                "Önce ambar girişiyle lotu oluşturun.");
+
+        await using var ins = conn.CreateCommand();
+        ins.Transaction = tx;
+        ins.CommandText = $"""
+            INSERT INTO {T("Lot")} ([ItemId],[LotNo],[CreatedById]) VALUES (@ItemId, @LotNo, @CreatedById);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
+            """;
+        ins.Parameters.AddWithValue("@ItemId", itemId);
+        ins.Parameters.AddWithValue("@LotNo", lotNo);
+        ins.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
+        return (Convert.ToInt32(await ins.ExecuteScalarAsync(ct)), lotNo);
+    }
+
+    /// <summary>
+    /// Azaltılan (stok, lot, kaynak lokasyon) için toplam lot bakiyesi (yeni satırlar dahil,
+    /// ana birim) eksiye düşemez. Lot-takip öncesi LotId'siz eski hareketler lot bakiyesine
+    /// sayılmaz — takibe yeni alınan stokta önce lotlu giriş/düzeltme yapılmalıdır.
+    /// İşaret konvansiyonu NegativeBalanceGuard ile birebir aynıdır.
+    /// </summary>
+    private async Task EnsureLotBalanceAsync(
+        SqlConnection conn, SqlTransaction tx, int companyId, int itemId, int lotId, int locationId, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT
+                ISNULL(SUM(CASE WHEN dl.[MovementType] IN (2,3,4) AND dl.[LocationId]     = @L THEN dl.[BaseQuantity]
+                                WHEN dl.[MovementType] IN (1,3,4) AND dl.[FromLocationId] = @L THEN -dl.[BaseQuantity]
+                                ELSE 0 END), 0) AS bal,
+                (SELECT TOP 1 [LotNo] FROM {T("Lot")} WHERE [Id] = @LotId) AS lot_no,
+                (SELECT TOP 1 ISNULL([Name], [Code]) FROM {T("Items")} WHERE [Id] = @ItemId) AS item_label,
+                (SELECT TOP 1 ISNULL([LocationName], [LocationCode]) FROM {T("Location")} WHERE [Id] = @L) AS loc_label
+            FROM {T("DocumentLine")} dl
+            INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
+            WHERE dl.[ItemId] = @ItemId AND dl.[LotId] = @LotId
+              AND doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
+              AND dl.[MovementType] IN (1,2,3,4)
+              AND (dl.[LocationId] = @L OR dl.[FromLocationId] = @L);
+            """;
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@LotId", lotId);
+        cmd.Parameters.AddWithValue("@L", locationId);
+        cmd.Parameters.AddWithValue("@Cid", companyId);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return;
+        var bal = r.IsDBNull(0) ? 0m : r.GetDecimal(0);
+        if (bal >= 0m) return;
+        var lotNo = r.IsDBNull(1) ? $"#{lotId}" : r.GetString(1);
+        var itemLabel = r.IsDBNull(2) ? $"#{itemId}" : r.GetString(2);
+        var locLabel = r.IsDBNull(3) ? $"#{locationId}" : r.GetString(3);
+        throw new InvalidOperationException(
+            $"Lot bakiyesi yetersiz: {itemLabel} — Lot '{lotNo}' ({locLabel}). Eksik: {-bal:N2} ana birim. " +
+            "Not: Lot takibi öncesi lotsuz girişler lot bakiyesine sayılmaz.");
     }
 
     /// <summary>Items.Code → Items.Id çözümü (ID tabanlı eşleştirme kuralı — kod yalnızca display).</summary>

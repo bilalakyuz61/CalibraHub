@@ -496,6 +496,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IStoc
                            CalibraHub.Persistence.Repositories.SqlStockDocRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IInventoryCountRepository,
                            CalibraHub.Persistence.Repositories.SqlInventoryCountRepository>();
+// Lot takibi (Faz 1) — lot ana kayıtları; iş emri mamul girişinde otomatik lot çözümü kullanır.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILotRepository,
+                           CalibraHub.Persistence.Repositories.SqlLotRepository>();
 
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();

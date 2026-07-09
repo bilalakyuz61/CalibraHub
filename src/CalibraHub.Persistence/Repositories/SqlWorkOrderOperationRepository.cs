@@ -285,10 +285,10 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 insCmd.CommandText = $"""
                     INSERT INTO {lineTable}
                         ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                         [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotNo],[Notes])
+                         [CombinationId],[LocationId],[FromLocationId],[MovementType],[UnitCost],[LotId],[LotNo],[Notes])
                     VALUES
                         (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{baseQtyExpr},0,0,0,
-                         @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotNo,@Notes);
+                         @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotId,@LotNo,@Notes);
                     """;
                 insCmd.Parameters.AddWithValue("@DocumentId", stockLine.DocumentId);
                 insCmd.Parameters.AddWithValue("@LineNo", nextLineNo);
@@ -300,6 +300,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 insCmd.Parameters.AddWithValue("@FromLocationId", (object?)stockLine.FromLocationId ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@MovementType", (object?)stockLine.MovementType ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@UnitCost", (object?)stockLine.UnitCost ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@LotId", (object?)stockLine.LotId ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@LotNo", (object?)stockLine.LotNo ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@Notes", (object?)stockLine.Notes ?? DBNull.Value);
                 await insCmd.ExecuteNonQueryAsync(ct);

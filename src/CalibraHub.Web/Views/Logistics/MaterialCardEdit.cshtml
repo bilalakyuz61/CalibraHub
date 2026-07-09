@@ -1861,7 +1861,7 @@
                 <div id="mceDocLockError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
 
                 <div style="margin-top:14px;font-size:.72rem;color:rgba(255,255,255,.45);">
-                    Depo, asgari stok ve kilit değişiklikleri anında uygulanır. Genel asgari stok, malzeme kartı kaydedildiğinde uygulanır.
+                    Planlama değişiklikleri (genel/depo asgari stok ve belge kilitleri) malzeme kartı kaydedildiğinde uygulanır.
                 </div>
             </div>
 
@@ -3045,6 +3045,15 @@
                 }).catch(function(err) { console.warn('[MCE] location save hatasi:', err); });
             }
 
+            // ── Belge kilitlerini (planlama) de ayni save akisinda kaydet ──
+            if (typeof window.mceDocLockSave === 'function' && currentId > 0) {
+                window.mceDocLockSave().then(function(res) {
+                    if (res && res.success === false && !res.skipped) {
+                        console.warn('[MCE] belge kilidi kaydi basarisiz:', res.message);
+                    }
+                }).catch(function(err) { console.warn('[MCE] doc-lock save hatasi:', err); });
+            }
+
             // ── Ozellik eslestirmelerini de ayni save akisinda kaydet ──
             // (Sadece trackCombinations acikken + Ozellikler sekmesi bir kere yuklendiyse liste doludur)
             var tracking = $('mceTrackCombinations') && $('mceTrackCombinations').checked;
@@ -3397,6 +3406,7 @@
                 setActive(navLocations);
                 activateSection('locations');
                 if (currentId > 0) mceLocLoad();
+                mceDocLockLoad(); // yeni kartta da toggle grid render olsun (kayıt sonrası persist)
             });
         }
 
@@ -4457,6 +4467,7 @@
 
         tbody.innerHTML = _mceLocLinks.map(function(l, idx) {
             var def = l.isDefault ? 'checked' : '';
+            var minVal = (l.minStock != null ? l.minStock : 0);
             return '<tr>' +
                 '<td class="mce-comb-td" style="text-align:center;">' +
                     '<input type="radio" name="mceLocDefault" ' + def + ' onchange="mceLocSetDefault(' + idx + ')" title="Varsayilan yap" />' +
@@ -4464,6 +4475,9 @@
                 '<td class="mce-comb-td" style="font-family:monospace;">' + (l.locationCode || '') + '</td>' +
                 '<td class="mce-comb-td">' + (l.locationName || '') + '</td>' +
                 '<td class="mce-comb-td">' + mceLocTypeLabel(l.locationTypeCode) + '</td>' +
+                '<td class="mce-comb-td" style="text-align:right;">' +
+                    '<input type="number" step="any" min="0" value="' + minVal + '" onchange="mceLocSetMin(' + idx + ', this.value)" class="mce-input mce-no-negative" style="width:96px;text-align:right;font-size:.76rem;padding:3px 6px;" />' +
+                '</td>' +
                 '<td class="mce-comb-td" style="text-align:center;">' +
                     '<button type="button" class="mce-btn mce-btn--danger" onclick="mceLocRemove(' + idx + ')" style="padding:3px 10px;font-size:.72rem;">Kaldir</button>' +
                 '</td>' +
@@ -4493,6 +4507,7 @@
             locationName: found.locationName,
             locationTypeCode: found.locationTypeCode,
             isDefault: isDefault,
+            minStock: 0,
             sortOrder: _mceLocLinks.length
         });
         mceLocRender();
@@ -4512,6 +4527,76 @@
         mceLocRender();
     };
 
+    window.mceLocSetMin = function(idx, val) {
+        if (idx < 0 || idx >= _mceLocLinks.length) return;
+        var n = parseFloat(val);
+        _mceLocLinks[idx].minStock = (isNaN(n) || n < 0) ? 0 : n;
+    };
+
+    // ── Belge Kilitleri (planlama) ─────────────────────────────────
+    var _mceDocLockTypes = [
+        { code: 'satis_teklifi',  label: 'Satış Teklifi' },
+        { code: 'satis_siparisi', label: 'Satış Siparişi' },
+        { code: 'alis_talebi',    label: 'Alış Talebi' },
+        { code: 'alis_teklifi',   label: 'Alış Teklifi' },
+        { code: 'alis_siparisi',  label: 'Alış Siparişi' },
+        { code: 'depo_giris',     label: 'Depo Giriş' },
+        { code: 'depo_cikis',     label: 'Depo Çıkış' },
+        { code: 'depo_transfer',  label: 'Depo Transfer' },
+        { code: 'sayim',          label: 'Sayım' }
+    ];
+    var _mceDocLocks = {};
+
+    window.mceDocLockLoad = function() {
+        if (!currentId || currentId <= 0) { _mceDocLocks = {}; mceDocLockRender(); return; }
+        fetch('/Logistics/GetItemDocumentLocks?itemId=' + currentId, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                _mceDocLocks = {};
+                var arr = (data && data.docTypes) ? data.docTypes : [];
+                arr.forEach(function(c) { _mceDocLocks[c] = true; });
+                mceDocLockRender();
+            })
+            .catch(function(e) {
+                var err = document.getElementById('mceDocLockError');
+                if (err) { err.textContent = 'Belge kilitleri yuklenemedi: ' + e.message; err.style.display = 'block'; }
+            });
+    };
+
+    function mceDocLockRender() {
+        var grid = document.getElementById('mceDocLockGrid');
+        if (!grid) return;
+        grid.innerHTML = _mceDocLockTypes.map(function(t) {
+            var on = !!_mceDocLocks[t.code];
+            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);">' +
+                '<span style="font-size:.8rem;color:rgba(226,232,240,.9);">' + t.label + '</span>' +
+                '<label class="mce-switch">' +
+                    '<input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="mceDocLockToggle(\'' + t.code + '\', this.checked)" />' +
+                    '<span class="mce-switch-track"></span>' +
+                '</label>' +
+            '</div>';
+        }).join('');
+    }
+
+    window.mceDocLockToggle = function(code, checked) {
+        if (checked) _mceDocLocks[code] = true;
+        else delete _mceDocLocks[code];
+    };
+
+    window.mceDocLockSave = function() {
+        if (!currentId || currentId <= 0) return Promise.resolve({ success: true, skipped: true });
+        var codes = Object.keys(_mceDocLocks).filter(function(c) { return _mceDocLocks[c]; });
+        return fetch('/Logistics/SaveItemDocumentLocks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ itemId: currentId, docTypes: codes })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { return d || { success: false }; })
+        .catch(function(e) { return { success: false, message: e.message }; });
+    };
+
     /**
      * Lokasyonlari kaydeder. Promise (success, message?) doner.
      * Ana mceSave icinden cagrildigi icin buton referansi kullanilmaz.
@@ -4527,7 +4612,7 @@
         var payload = {
             itemId: currentId,
             items: _mceLocLinks.map(function(l, i) {
-                return { locationId: l.locationId, isDefault: !!l.isDefault, sortOrder: i };
+                return { locationId: l.locationId, isDefault: !!l.isDefault, sortOrder: i, minStock: parseFloat(l.minStock) || 0 };
             })
         };
 

@@ -427,6 +427,11 @@ public sealed class WarehouseController : Controller
         {
             return Json(new { success = false, message = nbex.Message });
         }
+        catch (InvalidOperationException ioex)
+        {
+            // Lot zorunluluğu / lot bakiyesi gibi doğrulama mesajları kullanıcıya aynen gösterilir.
+            return Json(new { success = false, message = ioex.Message });
+        }
         catch (Exception ex)
         {
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
@@ -817,6 +822,18 @@ public sealed class WarehouseController : Controller
                 width           = 80,
                 align           = "center",
                 icon            = "Ruler",
+            },
+            new
+            {
+                // Lot / Parti (2026-07-09, Lot takibi Faz 1): lot-takipli stokta (TrackingType='Lot')
+                // zorunluluk + mevcut-lot kontrolü server-side yapılır (SqlStockDocRepository.
+                // ResolveLotForLineAsync); takipsiz stokta serbest metin olarak korunur.
+                key   = "lotNo",
+                label = "Lot / Parti",
+                type  = "text",
+                width = 110,
+                align = "left",
+                icon  = "Tag",
             },
             new
             {

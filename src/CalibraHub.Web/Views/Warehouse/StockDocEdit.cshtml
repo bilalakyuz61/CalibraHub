@@ -549,6 +549,7 @@
                     quantity:          l.qty,
                     combinationCode:   l.combinationCode || '',
                     trackCombinations: false,
+                    lotNo:             l.lotNo || '',
                     notes:             l.notes || '',
                     fromLocationId:    l.fromLocationId || null,
                     toLocationId:      l.toLocationId || null,
@@ -623,6 +624,7 @@
                         notes:          r.notes || null,
                         fromLocationId: r.fromLocationId || null,
                         toLocationId:   r.toLocationId || null,
+                        lotNo:          (r.lotNo == null ? '' : String(r.lotNo)).trim() || null,
                     };
                 });
 

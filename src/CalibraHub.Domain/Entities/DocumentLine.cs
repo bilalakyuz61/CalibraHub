@@ -75,7 +75,10 @@ public sealed class DocumentLine
     [Description("Stok hareketinin birim maliyet snapshot'ı (fiyat listesinden veya manuel).")]
     public decimal? UnitCost { get; set; }
 
-    [Description("Parti/lot takibi.")]
+    [Description("Lot referansı. FK -> Lot.Id. Lot-takipli stoklarda dolu; LotNo denormalize display kopyasıdır.")]
+    public int? LotId { get; set; }
+
+    [Description("Parti/lot takibi (display kopyası — ilişki LotId üzerinden).")]
     public string? LotNo { get; set; }
 
     public string? FromLocationCode { get; set; }

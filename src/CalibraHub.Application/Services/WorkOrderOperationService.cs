@@ -11,11 +11,13 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
 {
     private readonly IWorkOrderOperationRepository _repo;
     private readonly IWorkOrderRepository _workOrders;
+    private readonly ILotRepository _lots;
 
-    public WorkOrderOperationService(IWorkOrderOperationRepository repo, IWorkOrderRepository workOrders)
+    public WorkOrderOperationService(IWorkOrderOperationRepository repo, IWorkOrderRepository workOrders, ILotRepository lots)
     {
         _repo = repo;
         _workOrders = workOrders;
+        _lots = lots;
     }
 
     public Task<IReadOnlyCollection<WorkOrderOperationDto>> GetByWorkOrderAsync(int workOrderId, CancellationToken ct)
@@ -112,6 +114,17 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
             var finalQty = req.FinalQuantity ?? op.ProducedQuantity;
             if (finalQty > 0)
             {
+                // Lot-takipli mamulde otomatik lot = iş emri numarası (üretim partisi).
+                // Lot soy ağacının temeli: mamul lotu iş emrine, iş emri sarflara bağlanır.
+                int? lotId = null;
+                string? lotNo = null;
+                var tracking = await _lots.GetItemTrackingTypeAsync(wo.ItemId, ct);
+                if (string.Equals(tracking, "Lot", StringComparison.OrdinalIgnoreCase))
+                {
+                    lotNo = wo.OrderNumber;
+                    lotId = await _lots.GetOrCreateAsync(wo.ItemId, lotNo, null, ct);
+                }
+
                 stockLine = new DocumentLine
                 {
                     DocumentId = wo.DocumentId,
@@ -121,6 +134,8 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
                     Quantity = finalQty,
                     LocationId = wo.WarehouseLocationId,
                     MovementType = (byte)StockMovementType.Receipt,
+                    LotId = lotId,
+                    LotNo = lotNo,
                     Notes = $"İş Emri #{wo.OrderNumber} — üretim tamamlama",
                 };
             }

@@ -7688,6 +7688,50 @@ END;";
                     ON [{s}].[DocumentLine]([ItemId], [LocationId], [MovementType])
                     INCLUDE ([Quantity], [FromLocationId]);
 
+            -- 2026-07-09: Lot takibi Faz 1 — Lot ana tablosu (ID tabanli eslestirme kurali:
+            -- LotNo string yalniz display, iliskiler LotId uzerinden). Items.TrackingType='Lot'
+            -- olan stoklarda ambar hareketleri lot zorunlu tutar; DocumentLine.LotNo denormalize
+            -- display kopyasi olarak dolmaya devam eder (ekstre/legacy sorgular degismez).
+            -- Bu blok BaseQuantity ALTER'indan SONRA durmali: IX_DocumentLine_Lot INCLUDE'u
+            -- BaseQuantity'ye referans verir (taze DB'de kolon ancak yukarida olusur).
+            IF OBJECT_ID(N'[{s}].[Lot]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[Lot]
+                (
+                    [Id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Lot] PRIMARY KEY,
+                    [ItemId]        INT NOT NULL,
+                    [LotNo]         NVARCHAR(50) NOT NULL,
+                    [ExpiryDate]    DATETIME NULL,
+                    [SupplierLotNo] NVARCHAR(50) NULL,
+                    [Notes]         NVARCHAR(1000) NULL,
+                    [IsActive]      BIT NOT NULL CONSTRAINT [DF_Lot_IsActive] DEFAULT(1),
+                    [CreatedById]   INT NULL,
+                    [Created]       DATETIME NOT NULL CONSTRAINT [DF_Lot_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]   INT NULL,
+                    [Updated]       DATETIME NULL,
+                    CONSTRAINT [FK_Lot_Items] FOREIGN KEY ([ItemId]) REFERENCES [{s}].[Items]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_Lot_Item_LotNo] ON [{s}].[Lot]([ItemId], [LotNo]);
+            END;
+
+            -- FK/INDEX ifadeleri EXEC ile ayrı batch'te: aynı batch'te ALTER ile eklenen
+            -- LotId kolonuna sonraki ifadeler compile-time referans veremez (SqlException 207).
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'LotId') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [LotId] INT NULL;
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_DocumentLine_Lot'
+                               AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                EXEC(N'ALTER TABLE [{s}].[DocumentLine] WITH CHECK
+                    ADD CONSTRAINT [FK_DocumentLine_Lot] FOREIGN KEY ([LotId]) REFERENCES [{s}].[Lot]([Id]);');
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DocumentLine_Lot'
+                               AND object_id = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                EXEC(N'CREATE INDEX [IX_DocumentLine_Lot]
+                    ON [{s}].[DocumentLine]([LotId])
+                    INCLUDE ([ItemId], [LocationId], [FromLocationId], [MovementType], [BaseQuantity])
+                    WHERE [LotId] IS NOT NULL;');
+
             -- 2026-05-23: DocumentLineFulfillment — bag tablosu.
             -- Talep satiri (RequestLineId) → karsilama satiri (RefDocLineId, StockDocLine.Id
             -- veya DocumentLine.Id) eslemesi. Bir talep satiri birden cok karsilama satirina
