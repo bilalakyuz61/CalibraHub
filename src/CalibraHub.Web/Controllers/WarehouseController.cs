@@ -983,15 +983,9 @@ public sealed class WarehouseController : Controller
                 align           = "left",
                 icon            = "Warehouse",
             },
-            new
-            {
-                key   = "notes",
-                label = "Notlar",
-                type  = "text",
-                width = 180,
-                align = "left",
-                icon  = "MessageSquare",
-            },
+            // Satır bazlı "Notlar" sütunu kaldırıldı (2026-07-09): belge notu üst bilgideki
+            // Notlar alanında tutulur. Kalem bazlı not gerekirse Admin → Widget Tanımları ile
+            // "INVENTORY_COUNT_LINES" form code'una Ek Alan tanımlanır — hardcoded kolon eklenmez.
         },
         };
     }
