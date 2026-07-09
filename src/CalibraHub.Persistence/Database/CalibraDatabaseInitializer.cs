@@ -699,6 +699,11 @@ END;";
             // 2026-06-20 Şablon-tabanlı içe aktarım (AI'sız) — ImportTemplate (Cari pilotu).
             await EnsureImportTablesAsync(connection, cancellationToken);
             await EnsureDynamicFieldValuesTableAsync(connection, cancellationToken);
+            // 2026-07-10: ItemUnits, EnsureDocumentTablesAsync'ten ONCE gelmeli — DocumentLine
+            // BaseQuantity backfill'i ItemUnits'e JOIN yapar. Metod tanimliydi ama zincire hic
+            // baglanmamisti; ItemUnits'i olmayan sirket DB'lerinde backfill "Invalid object
+            // name 'dbo.ItemUnits'" (208) ile tum init'i durduruyordu.
+            await EnsureItemUnitsTableAsync(connection, cancellationToken);
             await EnsureDocumentTablesAsync(connection, cancellationToken);
             await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
             await EnsureDocumentTypesTableAsync(connection, cancellationToken);
@@ -2364,7 +2369,13 @@ END;";
                 ');
             END;
 
+            -- Legacy index yalnizca ESKI kolon adi (feature_id) hala mevcutsa olusturulur.
+            -- Taze DB'de tablo dogrudan [FeatureId] ile yaratilir ve modern
+            -- UX_FeatureValue_FeatureId_Code index'i yukarida kurulur; feature_id guard'i
+            -- olmadan bu blok taze DB'de "Column name 'feature_id' does not exist" (1911)
+            -- hatasiyla tum init'i durduruyordu (2026-07-10, per-company tam init'te bulundu).
             IF OBJECT_ID(N'[{schemaForSql}].[FeatureValue]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[FeatureValue]', N'feature_id') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[FeatureValue]', N'code') IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1
@@ -8011,8 +8022,11 @@ END;";
                 EXEC(N'ALTER TABLE [{s}].[SalesRepresentative] DROP COLUMN [rep_code];');
             END;
 
-            -- Yeni unique index (rep_name uzerinde) eksikse ekle
+            -- Legacy unique index (rep_name uzerinde) — yalnizca ESKI kolon adi hala mevcutsa.
+            -- Taze tablo [RepName] ile dogar ve UX_SalesRepresentative_RepName yukarida kurulur;
+            -- rep_name guard'i olmadan bu blok taze DB'de 1911 hatasiyla init'i durduruyordu.
             IF OBJECT_ID(N'[{s}].[SalesRepresentative]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.[SalesRepresentative]', N'rep_name') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.indexes
                                WHERE [object_id] = OBJECT_ID(N'[{s}].[SalesRepresentative]')
                                  AND [name] = N'ux_sales_representatives_name')
@@ -9714,16 +9728,21 @@ END;";
                 ALTER TABLE [{s}].[WaInbox] ADD [SenderName] NVARCHAR(200) NULL;
             END;
 
-            -- Performans indexi: direction + contact_phone + received_at
+            -- Performans indexi: Direction + ContactPhone + ReceivedAt
             -- GetConversationsAsync CTE'leri (has_incoming_cte, last_incoming_name) ve
             -- GetMessagesByPhoneAsync direkt esitlik sorgusu icin kullanilir.
+            -- 2026-07-10: kolon adlari PascalCase'e cekildi — bu noktada her DB Pascal'dir
+            -- (taze CREATE Pascal dogar, legacy kolonlar zincirin 5. adiminda rename edilir).
+            -- Eski snake_case referans taze DB'de "Column name 'contact_phone' does not
+            -- exist" (1911) ile tum init'i durduruyordu. Index adi ayni kaldi; index'i
+            -- zaten olan eski DB'ler NOT EXISTS guard'i ile atlanir.
             IF OBJECT_ID(N'[{s}].[WaInbox]', N'U') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.indexes
                                WHERE object_id = OBJECT_ID(N'[{s}].[WaInbox]')
                                  AND name = N'ix_wa_inbox_direction_phone')
             BEGIN
                 CREATE INDEX [ix_wa_inbox_direction_phone]
-                    ON [{s}].[WaInbox]([direction], [contact_phone], [received_at] DESC);
+                    ON [{s}].[WaInbox]([Direction], [ContactPhone], [ReceivedAt] DESC);
             END;
 
             -- WaGroup: grup master tablosu
@@ -15235,17 +15254,37 @@ END;";
                 );
 
                 -- Sorgu desenine optimize edilmiş kapsayıcı (covering) index:
-                -- (DocType, IsActive) filtresinden sonra kriter kolonları + LayoutId + UpdatedAt
+                -- (DocType, IsActive) filtresinden sonra kriter kolonları + LayoutId + Updated
                 -- INCLUDE'da geldiği için sorgu key-lookup yapmadan tamamlanır.
+                -- 2026-07-10: INCLUDE [UpdatedAt] → [Updated] — taze tablo [Updated] ile
+                -- dogar; eski referans taze DB'de 1911 ile tum init'i durduruyordu.
                 CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup]
                     ON [{s}].[DocLayoutRule]([DocType], [IsActive])
-                    INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [UpdatedAt]);
+                    INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [Updated]);
 
                 -- Aynı (DocType + kriter kombinasyonu) için iki aktif kural olamaz.
                 -- Filtered UNIQUE index NULL'leri "değer" olarak kabul ettiğinden bu örtüşür.
                 CREATE UNIQUE NONCLUSTERED INDEX [ux_DocLayoutRule_Combo]
                     ON [{s}].[DocLayoutRule]([DocType], [CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId])
                     WHERE [IsActive] = 1;
+            END;
+
+            -- 2026-07-05: DocLayoutRule — CreatedAt → Created, UpdatedAt → Updated kolon rename.
+            -- 2026-07-10: Rename'ler index bloklarindan ONCEye tasindi — asagidaki
+            -- ix_DocLayoutRule_Lookup INCLUDE listeleri [Updated] kullanir; rename metodun
+            -- sonunda kalirsa eski DB'lerde kolon henuz [UpdatedAt] iken index yeniden
+            -- olusturma 1911 ile patlar.
+            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'CreatedAt') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'Created') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{s}].[DocLayoutRule].[CreatedAt]', N'Created', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'UpdatedAt') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'Updated') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{s}].[DocLayoutRule].[UpdatedAt]', N'Updated', N'COLUMN';
             END;
 
             -- Mevcut DB'ler icin migrate: ContactGroupId kolonu (Cari Grup kriteri)
@@ -15268,7 +15307,7 @@ END;";
 
                 EXEC(N'CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup]
                        ON [{s}].[DocLayoutRule]([DocType], [IsActive])
-                       INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [UpdatedAt]);');
+                       INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [Updated]);');
             END;
 
             -- ── Mevcut DB'ler için AccountType kolonu (Cari tipi kriteri) ──
@@ -15291,7 +15330,7 @@ END;";
 
                 EXEC(N'CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup]
                        ON [{s}].[DocLayoutRule]([DocType], [IsActive])
-                       INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [AccountType], [LayoutId], [UpdatedAt]);');
+                       INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [AccountType], [LayoutId], [Updated]);');
             END;
 
             -- ── Mevcut DB icin DocumentTypeId kolonu (Phase: tip FK konsolidasyon) ──
@@ -15356,19 +15395,6 @@ END;";
                 ');
             END;
 
-            -- 2026-07-05: DocLayoutRule — CreatedAt → Created, UpdatedAt → Updated kolon rename.
-            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'CreatedAt') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'Created') IS NULL
-            BEGIN
-                EXEC sp_rename N'[{s}].[DocLayoutRule].[CreatedAt]', N'Created', N'COLUMN';
-            END;
-            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'UpdatedAt') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'Updated') IS NULL
-            BEGIN
-                EXEC sp_rename N'[{s}].[DocLayoutRule].[UpdatedAt]', N'Updated', N'COLUMN';
-            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
