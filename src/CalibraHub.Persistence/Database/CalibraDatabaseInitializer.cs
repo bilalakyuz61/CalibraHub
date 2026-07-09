@@ -7724,13 +7724,18 @@ END;";
                                AND parent_object_id = OBJECT_ID(N'[{s}].[DocumentLine]'))
                 EXEC(N'ALTER TABLE [{s}].[DocumentLine] WITH CHECK
                     ADD CONSTRAINT [FK_DocumentLine_Lot] FOREIGN KEY ([LotId]) REFERENCES [{s}].[Lot]([Id]);');
+            -- Index FİLTRESİZ: filtered index (WHERE LotId IS NOT NULL) tabloya yazan tüm
+            -- oturumlarda QUOTED_IDENTIFIER ON zorunluluğu getirir — sqlcmd/harici araçların
+            -- DocumentLine INSERT'lerini kırar. Filtreli oluşmuş eski sürüm varsa düzelt.
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DocumentLine_Lot'
+                       AND object_id = OBJECT_ID(N'[{s}].[DocumentLine]') AND has_filter = 1)
+                DROP INDEX [IX_DocumentLine_Lot] ON [{s}].[DocumentLine];
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_DocumentLine_Lot'
                                AND object_id = OBJECT_ID(N'[{s}].[DocumentLine]'))
                 EXEC(N'CREATE INDEX [IX_DocumentLine_Lot]
                     ON [{s}].[DocumentLine]([LotId])
-                    INCLUDE ([ItemId], [LocationId], [FromLocationId], [MovementType], [BaseQuantity])
-                    WHERE [LotId] IS NOT NULL;');
+                    INCLUDE ([ItemId], [LocationId], [FromLocationId], [MovementType], [BaseQuantity]);');
 
             -- 2026-05-23: DocumentLineFulfillment — bag tablosu.
             -- Talep satiri (RequestLineId) → karsilama satiri (RefDocLineId, StockDocLine.Id

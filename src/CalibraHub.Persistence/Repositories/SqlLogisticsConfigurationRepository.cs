@@ -2061,6 +2061,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     WHERE [LocationId] IS NOT NULL;
             END;
 
+            -- Planlama: depo bazında asgari stok kolonu (initializer yarış/atlama durumuna karşı per-call guard)
+            IF OBJECT_ID(N'[{s}].[ItemLocation]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[ItemLocation]', N'MinStock') IS NULL
+                ALTER TABLE [{s}].[ItemLocation] ADD [MinStock] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_ItemLocation_MinStock] DEFAULT(0);
+
             -- Planlama: belge bazında malzeme kilidi
             IF OBJECT_ID(N'[{s}].[ItemDocumentLock]', N'U') IS NULL
             BEGIN
