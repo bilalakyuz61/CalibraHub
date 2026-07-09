@@ -1810,7 +1810,8 @@ END;";
                     [Created]    DATETIME NULL,
                     [Updated]    DATETIME NULL,
                     [CreatedById]  INT NULL,
-                    [UpdatedById]  INT NULL
+                    [UpdatedById]  INT NULL,
+                    [MinStock]     DECIMAL(18,4) NOT NULL CONSTRAINT [df_Items_MinStock] DEFAULT(0)
                 );
 
                 EXEC(N'
@@ -1825,6 +1826,14 @@ END;";
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Items]
                     ADD [CompanyId] INT NOT NULL CONSTRAINT [df_Items_Company] DEFAULT(0);
+            END;
+
+            -- Planlama (2026-07-08): genel asgari stok — idempotent kolon ekle
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Items]', N'MinStock') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
+                    ADD [MinStock] DECIMAL(18,4) NOT NULL CONSTRAINT [df_Items_MinStock] DEFAULT(0);
             END;
 
             -- 2026-06-26: Takip tipi (None/Lot/Serial) — idempotent kolon ekle
@@ -8461,7 +8470,8 @@ END;";
                     [ItemId]     INT NOT NULL,
                     [LocationId] INT NOT NULL,
                     [IsDefault]  BIT NOT NULL DEFAULT(0),
-                    [SortOrder]  INT NOT NULL DEFAULT(0)
+                    [SortOrder]  INT NOT NULL DEFAULT(0),
+                    [MinStock]   DECIMAL(18,4) NOT NULL CONSTRAINT [DF_ItemLocation_MinStock] DEFAULT(0)
                 );
                 CREATE UNIQUE INDEX [UX_ItemLocation_ItemId_LocationId]
                     ON [{s}].[ItemLocation]([ItemId], [LocationId]);
@@ -8472,6 +8482,11 @@ END;";
                 CREATE INDEX [IX_ItemLocation_LocationId]
                     ON [{s}].[ItemLocation]([LocationId]);
             END;
+
+            -- Planlama (2026-07-08): depo bazında asgari stok kolonu (mevcut tabloya migrate)
+            IF OBJECT_ID(N'[{s}].[ItemLocation]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[ItemLocation]', N'MinStock') IS NULL
+                ALTER TABLE [{s}].[ItemLocation] ADD [MinStock] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_ItemLocation_MinStock] DEFAULT(0);
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;

@@ -1354,9 +1354,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType])
+                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType], [MinStock])
             VALUES
-                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType);
+                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType, @MinStock);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -1370,6 +1370,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@Combinations", stockCard.Combinations ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@TaxRate", stockCard.TaxRate));
         command.Parameters.Add(new SqlParameter("@TrackingType", (object?)stockCard.TrackingType ?? "None"));
+        command.Parameters.Add(new SqlParameter("@MinStock", stockCard.MinStock));
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -1389,6 +1390,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [Combinations] = @Combinations,
                 [TaxRate] = @TaxRate,
                 [TrackingType] = @TrackingType,
+                [MinStock] = @MinStock,
                 [Updated] = @Updated
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
@@ -2067,7 +2069,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await EnsureItemLocationsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id],[ItemId],[LocationId],[IsDefault],[SortOrder]
+            SELECT [Id],[ItemId],[LocationId],[IsDefault],[SortOrder],[MinStock]
             FROM {_itemLocationsTableName}
             WHERE [ItemId] = @ItemId
             ORDER BY [SortOrder], [Id];
@@ -2083,6 +2085,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 LocationId = reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2),
                 IsDefault = reader.GetBoolean(3),
                 SortOrder = reader.GetInt32(4),
+                MinStock = reader.IsDBNull(5) ? 0m : reader.GetDecimal(5),
             });
         }
         return results;
@@ -2137,13 +2140,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = $"""
                 INSERT INTO {_itemLocationsTableName}
-                    ([ItemId],[LocationId],[IsDefault],[SortOrder])
-                VALUES (@ItemId, @LocationId, @IsDefault, @SortOrder);
+                    ([ItemId],[LocationId],[IsDefault],[SortOrder],[MinStock])
+                VALUES (@ItemId, @LocationId, @IsDefault, @SortOrder, @MinStock);
                 """;
             cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
             cmd.Parameters.Add(new SqlParameter("@LocationId", (object?)l.LocationId ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@IsDefault", isDefault));
             cmd.Parameters.Add(new SqlParameter("@SortOrder", sortOrder++));
+            cmd.Parameters.Add(new SqlParameter("@MinStock", l.MinStock));
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
     }

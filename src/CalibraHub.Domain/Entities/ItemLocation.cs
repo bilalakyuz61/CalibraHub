@@ -12,4 +12,7 @@ public sealed class ItemLocation
     public int? LocationId { get; init; }
     public bool IsDefault { get; init; }
     public int SortOrder { get; init; }
+
+    /// <summary>Planlama: bu depodaki asgari stok (ana birim). Şimdilik yalnız tanım/gösterim.</summary>
+    public decimal MinStock { get; init; }
 }

@@ -14,6 +14,9 @@ public sealed class Item
     public bool Combinations { get; init; } = false;
     public decimal TaxRate { get; init; } = 20m;
 
+    /// <summary>Planlama: genel (malzeme bazında) asgari stok — ana birim. Şimdilik yalnız tanım/gösterim.</summary>
+    public decimal MinStock { get; init; }
+
     /// <summary>Takip tipi: "None" (Yok) | "Lot" (Lot takibi) | "Serial" (Seri takibi). Varsayılan "None".</summary>
     public string? TrackingType { get; init; } = "None";
     public bool IsActive { get; private set; } = true;
