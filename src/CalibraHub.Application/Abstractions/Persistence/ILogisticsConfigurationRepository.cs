@@ -50,6 +50,10 @@ public interface ILogisticsConfigurationRepository
     Task SaveItemUnitsAsync(int itemId, IReadOnlyCollection<ItemUnit> conversions, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<ItemLocation>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken);
     Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<ItemLocation> locations, CancellationToken cancellationToken);
+    // Planlama: belge bazında malzeme kilidi (DocType kod listesi)
+    Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken);
+    Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<int>> GetLockedItemIdsByDocTypeAsync(string docType, CancellationToken cancellationToken);
     Task NullifyItemLocationsByLocationIdAsync(int locationId, CancellationToken cancellationToken);
     Task NullifyLocationHistoricalFkRefsAsync(int locationId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken);

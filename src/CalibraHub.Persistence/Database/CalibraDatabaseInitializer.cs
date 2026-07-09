@@ -8487,6 +8487,21 @@ END;";
             IF OBJECT_ID(N'[{s}].[ItemLocation]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[ItemLocation]', N'MinStock') IS NULL
                 ALTER TABLE [{s}].[ItemLocation] ADD [MinStock] DECIMAL(18,4) NOT NULL CONSTRAINT [DF_ItemLocation_MinStock] DEFAULT(0);
+
+            -- Planlama (2026-07-08): belge bazında malzeme kilidi — kilitli malzeme o belge tipinde seçilemez
+            IF OBJECT_ID(N'[{s}].[ItemDocumentLock]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemDocumentLock]
+                (
+                    [Id]      INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ItemDocumentLock] PRIMARY KEY,
+                    [ItemId]  INT NOT NULL,
+                    [DocType] NVARCHAR(50) NOT NULL
+                );
+                CREATE UNIQUE INDEX [UX_ItemDocumentLock_ItemId_DocType]
+                    ON [{s}].[ItemDocumentLock]([ItemId], [DocType]);
+                CREATE INDEX [IX_ItemDocumentLock_DocType]
+                    ON [{s}].[ItemDocumentLock]([DocType]);
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
