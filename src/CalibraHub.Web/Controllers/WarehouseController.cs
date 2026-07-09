@@ -299,6 +299,12 @@ public sealed class WarehouseController : Controller
     {
         try
         {
+            // Yansıtılmış (Applied) sayım immutable — fark satırları belgeye bağlı; silinirse
+            // stok bakiyesi sessizce geri döner. Bu yüzden yalnızca Draft sayım silinebilir.
+            var status = await _inventoryCountRepo.GetStatusAsync(id, ct);
+            if (status == 1)
+                return Json(new { ok = false, error = "Yansıtılmış sayım fişi silinemez. Yansıtılan stok farkları bu belgeye bağlıdır; silinmesi bakiyeyi bozar." });
+
             await _stockDocRepo.DeleteAsync(id, ct);
             return Json(new { ok = true });
         }
@@ -918,6 +924,7 @@ public sealed class WarehouseController : Controller
     private async Task<object> BuildInventoryBoardConfigAsync(CancellationToken ct)
     {
         var docs = await _stockDocRepo.GetByTypeAsync("INVENTORY_COUNT", ct);
+        var appliedIds = await _inventoryCountRepo.GetAppliedDocumentIdsAsync(ct);
         var tr   = CultureInfo.GetCultureInfo("tr-TR");
         var masterWidgets = new List<object>
         {
@@ -925,33 +932,38 @@ public sealed class WarehouseController : Controller
             SmartBoardFilterHelpers.MakeStdWidget("w_kalem", "Kalem", "numeric"),
         };
 
-        var entities = docs.Select(d => new
+        var entities = docs.Select(d =>
         {
-            id          = d.Id,
-            title       = d.DocNo,
-            subtitle    = d.DocDate.ToString("dd.MM.yyyy", tr),
-            description = d.FromLocationName ?? "",
-            imageUrl    = (string?)null,
-            statusBadge = (object?)null,
-            widgets = new object[]
+            // Yansıtılmış (Applied) sayım immutable: "Yansıtıldı" rozeti göster, Sil'i gizle.
+            var isApplied = appliedIds.Contains(d.Id);
+            return new
             {
-                new { id = "w_depo",  type = "data", dataType = "text",    label = "Depo",
-                      value = d.FromLocationName ?? "-", detail = (string?)null, color = "violet" },
-                new { id = "w_kalem", type = "data", dataType = "numeric", label = "Kalem",
-                      value = d.LineCount.ToString(CultureInfo.InvariantCulture), detail = "kalem", color = "slate" },
-            },
-            primaryAction = new
-            {
-                label = "Düzenle", icon = "Edit", color = "amber",
-                url   = $"/Warehouse/InventoryEdit?id={d.Id}", hideButton = true,
-            },
-            secondaryAction = new
-            {
-                label     = "Sil", icon = "Trash2",
-                apiUrl    = $"/Warehouse/DeleteInventoryJson?id={d.Id}",
-                apiMethod = "POST",
-                confirm   = $"Bu sayım belgesini silmek istediğinizden emin misiniz? ({d.DocNo})",
-            },
+                id          = d.Id,
+                title       = d.DocNo,
+                subtitle    = d.DocDate.ToString("dd.MM.yyyy", tr),
+                description = d.FromLocationName ?? "",
+                imageUrl    = (string?)null,
+                statusBadge = isApplied ? (object?)new { label = "Yansıtıldı", color = "emerald" } : null,
+                widgets = new object[]
+                {
+                    new { id = "w_depo",  type = "data", dataType = "text",    label = "Depo",
+                          value = d.FromLocationName ?? "-", detail = (string?)null, color = "violet" },
+                    new { id = "w_kalem", type = "data", dataType = "numeric", label = "Kalem",
+                          value = d.LineCount.ToString(CultureInfo.InvariantCulture), detail = "kalem", color = "slate" },
+                },
+                primaryAction = new
+                {
+                    label = isApplied ? "Görüntüle" : "Düzenle", icon = "Edit", color = "amber",
+                    url   = $"/Warehouse/InventoryEdit?id={d.Id}", hideButton = true,
+                },
+                secondaryAction = isApplied ? null : (object?)new
+                {
+                    label     = "Sil", icon = "Trash2",
+                    apiUrl    = $"/Warehouse/DeleteInventoryJson?id={d.Id}",
+                    apiMethod = "POST",
+                    confirm   = $"Bu sayım belgesini silmek istediğinizden emin misiniz? ({d.DocNo})",
+                },
+            };
         }).ToList();
 
         return new

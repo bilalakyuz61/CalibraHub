@@ -396,6 +396,17 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             if (request.Id.HasValue && request.Id.Value > 0)
             {
                 docId = request.Id.Value;
+                // Yansıtılmış (Applied) sayım immutable — kalem DELETE/INSERT snapshot'ı bozar.
+                // Yalnızca Draft düzenlenebilir (aşağıdaki header UPDATE zaten WHERE Status=0).
+                await using (var st = conn.CreateCommand())
+                {
+                    st.Transaction = tx;
+                    st.CommandText = $"SELECT [Status] FROM {T("InventoryCount")} WHERE [DocumentId] = @Id;";
+                    st.Parameters.AddWithValue("@Id", docId);
+                    var stObj = await st.ExecuteScalarAsync(ct);
+                    if (stObj is not (null or DBNull) && Convert.ToInt32(stObj) != 0)
+                        throw new InvalidOperationException("Yansıtılmış sayım düzenlenemez.");
+                }
                 await using (var upd = conn.CreateCommand())
                 {
                     upd.Transaction = tx;

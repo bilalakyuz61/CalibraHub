@@ -30,4 +30,17 @@ public interface IInventoryCountRepository
     /// Doğal idempotent. Dönen değer: yazılan satır sayısı.
     /// </summary>
     Task<int> ZeroUncountedAsync(int documentId, CancellationToken ct);
+
+    /// <summary>
+    /// InventoryCount.Status döndürür (0=Draft, 1=Applied, 2=Cancelled). Belge bir sayım
+    /// değilse null. Silme/düzenleme guard'ları için — Applied sayım immutable olmalı
+    /// (yansıtılan fark satırları belgeye bağlı; silinirse bakiye sessizce geri döner).
+    /// </summary>
+    Task<byte?> GetStatusAsync(int documentId, CancellationToken ct);
+
+    /// <summary>
+    /// Yansıtılmış (Status=1) sayımların DocumentId set'ini toplu döndürür — board/liste
+    /// ekranında "Yansıtıldı" rozeti + Sil'i gizlemek için (N+1 önlemi).
+    /// </summary>
+    Task<IReadOnlySet<int>> GetAppliedDocumentIdsAsync(CancellationToken ct);
 }

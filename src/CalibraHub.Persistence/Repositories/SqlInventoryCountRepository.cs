@@ -24,6 +24,27 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
 
     private string T(string table) => $"[{_schema}].[{table}]";
 
+    public async Task<byte?> GetStatusAsync(int documentId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT [Status] FROM {T("InventoryCount")} WHERE [DocumentId] = @DocId;";
+        cmd.Parameters.AddWithValue("@DocId", documentId);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : Convert.ToByte(result);
+    }
+
+    public async Task<IReadOnlySet<int>> GetAppliedDocumentIdsAsync(CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT [DocumentId] FROM {T("InventoryCount")} WHERE [Status] = 1;";
+        var set = new HashSet<int>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct)) set.Add(r.GetInt32(0));
+        return set;
+    }
+
     public async Task<int> ApplyAsync(int documentId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
