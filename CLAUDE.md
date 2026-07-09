@@ -222,6 +222,30 @@ Tüm silme/destruktif işlemler **ekranın ortasında** custom modal ile onay al
 
 Silme/destruktif fiil olmayan sıradan bilgilendirme/uyarılar için inline mesaj veya toast yeterlidir; modal sadece **kullanıcı onayı gerektiren** akışlarda zorunludur.
 
+## Dinamik Alan (Widget / Alan Yönetimi) Host — belge/tanım ekranlarında ZORUNLU
+
+Kullanıcılar "Alan Yönetimi"nde herhangi bir form kodu (Forms.FormCode) altına özel alan (WidgetMas/EAV) tanımlar. Bu alanların düzenleme ekranında **render edilebilmesi için o ekranın dinamik widget host'unu mount etmesi gerekir.** Host eklenmezse alanlar sessizce görünmez — hata yok, boş kalır (silent failure). 2026-07-08'de Ambar Giriş/Çıkış/Transfer/Sayım ekranları bu host'u hiç mount etmediği için tanımlı alanlar görünmüyordu.
+
+**KURAL:** Yeni bir belge/tanım düzenleme ekranı (`*Edit.cshtml`) yazarken üst-bilgi özel alanları için **paylaşılan partial'ı** include et — elle `mountDynamicWidgetRenderer` JS'i kopyalama:
+
+```cshtml
+<div class="...-tab-pane" data-...-pane="widgets" style="padding:18px 4px;">
+  @await Html.PartialAsync("_DynamicWidgetHost", new CalibraHub.Web.Models.Shared.DynamicWidgetHostModel {
+      FormCode = "<ÜST_BILGI_FORM_KODU>",   // örn. Model.DocType / FormCodes.InventoryCount
+      HostId   = "<ekranaOzgu>Widgets",
+      RecordId = Model.DocId?.ToString(),    // edit'te dolu; yeni kayıtta null
+  })
+</div>
+```
+
+Ekranın save/load akışında **iki hook** (partial mount + reload'u kendisi yapar, ama yeni kayıtta save şart):
+- Belge kaydedilip Id alınınca (yeni kayıt DOC_ID set edildikten SONRA): `await window.CalibraWidgetHost.save('<HostId>', DOC_ID)`
+- (Opsiyonel) kayıt yeniden yüklenince: `window.CalibraWidgetHost.reload('<HostId>', DOC_ID)` — partial edit'te `data-record-id` ile zaten otomatik reload eder.
+
+**Neden partial:** Her ekranın ~40 satır mount/reload/save JS'ini kopyalaması tam olarak bu bug'ı üretti. Partial container + mount + kart CSS'ini (`cwh` prefix) + registry'yi tek include'a indirger. React bundle sayfada zaten yüklü olmalı (grid vb. için); partial polling ile bekler.
+
+**Referans:** `Views/Shared/_DynamicWidgetHost.cshtml` (+ `Models/Shared/DynamicWidgetHostModel.cs`). Retrofit örnekleri: `Views/Warehouse/StockDocEdit.cshtml`, `Views/Warehouse/InventoryEdit.cshtml`. Zaten host'u olan (kendi bespoke wiring'i, dokunma): `Sales/DocumentEdit` (Satış+Satın Alma), `Production/WorkOrderEdit`, `Logistics/MaterialCardEdit`, `Finance/ContactEdit`, `Arge/ProjectEdit`, `Assets/AssetEdit`. **İstisna:** `Logistics/BOMEdit` kendi `PRODUCT_TREES` field-settings mekanizmasını kullanır — bu partial'a tabi değildir.
+
 ## DB Naming Convention
 
 CalibraHub yıllar içinde snake_case'ten PascalCase'e geçiş yaptı; rename migration'ları (`MigrateTableRenamesAsync`, `MigrateColumnRenamesAsync`) yön bunu gösterir. Kodda hâlâ hibrit görünüm var (eski tablolar dokunulmuyor) ama **yeni eklenen her tablo ve kolon aşağıdaki kurallara uyar**.
