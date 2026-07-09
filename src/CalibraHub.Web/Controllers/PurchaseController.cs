@@ -1058,6 +1058,15 @@ public sealed class PurchaseController : Controller
 
             return Json(new { ok = true, docNo });
         }
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
+        {
+            return Json(new { ok = false, error = nbex.Message });
+        }
+        catch (InvalidOperationException ioex)
+        {
+            // Lot zorunluluğu / lot bakiyesi doğrulama mesajları kullanıcıya aynen gösterilir.
+            return Json(new { ok = false, error = ioex.Message });
+        }
         catch (Exception ex)
         {
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
@@ -1155,6 +1164,15 @@ public sealed class PurchaseController : Controller
             }
 
             return Json(new { ok = true, docNo });
+        }
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
+        {
+            return Json(new { ok = false, error = nbex.Message });
+        }
+        catch (InvalidOperationException ioex)
+        {
+            // Lot zorunluluğu / lot bakiyesi doğrulama mesajları kullanıcıya aynen gösterilir.
+            return Json(new { ok = false, error = ioex.Message });
         }
         catch (Exception ex)
         {
