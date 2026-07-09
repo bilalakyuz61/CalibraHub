@@ -949,8 +949,11 @@ using (var scope = app.Services.CreateScope())
     // Ensure*/Seed* zincirinden geçer (InitializeForConnectionAsync → EnsureFullSchemaAsync;
     // rename + notes + guide adımları da zincirin içinde). 2026-07-10 öncesi burada yalnızca
     // rename/notes/guide parça migration'ları çalışıyordu; yeni tablo/kolonlar şirket
-    // DB'lerine hiç ulaşmıyordu ("Invalid column name" 500'leri). Zincir idempotent —
-    // güncel DB'de yalnızca metadata kontrolü yapar (şirket başına ~1-2 sn).
+    // DB'lerine hiç ulaşmıyordu ("Invalid column name" 500'leri). Zincir idempotent ama
+    // bedava değil: güncel DB'de bile CREATE OR ALTER view + MERGE seed adımları çalışır,
+    // ölçülen maliyet şirket başına ~20-60 sn (startup, port açılmadan önce). Şirket sayısı
+    // artıp startup süresi sorun olursa adaylar: şirketleri paralel init etmek veya şema
+    // versiyon damgasıyla değişmemiş DB'leri atlamak — şimdilik bilinçli olarak sıralı.
     if (!useInMemoryPersistence)
     {
         var dbInitForCompanies = scope.ServiceProvider.GetRequiredService<CalibraDatabaseInitializer>();

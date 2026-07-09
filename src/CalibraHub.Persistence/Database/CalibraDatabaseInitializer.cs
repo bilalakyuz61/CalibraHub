@@ -648,8 +648,9 @@ END;";
     /// duruyordu ve startup şirket döngüsü yalnızca rename migration çalıştırıyordu;
     /// sonradan eklenen tablo/kolonlar (BaseQuantity, MovementType, TrackingType, Lot vb.)
     /// şirket DB'lerine hiç ulaşmıyordu → "Invalid column name" 500'leri.
-    /// Tüm adımlar idempotent (IF NOT EXISTS / CREATE OR ALTER / IF EXISTS sp_rename);
-    /// güncel bir DB'de yalnızca metadata kontrolü çalışır.
+    /// Tüm adımlar idempotent (IF NOT EXISTS / CREATE OR ALTER / IF EXISTS sp_rename).
+    /// Maliyet: güncel bir DB'de bile view CREATE OR ALTER + seed MERGE'leri çalışır —
+    /// ölçülen ~20-60 sn/DB; bu zincire adım eklerken startup bütçesini hatırla.
     /// </summary>
     private async Task EnsureFullSchemaAsync(SqlConnection connection, CancellationToken cancellationToken)
     {

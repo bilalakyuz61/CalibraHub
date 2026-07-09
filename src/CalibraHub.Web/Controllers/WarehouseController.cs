@@ -224,6 +224,55 @@ public sealed class WarehouseController : Controller
         return Json(result);
     }
 
+    // Lot bakiyeleri — hareket satırındaki Lot/Parti seçici dropdown'ını besler (Lot takibi).
+    // locationId verilirse o depodaki, verilmezse tüm depolardaki net lot bakiyeleri (yalnız > 0).
+    // FEFO sırası: SKT'si yakın olan önce, SKT'siz lotlar sonda.
+    [HttpGet]
+    public async Task<IActionResult> GetLotBalancesJson(int itemId, int? locationId, CancellationToken ct)
+    {
+        if (itemId <= 0) return Json(Array.Empty<object>());
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT lot.[LotNo], lot.[ExpiryDate],
+                   SUM(CASE WHEN dl.[MovementType] IN (2,3,4) AND dl.[LocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[LocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END)
+                 - SUM(CASE WHEN dl.[MovementType] IN (1,3,4) AND dl.[FromLocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[FromLocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END) AS bal
+            FROM [{_schema}].[DocumentLine] dl
+            INNER JOIN [{_schema}].[Document] doc ON doc.[Id] = dl.[DocumentId]
+            INNER JOIN [{_schema}].[Lot] lot ON lot.[Id] = dl.[LotId]
+            WHERE dl.[ItemId] = @ItemId AND dl.[LotId] IS NOT NULL
+              AND doc.[CompanyId] = @CompanyId AND doc.[IsActive] = 1
+              AND dl.[MovementType] IN (1,2,3,4)
+            GROUP BY lot.[Id], lot.[LotNo], lot.[ExpiryDate]
+            HAVING SUM(CASE WHEN dl.[MovementType] IN (2,3,4) AND dl.[LocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[LocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END)
+                 - SUM(CASE WHEN dl.[MovementType] IN (1,3,4) AND dl.[FromLocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[FromLocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END) > 0
+            ORDER BY CASE WHEN lot.[ExpiryDate] IS NULL THEN 1 ELSE 0 END, lot.[ExpiryDate], lot.[LotNo];
+            """;
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@LocId", (object?)locationId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+
+        var tr = CultureInfo.GetCultureInfo("tr-TR");
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var lotNo = r.GetString(0);
+            DateTime? expiry = r.IsDBNull(1) ? null : r.GetDateTime(1);
+            var bal = r.GetDecimal(2);
+            var label = "Bakiye: " + bal.ToString("N2", tr)
+                + (expiry.HasValue ? " · SKT: " + expiry.Value.ToString("dd.MM.yyyy", tr) : "");
+            result.Add(new { lotNo, balance = bal, expiryDate = expiry, label });
+        }
+        return Json(result);
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
@@ -825,15 +874,22 @@ public sealed class WarehouseController : Controller
             },
             new
             {
-                // Lot / Parti (2026-07-09, Lot takibi Faz 1): lot-takipli stokta (TrackingType='Lot')
+                // Lot / Parti (Lot takibi Faz 1): lot-takipli stokta (TrackingType='Lot')
                 // zorunluluk + mevcut-lot kontrolü server-side yapılır (SqlStockDocRepository.
                 // ResolveLotForLineAsync); takipsiz stokta serbest metin olarak korunur.
-                key   = "lotNo",
-                label = "Lot / Parti",
-                type  = "text",
-                width = 110,
-                align = "left",
-                icon  = "Tag",
+                // text-lookup: mevcut lot bakiyelerini FEFO sıralı önerir (transfer satırında
+                // kaynak depoya göre; satırda depo yoksa tüm depolar) — serbest yazım da geçerli,
+                // eşleşmeyen değer ham kaydedilir (girişte yeni lot yaratır).
+                key            = "lotNo",
+                label          = "Lot / Parti",
+                type           = "text-lookup",
+                lookupUrl      = "/Warehouse/GetLotBalancesJson?itemId={stockCardId}&locationId={fromLocationId}",
+                lookupValueKey = "lotNo",
+                lookupLabelKey = "label",
+                placeholder    = "Lot no",
+                width          = 130,
+                align          = "left",
+                icon           = "Tag",
             },
             new
             {
