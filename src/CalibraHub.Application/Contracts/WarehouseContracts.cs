@@ -39,7 +39,12 @@ public sealed record StockDocLineDto(
     int? ToLocationId,
     string? ToLocationName,
     decimal? UnitCost,
-    string? LotNo = null);
+    string? LotNo = null,
+    // Seri takibi Faz 2: satıra bağlı seri no'lar + edit UI'ının takip modunu bilmesi için
+    // stok kartı bilgisi (TrackingType/AutoSerial — Items join'inden).
+    IReadOnlyList<string>? Serials = null,
+    string? TrackingType = null,
+    bool AutoSerial = false);
 
 // ── Kayıt istekleri ───────────────────────────────────────────────────────────
 public sealed record SaveStockDocRequest(
@@ -66,4 +71,7 @@ public sealed record SaveStockDocLineRequest(
     int? FromLocationId,
     int? ToLocationId,
     decimal? UnitCost,
-    string? LotNo = null);
+    string? LotNo = null,
+    // Seri-takipli stokta satırın seri no listesi. Girişte AutoSerial=1 ise boş bırakılabilir
+    // (sunucu üretir); diğer tüm durumlarda adet kadar seri zorunludur.
+    IReadOnlyList<string>? Serials = null);

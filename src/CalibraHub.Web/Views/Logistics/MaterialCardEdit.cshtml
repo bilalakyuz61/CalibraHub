@@ -1713,16 +1713,23 @@
                     <div class="mce-row">
                         <label for="mceTraceability">İzlenebilirlik</label>
                         <label class="mce-switch" for="mceTraceability">
-                            <input type="checkbox" id="mceTraceability" onchange="document.getElementById('mceTrackingModeWrap').style.display = this.checked ? 'inline-flex' : 'none';" />
+                            <input type="checkbox" id="mceTraceability" onchange="window.mceSyncTrackingUi && window.mceSyncTrackingUi();" />
                             <span class="mce-switch-track"></span>
                         </label>
                         <div id="mceTrackingModeWrap" style="display:none;align-items:center;gap:10px;margin-left:22px;">
                             <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Lot</span>
                             <label class="mce-switch" for="mceTrackingMode">
-                                <input type="checkbox" id="mceTrackingMode" />
+                                <input type="checkbox" id="mceTrackingMode" onchange="window.mceSyncTrackingUi && window.mceSyncTrackingUi();" />
                                 <span class="mce-switch-track"></span>
                             </label>
                             <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Seri</span>
+                        </div>
+                        <div id="mceAutoSerialWrap" style="display:none;align-items:center;gap:10px;margin-left:22px;">
+                            <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Giriş Serisi Otomatik</span>
+                            <label class="mce-switch" for="mceAutoSerial" title="Açıkken giriş belgesinde seri listesi boş bırakılırsa sunucu otomatik üretir (Kod-Tarih-Sıra).">
+                                <input type="checkbox" id="mceAutoSerial" />
+                                <span class="mce-switch-track"></span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -2426,6 +2433,15 @@
     function _setHTML(id, html)  { var el = $(id); if (el) el.innerHTML = html; }
     function _setVal(id, val)    { var el = $(id); if (el) el.value = val; }
     function _setChk(id, val)    { var el = $(id); if (el) el.checked = !!val; }
+
+    // İzlenebilirlik alt satırlarının görünürlüğü: mod (Lot/Seri) yalnız izlenebilirlik açıkken,
+    // "Giriş Serisi Otomatik" yalnız Seri modundayken görünür.
+    window.mceSyncTrackingUi = function () {
+        var on   = !!($('mceTraceability') && $('mceTraceability').checked);
+        var seri = on && !!($('mceTrackingMode') && $('mceTrackingMode').checked);
+        var w = document.getElementById('mceTrackingModeWrap'); if (w) w.style.display = on ? 'inline-flex' : 'none';
+        var a = document.getElementById('mceAutoSerialWrap');   if (a) a.style.display = seri ? 'inline-flex' : 'none';
+    };
     function _setDisp(id, val)   { var el = $(id); if (el) el.style.display = val; }
     function populate(data) {
         // Defansif sarma: widget config tutarsizliklari (orn. ColSpan/field referans
@@ -2443,7 +2459,8 @@
                 var on = tt && tt !== 'None';
                 if ($('mceTraceability')) $('mceTraceability').checked = on;
                 if ($('mceTrackingMode')) $('mceTrackingMode').checked = (tt === 'Serial');
-                var w = document.getElementById('mceTrackingModeWrap'); if (w) w.style.display = on ? 'inline-flex' : 'none';
+                if ($('mceAutoSerial')) $('mceAutoSerial').checked = !!data.autoSerial;
+                if (window.mceSyncTrackingUi) window.mceSyncTrackingUi();
             })(data.trackingType);
             _setDisp('mceDeleteBtn',           'inline-flex');
 
@@ -2972,7 +2989,10 @@
             combinations: $('mceTrackCombinations').checked,
             taxRate: parseFloat($('mceTaxRate').value || '20'),
             minStock: parseFloat(($('mceGeneralMinStock') && $('mceGeneralMinStock').value) || '0') || 0,
-            trackingType: (($('mceTraceability') && $('mceTraceability').checked) ? (($('mceTrackingMode') && $('mceTrackingMode').checked) ? 'Serial' : 'Lot') : 'None')
+            trackingType: (($('mceTraceability') && $('mceTraceability').checked) ? (($('mceTrackingMode') && $('mceTrackingMode').checked) ? 'Serial' : 'Lot') : 'None'),
+            autoSerial: !!($('mceTraceability') && $('mceTraceability').checked &&
+                           $('mceTrackingMode') && $('mceTrackingMode').checked &&
+                           $('mceAutoSerial') && $('mceAutoSerial').checked)
         };
 
         $('mceSaveBtn').disabled = true;

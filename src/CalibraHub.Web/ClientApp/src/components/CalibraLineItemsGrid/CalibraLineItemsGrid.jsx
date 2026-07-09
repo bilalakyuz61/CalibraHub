@@ -22,7 +22,7 @@ import {
   Plus, Trash2, Pencil, Hash, FileText, Ruler, Sigma, DollarSign,
   Percent, Calculator, StickyNote, CircleDot, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
-  MoreHorizontal, ExternalLink, ChevronRight,
+  MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode,
 } from 'lucide-react'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell } from './LineGridCell'
@@ -43,6 +43,8 @@ var ICON_MAP = {
   Percent: Percent,
   Calculator: Calculator,
   StickyNote: StickyNote,
+  Tag: Tag,
+  Barcode: Barcode,
 }
 function resolveIcon(name) {
   return ICON_MAP[name] || CircleDot

@@ -174,6 +174,11 @@ export default function LineGridCell(props) {
     return <CombinationLookupCell column={column} row={row} value={value} onChange={onChange} />
   }
 
+  // ── Serial Entry (Seri Girişi / Seçimi) ────────────
+  if (column.type === 'serial-entry') {
+    return <SerialEntryCell column={column} row={row} value={value} onChange={onChange} />
+  }
+
   // ── Text (default) ─────────────────────────────────
   return (
     <input
@@ -1034,6 +1039,244 @@ function CombinationLookupCell(props) {
         />
       )}
     </>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SerialEntryCell — Seri girişi/seçimi butonu + modal (Seri takibi Faz 2)
+
+   column: { serialMode: 'entry' (giriş — serbest yazım/okutma) | 'pick'
+             (çıkış/transfer — stoktaki InStock serilerden seçim, serialsUrl) }
+   row.trackSerial: stok seri-takipli mi (lookupFillMap ile malzeme seçiminde dolar;
+   yüklenmiş satırda serials listesi doluysa da aktif kabul edilir).
+   row.autoSerial: girişte liste boş bırakılabilir — sunucu üretir (amber "Oto" rozeti).
+   Değer: row.serials — string[] (kaydetme payload'ına aynen gider).
+   ══════════════════════════════════════════════════════════════ */
+function splitSerialText(text) {
+  return String(text || '')
+    .split(/[\n\r,;\t|]+/)
+    .map(function(s) { return s.trim() })
+    .filter(function(s) { return s.length > 0 })
+}
+
+function SerialEntryCell(props) {
+  var column = props.column
+  var row = props.row
+  var onChange = props.onChange
+  var isLight = useIsLight()
+  var [open, setOpen] = useState(false)
+
+  var serials = Array.isArray(props.value) ? props.value : (Array.isArray(row.serials) ? row.serials : [])
+  var qty = parseNumber(row.quantity)
+  var qtyInt = (qty != null && qty > 0 && qty === Math.trunc(qty)) ? qty : null
+  var trackable = row.trackSerial === true || serials.length > 0
+  var autoSerial = row.autoSerial === true
+  var isEntry = column.serialMode !== 'pick'
+
+  if (!trackable) {
+    return (
+      <div className="w-full px-2.5 py-2 text-center text-[13px] text-slate-300 dark:text-white/25" title="Bu stokta seri takibi yok">—</div>
+    )
+  }
+
+  var ok = qtyInt != null && serials.length === qtyInt
+  var autoPending = isEntry && autoSerial && serials.length === 0
+  var btnClass
+  if (ok) {
+    btnClass = 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30'
+  } else if (autoPending) {
+    btnClass = 'text-amber-700 bg-amber-100 hover:bg-amber-200 dark:text-amber-300 dark:bg-amber-500/20 dark:hover:bg-amber-500/30'
+  } else {
+    btnClass = 'text-rose-600 bg-rose-100 hover:bg-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:hover:bg-rose-500/30'
+  }
+  var label = autoPending ? 'Oto' : (serials.length + '/' + (qtyInt != null ? qtyInt : '?'))
+  var title = autoPending
+    ? 'Seri listesi boş — kayıtta otomatik üretilecek (elle girmek için tıklayın)'
+    : (isEntry ? 'Seri no girişi — ' : 'Stoktan seri seçimi — ') + serials.length + ' seri' + (qtyInt != null ? ' / ' + qtyInt + ' adet' : '')
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={function() { setOpen(true) }}
+        className={'mx-auto h-7 min-w-[52px] px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-mono font-semibold transition-colors ' + btnClass}
+        title={title}
+      >
+        {label}
+      </button>
+      {open && (
+        <SerialEntryModal
+          isLight={isLight}
+          isEntry={isEntry}
+          row={row}
+          column={column}
+          qtyInt={qtyInt}
+          autoSerial={autoSerial}
+          serials={serials}
+          onApply={function(list) {
+            onChange(column.key, list)
+            setOpen(false)
+          }}
+          onClose={function() { setOpen(false) }}
+        />
+      )}
+    </>
+  )
+}
+
+function SerialEntryModal(props) {
+  var isLight = props.isLight
+  var isEntry = props.isEntry
+  var qtyInt = props.qtyInt
+  var [text, setText] = useState(props.serials.join('\n'))
+  var [selected, setSelected] = useState(function() {
+    var m = {}
+    props.serials.forEach(function(s) { m[s.toLowerCase()] = s })
+    return m
+  })
+  var [filter, setFilter] = useState('')
+
+  // Pick modunda stoktaki (InStock) serileri getir — URL row token'larıyla çözülür
+  var lookup = useLookup(!isEntry ? props.column.serialsUrl : null, props.row)
+
+  useEffect(function() {
+    function onKey(e) { if (e.key === 'Escape') props.onClose() }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  var entryList = splitSerialText(text)
+  var entryDupes = entryList.length !== entryList
+    .map(function(s) { return s.toLowerCase() })
+    .filter(function(s, i, arr) { return arr.indexOf(s) === i }).length
+
+  var pickedCount = Object.keys(selected).length
+  var currentCount = isEntry ? entryList.length : pickedCount
+  var countOk = qtyInt != null && currentCount === qtyInt
+  var countClass = countOk
+    ? 'text-emerald-600 dark:text-emerald-300'
+    : 'text-rose-600 dark:text-rose-300'
+
+  var options = (lookup.options || []).filter(function(o) {
+    if (!filter) return true
+    var q = filter.toLowerCase()
+    return String(o.serialNo || '').toLowerCase().indexOf(q) !== -1
+        || String(o.lotNo || '').toLowerCase().indexOf(q) !== -1
+  })
+
+  function toggle(serialNo) {
+    var key = serialNo.toLowerCase()
+    var next = Object.assign({}, selected)
+    if (next[key]) delete next[key]
+    else next[key] = serialNo
+    setSelected(next)
+  }
+
+  var panelStyle = isLight
+    ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
+    : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
+
+  return createPortal(
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2,6,23,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onMouseDown={function(e) { if (e.target === e.currentTarget) props.onClose() }}
+    >
+      <div style={Object.assign({ width: 'min(480px, 92vw)', borderRadius: '14px', overflow: 'hidden' }, panelStyle)}>
+        <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between">
+          <div>
+            <div className="text-[13px] font-semibold text-slate-800 dark:text-white/90">
+              {isEntry ? 'Seri No Girişi' : 'Stoktan Seri Seçimi'}
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-white/45 font-mono">
+              {(props.row.materialCode || '') + (props.row.materialName ? ' · ' + props.row.materialName : '')}
+            </div>
+          </div>
+          <div className={'text-[12px] font-mono font-bold tabular-nums ' + countClass}>
+            {currentCount + ' / ' + (qtyInt != null ? qtyInt : '?')}
+          </div>
+        </div>
+
+        {isEntry ? (
+          <div className="px-4 pb-2">
+            <textarea
+              autoFocus
+              value={text}
+              onChange={function(e) { setText(e.target.value) }}
+              rows={9}
+              placeholder={'Her satıra bir seri no (barkod okutucuyla art arda okutabilirsiniz)'}
+              className="w-full rounded-lg px-3 py-2 text-[12.5px] font-mono outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85 dark:placeholder:text-white/35"
+            />
+            {entryDupes && <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300">Tekrarlanan seri no var.</div>}
+            {props.autoSerial && (
+              <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                Bu stokta giriş serisi otomatik: listeyi tamamen boş bırakırsanız seri no'lar kayıtta üretilir.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="px-4 pb-2">
+            <div className="relative mb-2">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/35" />
+              <input
+                autoFocus
+                value={filter}
+                onChange={function(e) { setFilter(e.target.value) }}
+                placeholder="Seri / lot ara..."
+                className="w-full rounded-lg pl-8 pr-3 py-1.5 text-[12px] outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85 dark:placeholder:text-white/35"
+              />
+            </div>
+            <div className="max-h-[280px] overflow-y-auto rounded-lg border border-slate-200 dark:border-white/10">
+              {lookup.loading && <div className="px-3 py-3 text-[11px] text-slate-400 dark:text-white/40">Yükleniyor…</div>}
+              {!lookup.loading && options.length === 0 && (
+                <div className="px-3 py-3 text-[11px] text-slate-400 dark:text-white/40">Stokta seçilebilir seri yok.</div>
+              )}
+              {options.map(function(o) {
+                var checked = !!selected[String(o.serialNo).toLowerCase()]
+                return (
+                  <button
+                    key={o.serialNo}
+                    type="button"
+                    onClick={function() { toggle(o.serialNo) }}
+                    className={'w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ' +
+                      (checked
+                        ? 'bg-indigo-50 dark:bg-indigo-500/15'
+                        : 'hover:bg-slate-50 dark:hover:bg-white/[0.05]')}
+                  >
+                    <span className={'w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] font-bold ' +
+                      (checked
+                        ? 'bg-indigo-500 border-indigo-500 text-white'
+                        : 'border-slate-300 dark:border-white/25 text-transparent')}>✓</span>
+                    <span className="text-[12px] font-mono text-slate-800 dark:text-white/85">{o.serialNo}</span>
+                    {o.lotNo && <span className="text-[10.5px] font-mono text-slate-400 dark:text-white/35">Lot: {o.lotNo}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="px-4 py-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-white/[0.07]">
+          <button
+            type="button"
+            onClick={props.onClose}
+            className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 hover:bg-slate-100 dark:text-white/60 dark:hover:bg-white/[0.07] transition-colors"
+          >
+            Vazgeç
+          </button>
+          <button
+            type="button"
+            onClick={function() {
+              props.onApply(isEntry ? entryList : Object.keys(selected).map(function(k) { return selected[k] }))
+            }}
+            className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white bg-indigo-500 hover:bg-indigo-600 transition-colors"
+          >
+            Uygula
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
 

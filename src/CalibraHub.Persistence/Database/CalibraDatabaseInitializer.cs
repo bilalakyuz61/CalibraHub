@@ -1745,6 +1745,16 @@ END;";
                     ADD [TrackingType] NVARCHAR(20) NOT NULL CONSTRAINT [df_Items_TrackingType] DEFAULT(N'None');
             END;
 
+            -- 2026-07-10: Seri takibi Faz 2 — giriş serisi otomatik üretilsin mi
+            -- (yalnız TrackingType='Serial' iken anlamlı; giriş belgesinde seri listesi boş
+            -- bırakılırsa sunucu ItemCode-yyMMdd-NNN deseniyle üretir).
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Items]', N'AutoSerial') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
+                    ADD [AutoSerial] BIT NOT NULL CONSTRAINT [df_Items_AutoSerial] DEFAULT(0);
+            END;
+
             -- Eski tek-kolonlu unique index'i (Code) drop et, (CompanyId, Code) ile degistir
             IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
                AND EXISTS (
@@ -7643,6 +7653,52 @@ END;";
                 EXEC(N'CREATE INDEX [IX_DocumentLine_Lot]
                     ON [{s}].[DocumentLine]([LotId])
                     INCLUDE ([ItemId], [LocationId], [FromLocationId], [MovementType], [BaseQuantity]);');
+
+            -- 2026-07-10: Seri takibi Faz 2 — ItemSerial (seri ana kaydı) + DocumentLineSerial
+            -- (hareket satırı ↔ seri bağı; miktar N ⇒ N bağ satırı). Seri durumu ItemSerial.Status:
+            -- 1=InStock (stokta), 2=Issued (çıktı), 3=Blocked. Girişte InStock yaratılır/iade
+            -- girişinde Issued→InStock döner; çıkışta InStock şart + Issued'a çekilir; transferde
+            -- durum değişmez (yalnız bağ). DocumentLine delete+reinsert deseninde bağlar
+            -- ON DELETE CASCADE ile temizlenir, durum geçişleri SqlStockDocRepository'de yönetilir.
+            IF OBJECT_ID(N'[{s}].[ItemSerial]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemSerial]
+                (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ItemSerial] PRIMARY KEY,
+                    [ItemId]      INT NOT NULL,
+                    [SerialNo]    NVARCHAR(100) NOT NULL,
+                    [LotId]       INT NULL,
+                    [Status]      TINYINT NOT NULL CONSTRAINT [DF_ItemSerial_Status] DEFAULT(1),
+                    [IsActive]    BIT NOT NULL CONSTRAINT [DF_ItemSerial_IsActive] DEFAULT(1),
+                    [CreatedById] INT NULL,
+                    [Created]     DATETIME NOT NULL CONSTRAINT [DF_ItemSerial_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT NULL,
+                    [Updated]     DATETIME NULL,
+                    CONSTRAINT [FK_ItemSerial_Items] FOREIGN KEY ([ItemId]) REFERENCES [{s}].[Items]([Id]),
+                    CONSTRAINT [FK_ItemSerial_Lot] FOREIGN KEY ([LotId]) REFERENCES [{s}].[Lot]([Id]),
+                    CONSTRAINT [CK_ItemSerial_Status] CHECK ([Status] BETWEEN 1 AND 3)
+                );
+                CREATE UNIQUE INDEX [UX_ItemSerial_Item_SerialNo] ON [{s}].[ItemSerial]([ItemId], [SerialNo]);
+                CREATE INDEX [IX_ItemSerial_Item_Status] ON [{s}].[ItemSerial]([ItemId], [Status]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DocumentLineSerial]
+                (
+                    [Id]             INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentLineSerial] PRIMARY KEY,
+                    [DocumentLineId] INT NOT NULL,
+                    [SerialId]       INT NOT NULL,
+                    [Created]        DATETIME NOT NULL CONSTRAINT [DF_DocumentLineSerial_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_DocumentLineSerial_DocumentLine] FOREIGN KEY ([DocumentLineId])
+                        REFERENCES [{s}].[DocumentLine]([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_DocumentLineSerial_ItemSerial] FOREIGN KEY ([SerialId])
+                        REFERENCES [{s}].[ItemSerial]([Id])
+                );
+                CREATE UNIQUE INDEX [UX_DocumentLineSerial_Line_Serial]
+                    ON [{s}].[DocumentLineSerial]([DocumentLineId], [SerialId]);
+                CREATE INDEX [IX_DocumentLineSerial_Serial] ON [{s}].[DocumentLineSerial]([SerialId]);
+            END;
 
             -- 2026-05-23: DocumentLineFulfillment — bag tablosu.
             -- Talep satiri (RequestLineId) → karsilama satiri (RefDocLineId, StockDocLine.Id

@@ -550,6 +550,9 @@
                     combinationCode:   l.combinationCode || '',
                     trackCombinations: false,
                     lotNo:             l.lotNo || '',
+                    serials:           Array.isArray(l.serials) ? l.serials : [],
+                    trackSerial:       l.trackingType === 'Serial',
+                    autoSerial:        !!l.autoSerial,
                     notes:             l.notes || '',
                     fromLocationId:    l.fromLocationId || null,
                     toLocationId:      l.toLocationId || null,
@@ -625,6 +628,7 @@
                         fromLocationId: r.fromLocationId || null,
                         toLocationId:   r.toLocationId || null,
                         lotNo:          (r.lotNo == null ? '' : String(r.lotNo)).trim() || null,
+                        serials:        (Array.isArray(r.serials) && r.serials.length > 0) ? r.serials : null,
                     };
                 });
 

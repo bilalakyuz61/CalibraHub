@@ -398,7 +398,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     x.Combinations,
                     x.TaxRate,
                     TrackingType: x.TrackingType,
-                    MinStock: x.MinStock))
+                    MinStock: x.MinStock,
+                    AutoSerial: x.AutoSerial))
                 .ToArray(),
             Properties: properties
                 .Select(x => new FeatureDto(
@@ -1113,6 +1114,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             TaxRate = request.TaxRate,
             TrackingType = NormalizeTrackingType(request.TrackingType) ?? "None",
             MinStock = request.MinStock,
+            AutoSerial = request.AutoSerial,
             Created = DateTime.Now
         };
 
@@ -1164,6 +1166,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             TaxRate = request.TaxRate,
             TrackingType = NormalizeTrackingType(request.TrackingType) ?? existing.TrackingType ?? "None",
             MinStock = request.MinStock,
+            AutoSerial = request.AutoSerial,
             Created = existing.Created,
             Updated = DateTime.Now
         };

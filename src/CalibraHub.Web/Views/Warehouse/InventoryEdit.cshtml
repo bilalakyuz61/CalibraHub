@@ -394,6 +394,19 @@
     </div>
   </div>
 
+  <!-- Yansıtma İptali onay modal -->
+  <div id="invRevertModal" class="inv-modal-backdrop" style="display:none;">
+    <div class="inv-modal">
+      <div class="inv-modal__icon">↩️</div>
+      <h3 class="inv-modal__title">Yansıtmayı İptal Et</h3>
+      <p class="inv-modal__msg">Bu sayımın oluşturduğu stok hareketleri geri alınacak ve belge <strong>taslağa</strong> dönecek. Ardından düzenleyebilir veya silebilirsiniz. Devam edilsin mi?</p>
+      <div class="inv-modal__actions">
+        <button type="button" class="inv-modal__cancel" id="invRevertModalCancel">Vazgeç</button>
+        <button type="button" class="inv-modal__ok"     id="invRevertModalOk">Yansıtma İptali</button>
+      </div>
+    </div>
+  </div>
+
   <!-- İşlemler onay modal (genel — başlık/mesaj JS ile set edilir) -->
   <div id="invOpsModal" class="inv-modal-backdrop" style="display:none;">
     <div class="inv-modal">
@@ -491,6 +504,9 @@
                 };
             });
             setGridRows(rows);
+
+            // Yansıtılmış (Applied=1) sayım → view-only kilit + Yansıt yerine Yansıtma İptali
+            if (data.inventoryStatus === 1) applyLockedUi();
         } catch (e) {
             console.warn('[INV] Belge yüklenemedi:', e);
         } finally {
@@ -650,7 +666,11 @@
         }
     }
 
-    // ── Yansıt ───────────────────────────────────────────────────────
+    // ── Yansıt / Yansıtma İptali ──────────────────────────────────────
+    // Tek buton (invApplyBtn): Draft iken "Yansıt", Applied iken "Yansıtma İptali".
+    var _isApplied = false;
+    function onApplyBtnClick() { if (_isApplied) showRevertModal(); else showApplyModal(); }
+
     function showApplyModal() { document.getElementById('invApplyModal').style.display = 'flex'; document.getElementById('invApplyModalOk').focus(); }
     function hideApplyModal() { document.getElementById('invApplyModal').style.display = 'none'; }
     async function doApply() {
@@ -675,6 +695,57 @@
         } catch (ex) {
             if (window.CalibraHub && window.CalibraHub.toast)
                 window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
+        }
+    }
+
+    function showRevertModal() { document.getElementById('invRevertModal').style.display = 'flex'; document.getElementById('invRevertModalOk').focus(); }
+    function hideRevertModal() { document.getElementById('invRevertModal').style.display = 'none'; }
+    async function doRevert() {
+        hideRevertModal();
+        if (!DOC_ID) return;
+        try {
+            var resp = await fetch('/Warehouse/RevertInventoryJson?id=' + DOC_ID, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': TOKEN },
+            });
+            var json = await resp.json();
+            if (json && json.ok) {
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast('Yansıtma iptal edildi — ' + json.removed + ' hareket geri alındı. Belge taslağa döndü.', 'ok');
+                // Taslağa döndü → sayfayı tazele, butonlar normal (düzenle/sil/yansıt) gelir.
+                setTimeout(function() { location.reload(); }, 600);
+            } else {
+                var msg = (json && json.error) || 'Yansıtma iptali başarısız.';
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(msg, 'err');
+                else alert(msg);
+            }
+        } catch (ex) {
+            if (window.CalibraHub && window.CalibraHub.toast)
+                window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
+        }
+    }
+
+    // Applied sayım: view-only kilit + Yansıt butonunu Yansıtma İptali'ne çevir.
+    function applyLockedUi() {
+        _isApplied = true;
+        var saveBtn = document.getElementById('invSaveBtn');
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.title = 'Yansıtılmış sayım düzenlenemez — önce Yansıtma İptali'; }
+        var delBtn = document.getElementById('invDeleteBtn');
+        if (delBtn) { delBtn.disabled = true; delBtn.title = 'Yansıtılmış sayım silinemez — önce Yansıtma İptali'; }
+        ['invDocDate', 'invLocation', 'invNotes'].forEach(function(idv) {
+            var el = document.getElementById(idv); if (el) el.disabled = true;
+        });
+        // İşlemler sekmesi sıfırlama operasyonları da kilitlenir (stok-mutasyonu).
+        ['invZeroAllBtn', 'invZeroUncountedBtn'].forEach(function(idv) {
+            var el = document.getElementById(idv); if (el) el.disabled = true;
+        });
+        var applyBtn = document.getElementById('invApplyBtn');
+        if (applyBtn) {
+            applyBtn.classList.remove('pte-btn--violet');
+            applyBtn.classList.add('pte-btn--danger');
+            applyBtn.setAttribute('title', 'Yansıtmayı iptal et — stok hareketlerini geri al, belgeyi taslağa döndür');
+            applyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg><span class="pte-btn__label">Yans. İptali</span>';
         }
     }
 
@@ -855,11 +926,16 @@
             if (e.target === this) hideDeleteModal();
         });
         var applyBtn = document.getElementById('invApplyBtn');
-        if (applyBtn) applyBtn.addEventListener('click', showApplyModal);
+        if (applyBtn) applyBtn.addEventListener('click', onApplyBtnClick);
         document.getElementById('invApplyModalCancel')?.addEventListener('click', hideApplyModal);
         document.getElementById('invApplyModalOk')?.addEventListener('click', doApply);
         document.getElementById('invApplyModal')?.addEventListener('click', function(e) {
             if (e.target === this) hideApplyModal();
+        });
+        document.getElementById('invRevertModalCancel')?.addEventListener('click', hideRevertModal);
+        document.getElementById('invRevertModalOk')?.addEventListener('click', doRevert);
+        document.getElementById('invRevertModal')?.addEventListener('click', function(e) {
+            if (e.target === this) hideRevertModal();
         });
 
         // İşlemler sekmesi butonları
@@ -891,7 +967,7 @@
         updateOpsState();
 
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { hideDeleteModal(); hideApplyModal(); hideOpsModal(); }
+            if (e.key === 'Escape') { hideDeleteModal(); hideApplyModal(); hideRevertModal(); hideOpsModal(); }
         });
         if (!DOC_ID) {
             if (delBtn) delBtn.style.display = 'none';

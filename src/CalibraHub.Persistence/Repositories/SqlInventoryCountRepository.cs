@@ -45,6 +45,49 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         return set;
     }
 
+    public async Task<int> RevertAsync(int documentId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // 1) Optimistic-lock: yalnızca Applied ise Draft'a çevir. 0 satır → zaten taslak/yok.
+            await using (var upd = conn.CreateCommand())
+            {
+                upd.Transaction = tx;
+                upd.CommandText = $"""
+                    UPDATE {T("InventoryCount")}
+                    SET [Status] = 0, [Updated] = SYSUTCDATETIME()
+                    WHERE [DocumentId] = @DocId AND [Status] = 1;
+                    """;
+                upd.Parameters.AddWithValue("@DocId", documentId);
+                var affected = await upd.ExecuteNonQueryAsync(ct);
+                if (affected == 0)
+                    throw new InvalidOperationException("Bu sayım yansıtılmamış veya bulunamadı.");
+            }
+
+            // 2) Bu sayım fişinin ürettiği tüm stok hareketlerini sil (Yansıt farkları +
+            //    İşlemler sekmesi sıfırlamaları — hepsi MovementType=4). Ham sayım kalemleri
+            //    (InventoryCountLine) dokunulmaz → fiş temiz taslağa döner.
+            int removed;
+            await using (var del = conn.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = $"DELETE FROM {T("DocumentLine")} WHERE [DocumentId] = @DocId AND [MovementType] = 4;";
+                del.Parameters.AddWithValue("@DocId", documentId);
+                removed = await del.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return removed;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<int> ApplyAsync(int documentId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();

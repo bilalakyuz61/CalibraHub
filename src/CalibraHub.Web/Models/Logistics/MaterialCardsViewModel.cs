@@ -107,4 +107,6 @@ public sealed class SaveMaterialCardJsonInput
     public string? TrackingType { get; set; } = "None";
     /// <summary>Planlama: genel asgari stok (ana birim).</summary>
     public decimal? MinStock { get; set; }
+    /// <summary>Seri takibinde giriş serisi otomatik üretilsin (yalnız TrackingType='Serial').</summary>
+    public bool AutoSerial { get; set; }
 }

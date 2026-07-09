@@ -338,6 +338,27 @@ public sealed class WarehouseController : Controller
         }
     }
 
+    /// <summary>Yansıtma iptali (unpost) — yansıtılmış sayımı taslağa döndürür, stok hareketlerini geri alır.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.InventoryCount)]
+    public async Task<IActionResult> RevertInventoryJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            var removed = await _inventoryCountRepo.RevertAsync(id, ct);
+            return Json(new { ok = true, removed });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+        catch
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
     /// <summary>Sayım bağlantısız bakiye sıfırlama — depodaki TÜM canlı bakiyeleri sıfırlayan Adjust satırları yazar.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -464,7 +485,12 @@ public sealed class WarehouseController : Controller
         var doc = await _stockDocRepo.GetByIdAsync(id, ct);
         if (doc == null) return NotFound();
         var lines = await _stockDocRepo.GetLinesAsync(id, ct);
-        return Json(new { doc, lines });
+        // Sayım ise durum (0=Draft,1=Applied,2=Cancelled) — edit ekranı Applied'da
+        // Yansıt yerine "Yansıtma İptali" gösterip Kaydet/Sil'i kilitler.
+        byte? inventoryStatus = doc.DocType == "INVENTORY_COUNT"
+            ? await _inventoryCountRepo.GetStatusAsync(id, ct)
+            : null;
+        return Json(new { doc, lines, inventoryStatus });
     }
 
     [HttpPost]
@@ -581,8 +607,39 @@ public sealed class WarehouseController : Controller
                 MaterialName = x.Name,
                 x.UnitId,
                 TrackCombinations = x.Combinations,
+                // Seri takibi: grid'in Seri hücresi (buton aktifliği + otomatik üretim ipucu) için
+                TrackSerial = string.Equals(x.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase),
+                AutoSerial = x.AutoSerial,
             })
             .OrderBy(x => x.MaterialCode));
+    }
+
+    // Stoktaki (InStock) seriler — çıkış/transfer seri seçim modalını besler (Seri takibi Faz 2).
+    [HttpGet]
+    public async Task<IActionResult> GetSerialsJson(int itemId, CancellationToken ct)
+    {
+        if (itemId <= 0) return Json(Array.Empty<object>());
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT s.[SerialNo], lot.[LotNo]
+            FROM [{_schema}].[ItemSerial] s
+            LEFT JOIN [{_schema}].[Lot] lot ON lot.[Id] = s.[LotId]
+            WHERE s.[ItemId] = @ItemId AND s.[IsActive] = 1 AND s.[Status] = 1
+            ORDER BY s.[SerialNo];
+            """;
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            result.Add(new
+            {
+                serialNo = r.GetString(0),
+                lotNo = r.IsDBNull(1) ? null : r.GetString(1),
+            });
+        return Json(result);
     }
 
     [HttpGet]
@@ -839,6 +896,8 @@ public sealed class WarehouseController : Controller
                     ["stockCardId"]       = "id",
                     ["trackCombinations"] = "trackCombinations",
                     ["unitId"]            = "unitId",
+                    ["trackSerial"]       = "trackSerial",
+                    ["autoSerial"]        = "autoSerial",
                 },
                 width    = 200,
                 required = true,
@@ -864,6 +923,21 @@ public sealed class WarehouseController : Controller
                 align          = "center",
                 icon           = "CircleDot",
                 visibleWhenKey = "trackCombinations",
+            },
+            new
+            {
+                // Seri (Seri takibi Faz 2): seri-takipli stokta buton "n/adet" sayacı gösterir,
+                // modal açar. Giriş: serbest seri girişi (AutoSerial stokta boş bırakılabilir —
+                // sunucu üretir). Çıkış/transfer: stoktaki serilerden seçim (GetSerialsJson).
+                // Zorunluluk/tekillik/durum kontrolleri server-side (ResolveSerialsForLineAsync).
+                key        = "serials",
+                label      = "Seri",
+                type       = "serial-entry",
+                serialMode = docType == "STOCK_IN" ? "entry" : "pick",
+                serialsUrl = "/Warehouse/GetSerialsJson?itemId={stockCardId}",
+                width      = 90,
+                align      = "center",
+                icon       = "Barcode",
             },
             new
             {
@@ -956,13 +1030,22 @@ public sealed class WarehouseController : Controller
                     label = isApplied ? "Görüntüle" : "Düzenle", icon = "Edit", color = "amber",
                     url   = $"/Warehouse/InventoryEdit?id={d.Id}", hideButton = true,
                 },
-                secondaryAction = isApplied ? null : (object?)new
-                {
-                    label     = "Sil", icon = "Trash2",
-                    apiUrl    = $"/Warehouse/DeleteInventoryJson?id={d.Id}",
-                    apiMethod = "POST",
-                    confirm   = $"Bu sayım belgesini silmek istediğinizden emin misiniz? ({d.DocNo})",
-                },
+                // Applied → "Yansıtma İptali" (unpost, taslağa döner). Draft → "Sil".
+                secondaryAction = isApplied
+                    ? (object?)new
+                    {
+                        label     = "Yansıtma İptali", icon = "RotateCcw",
+                        apiUrl    = $"/Warehouse/RevertInventoryJson?id={d.Id}",
+                        apiMethod = "POST",
+                        confirm   = $"Yansıtma iptal edilsin mi? Bu sayımın stok hareketleri geri alınacak ve belge taslağa dönecek. ({d.DocNo})",
+                    }
+                    : new
+                    {
+                        label     = "Sil", icon = "Trash2",
+                        apiUrl    = $"/Warehouse/DeleteInventoryJson?id={d.Id}",
+                        apiMethod = "POST",
+                        confirm   = $"Bu sayım belgesini silmek istediğinizden emin misiniz? ({d.DocNo})",
+                    },
             };
         }).ToList();
 

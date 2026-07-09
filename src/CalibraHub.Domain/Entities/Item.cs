@@ -19,6 +19,10 @@ public sealed class Item
 
     /// <summary>Takip tipi: "None" (Yok) | "Lot" (Lot takibi) | "Serial" (Seri takibi). Varsayılan "None".</summary>
     public string? TrackingType { get; init; } = "None";
+
+    /// <summary>Giriş serisi otomatik: seri-takipli stokta giriş belgesinde seri listesi boş
+    /// bırakılırsa sunucu üretir (ItemCode-yyMMdd-NNN). Yalnız TrackingType='Serial' iken anlamlı.</summary>
+    public bool AutoSerial { get; init; }
     public bool IsActive { get; private set; } = true;
     // 2026-05-26: CLAUDE.md audit standardi — Created/Updated + CreatedBy/UpdatedBy NVARCHAR(120)
     public DateTime? Created { get; init; }

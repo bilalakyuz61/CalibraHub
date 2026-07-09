@@ -71,7 +71,8 @@ public sealed record ItemDto(
     int? CreatedById = null,
     int? UpdatedById = null,
     string? TrackingType = "None",
-    decimal MinStock = 0m);
+    decimal MinStock = 0m,
+    bool AutoSerial = false);
 
 public sealed record FeatureDto(
     int Id,
@@ -108,7 +109,8 @@ public sealed record CreateItemRequest(
     bool Combinations = false,
     decimal TaxRate = 20m,
     string? TrackingType = "None",
-    decimal MinStock = 0m);
+    decimal MinStock = 0m,
+    bool AutoSerial = false);
 
 public sealed record UpdateItemRequest(
     int ItemId,
@@ -119,7 +121,8 @@ public sealed record UpdateItemRequest(
     bool Combinations = false,
     decimal TaxRate = 20m,
     string? TrackingType = "None",
-    decimal MinStock = 0m);
+    decimal MinStock = 0m,
+    bool AutoSerial = false);
 
 public sealed record CreateFeatureRequest(
     string Name,

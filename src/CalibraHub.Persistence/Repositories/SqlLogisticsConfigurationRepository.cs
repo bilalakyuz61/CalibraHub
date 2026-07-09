@@ -85,7 +85,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [UnitId],
                    [CompanyId],
                    ISNULL([TrackingType], 'None') AS [TrackingType],
-                   ISNULL([MinStock], 0) AS [MinStock]
+                   ISNULL([MinStock], 0) AS [MinStock],
+                   ISNULL([AutoSerial], 0) AS [AutoSerial]
             FROM {_stockCardsTableName} sc
             WHERE sc.[CompanyId] = @CompanyId
             {dv.Sql}
@@ -110,7 +111,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 UnitId = reader.IsDBNull(9) ? null : reader.GetInt32(9),
                 CompanyId = reader.GetInt32(10),
                 TrackingType = reader.IsDBNull(11) ? "None" : reader.GetString(11),
-                MinStock = reader.IsDBNull(12) ? 0m : reader.GetDecimal(12)
+                MinStock = reader.IsDBNull(12) ? 0m : reader.GetDecimal(12),
+                AutoSerial = !reader.IsDBNull(13) && reader.GetBoolean(13)
             };
 
             if (!reader.GetBoolean(3))
@@ -1356,9 +1358,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType], [MinStock])
+                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType], [MinStock], [AutoSerial])
             VALUES
-                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType, @MinStock);
+                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType, @MinStock, @AutoSerial);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -1373,6 +1375,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@TaxRate", stockCard.TaxRate));
         command.Parameters.Add(new SqlParameter("@TrackingType", (object?)stockCard.TrackingType ?? "None"));
         command.Parameters.Add(new SqlParameter("@MinStock", stockCard.MinStock));
+        command.Parameters.Add(new SqlParameter("@AutoSerial", stockCard.AutoSerial ? 1 : 0));
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -1393,6 +1396,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [TaxRate] = @TaxRate,
                 [TrackingType] = @TrackingType,
                 [MinStock] = @MinStock,
+                [AutoSerial] = @AutoSerial,
                 [Updated] = @Updated
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
@@ -1407,6 +1411,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@Combinations", stockCard.Combinations ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@TaxRate", stockCard.TaxRate));
         command.Parameters.Add(new SqlParameter("@TrackingType", (object?)stockCard.TrackingType ?? "None"));
+        // 2026-07-10: @MinStock parametresi eksikti — SQL [MinStock] = @MinStock derken parametre
+        // hiç eklenmiyordu (update çağrısı "Must declare the scalar variable" ile düşerdi).
+        command.Parameters.Add(new SqlParameter("@MinStock", stockCard.MinStock));
+        command.Parameters.Add(new SqlParameter("@AutoSerial", stockCard.AutoSerial ? 1 : 0));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -185,7 +185,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                        COALESCE(l.[LocationId], ic.[LocationId]) AS FromLocationId,
                        loc.[LocationName] AS FromLocationName,
                        NULL AS ToLocationId, NULL AS ToLocationName,
-                       NULL AS UnitCost, NULL AS LotNo
+                       NULL AS UnitCost, NULL AS LotNo,
+                       NULL AS TrackingType, CAST(0 AS BIT) AS AutoSerial
                 FROM {T("InventoryCountLine")} l
                 INNER JOIN {T("InventoryCount")} ic ON ic.[Id] = l.[InventoryCountId]
                 LEFT JOIN {T("Items")} i ON i.[Id] = l.[ItemId]
@@ -211,7 +212,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                        l.[Notes],
                        l.[FromLocationId], fl.[LocationName] AS from_location_name,
                        l.[LocationId],     tl.[LocationName] AS to_location_name,
-                       l.[UnitCost], l.[LotNo]
+                       l.[UnitCost], l.[LotNo],
+                       ISNULL(i.[TrackingType], 'None') AS TrackingType,
+                       ISNULL(i.[AutoSerial], 0) AS AutoSerial
                 FROM {T("DocumentLine")} l
                 LEFT JOIN {T("Items")} i ON i.[Id] = l.[ItemId]
                 LEFT JOIN {T("Unit")} u ON u.[Id] = l.[UnitId]
@@ -222,8 +225,39 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ORDER BY l.[LineNo];
                 """;
             cmd.Parameters.AddWithValue("@DocId", docId);
-            return await ReadLinesAsync(cmd, ct);
+            var lines = await ReadLinesAsync(cmd, ct);
+            return await AttachSerialsAsync(conn, docId, lines, ct);
         }
+    }
+
+    /// <summary>Belgenin satırlarına bağlı seri no'ları (DocumentLineSerial) DTO'lara işler —
+    /// edit ekranı seri listelerini yeniden yükleyebilsin diye.</summary>
+    private async Task<IReadOnlyList<StockDocLineDto>> AttachSerialsAsync(
+        SqlConnection conn, int docId, IReadOnlyList<StockDocLineDto> lines, CancellationToken ct)
+    {
+        if (lines.Count == 0) return lines;
+        var map = new Dictionary<int, List<string>>();
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = $"""
+                SELECT dls.[DocumentLineId], s.[SerialNo]
+                FROM {T("DocumentLineSerial")} dls
+                INNER JOIN {T("ItemSerial")} s ON s.[Id] = dls.[SerialId]
+                INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
+                WHERE dl.[DocumentId] = @DocId
+                ORDER BY s.[SerialNo];
+                """;
+            cmd.Parameters.AddWithValue("@DocId", docId);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var lid = r.GetInt32(0);
+                if (!map.TryGetValue(lid, out var list)) map[lid] = list = new List<string>();
+                list.Add(r.GetString(1));
+            }
+        }
+        if (map.Count == 0) return lines;
+        return lines.Select(l => map.TryGetValue(l.Id, out var s) ? l with { Serials = s } : l).ToList();
     }
 
     public async Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct)
@@ -293,8 +327,41 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
 
+            // Seri durum geri alma (yeniden kayıt): bu belgenin ÇIKIŞ satırlarının Issued yaptığı
+            // serileri stoğa döndür; GİRİŞ satırlarının yarattığı serileri aday listesine al —
+            // satırlar silinip yeniden yazıldıktan sonra hiçbir satıra bağlı kalmayanlar emekli edilir.
+            // (Yeni belgede eski satır yok → her iki sorgu no-op.)
+            await using (var revert = conn.CreateCommand())
+            {
+                revert.Transaction = tx;
+                revert.CommandText = $"""
+                    UPDATE s SET s.[Status] = 1, s.[Updated] = SYSUTCDATETIME()
+                    FROM {T("ItemSerial")} s
+                    INNER JOIN {T("DocumentLineSerial")} dls ON dls.[SerialId] = s.[Id]
+                    INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
+                    WHERE dl.[DocumentId] = @DocId AND dl.[MovementType] = 1 AND s.[Status] = 2;
+                    """;
+                revert.Parameters.AddWithValue("@DocId", docId);
+                await revert.ExecuteNonQueryAsync(ct);
+            }
+            var receiptSerialCandidates = new List<int>();
+            await using (var cand = conn.CreateCommand())
+            {
+                cand.Transaction = tx;
+                cand.CommandText = $"""
+                    SELECT DISTINCT dls.[SerialId]
+                    FROM {T("DocumentLineSerial")} dls
+                    INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
+                    WHERE dl.[DocumentId] = @DocId AND dl.[MovementType] = 2;
+                    """;
+                cand.Parameters.AddWithValue("@DocId", docId);
+                await using var cr = await cand.ExecuteReaderAsync(ct);
+                while (await cr.ReadAsync(ct)) receiptSerialCandidates.Add(cr.GetInt32(0));
+            }
+
             // Kalemler: sil + yeniden ekle (mevcut stock_doc_line davranışıyla aynı — bu belge
             // tipleri icin "draft" kavramı yok, MovementType hemen set edilir).
+            // Satır↔seri bağları (DocumentLineSerial) FK ON DELETE CASCADE ile birlikte silinir.
             await using (var del = conn.CreateCommand())
             {
                 del.Transaction = tx;
@@ -335,6 +402,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                                                 AND pl.[ValidFrom] <= @DocDate AND (pl.[ValidTo] IS NULL OR pl.[ValidTo] >= @DocDate)
                                               ORDER BY pl.[ValidFrom] DESC)),
                          @LotId, @LotNo, @Notes);
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
                 lineIns.Parameters.AddWithValue("@DocId", docId);
                 lineIns.Parameters.AddWithValue("@LineNo", lineNo++);
@@ -350,7 +418,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@Notes", (object?)line.Notes ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@DocDate", request.DocDate.Date);
-                await lineIns.ExecuteNonQueryAsync(ct);
+                var lineId = Convert.ToInt32(await lineIns.ExecuteScalarAsync(ct));
+
+                // Seri çözümleme — seri-takipli stokta (TrackingType='Serial') zorunlu:
+                // girişte liste boşsa AutoSerial açık stok için otomatik üretilir;
+                // çıkış/transferde stoktaki (InStock) serilerden adet kadar seçim şarttır.
+                await ResolveSerialsForLineAsync(
+                    conn, tx, lineId, itemId.Value, line.MaterialCode, line.Qty, line.Serials,
+                    lotId, movementType, request.DocDate.Date, createdById, ct);
 
                 // Azaltıcı hareket (çıkış=1 / transfer-kaynak=3) → kaynak lokasyonu kontrol kuyruğuna al
                 if (movementType is 1 or 3)
@@ -370,6 +445,21 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // Lot bakiyesi: azaltılan her lot kaynak lokasyonda eksiye düşemez (yeni satırlar dahil)
             foreach (var (dItem, dLot, dLoc) in lotDecreases)
                 await EnsureLotBalanceAsync(conn, tx, companyId, dItem, dLot, dLoc, ct);
+
+            // Düzenlemede listeden çıkarılan giriş serileri: yeniden yazım sonrası hiçbir
+            // satıra bağlı kalmadıysa emekli et (fantom "stokta" seri kalmasın).
+            foreach (var sid in receiptSerialCandidates)
+            {
+                await using var ret = conn.CreateCommand();
+                ret.Transaction = tx;
+                ret.CommandText = $"""
+                    UPDATE {T("ItemSerial")} SET [IsActive] = 0, [Updated] = SYSUTCDATETIME()
+                    WHERE [Id] = @Sid
+                      AND NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [SerialId] = @Sid);
+                    """;
+                ret.Parameters.AddWithValue("@Sid", sid);
+                await ret.ExecuteNonQueryAsync(ct);
+            }
 
             await tx.CommitAsync(ct);
             return (docId, docNo);
@@ -635,11 +725,64 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {T("Document")} SET [IsActive]=0 WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
-        cmd.Parameters.AddWithValue("@Id", id);
-        cmd.Parameters.AddWithValue("@CompanyId", companyId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // Seri durum düzeltmeleri (belge pasifleşince miktar bakiyesi zaten IsActive=1
+            // filtresiyle geri döner; seri durumları da tutarlı kalsın):
+            // 1) Çıkış satırlarının Issued yaptığı seriler stoğa geri döner.
+            await using (var revert = conn.CreateCommand())
+            {
+                revert.Transaction = tx;
+                revert.CommandText = $"""
+                    UPDATE s SET s.[Status] = 1, s.[Updated] = SYSUTCDATETIME()
+                    FROM {T("ItemSerial")} s
+                    INNER JOIN {T("DocumentLineSerial")} dls ON dls.[SerialId] = s.[Id]
+                    INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
+                    WHERE dl.[DocumentId] = @Id AND dl.[MovementType] = 1 AND s.[Status] = 2;
+                    """;
+                revert.Parameters.AddWithValue("@Id", id);
+                await revert.ExecuteNonQueryAsync(ct);
+            }
+            // 2) Giriş satırlarının yarattığı seriler: başka aktif belgede bağı yoksa emekli edilir.
+            await using (var retire = conn.CreateCommand())
+            {
+                retire.Transaction = tx;
+                retire.CommandText = $"""
+                    UPDATE s SET s.[IsActive] = 0, s.[Updated] = SYSUTCDATETIME()
+                    FROM {T("ItemSerial")} s
+                    WHERE s.[Id] IN (
+                            SELECT dls.[SerialId]
+                            FROM {T("DocumentLineSerial")} dls
+                            INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
+                            WHERE dl.[DocumentId] = @Id AND dl.[MovementType] = 2)
+                      AND NOT EXISTS (
+                            SELECT 1
+                            FROM {T("DocumentLineSerial")} dls2
+                            INNER JOIN {T("DocumentLine")} dl2 ON dl2.[Id] = dls2.[DocumentLineId]
+                            INNER JOIN {T("Document")} d2 ON d2.[Id] = dl2.[DocumentId]
+                            WHERE dls2.[SerialId] = s.[Id] AND dl2.[DocumentId] <> @Id AND d2.[IsActive] = 1);
+                    """;
+                retire.Parameters.AddWithValue("@Id", id);
+                await retire.ExecuteNonQueryAsync(ct);
+            }
+
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = $"UPDATE {T("Document")} SET [IsActive]=0 WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
+                cmd.Parameters.AddWithValue("@Id", id);
+                cmd.Parameters.AddWithValue("@CompanyId", companyId);
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     // ── Yardımcılar ───────────────────────────────────────────────────────────
@@ -750,6 +893,184 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             "Not: Lot takibi öncesi lotsuz girişler lot bakiyesine sayılmaz.");
     }
 
+    /// <summary>
+    /// Seri-takipli stokta (Items.TrackingType='Serial') satırın serilerini çözer ve satıra bağlar
+    /// (DocumentLineSerial). Kurallar: miktar tam sayı, seri sayısı = miktar. GİRİŞ (2): seri
+    /// listesi boşsa ve stok AutoSerial ise ItemCode-yyMMdd-NNN üretilir; Issued/pasif seri
+    /// girişle stoğa döner (iade), başka belgeyle stokta olan seri tekrar giremez.
+    /// ÇIKIŞ (1): seriler InStock olmalı → Issued. TRANSFER (3): InStock şart, durum değişmez.
+    /// Seri-takipli olmayan stokta no-op.
+    /// </summary>
+    private async Task ResolveSerialsForLineAsync(
+        SqlConnection conn, SqlTransaction tx, int lineId, int itemId, string? materialCode,
+        decimal qty, IReadOnlyList<string>? rawSerials, int? lotId, byte? movementType,
+        DateTime docDate, int? createdById, CancellationToken ct)
+    {
+        string tracking = "None"; var autoSerial = false;
+        var itemCode = string.IsNullOrWhiteSpace(materialCode) ? $"#{itemId}" : materialCode.Trim();
+        await using (var info = conn.CreateCommand())
+        {
+            info.Transaction = tx;
+            info.CommandText = $"SELECT ISNULL([TrackingType],'None'), ISNULL([AutoSerial],0), [Code] FROM {T("Items")} WHERE [Id] = @Id;";
+            info.Parameters.AddWithValue("@Id", itemId);
+            await using var ir = await info.ExecuteReaderAsync(ct);
+            if (await ir.ReadAsync(ct))
+            {
+                tracking = ir.GetString(0);
+                autoSerial = ir.GetBoolean(1);
+                if (!ir.IsDBNull(2)) itemCode = ir.GetString(2);
+            }
+        }
+        if (!string.Equals(tracking, "Serial", StringComparison.OrdinalIgnoreCase)) return;
+
+        if (qty != decimal.Truncate(qty))
+            throw new InvalidOperationException($"'{itemCode}' seri takipli — miktar tam sayı olmalı (girilen: {qty:0.##}).");
+        var count = (int)qty;
+
+        var serials = (rawSerials ?? Array.Empty<string>())
+            .Select(s => (s ?? string.Empty).Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+        if (serials.Distinct(StringComparer.OrdinalIgnoreCase).Count() != serials.Count)
+            throw new InvalidOperationException($"'{itemCode}' satırında tekrarlanan seri no var.");
+
+        if (movementType == 2 && serials.Count == 0 && autoSerial)
+            serials = await GenerateAutoSerialsAsync(conn, tx, itemId, itemCode, count, docDate, ct);
+
+        if (serials.Count != count)
+            throw new InvalidOperationException(
+                $"'{itemCode}' seri takipli — {count} adet için {serials.Count} seri girildi. " +
+                (movementType == 2
+                    ? (autoSerial
+                        ? "Otomatik üretim için seri listesini tamamen boş bırakın ya da adet kadar seri girin."
+                        : "Satırdaki Seri butonundan adet kadar seri no girin.")
+                    : "Çıkış/transferde stoktaki serilerden adet kadar seçim zorunlu."));
+
+        foreach (var serialNo in serials)
+        {
+            var serialId = 0; byte status = 0; var isActive = false;
+            await using (var find = conn.CreateCommand())
+            {
+                find.Transaction = tx;
+                find.CommandText = $"SELECT [Id], [Status], [IsActive] FROM {T("ItemSerial")} WHERE [ItemId] = @ItemId AND [SerialNo] = @SerialNo;";
+                find.Parameters.AddWithValue("@ItemId", itemId);
+                find.Parameters.AddWithValue("@SerialNo", serialNo);
+                await using var fr = await find.ExecuteReaderAsync(ct);
+                if (await fr.ReadAsync(ct))
+                {
+                    serialId = fr.GetInt32(0);
+                    status = fr.GetByte(1);
+                    isActive = fr.GetBoolean(2);
+                }
+            }
+
+            if (movementType == 2) // Giriş
+            {
+                if (serialId == 0)
+                {
+                    await using var ins = conn.CreateCommand();
+                    ins.Transaction = tx;
+                    ins.CommandText = $"""
+                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[LotId],[Status],[CreatedById])
+                        VALUES (@ItemId, @SerialNo, @LotId, 1, @CreatedById);
+                        SELECT CAST(SCOPE_IDENTITY() AS INT);
+                        """;
+                    ins.Parameters.AddWithValue("@ItemId", itemId);
+                    ins.Parameters.AddWithValue("@SerialNo", serialNo);
+                    ins.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                    ins.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
+                    serialId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
+                }
+                else if (!isActive || status == 2)
+                {
+                    // Emekli/çıkmış seri yeniden girişle stoğa döner (iade senaryosu)
+                    await using var upd = conn.CreateCommand();
+                    upd.Transaction = tx;
+                    upd.CommandText = $"""
+                        UPDATE {T("ItemSerial")}
+                        SET [Status] = 1, [IsActive] = 1, [LotId] = COALESCE(@LotId, [LotId]), [Updated] = SYSUTCDATETIME()
+                        WHERE [Id] = @Id;
+                        """;
+                    upd.Parameters.AddWithValue("@Id", serialId);
+                    upd.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                    await upd.ExecuteNonQueryAsync(ct);
+                }
+                else if (status == 1)
+                {
+                    // InStock seri: başka aktif belgenin girişine bağlıysa ikinci kez giremez;
+                    // bağsızsa (bu belgenin önceki kaydından — delete+reinsert bağı düşürdü) yeniden bağlanır.
+                    bool linkedElsewhere;
+                    await using (var chk = conn.CreateCommand())
+                    {
+                        chk.Transaction = tx;
+                        chk.CommandText = $"""
+                            SELECT COUNT(1) FROM {T("DocumentLineSerial")} dls
+                            INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
+                            INNER JOIN {T("Document")} d ON d.[Id] = dl.[DocumentId]
+                            WHERE dls.[SerialId] = @Sid AND dl.[MovementType] = 2 AND d.[IsActive] = 1;
+                            """;
+                        chk.Parameters.AddWithValue("@Sid", serialId);
+                        linkedElsewhere = Convert.ToInt32(await chk.ExecuteScalarAsync(ct)) > 0;
+                    }
+                    if (linkedElsewhere)
+                        throw new InvalidOperationException(
+                            $"'{itemCode}' için '{serialNo}' serisi zaten stokta — aynı seri ikinci kez giriş yapamaz.");
+                }
+                else // status == 3 Blocked
+                {
+                    throw new InvalidOperationException($"'{itemCode}' için '{serialNo}' serisi bloke — giriş yapılamaz.");
+                }
+            }
+            else // Çıkış (1) / Transfer (3)
+            {
+                if (serialId == 0 || !isActive)
+                    throw new InvalidOperationException(
+                        $"'{itemCode}' için '{serialNo}' serisi bulunamadı — çıkış/transfer yalnız stoktaki serilerle yapılabilir.");
+                if (status != 1)
+                    throw new InvalidOperationException(
+                        $"'{itemCode}' için '{serialNo}' serisi stokta değil ({(status == 2 ? "çıkmış" : "bloke")}).");
+                if (movementType == 1)
+                {
+                    await using var iss = conn.CreateCommand();
+                    iss.Transaction = tx;
+                    iss.CommandText = $"UPDATE {T("ItemSerial")} SET [Status] = 2, [Updated] = SYSUTCDATETIME() WHERE [Id] = @Id;";
+                    iss.Parameters.AddWithValue("@Id", serialId);
+                    await iss.ExecuteNonQueryAsync(ct);
+                }
+            }
+
+            await using var link = conn.CreateCommand();
+            link.Transaction = tx;
+            link.CommandText = $"INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@LineId, @Sid);";
+            link.Parameters.AddWithValue("@LineId", lineId);
+            link.Parameters.AddWithValue("@Sid", serialId);
+            await link.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    /// <summary>Otomatik seri üretimi: {ItemCode}-{yyMMdd}-{NNN}. Sıra numarası aynı önekteki en
+    /// yüksek değerin devamıdır; UPDLOCK+HOLDLOCK ile tx içinde okunur, UX_ItemSerial_Item_SerialNo
+    /// unique index'i olası yarışta çakışmayı DB seviyesinde engeller (tx rollback).</summary>
+    private async Task<List<string>> GenerateAutoSerialsAsync(
+        SqlConnection conn, SqlTransaction tx, int itemId, string itemCode, int count, DateTime docDate, CancellationToken ct)
+    {
+        var prefix = $"{itemCode}-{docDate:yyMMdd}-";
+        int next;
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = $"""
+                SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([SerialNo], LEN(@Prefix) + 1, 10) AS INT)), 0) + 1
+                FROM {T("ItemSerial")} WITH (UPDLOCK, HOLDLOCK)
+                WHERE [ItemId] = @ItemId AND [SerialNo] LIKE @Prefix + '%';
+                """;
+            cmd.Parameters.AddWithValue("@Prefix", prefix);
+            cmd.Parameters.AddWithValue("@ItemId", itemId);
+            next = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        }
+        return Enumerable.Range(next, count).Select(n => $"{prefix}{n:D3}").ToList();
+    }
+
     /// <summary>Items.Code → Items.Id çözümü (ID tabanlı eşleştirme kuralı — kod yalnızca display).</summary>
     private async Task<int?> ResolveItemIdByCodeAsync(SqlConnection conn, SqlTransaction tx, string code, CancellationToken ct)
     {
@@ -811,7 +1132,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ToLocationId: r.IsDBNull(14) ? null : r.GetInt32(14),
                 ToLocationName: r.IsDBNull(15) ? null : r.GetString(15),
                 UnitCost: r.IsDBNull(16) ? null : r.GetDecimal(16),
-                LotNo: r.IsDBNull(17) ? null : r.GetString(17)));
+                LotNo: r.IsDBNull(17) ? null : r.GetString(17),
+                Serials: null, // AttachSerialsAsync doldurur (yalnız DocumentLine tabanlı belgelerde)
+                TrackingType: r.IsDBNull(18) ? null : r.GetString(18),
+                AutoSerial: !r.IsDBNull(19) && r.GetBoolean(19)));
         }
         return result;
     }

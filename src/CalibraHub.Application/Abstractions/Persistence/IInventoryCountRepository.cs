@@ -43,4 +43,13 @@ public interface IInventoryCountRepository
     /// ekranında "Yansıtıldı" rozeti + Sil'i gizlemek için (N+1 önlemi).
     /// </summary>
     Task<IReadOnlySet<int>> GetAppliedDocumentIdsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Yansıtma iptali (unpost) — yansıtılmış sayımı taslağa geri döndürür. Optimistic-lock:
+    /// yalnızca Status=1 iken çalışır (aksi halde InvalidOperationException). Bu sayım fişinin
+    /// ürettiği tüm stok hareketlerini (MovementType=4 DocumentLine — Yansıt farkları + İşlemler
+    /// sekmesi sıfırlamaları) siler ve Status'u Draft (0) yapar. Sonrasında fiş serbestçe
+    /// düzenlenebilir/silinebilir. Dönen değer: geri alınan (silinen) hareket satırı sayısı.
+    /// </summary>
+    Task<int> RevertAsync(int documentId, CancellationToken ct);
 }
