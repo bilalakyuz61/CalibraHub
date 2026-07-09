@@ -116,13 +116,23 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
             {
                 // Lot-takipli mamulde otomatik lot = iş emri numarası (üretim partisi).
                 // Lot soy ağacının temeli: mamul lotu iş emrine, iş emri sarflara bağlanır.
+                // Seri-takipli mamulde üretim serileri her zaman otomatiktir ({İşEmriNo}-NNN) —
+                // ShopFloor'da elle seri girişi yok; repo aynı tx içinde üretip satıra bağlar.
                 int? lotId = null;
                 string? lotNo = null;
+                string? serialPrefix = null;
                 var tracking = await _lots.GetItemTrackingTypeAsync(wo.ItemId, ct);
                 if (string.Equals(tracking, "Lot", StringComparison.OrdinalIgnoreCase))
                 {
                     lotNo = wo.OrderNumber;
                     lotId = await _lots.GetOrCreateAsync(wo.ItemId, lotNo, null, ct);
+                }
+                else if (string.Equals(tracking, "Serial", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (finalQty != decimal.Truncate(finalQty))
+                        throw new InvalidOperationException(
+                            $"Seri takipli mamulde üretim miktarı tam sayı olmalı (girilen: {finalQty:0.##}).");
+                    serialPrefix = wo.OrderNumber;
                 }
 
                 stockLine = new DocumentLine
@@ -136,6 +146,7 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
                     MovementType = (byte)StockMovementType.Receipt,
                     LotId = lotId,
                     LotNo = lotNo,
+                    SerialPrefix = serialPrefix,
                     Notes = $"İş Emri #{wo.OrderNumber} — üretim tamamlama",
                 };
             }

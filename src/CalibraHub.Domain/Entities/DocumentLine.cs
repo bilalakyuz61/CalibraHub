@@ -84,6 +84,11 @@ public sealed class DocumentLine
     public string? FromLocationCode { get; set; }
     public string? FromLocationName { get; set; }
 
+    // ── Transient: iş emri mamul girişinde otomatik seri üretim öneki (tabloya yazılmaz).
+    // Dolu ise SqlWorkOrderOperationRepository, satır insert'inden sonra aynı transaction'da
+    // {SerialPrefix}-NNN serilerini (adet kadar, InStock) üretip satıra bağlar. ──
+    public string? SerialPrefix { get; set; }
+
     // ── Transient display fields (Item + Unit + ProductConfiguration + Location JOIN ile okunur; tabloya yazilmaz) ──
     public string? MaterialCode { get; set; }
     public string? MaterialName { get; set; }

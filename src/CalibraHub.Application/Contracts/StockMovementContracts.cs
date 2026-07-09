@@ -32,7 +32,8 @@ public sealed record ItemStockMovementRowDto(
     string? LotNo,
     string? CombinationCode,
     string? Notes,
-    string? CreatedByName);
+    string? CreatedByName,
+    string? SerialNos = null);   // satıra bağlı seri no'lar (virgülle birleşik — Seri takibi Faz 2)
 
 /// <summary>Stok hareketleri filtresi. Tüm alanlar opsiyonel — null ise o kriter uygulanmaz.</summary>
 public sealed record ItemStockMovementFilter(

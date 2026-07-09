@@ -5474,6 +5474,7 @@
             { key: 'toLoc',    label: 'Hedef Lok.',    cell: function (m) { var t = locText(m.toLocationCode, m.toLocationName); return t ? esc(t) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return locText(m.toLocationCode, m.toLocationName); } },
             { key: 'unitCost', label: 'Birim Maliyet', num: true, cell: function (m) { return m.unitCost != null ? fmt(m.unitCost, 2) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return m.unitCost == null ? '' : m.unitCost; } },
             { key: 'lot',      label: 'Lot / Parti',   cell: function (m) { return m.lotNo ? esc(m.lotNo) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return m.lotNo || ''; } },
+            { key: 'serial',   label: 'Seri',          cell: function (m) { return m.serialNos ? '<span title="' + esc(m.serialNos) + '">' + esc(m.serialNos.length > 28 ? m.serialNos.substring(0, 28) + '…' : m.serialNos) + '</span>' : '<span class="smv-muted">—</span>'; }, xv: function (m) { return m.serialNos || ''; } },
             { key: 'balance',  label: 'Bakiye',        num: true, title: 'Ana birim cinsinden koşan bakiye', xlabel: 'Bakiye (Ana Birim)', cell: function (m) { return fmt(m.runningBalance); }, xv: function (m) { return m.runningBalance; } },
             { key: 'user',     label: 'Kullanıcı',     cell: function (m) { return m.createdByName ? esc(m.createdByName) : '<span class="smv-muted">—</span>'; }, xv: function (m) { return m.createdByName || ''; } }
         ];

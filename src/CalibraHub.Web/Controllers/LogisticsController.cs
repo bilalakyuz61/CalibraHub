@@ -613,6 +613,7 @@ public sealed class LogisticsController : Controller
                     m.ToLocationName,
                     m.UnitCost,
                     m.LotNo,
+                    m.SerialNos,
                     m.CombinationCode,
                     m.Notes,
                     m.CreatedByName,

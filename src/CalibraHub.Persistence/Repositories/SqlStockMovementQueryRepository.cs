@@ -62,7 +62,11 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                     l.[UnitCost], l.[LotNo], l.[Notes],
                     cfg.[RecordCode] AS CombinationCode,
                     usr.[FullName] AS CreatedByName,
-                    l.[BaseQuantity]
+                    l.[BaseQuantity],
+                    (SELECT STRING_AGG(s.[SerialNo], N', ') WITHIN GROUP (ORDER BY s.[SerialNo])
+                     FROM {T("DocumentLineSerial")} dls
+                     INNER JOIN {T("ItemSerial")} s ON s.[Id] = dls.[SerialId]
+                     WHERE dls.[DocumentLineId] = l.[Id]) AS SerialNos
                 FROM {T("DocumentLine")} l
                 INNER JOIN {T("Document")} d        ON d.[Id]  = l.[DocumentId]
                 LEFT  JOIN {T("DocumentType")} dt   ON dt.[Id] = d.[DocumentTypeId]
@@ -116,6 +120,7 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                     Notes = r.IsDBNull(17) ? null : r.GetString(17),
                     CombinationCode = r.IsDBNull(18) ? null : r.GetString(18),
                     CreatedByName = r.IsDBNull(19) ? null : r.GetString(19),
+                    SerialNos = r.IsDBNull(21) ? null : r.GetString(21),
                     SignedDelta = signed,
                     BaseSignedDelta = baseSigned,
                 });
@@ -173,7 +178,7 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
                 x.Quantity, x.SignedDelta, x.BaseQuantity, x.BaseSignedDelta, x.RunningBalance, x.UnitCode,
                 x.FromLocationId, x.FromLocationCode, x.FromLocationName,
                 x.ToLocationId, x.ToLocationCode, x.ToLocationName,
-                x.UnitCost, x.LotNo, x.CombinationCode, x.Notes, x.CreatedByName))
+                x.UnitCost, x.LotNo, x.CombinationCode, x.Notes, x.CreatedByName, x.SerialNos))
             .ToList();
 
         return new ItemStockMovementResultDto(rows, locations, totalIn, totalOut, currentBalance, rows.Count);
@@ -202,6 +207,7 @@ public sealed class SqlStockMovementQueryRepository : IStockMovementQueryReposit
         public string? Notes;
         public string? CombinationCode;
         public string? CreatedByName;
+        public string? SerialNos;
         public decimal SignedDelta;
         public decimal BaseSignedDelta;
         public decimal RunningBalance;

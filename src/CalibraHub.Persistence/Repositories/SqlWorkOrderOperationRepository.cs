@@ -289,6 +289,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                     VALUES
                         (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{baseQtyExpr},0,0,0,
                          @CombinationId,@LocationId,@FromLocationId,@MovementType,@UnitCost,@LotId,@LotNo,@Notes);
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
                 insCmd.Parameters.AddWithValue("@DocumentId", stockLine.DocumentId);
                 insCmd.Parameters.AddWithValue("@LineNo", nextLineNo);
@@ -303,7 +304,45 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 insCmd.Parameters.AddWithValue("@LotId", (object?)stockLine.LotId ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@LotNo", (object?)stockLine.LotNo ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@Notes", (object?)stockLine.Notes ?? DBNull.Value);
-                await insCmd.ExecuteNonQueryAsync(ct);
+                var stockLineId = Convert.ToInt32(await insCmd.ExecuteScalarAsync(ct));
+
+                // Seri-takipli mamul: {SerialPrefix}-NNN serilerini üret (InStock) ve satıra bağla —
+                // numaralandırma aynı önekteki en yüksek değerden devam eder (kısmi/tekrar
+                // tamamlama yeni seri aralığı açar, unique index çakışmasına düşmez).
+                if (!string.IsNullOrWhiteSpace(stockLine.SerialPrefix))
+                {
+                    var count = (int)stockLine.Quantity;
+                    var prefix = stockLine.SerialPrefix.Trim() + "-";
+                    int next;
+                    await using (var seqCmd = conn.CreateCommand())
+                    {
+                        seqCmd.Transaction = tx;
+                        seqCmd.CommandText = $"""
+                            SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([SerialNo], LEN(@Prefix) + 1, 10) AS INT)), 0) + 1
+                            FROM [{s}].[ItemSerial] WITH (UPDLOCK, HOLDLOCK)
+                            WHERE [ItemId] = @ItemId AND [SerialNo] LIKE @Prefix + '%';
+                            """;
+                        seqCmd.Parameters.AddWithValue("@Prefix", prefix);
+                        seqCmd.Parameters.AddWithValue("@ItemId", stockLine.ItemId);
+                        next = Convert.ToInt32(await seqCmd.ExecuteScalarAsync(ct));
+                    }
+                    for (var i = 0; i < count; i++)
+                    {
+                        await using var serCmd = conn.CreateCommand();
+                        serCmd.Transaction = tx;
+                        serCmd.CommandText = $"""
+                            INSERT INTO [{s}].[ItemSerial] ([ItemId],[SerialNo],[LotId],[Status])
+                            VALUES (@ItemId, @SerialNo, @LotId, 1);
+                            INSERT INTO [{s}].[DocumentLineSerial] ([DocumentLineId],[SerialId])
+                            VALUES (@LineId, SCOPE_IDENTITY());
+                            """;
+                        serCmd.Parameters.AddWithValue("@ItemId", stockLine.ItemId);
+                        serCmd.Parameters.AddWithValue("@SerialNo", $"{prefix}{next + i:D3}");
+                        serCmd.Parameters.AddWithValue("@LotId", (object?)stockLine.LotId ?? DBNull.Value);
+                        serCmd.Parameters.AddWithValue("@LineId", stockLineId);
+                        await serCmd.ExecuteNonQueryAsync(ct);
+                    }
+                }
             }
 
             await tx.CommitAsync(ct);
