@@ -87,8 +87,13 @@ public sealed class DocumentService : IDocumentService
     };
 
     /// <summary>
-    /// Kalem satırları diff'i — Id eşleşmesiyle eklenen/silinen/değişen satırları
-    /// alan değişikliği listesine çevirir (yalnızca değişenler).
+    /// Kalem satırları diff'i — eklenen/silinen/değişen satırları alan değişikliği
+    /// listesine çevirir (yalnızca değişenler). Eşleştirme iki geçişlidir:
+    ///   1) Satır Id eşleşmesi (normal upsert — Id korunur).
+    ///   2) Id ile eşleşmeyenler içerik anahtarıyla (ItemId + CombinationId, LineNo sıralı)
+    ///      eşleştirilir — bazı ekranlar satır Id'sini göndermediği için SaveLinesAsync
+    ///      DELETE+INSERT çalışır ve Id değişir; bu geçiş olmadan basit bir miktar
+    ///      düzeltmesi "silindi + eklendi" olarak raporlanırdı.
     /// </summary>
     private static List<AuditFieldChange> BuildLineChanges(
         IReadOnlyCollection<DocumentLine> oldLines, IReadOnlyCollection<DocumentLine> newLines)
@@ -101,16 +106,41 @@ public sealed class DocumentService : IDocumentService
             l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId);
         static string LineSummary(DocumentLine l) =>
             $"{AuditDiff.Normalize(l.Quantity)} {l.UnitCode ?? "birim"} × {AuditDiff.Normalize(l.UnitPrice)}";
+        static string ContentKey(DocumentLine l) =>
+            l.ItemId + "|" + (l.CombinationId?.ToString() ?? "");
 
-        foreach (var o in oldLines.Where(o => !newById.ContainsKey(o.Id)))
+        // 1. geçiş — Id eşleşmesi
+        var pairs = new List<(DocumentLine Old, DocumentLine New)>();
+        var unmatchedOld = new List<DocumentLine>();
+        foreach (var o in oldLines)
+        {
+            if (newById.TryGetValue(o.Id, out var n)) pairs.Add((o, n));
+            else unmatchedOld.Add(o);
+        }
+        var unmatchedNew = newLines.Where(n => !oldById.ContainsKey(n.Id)).ToList();
+
+        // 2. geçiş — içerik anahtarı eşleşmesi (aynı malzeme+kombinasyon, LineNo sırasıyla bire bir)
+        var newByKey = unmatchedNew
+            .GroupBy(ContentKey)
+            .ToDictionary(g => g.Key, g => new Queue<DocumentLine>(g.OrderBy(l => l.LineNo)));
+        var removedLines = new List<DocumentLine>();
+        foreach (var o in unmatchedOld.OrderBy(l => l.LineNo))
+        {
+            if (newByKey.TryGetValue(ContentKey(o), out var q) && q.Count > 0)
+                pairs.Add((o, q.Dequeue()));
+            else
+                removedLines.Add(o);
+        }
+        var addedLines = newByKey.Values.SelectMany(q => q).OrderBy(l => l.LineNo);
+
+        foreach (var o in removedLines)
             changes.Add(new AuditFieldChange($"Line[{o.Id}]", $"Kalem Silindi — {LineName(o)}", LineSummary(o), null));
 
-        foreach (var n in newLines.Where(n => !oldById.ContainsKey(n.Id)))
+        foreach (var n in addedLines)
             changes.Add(new AuditFieldChange($"Line[{n.Id}]", $"Kalem Eklendi — {LineName(n)}", null, LineSummary(n)));
 
-        foreach (var n in newLines)
+        foreach (var (o, n) in pairs)
         {
-            if (!oldById.TryGetValue(n.Id, out var o)) continue;
             var name = LineName(n);
             void AddIfChanged(string field, string label, object? oldVal, object? newVal)
             {
