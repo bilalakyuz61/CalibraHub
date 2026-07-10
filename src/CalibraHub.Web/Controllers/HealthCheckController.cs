@@ -7,6 +7,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
+using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Diagnostics;
 using CalibraHub.Web.Models.Navigation;
 using CalibraHub.Web.Services;
@@ -34,6 +35,7 @@ public sealed class HealthCheckController : Controller
     private readonly IDepartmentRepository _departmentRepository;
     private readonly CalibraDatabaseInitializer _dbInitializer;
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly string _schema;
 
     public HealthCheckController(
         IHttpClientFactory httpFactory,
@@ -44,7 +46,8 @@ public sealed class HealthCheckController : Controller
         ICompanyRepository companyRepository,
         IDepartmentRepository departmentRepository,
         CalibraDatabaseInitializer dbInitializer,
-        SqlServerConnectionFactory connectionFactory)
+        SqlServerConnectionFactory connectionFactory,
+        CalibraDatabaseOptions dbOptions)
     {
         _httpFactory = httpFactory;
         _httpContextAccessor = httpContextAccessor;
@@ -55,6 +58,7 @@ public sealed class HealthCheckController : Controller
         _departmentRepository = departmentRepository;
         _dbInitializer = dbInitializer;
         _connectionFactory = connectionFactory;
+        _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     [HttpGet("/Admin/HealthCheck")]
@@ -73,6 +77,11 @@ public sealed class HealthCheckController : Controller
         var results = new List<CheckResult>();
         foreach (var target in checks)
             results.Add(await RunSingleAsync(client, baseUrl, cookieHeader, target, ct));
+
+        // Altyapı / Şema derinlik kontrolleri (menü URL smoke'unun kapsamadığı)
+        await using (var infraConn = await TryOpenAsync(ct))
+            foreach (var spec in BuildInfraSpecs())
+                results.Add(await RunInfraAsync(spec, infraConn, ct));
 
         var summary = new
         {
@@ -107,7 +116,8 @@ public sealed class HealthCheckController : Controller
         Response.StatusCode = 200;
 
         var (checks, client, baseUrl, cookieHeader) = PrepareRun();
-        var total = checks.Count;
+        var infraSpecs = BuildInfraSpecs();
+        var total = checks.Count + infraSpecs.Count;
         var results = new List<CheckResult>(total);
 
         await WriteFrameAsync(new { type = "start", total }, ct);
@@ -147,6 +157,33 @@ public sealed class HealthCheckController : Controller
             }, ct);
         }
 
+        // Altyapı / Şema derinlik kontrolleri — aynı canlı akışa devam
+        await using (var infraConn = await TryOpenAsync(ct))
+        {
+            for (var j = 0; j < infraSpecs.Count; j++)
+            {
+                var spec = infraSpecs[j];
+                await WriteFrameAsync(new
+                {
+                    type        = "checking",
+                    index       = checks.Count + j + 1,
+                    total,
+                    label       = spec.Label,
+                    parentLabel = spec.Group,
+                    path        = "",
+                }, ct);
+                var result = await RunInfraAsync(spec, infraConn, ct);
+                results.Add(result);
+                await WriteFrameAsync(new
+                {
+                    type   = "result",
+                    index  = checks.Count + j + 1,
+                    total,
+                    result,
+                }, ct);
+            }
+        }
+
         await WriteFrameAsync(new
         {
             type    = "done",
@@ -171,6 +208,148 @@ public sealed class HealthCheckController : Controller
         });
         await Response.WriteAsync(json + "\n", ct);
         await Response.Body.FlushAsync(ct);
+    }
+
+    // ── Altyapı / Şema derinlik kontrolleri ──────────────────────────
+    // Menü-URL smoke'unun kapsamadığı: bağlantı, yazma yeteneği, çekirdek tablo/kolon
+    // bütünlüğü ve seed sayımları. CheckResult olarak üretilir (ParentLabel = grup),
+    // aynı JSON/NDJSON akışına eklenir; frontend değişikliği gerekmez.
+
+    private static readonly string[] CoreTables =
+    {
+        "Users", "Forms", "Location", "Items", "ItemLocation", "ItemDocumentLock",
+        "Document", "DocumentLine", "Contact", "DecimalSetting", "PermissionDef", "ApprovalFlow"
+    };
+
+    private static readonly (string Table, string Column)[] CoreColumns =
+    {
+        ("Items", "MinStock"), ("ItemLocation", "MinStock"), ("DocumentLine", "BaseQuantity"),
+        ("Document", "Status"), ("ItemDocumentLock", "DocType"),
+    };
+
+    private sealed record InfraSpec(
+        string Key, string Label, string Group,
+        Func<SqlConnection?, CancellationToken, Task<(string Status, string Detail)>> Run);
+
+    private List<InfraSpec> BuildInfraSpecs()
+    {
+        const string gdb = "Altyapı / Veritabanı";
+        const string gseed = "Altyapı / Seed";
+        return new List<InfraSpec>
+        {
+            new("infra.conn", "Veritabanı bağlantısı", gdb, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı açılamadı");
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT DB_NAME(), CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(64));";
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                if (await r.ReadAsync(ct))
+                    return ("ok", $"DB: {(r.IsDBNull(0) ? "?" : r.GetString(0))} · SQL {(r.IsDBNull(1) ? "?" : r.GetString(1))}");
+                return ("ok", "bağlı");
+            }),
+            new("infra.write", "Yazma yeteneği (geçici tablo)", gdb, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = "CREATE TABLE #hc_probe(x INT); INSERT INTO #hc_probe VALUES(1); SELECT COUNT(*) FROM #hc_probe; DROP TABLE #hc_probe;";
+                var n = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 0);
+                return n == 1 ? ("ok", "yaz/oku başarılı — gerçek veri etkilenmez") : ("error", $"beklenen 1, gelen {n}");
+            }),
+            new("infra.tables", "Çekirdek tablolar", gdb, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                var missing = new List<string>();
+                foreach (var t in CoreTables)
+                    if (!await ObjExistsAsync(conn, $"[{_schema}].[{t}]", ct)) missing.Add(t);
+                return missing.Count == 0
+                    ? ("ok", $"{CoreTables.Length}/{CoreTables.Length} mevcut")
+                    : ("error", $"EKSİK ({missing.Count}): {string.Join(", ", missing)}");
+            }),
+            new("infra.columns", "Kritik kolonlar", gdb, async (conn, ct) =>
+            {
+                if (conn is null) return ("error", "Bağlantı yok");
+                var missing = new List<string>();
+                foreach (var (t, c) in CoreColumns)
+                    if (!await ColExistsAsync(conn, $"[{_schema}].[{t}]", c, ct)) missing.Add($"{t}.{c}");
+                return missing.Count == 0
+                    ? ("ok", $"{CoreColumns.Length}/{CoreColumns.Length} mevcut")
+                    : ("error", $"EKSİK: {string.Join(", ", missing)} — self-healing ensure devreye girmeli");
+            }),
+            new("seed.users", "Kullanıcı kaydı", gseed, async (conn, ct) =>
+            {
+                var n = await CountAsync(conn, "Users", ct);
+                return n < 0 ? ("error", "okunamadı") : n > 0 ? ("ok", $"{n} kayıt") : ("error", "en az bir admin bekleniyor");
+            }),
+            new("seed.forms", "Form tanımı (seed)", gseed, async (conn, ct) =>
+            {
+                var n = await CountAsync(conn, "Forms", ct);
+                return n < 0 ? ("error", "okunamadı") : n > 0 ? ("ok", $"{n} kayıt") : ("warn", "form seed eksik");
+            }),
+            new("seed.perms", "İzin tanımı (seed)", gseed, async (conn, ct) =>
+            {
+                var n = await CountAsync(conn, "PermissionDef", ct);
+                return n < 0 ? ("error", "okunamadı") : n > 0 ? ("ok", $"{n} kayıt") : ("warn", "izin seed eksik");
+            }),
+            new("seed.decimal", "Ondalık ayarı", gseed, async (conn, ct) =>
+            {
+                var n = await CountAsync(conn, "DecimalSetting", ct);
+                return n < 0 ? ("error", "okunamadı") : ("ok", n > 0 ? $"{n} kayıt" : "kayıt yok (varsayılanlar devrede)");
+            }),
+        };
+    }
+
+    private async Task<CheckResult> RunInfraAsync(InfraSpec spec, SqlConnection? conn, CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        string status = "ok", detail = "";
+        try { (status, detail) = await spec.Run(conn, ct); }
+        catch (Exception ex) { status = "exception"; detail = ex.Message.Length > 200 ? ex.Message[..200] : ex.Message; }
+        sw.Stop();
+        return new CheckResult
+        {
+            Key = spec.Key,
+            Label = spec.Label,
+            Path = "",
+            ParentLabel = spec.Group,
+            Status = status,
+            DurationMs = (int)sw.ElapsedMilliseconds,
+            ErrorSnippet = string.IsNullOrWhiteSpace(detail) ? null : detail,
+        };
+    }
+
+    private async Task<SqlConnection?> TryOpenAsync(CancellationToken ct)
+    {
+        try { return await _connectionFactory.OpenConnectionAsync(ct); }
+        catch { return null; }
+    }
+
+    private static async Task<bool> ObjExistsAsync(SqlConnection conn, string objName, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@n, N'U') IS NOT NULL THEN 1 ELSE 0 END;";
+        cmd.Parameters.Add(new SqlParameter("@n", objName));
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 0) == 1;
+    }
+
+    private static async Task<bool> ColExistsAsync(SqlConnection conn, string objName, string col, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT CASE WHEN COL_LENGTH(@n, @c) IS NOT NULL THEN 1 ELSE 0 END;";
+        cmd.Parameters.Add(new SqlParameter("@n", objName));
+        cmd.Parameters.Add(new SqlParameter("@c", col));
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 0) == 1;
+    }
+
+    private async Task<int> CountAsync(SqlConnection? conn, string table, CancellationToken ct)
+    {
+        if (conn is null) return -1;
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"SELECT COUNT(1) FROM [{_schema}].[{table}];";
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 0);
+        }
+        catch { return -1; }
     }
 
     private (List<CheckTarget> Checks, HttpClient Client, string BaseUrl, string CookieHeader) PrepareRun()
