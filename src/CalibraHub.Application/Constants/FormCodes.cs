@@ -69,6 +69,12 @@ public static class FormCodes
     public const string SalesOrderEdit  = "SALES_ORDER_EDIT";
     public const string SalesOrderLines = "SALES_ORDER_LINES";
 
+    // Satış İrsaliyesi (satis_irsaliyesi) — teklif→sipariş→irsaliye zincirinin son halkası.
+    public const string SalesDelivery      = "SALES_DELIVERY";
+    public const string SalesDeliveryNew   = "SALES_DELIVERY_NEW";
+    public const string SalesDeliveryEdit  = "SALES_DELIVERY_EDIT";
+    public const string SalesDeliveryLines = "SALES_DELIVERY_LINES";
+
     // ═══════════════════════════════════════════════════
     // SATIN ALMA
     // ═══════════════════════════════════════════════════
@@ -91,6 +97,12 @@ public static class FormCodes
     public const string PurchaseDemandNew    = "PURCHASE_DEMAND_NEW";
     public const string PurchaseDemandEdit   = "PURCHASE_DEMAND_EDIT";
     public const string PurchaseDemandLines  = "PURCHASE_DEMAND_LINES";
+
+    // Alış İrsaliyesi (alis_irsaliyesi) — talep→teklif→sipariş→irsaliye zincirinin son halkası (mal kabul).
+    public const string PurchaseDelivery      = "PURCHASE_DELIVERY";
+    public const string PurchaseDeliveryNew   = "PURCHASE_DELIVERY_NEW";
+    public const string PurchaseDeliveryEdit  = "PURCHASE_DELIVERY_EDIT";
+    public const string PurchaseDeliveryLines = "PURCHASE_DELIVERY_LINES";
 
     public const string PurchaseFulfillment  = "PURCHASE_FULFILLMENT";
 

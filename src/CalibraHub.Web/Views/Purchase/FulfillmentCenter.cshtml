@@ -1731,6 +1731,27 @@
         return 'pending';
     }
 
+    // ── Karşılama filtresi KALEM seviyesinde (rozetle tutarlı: l.fulfillmentStatus) ──
+    // Belge-seviyesi fulfillCategory karışık belgede 'partial' döndürüp tamamlanan
+    // kalemi de gösteriyordu; artık her kalem kendi durumuna göre elenir.
+    var _fulfillSel = [];
+    var _LINE_FCAT = { 0: 'pending', 1: 'partial', 2: 'full' };
+    function lineFulfillCat(l) { return (l && _LINE_FCAT[l.fulfillmentStatus]) || 'pending'; }
+    function visibleLines(r) {
+        var lines = _docLineCache[r.id] || [];
+        if (!_fulfillSel.length) return lines;
+        return lines.filter(function(l) { return _fulfillSel.indexOf(lineFulfillCat(l)) >= 0; });
+    }
+    // Belge, seçili kategorilerden en az bir kaleme sahipse listede kalır (agregat üzerinden;
+    // kalemler henüz yüklenmemiş olabilir). Kalem elemesi render'da visibleLines ile yapılır.
+    function docHasFulfillMatch(r, sel) {
+        var full = r.fulfillFull || 0, part = r.fulfillPartial || 0;
+        var pend = Math.max(0, (r.lineCount || 0) - full - part);
+        return (sel.indexOf('full') >= 0 && full > 0)
+            || (sel.indexOf('partial') >= 0 && part > 0)
+            || (sel.indexOf('pending') >= 0 && pend > 0);
+    }
+
     function effectiveStatus(r) {
         if (PENDING_APPROVAL_IDS.has(r.id)) return 'Sent';  // onay sürecinde → Onay Bekliyor filtresi
         if (r.status === 'Sent')            return 'Draft'; // onay yok → Taslak filtresi
@@ -1745,6 +1766,7 @@
         var reqSel       = Array.from(document.querySelectorAll('.fc3-ms-cb-req:checked')).map(function(cb) { return cb.value.toLowerCase(); }).filter(function(v) { return v !== '__all__'; });
         var statSel      = Array.from(document.querySelectorAll('.fc3-ms-cb-stat:checked')).map(function(cb) { return cb.value; }).filter(function(v) { return v !== '__all__'; });
         var fulfillSel   = Array.from(document.querySelectorAll('.fc3-ms-cb-fulfill:checked')).map(function(cb) { return cb.value; });
+        _fulfillSel = fulfillSel;   // render'daki kalem elemesi için sakla
         var cariGrpSel   = Array.from(document.querySelectorAll('.fc3-ms-cb-cg:checked')).map(function(cb) { return cb.value; });
         var kalemGrpSel  = Array.from(document.querySelectorAll('.fc3-ms-cb-kg:checked')).map(function(cb) { return cb.value; });
         var matSearchEl  = document.getElementById('fc3MatSearch');
@@ -1766,7 +1788,8 @@
                 if (statSel.indexOf(effectiveStatus(r)) === -1) return false;
             }
             if (fulfillSel.length > 0) {
-                if (fulfillSel.indexOf(fulfillCategory(r)) === -1) return false;
+                // Belge, seçili kategorilerden ≥1 kaleme sahipse kalır (kalem elemesi render'da)
+                if (!docHasFulfillMatch(r, fulfillSel)) return false;
             }
             if (cariGrpSel.length > 0) {
                 if (cariGrpSel.indexOf(r.contactGroupName || '') === -1) return false;
@@ -2007,7 +2030,7 @@
             return;
         }
 
-        var totalLines = _vis.reduce(function(s, r) { return s + (_docLineCache[r.id] || []).length; }, 0);
+        var totalLines = _vis.reduce(function(s, r) { return s + visibleLines(r).length; }, 0);
         if (cnt) cnt.textContent = totalLines + ' kalem';
 
         if (totalLines === 0) {
@@ -2125,7 +2148,7 @@
             // Tüm (belge, kalem) çiftlerini düzleştir + sırala
             var allPairs = [];
             _vis.forEach(function(r) {
-                (_docLineCache[r.id] || []).forEach(function(l) { allPairs.push({ r: r, l: l }); });
+                visibleLines(r).forEach(function(l) { allPairs.push({ r: r, l: l }); });
             });
             allPairs.sort(function(a, b) {
                 for (var gi = 0; gi < groupCols.length; gi++) {
@@ -2324,7 +2347,7 @@
         } else {
             // Düz liste (mevcut davranış)
             el.innerHTML = _vis.map(function(r) {
-                return (_docLineCache[r.id] || []).map(function(l) { return buildRowHtml(r, l); }).join('');
+                return visibleLines(r).map(function(l) { return buildRowHtml(r, l); }).join('');
             }).join('');
         }
     }

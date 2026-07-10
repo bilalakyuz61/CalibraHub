@@ -463,6 +463,106 @@ public sealed class SalesController : Controller
     }
 
     // ════════════════════════════════════════════════════════════════
+    // IRSALIYE LISTESI EKRANI (Document type = satis_irsaliyesi)
+    // Sipariş listesi pattern'i birebir — belge türü + form kodu farklı.
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesDelivery)]
+    public async Task<IActionResult> Deliveries(CancellationToken ct)
+    {
+        var boardConfig = await BuildDeliveriesBoardConfigAsync(ct);
+        return View("Documents", new DocumentsViewModel
+        {
+            AvailableColumns = DocumentGridColumns,
+            VisibleColumns = DefaultDocumentColumns,
+            BoardConfig = boardConfig,
+        });
+    }
+
+    private async Task<object> BuildDeliveriesBoardConfigAsync(CancellationToken ct)
+    {
+        var docs = await _quoteService.GetByTypeAsync("satis_irsaliyesi", search: null, status: null, ct);
+        var trCulture = CultureInfo.GetCultureInfo("tr-TR");
+
+        var schema = await _widgetService.GetFormSchemaByCodeAsync("SALES_DELIVERY_EDIT", ct);
+        var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(schema);
+        var statusOptions = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(
+            new[] { "Taslak", "Gonderildi", "Onaylandi", "Reddedildi", "Iptal", "Kapali" });
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_tutar", "Toplam Tutar", "currency"));
+        var durumW = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_durum", "Durum", "options");
+        durumW["options"] = statusOptions;
+        masterWidgets.Add(durumW);
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_kalem", "Kalem Sayısı", "numeric"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_tarih", "İrsaliye Tarihi", "date"));
+
+        var recordIds = docs.Select(d => d.Id.ToString()).ToArray();
+        var batchWidgets = masterWidgets.Count > 0 && recordIds.Length > 0
+            ? await _widgetService.GetBatchRenderModelsAsync("SALES_DELIVERY_EDIT", recordIds, ct)
+            : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
+
+        var entities = new List<object>();
+        foreach (var doc in docs)
+        {
+            var widgets = new List<object>
+            {
+                new { id = "w_tutar", type = "data", dataType = "currency", label = "Toplam Tutar",
+                    value = doc.GrandTotal.ToString("N2", trCulture), detail = doc.CurrencyCode ?? "TRY", color = "blue" },
+                new { id = "w_durum", type = "data", dataType = "options", label = "Durum",
+                    value = TranslateStatus(doc.Status), detail = (string?)null, color = StatusColor(doc.Status) },
+                new { id = "w_kalem", type = "data", dataType = "numeric", label = "Kalem Sayisi",
+                    value = doc.LineCount.ToString(CultureInfo.InvariantCulture), detail = "kalem", color = "slate" },
+                new { id = "w_tarih", type = "data", dataType = "date", label = "Irsaliye Tarihi",
+                    value = doc.DocumentDate.ToString("dd.MM.yyyy", trCulture), detail = (string?)null, color = "slate" },
+            };
+            var recordId = doc.Id.ToString();
+            if (batchWidgets.TryGetValue(recordId, out var renderDtos))
+                foreach (var w in renderDtos)
+                    widgets.Add(new { id = w.WidgetId, type = "data", dataType = w.DataType.ToLowerInvariant(),
+                        label = w.Label, value = w.Value, isPlainField = w.IsPlainField });
+
+            entities.Add(new
+            {
+                id = doc.Id,
+                title = string.IsNullOrWhiteSpace(doc.ContactName) ? "(musterisiz)" : doc.ContactName,
+                subtitle = doc.DocumentNumber ?? string.Empty,
+                description = string.Empty,
+                imageUrl = (string?)null,
+                statusBadge = (object?)null,
+                widgets,
+                primaryAction = new { label = "Duzenle", icon = "Edit", color = "amber",
+                    url = $"/Sales/DocumentEdit?id={doc.Id}", hideButton = true },
+                secondaryAction = new { label = "Sil", icon = "Trash2",
+                    apiUrl = $"/Sales/DeleteDocumentJson?id={doc.Id}",
+                    confirm = $"Bu irsaliyeyi silmek istediginizden emin misiniz? ({doc.DocumentNumber})" },
+            });
+        }
+
+        return new
+        {
+            boardKey = "sales-deliveries",
+            title = "Satış İrsaliyeleri",
+            subtitle = $"{entities.Count} irsaliye",
+            icon = "Truck",
+            iconColor = "violet",
+            refreshUrl = "/Sales/DeliveriesBoardConfig",
+            searchPlaceholder = "Hizli ara... (irsaliye no, musteri)",
+            emptyText = "Henuz irsaliye olusturulmamis",
+            actions = new object[]
+            {
+                new { id = "new-delivery", label = "Yeni İrsaliye", icon = "Plus",
+                    variant = "primary", url = "/Sales/DocumentEdit?type=sales_delivery" },
+            },
+            masterWidgets,
+            entities,
+        };
+    }
+
+    [HttpGet("/Sales/DeliveriesBoardConfig")]
+    public async Task<IActionResult> DeliveriesBoardConfig(CancellationToken ct)
+        => Json(await BuildDeliveriesBoardConfigAsync(ct));
+
+    // ════════════════════════════════════════════════════════════════
     // TEKLIFLERDEN SIPARIS OLUSTURMA (modal API'leri)
     // ════════════════════════════════════════════════════════════════
 
@@ -613,10 +713,13 @@ public sealed class SalesController : Controller
             var t = type.Trim();
             typeCode = t.ToLowerInvariant() switch
             {
+                "quote"            or "satis_teklifi"         => "satis_teklifi",
+                "sales_delivery"   or "satis_irsaliyesi"      => "satis_irsaliyesi",
                 "purchase_request" or "alis_talebi"           => "alis_talebi",
                 "purchase_quote"   or "alis_teklifi"          => "alis_teklifi",
                 "purchase_order"   or "alis_siparisi"         => "alis_siparisi",
                 "purchase_demand"  or "satin_alma_talebi"     => "satin_alma_talebi",
+                "purchase_delivery" or "alis_irsaliyesi"      => "alis_irsaliyesi",
                 _ => typeCode,  // tanimsiz — varsayilani koru
             };
         }
@@ -669,11 +772,14 @@ public sealed class SalesController : Controller
             NewUrl                = formMeta?.NewUrl,
             DocumentTypeName      = docType?.Name ?? typeCode switch
             {
-                "satis_siparisi" => "Satış Siparişi",
-                "alis_talebi"    => "İhtiyaç Kaydı",
-                "alis_teklifi"   => "Satın Alma Teklif",
-                "alis_siparisi"  => "Satın Alma Sipariş",
-                _                 => "Satış Teklifi",
+                "satis_siparisi"   => "Satış Siparişi",
+                "satis_irsaliyesi" => "Satış İrsaliyesi",
+                "alis_talebi"      => "İhtiyaç Kaydı",
+                "alis_teklifi"     => "Satın Alma Teklif",
+                "alis_siparisi"    => "Satın Alma Sipariş",
+                "satin_alma_talebi" => "Satın Alma Talebi",
+                "alis_irsaliyesi"  => "Alış İrsaliyesi",
+                _                   => "Satış Teklifi",
             },
             DocumentTypeIcon      = formMeta?.Icon,
             DocumentTypeIconColor = formMeta?.IconColor,

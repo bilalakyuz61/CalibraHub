@@ -9902,6 +9902,9 @@ END;";
         ("raf_etiketi",   "Raf Etiketi",   "vw_ShelfLabel",     "id",      "Depo raf etiketi"),
         ("satis_teklifi", "Satis Teklifi", "vw_ReportDocument", "BelgeId", "Satis teklifi sablonu"),
         ("satis_siparisi", "Satis Siparisi", "vw_ReportDocument", "BelgeId", "Satis siparisi sablonu (tekliften donusturuldu)"),
+        // 2026-07-11: Satis Irsaliyesi — teklif→siparis→irsaliye zincirinin son halkasi.
+        // Ayni dbo.Document tablosu, DocumentTypeId ile ayrisir; print icin sevk irsaliyesi view'i.
+        ("satis_irsaliyesi", "Satis Irsaliyesi", "vw_DeliveryNote", "BelgeId", "Musteriye sevk irsaliyesi (siparisten turetilir)"),
         // 2026-05-22: Satin Alma 3-asama akisi — ayni Document tablosunu paylasir,
         // sadece DocumentTypeId ile ayrisir. Print sablonu icin satis_teklifi ile ayni
         // vw_ReportDocument'i kullanabilirler (tedarikci adi/cari kod farkli mapping
@@ -9911,6 +9914,8 @@ END;";
         ("alis_siparisi",     "Alis Siparisi",     "vw_ReportDocument", "BelgeId", "Tedarikciye verilen satin alma siparisi"),
         // 2026-06-12: Satin Alma Talebi — ihtiyac→talep→siparis zinciri, ikinci halka.
         ("satin_alma_talebi", "Satin Alma Talebi", "vw_ReportDocument", "BelgeId", "Birden fazla ihtiyac kaydindan olusturulan resmi satin alma talebi"),
+        // 2026-07-11: Alis Irsaliyesi — talep→teklif→siparis→irsaliye zincirinin son halkasi (mal kabul).
+        ("alis_irsaliyesi", "Alis Irsaliyesi", "vw_DeliveryNote", "BelgeId", "Tedarikciden mal kabul irsaliyesi (siparisten turetilir)"),
         // 2026-05-20: Uretim is emri — DocumentNumberRule ile numara turetilebilir
         // (OrderNumber kolonu). Print sablonu icin SqlViewName/RequiredKeyColumn ileride
         // vw_WorkOrder eklenince doldurulur; numara kurali icin gerekli degil.
@@ -10909,6 +10914,51 @@ END;";
                 [IconColor] = ISNULL([IconColor], N'violet')
              WHERE [FormCode] = N'PURCHASE_DEMAND_EDIT';
 
+            -- 2026-07-11: İrsaliye form aileleri (satis_irsaliyesi / alis_irsaliyesi) —
+            -- aynı dbo.Document tablosu, DocumentTypeId ile ayrışır (sipariş pattern'i birebir).
+            UPDATE dbo.Forms
+               SET [BaseTable]       = N'dbo.Document',
+                   [BaseRecordKey]   = N'DocumentNumber',
+                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''satis_irsaliyesi'')'
+             WHERE [FormCode] IN (N'SALES_DELIVERY_NEW', N'SALES_DELIVERY_EDIT')
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
+            UPDATE dbo.Forms
+               SET [BaseTable]       = N'dbo.Document',
+                   [BaseRecordKey]   = N'DocumentNumber',
+                   [BaseTableFilter] = N'[DocumentTypeId] IN (SELECT [Id] FROM [dbo].[DocumentType] WHERE [Code] = ''alis_irsaliyesi'')'
+             WHERE [FormCode] IN (N'PURCHASE_DELIVERY_NEW', N'PURCHASE_DELIVERY_EDIT')
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'' OR [BaseTableFilter] LIKE N'%[dbo].[document_types]%');
+            -- Kalem formları (DocumentLine) — parent FK üzerinden filtrelenir
+            UPDATE dbo.Forms
+               SET [BaseTable]     = N'dbo.DocumentLine',
+                   [BaseRecordKey] = N'id'
+             WHERE [FormCode] IN (N'SALES_DELIVERY_LINES', N'PURCHASE_DELIVERY_LINES')
+               AND ([BaseTable] IS NULL OR [BaseTable] = N'');
+            -- Master-Detail: header formları → ilgili LINES formu
+            UPDATE dbo.Forms
+               SET [LinesFormCode] = N'SALES_DELIVERY_LINES', [LinesParentColumn] = N'DocumentId'
+             WHERE [FormCode] IN (N'SALES_DELIVERY_NEW', N'SALES_DELIVERY_EDIT')
+               AND ([LinesFormCode] IS NULL OR [LinesFormCode] = N'');
+            UPDATE dbo.Forms
+               SET [LinesFormCode] = N'PURCHASE_DELIVERY_LINES', [LinesParentColumn] = N'DocumentId'
+             WHERE [FormCode] IN (N'PURCHASE_DELIVERY_NEW', N'PURCHASE_DELIVERY_EDIT')
+               AND ([LinesFormCode] IS NULL OR [LinesFormCode] = N'');
+            -- UI metadata (List/New/Edit URL, ikon, renk)
+            UPDATE dbo.Forms SET
+                [ListUrl]   = ISNULL([ListUrl],   N'/Sales/Deliveries'),
+                [NewUrl]    = ISNULL([NewUrl],    N'/Sales/DocumentEdit?type=sales_delivery'),
+                [EditUrl]   = ISNULL([EditUrl],   N'/Sales/DocumentEdit'),
+                [Icon]      = ISNULL([Icon],      N'Truck'),
+                [IconColor] = ISNULL([IconColor], N'violet')
+             WHERE [FormCode] = N'SALES_DELIVERY_EDIT';
+            UPDATE dbo.Forms SET
+                [ListUrl]   = ISNULL([ListUrl],   N'/Purchase/Deliveries'),
+                [NewUrl]    = ISNULL([NewUrl],    N'/Purchase/Edit?type=purchase_delivery'),
+                [EditUrl]   = ISNULL([EditUrl],   N'/Purchase/Edit'),
+                [Icon]      = ISNULL([Icon],      N'Truck'),
+                [IconColor] = ISNULL([IconColor], N'rose')
+             WHERE [FormCode] = N'PURCHASE_DELIVERY_EDIT';
+
             UPDATE dbo.Forms
                SET [BaseTable] = N'dbo.DocumentLine',
                    [BaseRecordKey] = N'id'
@@ -11481,6 +11531,11 @@ END;";
             ("SALES_ORDER_NEW",     "Yeni",                             "Satış",                "Satış Siparişi",           425,  false), // navigasyon formu
             ("SALES_ORDER_EDIT",    "Üst Bilgi",                        "Satış",                "Satış Siparişi",           430,  true),
             ("SALES_ORDER_LINES",   "Kalem Bilgisi",                    "Satış",                "Satış Siparişi",           435,  true),
+            // 2026-07-11: Satış İrsaliyesi — teklif→sipariş→irsaliye zinciri son halka.
+            ("SALES_DELIVERY",       "Satış İrsaliyesi",                "Satış",                "Satış İrsaliyesi",         440,  true),  // SmartBoard liste
+            ("SALES_DELIVERY_NEW",   "Yeni",                            "Satış",                "Satış İrsaliyesi",         441,  false), // navigasyon formu
+            ("SALES_DELIVERY_EDIT",  "Üst Bilgi",                       "Satış",                "Satış İrsaliyesi",         442,  true),
+            ("SALES_DELIVERY_LINES", "Kalem Bilgisi",                   "Satış",                "Satış İrsaliyesi",         443,  true),
 
             // ── Satın Alma (2026-05-22) — 3-asama akis, ayni dbo.Document tablosu ───
             ("PURCHASE_REQUEST",       "İhtiyaç Kaydı",                 "Satın Alma",           "İhtiyaç Kaydı",            450,  true),  // SmartBoard liste
@@ -11501,6 +11556,11 @@ END;";
             ("PURCHASE_DEMAND_NEW",    "Yeni",                          "Satın Alma",           "Satın Alma Talebi",        481,  false), // navigasyon formu
             ("PURCHASE_DEMAND_EDIT",   "Üst Bilgi",                     "Satın Alma",           "Satın Alma Talebi",        482,  true),
             ("PURCHASE_DEMAND_LINES",  "Kalem Bilgisi",                 "Satın Alma",           "Satın Alma Talebi",        483,  true),
+            // 2026-07-11: Alış İrsaliyesi — talep→teklif→sipariş→irsaliye zinciri son halka (mal kabul).
+            ("PURCHASE_DELIVERY",       "Alış İrsaliyesi",              "Satın Alma",           "Alış İrsaliyesi",          490,  true),  // SmartBoard liste
+            ("PURCHASE_DELIVERY_NEW",   "Yeni",                         "Satın Alma",           "Alış İrsaliyesi",          491,  false), // navigasyon formu
+            ("PURCHASE_DELIVERY_EDIT",  "Üst Bilgi",                    "Satın Alma",           "Alış İrsaliyesi",          492,  true),
+            ("PURCHASE_DELIVERY_LINES", "Kalem Bilgisi",               "Satın Alma",           "Alış İrsaliyesi",          493,  true),
 
             // ── Üretim ───────────────────────────────────────────────────────
             // BOM_EDIT → "Ürün Ağacı": sol menüdeki "Ürün Ağacı" kartı BomController([PermissionScope("BOM_EDIT")]) tarafından korunur.

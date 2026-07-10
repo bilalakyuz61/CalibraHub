@@ -160,6 +160,21 @@ public sealed class PurchaseController : Controller
                         "talep", "/Purchase/Edit?type=purchase_demand", "violet", ct,
                         newUrl: "/Purchase/PurchaseRequestWizard");
 
+    [HttpGet("/Purchase/Deliveries")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseDelivery)]
+    public Task<IActionResult> Deliveries(CancellationToken ct) =>
+        RenderListAsync("alis_irsaliyesi", "PURCHASE_DELIVERY_EDIT", "Alış İrsaliyeleri",
+                        "irsaliye", "/Purchase/Edit?type=purchase_delivery", "rose", ct);
+
+    [HttpGet("/Purchase/DeliveriesBoardConfig")]
+    public async Task<IActionResult> DeliveriesBoardConfig(CancellationToken ct)
+    {
+        var config = await BuildPurchaseBoardAsync(
+            "alis_irsaliyesi", "PURCHASE_DELIVERY_EDIT", "Alış İrsaliyeleri",
+            "irsaliye", "/Purchase/Edit?type=purchase_delivery", "rose", ct);
+        return Json(config);
+    }
+
     [HttpGet("/Purchase/RequestsBoardConfig")]
     public async Task<IActionResult> RequestsBoardConfig(CancellationToken ct)
     {
@@ -209,10 +224,11 @@ public sealed class PurchaseController : Controller
     {
         var t = (type ?? "").Trim().ToLowerInvariant() switch
         {
-            "purchase_quote"   or "alis_teklifi"       => "purchase_quote",
-            "purchase_order"   or "alis_siparisi"      => "purchase_order",
-            "purchase_demand"  or "satin_alma_talebi"  => "purchase_demand",
-            _                                           => "purchase_request",
+            "purchase_quote"    or "alis_teklifi"       => "purchase_quote",
+            "purchase_order"    or "alis_siparisi"      => "purchase_order",
+            "purchase_demand"   or "satin_alma_talebi"  => "purchase_demand",
+            "purchase_delivery" or "alis_irsaliyesi"    => "purchase_delivery",
+            _                                            => "purchase_request",
         };
         var idQ  = id.HasValue && id.Value > 0 ? $"&id={id.Value}" : "";
         var frQ  = fromRequest.HasValue && fromRequest.Value > 0 ? $"&fromRequest={fromRequest.Value}" : "";
@@ -443,6 +459,7 @@ public sealed class PurchaseController : Controller
         {
             "alis_talebi"       => "/Purchase/RequestsBoardConfig",
             "satin_alma_talebi" => "/Purchase/PurchaseDemandsBoardConfig",
+            "alis_irsaliyesi"   => "/Purchase/DeliveriesBoardConfig",
             _ => (string?)null,
         };
 

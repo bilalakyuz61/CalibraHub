@@ -152,6 +152,8 @@ public static class MenuDefinition
                         PermissionFormCode: FormCodes.SalesQuote),
                     new("logistics.salesorders", isEn ? "Sales Order" : "Satış Siparişi", "ShoppingCart","/Sales/Orders", null,
                         PermissionFormCode: FormCodes.SalesOrder),
+                    new("logistics.salesdeliveries", isEn ? "Sales Delivery" : "Satış İrsaliyesi", "Truck", "/Sales/Deliveries", null,
+                        PermissionFormCode: FormCodes.SalesDelivery),
                 }),
                 // Satın Alma
                 new("logistics.purchase", isEn ? "Purchase" : "Satın Alma", "ShoppingBag", null, new List<MenuNode>
@@ -160,10 +162,14 @@ public static class MenuDefinition
                         PermissionFormCode: FormCodes.PurchaseRequest),
                     new("logistics.purchasefulfillment", isEn ? "Fulfillment Center" : "İhtiyaç Karşılama",  "PackageCheck",   "/Purchase/FulfillmentCenter", null,
                         PermissionFormCode: FormCodes.PurchaseFulfillment),
+                    new("logistics.purchasedemands",     isEn ? "Purchase Request"   : "Satın Alma Talebi", "ClipboardCheck", "/Purchase/PurchaseDemands",   null,
+                        PermissionFormCode: FormCodes.PurchaseDemand),
                     new("logistics.purchasequotes",      isEn ? "Purchase Quote"     : "Satın Alma Teklif",  "FileText",       "/Purchase/Quotes",            null,
                         PermissionFormCode: FormCodes.PurchaseQuote),
                     new("logistics.purchaseorders",   isEn ? "Purchase Order"   : "Satın Alma Sipariş", "ShoppingCart",  "/Purchase/Orders",   null,
                         PermissionFormCode: FormCodes.PurchaseOrder),
+                    new("logistics.purchasedeliveries", isEn ? "Purchase Delivery" : "Alış İrsaliyesi", "Truck", "/Purchase/Deliveries", null,
+                        PermissionFormCode: FormCodes.PurchaseDelivery),
                 }),
                 // Depo
                 new("logistics.warehouse", isEn ? "Warehouse" : "Depo", "Warehouse", null, new List<MenuNode>
