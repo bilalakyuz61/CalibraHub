@@ -785,6 +785,205 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         }
     }
 
+    /// <summary>
+    /// Üretim sarfı (2026-07-10) — iş emri bileşen sarfını TEK transaction'da yazar.
+    /// Reçete-önerili + serbest satır modeli: satır WorkOrderComponentId taşıyorsa o bileşenin
+    /// IssuedQuantity'si artar; taşımıyorsa (ItemId+ConfigId) eşleşen bileşene eklenir, hiç
+    /// eşleşme yoksa RequiredQuantity=0 "Serbest sarf" bileşen kaydı açılır (bileşen listesi
+    /// sarfın tam defteri kalır). Lot/seri kuralları stok çıkışıyla birebir:
+    /// ResolveLotForLineAsync (mevcut lot şart) + ResolveSerialsForLineAsync (InStock'tan adet
+    /// kadar seçim → Issued). Sonda NegativeBalanceGuard + EnsureLotBalanceAsync.
+    /// </summary>
+    public async Task<int> IssueWorkOrderConsumptionAsync(
+        WorkOrderConsumptionRequest request, int? createdById, CancellationToken ct)
+    {
+        if (request.Lines is null || request.Lines.Count == 0)
+            throw new InvalidOperationException("Sarf için en az bir satır girilmelidir.");
+
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // ── İş emri başlığı ────────────────────────────────────────────
+            int documentId; int? woLocationId; byte woStatus; string orderNo;
+            await using (var wo = conn.CreateCommand())
+            {
+                wo.Transaction = tx;
+                wo.CommandText = $"""
+                    SELECT [DocumentId], [WarehouseLocationId], [Status], [OrderNumber]
+                    FROM {T("WorkOrder")} WHERE [Id] = @Id;
+                    """;
+                wo.Parameters.AddWithValue("@Id", request.WorkOrderId);
+                await using var r = await wo.ExecuteReaderAsync(ct);
+                if (!await r.ReadAsync(ct))
+                    throw new InvalidOperationException("İş emri bulunamadı.");
+                documentId   = r.GetInt32(0);
+                woLocationId = r.IsDBNull(1) ? null : r.GetInt32(1);
+                woStatus     = r.GetByte(2);
+                orderNo      = r.IsDBNull(3) ? $"#{request.WorkOrderId}" : r.GetString(3);
+            }
+            var status = (Domain.Enums.WorkOrderStatus)woStatus;
+            if (status is Domain.Enums.WorkOrderStatus.Cancelled or Domain.Enums.WorkOrderStatus.Closed)
+                throw new InvalidOperationException($"'{orderNo}' iş emri {(status == Domain.Enums.WorkOrderStatus.Cancelled ? "iptal edilmiş" : "kapatılmış")} — sarf girilemez.");
+
+            // LineNo başlangıcı — AppendStockLineAsync/IssueAsync ile aynı UPDLOCK+HOLDLOCK deseni
+            int lineNo;
+            await using (var ln = conn.CreateCommand())
+            {
+                ln.Transaction = tx;
+                ln.CommandText = $"""
+                    SELECT ISNULL(MAX([LineNo]), 0) + 1 FROM {T("DocumentLine")} WITH (UPDLOCK, HOLDLOCK)
+                    WHERE [DocumentId] = @DocId;
+                    """;
+                ln.Parameters.AddWithValue("@DocId", documentId);
+                lineNo = Convert.ToInt32(await ln.ExecuteScalarAsync(ct));
+            }
+
+            var docDate = DateTime.Today;
+            var defaultNote = request.ProducedQuantity is > 0
+                ? $"Üretim sarfı (üretilen: {request.ProducedQuantity:0.####})"
+                : "Üretim sarfı";
+            var written = 0;
+            var decreases = new HashSet<(int ItemId, int LocationId)>();
+            var lotDecreases = new HashSet<(int ItemId, int LotId, int LocationId)>();
+
+            foreach (var line in request.Lines)
+            {
+                var itemId = line.ItemId;
+                if ((!itemId.HasValue || itemId.Value <= 0) && !string.IsNullOrWhiteSpace(line.MaterialCode))
+                    itemId = await ResolveItemIdByCodeAsync(conn, tx, line.MaterialCode!, ct);
+                if (!itemId.HasValue || itemId.Value <= 0) continue;
+                if (line.Qty <= 0) continue;
+
+                var fromLoc = line.FromLocationId ?? woLocationId;
+                if (fromLoc is not > 0)
+                    throw new InvalidOperationException(
+                        $"'{line.MaterialCode ?? ("#" + itemId)}' satırı için kaynak depo çözülemedi — " +
+                        "iş emrinde depo tanımlı değil; satırda depo seçin ya da iş emrine depo atayın.");
+
+                // Lot: çıkışta mevcut lot şart (lot-takipli stokta zorunluluk helper içinde)
+                var (lotId, lotNo) = await ResolveLotForLineAsync(
+                    conn, tx, itemId.Value, line.MaterialCode, line.LotNo, movementType: 1, createdById, ct);
+
+                await using var ins = conn.CreateCommand();
+                ins.Transaction = tx;
+                ins.CommandText = $"""
+                    INSERT INTO {T("DocumentLine")}
+                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                         [CombinationId],[FromLocationId],[MovementType],[UnitCost],[LotId],[LotNo],[Notes])
+                    VALUES
+                        (@DocId,@LineNo,@ItemId,@UnitId,@Qty,{StockUnitSql.BaseQtyExpr(T("Items"), T("ItemUnits"), "@Qty", "@ItemId", "@UnitId")},0,0,0,
+                         @CombId,@FromLoc,1,
+                         (SELECT TOP 1 pl.[Price] FROM {T("PriceList")} pl
+                          WHERE pl.[ItemId] = @ItemId AND pl.[PriceType] = N'm' AND pl.[IsActive] = 1
+                            AND pl.[ValidFrom] <= @DocDate AND (pl.[ValidTo] IS NULL OR pl.[ValidTo] >= @DocDate)
+                          ORDER BY pl.[ValidFrom] DESC),
+                         @LotId, @LotNo, @Notes);
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
+                    """;
+                ins.Parameters.AddWithValue("@DocId", documentId);
+                ins.Parameters.AddWithValue("@LineNo", lineNo++);
+                ins.Parameters.AddWithValue("@ItemId", itemId.Value);
+                ins.Parameters.AddWithValue("@UnitId", (object?)line.UnitId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@Qty", line.Qty);
+                ins.Parameters.AddWithValue("@CombId", (object?)line.CombinationId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@FromLoc", fromLoc.Value);
+                ins.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@Notes", string.IsNullOrWhiteSpace(line.Notes) ? defaultNote : line.Notes!.Trim());
+                ins.Parameters.AddWithValue("@DocDate", docDate);
+                var lineId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
+
+                // Seri: çıkış (1) → InStock serilerden adet kadar seçim şart → Issued
+                await ResolveSerialsForLineAsync(
+                    conn, tx, lineId, itemId.Value, line.MaterialCode, line.Qty, line.Serials,
+                    lotId, movementType: 1, docDate, createdById, ct);
+
+                // Bileşen defteri: bağlı bileşen → artır; serbest → eşleştir ya da yeni kayıt aç
+                await BumpWorkOrderComponentAsync(
+                    conn, tx, request.WorkOrderId, line.WorkOrderComponentId,
+                    itemId.Value, line.CombinationId, line.UnitId, line.Qty, ct);
+
+                decreases.Add((itemId.Value, fromLoc.Value));
+                if (lotId.HasValue) lotDecreases.Add((itemId.Value, lotId.Value, fromLoc.Value));
+                written++;
+            }
+
+            if (written == 0)
+                throw new InvalidOperationException("Sarf için geçerli satır yok (malzeme ve miktar kontrol edin).");
+
+            // Tüm satırlar tx içinde yazıldı → bakiye kontrolleri (yeni satırlar hesaba dahil)
+            foreach (var (dItem, dLoc) in decreases)
+                await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, dItem, dLoc, docDate, ct);
+            foreach (var (dItem, dLot, dLoc) in lotDecreases)
+                await EnsureLotBalanceAsync(conn, tx, companyId, dItem, dLot, dLoc, ct);
+
+            await tx.CommitAsync(ct);
+            return written;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    /// <summary>Sarf satırını bileşen defterine işler — bkz. IssueWorkOrderConsumptionAsync özeti.</summary>
+    private async Task BumpWorkOrderComponentAsync(
+        SqlConnection conn, SqlTransaction tx, int workOrderId, int? componentId,
+        int itemId, int? configId, int? unitId, decimal qty, CancellationToken ct)
+    {
+        if (componentId is > 0)
+        {
+            await using var upd = conn.CreateCommand();
+            upd.Transaction = tx;
+            upd.CommandText = $"""
+                UPDATE {T("WorkOrderComponent")}
+                SET [IssuedQuantity] = [IssuedQuantity] + @Qty, [Updated] = SYSUTCDATETIME()
+                WHERE [Id] = @Id AND [WorkOrderId] = @WoId;
+                """;
+            upd.Parameters.AddWithValue("@Id", componentId.Value);
+            upd.Parameters.AddWithValue("@WoId", workOrderId);
+            upd.Parameters.AddWithValue("@Qty", qty);
+            if (await upd.ExecuteNonQueryAsync(ct) == 0)
+                throw new InvalidOperationException("Bileşen kaydı bu iş emrine ait değil.");
+            return;
+        }
+
+        // Serbest satır: aynı (ItemId, ConfigId) bileşeni varsa ona ekle
+        await using (var match = conn.CreateCommand())
+        {
+            match.Transaction = tx;
+            match.CommandText = $"""
+                UPDATE TOP (1) {T("WorkOrderComponent")}
+                SET [IssuedQuantity] = [IssuedQuantity] + @Qty, [Updated] = SYSUTCDATETIME()
+                WHERE [WorkOrderId] = @WoId AND [ItemId] = @ItemId
+                  AND (([ConfigId] IS NULL AND @Cfg IS NULL) OR [ConfigId] = @Cfg);
+                """;
+            match.Parameters.AddWithValue("@WoId", workOrderId);
+            match.Parameters.AddWithValue("@ItemId", itemId);
+            match.Parameters.AddWithValue("@Cfg", (object?)configId ?? DBNull.Value);
+            match.Parameters.AddWithValue("@Qty", qty);
+            if (await match.ExecuteNonQueryAsync(ct) > 0) return;
+        }
+
+        // Hiç yok → reçete dışı serbest sarf kaydı (RequiredQuantity=0, defterde görünsün)
+        await using var ins = conn.CreateCommand();
+        ins.Transaction = tx;
+        ins.CommandText = $"""
+            INSERT INTO {T("WorkOrderComponent")}
+                ([WorkOrderId],[ItemId],[ConfigId],[RequiredQuantity],[IssuedQuantity],[ScrapRate],[UnitId],[Notes],[Created])
+            VALUES (@WoId, @ItemId, @Cfg, 0, @Qty, 0, @UnitId, N'Serbest sarf', SYSUTCDATETIME());
+            """;
+        ins.Parameters.AddWithValue("@WoId", workOrderId);
+        ins.Parameters.AddWithValue("@ItemId", itemId);
+        ins.Parameters.AddWithValue("@Cfg", (object?)configId ?? DBNull.Value);
+        ins.Parameters.AddWithValue("@Qty", qty);
+        ins.Parameters.AddWithValue("@UnitId", (object?)unitId ?? DBNull.Value);
+        await ins.ExecuteNonQueryAsync(ct);
+    }
+
     // ── Yardımcılar ───────────────────────────────────────────────────────────
 
     private async Task<bool> IsInventoryCountAsync(int documentId, CancellationToken ct)

@@ -329,7 +329,50 @@ public sealed class ProductionController : Controller
         }
         var dto = await _service.GetAsync(id.Value, ct);
         if (dto is null) return NotFound();
+        // Üretim sarfı modalı kalem grid'i — STOCK_OUT kolon seti (lookup + kombinasyon +
+        // seri-pick + lot + miktar) aynen yeniden kullanılır (2026-07-10 üretim sarfı).
+        ViewData["ConsumptionGridConfigJson"] = System.Text.Json.JsonSerializer.Serialize(
+            WarehouseController.BuildLineGridConfig("STOCK_OUT"),
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            });
         return View(dto);
+    }
+
+    /// <summary>
+    /// Üretim sarfı (2026-07-10) — üretilen miktara göre bileşen sarfı: reçete önerisi +
+    /// serbest satır; lot/seri kuralları stok çıkışıyla aynı (sunucu tarafı zorunlu).
+    /// </summary>
+    [HttpPost("Production/WorkOrder/IssueConsumptionJson")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> IssueConsumptionJson(
+        [FromBody] WorkOrderConsumptionRequest req,
+        [FromServices] IStockDocRepository stockDocRepo,
+        CancellationToken ct)
+    {
+        if (req is null || req.WorkOrderId <= 0)
+            return Json(new { ok = false, error = "İş emri belirtilmedi." });
+        try
+        {
+            var lines = await stockDocRepo.IssueWorkOrderConsumptionAsync(req, CurrentUserId(), ct);
+            return Json(new { ok = true, lines });
+        }
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
+        {
+            return Json(new { ok = false, error = nbex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // İş kuralı mesajları (lot/seri zorunluluğu, bakiye, durum) kullanıcıya aynen gösterilir
+            return Json(new { ok = false, error = ex.Message });
+        }
+        catch (Exception)
+        {
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     [HttpPost]

@@ -37,7 +37,8 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                    c.[ConfigId], cfg.[RecordCode] AS ConfigCode,
                    c.[RequiredQuantity], c.[IssuedQuantity], c.[ScrapRate],
                    c.[UnitId], u.[Code] AS UnitCode,
-                   c.[Notes], c.[Created], c.[Updated]
+                   c.[Notes], c.[Created], c.[Updated],
+                   ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial
             FROM {_table} c
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
@@ -65,7 +66,9 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 UnitCode:         r.IsDBNull(11) ? null : r.GetString(11),
                 Notes:            r.IsDBNull(12) ? null : r.GetString(12),
                 Created:          r.GetDateTime(13),
-                Updated:          r.IsDBNull(14) ? null : r.GetDateTime(14)));
+                Updated:          r.IsDBNull(14) ? null : r.GetDateTime(14),
+                TrackingType:     r.IsDBNull(15) ? "None" : r.GetString(15),
+                AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16)));
         }
         return list;
     }
@@ -134,13 +137,16 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         {
             int itemId, documentId;
             int? configId, unitId, warehouseLocationId;
+            string tracking; string? itemCode;
             await using (var selCmd = conn.CreateCommand())
             {
                 selCmd.Transaction = tx;
                 selCmd.CommandText = $@"
-                    SELECT c.[ItemId], c.[ConfigId], c.[UnitId], w.[DocumentId], w.[WarehouseLocationId]
+                    SELECT c.[ItemId], c.[ConfigId], c.[UnitId], w.[DocumentId], w.[WarehouseLocationId],
+                           ISNULL(i.[TrackingType], 'None'), i.[Code]
                     FROM {_table} c
                     INNER JOIN [{_schema}].[WorkOrder] w ON w.[Id] = c.[WorkOrderId]
+                    LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
                     WHERE c.[Id] = @Id;";
                 selCmd.Parameters.AddWithValue("@Id", componentId);
                 await using var r = await selCmd.ExecuteReaderAsync(ct);
@@ -150,7 +156,18 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 unitId = r.IsDBNull(2) ? null : r.GetInt32(2);
                 documentId = r.GetInt32(3);
                 warehouseLocationId = r.IsDBNull(4) ? null : r.GetInt32(4);
+                tracking = r.GetString(5);
+                itemCode = r.IsDBNull(6) ? null : r.GetString(6);
             }
+
+            // Bütünlük (2026-07-10): lot/seri-takipli bileşen bu lot/serisiz yoldan sarf edilirse
+            // lot/seri bakiyesi fiziksel stoktan sapar (DocumentLineSerial/LotId yazılmaz). Bu
+            // bileşenler İş Emri ekranındaki "Sarf Gir" akışından (IssueWorkOrderConsumptionAsync,
+            // lot/seri seçimli) sarf edilmelidir.
+            if (!string.Equals(tracking, "None", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"'{itemCode ?? ("#" + itemId)}' {(string.Equals(tracking, "Serial", StringComparison.OrdinalIgnoreCase) ? "seri" : "lot")} takipli — " +
+                    "sarf, İş Emri ekranındaki 'Sarf Gir' üzerinden lot/seri seçimiyle yapılmalıdır.");
 
             await using (var updCmd = conn.CreateCommand())
             {

@@ -1109,6 +1109,10 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                                 title="Ürün ağacındaki bileşenleri planlanan miktara çarp ve listele (mevcut listeyi siler)">
                             ⚙ Reçeteyi Patlat
                         </button>
+                        <button type="button" class="woe-btn woe-btn--primary" id="btn-bom-issue"
+                                title="Üretilen miktara göre bileşen sarfı gir — reçete önerisi + serbest satır; seri/lot takipli bileşende seçim zorunludur">
+                            📤 Sarf Gir
+                        </button>
                     }
                 </div>
                 <div class="pane-hint">
@@ -1134,6 +1138,88 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                             <span>Notlar</span>
                         </div>
                         <div class="woe-bom-empty src-empty">Yükleniyor…</div>
+                    </div>
+
+                    @* ── Üretim Sarfı modalı (2026-07-10) — reçete önerisi + serbest satır;
+                          kolonlar STOCK_OUT kalem grid'i (lookup + kombinasyon + seri-pick + lot). *@
+                    <style>
+                        .woe-sarf-backdrop {
+                            position: fixed; inset: 0; z-index: 10050;
+                            display: none; align-items: center; justify-content: center;
+                            background: rgba(2,6,23,0.6);
+                            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+                        }
+                        .woe-sarf-card {
+                            width: min(1060px, calc(100vw - 48px));
+                            max-height: calc(100vh - 64px);
+                            display: flex; flex-direction: column;
+                            background: var(--app-surface, #fff);
+                            color: var(--bs-body-color, #0f172a);
+                            border: 1px solid var(--app-border, #e2e8f0);
+                            border-radius: 14px; overflow: hidden;
+                            box-shadow: 0 24px 64px rgba(2,6,23,0.45);
+                        }
+                        body.app-theme-dark .woe-sarf-card {
+                            background: #0d1322; color: #e2e8f0; border-color: rgba(255,255,255,0.10);
+                        }
+                        .woe-sarf-head {
+                            display: flex; align-items: center; gap: 10px;
+                            padding: 14px 18px; font-weight: 700; font-size: 0.95rem;
+                            border-bottom: 1px solid var(--app-border, #e2e8f0);
+                        }
+                        body.app-theme-dark .woe-sarf-head { border-bottom-color: rgba(255,255,255,0.08); }
+                        .woe-sarf-close {
+                            margin-left: auto; border: none; background: transparent; cursor: pointer;
+                            font-size: 1.2rem; line-height: 1; color: inherit; opacity: .6;
+                        }
+                        .woe-sarf-close:hover { opacity: 1; }
+                        .woe-sarf-toolbar {
+                            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                            padding: 12px 18px; border-bottom: 1px solid var(--app-border, #e2e8f0);
+                        }
+                        body.app-theme-dark .woe-sarf-toolbar { border-bottom-color: rgba(255,255,255,0.08); }
+                        .woe-sarf-toolbar label { font-size: 0.82rem; font-weight: 600; }
+                        .woe-sarf-toolbar input {
+                            width: 130px; text-align: right;
+                            padding: 6px 10px; border-radius: 8px;
+                            border: 1px solid var(--app-border, #cbd5e1);
+                            background: var(--app-surface, #fff); color: inherit; font-size: 0.85rem;
+                        }
+                        body.app-theme-dark .woe-sarf-toolbar input { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.14); }
+                        .woe-sarf-hint { font-size: 0.74rem; opacity: .65; flex: 1 1 260px; }
+                        .woe-sarf-grid { flex: 1 1 auto; min-height: 320px; height: 46vh; padding: 8px 10px; }
+                        .woe-sarf-foot {
+                            display: flex; justify-content: flex-end; gap: 10px;
+                            padding: 12px 18px; border-top: 1px solid var(--app-border, #e2e8f0);
+                        }
+                        body.app-theme-dark .woe-sarf-foot { border-top-color: rgba(255,255,255,0.08); }
+                    </style>
+                    <div id="woeSarfModal" class="woe-sarf-backdrop" role="dialog" aria-modal="true" aria-label="Üretim Sarfı">
+                        <div class="woe-sarf-card">
+                            <div class="woe-sarf-head">
+                                <span>📤 Üretim Sarfı</span>
+                                <button type="button" class="woe-sarf-close" id="woeSarfClose" title="Kapat (Esc)">✕</button>
+                            </div>
+                            <div class="woe-sarf-toolbar">
+                                <label for="woeSarfProduced">Üretilen Miktar</label>
+                                <input type="number" id="woeSarfProduced" min="0" step="any"
+                                       value="@((Model?.PlannedQuantity ?? 0m).ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                                <button type="button" class="woe-btn" id="woeSarfPropose"
+                                        title="Bileşen miktarlarını reçete oranından hesapla: birim ihtiyaç × üretilen">
+                                    ⚙ Reçeteden Öner
+                                </button>
+                                <span class="woe-sarf-hint">
+                                    Öneri satırları serbestçe düzenlenebilir — satır ekleyip çıkarabilir, miktarları
+                                    değiştirebilirsiniz. Seri takipli bileşende stoktaki serilerden seçim, lot
+                                    takiplide mevcut lot zorunludur. Kaynak depo: iş emri deposu.
+                                </span>
+                            </div>
+                            <div id="woeSarfGrid" class="woe-sarf-grid"></div>
+                            <div class="woe-sarf-foot">
+                                <button type="button" class="woe-btn" id="woeSarfCancel">Vazgeç</button>
+                                <button type="button" class="woe-btn woe-btn--primary" id="woeSarfSave">💾 Sarfı Kaydet</button>
+                            </div>
+                        </div>
                     </div>
                 }
             </section>
@@ -2197,6 +2283,148 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
         }
 
         document.getElementById('btn-bom-explode')?.addEventListener('click', explodeBom);
+
+        // ── Üretim Sarfı (2026-07-10) — reçete önerisi + serbest satır + seri/lot seçimi ──
+        // Kalem grid'i STOCK_OUT kolon setiyle mount edilir (seri-pick GetSerialsJson'dan,
+        // lot FEFO bakiye önerili). Kurallar sunucuda zorunlu (IssueWorkOrderConsumptionAsync).
+        var SARF_GRID_CONFIG = @Html.Raw(ViewData["ConsumptionGridConfigJson"] as string ?? "null");
+        var SARF_PLANNED = parseFloat('@((Model?.PlannedQuantity ?? 0m).ToString(System.Globalization.CultureInfo.InvariantCulture))') || 0;
+        var _sarfMounted = false;
+        window.__WOE_SARF_ROWS__ = [];
+
+        function sarfGrid() { return window.CalibraHub && window.CalibraHub.__woeSarfGrid; }
+        function patchSarfGridKey() {
+            // Grid kendini global 'salesLineGrid' anahtarına yazar — bu sayfada ayrı anahtara yönlendir
+            // (StockDocEdit'teki patchGridKey deseni).
+            try {
+                Object.defineProperty(window.CalibraHub, 'salesLineGrid', {
+                    get: function () { return window.CalibraHub.__woeSarfGrid; },
+                    set: function (v) { window.CalibraHub.__woeSarfGrid = v; },
+                    configurable: true,
+                });
+            } catch (e) { /* zaten patch'li */ }
+        }
+        function mountSarfGrid() {
+            if (_sarfMounted) return;
+            var el = document.getElementById('woeSarfGrid');
+            if (!el || !SARF_GRID_CONFIG) return;
+            if (!window.CalibraHub || !window.CalibraHub.mountLineItemsGrid) {
+                // Bundle henüz yüklenmediyse kısa polling ile bekle (DWR async yüklüyor)
+                var tries = 0;
+                var t = setInterval(function () {
+                    if (window.CalibraHub && window.CalibraHub.mountLineItemsGrid) { clearInterval(t); mountSarfGrid(); }
+                    else if (++tries > 100) { clearInterval(t); flash('Kalem grid bileşeni yüklenemedi.', false); }
+                }, 50);
+                return;
+            }
+            _sarfMounted = true;
+            patchSarfGridKey();
+            window.CalibraHub.mountLineItemsGrid(el, SARF_GRID_CONFIG, {
+                onRowsChange: function (rows) { window.__WOE_SARF_ROWS__ = rows || []; }
+            });
+        }
+        function openSarf() {
+            var m = document.getElementById('woeSarfModal');
+            if (m) { m.style.display = 'flex'; mountSarfGrid(); }
+        }
+        function closeSarf() {
+            var m = document.getElementById('woeSarfModal');
+            if (m) m.style.display = 'none';
+        }
+        async function proposeSarf() {
+            var produced = parseFloat(document.getElementById('woeSarfProduced')?.value) || 0;
+            if (produced <= 0) { flash('Önce üretilen miktarı girin.', false); return; }
+            try {
+                var r = await fetch('/Production/WorkOrderComponents?workOrderId=' + bomWoId, { credentials: 'same-origin' });
+                var list = await r.json();
+                if (!Array.isArray(list) || list.length === 0) {
+                    flash('Reçete bileşeni yok — önce "Reçeteyi Patlat" ile bileşen listesi oluşturun ya da satırları serbest girin.', false);
+                    return;
+                }
+                var planned = SARF_PLANNED > 0 ? SARF_PLANNED : produced;
+                var rows = list.map(function (c) {
+                    var qty = (c.requiredQuantity || 0) * (produced / planned);
+                    return {
+                        __componentId:     c.id,
+                        stockCardId:       c.itemId,
+                        materialCode:      c.itemCode || '',
+                        materialName:      c.itemName || '',
+                        combinationId:     c.configId || null,
+                        combinationCode:   c.configCode || '',
+                        trackCombinations: !!c.configId,
+                        unitId:            c.unitId || null,
+                        quantity:          Math.round(qty * 10000) / 10000,
+                        trackSerial:       (c.trackingType || 'None') === 'Serial',
+                        autoSerial:        !!c.autoSerial,
+                        serials:           [],
+                        lotNo:             '',
+                    };
+                });
+                var h = sarfGrid();
+                if (h && h.setRows) { h.setRows(rows); window.__WOE_SARF_ROWS__ = rows; }
+                else flash('Grid henüz hazır değil — bir saniye sonra tekrar deneyin.', false);
+            } catch (ex) { flash('Öneri yüklenemedi: ' + ex.message, false); }
+        }
+        async function saveSarf() {
+            var rows = (window.__WOE_SARF_ROWS__ || []).filter(function (r) {
+                return r && (r.stockCardId || (r.materialCode || '').trim()) && (parseFloat(r.quantity) || 0) > 0;
+            });
+            if (!rows.length) { flash('Sarf için en az bir satır girin (malzeme + miktar).', false); return; }
+            var produced = parseFloat(document.getElementById('woeSarfProduced')?.value);
+            var btn = document.getElementById('woeSarfSave');
+            if (btn) btn.disabled = true;
+            try {
+                var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+                var r = await fetch('/Production/WorkOrder/IssueConsumptionJson', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({
+                        workOrderId: bomWoId,
+                        producedQuantity: isNaN(produced) ? null : produced,
+                        lines: rows.map(function (x) {
+                            return {
+                                workOrderComponentId: x.__componentId || null,
+                                itemId: x.stockCardId || null,
+                                materialCode: (x.materialCode || '').trim() || null,
+                                unitId: x.unitId || null,
+                                qty: parseFloat(x.quantity) || 0,
+                                combinationId: x.combinationId || null,
+                                fromLocationId: null,   // iş emri deposu (sunucu çözer)
+                                lotNo: (x.lotNo || '').trim() || null,
+                                serials: (Array.isArray(x.serials) && x.serials.length) ? x.serials : null,
+                                notes: (x.notes || '').trim() || null,
+                            };
+                        })
+                    })
+                });
+                var j = await r.json();
+                if (j && j.ok) {
+                    flash('Sarf kaydedildi (' + (j.lines || 0) + ' satır). Bileşen listesi güncellendi.', true);
+                    closeSarf();
+                    var h = sarfGrid();
+                    if (h && h.setRows) h.setRows([]);
+                    window.__WOE_SARF_ROWS__ = [];
+                    await loadBom();
+                } else {
+                    flash((j && j.error) || 'Sarf kaydedilemedi.', false);
+                }
+            } catch (ex) {
+                flash('Hata: ' + ex.message, false);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+        document.getElementById('btn-bom-issue')?.addEventListener('click', openSarf);
+        document.getElementById('woeSarfClose')?.addEventListener('click', closeSarf);
+        document.getElementById('woeSarfCancel')?.addEventListener('click', closeSarf);
+        document.getElementById('woeSarfPropose')?.addEventListener('click', proposeSarf);
+        document.getElementById('woeSarfSave')?.addEventListener('click', saveSarf);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                var m = document.getElementById('woeSarfModal');
+                if (m && m.style.display !== 'none' && m.style.display !== '') closeSarf();
+            }
+        });
 
         // Reçete tabı açılınca lazy-load
         var bomLoaded = false;

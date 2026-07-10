@@ -833,7 +833,9 @@ public sealed class WarehouseController : Controller
     // Line grid config — CalibraLineItemsGrid için server-side JSON
     // ═══════════════════════════════════════════════════════════════════════
 
-    private static object BuildLineGridConfig(string docType, IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
+    // internal: ProductionController üretim sarfı modalı aynı STOCK_OUT kolon setini
+    // (lookup + kombinasyon + seri-pick + lot + miktar) yeniden kullanır (2026-07-10).
+    internal static object BuildLineGridConfig(string docType, IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
     {
         var isTransfer = docType == "TRANSFER";
         var bindingMap = (bindings ?? [])

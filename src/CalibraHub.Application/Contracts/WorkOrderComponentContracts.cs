@@ -19,7 +19,11 @@ public sealed record WorkOrderComponentDto(
     string? UnitCode,
     string? Notes,
     DateTime Created,
-    DateTime? Updated);
+    DateTime? Updated,
+    // Sarf UI'ının takip modunu bilmesi için (Items join'i — 2026-07-10 üretim sarfı):
+    // seri-takipli bileşende seri seçim hücresi, lot-takiplide lot zorunluluğu aktive olur.
+    string? TrackingType = null,
+    bool AutoSerial = false);
 
 /// <summary>
 /// Patlatma sonucu özeti — Frontend toast/log için.

@@ -19,5 +19,15 @@ public interface IStockDocRepository
     /// </summary>
     Task<(int Id, string DocNo)> DeliverSalesOrderAsync(int salesOrderId, int? createdById, CancellationToken ct);
 
+    /// <summary>
+    /// Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) — tek transaction'da: iş emrinin
+    /// belgesine MovementType=1 (çıkış) satırları yazar; lot/seri kurallarını stok çıkışıyla
+    /// birebir uygular (lot-takipli → mevcut lot zorunlu, seri-takipli → stoktaki InStock
+    /// serilerden adet kadar seçim → Issued); WorkOrderComponent.IssuedQuantity'yi artırır
+    /// (serbest satırda RequiredQuantity=0 "Serbest sarf" bileşen kaydı açılır) ve eksi
+    /// bakiye + lot bakiye kontrollerini çalıştırır. Yazılan satır sayısını döner.
+    /// </summary>
+    Task<int> IssueWorkOrderConsumptionAsync(WorkOrderConsumptionRequest request, int? createdById, CancellationToken ct);
+
     Task DeleteAsync(int id, CancellationToken ct);
 }
