@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Entities;
@@ -29,6 +30,7 @@ public sealed class AdminManagementService : IAdminManagementService
     private readonly IIntegratorImportLogRepository _integratorImportLogRepository;
     private readonly ICompanyConnectionRegistry _companyConnectionRegistry;
     private readonly IPermissionGrantRepository _permissionGrantRepository;
+    private readonly IAuditTrailService? _audit;
 
     public AdminManagementService(
         IIntegratorDocumentClient integratorDocumentClient,
@@ -41,7 +43,8 @@ public sealed class AdminManagementService : IAdminManagementService
         IPasswordHashService passwordHashService,
         IIntegratorImportLogRepository integratorImportLogRepository,
         ICompanyConnectionRegistry companyConnectionRegistry,
-        IPermissionGrantRepository permissionGrantRepository)
+        IPermissionGrantRepository permissionGrantRepository,
+        IAuditTrailService? audit = null)
     {
         _integratorDocumentClient = integratorDocumentClient;
         _integratorSettingsRepository = integratorSettingsRepository;
@@ -54,6 +57,7 @@ public sealed class AdminManagementService : IAdminManagementService
         _integratorImportLogRepository = integratorImportLogRepository;
         _companyConnectionRegistry = companyConnectionRegistry;
         _permissionGrantRepository = permissionGrantRepository;
+        _audit = audit;
     }
 
     public async Task<int> SaveCompanyAsync(
@@ -691,7 +695,10 @@ public sealed class AdminManagementService : IAdminManagementService
             Name = name
         };
 
-        await _departmentRepository.AddAsync(department, cancellationToken);
+        var newDepartmentId = await _departmentRepository.AddAsync(department, cancellationToken);
+
+        // İşlem logu — yeni departman
+        _audit?.LogInsert("Department", newDepartmentId, name);
     }
 
     public async Task UpdateDepartmentAsync(UpdateDepartmentRequest request, CancellationToken cancellationToken)
@@ -716,11 +723,18 @@ public sealed class AdminManagementService : IAdminManagementService
             throw new ArgumentException($"Bu sirkette ayni isimde departman zaten tanimli: '{name}'");
         }
 
+        // İşlem logu: entity yerinde mutate edildiği için eski değerler ÖNCE snapshot'lanır
+        var auditOld = new { existing.Name, existing.ParentDepartmentId, existing.IsActive };
+
         // Code mevcut value'yu koru (UI'dan gelmiyor)
         existing.Update(name, existing.ParentDepartmentId);
         if (request.IsActive) existing.Activate(); else existing.Deactivate();
 
         await _departmentRepository.UpdateAsync(existing, cancellationToken);
+
+        // İşlem logu — yalnızca değişen alanlar
+        _audit?.LogUpdate("Department", request.Id, name,
+            auditOld, new { existing.Name, existing.ParentDepartmentId, existing.IsActive });
     }
 
     public async Task DeleteDepartmentAsync(int id, CancellationToken cancellationToken)
@@ -733,6 +747,9 @@ public sealed class AdminManagementService : IAdminManagementService
         // önce sil (DB-seviye FK yok, CascadeDelete uygulama tarafında manuel).
         await _permissionGrantRepository.DeleteByDepartmentAsync(id, cancellationToken);
         await _departmentRepository.DeleteAsync(id, cancellationToken);
+
+        // İşlem logu — departman silme
+        _audit?.LogDelete("Department", id, existing.Name);
     }
 
     public async Task CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken)
@@ -854,6 +871,21 @@ public sealed class AdminManagementService : IAdminManagementService
         userProfile.SetPasswordHash(_passwordHashService.HashPassword(password));
 
         await _userProfileRepository.AddAsync(userProfile, cancellationToken);
+
+        // İşlem logu — AddAsync Id dönmediği için yeni kayıt e-posta ile geri okunur
+        // (okunamazsa Id'siz loglanır; audit hatası kaydı asla bozmaz)
+        if (_audit is not null)
+        {
+            try
+            {
+                var created = await _userProfileRepository.GetByEmailAndCompanyIdAsync(email, request.CompanyId, cancellationToken);
+                _audit.LogInsert("User", created?.Id, email, detail: fullName);
+            }
+            catch
+            {
+                _audit.LogInsert("User", null, email, detail: fullName);
+            }
+        }
     }
 
     public async Task UpdateUserAsync(UpdateUserRequest request, CancellationToken cancellationToken)
@@ -952,6 +984,21 @@ public sealed class AdminManagementService : IAdminManagementService
         }
 
         await _userProfileRepository.UpdateAsync(updated, cancellationToken);
+
+        // İşlem logu — ŞİFRE HASH'İ DİFF'E ASLA GİRMEZ (ignore listesi);
+        // şifre değiştiyse değersiz maskeli işaret eklenir.
+        if (_audit is not null)
+        {
+            try
+            {
+                var changes = AuditDiff.Compute(existing, updated, "User",
+                    ignore: new[] { "PasswordHash", "LanguageCode", "ThemeCode", "GridPreferencesJson" });
+                if (!string.IsNullOrWhiteSpace(request.Password))
+                    changes.Add(new AuditFieldChange("Password", "Şifre", null, "(değiştirildi)"));
+                _audit.LogChanges("User", existing.Id, email, changes);
+            }
+            catch { /* audit yazımı kaydı asla bozmaz */ }
+        }
     }
 
     private static (string Name, string BaseUrl, string CompanyTaxNumber, string Username, string Secret, int PollingIntervalSeconds, int MaxRecordsPerPull, int LogRetentionDays, bool IncludeReceivedDocumentsInPull, bool MarkDownloadedDocumentsAsReceived, bool IncludeIssuedEInvoicesInPull, bool IncludeIssuedEArchivesInPull, bool IncludeIssuedEDispatchesInPull)

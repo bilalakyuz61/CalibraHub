@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 
@@ -8,8 +9,13 @@ namespace CalibraHub.Application.Services;
 public sealed class FinanceService : IFinanceService
 {
     private readonly IFinanceRepository _repo;
+    private readonly IAuditTrailService? _audit;
 
-    public FinanceService(IFinanceRepository repo) => _repo = repo;
+    public FinanceService(IFinanceRepository repo, IAuditTrailService? audit = null)
+    {
+        _repo = repo;
+        _audit = audit;
+    }
 
     public async Task<IReadOnlyCollection<ContactDto>> GetContactsAsync(
         byte? accountType, string? search, CancellationToken cancellationToken)
@@ -86,6 +92,17 @@ public sealed class FinanceService : IFinanceService
                 CreatedAt = existing.CreatedAt
             };
             await _repo.UpdateContactAsync(updated, cancellationToken);
+
+            // İşlem logu — yalnızca değişen alanlar (CompanyId yeni nesnede set edilmediği için hariç)
+            if (_audit is not null)
+            {
+                try
+                {
+                    var changes = AuditDiff.Compute(existing, updated, "Contact", ignore: new[] { "CompanyId" });
+                    _audit.LogChanges("Contact", existing.Id, updated.AccountTitle, changes);
+                }
+                catch { /* audit yazımı kaydı asla bozmaz */ }
+            }
             return (true, null, ToDto(updated));
         }
         else
@@ -146,6 +163,9 @@ public sealed class FinanceService : IFinanceService
                 WaName = entity.WaName,
                 CreatedAt = entity.CreatedAt
             };
+
+            // İşlem logu — yeni cari
+            _audit?.LogInsert("Contact", newId, entity.AccountTitle, detail: code);
             return (true, null, ToDto(created));
         }
     }
@@ -157,6 +177,9 @@ public sealed class FinanceService : IFinanceService
             return (false, "Kayıt bulunamadı.");
 
         await _repo.DeleteContactAsync(id, cancellationToken);
+
+        // İşlem logu — cari silme
+        _audit?.LogDelete("Contact", id, existing.AccountTitle, detail: existing.AccountCode);
         return (true, null);
     }
 
@@ -166,6 +189,14 @@ public sealed class FinanceService : IFinanceService
         var existing = await _repo.GetContactByIdAsync(contactId, cancellationToken);
         if (existing is null) return (false, "Cari bulunamadı.");
         await _repo.UpdateContactPriceGroupAsync(contactId, priceGroupId, cancellationToken);
+
+        // İşlem logu — yalnızca fiyat grubu değiştiyse
+        if (_audit is not null && existing.PriceGroupId != priceGroupId)
+        {
+            _audit.LogChanges("Contact", contactId, existing.AccountTitle,
+                [new AuditFieldChange("PriceGroupId", "Fiyat Grubu",
+                    AuditDiff.Normalize(existing.PriceGroupId), AuditDiff.Normalize(priceGroupId))]);
+        }
         return (true, null);
     }
 

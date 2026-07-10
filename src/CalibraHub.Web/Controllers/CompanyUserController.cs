@@ -1,6 +1,7 @@
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
@@ -31,19 +32,22 @@ public sealed class CompanyUserController : Controller
     private readonly IDepartmentRepository _deptRepo;
     private readonly ICompanyRepository _companyRepo;
     private readonly IPasswordHashService _passwordHashService;
+    private readonly IAuditTrailService _audit;
 
     public CompanyUserController(
         IUserProfileRepository userRepo,
         IAdminManagementService adminService,
         IDepartmentRepository deptRepo,
         ICompanyRepository companyRepo,
-        IPasswordHashService passwordHashService)
+        IPasswordHashService passwordHashService,
+        IAuditTrailService audit)
     {
         _userRepo = userRepo;
         _adminService = adminService;
         _deptRepo = deptRepo;
         _companyRepo = companyRepo;
         _passwordHashService = passwordHashService;
+        _audit = audit;
     }
 
     private (int CompanyId, int UserId) GetCurrentUser()
@@ -356,6 +360,16 @@ public sealed class CompanyUserController : Controller
                     if (!dto.IsActive) rebuilt.Deactivate();
                     // dto.IsActive=true ise yeni instance'in default IsActive=true zaten.
                     await _userRepo.UpdateAsync(rebuilt, ct);
+
+                    // İşlem logu — AdminService diff'i FullName/Email/Rol'ü kapsar; bu ikinci
+                    // UPDATE'in taşıdığı alanlar (departman/amir/telefon/aktiflik) burada diff'lenir.
+                    try
+                    {
+                        _audit.LogUpdate("User", existing.Id, rebuilt.Email,
+                            new { existing.DepartmentId, existing.SupervisorUserId, existing.PhoneNumber, existing.IsActive },
+                            new { rebuilt.DepartmentId, rebuilt.SupervisorUserId, rebuilt.PhoneNumber, rebuilt.IsActive });
+                    }
+                    catch { /* audit yazımı kaydı asla bozmaz */ }
                 }
 
                 return Json(new { ok = true, id = existing.Id, message = "Kullanıcı güncellendi." });
@@ -466,6 +480,9 @@ public sealed class CompanyUserController : Controller
         {
             user.Deactivate();
             await _userRepo.UpdateAsync(user, ct);
+
+            // İşlem logu — kullanıcı silme = deaktifleştirme (soft-delete)
+            _audit.LogDelete("User", id, user.Email, detail: user.FullName);
             return Json(new { ok = true });
         }
         catch (Exception ex)

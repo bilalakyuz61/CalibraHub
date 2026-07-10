@@ -1123,7 +1123,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             Created = DateTime.Now
         };
 
-        await _repository.AddItemAsync(stockCard, cancellationToken);
+        var newItemId = await _repository.AddItemAsync(stockCard, cancellationToken);
+
+        // İşlem logu — yeni malzeme kartı
+        _audit?.LogInsert("Item", newItemId, name, detail: code);
     }
 
     public async Task UpdateItemAsync(UpdateItemRequest request, CancellationToken cancellationToken)
@@ -1177,6 +1180,17 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         };
 
         await _repository.UpdateItemAsync(updatedItem, cancellationToken);
+
+        // İşlem logu — yalnızca değişen alanlar (CompanyId yeni nesnede set edilmediği için hariç)
+        if (_audit is not null)
+        {
+            try
+            {
+                var changes = AuditDiff.Compute(existing, updatedItem, "Item", ignore: new[] { "CompanyId" });
+                _audit.LogChanges("Item", request.ItemId, name, changes);
+            }
+            catch { /* audit yazımı kaydı asla bozmaz */ }
+        }
     }
 
     public async Task DeactivateItemAsync(int stockCardId, CancellationToken cancellationToken)
@@ -1194,6 +1208,9 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         }
 
         await _repository.DeleteItemAsync(stockCardId, cancellationToken);
+
+        // İşlem logu — malzeme kartı silme (soft-delete)
+        _audit?.LogDelete("Item", stockCardId, stockCard.Name, detail: stockCard.Code);
     }
 
     public async Task CreateLocationAsync(
@@ -1561,7 +1578,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
             IsActive = request.IsActive
         };
-        return await _repository.AddMachineAsync(machine, cancellationToken);
+        var newMachineId = await _repository.AddMachineAsync(machine, cancellationToken);
+
+        // İşlem logu — yeni makine
+        _audit?.LogInsert("Machine", newMachineId, name);
+
+        return newMachineId;
     }
 
     public async Task UpdateMachineAsync(UpdateMachineRequest request, CancellationToken cancellationToken)
@@ -1605,13 +1627,39 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             IsActive = request.IsActive
         };
         await _repository.UpdateMachineAsync(machine, cancellationToken);
+
+        // İşlem logu — yalnızca değişen alanlar (CompanyId yeni nesnede set edilmediği için hariç)
+        if (_audit is not null)
+        {
+            try
+            {
+                var changes = AuditDiff.Compute(existingMachine, machine, "Machine", ignore: new[] { "CompanyId" });
+                _audit.LogChanges("Machine", request.Id, name, changes);
+            }
+            catch { /* audit yazımı kaydı asla bozmaz */ }
+        }
     }
 
     public async Task DeleteMachineAsync(int machineId, CancellationToken cancellationToken)
     {
         if (machineId <= 0)
             throw new ArgumentException("Makine secimi zorunludur.");
+
+        // İşlem logu için silinen makinenin adını silmeden ÖNCE al (okunamazsa Id ile loglanır)
+        string? machineName = null;
+        if (_audit is not null)
+        {
+            try
+            {
+                var machines = await _repository.GetMachinesAsync(cancellationToken);
+                machineName = machines.FirstOrDefault(m => m.Id == machineId)?.Name;
+            }
+            catch { }
+        }
+
         await _repository.DeleteMachineAsync(machineId, cancellationToken);
+
+        _audit?.LogDelete("Machine", machineId, machineName ?? ("#" + machineId));
     }
 
     public async Task CreateUnitAsync(

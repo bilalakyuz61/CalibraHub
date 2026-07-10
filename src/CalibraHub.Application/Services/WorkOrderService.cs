@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -33,6 +34,7 @@ public sealed class WorkOrderService : IWorkOrderService
     private readonly IDocumentNumberService? _docNumberService;
     private readonly IDocumentTypeRepository? _documentTypeRepo;
     private readonly IArgeProjectRepository? _argeProjects;
+    private readonly IAuditTrailService? _audit;
 
     public WorkOrderService(
         IWorkOrderRepository workOrders,
@@ -44,7 +46,8 @@ public sealed class WorkOrderService : IWorkOrderService
         ILogisticsConfigurationRepository logisticsConfig,
         IDocumentNumberService? docNumberService = null,
         IDocumentTypeRepository? documentTypeRepo = null,
-        IArgeProjectRepository? argeProjects = null)
+        IArgeProjectRepository? argeProjects = null,
+        IAuditTrailService? audit = null)
     {
         _workOrders = workOrders;
         _numerator = numerator;
@@ -56,6 +59,7 @@ public sealed class WorkOrderService : IWorkOrderService
         _docNumberService = docNumberService;
         _documentTypeRepo = documentTypeRepo;
         _argeProjects = argeProjects;
+        _audit = audit;
     }
 
     /// <summary>
@@ -171,6 +175,11 @@ public sealed class WorkOrderService : IWorkOrderService
             await _workOrderOperations.ExplodeFromRoutingAsync(newId, resolvedRoutingId.Value, ct);
         }
 
+        // İşlem logu — yeni iş emri
+        _audit?.LogInsert("WorkOrder", newId, orderNumber,
+            detail: $"Planlanan {AuditDiff.Normalize(request.PlannedQuantity)}" +
+                    (autoRelease ? " · Yayımlandı" : ""));
+
         return newId;
     }
 
@@ -178,6 +187,13 @@ public sealed class WorkOrderService : IWorkOrderService
     {
         if (request.PlannedQuantity <= 0)
             throw new ArgumentException("Planlanan miktar 0'dan buyuk olmali.", nameof(request.PlannedQuantity));
+
+        // İşlem logu: eski durumu mutasyondan ÖNCE oku (yalnızca audit için)
+        WorkOrderDto? auditOld = null;
+        if (_audit is not null)
+        {
+            try { auditOld = await _workOrders.GetAsync(id, ct); } catch { }
+        }
 
         await _workOrders.UpdateAsync(id, request, null, ct);
 
@@ -191,6 +207,13 @@ public sealed class WorkOrderService : IWorkOrderService
                 doc.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
                 await _documents.UpsertAsync(doc, ct);
             }
+        }
+
+        // İşlem logu — request'teki alanlar eski DTO ile ad eşleşmesiyle diff'lenir,
+        // yalnızca değişen alanlar loglanır (hiç değişiklik yoksa log yazılmaz).
+        if (_audit is not null && auditOld is not null)
+        {
+            _audit.LogUpdate("WorkOrder", id, auditOld.OrderNumber, auditOld, request);
         }
     }
 
@@ -222,6 +245,16 @@ public sealed class WorkOrderService : IWorkOrderService
         }
 
         await _workOrders.ChangeStatusAsync(id, newStatus, null, ct);
+
+        // İşlem logu — iptal kullanıcı gözünden silmedir (LogDelete), diğer geçişler durum değişikliği
+        if (_audit is not null && current.Status != newStatus)
+        {
+            if (newStatus == WorkOrderStatus.Cancelled)
+                _audit.LogDelete("WorkOrder", id, current.OrderNumber, detail: "İptal edildi");
+            else
+                _audit.LogChanges("WorkOrder", id, current.OrderNumber,
+                    [new AuditFieldChange("Status", "Durum", current.Status.ToString(), newStatus.ToString())]);
+        }
     }
 
     public async Task<int> ReviseAsync(int id, CancellationToken ct)
@@ -257,7 +290,13 @@ public sealed class WorkOrderService : IWorkOrderService
             Notes = oldDoc.Notes,
         }, ct);
 
-        return await _workOrders.CreateRevisionAsync(id, newDocumentId, null, ct);
+        var revisionId = await _workOrders.CreateRevisionAsync(id, newDocumentId, null, ct);
+
+        // İşlem logu — revizyon yeni kayıttır; eski emir repo tarafında Cancelled olur
+        _audit?.LogInsert("WorkOrder", revisionId, newNumber,
+            detail: $"Revizyon — kaynak {current.OrderNumber}");
+
+        return revisionId;
     }
 
     public async Task<int> CreateFromSalesLineAsync(CreateWorkOrderFromSalesLineRequest request, CancellationToken ct)
@@ -297,6 +336,13 @@ public sealed class WorkOrderService : IWorkOrderService
                 AssignedPersonnelId: target.AssignedPersonnelId,
                 Notes: target.Notes,
                 ArgeProjectId: target.ArgeProjectId), null, ct);
+
+            // İşlem logu — toplama: mevcut emrin planlanan miktarı arttı
+            _audit?.LogChanges("WorkOrder", target.Id, target.OrderNumber,
+                [new AuditFieldChange("PlannedQuantity", "Planlanan Miktar",
+                    AuditDiff.Normalize(target.PlannedQuantity),
+                    AuditDiff.Normalize(target.PlannedQuantity + request.Quantity))],
+                detail: "Sipariş satırından toplama");
             return target.Id;
         }
 

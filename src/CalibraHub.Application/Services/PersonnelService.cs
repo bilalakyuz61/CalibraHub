@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 
@@ -8,8 +9,13 @@ namespace CalibraHub.Application.Services;
 public sealed class PersonnelService : IPersonnelService
 {
     private readonly IPersonnelRepository _repo;
+    private readonly IAuditTrailService? _audit;
 
-    public PersonnelService(IPersonnelRepository repo) => _repo = repo;
+    public PersonnelService(IPersonnelRepository repo, IAuditTrailService? audit = null)
+    {
+        _repo = repo;
+        _audit = audit;
+    }
 
     public Task<IReadOnlyCollection<PersonnelDto>> ListAsync(bool includeInactive, bool onlyOperators, CancellationToken ct)
         => _repo.ListAsync(includeInactive, onlyOperators, ct);
@@ -34,16 +40,10 @@ public sealed class PersonnelService : IPersonnelService
         }
 
         // Code DB'de var ama UI gostermez — auto-turetilir (mevcut record'sa onun kodunu koru)
-        string code;
-        if (req.Id > 0)
-        {
-            var existing = all.FirstOrDefault(p => p.Id == req.Id);
-            code = !string.IsNullOrWhiteSpace(existing?.Code) ? existing!.Code : DeriveCode(fullName);
-        }
-        else
-        {
-            code = DeriveCode(fullName);
-        }
+        var existing = req.Id > 0 ? all.FirstOrDefault(p => p.Id == req.Id) : null;
+        var code = req.Id > 0
+            ? (!string.IsNullOrWhiteSpace(existing?.Code) ? existing!.Code : DeriveCode(fullName))
+            : DeriveCode(fullName);
 
         var entity = new Personnel
         {
@@ -63,7 +63,29 @@ public sealed class PersonnelService : IPersonnelService
             Notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim(),
             BirthDate = req.BirthDate,
         };
-        return await _repo.SaveAsync(entity, ct);
+        var savedId = await _repo.SaveAsync(entity, ct);
+
+        // İşlem logu — PIN değeri log dosyasına yazılmaz (ignore); değiştiyse maskeli işaretlenir
+        if (_audit is not null)
+        {
+            try
+            {
+                if (existing is null)
+                {
+                    _audit.LogInsert("Personnel", savedId, fullName);
+                }
+                else
+                {
+                    var changes = AuditDiff.Compute(existing, entity, "Personnel",
+                        ignore: new[] { "PinCode", "CompanyId", "Code" });
+                    if (!string.Equals(existing.PinCode ?? "", entity.PinCode ?? "", StringComparison.Ordinal))
+                        changes.Add(new AuditFieldChange("PinCode", "PIN", null, "(değiştirildi)"));
+                    _audit.LogChanges("Personnel", savedId, fullName, changes);
+                }
+            }
+            catch { /* audit yazımı kaydı asla bozmaz */ }
+        }
+        return savedId;
     }
 
     // Backward-compat: Code DB'de var ama UI'dan kaldirildi.
@@ -75,7 +97,19 @@ public sealed class PersonnelService : IPersonnelService
         return t.Length > 50 ? t[..50] : t;
     }
 
-    public Task DeleteAsync(int id, CancellationToken ct) => _repo.DeleteAsync(id, ct);
+    public async Task DeleteAsync(int id, CancellationToken ct)
+    {
+        // İşlem logu için silinen personelin adını silmeden ÖNCE al (okunamazsa Id ile loglanır)
+        string? fullName = null;
+        if (_audit is not null)
+        {
+            try { fullName = (await _repo.GetAsync(id, ct))?.FullName; } catch { }
+        }
+
+        await _repo.DeleteAsync(id, ct);
+
+        _audit?.LogDelete("Personnel", id, fullName ?? ("#" + id));
+    }
 
     public Task<PersonnelDto?> GetByPinOrCardAsync(string? pinCode, string? cardNo, CancellationToken ct)
         => _repo.GetByPinOrCardAsync(pinCode, cardNo, ct);
