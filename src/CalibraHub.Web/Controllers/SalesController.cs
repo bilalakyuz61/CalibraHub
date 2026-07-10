@@ -1235,9 +1235,10 @@ public sealed class SalesController : Controller
             // widget degerlerini kontrol et. Eksik varsa belge kaydi commit edilmis olsa
             // bile KITT / success tetiklenmesin — kullanici ⚙ modal'dan doldurup tekrar
             // kaydetmek zorunda.
+            IReadOnlyCollection<DocumentLineDto> savedLines = Array.Empty<DocumentLineDto>();
             if (quote != null)
             {
-                var savedLines = await _quoteService.GetQuoteLinesAsync(quote.Id, ct);
+                savedLines = await _quoteService.GetQuoteLinesAsync(quote.Id, ct);
                 var lineIds    = savedLines.Select(l => l.Id.ToString()).ToArray();
                 var saveLineFormCode = "SALES_QUOTE_LINES";
                 if (request.DocumentTypeId.HasValue)
@@ -1278,7 +1279,11 @@ public sealed class SalesController : Controller
                     User?.Identity?.Name);
             }
 
-            return Json(new { success = true, quote, approvalTriggered });
+            // lines: kaydedilen satirlar (Id dahil, LineNo sirasinda). Grid sessiz kayit
+            // sonrasi bu Id'leri satirlarina merge eder — aksi halde bir sonraki kayit
+            // Id'siz gider, SaveLinesAsync satirlari DELETE+INSERT eder ve satir bazli
+            // WidgetTra kayitlari orphan kalir (TKL202600000002 vakasi, 2026-07-10).
+            return Json(new { success = true, quote, approvalTriggered, lines = savedLines });
         }
         catch (Exception ex)
         {

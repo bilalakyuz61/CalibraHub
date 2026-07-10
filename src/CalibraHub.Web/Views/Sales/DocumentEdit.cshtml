@@ -3964,7 +3964,19 @@
         }
     }
 
-    window.sqSave = async function (opts) {
+    // Es zamanli kayitlari serilestir: malzeme secimi 150ms sonra sessiz kayit
+    // tetikler; kullanici o kayit ucustayken Kaydet'e basarsa ikinci kayit ilkinin
+    // bitmesini (ve satir Id merge'inin grid'e islenmesini) beklemeli. Aksi halde
+    // ikinci payload Id'siz gider (satirlar DELETE+INSERT olur) ya da currentQuoteId
+    // henuz null ise ayni belge iki kez INSERT edilir.
+    var _sqSaveChain = Promise.resolve();
+    window.sqSave = function (opts) {
+        var run = _sqSaveChain.then(function () { return _sqSaveCore(opts); });
+        _sqSaveChain = run.catch(function () {});
+        return run;
+    };
+
+    async function _sqSaveCore(opts) {
         // opts.silent   === true  → basari KITT animasyonu atlanir (otomatik kayit)
         // opts.validate === true  → zorunlu alan kontrolleri aktif (manuel Kaydet butonu)
         var _silent   = !!(opts && opts.silent);
@@ -4238,6 +4250,15 @@
                 return;
             }
             currentQuoteId = data.quote.id;
+            // Kaydedilen satir Id'lerini grid'e geri yaz (yanittaki lines, LineNo sirasinda).
+            // Ozellikle sessiz kayitta (malzeme secimi tetikler) grid satirlari Id'siz
+            // kaliyordu; bir sonraki kayit Id'siz payload ile satirlari DELETE+INSERT
+            // ediyor, audit'e "Kalem Silindi + Eklendi" dusuyor ve satir widget'lari
+            // (WidgetTra) orphan kaliyordu (TKL202600000002 vakasi, 2026-07-10).
+            if (Array.isArray(data.lines) && window.CalibraHub && window.CalibraHub.salesLineGrid
+                && typeof window.CalibraHub.salesLineGrid.mergeSavedLineIds === 'function') {
+                try { window.CalibraHub.salesLineGrid.mergeSavedLineIds(data.lines); } catch (_) {}
+            }
             // Basarili kayit sonrasi: eksik yok, grid'e temiz state sinyali ver.
             if (window.CalibraHub && window.CalibraHub.salesLineGrid
                 && typeof window.CalibraHub.salesLineGrid.setInvalidLines === 'function') {
@@ -4354,7 +4375,7 @@
                 }, 1100);
             }
         } catch (e) { CalibraAlert.error('Kayit hatasi: ' + e.message); }
-    };
+    }
 
     /* Renderer reload — React proxy.reload ic handleRef null iken sessizce
        no-op oldugu icin cagriyi birkaç kez tekrar ederiz (idempotent).

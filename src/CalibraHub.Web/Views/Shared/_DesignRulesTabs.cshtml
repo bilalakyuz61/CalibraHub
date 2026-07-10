@@ -1,0 +1,92 @@
+@*
+    Tasarım Kuralları alt-sekme host'u (2026-07-11).
+
+    NEDEN: Alt-sekmeler (Belge Tasarımı / Belge Numarası / Cari Kodu / Stok Kodu) eskiden
+    düz <a href> ile tam-sayfa navigasyon yapıyordu → her tıklamada şerit dahil TÜM sayfa
+    yeniden yükleniyordu (flicker). Üst workspace tab'ları iframe tabanlı olduğu için şerit
+    sabit kalır. Bu partial aynı deseni içeride kurar: şerit SABİT host, içerik iç iframe'de
+    (`?embed=1` → _Layout body-only + Index embed dalı = şeritsiz içerik). Sekme tıklaması
+    yalnız iframe.src'yi değiştirir → şerit hiç yeniden yüklenmez.
+
+    Kullanım: Design-rules Index'leri host modunda (embed değilken) bu partial'ı render eder.
+*@
+@{
+    var drPath = Context.Request.Path.Value ?? "";
+    var drIsLayout = drPath.StartsWith("/DocLayoutRule", StringComparison.OrdinalIgnoreCase);
+    var drIsNumber = drPath.StartsWith("/DocumentNumberRule", StringComparison.OrdinalIgnoreCase);
+    var drIsCode   = drPath.StartsWith("/CodeRule", StringComparison.OrdinalIgnoreCase);
+    var drEntity   = (string?)Context.Request.Query["entity"] ?? "contact";
+    var drActiveContact = drIsCode && !string.Equals(drEntity, "item", StringComparison.OrdinalIgnoreCase);
+    var drActiveItem    = drIsCode && string.Equals(drEntity, "item", StringComparison.OrdinalIgnoreCase);
+    // İç iframe başlangıç URL'i = mevcut sayfa + embed=1 (şeritsiz içerik dalı)
+    var drSelf = drPath + (Context.Request.QueryString.Value ?? "");
+    var drInitialSrc = drSelf + (drSelf.Contains('?') ? "&" : "?") + "embed=1";
+}
+
+<style>
+    /* Host: aksiyon-alanı flex kolon; şerit sabit, iframe kalan alanı doldurur. */
+    .workspace-frame-body.page-design-rules-host .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    .dlr-host { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; height: 100%; }
+    .dlr-tabs {
+        display: flex; gap: 0; padding: 0 16px;
+        background: transparent;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        flex-shrink: 0;
+    }
+    .dlr-tab {
+        padding: 10px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+        background: transparent; border: none; border-bottom: 2px solid transparent;
+        margin-bottom: -1px; color: rgba(148, 163, 184, 0.85); text-decoration: none;
+        display: inline-flex; align-items: center; gap: 7px;
+        transition: color .12s, border-color .12s;
+    }
+    .dlr-tab:hover { color: #6366f1; }
+    .dlr-tab.active { color: #6366f1; border-bottom-color: #6366f1; font-weight: 600; }
+    body.app-theme-dark .dlr-tab.active { color: #a5b4fc; border-bottom-color: #a5b4fc; }
+    body.app-theme-dark .dlr-tab:hover  { color: #a5b4fc; }
+    .dlr-tab svg { opacity: 0.85; }
+    .dlr-frame { flex: 1 1 auto; min-height: 0; width: 100%; border: none; background: transparent; }
+</style>
+
+<div class="dlr-host">
+    <div class="dlr-tabs">
+        <a href="/DocLayoutRule" data-src="/DocLayoutRule" class="dlr-tab @(drIsLayout ? "active" : "")">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Belge Tasarımı
+        </a>
+        <a href="/DocumentNumberRule" data-src="/DocumentNumberRule" class="dlr-tab @(drIsNumber ? "active" : "")">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+            Belge Numarası
+        </a>
+        <a href="/CodeRule?entity=contact" data-src="/CodeRule?entity=contact" class="dlr-tab @(drActiveContact ? "active" : "")">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Cari Kodu
+        </a>
+        <a href="/CodeRule?entity=item" data-src="/CodeRule?entity=item" class="dlr-tab @(drActiveItem ? "active" : "")">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            Stok Kodu
+        </a>
+    </div>
+    <iframe id="drContentFrame" class="dlr-frame" src="@drInitialSrc" title="Tasarım Kuralları içeriği"></iframe>
+</div>
+
+<script>
+(function () {
+    // Sekme tıklaması: tam-sayfa navigasyon YERİNE yalnız iç iframe'in src'sini değiştir →
+    // şerit hiç yeniden yüklenmez (üst workspace tab davranışı).
+    var frame = document.getElementById('drContentFrame');
+    var tabs = document.querySelectorAll('.dlr-tabs .dlr-tab');
+    function embed(url) { return url + (url.indexOf('?') > -1 ? '&' : '?') + 'embed=1'; }
+    tabs.forEach(function (a) {
+        a.addEventListener('click', function (e) {
+            e.preventDefault();
+            var base = a.getAttribute('data-src');
+            if (frame) frame.src = embed(base);
+            tabs.forEach(function (x) { x.classList.remove('active'); });
+            a.classList.add('active');
+        });
+    });
+})();
+</script>

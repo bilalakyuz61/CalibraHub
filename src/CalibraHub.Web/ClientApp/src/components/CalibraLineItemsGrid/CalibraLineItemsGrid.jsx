@@ -445,6 +445,35 @@ export default function CalibraLineItemsGrid(props) {
           return copy
         })
       },
+      // Kayit yanitindaki satirlari (LineNo sirasinda) grid'in dolu satirlarina
+      // pozisyonel eslestirip YALNIZCA id alanini yazar. setRows'tan farki:
+      // kullanicinin devam eden duzenlemelerini ezmez, _locked durumunu degistirmez.
+      // Id'siz kalan satir bir sonraki kayitta DELETE+INSERT edilir ve satir bazli
+      // widget (WidgetTra) kayitlari orphan kalir — bu merge o acigi kapatir.
+      // Dolu satir predicate'i sqSave'in rowsFilled filtresiyle ayni olmali
+      // (materialCode || materialName) — payload'a giden siralama korunur.
+      mergeSavedLineIds: function(savedLines) {
+        var arr = Array.isArray(savedLines) ? savedLines : []
+        if (arr.length === 0) return
+        setRows(function(prev) {
+          var cursor = 0
+          return prev.map(function(r) {
+            if (!r || !(r.materialCode || r.materialName)) return r
+            if (cursor >= arr.length) return r
+            var sl = arr[cursor]
+            cursor++
+            var hasId = r.id != null && r.id !== '' && Number(r.id) > 0
+            if (hasId || !sl || !(Number(sl.id) > 0)) return r
+            // Guvenlik: ucus sirasinda satir degistiyse yanlis Id yazmamak icin
+            // itemId tutarliligi aranir — uymazsa satir Id'siz birakilir.
+            var slItem  = sl.itemId != null ? Number(sl.itemId) : null
+            var rowItem = r.stockCardId != null && r.stockCardId !== '' ? Number(r.stockCardId)
+                        : (r.itemId != null && r.itemId !== '' ? Number(r.itemId) : null)
+            if (slItem == null || rowItem == null || slItem !== rowItem) return r
+            return Object.assign({}, r, { id: Number(sl.id) })
+          })
+        })
+      },
       // Satirlardaki eksik zorunlu widget state'i — ⚙ rengini kirmizi yapar.
       setInvalidLines: function(ids) {
         var arr = Array.isArray(ids) ? ids.map(function(n) { return Number(n) }).filter(function(n) { return n > 0 }) : []
