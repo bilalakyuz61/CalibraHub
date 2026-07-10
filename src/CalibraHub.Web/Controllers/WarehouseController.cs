@@ -349,6 +349,11 @@ public sealed class WarehouseController : Controller
             var removed = await _inventoryCountRepo.RevertAsync(id, ct);
             return Json(new { ok = true, removed });
         }
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException ex)
+        {
+            // İptal, bir depoda bakiyeyi eksiye düşürüyor (yansıtılan stok sonradan tüketilmiş).
+            return Json(new { ok = false, error = "Yansıtma iptal edilemez — " + ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return Json(new { ok = false, error = ex.Message });

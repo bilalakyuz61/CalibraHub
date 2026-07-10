@@ -47,11 +47,14 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
 
     public async Task<int> RevertAsync(int documentId, CancellationToken ct)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
             // 1) Optimistic-lock: yalnızca Applied ise Draft'a çevir. 0 satır → zaten taslak/yok.
+            //    Belge tarihini de al (eksi bakiye kontrolü ileriye-dönük bu tarihten bakar).
+            DateTime docDate;
             await using (var upd = conn.CreateCommand())
             {
                 upd.Transaction = tx;
@@ -59,14 +62,41 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                     UPDATE {T("InventoryCount")}
                     SET [Status] = 0, [Updated] = SYSUTCDATETIME()
                     WHERE [DocumentId] = @DocId AND [Status] = 1;
+                    IF @@ROWCOUNT = 0 SELECT CAST(NULL AS DATETIME);
+                    ELSE SELECT [DocumentDate] FROM {T("Document")} WHERE [Id] = @DocId;
                     """;
                 upd.Parameters.AddWithValue("@DocId", documentId);
-                var affected = await upd.ExecuteNonQueryAsync(ct);
-                if (affected == 0)
+                var dObj = await upd.ExecuteScalarAsync(ct);
+                if (dObj is null or DBNull)
                     throw new InvalidOperationException("Bu sayım yansıtılmamış veya bulunamadı.");
+                docDate = Convert.ToDateTime(dObj);
             }
 
-            // 2) Bu sayım fişinin ürettiği tüm stok hareketlerini sil (Yansıt farkları +
+            // 2) Silinecek düzeltme satırlarının etkilediği (item, lokasyon) çiftlerini topla —
+            //    DELETE'ten ÖNCE (sonra kayıt kalmaz). Stok ARTIRAN (giriş yönü) bir yansıtmayı
+            //    geri almak bakiyeyi düşürür; bu depoda eksiye düşerse iptal engellenmeli.
+            //    Not: Sayım düzeltme satırları LotId taşımaz / seri çözmez (AppendAdjustLineAsync)
+            //    → lot/seri bakiyesi etkilenmez, yalnızca genel (item, lokasyon) bakiyesi kontrol edilir.
+            var affected = new HashSet<(int ItemId, int LocationId)>();
+            await using (var sel = conn.CreateCommand())
+            {
+                sel.Transaction = tx;
+                sel.CommandText = $"""
+                    SELECT DISTINCT [ItemId], [LocationId], [FromLocationId]
+                    FROM {T("DocumentLine")}
+                    WHERE [DocumentId] = @DocId AND [MovementType] = 4 AND [ItemId] IS NOT NULL;
+                    """;
+                sel.Parameters.AddWithValue("@DocId", documentId);
+                await using var r = await sel.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                {
+                    var itemId = r.GetInt32(0);
+                    if (!r.IsDBNull(1)) affected.Add((itemId, r.GetInt32(1)));
+                    if (!r.IsDBNull(2)) affected.Add((itemId, r.GetInt32(2)));
+                }
+            }
+
+            // 3) Bu sayım fişinin ürettiği tüm stok hareketlerini sil (Yansıt farkları +
             //    İşlemler sekmesi sıfırlamaları — hepsi MovementType=4). Ham sayım kalemleri
             //    (InventoryCountLine) dokunulmaz → fiş temiz taslağa döner.
             int removed;
@@ -77,6 +107,12 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                 del.Parameters.AddWithValue("@DocId", documentId);
                 removed = await del.ExecuteNonQueryAsync(ct);
             }
+
+            // 4) Eksi bakiye kontrolü (silme SONRASI güncel bakiye üzerinden). Şirket/lokasyon
+            //    parametrelerine saygılı — kontrol kapalıysa no-op. Negatifse NegativeBalanceException
+            //    fırlatır → tx geri alınır → iptal engellenir, kullanıcı net mesaj alır.
+            foreach (var (itemId, locationId) in affected)
+                await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, itemId, locationId, docDate.Date, ct);
 
             await tx.CommitAsync(ct);
             return removed;
