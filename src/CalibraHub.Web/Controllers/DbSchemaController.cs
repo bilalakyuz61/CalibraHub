@@ -8,10 +8,17 @@ namespace CalibraHub.Web.Controllers;
 /// <summary>
 /// Aktif sirket DB'sinin fiziksel sema haritasini gosterir.
 /// Sadece metadata (sys.* introspection); ornek veri/PII OKUNMAZ.
+///
+/// Yetki kapsami = CompanySettings (SetupDefinitions DEGIL) — BILINCLI KARAR (2026-07-11):
+/// Menu ogesi AdminOnly oldugundan DepartmentManager (= "Admin") linki gorur. DB haritasi
+/// salt-okunur meta veridir (tablo/kolon/index/FK adlari; PII/sifre yok), entegrator sirri
+/// degildir. Bu yuzden SystemAdmin'e ozel SetupDefinitions yerine, Sirket Ayarlari/Parametreleri
+/// ile ayni CompanySettings kapsamina baglandi → Admin de goruntuleyebilir. GERI ALMA: tekrar
+/// SetupDefinitions yapilirsa Admin menude linki gorur ama tiklayinca 403 alir (dead link).
 /// </summary>
 [Authorize]
 [Route("admin/db-schema")]
-[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CompanySettings)]
 public sealed class DbSchemaController : Controller
 {
     private readonly IDbSchemaService _service;
