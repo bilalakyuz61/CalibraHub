@@ -2216,6 +2216,7 @@
             {
                 <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="workflow" onclick="sqSwitchTab('workflow')">Onay Akışı</button>
                 <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="lineage" onclick="sqSwitchTab('lineage')">İlişkili Belgeler</button>
+                <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="audittrail" onclick="sqSwitchTab('audittrail')">Değişiklik Geçmişi</button>
             }
         </nav>
         <div class="sqe-tab-content">
@@ -2488,6 +2489,14 @@
                 <div id="sqLineageHost" data-doc-id="@Model.DocumentId.Value">
                     <div class="dlg-empty">Yükleniyor…</div>
                 </div>
+            </div>
+            <div class="sqe-tab-pane" data-sqe-pane="audittrail" style="padding:14px 6px;">
+                @await Html.PartialAsync("_AuditTrailHost", new CalibraHub.Web.Models.Shared.AuditTrailHostModel {
+                    Entity = Model.DocumentTypeCode ?? "belge",
+                    RecordId = Model.DocumentId.Value.ToString(),
+                    WidgetFormCode = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(Model.DocumentTypeCode).Header,
+                    HostId = "sqAuditTrail",
+                })
             </div>
         }
 

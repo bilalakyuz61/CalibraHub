@@ -175,6 +175,7 @@ public static class FormCodes
     public const string ApprovalFlows      = "APPROVAL_FLOWS";
     public const string DecimalSettings    = "DECIMAL_SETTINGS";
     public const string GeneralDefs        = "GENERAL_DEFS";      // Genel Tanımlamalar sayfası (Adres Tanımlama: Ülke/Şehir/İlçe)
+    public const string AuditLog           = "AUDIT_LOG";         // İşlem Logları izleme/raporlama ekranı
 
     // ═══════════════════════════════════════════════════
     // GENEL (yetki kapsamına sonradan alınanlar — 2026-07-06)

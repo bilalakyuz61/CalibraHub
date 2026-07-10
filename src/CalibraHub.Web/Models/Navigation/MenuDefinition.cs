@@ -72,6 +72,8 @@ public static class MenuDefinition
             new("settings.dbschema",       isEn ? "Database Map"           : "Veritabanı Haritası",     "Database",           "/admin/db-schema",          null, AdminOnly: true),
             new("settings.scheduledtasks", isEn ? "Scheduled Tasks"        : "Zamanlanmış Görevler",    "Clock",              "/Admin/ScheduledTasks",     null,
                 PermissionFormCode: FormCodes.Scheduler),
+            new("settings.auditlog",       isEn ? "Audit Log"              : "İşlem Logları",           "ScrollText",         "/AuditLog",                 null,
+                MatchPath: "/AuditLog", PermissionFormCode: FormCodes.AuditLog),
         };
         if (isSystemAdmin)
         {

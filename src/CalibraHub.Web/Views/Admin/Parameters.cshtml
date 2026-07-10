@@ -615,6 +615,22 @@ body.app-theme-dark .ap-wrapper {
                         <span style="margin-left:8px;font-size:0.8rem;opacity:.6;">dk</span>
                     </div>
                 </div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">İşlem Logu Saklama Süresi (gün)</div>
+                        <div class="ap-row-desc">
+                            İşlem logları (insert/update/delete + oturum olayları) program dizininde günlük
+                            JSON dosyaları olarak tutulur. Bu süreden eski günlük dosyalar otomatik silinir.
+                            <strong>0 = süresiz sakla</strong> (otomatik temizlik yapılmaz). Önerilen: 365.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <input type="number" id="ap-audit-retention" class="form-control form-control-sm"
+                               min="0" max="3650" step="30" value="@(ViewData["AuditRetentionDays"] as int? ?? 365)"
+                               style="width:110px;text-align:right;" />
+                        <span style="margin-left:8px;font-size:0.8rem;opacity:.6;">gün</span>
+                    </div>
+                </div>
             </section>
 
         </main>
@@ -818,11 +834,14 @@ body.app-theme-dark .ap-wrapper {
                 var idleEl = document.getElementById('ap-session-idle');
                 var idleVal = parseInt(idleEl && idleEl.value, 10);
                 if (isNaN(idleVal) || idleVal < 0) idleVal = 0;
+                var retEl = document.getElementById('ap-audit-retention');
+                var retVal = parseInt(retEl && retEl.value, 10);
+                if (isNaN(retVal) || retVal < 0) retVal = 365;
                 var rsec = await fetch('/Admin/SaveSecurityParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ sessionIdleMinutes: idleVal })
+                    body: JSON.stringify({ sessionIdleMinutes: idleVal, auditRetentionDays: retVal })
                 });
                 var dsec = await rsec.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!dsec.ok;

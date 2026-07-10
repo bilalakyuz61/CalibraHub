@@ -821,6 +821,13 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                 <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
                 <span>Widget Sahaları</span>
             </button>
+            @if (!isNew)
+            {
+                <button type="button" class="woe-nav-btn" data-tab="audittrail">
+                    <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Değişiklik Geçmişi</span>
+                </button>
+            }
         </nav>
 
         <div class="woe-pane">
@@ -1338,6 +1345,20 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                     </div>
                 </div>
             </section>
+            @if (!isNew)
+            {
+                <section class="woe-pane-section" data-pane="audittrail">
+                    <h2>Değişiklik Geçmişi</h2>
+                    <div class="pane-hint">Bu iş emri üzerinde yapılan tüm işlemler (işlem logu).</div>
+                    @await Html.PartialAsync("_AuditTrailHost", new CalibraHub.Web.Models.Shared.AuditTrailHostModel
+                    {
+                        Entity = "WorkOrder",
+                        RecordId = Model?.Id.ToString(),
+                        WidgetFormCode = "WORK_ORDER_EDIT",
+                        HostId = "woeAuditTrail",
+                    })
+                </section>
+            }
         </div>
     </div>
 </div>

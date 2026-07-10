@@ -265,6 +265,18 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-audit-log">
+                                <a class="admin-nav-item @(activeMenu == "audit-log" ? "active" : string.Empty)"
+                                   href="/AuditLog" title="İşlem Logları">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M8 3h8l4 4v14H4V3z"></path><path d="M8 11h8"></path><path d="M8 15h8"></path><path d="M8 7h4"></path></svg>
+                                    </span>
+                                    <span class="menu-text">İşlem Logları</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="İşlem Logları favorilere ekle">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
                             <div class="menu-entry" data-menu-entry data-favorite-key="admin-db-schema">
                                 <a class="admin-nav-item @(activeMenu == "db-schema" ? "active" : string.Empty)"
                                    href="/admin/db-schema" title="Veritabani Haritasi">

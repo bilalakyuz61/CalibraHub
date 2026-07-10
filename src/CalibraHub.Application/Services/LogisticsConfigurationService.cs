@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -27,10 +28,14 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         "Serial"
     };
     private readonly ILogisticsConfigurationRepository _repository;
+    private readonly IAuditTrailService? _audit;
 
-    public LogisticsConfigurationService(ILogisticsConfigurationRepository repository)
+    public LogisticsConfigurationService(
+        ILogisticsConfigurationRepository repository,
+        IAuditTrailService? audit = null)
     {
         _repository = repository;
+        _audit = audit;
     }
 
     public async Task<MaterialCardDynamicSchemaDto> GetMaterialCardDynamicSchemaAsync(CancellationToken cancellationToken)

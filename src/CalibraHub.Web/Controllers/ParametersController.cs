@@ -121,6 +121,12 @@ public sealed class ParametersController : Controller
             CalibraHub.Application.Constants.SecurityParameters.SessionIdleMinutesKey, cancellationToken)
             ?? CalibraHub.Application.Constants.SecurityParameters.DefaultSessionIdleMinutes;
 
+        // Güvenlik tab: işlem logu (audit trail) saklama süresi (gün). 0 = süresiz sakla.
+        ViewData["AuditRetentionDays"] = await _companyParameters.GetIntAsync(
+            CalibraHub.Application.Constants.AuditParameters.FormCode,
+            CalibraHub.Application.Constants.AuditParameters.RetentionDaysKey, cancellationToken)
+            ?? CalibraHub.Application.Constants.AuditParameters.DefaultRetentionDays;
+
         return View("~/Views/Admin/Parameters.cshtml");
     }
 
@@ -323,6 +329,16 @@ public sealed class ParametersController : Controller
                 CalibraHub.Application.Constants.SecurityParameters.SessionIdleMinutesKey,
                 idle.ToString(),
                 CalibraHub.Domain.Enums.CompanyParameterDataType.Int), ct);
+
+            // İşlem logu saklama süresi (gün) — 0 = süresiz sakla, üst sınır 10 yıl.
+            var retention = input.AuditRetentionDays < 0
+                ? CalibraHub.Application.Constants.AuditParameters.DefaultRetentionDays
+                : Math.Min(input.AuditRetentionDays, 3650);
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                CalibraHub.Application.Constants.AuditParameters.FormCode,
+                CalibraHub.Application.Constants.AuditParameters.RetentionDaysKey,
+                retention.ToString(),
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Int), ct);
             return Json(new { ok = true });
         }
         catch (Exception)
@@ -331,7 +347,9 @@ public sealed class ParametersController : Controller
         }
     }
 
-    public sealed record SecurityParametersInput(int SessionIdleMinutes);
+    public sealed record SecurityParametersInput(
+        int SessionIdleMinutes,
+        int AuditRetentionDays = CalibraHub.Application.Constants.AuditParameters.DefaultRetentionDays);
 
     public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
     public sealed record ApprovalParametersInput(List<ApprovalKindInput> Kinds);

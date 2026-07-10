@@ -1640,6 +1640,10 @@
                 Stok Hareketleri
                 <span class="mce-nav-count is-empty" id="mceStockMovCount">0</span>
             </button>
+            <button type="button" class="mce-nav-btn" id="mceNavAuditTrail">
+                <span class="mce-nav-dot"></span>
+                Değişiklik Geçmişi
+            </button>
             <button type="button" class="mce-nav-btn" id="mceNavFeatures" style="display:none;">
                 <span class="mce-nav-dot"></span>
                 Özellikler
@@ -2144,6 +2148,15 @@
                     </div>
                     <div id="smvError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
                 </div>
+            </div>
+
+            <!-- Değişiklik Geçmişi (işlem logu — dosya tabanlı audit trail) -->
+            <div class="mce-card mce-section-anchor" id="mceAuditTrailCard" style="display:none;">
+                <p class="mce-card-title">Değişiklik Geçmişi</p>
+                <div id="mceAuditNeedsSave" style="display:none;padding:22px;text-align:center;color:rgba(148,163,184,.8);font-size:.85rem;">
+                    Değişiklik geçmişini görüntülemek için önce malzeme kartını kaydedin.
+                </div>
+                <div id="mceAuditTrailHost" style="padding:6px 2px;"></div>
             </div>
 
             <!-- Özellikler (Özellik Eşleştirme) — sadece trackCombinations açıkken -->
@@ -3368,6 +3381,10 @@
             var stockMovCard = document.getElementById('mceStockMovCard');
             if (stockMovCard) stockMovCard.style.display = (key === 'stockmov') ? '' : 'none';
 
+            // Degisiklik Gecmisi (audit trail) karti
+            var auditCard = document.getElementById('mceAuditTrailCard');
+            if (auditCard) auditCard.style.display = (key === 'audittrail') ? '' : 'none';
+
             // Ozellikler karti
             var featuresCard = document.getElementById('mceFeaturesCard');
             if (featuresCard) featuresCard.style.display = (key === 'features') ? '' : 'none';
@@ -3438,6 +3455,34 @@
                 activateSection('stockmov');
                 if (typeof window.mceStockMovActivate === 'function') {
                     window.mceStockMovActivate(currentId);
+                }
+            });
+        }
+
+        // Degisiklik Gecmisi (audit trail) butonu — panel ilk tiklamada mount edilir
+        var navAuditTrail = document.getElementById('mceNavAuditTrail');
+        if (navAuditTrail) {
+            navAuditTrail.addEventListener('click', function() {
+                setActive(navAuditTrail);
+                activateSection('audittrail');
+                var host = document.getElementById('mceAuditTrailHost');
+                var needsSave = document.getElementById('mceAuditNeedsSave');
+                if (!host) return;
+                if (!(currentId > 0)) {
+                    if (needsSave) needsSave.style.display = '';
+                    host.style.display = 'none';
+                    return;
+                }
+                if (needsSave) needsSave.style.display = 'none';
+                host.style.display = '';
+                if (window.CalibraHub && window.CalibraHub.mountAuditTrail) {
+                    window.CalibraHub.mountAuditTrail(host, {
+                        entity: 'Item',
+                        recordId: currentId,
+                        widgetFormCode: 'MATERIAL_CARD_EDIT',
+                    });
+                } else {
+                    host.innerHTML = '<div style="padding:16px;font-size:.8rem;opacity:.6;">React bundle yüklenemedi.</div>';
                 }
             });
         }

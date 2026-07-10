@@ -11582,6 +11582,7 @@ END;";
             ("SETUP_DEFINITIONS",   "Alan Rehberi",                     "Ayarlar",              null,                       960,  false), // yönetim sayfası
             ("APPROVAL_FLOWS",      "Onay Akışları",                    "Ayarlar",              null,                       970,  false), // yönetim sayfası
             ("DECIMAL_SETTINGS",    "Ondalık Ayarları",                 "Ayarlar",              null,                       905,  false), // form bazlı ondalık hane yönetim sayfası
+            ("AUDIT_LOG",           "İşlem Logları",                    "Ayarlar",              null,                       985,  false), // dosya tabanlı audit trail izleme ekranı
 
             // ── Genel (yetki kapsamına sonradan alınanlar — 2026-07-06) ─────
             ("CALENDAR",            "Takvim",                           "Genel",                null,                       15,   false),

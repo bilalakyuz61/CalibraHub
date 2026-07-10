@@ -1,0 +1,62 @@
+@model CalibraHub.Web.Models.Shared.AuditTrailHostModel
+@*
+    Paylaşılan "Değişiklik Geçmişi" host'u — dosya tabanlı işlem loglarının (audit trail)
+    kayıt bazlı zaman çizelgesi. React AuditTrailPanel'i mount eder; bundle hazır olana
+    kadar polling ile bekler (aynı pattern: _DynamicWidgetHost).
+
+    ENTEGRASYON:
+      1) Bir sekme/panel içine include et (model ile Entity + RecordId + ops. WidgetFormCode ver).
+      2) Yeni kayıt save sonrası:  window.CalibraAuditTrail.reload('<HostId>', newId)
+*@
+@{
+    var hostId = string.IsNullOrWhiteSpace(Model.HostId) ? "auditTrailHost" : Model.HostId.Trim();
+}
+
+<div id="@hostId" class="cat-root"
+     data-entity="@Model.Entity"
+     data-record-id="@(Model.RecordId ?? "")"
+     data-widget-form-code="@(Model.WidgetFormCode ?? "")"></div>
+
+<script>
+(function () {
+    // ── Merkezi audit trail registry (bir kez tanımlanır) ───────────────────
+    window.CalibraAuditTrail = window.CalibraAuditTrail || (function () {
+        var reg = {};
+        function mount(id) {
+            var host = document.getElementById(id);
+            if (!host || !window.CalibraHub || !window.CalibraHub.mountAuditTrail) return null;
+            var handle = window.CalibraHub.mountAuditTrail(host, {
+                entity: host.getAttribute('data-entity') || '',
+                recordId: host.getAttribute('data-record-id') || '',
+                widgetFormCode: host.getAttribute('data-widget-form-code') || null,
+            });
+            reg[id] = handle;
+            return handle;
+        }
+        return {
+            _mount: mount,
+            get: function (id) { return reg[id] || null; },
+            // Kayıt Id değişince (yeni kayıt save edilince) çizelgeyi yeni Id ile yeniden kur.
+            reload: function (id, recordId) {
+                var host = document.getElementById(id);
+                if (!host) return;
+                if (recordId != null) host.setAttribute('data-record-id', String(recordId));
+                mount(id);
+            },
+        };
+    })();
+
+    var HOST_ID = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(hostId));
+    var tries = 0;
+    (function tryMount() {
+        if (window.CalibraAuditTrail.get(HOST_ID)) return;
+        if (window.CalibraHub && window.CalibraHub.mountAuditTrail) {
+            try { window.CalibraAuditTrail._mount(HOST_ID); }
+            catch (e) { console.warn('[AuditTrail] mount hatasi (' + HOST_ID + '):', e); }
+            return;
+        }
+        if (++tries <= 120) { setTimeout(tryMount, 50); }
+        else { console.warn('[AuditTrail] React bundle yuklenemedi: ' + HOST_ID); }
+    })();
+})();
+</script>

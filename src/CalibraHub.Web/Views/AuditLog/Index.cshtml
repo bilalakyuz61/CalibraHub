@@ -1,0 +1,56 @@
+@{
+    ViewData["Title"] = "İşlem Logları";
+    ViewData["FormCode"] = "AUDIT_LOG";
+    ViewData["BodyClass"] = "page-audit-log";
+    ViewData["DbInfo"] =
+        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>App_Data/AuditLogs</td><td style='padding:6px 8px;'>Günlük JSONL log dosyaları (DB'de tutulmaz) — company-{id}/yyyy-MM/audit-yyyy-MM-dd.jsonl</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;'>WidgetTraLog</td><td style='padding:6px 8px;'>Ek Alanlar (EAV) değişiklik geçmişi — kayıt çizelgesine merge edilir</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .workspace-frame-body.page-audit-log .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    #auditMonitorRoot { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+</style>
+}
+
+<div id="auditMonitorRoot"></div>
+
+@section Scripts {
+<script>
+(function () {
+    var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var el = document.getElementById('auditMonitorRoot');
+
+    function showError(msg) { if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>'; }
+    function loadCss() {
+        if (document.querySelector('link[data-al-css]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL; link.setAttribute('data-al-css', '1');
+        document.head.appendChild(link);
+    }
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-al-js]');
+        if (prev) { prev.addEventListener('load', cb); return; }
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL; s.setAttribute('data-al-js', '1');
+        s.onload = function () { setTimeout(cb, 0); };
+        s.onerror = function () { showError('React bundle yüklenemedi.'); };
+        document.head.appendChild(s);
+    }
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountAuditMonitor) { showError('mountAuditMonitor bulunamadı.'); return; }
+        window.CalibraHub.mountAuditMonitor(el, { apiBase: '/AuditLog' });
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountAuditMonitor) doMount();
+    else loadScript(doMount);
+})();
+</script>
+}

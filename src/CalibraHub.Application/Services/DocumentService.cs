@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Approval.EntityTypes;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
@@ -18,6 +19,7 @@ public sealed class DocumentService : IDocumentService
     private readonly IApprovalFlowService? _approvalFlowService;
     private readonly ICompanyParameterService? _companyParameters;
     private readonly IDecimalSettingService? _decimalSettings;
+    private readonly IAuditTrailService? _audit;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
 
@@ -29,7 +31,8 @@ public sealed class DocumentService : IDocumentService
         IDocumentNumberService? docNumberService = null,
         IApprovalFlowService? approvalFlowService = null,
         ICompanyParameterService? companyParameters = null,
-        IDecimalSettingService? decimalSettings = null)
+        IDecimalSettingService? decimalSettings = null,
+        IAuditTrailService? audit = null)
     {
         _repo = repo;
         _financeService = financeService;
@@ -39,6 +42,92 @@ public sealed class DocumentService : IDocumentService
         _approvalFlowService = approvalFlowService;
         _companyParameters = companyParameters;
         _decimalSettings = decimalSettings;
+        _audit = audit;
+    }
+
+    // ── İşlem logu (audit trail) yardımcıları ──────────────────────────────
+    // Belgenin audit entity kodu = DocumentType.Code ("satis_siparisi", "alis_talebi"...).
+    // Edit ekranındaki "Değişiklik Geçmişi" sekmesi aynı kodla sorgular (_AuditTrailHost).
+
+    private async Task<string> ResolveAuditEntityAsync(int? documentTypeId, CancellationToken ct)
+    {
+        if (documentTypeId is > 0)
+        {
+            try
+            {
+                var dt = await _documentTypeRepo.GetByIdAsync(documentTypeId.Value, ct);
+                if (!string.IsNullOrWhiteSpace(dt?.Code)) return dt!.Code;
+            }
+            catch { /* audit için tip çözümlenemedi — genel koda düş */ }
+        }
+        return "belge";
+    }
+
+    /// <summary>Header diff snapshot'ı — yalnızca kullanıcı tarafından düzenlenen alanlar
+    /// (türetilmiş SubTotal/TaxAmount/DiscountAmount gürültü olmasın diye dışarıda).</summary>
+    private static object SnapHeader(Document d) => new
+    {
+        d.DocumentDate,
+        d.ValidUntil,
+        d.DeliveryDate,
+        d.DeliveryDays,
+        d.ContactName,
+        d.ContactAddress,
+        d.SalesRepId,
+        d.RequesterPersonnelId,
+        d.LocationId,
+        d.CurrencyId,
+        d.DiscountRate,
+        d.TaxRate,
+        d.GrandTotal,
+        d.PaymentTerms,
+        d.DeliveryTerms,
+        d.DeliveryAddress,
+        d.Notes,
+    };
+
+    /// <summary>
+    /// Kalem satırları diff'i — Id eşleşmesiyle eklenen/silinen/değişen satırları
+    /// alan değişikliği listesine çevirir (yalnızca değişenler).
+    /// </summary>
+    private static List<AuditFieldChange> BuildLineChanges(
+        IReadOnlyCollection<DocumentLine> oldLines, IReadOnlyCollection<DocumentLine> newLines)
+    {
+        var changes = new List<AuditFieldChange>();
+        var oldById = oldLines.ToDictionary(l => l.Id);
+        var newById = newLines.ToDictionary(l => l.Id);
+
+        static string LineName(DocumentLine l) =>
+            l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId);
+        static string LineSummary(DocumentLine l) =>
+            $"{AuditDiff.Normalize(l.Quantity)} {l.UnitCode ?? "birim"} × {AuditDiff.Normalize(l.UnitPrice)}";
+
+        foreach (var o in oldLines.Where(o => !newById.ContainsKey(o.Id)))
+            changes.Add(new AuditFieldChange($"Line[{o.Id}]", $"Kalem Silindi — {LineName(o)}", LineSummary(o), null));
+
+        foreach (var n in newLines.Where(n => !oldById.ContainsKey(n.Id)))
+            changes.Add(new AuditFieldChange($"Line[{n.Id}]", $"Kalem Eklendi — {LineName(n)}", null, LineSummary(n)));
+
+        foreach (var n in newLines)
+        {
+            if (!oldById.TryGetValue(n.Id, out var o)) continue;
+            var name = LineName(n);
+            void AddIfChanged(string field, string label, object? oldVal, object? newVal)
+            {
+                var os = AuditDiff.Normalize(oldVal);
+                var ns = AuditDiff.Normalize(newVal);
+                if (!string.Equals(os ?? "", ns ?? "", StringComparison.Ordinal))
+                    changes.Add(new AuditFieldChange($"Line[{n.Id}].{field}", $"{name} · {label}", os, ns));
+            }
+            AddIfChanged("Quantity", "Miktar", o.Quantity, n.Quantity);
+            AddIfChanged("UnitPrice", "Birim Fiyat", o.UnitPrice, n.UnitPrice);
+            AddIfChanged("DiscountRate", "İskonto %", o.DiscountRate, n.DiscountRate);
+            AddIfChanged("Unit", "Birim", o.UnitCode, n.UnitCode);
+            AddIfChanged("Location", "Lokasyon", o.LocationName ?? o.LocationCode, n.LocationName ?? n.LocationCode);
+            AddIfChanged("Combination", "Kombinasyon", o.CombinationCode, n.CombinationCode);
+            AddIfChanged("Notes", "Not", o.Notes, n.Notes);
+        }
+        return changes;
     }
 
     /// <summary>
@@ -350,6 +439,10 @@ public sealed class DocumentService : IDocumentService
         // DocumentTypeId null ise varsayilan 'satis_teklifi' turune bagla
         var effectiveDocumentTypeId = request.DocumentTypeId ?? await ResolveDefaultQuoteTypeIdAsync(ct);
 
+        // İşlem logu için eski durum snapshot'ları (yalnızca güncellemede ve audit aktifken)
+        object? auditOldHeader = null;
+        IReadOnlyCollection<DocumentLine>? auditOldLines = null;
+
         Document quote;
         if (isNew)
         {
@@ -390,6 +483,14 @@ public sealed class DocumentService : IDocumentService
             // GetByIdAsync zaten line_count'u tek sorguda getiriyor — tekrar lines cekmeye gerek yok.
             if (existing.LineCount > 0 && existing.ContactId != request.ContactId)
                 return (false, "Kalem girilmis belgenin cari kodu degistirilemez.", null, false);
+
+            // İşlem logu: mutasyondan ÖNCE eski header + kalem snapshot'ı al
+            if (_audit is not null)
+            {
+                auditOldHeader = SnapHeader(existing);
+                try { auditOldLines = await _repo.GetLinesAsync(request.Id!.Value, ct); }
+                catch { auditOldLines = null; }
+            }
 
             existing.DocumentTypeId = request.DocumentTypeId ?? existing.DocumentTypeId ?? effectiveDocumentTypeId;
             existing.DocumentDate = request.DocumentDate;
@@ -569,6 +670,33 @@ public sealed class DocumentService : IDocumentService
             }
         }
 
+        // ── İşlem logu — yeni kayıt: Insert; güncelleme: yalnızca değişen alanlar ──
+        if (_audit is not null)
+        {
+            try
+            {
+                var auditEntity = await ResolveAuditEntityAsync(quote.DocumentTypeId, ct);
+                if (isNew)
+                {
+                    _audit.LogInsert(auditEntity, quote.Id, quote.DocumentNumber,
+                        detail: $"{finalLines.Length} kalem · Genel Toplam {AuditDiff.Normalize(quote.GrandTotal)}");
+                }
+                else
+                {
+                    var changes = new List<AuditFieldChange>();
+                    if (auditOldHeader is not null)
+                        changes.AddRange(AuditDiff.Compute(auditOldHeader, SnapHeader(quote), auditEntity));
+                    if (auditOldLines is not null)
+                    {
+                        var newLinesForAudit = await _repo.GetLinesAsync(quote.Id, ct);
+                        changes.AddRange(BuildLineChanges(auditOldLines, newLinesForAudit));
+                    }
+                    _audit.LogChanges(auditEntity, quote.Id, quote.DocumentNumber, changes);
+                }
+            }
+            catch { /* audit yazımı belge kaydını asla bozmaz */ }
+        }
+
         return (true, null, MapDto(quote), approvalStarted);
     }
 
@@ -597,7 +725,20 @@ public sealed class DocumentService : IDocumentService
                                "Kaynak belge silinemez; önce türetilmiş belgeleri silin/iptal edin.");
         }
 
+        // İşlem logu için silinen belgenin kimliğini silmeden ÖNCE al
+        Document? docForAudit = null;
+        if (_audit is not null)
+        {
+            try { docForAudit = await _repo.GetByIdAsync(id, ct); } catch { }
+        }
+
         await _repo.DeleteAsync(id, ct);
+
+        if (_audit is not null && docForAudit is not null)
+        {
+            var auditEntity = await ResolveAuditEntityAsync(docForAudit.DocumentTypeId, ct);
+            _audit.LogDelete(auditEntity, id, docForAudit.DocumentNumber);
+        }
         return (true, null);
     }
 
@@ -606,7 +747,22 @@ public sealed class DocumentService : IDocumentService
         if (!Enum.TryParse<DocumentStatus>(newStatus, out _))
             return (false, "Gecersiz durum.");
 
+        // İşlem logu için eski durumu değişiklikten ÖNCE oku
+        Document? docForAudit = null;
+        if (_audit is not null)
+        {
+            try { docForAudit = await _repo.GetByIdAsync(id, ct); } catch { }
+        }
+
         await _repo.UpdateStatusAsync(id, newStatus, ct);
+
+        if (_audit is not null && docForAudit is not null &&
+            !string.Equals(docForAudit.Status.ToString(), newStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            var auditEntity = await ResolveAuditEntityAsync(docForAudit.DocumentTypeId, ct);
+            _audit.LogChanges(auditEntity, id, docForAudit.DocumentNumber,
+                [new AuditFieldChange("Status", "Durum", docForAudit.Status.ToString(), newStatus)]);
+        }
         return (true, null);
     }
 
@@ -811,10 +967,19 @@ public sealed class DocumentService : IDocumentService
             foreach (var (quote, _) in grp)
             {
                 await _docSourceRepo.AddAsync(newOrderId, quote.Id, ct);
+                var prevStatus = quote.Status;
                 quote.Status = DocumentStatus.Converted;
                 quote.UpdatedAt = DateTime.Now;
                 await _repo.UpsertAsync(quote, ct);
+                _audit?.LogChanges(
+                    await ResolveAuditEntityAsync(quote.DocumentTypeId, ct), quote.Id, quote.DocumentNumber,
+                    [new AuditFieldChange("Status", "Durum", prevStatus.ToString(), DocumentStatus.Converted.ToString())],
+                    detail: $"Siparişe dönüştürüldü: {orderNumber}");
             }
+
+            _audit?.LogInsert(
+                await ResolveAuditEntityAsync(orderTypeId, ct), newOrderId, orderNumber,
+                detail: $"Tekliften dönüştürüldü: {string.Join(", ", grp.Select(t => t.Quote.DocumentNumber))}");
 
             orderIds.Add(newOrderId);
         }

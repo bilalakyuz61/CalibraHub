@@ -46,6 +46,9 @@ import RoutingTree from './components/RoutingTree/RoutingTree'
 import ReportDesigner from './components/ReportDesigner/ReportDesigner'
 import ReportViewer from './components/ReportViewer/ReportViewer'
 import './components/ReportDesigner/ReportDesigner.css'
+import AuditMonitor from './components/AuditLog/AuditMonitor'
+import AuditTrailPanel from './components/AuditLog/AuditTrailPanel'
+import './components/AuditLog/auditLog.css'
 import OperationGrid from './components/OperationGrid/OperationGrid'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
@@ -1827,3 +1830,56 @@ function mountReportDesigner(element, config) {
   return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountReportDesigner = mountReportDesigner
+
+/**
+ * AuditMonitor mount — İşlem Logları izleme/raporlama ekranı (/AuditLog).
+ * @param {HTMLElement} element
+ * @param {{ apiBase?: string }} config
+ */
+function mountAuditMonitor(element, config) {
+  config = config || {}
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(AuditMonitor, { apiBase: config.apiBase || '/AuditLog' })
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountAuditMonitor = mountAuditMonitor
+
+/**
+ * AuditTrailPanel mount — tek kaydın değişiklik geçmişi zaman çizelgesi.
+ * Belge/tanım edit ekranlarındaki "Değişiklik Geçmişi" sekmesi kullanır
+ * (Views/Shared/_AuditTrailHost.cshtml).
+ * @param {HTMLElement} element
+ * @param {{ entity: string, recordId: string|number, widgetFormCode?: string, apiBase?: string }} config
+ */
+function mountAuditTrail(element, config) {
+  config = config || {}
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(AuditTrailPanel, {
+        entity: config.entity || '',
+        recordId: config.recordId || null,
+        widgetFormCode: config.widgetFormCode || null,
+        apiBase: config.apiBase || '/AuditLog',
+      })
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountAuditTrail = mountAuditTrail

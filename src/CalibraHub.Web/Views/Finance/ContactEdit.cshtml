@@ -1107,6 +1107,13 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 <span class="ca-nav-dot"></span>
                 Gruplar
             </button>
+            @if (existing?.Id > 0)
+            {
+                <button type="button" class="ca-nav-btn" data-nav-key="audittrail" id="caNavAuditTrail">
+                    <span class="ca-nav-dot"></span>
+                    Değişiklik Geçmişi
+                </button>
+            }
             <!-- Widget grup butonlari JS tarafindan dinamik olarak eklenir -->
         </nav>
 
@@ -1457,6 +1464,21 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 </div>
                 <div id="caMovList" style="display:flex;flex-direction:column;gap:8px;"></div>
             </div>
+
+            @if (existing?.Id > 0)
+            {
+            <!-- Değişiklik Geçmişi (işlem logu — dosya tabanlı audit trail) -->
+            <div class="ca-card" id="caCardAuditTrail" data-section="audittrail" style="display:none;">
+                <div class="ca-card__title">Değişiklik Geçmişi</div>
+                @await Html.PartialAsync("_AuditTrailHost", new CalibraHub.Web.Models.Shared.AuditTrailHostModel
+                {
+                    Entity = "Contact",
+                    RecordId = existing!.Id.ToString(),
+                    WidgetFormCode = CalibraHub.Application.Constants.FormCodes.Contacts,
+                    HostId = "caAuditTrail",
+                })
+            </div>
+            }
 
             <!-- Gruplar (5 seviyeli hiyerarsik gruplama) — entityType=2 (cari) ──
                  Malzeme karttaki pattern'in cari versiyonu. Eski tek-deger ContactGroupId

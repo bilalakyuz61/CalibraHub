@@ -1,6 +1,7 @@
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -26,6 +27,7 @@ public sealed class WarehouseController : Controller
     private readonly IDocumentTypeRepository _documentTypeRepo;
     private readonly IDocumentSourceRepository _docSourceRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IAuditTrailService _audit;
     private readonly string _schema;
 
     private static readonly JsonSerializerOptions BoardJsonOpts = new()
@@ -45,6 +47,7 @@ public sealed class WarehouseController : Controller
         IDocumentTypeRepository documentTypeRepo,
         IDocumentSourceRepository docSourceRepo,
         SqlServerConnectionFactory connectionFactory,
+        IAuditTrailService audit,
         CalibraDatabaseOptions dbOptions)
     {
         _stockDocRepo = stockDocRepo;
@@ -56,11 +59,161 @@ public sealed class WarehouseController : Controller
         _documentTypeRepo = documentTypeRepo;
         _docSourceRepo = docSourceRepo;
         _connectionFactory = connectionFactory;
+        _audit = audit;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     private string CurrentUser() => User.FindFirstValue(ClaimTypes.Name) ?? "system";
     private int? CurrentUserId() => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    // ── İşlem logu (audit trail) yardımcıları ──────────────────────────────
+    // Depo belgelerinin audit entity kodu = DocumentType.Code (SqlStockDocRepository.TypeCodeFor
+    // ile birebir). Edit ekranındaki "Değişiklik Geçmişi" aynı kodla sorgular.
+
+    private static string AuditEntityFor(string? docType) => docType switch
+    {
+        "TRANSFER"        => "depo_transfer",
+        "STOCK_OUT"       => "depo_cikis",
+        "INVENTORY_COUNT" => "sayim",
+        _                 => "depo_giris",
+    };
+
+    /// <summary>RefNo repo tarafında Notes'a "[Ref: x]" olarak gömülür (CombineNotesWithRef) —
+    /// diff'te yanlış pozitif olmaması için request tarafında aynı birleşim uygulanır.</summary>
+    private static string? CombineNotesWithRefForAudit(string? notes, string? refNo)
+    {
+        if (string.IsNullOrWhiteSpace(refNo)) return notes;
+        var prefix = $"[Ref: {refNo.Trim()}]";
+        return string.IsNullOrWhiteSpace(notes) ? prefix : $"{prefix} {notes.Trim()}";
+    }
+
+    /// <summary>Header diff snapshot'ı (eski kayıt) — yalnızca ekranda düzenlenebilen header alanları.
+    /// Sayımda lokasyon DTO'da FromLocationId'de, diğer tiplerde ToLocationId'de taşınır.</summary>
+    private static object SnapStockHeader(StockDocDto d) => new
+    {
+        DocumentDate = d.DocDate.Date,
+        LocationId   = d.DocType == "INVENTORY_COUNT" ? d.FromLocationId : d.ToLocationId,
+        d.Notes,
+        d.ArgeProjectId,
+    };
+
+    /// <summary>Header diff snapshot'ı (yeni istek) — eski DTO snapshot'ı ile aynı alan adları.</summary>
+    private static object SnapStockHeader(SaveStockDocRequest r) => new
+    {
+        DocumentDate = r.DocDate.Date,
+        LocationId   = r.DocType == "INVENTORY_COUNT" ? r.FromLocationId : r.ToLocationId,
+        Notes        = CombineNotesWithRefForAudit(r.Notes, r.RefNo),
+        r.ArgeProjectId,
+    };
+
+    /// <summary>
+    /// Kalem diff'i — kaydetme DELETE+INSERT çalıştığı için satır Id'leri stabil değildir;
+    /// eşleştirme içerik anahtarıyla yapılır (ItemId + Kombinasyon + Lot) ve aynı anahtarda
+    /// sıra korunur. Yalnızca eklenen/silinen/değişen satırlar loglanır.
+    /// </summary>
+    private static List<AuditFieldChange> BuildStockLineChanges(
+        IReadOnlyList<StockDocLineDto> oldLines, IReadOnlyList<StockDocLineDto> newLines)
+    {
+        var changes = new List<AuditFieldChange>();
+
+        static string Key(StockDocLineDto l) => $"{l.ItemId}|{l.CombinationId}|{l.LotNo}";
+        static string LineName(StockDocLineDto l) => l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId);
+        static string LineSummary(StockDocLineDto l) =>
+            $"{AuditDiff.Normalize(l.Qty)} {l.UnitCode ?? "birim"}";
+
+        var oldByKey = oldLines.GroupBy(Key).ToDictionary(g => g.Key, g => g.ToList());
+        var newByKey = newLines.GroupBy(Key).ToDictionary(g => g.Key, g => g.ToList());
+        var allKeys = oldByKey.Keys.Union(newByKey.Keys);
+
+        foreach (var key in allKeys)
+        {
+            var olds = oldByKey.TryGetValue(key, out var ol) ? ol : new List<StockDocLineDto>();
+            var news = newByKey.TryGetValue(key, out var nl) ? nl : new List<StockDocLineDto>();
+            var paired = Math.Min(olds.Count, news.Count);
+
+            // Aynı anahtar altında eşleşen satırlar — alan bazlı diff
+            for (var i = 0; i < paired; i++)
+            {
+                var o = olds[i];
+                var n = news[i];
+                var name = LineName(n);
+                void AddIfChanged(string field, string label, object? oldVal, object? newVal)
+                {
+                    var os = AuditDiff.Normalize(oldVal);
+                    var ns = AuditDiff.Normalize(newVal);
+                    if (!string.Equals(os ?? "", ns ?? "", StringComparison.Ordinal))
+                        changes.Add(new AuditFieldChange($"Line[{key}].{field}", $"{name} · {label}", os, ns));
+                }
+                AddIfChanged("Quantity", "Miktar", o.Qty, n.Qty);
+                AddIfChanged("FromLocation", "Çıkış Lokasyonu",
+                    o.FromLocationName ?? o.FromLocationId?.ToString(),
+                    n.FromLocationName ?? n.FromLocationId?.ToString());
+                AddIfChanged("ToLocation", "Giriş Lokasyonu",
+                    o.ToLocationName ?? o.ToLocationId?.ToString(),
+                    n.ToLocationName ?? n.ToLocationId?.ToString());
+                AddIfChanged("UnitCost", "Birim Maliyet", o.UnitCost, n.UnitCost);
+                AddIfChanged("Notes", "Not", o.Notes, n.Notes);
+            }
+
+            // Fazla eski satırlar → silindi, fazla yeni satırlar → eklendi
+            for (var i = paired; i < olds.Count; i++)
+                changes.Add(new AuditFieldChange($"Line[{key}]",
+                    $"Kalem Silindi — {LineName(olds[i])}", LineSummary(olds[i]), null));
+            for (var i = paired; i < news.Count; i++)
+                changes.Add(new AuditFieldChange($"Line[{key}]",
+                    $"Kalem Eklendi — {LineName(news[i])}", null, LineSummary(news[i])));
+        }
+
+        return changes;
+    }
+
+    /// <summary>Kaydetmeden ÖNCE mevcut belge + satır snapshot'ını okur (yalnızca audit için;
+    /// okunamazsa null döner, kayıt akışı etkilenmez).</summary>
+    private async Task<(StockDocDto? Doc, IReadOnlyList<StockDocLineDto>? Lines)> TryGetStockDocForAuditAsync(
+        int id, CancellationToken ct)
+    {
+        try
+        {
+            var doc = await _stockDocRepo.GetByIdAsync(id, ct);
+            var lines = doc is null ? null : await _stockDocRepo.GetLinesAsync(id, ct);
+            return (doc, lines);
+        }
+        catch { return (null, null); }
+    }
+
+    /// <summary>Başarılı depo belgesi kaydı sonrası işlem logu — yeni kayıt Insert,
+    /// güncelleme header + kalem diff'i. Audit hatası kayıt akışını asla bozmaz.</summary>
+    private async Task LogStockDocSaveAsync(
+        SaveStockDocRequest request, int id, string docNo,
+        StockDocDto? oldDoc, IReadOnlyList<StockDocLineDto>? oldLines, CancellationToken ct)
+    {
+        try
+        {
+            var entity = AuditEntityFor(request.DocType);
+            var lineCount = request.Lines?.Count ?? 0;
+            if (oldDoc is null)
+            {
+                // request.Id > 0 ama eski kayıt okunamadıysa da Insert yerine detay ile Update yazmak
+                // yanıltıcı olurdu — eski durum bilinmiyorsa yeni kayıtta Insert, güncellemede detay log.
+                if (request.Id is > 0)
+                    _audit.LogChanges(entity, id, docNo, Array.Empty<AuditFieldChange>(),
+                        detail: $"Güncellendi · {lineCount} kalem (önceki durum okunamadı)");
+                else
+                    _audit.LogInsert(entity, id, docNo, detail: $"{lineCount} kalem");
+                return;
+            }
+
+            var changes = new List<AuditFieldChange>();
+            changes.AddRange(AuditDiff.Compute(SnapStockHeader(oldDoc), SnapStockHeader(request), entity));
+            if (oldLines is not null)
+            {
+                var newLines = await _stockDocRepo.GetLinesAsync(id, ct);
+                changes.AddRange(BuildStockLineChanges(oldLines, newLines));
+            }
+            _audit.LogChanges(entity, id, docNo, changes);
+        }
+        catch { /* audit yazımı belge kaydını asla bozmaz */ }
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // TRANSFER
@@ -285,7 +438,14 @@ public sealed class WarehouseController : Controller
             return Json(new { success = false, message = "Geçersiz istek." });
         try
         {
+            // İşlem logu: güncellemede eski header + kalem snapshot'ı kaydetmeden ÖNCE alınır
+            var (oldDoc, oldLines) = request.Id is > 0
+                ? await TryGetStockDocForAuditAsync(request.Id.Value, ct)
+                : ((StockDocDto?)null, (IReadOnlyList<StockDocLineDto>?)null);
+
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
+
+            await LogStockDocSaveAsync(request, id, docNo, oldDoc, oldLines, ct);
             return Json(new { success = true, id, docNo });
         }
         catch (Exception ex)
@@ -308,7 +468,13 @@ public sealed class WarehouseController : Controller
             if (status == 1)
                 return Json(new { ok = false, error = "Yansıtılmış sayım fişi silinemez. Yansıtılan stok farkları bu belgeye bağlıdır; silinmesi bakiyeyi bozar." });
 
+            // İşlem logu: silinen belgenin kimliği silmeden ÖNCE okunur
+            var (docForAudit, _) = await TryGetStockDocForAuditAsync(id, ct);
+
             await _stockDocRepo.DeleteAsync(id, ct);
+
+            if (docForAudit is not null)
+                _audit.LogDelete(AuditEntityFor(docForAudit.DocType), id, docForAudit.DocNo);
             return Json(new { ok = true });
         }
         catch
@@ -509,7 +675,14 @@ public sealed class WarehouseController : Controller
             return Json(new { success = false, message = "Geçersiz istek." });
         try
         {
+            // İşlem logu: güncellemede eski header + kalem snapshot'ı kaydetmeden ÖNCE alınır
+            var (oldDoc, oldLines) = request.Id is > 0
+                ? await TryGetStockDocForAuditAsync(request.Id.Value, ct)
+                : ((StockDocDto?)null, (IReadOnlyList<StockDocLineDto>?)null);
+
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
+
+            await LogStockDocSaveAsync(request, id, docNo, oldDoc, oldLines, ct);
             return Json(new { success = true, id, docNo });
         }
         catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
@@ -540,6 +713,8 @@ public sealed class WarehouseController : Controller
             // Repo ParentDocumentId set ediyor; İlişkili Belgeler paneli DocumentSource okur.
             await _docSourceRepo.EnsureSchemaAsync(ct);
             await _docSourceRepo.AddAsync(id, orderId, ct);
+            // İşlem logu: teslimat çıkış fişi yeni bir depo_cikis belgesidir
+            _audit.LogInsert("depo_cikis", id, docNo, detail: $"Satış siparişi teslimatı (Sipariş #{orderId})");
             return Json(new { success = true, id, docNo });
         }
         catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
@@ -563,7 +738,13 @@ public sealed class WarehouseController : Controller
     {
         try
         {
+            // İşlem logu: silinen belgenin kimliği silmeden ÖNCE okunur
+            var (docForAudit, _) = await TryGetStockDocForAuditAsync(id, ct);
+
             await _stockDocRepo.DeleteAsync(id, ct);
+
+            if (docForAudit is not null)
+                _audit.LogDelete(AuditEntityFor(docForAudit.DocType), id, docForAudit.DocNo);
             return Json(new { ok = true });
         }
         catch (Exception ex)

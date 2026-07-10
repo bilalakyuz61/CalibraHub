@@ -320,6 +320,26 @@ builder.Services.AddSingleton(bootstrapAdminOptions);
 builder.Services.AddSingleton<CompanyConnectionRegistry>();
 builder.Services.AddSingleton<ICompanyConnectionRegistry>(sp => sp.GetRequiredService<CompanyConnectionRegistry>());
 builder.Services.AddSingleton<SqlServerConnectionFactory>();
+
+// 2026-07-10 İşlem Log Modülü (audit trail) — tüm insert/update/delete + oturum olayları
+// günlük JSONL dosyalarına yazılır ({ContentRoot}/App_Data/AuditLogs). DB'ye yazım YOK
+// (bilinçli karar — sistemi yormasın). Kanal + yazıcı + servis singleton; sorgu servisi
+// scoped (aktif şirket claim'inden okur). Bkz. CalibraHub.Application/Auditing/.
+builder.Services.AddSingleton<CalibraHub.Application.Auditing.AuditTrailChannel>();
+builder.Services.AddSingleton(new CalibraHub.Application.Auditing.AuditTrailOptions
+{
+    RootPath = builder.Configuration["AuditTrail:RootPath"]
+               ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "AuditLogs"),
+});
+builder.Services.AddSingleton<CalibraHub.Application.Auditing.IAuditContextProvider,
+                              CalibraHub.Web.Services.HttpAuditContextProvider>();
+builder.Services.AddSingleton<CalibraHub.Application.Auditing.IAuditTrailService,
+                              CalibraHub.Application.Auditing.AuditTrailService>();
+builder.Services.AddSingleton<CalibraHub.Application.Auditing.IAuditRetentionResolver,
+                              CalibraHub.Persistence.Repositories.SqlAuditRetentionResolver>();
+builder.Services.AddScoped<CalibraHub.Application.Auditing.IAuditQueryService,
+                           CalibraHub.Application.Auditing.AuditQueryService>();
+builder.Services.AddHostedService<CalibraHub.Application.Auditing.AuditFileWriter>();
 builder.Services.AddScoped<ILogisticsConfigurationRepository, SqlLogisticsConfigurationRepository>();
 builder.Services.AddScoped<IFinanceRepository, SqlFinanceRepository>();
 builder.Services.AddScoped<IAddressRepository, SqlAddressRepository>();

@@ -269,6 +269,11 @@
               onclick="invSwitchTab('ops')">İşlemler</button>
       <button type="button" class="inv-tab-btn" data-inv-tab="widgets"
               onclick="invSwitchTab('widgets')">Ek Alanlar</button>
+      @if (isEdit)
+      {
+        <button type="button" class="inv-tab-btn" data-inv-tab="audittrail"
+                onclick="invSwitchTab('audittrail')">Değişiklik Geçmişi</button>
+      }
     </nav>
 
     <div class="inv-tab-content" id="invTabContent">
@@ -319,6 +324,20 @@
             RecordId = Model.DocId?.ToString(),
         })
       </div>
+
+      @if (isEdit)
+      {
+      <!-- TAB: Değişiklik Geçmişi (işlem logu — dosya tabanlı audit trail) -->
+      <div class="inv-tab-pane" data-inv-pane="audittrail" style="padding:14px 6px;">
+        @await Html.PartialAsync("_AuditTrailHost", new CalibraHub.Web.Models.Shared.AuditTrailHostModel
+        {
+            Entity = "sayim",
+            RecordId = Model.DocId?.ToString(),
+            WidgetFormCode = CalibraHub.Application.Constants.FormCodes.InventoryCount,
+            HostId = "invAuditTrail",
+        })
+      </div>
+      }
 
       <!-- TAB 3: İşlemler -->
       <div class="inv-tab-pane" data-inv-pane="ops">

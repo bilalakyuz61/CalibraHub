@@ -350,6 +350,8 @@
       {
         <button type="button" class="sqe-tab-btn" data-wde-tab-btn="lineage"
                 onclick="wdeSwitchTab('lineage')">İlişkili Belgeler</button>
+        <button type="button" class="sqe-tab-btn" data-wde-tab-btn="audittrail"
+                onclick="wdeSwitchTab('audittrail')">Değişiklik Geçmişi</button>
       }
     </nav>
 
@@ -425,6 +427,21 @@
         <div id="wdeLineageHost" data-doc-id="@Model.DocId">
           <div class="dlg-empty">Yükleniyor…</div>
         </div>
+      </div>
+      <!-- TAB: Değişiklik Geçmişi (işlem logu — dosya tabanlı audit trail) -->
+      <div class="sqe-tab-pane" data-wde-pane="audittrail" style="padding:14px 6px;">
+        @await Html.PartialAsync("_AuditTrailHost", new CalibraHub.Web.Models.Shared.AuditTrailHostModel
+        {
+            Entity = Model.DocType switch
+            {
+                "TRANSFER"  => "depo_transfer",
+                "STOCK_OUT" => "depo_cikis",
+                _           => "depo_giris",
+            },
+            RecordId = Model.DocId?.ToString(),
+            WidgetFormCode = Model.DocType,
+            HostId = "wdeAuditTrail",
+        })
       </div>
       }
 

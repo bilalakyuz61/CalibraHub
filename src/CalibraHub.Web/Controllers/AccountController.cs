@@ -34,6 +34,7 @@ public sealed class AccountController : Controller
     private readonly IEmailSender _emailSender;
     private readonly IPasswordHashService _passwordHashService;
     private readonly CalibraHub.Application.Services.LoginLockoutTracker _loginLockout;
+    private readonly CalibraHub.Application.Auditing.IAuditTrailService _audit;
     private readonly ILogger<AccountController> _logger;
 
     public AccountController(
@@ -47,6 +48,7 @@ public sealed class AccountController : Controller
         IEmailSender emailSender,
         IPasswordHashService passwordHashService,
         CalibraHub.Application.Services.LoginLockoutTracker loginLockout,
+        CalibraHub.Application.Auditing.IAuditTrailService audit,
         ILogger<AccountController> logger)
     {
         _companyDefinitionRepository = companyDefinitionRepository;
@@ -59,6 +61,7 @@ public sealed class AccountController : Controller
         _emailSender = emailSender;
         _passwordHashService = passwordHashService;
         _loginLockout = loginLockout;
+        _audit = audit;
         _logger = logger;
     }
 
@@ -255,6 +258,10 @@ public sealed class AccountController : Controller
             var lockMsg = $"Hesap geçici olarak kilitlendi. {remaining} dakika sonra tekrar deneyin.";
             _logger.LogWarning("[Login] Kilitli hesaba giriş denemesi: {Email} IP={Ip}",
                 input.Email, HttpContext.Connection.RemoteIpAddress);
+            _audit.LogEvent(CalibraHub.Application.Auditing.AuditActions.LoginFailed,
+                detail: "Kilitli hesaba giriş denemesi",
+                actor: LoginActor(input.CompanyId, input.Email),
+                entity: "Session");
             if (isAjax)
                 return Json(new { ok = false, error = "locked", message = lockMsg });
             ModelState.AddModelError(string.Empty, lockMsg);
@@ -276,6 +283,10 @@ public sealed class AccountController : Controller
                 HttpContext.Connection.RemoteIpAddress,
                 count,
                 nowLocked ? " → HESAP KİLİTLENDİ" : "");
+            _audit.LogEvent(CalibraHub.Application.Auditing.AuditActions.LoginFailed,
+                detail: nowLocked ? $"Başarısız giriş (deneme {count}) — hesap kilitlendi" : $"Başarısız giriş (deneme {count})",
+                actor: LoginActor(input.CompanyId, input.Email),
+                entity: "Session");
 
             if (nowLocked)
             {
@@ -326,6 +337,13 @@ public sealed class AccountController : Controller
             CookieAuthenticationDefaults.AuthenticationScheme,
             principal,
             authProperties);
+
+        _audit.LogEvent(CalibraHub.Application.Auditing.AuditActions.Login,
+            detail: input.RememberMe ? "Giriş (beni hatırla)" : "Giriş",
+            actor: new CalibraHub.Application.Auditing.AuditActor(
+                authenticatedUser.CompanyId, authenticatedUser.Id, authenticatedUser.Email,
+                HttpContext.Connection.RemoteIpAddress?.ToString(), "Web"),
+            entity: "Session");
 
         // Login sayfasındaki tema toggle'ı localStorage'a kaydeder.
         // Form submit sırasında hidden input aracılığıyla sunucuya taşınır ve kullanıcı tercihine işlenir.
@@ -600,6 +618,7 @@ public sealed class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
+        _audit.LogEvent(CalibraHub.Application.Auditing.AuditActions.Logout, entity: "Session");
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction(nameof(Login));
     }
@@ -607,9 +626,15 @@ public sealed class AccountController : Controller
     [HttpGet]
     public async Task<IActionResult> Logout(string? returnUrl)
     {
+        if (User.Identity?.IsAuthenticated == true)
+            _audit.LogEvent(CalibraHub.Application.Auditing.AuditActions.Logout, entity: "Session");
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction(nameof(Login));
     }
+
+    /// <summary>Login öncesi audit olayları için aktör — kullanıcı henüz authenticate değil.</summary>
+    private CalibraHub.Application.Auditing.AuditActor LoginActor(int? companyId, string? email) =>
+        new(companyId, null, email, HttpContext.Connection.RemoteIpAddress?.ToString(), "Web");
 
     // ── Oturum idle-timeout ────────────────────────────────────────────────
     // Client (Shell) idle-timer'ı bu politikayı okuyup geri sayımlı uyarı + logout uygular.
