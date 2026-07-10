@@ -326,6 +326,14 @@ public sealed class HealthCheckController : Controller
         catch { return null; }
     }
 
+    // StreamTestCompany için: test şirketinin connection string'i ile aç (mevcut şirket değil)
+    private static async Task<SqlConnection?> TryOpenConnStrAsync(string? connStr, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(connStr)) return null;
+        try { var c = new SqlConnection(connStr); await c.OpenAsync(ct); return c; }
+        catch { return null; }
+    }
+
     private static async Task<bool> ObjExistsAsync(SqlConnection conn, string objName, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
@@ -526,7 +534,8 @@ public sealed class HealthCheckController : Controller
 
             // Form testleri — mevcut Stream() ile aynı mantık, test kullanıcısının cookie'si ile
             var checks = BuildCheckList();
-            var total   = checks.Count;
+            var infraSpecs = BuildInfraSpecs();
+            var total   = checks.Count + infraSpecs.Count;
             var results = new List<CheckResult>(total);
             var client  = _httpFactory.CreateClient("health-check");
             client.Timeout = TimeSpan.FromSeconds(15);
@@ -550,6 +559,31 @@ public sealed class HealthCheckController : Controller
                 results.Add(result);
 
                 await WriteFrameAsync(new { type = "result", index = i + 1, total, result }, ct);
+            }
+
+            // Altyapı / Şema derinlik kontrolleri:
+            //  - createNewDb: yeni test DB'sinin (init edilmiş, kullanılabilir) conn string'i
+            //  - değilse: test şirketi mevcut DB'de → factory ile (şifre çözülmüş) aç
+            await using (var infraConn = createNewDb
+                ? await TryOpenConnStrAsync(connectionString, ct)
+                : await TryOpenAsync(ct))
+            {
+                for (var j = 0; j < infraSpecs.Count; j++)
+                {
+                    var spec = infraSpecs[j];
+                    await WriteFrameAsync(new
+                    {
+                        type        = "checking",
+                        index       = checks.Count + j + 1,
+                        total,
+                        label       = spec.Label,
+                        parentLabel = spec.Group,
+                        path        = "",
+                    }, ct);
+                    var result = await RunInfraAsync(spec, infraConn, ct);
+                    results.Add(result);
+                    await WriteFrameAsync(new { type = "result", index = checks.Count + j + 1, total, result }, ct);
+                }
             }
 
             await WriteFrameAsync(new
