@@ -857,6 +857,30 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<IReadOnlyDictionary<int, (int Count, decimal QtySum)>> GetDerivedLineAggregatesAsync(
+        int documentId, CancellationToken ct)
+    {
+        // Bu belgenin satırlarına SourceLineId ile referans veren türetilmiş satırlar —
+        // yalnızca AKTİF (IsActive=1) belgelerdekiler sayılır (soft-delete edilen türev
+        // bağı serbest bırakır). IX_DocumentLine_SourceLineId index'i kullanılır.
+        var map = new Dictionary<int, (int Count, decimal QtySum)>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT src.[Id], COUNT(dl.[Id]) AS Cnt, SUM(dl.[Quantity]) AS QtySum
+            FROM {_lineTable} src
+            INNER JOIN {_lineTable} dl ON dl.[SourceLineId] = src.[Id]
+            INNER JOIN {_quoteTable} d ON d.[Id] = dl.[DocumentId] AND d.[IsActive] = 1
+            WHERE src.[DocumentId] = @DocId
+            GROUP BY src.[Id];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@DocId", documentId));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            map[r.GetInt32(0)] = (r.GetInt32(1), r.IsDBNull(2) ? 0m : r.GetDecimal(2));
+        return map;
+    }
+
     // ── Line Details (ozellik-deger aciklamalari) ────────────────────────
 
     public async Task<IReadOnlyCollection<DocumentLineDetail>> GetLineDetailsAsync(int documentLineId, CancellationToken ct)

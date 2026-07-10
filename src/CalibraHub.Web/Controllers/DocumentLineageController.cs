@@ -111,6 +111,10 @@ public sealed class DocumentLineageController : Controller
             if (!string.IsNullOrEmpty(permForm))
                 canView = await _permService.CheckAnyAsync(userId, role, dept, permForm, viewActions, ct);
 
+            // Soft-delete edilmiş belge zincirde görünür kalır (akış kopmaz) ama
+            // "Silinmiş" işaretlenir ve link verilmez.
+            var isDeleted = !doc.IsActive;
+
             nodes.Add(new
             {
                 id             = nodeId,
@@ -118,11 +122,11 @@ public sealed class DocumentLineageController : Controller
                 typeName       = string.IsNullOrWhiteSpace(typeName) ? fallbackName : typeName,
                 typeCode,
                 date           = doc.DocumentDate,
-                status         = doc.Status,
+                status         = isDeleted ? "Deleted" : doc.Status,
                 depth          = d,
                 isRoot         = nodeId == id,
-                canView,
-                url            = canView && editUrl.Length > 0 ? editUrl : null,
+                canView        = canView && !isDeleted,
+                url            = canView && !isDeleted && editUrl.Length > 0 ? editUrl : null,
             });
         }
 

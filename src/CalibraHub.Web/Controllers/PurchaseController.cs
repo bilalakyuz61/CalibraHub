@@ -870,6 +870,16 @@ public sealed class PurchaseController : Controller
         var companyId  = _connectionFactory.ResolveCurrentCompanyId();
         var (seFilter, seParams) = await BuildStockEffectFilterAsync("d", ct);
 
+        // Asgari stok koruması: parametre açıkken depo bazında asgari (ItemLocation.MinStock)
+        // görünen bakiyeden düşülür — FC "Stok" kolonu kullanılabilir miktarı gösterir.
+        // (Genel asgari Items.MinStock, dağıtım tavanı olarak FulfillFromStock'ta uygulanır.)
+        var respectMinStock = await _companyParams.GetBoolAsync(
+            FulfillmentParameters.FormCode, FulfillmentParameters.RespectMinStockKey, ct) ?? false;
+        var minJoin = respectMinStock
+            ? $"LEFT JOIN [{s}].[ItemLocation] il ON il.[ItemId] = c.ItemId AND il.[LocationId] = c.LocationId"
+            : "";
+        var balExpr = respectMinStock ? "SUM(c.Bal) - ISNULL(MAX(il.[MinStock]), 0)" : "SUM(c.Bal)";
+
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         // 2026-07-02: Tek kaynak — DocumentLine (MovementType: 1=Issue/2=Receipt/3=Transfer/4=Adjust).
@@ -934,12 +944,13 @@ public sealed class PurchaseController : Controller
                 WHERE dl.ItemId IN ({paramList}) AND dl.MovementType = 4 AND dl.FromLocationId IS NOT NULL
                   AND d.CompanyId = @CompanyId AND d.IsActive = 1{seFilter}
             )
-            SELECT c.ItemId, c.LocationId, loc.LocationName, SUM(c.Bal) AS Balance
+            SELECT c.ItemId, c.LocationId, loc.LocationName, {balExpr} AS Balance
             FROM Combined c
             LEFT JOIN [{s}].[Location] loc ON loc.Id = c.LocationId
+            {minJoin}
             GROUP BY c.ItemId, c.LocationId, loc.LocationName
-            HAVING SUM(c.Bal) > 0
-            ORDER BY c.ItemId, SUM(c.Bal) DESC;
+            HAVING {balExpr} > 0
+            ORDER BY c.ItemId, {balExpr} DESC;
             """;
         for (var i = 0; i < itemIds.Length; i++)
             cmd.Parameters.Add(new SqlParameter($"@i{i}", itemIds[i]));
@@ -1195,7 +1206,8 @@ public sealed class PurchaseController : Controller
         var ids     = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
                             .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
                             .Select(int.Parse).ToList();
-        return Json(new { mode, locationIds = ids });
+        var respectMinStock = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.RespectMinStockKey, ct) ?? false;
+        return Json(new { mode, locationIds = ids, respectMinStock });
     }
 
     /// <summary>
@@ -1218,6 +1230,7 @@ public sealed class PurchaseController : Controller
         const string fc = "PURCHASE_FULFILLMENT";
         var mode   = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_MODE", ct) ?? "SPECIFIC";
         var idsRaw = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_IDS",  ct) ?? "";
+        var respectMinStock = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.RespectMinStockKey, ct) ?? false;
 
         List<int>? configuredLocIds = null;
         if (string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase))
@@ -1361,6 +1374,42 @@ public sealed class PurchaseController : Controller
             }
         }
 
+        // -- Asgari stok koruması (FULFILLMENT_RESPECT_MIN_STOCK) --
+        // Depo bazında asgari (ItemLocation.MinStock) o deponun bakiyesinden düşülür;
+        // genel asgari (Items.MinStock) görünen havuzun toplamından düşülerek malzeme
+        // bazında dağıtım tavanı (itemAllowedTotal) oluşturur.
+        var itemAllowedTotal = new Dictionary<int, decimal>();
+        if (respectMinStock && stockByItemLoc.Count > 0)
+        {
+            var itemMin = new Dictionary<int, decimal>();
+            var locMin  = new Dictionary<(int ItemId, int LocId), decimal>();
+            await using (var cmdMin = conn.CreateCommand())
+            {
+                cmdMin.CommandText = $"""
+                    SELECT [Id], [MinStock] FROM [{s}].[Items] WHERE [Id] IN ({iParamList}) AND [MinStock] > 0;
+                    SELECT [ItemId], [LocationId], [MinStock] FROM [{s}].[ItemLocation]
+                    WHERE [ItemId] IN ({iParamList}) AND [MinStock] > 0;
+                    """;
+                for (var i = 0; i < distinctItemIds.Count; i++)
+                    cmdMin.Parameters.Add(new SqlParameter($"@i{i}", distinctItemIds[i]));
+                await using var rm = await cmdMin.ExecuteReaderAsync(ct);
+                while (await rm.ReadAsync(ct)) itemMin[rm.GetInt32(0)] = rm.GetDecimal(1);
+                await rm.NextResultAsync(ct);
+                while (await rm.ReadAsync(ct)) locMin[(rm.GetInt32(0), rm.GetInt32(1))] = rm.GetDecimal(2);
+            }
+
+            foreach (var itemId in stockByItemLoc.Keys.ToList())
+            {
+                var locs     = stockByItemLoc[itemId];
+                var totalRaw = locs.Values.Sum();
+                foreach (var locId in locs.Keys.ToList())
+                    if (locMin.TryGetValue((itemId, locId), out var lm) && lm > 0)
+                        locs[locId] -= lm;   // negatife düşebilir → dağıtımda avail<=0 zaten atlanır
+                var im = itemMin.GetValueOrDefault(itemId);
+                itemAllowedTotal[itemId] = Math.Max(0m, totalRaw - im);
+            }
+        }
+
         // -- FIFO dağıtım --
         // mutableStock: değiştirilebilir kopya
         var mutableStock = stockByItemLoc.ToDictionary(
@@ -1394,6 +1443,13 @@ public sealed class PurchaseController : Controller
                 var avail = locMap[locId];
                 if (avail <= 0) continue;
                 var take = Math.Min(toFulfill, avail);
+                // Genel asgari stok tavanı (parametre açıksa) — malzeme bazında kalan izin
+                if (respectMinStock && itemAllowedTotal.TryGetValue(line.ItemId, out var capLeft))
+                {
+                    if (capLeft <= 0) break;
+                    take = Math.Min(take, capLeft);
+                    itemAllowedTotal[line.ItemId] = capLeft - take;
+                }
                 planned.Add(new StockIssueLineRequest(
                     ItemId:         line.ItemId,
                     UnitId:         line.UnitId,

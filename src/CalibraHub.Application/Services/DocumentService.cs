@@ -266,28 +266,38 @@ public sealed class DocumentService : IDocumentService
 
         var isNew = !request.Id.HasValue || request.Id.Value == 0;
 
-        // ── Karşılama bağlantısı koruması (İhtiyaç Kaydı zinciri) ──────────────
-        // Bir kalem karşılandıysa (FulfilledFromStock + FulfilledByPurchase > 0):
-        //   • miktarı karşılanan miktarın altına düşürülemez,
-        //   • payload'dan çıkarılıp silinemez (kaynak kalem korunur).
-        // Fulfilled* yalnızca İhtiyaç Kaydı (alis_talebi) satırlarında dolduğundan
-        // kontrol sadece o belge türü güncellenirken çalıştırılır (gereksiz sorgu yok).
-        if (!isNew && request.Id.HasValue && isPurchaseRequest)
+        // ── Bağlantı bütünlüğü koruması (güncelleme) ───────────────────────────
+        // Kaynak kalem, bağlantıyı bozacak şekilde düzenlenemez/silinemez:
+        //  1) İhtiyaç zinciri: karşılanan (FulfilledFromStock+ByPurchase) miktar tabandır.
+        //  2) Dönüşüm zinciri (teklif→sipariş vb.): başka AKTİF belgede SourceLineId ile
+        //     referans alınan kalem silinemez; miktarı türetilmiş toplamın altına inemez.
+        // Bağlantıyı etkilemeyen düzenlemeler (not, fiyat, artırma...) serbesttir.
+        if (!isNew && request.Id.HasValue)
         {
-            var existingLines = await GetQuoteLinesAsync(request.Id.Value, ct);
-            var incomingById = request.Lines
-                .Where(l => l.Id.HasValue && l.Id.Value > 0)
-                .GroupBy(l => l.Id!.Value)
-                .ToDictionary(g => g.Key, g => g.First());
-            foreach (var ex in existingLines)
+            var derivedAgg = await _repo.GetDerivedLineAggregatesAsync(request.Id.Value, ct);
+            if (isPurchaseRequest || derivedAgg.Count > 0)
             {
-                var consumed = ex.FulfilledFromStock + ex.FulfilledByPurchase;
-                if (consumed <= 0) continue;
-                var name = ex.MaterialName ?? ex.MaterialCode ?? $"#{ex.Id}";
-                if (!incomingById.TryGetValue(ex.Id, out var inc))
-                    return (false, $"'{name}' kalemi {consumed:0.##} birim karşılandığı için silinemez. Önce karşılama belgelerini geri alın.", null, false);
-                if (inc.Quantity < consumed)
-                    return (false, $"'{name}' kalemi {consumed:0.##} birim karşılandığı için miktarı bunun altına düşürülemez (girilen: {inc.Quantity:0.##}).", null, false);
+                var existingLines = await GetQuoteLinesAsync(request.Id.Value, ct);
+                var incomingById = request.Lines
+                    .Where(l => l.Id.HasValue && l.Id.Value > 0)
+                    .GroupBy(l => l.Id!.Value)
+                    .ToDictionary(g => g.Key, g => g.First());
+                foreach (var ex in existingLines)
+                {
+                    var consumed = isPurchaseRequest ? ex.FulfilledFromStock + ex.FulfilledByPurchase : 0m;
+                    var hasDerived = derivedAgg.TryGetValue(ex.Id, out var da);
+                    var floor = Math.Max(consumed, hasDerived ? da.QtySum : 0m);
+                    if (consumed <= 0 && !hasDerived) continue;
+
+                    var name = ex.MaterialName ?? ex.MaterialCode ?? $"#{ex.Id}";
+                    var reason = hasDerived
+                        ? $"bu kalemden türetilmiş {da.Count} belge satırı olduğu"
+                        : $"{consumed:0.##} birim karşılandığı";
+                    if (!incomingById.TryGetValue(ex.Id, out var inc))
+                        return (false, $"'{name}' kalemi {reason} için silinemez. Önce bağlantılı belgeleri geri alın.", null, false);
+                    if (inc.Quantity < floor)
+                        return (false, $"'{name}' kalemi {reason} için miktarı {floor:0.##} altına düşürülemez (girilen: {inc.Quantity:0.##}).", null, false);
+                }
             }
         }
         var effectiveTypeIdForNumber = request.DocumentTypeId ?? await ResolveDefaultQuoteTypeIdAsync(ct) ?? 0;
@@ -564,11 +574,28 @@ public sealed class DocumentService : IDocumentService
 
     public async Task<(bool Ok, string? Error)> DeleteQuoteAsync(int id, CancellationToken ct)
     {
-        // Karşılanmış kalem içeren belge silinemez (İhtiyaç Kaydı zinciri koruması).
-        // Diğer belge türlerinde Fulfilled* = 0 olduğundan bu kontrol no-op'tur.
+        // 1) Karşılanmış kalem içeren belge silinemez (İhtiyaç Kaydı zinciri koruması).
+        //    Diğer belge türlerinde Fulfilled* = 0 olduğundan bu kontrol no-op'tur.
         var lines = await GetQuoteLinesAsync(id, ct);
         if (lines.Any(l => l.FulfilledFromStock + l.FulfilledByPurchase > 0))
             return (false, "Bu belge karşılanmış kalem(ler) içerdiği için silinemez. Önce karşılama belgelerini geri alın.");
+
+        // 2) Bu belgeden türetilmiş AKTİF belge varsa (DocumentSource: teklif→sipariş,
+        //    İhtiyaç→talep/fiş...) kaynak silinemez — bağlantı bozulur. Türetilenler
+        //    silinirse (soft-delete) kaynak yeniden silinebilir hale gelir.
+        var derivedIds = await _docSourceRepo.GetDerivedDocumentIdsAsync(id, ct);
+        if (derivedIds.Count > 0)
+        {
+            var activeNos = new List<string>();
+            foreach (var did in derivedIds)
+            {
+                var d = await GetQuoteByIdAsync(did, ct);
+                if (d is { IsActive: true }) activeNos.Add(d.DocumentNumber);
+            }
+            if (activeNos.Count > 0)
+                return (false, $"Bu belgeden türetilmiş belge(ler) var: {string.Join(", ", activeNos)}. " +
+                               "Kaynak belge silinemez; önce türetilmiş belgeleri silin/iptal edin.");
+        }
 
         await _repo.DeleteAsync(id, ct);
         return (true, null);

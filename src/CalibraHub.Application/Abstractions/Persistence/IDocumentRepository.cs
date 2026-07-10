@@ -42,6 +42,14 @@ public interface IDocumentRepository
     Task UpdateLineFulfillmentAsync(int lineId, decimal fulfilledFromStock, decimal fulfilledByPurchase, CancellationToken ct);
 
     /// <summary>
+    /// Belgenin satırlarına SourceLineId ile referans veren (AKTİF belgelerdeki) türetilmiş
+    /// satır agregatları: kaynakLineId → (türetilmiş satır sayısı, toplam miktar).
+    /// Bağlantı bütünlüğü guard'ları için: referanslı kaynak kalem silinemez, miktarı
+    /// türetilmiş toplamın altına düşürülemez (teklif→sipariş vb. zincirler).
+    /// </summary>
+    Task<IReadOnlyDictionary<int, (int Count, decimal QtySum)>> GetDerivedLineAggregatesAsync(int documentId, CancellationToken ct);
+
+    /// <summary>
     /// Bir satiri revize et — atomik olarak:
     ///   1) Eski satirin notes = @description (revize gerekcesi / eski halin anlatimi)
     ///   2) Yeni satir: eski satirin birebir kopyasi + revised_from_id = parentLineId

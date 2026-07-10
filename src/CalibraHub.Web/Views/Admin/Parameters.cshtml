@@ -457,6 +457,28 @@ body.app-theme-dark .ap-wrapper {
 
                 <div class="ap-row">
                     <div class="ap-row-main">
+                        <div class="ap-row-title">Karşılamada Asgari Stok Korunsun</div>
+                        <div class="ap-row-desc">
+                            Açıkken "Depodan Karşıla" dağıtımı ve stok bakiyesi görünümü asgari stok
+                            seviyelerini korur: <strong>depo bazında asgari</strong> (Malzeme Kartı →
+                            Lokasyonlar) o deponun bakiyesinden, <strong>genel asgari</strong>
+                            (Malzeme Kartı) toplam kullanılabilir havuzdan düşülür. Kapalıyken tüm
+                            fiziksel bakiye karşılamada kullanılabilir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-fc-min-stock" />
+                            <span class="ap-switch-track">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label" id="ap-fc-min-stock-label">Pasif</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
                         <div class="ap-row-title">Karşılama Deposu Seçimi</div>
                         <div class="ap-row-desc">
                             "Depodan Karşıla" aksiyonu çalışırken hangi depoların stok bakiyesine bakılacağını belirleyin.
@@ -669,6 +691,7 @@ body.app-theme-dark .ap-wrapper {
     }
     wireSwitch('ap-edoc-approval', 'ap-edoc-approval-label');
     wireSwitch('ap-bom-allow-dup', 'ap-bom-allow-dup-label');
+    wireSwitch('ap-fc-min-stock', 'ap-fc-min-stock-label');
     // Belge türü onay switch'leri — dinamik liste (data-kind attribute'lu)
     document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
         wireSwitch(cb.id, cb.id + '-label');
@@ -741,9 +764,17 @@ body.app-theme-dark .ap-wrapper {
                     body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_LOCATION_IDS', paramValue: ids.join(','), dataType: 1 })
                 });
                 var d2 = await r2.json();
-                ok = !!d1.ok && !!d2.ok;
+                var minEl = document.getElementById('ap-fc-min-stock');
+                var r3 = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_RESPECT_MIN_STOCK', paramValue: (minEl && minEl.checked) ? 'true' : 'false', dataType: 3 })
+                });
+                var d3 = await r3.json();
+                ok = !!d1.ok && !!d2.ok && !!d3.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash((d1.error || d2.error || 'Kaydetme basarisiz.'), false);
+                else    flash((d1.error || d2.error || d3.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
                 var negCtrlEl = document.getElementById('ap-neg-control');
                 var rs = await fetch('/Admin/SaveStockParametersJson', {
@@ -845,6 +876,16 @@ body.app-theme-dark .ap-wrapper {
             var modeEl = document.getElementById(cfg.mode === 'ITEM_DEFAULT' ? 'apFcLocDefault' : 'apFcLocSpecific');
             if (modeEl) modeEl.checked = true;
             fcModeChange();
+
+            // Asgari stok switch'i (default: kapalı)
+            var msOn = cfg.respectMinStock === true;
+            var msEl = document.getElementById('ap-fc-min-stock');
+            if (msEl) {
+                msEl.checked = msOn;
+                msEl.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', msOn);
+                var msLbl = document.getElementById('ap-fc-min-stock-label');
+                if (msLbl) { msLbl.textContent = msOn ? 'Aktif' : 'Pasif'; msLbl.classList.toggle('is-active', msOn); }
+            }
 
             var locs = await (await fetch('/Warehouse/GetLocationsJson')).json();
             _fcLocs = locs || [];

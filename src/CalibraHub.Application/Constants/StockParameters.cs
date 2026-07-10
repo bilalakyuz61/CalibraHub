@@ -66,6 +66,14 @@ public static class FulfillmentParameters
     public const string LocationIdsKey = "FULFILLMENT_LOCATION_IDS";
 
     /// <summary>
+    /// Karşılamada asgari stok korunsun (Bool, default false). Açıkken "Depodan Karşıla"
+    /// dağıtımı ve stok bakiyesi görünümü asgari seviyeleri düşer: depo bazında asgari
+    /// (ItemLocation.MinStock) ilgili depo bakiyesinden, genel asgari (Items.MinStock)
+    /// toplam kullanılabilir havuzdan. Kapalıyken tüm fiziksel bakiye kullanılabilir.
+    /// </summary>
+    public const string RespectMinStockKey = "FULFILLMENT_RESPECT_MIN_STOCK";
+
+    /// <summary>
     /// KALDIRILDI (2026-07-08): ayrı "karşılamada onay şartı" parametresi. Karşılama artık
     /// doğrudan İhtiyaç Kaydı onay tetiklemesine (APPROVAL_ENABLED_PurchaseRequest) bağlıdır:
     /// onay açıksa yalnızca Onaylı belgeler karşılanır, kapalıysa tümü. Sabit yalnızca eski

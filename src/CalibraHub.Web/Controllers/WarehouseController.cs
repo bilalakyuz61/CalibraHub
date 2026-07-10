@@ -24,6 +24,7 @@ public sealed class WarehouseController : Controller
     private readonly IFieldSettingRepository _fieldSettings;
     private readonly ICompanyParameterService _companyParams;
     private readonly IDocumentTypeRepository _documentTypeRepo;
+    private readonly IDocumentSourceRepository _docSourceRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
 
@@ -42,6 +43,7 @@ public sealed class WarehouseController : Controller
         IFieldSettingRepository fieldSettings,
         ICompanyParameterService companyParams,
         IDocumentTypeRepository documentTypeRepo,
+        IDocumentSourceRepository docSourceRepo,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
     {
@@ -52,6 +54,7 @@ public sealed class WarehouseController : Controller
         _fieldSettings = fieldSettings;
         _companyParams = companyParams;
         _documentTypeRepo = documentTypeRepo;
+        _docSourceRepo = docSourceRepo;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
@@ -533,6 +536,10 @@ public sealed class WarehouseController : Controller
         try
         {
             var (id, docNo) = await _stockDocRepo.DeliverSalesOrderAsync(orderId, CurrentUserId(), ct);
+            // Belge soyağacı: teslimat fişi (depo_cikis) ← satış siparişi.
+            // Repo ParentDocumentId set ediyor; İlişkili Belgeler paneli DocumentSource okur.
+            await _docSourceRepo.EnsureSchemaAsync(ct);
+            await _docSourceRepo.AddAsync(id, orderId, ct);
             return Json(new { success = true, id, docNo });
         }
         catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
