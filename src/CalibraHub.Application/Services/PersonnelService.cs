@@ -72,7 +72,9 @@ public sealed class PersonnelService : IPersonnelService
             {
                 if (existing is null)
                 {
-                    _audit.LogInsert("Personnel", savedId, fullName);
+                    // İlk değer dökümü — PIN asla loglanmaz
+                    _audit.LogInsert("Personnel", savedId, fullName,
+                        snapshot: entity, snapshotIgnore: ["PinCode", "CompanyId", "Code"]);
                 }
                 else
                 {

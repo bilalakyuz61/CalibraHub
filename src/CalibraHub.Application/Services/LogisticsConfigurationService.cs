@@ -1125,8 +1125,9 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
         var newItemId = await _repository.AddItemAsync(stockCard, cancellationToken);
 
-        // İşlem logu — yeni malzeme kartı
-        _audit?.LogInsert("Item", newItemId, name, detail: code);
+        // İşlem logu — yeni malzeme kartı (ilk değer dökümüyle)
+        _audit?.LogInsert("Item", newItemId, name, detail: code,
+            snapshot: stockCard, snapshotIgnore: ["CompanyId"]);
     }
 
     public async Task UpdateItemAsync(UpdateItemRequest request, CancellationToken cancellationToken)
@@ -1580,8 +1581,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         };
         var newMachineId = await _repository.AddMachineAsync(machine, cancellationToken);
 
-        // İşlem logu — yeni makine
-        _audit?.LogInsert("Machine", newMachineId, name);
+        // İşlem logu — yeni makine (ilk değer dökümüyle)
+        _audit?.LogInsert("Machine", newMachineId, name, snapshot: machine);
 
         return newMachineId;
     }

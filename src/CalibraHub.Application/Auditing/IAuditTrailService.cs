@@ -15,8 +15,15 @@ namespace CalibraHub.Application.Auditing;
 /// </summary>
 public interface IAuditTrailService
 {
-    /// <summary>Yeni kayıt oluşturuldu.</summary>
-    void LogInsert(string entity, object? entityId, string? title, string? detail = null, AuditActor? actor = null);
+    /// <summary>
+    /// Yeni kayıt oluşturuldu. <paramref name="snapshot"/> verilirse kaydın dolu skaler
+    /// alanları "boş → değer" formatında log satırına eklenir (ilk değer dökümü).
+    /// <paramref name="snapshotIgnore"/> ile hassas alanlar (PIN, hash) dışarıda bırakılır.
+    /// <paramref name="extraChanges"/> snapshot'a ek satırlar içindir (ör. belge kalem dökümü).
+    /// </summary>
+    void LogInsert(string entity, object? entityId, string? title, string? detail = null, AuditActor? actor = null,
+        object? snapshot = null, IEnumerable<string>? snapshotIgnore = null,
+        IReadOnlyList<AuditFieldChange>? extraChanges = null);
 
     /// <summary>
     /// Kayıt güncellendi — <paramref name="oldSnapshot"/> ile <paramref name="newSnapshot"/>

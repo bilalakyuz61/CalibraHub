@@ -708,8 +708,17 @@ public sealed class DocumentService : IDocumentService
                 var auditEntity = await ResolveAuditEntityAsync(quote.DocumentTypeId, ct);
                 if (isNew)
                 {
+                    // İlk değer dökümü: başlık alanları + kalem listesi ("boş → değer")
+                    var insertedLines = await _repo.GetLinesAsync(quote.Id, ct);
+                    var lineSnapshot = insertedLines.Select(l => new AuditFieldChange(
+                        $"Line[{l.Id}]",
+                        $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",
+                        null,
+                        $"{AuditDiff.Normalize(l.Quantity)} {l.UnitCode ?? "birim"} × {AuditDiff.Normalize(l.UnitPrice)}")).ToList();
                     _audit.LogInsert(auditEntity, quote.Id, quote.DocumentNumber,
-                        detail: $"{finalLines.Length} kalem · Genel Toplam {AuditDiff.Normalize(quote.GrandTotal)}");
+                        detail: $"{finalLines.Length} kalem · Genel Toplam {AuditDiff.Normalize(quote.GrandTotal)}",
+                        snapshot: SnapHeader(quote),
+                        extraChanges: lineSnapshot);
                 }
                 else
                 {
@@ -1018,7 +1027,8 @@ public sealed class DocumentService : IDocumentService
 
             _audit?.LogInsert(
                 await ResolveAuditEntityAsync(orderTypeId, ct), newOrderId, orderNumber,
-                detail: $"Tekliften dönüştürüldü: {string.Join(", ", grp.Select(t => t.Quote.DocumentNumber))}");
+                detail: $"Tekliften dönüştürüldü: {string.Join(", ", grp.Select(t => t.Quote.DocumentNumber))}",
+                snapshot: SnapHeader(order));
 
             orderIds.Add(newOrderId);
         }

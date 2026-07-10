@@ -697,8 +697,9 @@ public sealed class AdminManagementService : IAdminManagementService
 
         var newDepartmentId = await _departmentRepository.AddAsync(department, cancellationToken);
 
-        // İşlem logu — yeni departman
-        _audit?.LogInsert("Department", newDepartmentId, name);
+        // İşlem logu — yeni departman (ilk değer dökümüyle)
+        _audit?.LogInsert("Department", newDepartmentId, name,
+            snapshot: department, snapshotIgnore: ["CompanyId"]);
     }
 
     public async Task UpdateDepartmentAsync(UpdateDepartmentRequest request, CancellationToken cancellationToken)
@@ -879,7 +880,10 @@ public sealed class AdminManagementService : IAdminManagementService
             try
             {
                 var created = await _userProfileRepository.GetByEmailAndCompanyIdAsync(email, request.CompanyId, cancellationToken);
-                _audit.LogInsert("User", created?.Id, email, detail: fullName);
+                // İlk değer dökümü — şifre hash'i ve UI tercihleri asla loglanmaz
+                _audit.LogInsert("User", created?.Id, email, detail: fullName,
+                    snapshot: created,
+                    snapshotIgnore: ["PasswordHash", "LanguageCode", "ThemeCode", "GridPreferencesJson", "CompanyId"]);
             }
             catch
             {

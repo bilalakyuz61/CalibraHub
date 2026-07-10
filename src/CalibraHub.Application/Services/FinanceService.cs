@@ -164,8 +164,9 @@ public sealed class FinanceService : IFinanceService
                 CreatedAt = entity.CreatedAt
             };
 
-            // İşlem logu — yeni cari
-            _audit?.LogInsert("Contact", newId, entity.AccountTitle, detail: code);
+            // İşlem logu — yeni cari (ilk değer dökümüyle)
+            _audit?.LogInsert("Contact", newId, entity.AccountTitle, detail: code,
+                snapshot: created, snapshotIgnore: ["CompanyId"]);
             return (true, null, ToDto(created));
         }
     }

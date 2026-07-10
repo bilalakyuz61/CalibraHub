@@ -189,10 +189,24 @@ public sealed class WarehouseController : Controller
         return lines.Select(l => new AuditFieldChange(
             $"Line[{l.Id}]",
             $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",
-            $"{AuditDiff.Normalize(l.Qty)} {l.UnitCode ?? "birim"}"
-                + (string.IsNullOrWhiteSpace(l.LotNo) ? "" : $" · Lot {l.LotNo}"),
+            LineValueSummary(l),
             null)).ToList();
     }
+
+    /// <summary>Yeni belgenin kalem dökümü — ekleme log satırına ilk değerler olarak eklenir. New dolu, Old null.</summary>
+    private static List<AuditFieldChange>? BuildInsertedLineSnapshot(IReadOnlyList<StockDocLineDto>? lines)
+    {
+        if (lines is not { Count: > 0 }) return null;
+        return lines.Select(l => new AuditFieldChange(
+            $"Line[{l.Id}]",
+            $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",
+            null,
+            LineValueSummary(l))).ToList();
+    }
+
+    private static string LineValueSummary(StockDocLineDto l) =>
+        $"{AuditDiff.Normalize(l.Qty)} {l.UnitCode ?? "birim"}"
+        + (string.IsNullOrWhiteSpace(l.LotNo) ? "" : $" · Lot {l.LotNo}");
 
     /// <summary>Başarılı depo belgesi kaydı sonrası işlem logu — yeni kayıt Insert,
     /// güncelleme header + kalem diff'i. Audit hatası kayıt akışını asla bozmaz.</summary>
@@ -209,10 +223,19 @@ public sealed class WarehouseController : Controller
                 // request.Id > 0 ama eski kayıt okunamadıysa da Insert yerine detay ile Update yazmak
                 // yanıltıcı olurdu — eski durum bilinmiyorsa yeni kayıtta Insert, güncellemede detay log.
                 if (request.Id is > 0)
+                {
                     _audit.LogChanges(entity, id, docNo, Array.Empty<AuditFieldChange>(),
                         detail: $"Güncellendi · {lineCount} kalem (önceki durum okunamadı)");
+                }
                 else
-                    _audit.LogInsert(entity, id, docNo, detail: $"{lineCount} kalem");
+                {
+                    // İlk değer dökümü: başlık alanları + kaydedilen kalemler ("boş → değer")
+                    IReadOnlyList<StockDocLineDto>? insertedLines = null;
+                    try { insertedLines = await _stockDocRepo.GetLinesAsync(id, ct); } catch { }
+                    _audit.LogInsert(entity, id, docNo, detail: $"{lineCount} kalem",
+                        snapshot: SnapStockHeader(request),
+                        extraChanges: BuildInsertedLineSnapshot(insertedLines));
+                }
                 return;
             }
 
@@ -728,8 +751,12 @@ public sealed class WarehouseController : Controller
             // Repo ParentDocumentId set ediyor; İlişkili Belgeler paneli DocumentSource okur.
             await _docSourceRepo.EnsureSchemaAsync(ct);
             await _docSourceRepo.AddAsync(id, orderId, ct);
-            // İşlem logu: teslimat çıkış fişi yeni bir depo_cikis belgesidir
-            _audit.LogInsert("depo_cikis", id, docNo, detail: $"Satış siparişi teslimatı (Sipariş #{orderId})");
+            // İşlem logu: teslimat çıkış fişi yeni bir depo_cikis belgesidir (kalem dökümüyle)
+            IReadOnlyList<StockDocLineDto>? deliveredLines = null;
+            try { deliveredLines = await _stockDocRepo.GetLinesAsync(id, ct); } catch { }
+            _audit.LogInsert("depo_cikis", id, docNo,
+                detail: $"Satış siparişi teslimatı (Sipariş #{orderId})",
+                extraChanges: BuildInsertedLineSnapshot(deliveredLines));
             return Json(new { success = true, id, docNo });
         }
         catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)

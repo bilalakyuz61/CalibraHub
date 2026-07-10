@@ -23,8 +23,27 @@ public sealed class AuditTrailService : IAuditTrailService
     }
 
     public void LogInsert(string entity, object? entityId, string? title, string? detail = null,
-        AuditActor? actor = null)
-        => Enqueue(AuditActions.Insert, entity, entityId, title, null, detail, actor);
+        AuditActor? actor = null, object? snapshot = null, IEnumerable<string>? snapshotIgnore = null,
+        IReadOnlyList<AuditFieldChange>? extraChanges = null)
+    {
+        List<AuditFieldChange>? changes = null;
+        if (snapshot is not null)
+        {
+            // İlk değer dökümü: eski taraf null → yalnızca dolu alanlar "boş → değer" üretir
+            try { changes = AuditDiff.Compute(null, snapshot, entity, snapshotIgnore); }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Audit] Insert snapshot hesaplanamadı: {Entity}/{Id}", entity, entityId);
+            }
+        }
+        if (extraChanges is { Count: > 0 })
+        {
+            changes ??= new List<AuditFieldChange>();
+            changes.AddRange(extraChanges);
+        }
+        Enqueue(AuditActions.Insert, entity, entityId, title,
+            changes is { Count: > 0 } ? changes : null, detail, actor);
+    }
 
     public void LogUpdate(string entity, object? entityId, string? title, object? oldSnapshot,
         object? newSnapshot, string? detail = null, AuditActor? actor = null)

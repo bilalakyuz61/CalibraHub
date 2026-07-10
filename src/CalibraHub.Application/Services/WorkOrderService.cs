@@ -175,10 +175,16 @@ public sealed class WorkOrderService : IWorkOrderService
             await _workOrderOperations.ExplodeFromRoutingAsync(newId, resolvedRoutingId.Value, ct);
         }
 
-        // İşlem logu — yeni iş emri
-        _audit?.LogInsert("WorkOrder", newId, orderNumber,
-            detail: $"Planlanan {AuditDiff.Normalize(request.PlannedQuantity)}" +
-                    (autoRelease ? " · Yayımlandı" : ""));
+        // İşlem logu — yeni iş emri; ilk değer dökümü için kaydedilen DTO (display alanlarıyla) okunur
+        if (_audit is not null)
+        {
+            WorkOrderDto? createdForAudit = null;
+            try { createdForAudit = await _workOrders.GetAsync(newId, ct); } catch { }
+            _audit.LogInsert("WorkOrder", newId, orderNumber,
+                detail: $"Planlanan {AuditDiff.Normalize(request.PlannedQuantity)}" +
+                        (autoRelease ? " · Yayımlandı" : ""),
+                snapshot: createdForAudit);
+        }
 
         return newId;
     }
@@ -293,8 +299,14 @@ public sealed class WorkOrderService : IWorkOrderService
         var revisionId = await _workOrders.CreateRevisionAsync(id, newDocumentId, null, ct);
 
         // İşlem logu — revizyon yeni kayıttır; eski emir repo tarafında Cancelled olur
-        _audit?.LogInsert("WorkOrder", revisionId, newNumber,
-            detail: $"Revizyon — kaynak {current.OrderNumber}");
+        if (_audit is not null)
+        {
+            WorkOrderDto? createdForAudit = null;
+            try { createdForAudit = await _workOrders.GetAsync(revisionId, ct); } catch { }
+            _audit.LogInsert("WorkOrder", revisionId, newNumber,
+                detail: $"Revizyon — kaynak {current.OrderNumber}",
+                snapshot: createdForAudit);
+        }
 
         return revisionId;
     }
