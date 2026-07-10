@@ -38,7 +38,12 @@ public sealed class AuditLogController : Controller
     [HttpGet("/AuditLog/Search")]
     [PermissionScope(FormCodes.AuditLog)]
     public async Task<IActionResult> Search(
-        DateTime? from, DateTime? to, string? action, string? entity, string? user, string? text,
+        DateTime? from, DateTime? to,
+        // [FromQuery] ZORUNLU: "action" MVC route değeriyle (action="Search") çakışır —
+        // route value provider query'den önce geldiği için parametre her istekte "Search"
+        // değerini alır ve arama hep 0 döner. FromQuery bağlamayı query string'e kilitler.
+        [FromQuery(Name = "action")] string? action,
+        string? entity, string? user, string? text,
         int page = 1, int pageSize = 50, CancellationToken ct = default)
     {
         var (fromUtc, toUtc) = NormalizeRange(from, to);
