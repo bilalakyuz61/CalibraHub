@@ -181,6 +181,19 @@ public sealed class WarehouseController : Controller
         catch { return (null, null); }
     }
 
+    /// <summary>Silinen belgenin kalem dökümü — silme log satırına snapshot olarak eklenir
+    /// ("ne kayboldu" izlenebilsin). Old dolu, New null.</summary>
+    private static List<AuditFieldChange>? BuildDeletedLineSnapshot(IReadOnlyList<StockDocLineDto>? lines)
+    {
+        if (lines is not { Count: > 0 }) return null;
+        return lines.Select(l => new AuditFieldChange(
+            $"Line[{l.Id}]",
+            $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",
+            $"{AuditDiff.Normalize(l.Qty)} {l.UnitCode ?? "birim"}"
+                + (string.IsNullOrWhiteSpace(l.LotNo) ? "" : $" · Lot {l.LotNo}"),
+            null)).ToList();
+    }
+
     /// <summary>Başarılı depo belgesi kaydı sonrası işlem logu — yeni kayıt Insert,
     /// güncelleme header + kalem diff'i. Audit hatası kayıt akışını asla bozmaz.</summary>
     private async Task LogStockDocSaveAsync(
@@ -468,13 +481,15 @@ public sealed class WarehouseController : Controller
             if (status == 1)
                 return Json(new { ok = false, error = "Yansıtılmış sayım fişi silinemez. Yansıtılan stok farkları bu belgeye bağlıdır; silinmesi bakiyeyi bozar." });
 
-            // İşlem logu: silinen belgenin kimliği silmeden ÖNCE okunur
-            var (docForAudit, _) = await TryGetStockDocForAuditAsync(id, ct);
+            // İşlem logu: silinen belgenin kimliği + kalem dökümü silmeden ÖNCE okunur
+            var (docForAudit, linesForAudit) = await TryGetStockDocForAuditAsync(id, ct);
 
             await _stockDocRepo.DeleteAsync(id, ct);
 
             if (docForAudit is not null)
-                _audit.LogDelete(AuditEntityFor(docForAudit.DocType), id, docForAudit.DocNo);
+                _audit.LogDelete(AuditEntityFor(docForAudit.DocType), id, docForAudit.DocNo,
+                    detail: linesForAudit is { Count: > 0 } ? $"{linesForAudit.Count} kalem" : null,
+                    snapshot: BuildDeletedLineSnapshot(linesForAudit));
             return Json(new { ok = true });
         }
         catch
@@ -738,13 +753,15 @@ public sealed class WarehouseController : Controller
     {
         try
         {
-            // İşlem logu: silinen belgenin kimliği silmeden ÖNCE okunur
-            var (docForAudit, _) = await TryGetStockDocForAuditAsync(id, ct);
+            // İşlem logu: silinen belgenin kimliği + kalem dökümü silmeden ÖNCE okunur
+            var (docForAudit, linesForAudit) = await TryGetStockDocForAuditAsync(id, ct);
 
             await _stockDocRepo.DeleteAsync(id, ct);
 
             if (docForAudit is not null)
-                _audit.LogDelete(AuditEntityFor(docForAudit.DocType), id, docForAudit.DocNo);
+                _audit.LogDelete(AuditEntityFor(docForAudit.DocType), id, docForAudit.DocNo,
+                    detail: linesForAudit is { Count: > 0 } ? $"{linesForAudit.Count} kalem" : null,
+                    snapshot: BuildDeletedLineSnapshot(linesForAudit));
             return Json(new { ok = true });
         }
         catch (Exception ex)

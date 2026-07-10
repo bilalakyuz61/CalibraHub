@@ -50,8 +50,9 @@ public sealed class AuditTrailService : IAuditTrailService
     }
 
     public void LogDelete(string entity, object? entityId, string? title, string? detail = null,
-        AuditActor? actor = null)
-        => Enqueue(AuditActions.Delete, entity, entityId, title, null, detail, actor);
+        AuditActor? actor = null, IReadOnlyList<AuditFieldChange>? snapshot = null)
+        => Enqueue(AuditActions.Delete, entity, entityId, title,
+            snapshot is { Count: > 0 } ? new List<AuditFieldChange>(snapshot) : null, detail, actor);
 
     public void LogEvent(string action, string? detail = null, AuditActor? actor = null,
         string? entity = null, object? entityId = null, string? title = null)

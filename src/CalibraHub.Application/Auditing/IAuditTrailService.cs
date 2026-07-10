@@ -33,8 +33,13 @@ public interface IAuditTrailService
     void LogChanges(string entity, object? entityId, string? title, IReadOnlyList<AuditFieldChange> changes,
         string? detail = null, AuditActor? actor = null);
 
-    /// <summary>Kayıt silindi (soft/hard farketmez — kullanıcı gözünden silme).</summary>
-    void LogDelete(string entity, object? entityId, string? title, string? detail = null, AuditActor? actor = null);
+    /// <summary>
+    /// Kayıt silindi (soft/hard farketmez — kullanıcı gözünden silme).
+    /// <paramref name="snapshot"/> ile silinen içeriğin dökümü (ör. belge kalemleri)
+    /// log satırına eklenebilir — Old dolu, New null olacak şekilde verilir.
+    /// </summary>
+    void LogDelete(string entity, object? entityId, string? title, string? detail = null, AuditActor? actor = null,
+        IReadOnlyList<AuditFieldChange>? snapshot = null);
 
     /// <summary>Güvenlik/oturum olayı (Login, LoginFailed, Logout) veya serbest olay.</summary>
     void LogEvent(string action, string? detail = null, AuditActor? actor = null,

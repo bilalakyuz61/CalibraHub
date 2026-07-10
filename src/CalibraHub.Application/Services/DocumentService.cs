@@ -767,7 +767,16 @@ public sealed class DocumentService : IDocumentService
         if (_audit is not null && docForAudit is not null)
         {
             var auditEntity = await ResolveAuditEntityAsync(docForAudit.DocumentTypeId, ct);
-            _audit.LogDelete(auditEntity, id, docForAudit.DocumentNumber);
+            // Silinen belgenin kalem dökümü snapshot olarak loglanır — "ne kayboldu" izlenebilir.
+            // `lines` metodun başında karşılama kontrolü için zaten yüklendi.
+            var snapshot = lines.Select(l => new AuditFieldChange(
+                $"Line[{l.Id}]",
+                $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",
+                $"{AuditDiff.Normalize(l.Quantity)} {l.UnitCode ?? "birim"} × {AuditDiff.Normalize(l.UnitPrice)}",
+                null)).ToList();
+            _audit.LogDelete(auditEntity, id, docForAudit.DocumentNumber,
+                detail: $"{lines.Count} kalem · Genel Toplam {AuditDiff.Normalize(docForAudit.GrandTotal)}",
+                snapshot: snapshot);
         }
         return (true, null);
     }
