@@ -513,6 +513,8 @@ var NOTIF_SYSTEM_TOKENS = [
   { key: 'requesterName',   label: 'Oluşturan' },
   { key: 'approveLink',     label: 'Onay Linki' },
   { key: 'rejectLink',      label: 'Red Linki' },
+  // Mail'de stilli Onayla/Reddet butonları, WhatsApp'ta emoji'li link satırları üretir.
+  { key: 'approvalButtons', label: 'Onay/Red Butonları' },
 ]
 function buildNotifTokens(entityTypeFields) {
   var entityTokens = (Array.isArray(entityTypeFields) ? entityTypeFields : [])

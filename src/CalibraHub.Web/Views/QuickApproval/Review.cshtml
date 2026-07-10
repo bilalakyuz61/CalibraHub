@@ -1,0 +1,238 @@
+@{
+    Layout = null;
+    var companyId    = (int)(ViewBag.CompanyId ?? 0);
+    var token        = ViewBag.Token as string ?? "";
+    var intent       = ViewBag.Intent as string ?? "";
+    var approverName = ViewBag.ApproverName as string;
+    var flowName     = ViewBag.FlowName as string;
+    var stepName     = ViewBag.StepName as string;
+    var docNumber    = ViewBag.DocNumber as string;
+    var contactName  = ViewBag.ContactName as string;
+    var amountText   = ViewBag.AmountText as string;
+    var dateText     = ViewBag.DateText as string;
+    var previewHtml  = ViewBag.PreviewHtml as string;
+    var hasPreview   = !string.IsNullOrWhiteSpace(previewHtml);
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Onay Talebi — CalibraHub</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            background: #f1f5f9;
+            padding: 24px 16px;
+            display: flex;
+            justify-content: center;
+        }
+        .wrap { width: 100%; max-width: @(hasPreview ? "860px" : "520px"); }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,.10);
+            padding: 28px 28px 24px;
+        }
+        .head { text-align: center; margin-bottom: 18px; }
+        .head .icon { font-size: 44px; line-height: 1; margin-bottom: 10px; }
+        .head .title { font-size: 1.25rem; font-weight: 700; color: #1e293b; }
+        .head .sub { font-size: .85rem; color: #64748b; margin-top: 4px; line-height: 1.5; }
+        .meta {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px; margin: 16px 0;
+        }
+        .meta-item {
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+            padding: 10px 14px;
+        }
+        .meta-item .k { font-size: .68rem; font-weight: 700; color: #94a3b8; letter-spacing: .04em; margin-bottom: 3px; }
+        .meta-item .v { font-size: .92rem; font-weight: 600; color: #1e293b; word-break: break-word; }
+        .preview {
+            margin: 16px 0;
+            border: 1px solid #e2e8f0; border-radius: 12px;
+            overflow: hidden; background: #eef2f7;
+        }
+        .preview iframe {
+            display: block; width: 100%; height: 520px; border: 0; background: #fff;
+        }
+        .note-row { margin: 14px 0 4px; }
+        .note-row label { display: block; font-size: .78rem; font-weight: 600; color: #475569; margin-bottom: 6px; }
+        .note-row textarea {
+            width: 100%; min-height: 64px; resize: vertical;
+            border: 1px solid #cbd5e1; border-radius: 10px;
+            padding: 10px 12px; font-size: .88rem; font-family: inherit; color: #1e293b;
+            outline: none;
+        }
+        .note-row textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+        .actions { display: flex; gap: 12px; margin-top: 16px; }
+        .btn {
+            flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 13px 20px; border-radius: 12px; border: 2px solid transparent;
+            font-size: .95rem; font-weight: 700; cursor: pointer;
+            transition: transform .08s ease, box-shadow .12s ease, opacity .12s;
+        }
+        .btn:active { transform: scale(.985); }
+        .btn-approve { background: #16a34a; color: #fff; }
+        .btn-approve:hover { box-shadow: 0 6px 18px rgba(22,163,74,.35); }
+        .btn-reject  { background: #dc2626; color: #fff; }
+        .btn-reject:hover { box-shadow: 0 6px 18px rgba(220,38,38,.35); }
+        .btn.is-secondary { opacity: .78; }
+        .btn.is-primary   { box-shadow: 0 4px 14px rgba(0,0,0,.14); }
+        .logo { text-align: center; font-size: .72rem; font-weight: 600; color: #cbd5e1; margin-top: 22px; letter-spacing: .05em; }
+
+        /* ── Onay modalı (ortada, proje standardı) ── */
+        .qa-backdrop {
+            position: fixed; inset: 0; display: none;
+            align-items: center; justify-content: center;
+            background: rgba(15,23,42,.55); backdrop-filter: blur(3px);
+            z-index: 50; padding: 16px;
+        }
+        .qa-backdrop.is-open { display: flex; }
+        .qa-modal {
+            background: #fff; border-radius: 14px; padding: 26px 24px;
+            max-width: 380px; width: 100%; text-align: center;
+            box-shadow: 0 18px 50px rgba(0,0,0,.28);
+        }
+        .qa-modal .m-icon { font-size: 40px; margin-bottom: 10px; }
+        .qa-modal .m-title { font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+        .qa-modal .m-msg { font-size: .85rem; color: #64748b; line-height: 1.55; margin-bottom: 18px; }
+        .qa-modal .m-actions { display: flex; gap: 10px; }
+        .qa-modal .m-btn {
+            flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid #e2e8f0;
+            font-size: .88rem; font-weight: 700; cursor: pointer; background: #fff; color: #475569;
+        }
+        .qa-modal .m-btn-ok.approve { background: #16a34a; border-color: #16a34a; color: #fff; }
+        .qa-modal .m-btn-ok.reject  { background: #dc2626; border-color: #dc2626; color: #fff; }
+
+        @@media (max-width: 560px) {
+            .actions { flex-direction: column; }
+            .preview iframe { height: 380px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <div class="head">
+                <div class="icon">📋</div>
+                <div class="title">Onay Talebi</div>
+                <div class="sub">
+                    @if (!string.IsNullOrWhiteSpace(approverName))
+                    {
+                        <span>Sayın <strong>@approverName</strong>, </span>
+                    }
+                    aşağıdaki kaydı inceleyip onaylayabilir veya reddedebilirsiniz.
+                </div>
+            </div>
+
+            <div class="meta">
+                @if (!string.IsNullOrWhiteSpace(docNumber))
+                {
+                    <div class="meta-item"><div class="k">BELGE NO</div><div class="v">@docNumber</div></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(contactName))
+                {
+                    <div class="meta-item"><div class="k">CARİ</div><div class="v">@contactName</div></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(dateText))
+                {
+                    <div class="meta-item"><div class="k">TARİH</div><div class="v">@dateText</div></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(amountText))
+                {
+                    <div class="meta-item"><div class="k">TUTAR</div><div class="v">@amountText</div></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(flowName))
+                {
+                    <div class="meta-item"><div class="k">ONAY AKIŞI</div><div class="v">@flowName</div></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(stepName))
+                {
+                    <div class="meta-item"><div class="k">ADIM</div><div class="v">@stepName</div></div>
+                }
+            </div>
+
+            @if (hasPreview)
+            {
+                @* Firma-özel Belge Tasarımcısı şablonuyla render edilmiş belge.
+                   sandbox: script çalıştırmaz — yalnızca görsel içerik. *@
+                <div class="preview">
+                    <iframe sandbox="" srcdoc="@previewHtml"></iframe>
+                </div>
+            }
+
+            <form method="post" action="/Approval/Quick/Act" id="qaForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="c" value="@companyId" />
+                <input type="hidden" name="t" value="@token" />
+                <input type="hidden" name="a" id="qaAction" value="" />
+
+                <div class="note-row">
+                    <label for="qaNote">Not (opsiyonel — red durumunda gerekçe önerilir)</label>
+                    <textarea id="qaNote" name="note" maxlength="1000" placeholder="İsterseniz karar notu ekleyin…"></textarea>
+                </div>
+
+                <div class="actions">
+                    <button type="button" class="btn btn-approve @(intent == "reject" ? "is-secondary" : "is-primary")"
+                            onclick="qaConfirm('approve')">✓ Onayla</button>
+                    <button type="button" class="btn btn-reject @(intent == "approve" ? "is-secondary" : "is-primary")"
+                            onclick="qaConfirm('reject')">✕ Reddet</button>
+                </div>
+            </form>
+        </div>
+        <div class="logo">CalibraHub</div>
+    </div>
+
+    <div class="qa-backdrop" id="qaBackdrop">
+        <div class="qa-modal">
+            <div class="m-icon" id="qaMIcon">✅</div>
+            <div class="m-title" id="qaMTitle">Onaylansın mı?</div>
+            <div class="m-msg" id="qaMMsg"></div>
+            <div class="m-actions">
+                <button type="button" class="m-btn" onclick="qaClose()">Vazgeç</button>
+                <button type="button" class="m-btn m-btn-ok approve" id="qaMOk" onclick="qaSubmit()">Onayla</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var _qaPending = '';
+        function qaConfirm(action) {
+            _qaPending = action;
+            var isApprove = action === 'approve';
+            document.getElementById('qaMIcon').textContent  = isApprove ? '✅' : '❌';
+            document.getElementById('qaMTitle').textContent = isApprove ? 'Onaylansın mı?' : 'Reddedilsin mi?';
+            document.getElementById('qaMMsg').textContent   = isApprove
+                ? 'Bu kaydı onaylamak üzeresiniz. İşlem geri alınamaz.'
+                : 'Bu kaydı reddetmek üzeresiniz. İşlem geri alınamaz.';
+            var ok = document.getElementById('qaMOk');
+            ok.textContent = isApprove ? 'Onayla' : 'Reddet';
+            ok.className = 'm-btn m-btn-ok ' + (isApprove ? 'approve' : 'reject');
+            document.getElementById('qaBackdrop').classList.add('is-open');
+            ok.focus();
+        }
+        function qaClose() {
+            _qaPending = '';
+            document.getElementById('qaBackdrop').classList.remove('is-open');
+        }
+        function qaSubmit() {
+            if (!_qaPending) return;
+            document.getElementById('qaAction').value = _qaPending;
+            var ok = document.getElementById('qaMOk');
+            ok.disabled = true;
+            document.getElementById('qaForm').submit();
+        }
+        document.getElementById('qaBackdrop').addEventListener('click', function (e) {
+            if (e.target === this) qaClose();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') qaClose();
+            else if (e.key === 'Enter' && _qaPending) { e.preventDefault(); qaSubmit(); }
+        });
+        // Mail'deki intent'e göre butonu ön-vurgula (otomatik submit YOK — kullanıcı görür ve karar verir)
+    </script>
+</body>
+</html>

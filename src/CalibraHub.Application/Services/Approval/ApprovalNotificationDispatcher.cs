@@ -165,12 +165,16 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
             return;
         }
 
-        // Hızlı onay/red link tokenları — {approveLink} / {rejectLink} şablon içinde varsa
-        // her alıcı için ayrı token üret; link yoksa boş string (şablondan kaldırılır).
+        // Hızlı onay/red link tokenları — {approveLink} / {rejectLink} / {approvalButtons}
+        // şablon içinde varsa her alıcı için ayrı token üret; link yoksa boş string.
+        // {approvalButtons}: mail kanalında stilli HTML Onayla/Reddet butonları,
+        // WhatsApp kanalında emoji'li iki link satırı üretir.
         var rawSubject = string.IsNullOrWhiteSpace(cfg.Subject) ? "Onay Bildirimi" : cfg.Subject;
         var rawBody    = cfg.Body ?? "";
+        bool hasButtonsToken = rawBody.Contains(ApprovalButtonsToken);
         bool hasLinkToken = rawSubject.Contains("{approveLink}") || rawSubject.Contains("{rejectLink}")
-                         || rawBody.Contains("{approveLink}")    || rawBody.Contains("{rejectLink}");
+                         || rawBody.Contains("{approveLink}")    || rawBody.Contains("{rejectLink}")
+                         || hasButtonsToken;
         var needLinks  = _tokenRepo is not null
             && ctx.ApprovalInstanceId.HasValue
             && hasLinkToken;
@@ -237,14 +241,25 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
                     }
                 }
 
-                var subj    = ApplyContextTokens(rawSubject, ctx, rec.Name, approveLink, rejectLink);
-                var lnkBody = ApplyContextTokens(rawBody,    ctx, rec.Name, approveLink, rejectLink);
+                var subj = ApplyContextTokens(rawSubject, ctx, rec.Name, approveLink, rejectLink)
+                    .Replace(ApprovalButtonsToken, "");   // konu satırında buton olmaz
+                var bodyCommon = ApplyContextTokens(rawBody, ctx, rec.Name, approveLink, rejectLink);
 
                 if (lnkSendMail && !string.IsNullOrWhiteSpace(rec.Email))
                 {
                     try
                     {
-                        var result = await _email.SendAsync(rec.CompanyId, new[] { rec.Email! }, subj, lnkBody, lnkAttachments, ct);
+                        // {approvalButtons} varsa mail HTML gönderilir: satır sonları <br>'a
+                        // çevrilir, token stilli Onayla/Reddet butonlarıyla değiştirilir.
+                        // (Butonlar önizleme sayfasına götürür — tıklama işlemi orada tamamlanır.)
+                        var mailBody = bodyCommon;
+                        if (hasButtonsToken)
+                        {
+                            mailBody = mailBody.Replace("\r\n", "\n").Replace("\n", "<br/>");
+                            mailBody = mailBody.Replace(ApprovalButtonsToken, BuildButtonsHtml(approveLink, rejectLink));
+                        }
+                        var result = await _email.SendAsync(rec.CompanyId, new[] { rec.Email! }, subj, mailBody,
+                            lnkAttachments, ct, isHtml: hasButtonsToken);
                         _logger.LogInformation("Notification (link) email: {Status} → {Email}.", result.Status, rec.Email);
                     }
                     catch (Exception ex) { _logger.LogError(ex, "Notification (link) email hatası ({Email}).", rec.Email); }
@@ -254,8 +269,10 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
                 {
                     try
                     {
-                        var msg = string.IsNullOrWhiteSpace(lnkBody) ? subj
-                            : (string.IsNullOrWhiteSpace(subj) ? lnkBody : subj + "\n\n" + lnkBody);
+                        // WhatsApp düz metin — buton token'ı emoji'li iki link satırına düşer.
+                        var waBody = bodyCommon.Replace(ApprovalButtonsToken, BuildButtonsText(approveLink, rejectLink));
+                        var msg = string.IsNullOrWhiteSpace(waBody) ? subj
+                            : (string.IsNullOrWhiteSpace(subj) ? waBody : subj + "\n\n" + waBody);
                         var r = await _whatsApp.SendTextMessageAsync(rec.Phone!, msg, ct, interactive: true);
                         if (!r.Success) _logger.LogWarning("Notification (link) WhatsApp başarısız: {Msg}", r.Message);
                     }
@@ -267,8 +284,9 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
 
         // ── Standart yol (link token yok) ─────────────────────────────────────
         // Token replace — boş string null değil, ?? çalışmaz; IsNullOrWhiteSpace kullan.
-        var subject = ApplyContextTokens(rawSubject, ctx, recipients[0].Name);
-        var body    = ApplyContextTokens(rawBody, ctx, recipients[0].Name);
+        // {approvalButtons} link üretilemediyse (tokenRepo yok / instance yok) boş düşer.
+        var subject = ApplyContextTokens(rawSubject, ctx, recipients[0].Name).Replace(ApprovalButtonsToken, "");
+        var body    = ApplyContextTokens(rawBody, ctx, recipients[0].Name).Replace(ApprovalButtonsToken, "");
 
         // PDF ek (opsiyonel)
         List<EmailAttachment>? attachments = null;
@@ -436,6 +454,29 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
                 break;
         }
         return list;
+    }
+
+    /// <summary>Şablonda hazır Onayla/Reddet buton bloğu üreten token.</summary>
+    private const string ApprovalButtonsToken = "{approvalButtons}";
+
+    /// <summary>
+    /// Mail (HTML) kanalı için stilli Onayla/Reddet butonları — tablo tabanlı,
+    /// inline-style (Outlook/Gmail uyumlu). Tek satır: nl2br dönüşümünden etkilenmez.
+    /// </summary>
+    private static string BuildButtonsHtml(string approveLink, string rejectLink)
+    {
+        if (string.IsNullOrWhiteSpace(approveLink) && string.IsNullOrWhiteSpace(rejectLink)) return "";
+        return "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:18px 0;\"><tr>"
+             + $"<td style=\"padding-right:12px;\"><a href=\"{approveLink}\" style=\"display:inline-block;background:#16a34a;color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;text-decoration:none;padding:12px 34px;border-radius:8px;\">&#10003;&nbsp;Onayla</a></td>"
+             + $"<td><a href=\"{rejectLink}\" style=\"display:inline-block;background:#dc2626;color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;text-decoration:none;padding:12px 34px;border-radius:8px;\">&#10007;&nbsp;Reddet</a></td>"
+             + "</tr></table>";
+    }
+
+    /// <summary>WhatsApp (düz metin) kanalı için emoji'li onay/red link satırları.</summary>
+    private static string BuildButtonsText(string approveLink, string rejectLink)
+    {
+        if (string.IsNullOrWhiteSpace(approveLink) && string.IsNullOrWhiteSpace(rejectLink)) return "";
+        return $"✅ Onaylamak için: {approveLink}\n❌ Reddetmek için: {rejectLink}";
     }
 
     private static string ApplyContextTokens(
