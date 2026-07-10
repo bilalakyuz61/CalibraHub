@@ -305,15 +305,18 @@ public sealed class HealthCheckController : Controller
         try { (status, detail) = await spec.Run(conn, ct); }
         catch (Exception ex) { status = "exception"; detail = ex.Message.Length > 200 ? ex.Message[..200] : ex.Message; }
         sw.Stop();
+        // View, errorSnippet'i kırmızı stille gösterir → sadece gerçek hata detayı oraya düşsün.
+        // ok/uyarı detayı etiket satırına eklenir (yeşil/amber satır temiz kalır).
+        var problem = status is "error" or "exception";
         return new CheckResult
         {
             Key = spec.Key,
-            Label = spec.Label,
+            Label = (!problem && !string.IsNullOrWhiteSpace(detail)) ? $"{spec.Label} — {detail}" : spec.Label,
             Path = "",
             ParentLabel = spec.Group,
             Status = status,
             DurationMs = (int)sw.ElapsedMilliseconds,
-            ErrorSnippet = string.IsNullOrWhiteSpace(detail) ? null : detail,
+            ErrorSnippet = problem && !string.IsNullOrWhiteSpace(detail) ? detail : null,
         };
     }
 
