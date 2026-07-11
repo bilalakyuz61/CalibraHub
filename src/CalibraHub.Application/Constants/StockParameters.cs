@@ -38,6 +38,15 @@ public static class StockParameters
     public const string SalesOrderAffectsStockKey = "SALES_ORDER_AFFECTS_STOCK";
 
     /// <summary>
+    /// Sipariş seri rezervasyonu (Bool, default false). HİYERARŞİK: yalnızca stok rezervasyonu
+    /// (<see cref="SalesOrderAffectsStockKey"/>) AÇIKken etkilidir/açılabilir. Açıkken seri-takipli
+    /// kalemlerde siparişe seçilen seriler kaydetmede InStock→Reserved (4) olur; başka siparişlerin
+    /// stok seri havuzundan (Status=1) çıkarılır. İrsaliyeye dönüşümde Reserved→Issued, sipariş
+    /// iptal/silmede Reserved→InStock. Stok rezervasyonu kapanınca seri rezervasyonu da etkisizdir.
+    /// </summary>
+    public const string OrderSerialReservationKey = "ORDER_SERIAL_RESERVATION";
+
+    /// <summary>
     /// Stok hareketi (DocumentLine.MovementType) üretebilen belge türleri —
     /// parametre ekranındaki switch listesi. Code = DocumentType.Code.
     /// </summary>

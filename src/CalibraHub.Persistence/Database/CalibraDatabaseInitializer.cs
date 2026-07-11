@@ -7656,10 +7656,12 @@ END;";
 
             -- 2026-07-10: Seri takibi Faz 2 — ItemSerial (seri ana kaydı) + DocumentLineSerial
             -- (hareket satırı ↔ seri bağı; miktar N ⇒ N bağ satırı). Seri durumu ItemSerial.Status:
-            -- 1=InStock (stokta), 2=Issued (çıktı), 3=Blocked. Girişte InStock yaratılır/iade
-            -- girişinde Issued→InStock döner; çıkışta InStock şart + Issued'a çekilir; transferde
-            -- durum değişmez (yalnız bağ). DocumentLine delete+reinsert deseninde bağlar
-            -- ON DELETE CASCADE ile temizlenir, durum geçişleri SqlStockDocRepository'de yönetilir.
+            -- 1=InStock (stokta), 2=Issued (çıktı), 3=Blocked, 4=Reserved (sipariş için rezerve, 2026-07-11).
+            -- Girişte InStock yaratılır/iade girişinde Issued→InStock döner; çıkışta InStock şart +
+            -- Issued'a çekilir; transferde durum değişmez (yalnız bağ). Sipariş seri rezervasyonu:
+            -- InStock→Reserved (kaydet), Reserved→Issued (irsaliye), Reserved→InStock (iptal/sil).
+            -- DocumentLine delete+reinsert deseninde bağlar ON DELETE CASCADE ile temizlenir,
+            -- durum geçişleri SqlStockDocRepository / DocumentService'de yönetilir.
             IF OBJECT_ID(N'[{s}].[ItemSerial]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[ItemSerial]
@@ -7676,10 +7678,19 @@ END;";
                     [Updated]     DATETIME NULL,
                     CONSTRAINT [FK_ItemSerial_Items] FOREIGN KEY ([ItemId]) REFERENCES [{s}].[Items]([Id]),
                     CONSTRAINT [FK_ItemSerial_Lot] FOREIGN KEY ([LotId]) REFERENCES [{s}].[Lot]([Id]),
-                    CONSTRAINT [CK_ItemSerial_Status] CHECK ([Status] BETWEEN 1 AND 3)
+                    CONSTRAINT [CK_ItemSerial_Status] CHECK ([Status] BETWEEN 1 AND 4)
                 );
                 CREATE UNIQUE INDEX [UX_ItemSerial_Item_SerialNo] ON [{s}].[ItemSerial]([ItemId], [SerialNo]);
                 CREATE INDEX [IX_ItemSerial_Item_Status] ON [{s}].[ItemSerial]([ItemId], [Status]);
+            END;
+
+            -- 2026-07-11: Reserved (4) durumu için CHECK genişletme (mevcut DB'ler; 1-3 → 1-4).
+            IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_ItemSerial_Status'
+                       AND parent_object_id = OBJECT_ID(N'[{s}].[ItemSerial]')
+                       AND definition LIKE N'%3%' AND definition NOT LIKE N'%4%')
+            BEGIN
+                ALTER TABLE [{s}].[ItemSerial] DROP CONSTRAINT [CK_ItemSerial_Status];
+                ALTER TABLE [{s}].[ItemSerial] ADD CONSTRAINT [CK_ItemSerial_Status] CHECK ([Status] BETWEEN 1 AND 4);
             END;
 
             IF OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NULL

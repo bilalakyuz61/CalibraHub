@@ -114,6 +114,9 @@ public sealed class ParametersController : Controller
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceControlKey)?.ParamValue == "true";
         ViewData["SalesOrderAffectsStock"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesOrderAffectsStockKey)?.ParamValue == "true";
+        // Sipariş seri rezervasyonu — hiyerarşik: yalnızca stok rezervasyonu açıkken etkili.
+        ViewData["OrderSerialReservation"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.OrderSerialReservationKey)?.ParamValue == "true";
 
         // Güvenlik tab: oturum atalet süresi (dk). Tanımsız → varsayılan (30). 0 = kapalı.
         ViewData["SessionIdleMinutes"] = await _companyParameters.GetIntAsync(
