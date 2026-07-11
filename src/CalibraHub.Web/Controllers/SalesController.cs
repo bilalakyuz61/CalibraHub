@@ -596,6 +596,33 @@ public sealed class SalesController : Controller
     }
 
     /// <summary>
+    /// Satın alma zinciri tek-belge dönüşümü: satin_alma_talebi→alis_teklifi, alis_teklifi→alis_siparisi.
+    /// Kaynak türüne göre hedef + Approved/Cari zorunluluğu belirlenir. Sipariş edit ekranındaki
+    /// "Dönüştür" butonundan tetiklenir. Dönüşen belge yeni sekmede açılabilsin diye id/tür döner.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> ConvertPurchaseDocJson(int sourceId, CancellationToken ct)
+    {
+        if (sourceId <= 0) return Json(new { success = false, message = "Belge bulunamadı." });
+        var doc = await _quoteService.GetQuoteByIdAsync(sourceId, ct);
+        if (doc?.DocumentTypeId == null) return Json(new { success = false, message = "Belge bulunamadı." });
+        var dt = await _documentTypeRepo.GetByIdAsync(doc.DocumentTypeId.Value, ct);
+        var src = dt?.Code ?? "";
+        string target; bool reqApproved; bool reqContact; string targetLabel; string editType;
+        switch (src)
+        {
+            case "satin_alma_talebi": target = "alis_teklifi";  reqApproved = false; reqContact = false; targetLabel = "Satın Alma Teklifi"; editType = "purchase_quote"; break;
+            case "alis_teklifi":      target = "alis_siparisi"; reqApproved = true;  reqContact = true;  targetLabel = "Satın Alma Siparişi"; editType = "purchase_order"; break;
+            default: return Json(new { success = false, message = "Bu belge türü dönüştürülemez." });
+        }
+        var res = await _quoteService.ConvertDocumentsAsync(
+            new[] { sourceId }, src, target, reqApproved, reqContact, DateTime.Today, CurrentUserId(), ct);
+        if (!res.Success) return Json(new { success = false, message = res.Error });
+        var newId = res.OrderIds.Count > 0 ? res.OrderIds[0] : 0;
+        return Json(new { success = true, id = newId, targetLabel, editUrl = $"/Purchase/Edit?type={editType}&id={newId}" });
+    }
+
+    /// <summary>
     /// Tek bir teklifi siparise donusturur — kart aksiyonundan tetiklenir.
     /// Mevcut CreateOrdersFromQuotesAsync altyapisini tek-elemanli QuoteIds ile cagirir;
     /// CreateWorkOrders=true ise olusan siparişin her satirindan birer is emri (WorkOrder) acar.

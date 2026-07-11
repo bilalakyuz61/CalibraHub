@@ -7698,11 +7698,14 @@ END;";
             -- bırakılabilir (orphan Reserved kalmaz). NULL = rezerve değil.
             IF COL_LENGTH(N'[{s}].[ItemSerial]', N'ReservedForDocumentId') IS NULL
                 ALTER TABLE [{s}].[ItemSerial] ADD [ReservedForDocumentId] INT NULL;
+            -- Filtered index EXEC ile ertelenmiş derlenir: ALTER ile aynı batch'te yeni kolona
+            -- doğrudan referans, kolonu olmayan DB'de compile-time 207 (Invalid column name)
+            -- üretir (QI dersi — bkz. Lot/Seri Faz 2 EXEC-batch notu).
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ItemSerial_ReservedForDocument'
                            AND object_id = OBJECT_ID(N'[{s}].[ItemSerial]'))
                AND COL_LENGTH(N'[{s}].[ItemSerial]', N'ReservedForDocumentId') IS NOT NULL
-                CREATE INDEX [IX_ItemSerial_ReservedForDocument] ON [{s}].[ItemSerial]([ReservedForDocumentId])
-                    WHERE [ReservedForDocumentId] IS NOT NULL;
+                EXEC(N'CREATE INDEX [IX_ItemSerial_ReservedForDocument] ON [{s}].[ItemSerial]([ReservedForDocumentId])
+                    WHERE [ReservedForDocumentId] IS NOT NULL;');
 
             IF OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NULL
             BEGIN

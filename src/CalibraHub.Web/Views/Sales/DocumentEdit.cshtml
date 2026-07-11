@@ -6,6 +6,9 @@
     // Satin Alma Talebi (alis_talebi) — sirket icinden gelen talep; bu asamada henuz
     // tedarikci de fiyatlandirma da belli degil. Para Birimi / Cari Kod alanlari gizlenir.
     var isPurchaseRequest = string.Equals(Model.DocumentTypeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+    // Satın alma zinciri dönüşüm kaynakları: talep→teklif, teklif→sipariş.
+    var isPurchaseDemand = string.Equals(Model.DocumentTypeCode, "satin_alma_talebi", StringComparison.OrdinalIgnoreCase);
+    var isPurchaseQuote  = string.Equals(Model.DocumentTypeCode, "alis_teklifi", StringComparison.OrdinalIgnoreCase);
     // Cari Kod rehberi: purchase belgelerinde Tedarikci, sales/talep'te musteri.
     var customerGuideCode = isPurchase ? "SUPPLIERS" : "CUSTOMERS";
     // 2026-05-23: Satis tarafinda "Teklif/Siparis" labellari kullaniliyordu; satin alma
@@ -2099,6 +2102,47 @@
                 t.textContent = msg;
                 document.body.appendChild(t);
                 setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 4000);
+            }
+            </script>
+        }
+        @if ((isPurchaseDemand || isPurchaseQuote) && Model.DocumentId.HasValue)
+        {
+            var cvtLabel = isPurchaseDemand ? "Teklife Dönüştür" : "Siparişe Dönüştür";
+            <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="sqBtnConvert" data-collaboration-allow onclick="sqConvertPurchaseDoc()" title="@cvtLabel — kalemleri kopyalayıp bağlantı kurar" aria-label="@cvtLabel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                <span class="pte-btn__label">@cvtLabel</span>
+            </button>
+            <script>
+            function sqConvertPurchaseDoc() {
+                var sid = @(Model.DocumentId ?? 0);
+                if (!sid) return;
+                var tokEl = document.querySelector('input[name="__RequestVerificationToken"]');
+                var btn = document.getElementById('sqBtnConvert');
+                if (typeof CalibraConfirm === 'function') {
+                    CalibraConfirm({ title: '@cvtLabel', message: 'Bu belgenin kalemleri kopyalanarak yeni belge oluşturulacak ve iki belge birbirine bağlanacak. Devam edilsin mi?', okLabel: '@cvtLabel' })
+                        .then(function (ok) { if (ok) _sqDoConvert(sid, tokEl, btn); });
+                } else { _sqDoConvert(sid, tokEl, btn); }
+            }
+            function _sqDoConvert(sid, tokEl, btn) {
+                if (btn) btn.disabled = true;
+                fetch('/Sales/ConvertPurchaseDocJson?sourceId=' + sid, {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'RequestVerificationToken': tokEl ? tokEl.value : '' }
+                }).then(function (r) { return r.json(); }).then(function (d) {
+                    if (d && d.success) {
+                        if (typeof CalibraAlert !== 'undefined') CalibraAlert.success((d.targetLabel || 'Belge') + ' oluşturuldu.');
+                        setTimeout(function () {
+                            if (d.editUrl) { if (window.calibraOpenWorkspaceTab) window.calibraOpenWorkspaceTab(d.editUrl, d.targetLabel); else window.location.href = d.editUrl; }
+                            else window.location.reload();
+                        }, 700);
+                    } else {
+                        if (typeof CalibraAlert !== 'undefined') CalibraAlert.error((d && d.message) || 'Dönüştürme başarısız.');
+                        if (btn) btn.disabled = false;
+                    }
+                }).catch(function (e) {
+                    if (typeof CalibraAlert !== 'undefined') CalibraAlert.error('Dönüştürme hatası: ' + e);
+                    if (btn) btn.disabled = false;
+                });
             }
             </script>
         }

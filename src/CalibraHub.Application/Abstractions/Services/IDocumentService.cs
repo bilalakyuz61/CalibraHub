@@ -20,6 +20,15 @@ public interface IDocumentService
     /// </summary>
     Task<CreateOrdersFromQuotesResult> CreateOrdersFromQuotesAsync(
         CreateOrdersFromQuotesRequest req, int? createdById, CancellationToken ct);
+    /// <summary>
+    /// Genel belge dönüşümü (satın alma zinciri: talep→teklif→sipariş). Kaynak belgeleri cari
+    /// bazında gruplayıp her grup için hedef türünde tek belge üretir; kalemleri SourceLineId ile
+    /// klonlar, DocumentSource köprüsü ekler, kaynağı Converted yapar. requireApproved: kaynak
+    /// Approved olmalı mı; requireContact: kaynakta cari zorunlu mu (talep→teklif'te false).
+    /// </summary>
+    Task<CreateOrdersFromQuotesResult> ConvertDocumentsAsync(
+        IReadOnlyCollection<int> sourceIds, string sourceTypeCode, string targetTypeCode,
+        bool requireApproved, bool requireContact, DateTime targetDate, int? createdById, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentListItemDto>> GetMovementsByContactAsync(int contactId, int? documentTypeId, DateTime? fromDate, DateTime? toDate, CancellationToken ct);
     Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct);
