@@ -643,14 +643,15 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
-            // 0) Sipariş başlığı — tür doğrulama + cari/tutar alanları (irsaliyeye kopyalanır)
-            string? contactName = null, contactAddress = null; int? contactId = null, currencyId = null, salesRepId = null;
+            // 0) Sipariş başlığı — tür doğrulama + cari/tutar alanları (irsaliyeye kopyalanır).
+            //    ContactName Document'ta KOLON DEĞİL (ContactId JOIN'iyle çözülür) — kopyalanmaz.
+            string? contactAddress = null; int? contactId = null, currencyId = null, salesRepId = null;
             decimal subTotal = 0, discountRate = 0, discountAmount = 0, taxRate = 0, taxAmount = 0, grandTotal = 0;
             await using (var h = conn.CreateCommand())
             {
                 h.Transaction = tx;
                 h.CommandText = $"""
-                    SELECT dt.[Code], doc.[ContactId], doc.[ContactName], doc.[ContactAddress],
+                    SELECT dt.[Code], doc.[ContactId], doc.[ContactAddress],
                            doc.[CurrencyId], doc.[SalesRepId], doc.[SubTotal], doc.[DiscountRate],
                            doc.[DiscountAmount], doc.[TaxRate], doc.[TaxAmount], doc.[GrandTotal]
                     FROM {T("Document")} doc
@@ -668,16 +669,15 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         isPurchase ? "Bu belge satın alma siparişi değil; alış irsaliyesine dönüştürülemez."
                                    : "Bu belge satış siparişi değil; satış irsaliyesine dönüştürülemez.");
                 contactId      = hr.IsDBNull(1) ? null : hr.GetInt32(1);
-                contactName    = hr.IsDBNull(2) ? null : hr.GetString(2);
-                contactAddress = hr.IsDBNull(3) ? null : hr.GetString(3);
-                currencyId     = hr.IsDBNull(4) ? null : hr.GetInt32(4);
-                salesRepId     = hr.IsDBNull(5) ? null : hr.GetInt32(5);
-                subTotal       = hr.IsDBNull(6) ? 0 : hr.GetDecimal(6);
-                discountRate   = hr.IsDBNull(7) ? 0 : hr.GetDecimal(7);
-                discountAmount = hr.IsDBNull(8) ? 0 : hr.GetDecimal(8);
-                taxRate        = hr.IsDBNull(9) ? 0 : hr.GetDecimal(9);
-                taxAmount      = hr.IsDBNull(10) ? 0 : hr.GetDecimal(10);
-                grandTotal     = hr.IsDBNull(11) ? 0 : hr.GetDecimal(11);
+                contactAddress = hr.IsDBNull(2) ? null : hr.GetString(2);
+                currencyId     = hr.IsDBNull(3) ? null : hr.GetInt32(3);
+                salesRepId     = hr.IsDBNull(4) ? null : hr.GetInt32(4);
+                subTotal       = hr.IsDBNull(5) ? 0 : hr.GetDecimal(5);
+                discountRate   = hr.IsDBNull(6) ? 0 : hr.GetDecimal(6);
+                discountAmount = hr.IsDBNull(7) ? 0 : hr.GetDecimal(7);
+                taxRate        = hr.IsDBNull(8) ? 0 : hr.GetDecimal(8);
+                taxAmount      = hr.IsDBNull(9) ? 0 : hr.GetDecimal(9);
+                grandTotal     = hr.IsDBNull(10) ? 0 : hr.GetDecimal(10);
             }
 
             // 1) Açık satırlar (ticari satır=MovementType NULL, açık = BaseQuantity - DeliveredQuantity > 0).
@@ -728,11 +728,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.CommandText = $"""
                     INSERT INTO {T("Document")}
                         ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
-                         [ContactId],[ContactName],[ContactAddress],[CurrencyId],[SalesRepId],
+                         [ContactId],[ContactAddress],[CurrencyId],[SalesRepId],
                          [SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
                          [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
                     SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, NULL,
-                           @ContactId, @ContactName, @ContactAddress, @CurrencyId, @SalesRepId,
+                           @ContactId, @ContactAddress, @CurrencyId, @SalesRepId,
                            @SubTotal, @DiscountRate, @DiscountAmount, @TaxRate, @TaxAmount, @GrandTotal,
                            @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @OrderId
                     FROM {T("DocumentType")} dt WHERE dt.[Code] = @TargetType;
@@ -742,7 +742,6 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.Parameters.AddWithValue("@DocNo", docNo);
                 ins.Parameters.AddWithValue("@DocDate", DateTime.Today);
                 ins.Parameters.AddWithValue("@ContactId", (object?)contactId ?? DBNull.Value);
-                ins.Parameters.AddWithValue("@ContactName", (object?)contactName ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@ContactAddress", (object?)contactAddress ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@CurrencyId", (object?)currencyId ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@SalesRepId", (object?)salesRepId ?? DBNull.Value);
