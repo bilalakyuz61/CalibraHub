@@ -229,8 +229,8 @@
         .cal-dial.is-cal  .cal-dial-readout { color: #059669; } body.app-theme-dark .cal-dial.is-cal  .cal-dial-readout { color: #34d399; }
         .cal-dial.is-fail .cal-dial-readout { color: #e11d48; } body.app-theme-dark .cal-dial.is-fail .cal-dial-readout { color: #fb7185; }
         .cal-dial-status {
-            margin-top: 9px; text-align: center; font-size: .74rem; font-weight: 600;
-            min-height: 1.05em; color: #64748b; transition: color .3s;
+            margin-top: 10px; text-align: center; font-size: .86rem; font-weight: 600;
+            min-height: 1.2em; white-space: nowrap; color: #64748b; transition: color .3s;
         }
         body.app-theme-dark .cal-dial-status { color: #94a3b8; }
         .cal-dial.is-calibrating .cal-dial-status { color: #4f46e5; } body.app-theme-dark .cal-dial.is-calibrating .cal-dial-status { color: #a5b4fc; }
@@ -540,43 +540,19 @@
                         return;
                     }
 
-                    // Hatalı giriş — "kalibre edilemedi"
-                    if (window.CalibraLoginDial) window.CalibraLoginDial.fail(json.message);
-
-                    var errorDiv = document.getElementById("loginError");
-                    function showError(msg) {
-                        if (errorDiv) { errorDiv.textContent = msg; errorDiv.classList.add("is-visible"); }
-                    }
-                    function clearError() {
-                        if (errorDiv) { errorDiv.classList.remove("is-visible"); errorDiv.textContent = ""; }
-                    }
-
-                    if (json.error === "credentials") {
-                        showError(json.message || "E-posta, şirket veya şifre hatalı.");
-                        if (pwWrap && pwInput) {
-                            pwInput.value = "";
-                            pwWrap.classList.add("login-pw-error");
-                            pwWrap.classList.remove("login-pw-shake");
-                            void pwWrap.offsetWidth;
-                            pwWrap.classList.add("login-pw-shake");
-                            pwWrap.addEventListener("animationend", function () {
-                                pwWrap.classList.remove("login-pw-shake");
-                            }, { once: true });
-                            pwInput.focus();
-                            pwInput.addEventListener("input", function () {
-                                pwWrap.classList.remove("login-pw-error");
-                                clearError();
-                            }, { once: true });
-                        }
-                    } else if (json.error === "locked") {
-                        showError(json.message || "Hesap geçici olarak kilitlendi. Lütfen daha sonra tekrar deneyin.");
-                        if (pwWrap && pwInput) {
+                    // Kalibre edilemedi — kırmızı kadran yeterli uyarı; kadran/alan titremesi YOK
+                    if (json.error === "locked") {
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail('Hesap kilitli');
+                        if (pwInput) {
                             pwInput.value = "";
                             pwInput.disabled = true;
                             setTimeout(function () { pwInput.disabled = false; }, 5000);
                         }
                     } else if (json.error === "validation") {
-                        showError("Lütfen tüm alanları doldurun.");
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail('Alanları doldurun');
+                    } else {   // credentials
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail();
+                        if (pwInput) { pwInput.value = ""; pwInput.focus(); }
                     }
                 } catch {
                     // Network hatası: normal submit
@@ -587,9 +563,9 @@
     })();
 </script>
 <script>
-    /* ── Kimlik kalibrasyon kadranı — 3 ibre (şifre/kullanıcı/şirket) girişe bağlı ──
-       Alanları doldurdukça ibreler merkeze (0) yaklaşır ("kalibre ediliyor"); doğru
-       girişte merkeze kilitlenir (yeşil ✓ "kalibrasyon tamam"), yanlışta saçılır (kırmızı). */
+    /* ── Kimlik kalibrasyon kadranı — 3 ibre, mekanik tik-tik ──
+       Yazdıkça ibreler rastgele dağılır ("kalibre ediliyor"); Giriş'te rastgele dolaşır,
+       doğru girişte 12'de (merkez) toplanıp kilitlenir (yeşil ✓), yanlışta dağınık kalır (kırmızı). */
     (function () {
         var dial = document.getElementById('calDial');
         if (!dial) return;
@@ -663,21 +639,28 @@
         function kick() { if (!running) { running = true; lastTick = 0; raf = requestAnimationFrame(frame); } }
         function setStatus(t) { if (statusEl) statusEl.textContent = t; }
 
-        // ── Alanlara göre hedef ibre konumları (dolu = merkeze yakın) ──
+        // ── Rastgele dağılım: ibreler kadran boyunca serbestçe dağılır (mekanik arama) ──
+        var roamId = 0;
+        function randTargets() { for (var k = 0; k < 3; k++) needles[k].tgt = 10 + Math.random() * 80; }
+        function startRoam(ms) { stopRoam(); randTargets(); kick(); if (!reduce) roamId = setInterval(function () { randTargets(); kick(); }, ms); }
+        function stopRoam() { if (roamId) { clearInterval(roamId); roamId = 0; } }
+
+        // Yazdıkça her tuşta yeni rastgele dağılım; alanlar boşsa nötr dinlenmeye döner
         function evalFields() {
-            var email = emailEl ? emailEl.value.trim() : '';
-            var pw    = pwEl ? pwEl.value : '';
-            var co    = coEl ? coEl.value : '';
-            needles[0].tgt = pw.length === 0 ? 12 : (pw.length >= 6 ? 48 : 12 + pw.length * 6);
-            needles[1].tgt = email.length === 0 ? 88 : (/.+@@.+\..+/.test(email) ? 52 : Math.max(52, 88 - email.length * 3.2));
-            needles[2].tgt = co ? 50 : 30;
-            if (mode !== 'success') {
-                var any = email || pw || co;
-                mode = any ? 'calibrating' : 'idle';
-                dial.classList.toggle('is-calibrating', mode === 'calibrating');
-                setStatus(any ? 'Kalibre ediliyor…' : 'Kalibrasyon bekleniyor');
+            if (mode === 'success' || mode === 'measuring') return;
+            var any = (emailEl && emailEl.value.trim()) || (pwEl && pwEl.value) || (coEl && coEl.value);
+            if (any) {
+                mode = 'calibrating';
+                dial.classList.add('is-calibrating');
+                setStatus('Kalibre ediliyor…');
+                randTargets(); kick();                     // her tuşta ibreler yeniden dağılır
+            } else {
+                mode = 'idle';
+                dial.classList.remove('is-calibrating');
+                setStatus('Kalibrasyon bekleniyor');
+                needles[0].tgt = 26; needles[1].tgt = 54; needles[2].tgt = 78;   // nötr dinlenme
+                kick();
             }
-            kick();
         }
         function onFieldInput() {
             if (mode === 'fail' || mode === 'success') { mode = 'idle'; dial.classList.remove('is-fail', 'is-cal'); }
@@ -690,35 +673,36 @@
         // ── Dış API — submit handler çağırır ──
         window.CalibraLoginDial = {
             begin: function () {
-                mode = 'calibrating'; busyStart = performance.now();
+                mode = 'measuring'; busyStart = performance.now();
                 dial.classList.remove('is-cal', 'is-fail'); dial.classList.add('is-calibrating');
-                needles[0].tgt = 50; needles[1].tgt = 50; needles[2].tgt = 50;   // ölçüm: merkeze topla
-                setStatus('Kalibre ediliyor…'); kick();
+                setStatus('Kalibre ediliyor…');
+                startRoam(300);                              // ölçüm: ibreler rastgele dolaşır
             },
             success: function (done) {
-                var wait = Math.max(0, 620 - (performance.now() - busyStart));
+                var wait = Math.max(0, 700 - (performance.now() - busyStart));
                 setTimeout(function () {
-                    mode = 'success';
+                    mode = 'success'; stopRoam();
                     dial.classList.remove('is-calibrating', 'is-fail');
-                    needles[0].tgt = 50; needles[1].tgt = 50; needles[2].tgt = 50; kick();
+                    needles[0].tgt = 50; needles[1].tgt = 50; needles[2].tgt = 50; kick();   // 12'de topla
                     // Kilitlenme: üç ibre tam merkeze oturur — yazı YOK, sadece yeşil + ✓
                     setTimeout(function () {
                         cancelAnimationFrame(raf); running = false;
                         needles[0].cur = needles[1].cur = needles[2].cur = 50;
                         needles.forEach(place); renderArc();
                         dial.classList.add('is-cal'); setStatus('');
-                    }, reduce ? 0 : 460);
-                    setTimeout(function () { if (done) done(); }, reduce ? 500 : 1250);
+                    }, reduce ? 0 : 520);
+                    setTimeout(function () { if (done) done(); }, reduce ? 500 : 1300);
                 }, wait);
             },
-            fail: function (msg) {
-                var wait = Math.max(0, 620 - (performance.now() - busyStart));
+            fail: function (label) {
+                var msg = label || 'Kalibre edilemedi';
+                var wait = Math.max(0, 700 - (performance.now() - busyStart));
                 setTimeout(function () {
                     mode = 'fail';
                     dial.classList.remove('is-calibrating', 'is-cal'); dial.classList.add('is-fail');
-                    needles[0].tgt = 86; needles[1].tgt = 15; needles[2].tgt = 72;   // ibreler saçılır
-                    setStatus(msg || 'Kalibre edilemedi'); kick();
-                    dial.classList.remove('cal-shake'); void dial.offsetWidth; dial.classList.add('cal-shake');
+                    setStatus(msg);
+                    startRoam(300);                          // yine rastgele dolaşır…
+                    setTimeout(function () { stopRoam(); randTargets(); kick(); }, 1000);   // …dağınık kalır (titreme YOK)
                 }, wait);
             }
         };
