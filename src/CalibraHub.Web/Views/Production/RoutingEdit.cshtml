@@ -111,6 +111,24 @@ body.app-theme-dark .re-btn--danger { background: rgba(239,68,68,.12); color: #f
 }
 .re-nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: .7; }
 .re-nav-btn.is-active .re-nav-icon { opacity: 1; }
+
+/* Malzeme Kartı sol-menü paritesi (2026-07-11): ikon yerine ring→dolu+glow dot.
+   Buton zaten flex + gap:8px taşır; ::before dot'u metnin soluna koyar.
+   Aktif arka plan/renk/border-left DEĞİŞMEZ — yalnızca indikatör eklenir. */
+.re-nav-icon { display: none; }
+.re-nav-btn::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+}
+.re-nav-btn:hover::before { border-color: #94a3b8; }
+.re-nav-btn.is-active::before {
+    background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5);
+}
+body.app-theme-dark .re-nav-btn::before { border-color: rgba(255,255,255,.24); }
+body.app-theme-dark .re-nav-btn:hover::before { border-color: rgba(255,255,255,.48); }
+body.app-theme-dark .re-nav-btn.is-active::before {
+    background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55);
+}
 .re-nav-count {
     margin-left: auto; padding: 1px 7px; border-radius: 999px;
     font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace;

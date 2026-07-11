@@ -213,6 +213,22 @@ body.app-theme-dark .sre-root {
     font-weight: 600;
 }
 
+/* ── Malzeme Kartı sol-menü paritesi: ring→dolu+glow dot indikatör ── */
+.sre-tab { display: flex; align-items: center; gap: 9px; }
+.sre-tab::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+}
+.sre-tab:hover::before { border-color: #94a3b8; }
+.sre-tab.is-active::before {
+    background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5);
+}
+body.app-theme-dark .sre-tab::before { border-color: rgba(255,255,255,.24); }
+body.app-theme-dark .sre-tab:hover::before { border-color: rgba(255,255,255,.48); }
+body.app-theme-dark .sre-tab.is-active::before {
+    background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55);
+}
+
 /* ── Sag icerik ── */
 .sre-panels {
     flex: 1 1 auto; min-width: 0;

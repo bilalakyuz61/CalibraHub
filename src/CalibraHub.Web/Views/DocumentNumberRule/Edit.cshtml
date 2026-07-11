@@ -98,6 +98,22 @@
     }
     .dnr-tab .ic { width: 14px; font-size: 13px; opacity: 0.85; }
 
+    /* ── Malzeme Kartı sol-menü paritesi: ikon yerine ring→dolu+glow dot ── */
+    .dnr-tab .ic { display: none; }
+    .dnr-tab::before {
+        content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+    }
+    .dnr-tab:hover::before { border-color: #94a3b8; }
+    .dnr-tab.active::before {
+        background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5);
+    }
+    body.app-theme-dark .dnr-tab::before { border-color: rgba(255,255,255,.24); }
+    body.app-theme-dark .dnr-tab:hover::before { border-color: rgba(255,255,255,.48); }
+    body.app-theme-dark .dnr-tab.active::before {
+        background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55);
+    }
+
     /* Orta — form panel */
     .dnr-form {
         padding: 20px 24px; min-width: 0;

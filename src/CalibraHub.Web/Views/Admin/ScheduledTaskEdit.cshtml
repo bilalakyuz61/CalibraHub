@@ -43,6 +43,22 @@ body.app-theme-dark .ste-builtin-note { color: #fbbf24; }
 }
 .ste-tab:hover { background: var(--ste-bg); color: var(--ste-text); }
 .ste-tab.active { color: var(--ste-accent); border-left-color: var(--ste-accent); background: rgba(99,102,241,.06); }
+
+/* ── Malzeme Kartı sol-menü paritesi: ring→dolu+glow dot indikatör ── */
+.ste-tab > svg { display: none; }
+.ste-tab::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+}
+.ste-tab:hover::before { border-color: #94a3b8; }
+.ste-tab.active::before {
+    background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5);
+}
+body.app-theme-dark .ste-tab::before { border-color: rgba(255,255,255,.24); }
+body.app-theme-dark .ste-tab:hover::before { border-color: rgba(255,255,255,.48); }
+body.app-theme-dark .ste-tab.active::before {
+    background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55);
+}
 .ste-panels { flex: 1; padding: 20px 24px; overflow-y: auto; }
 .ste-panel { display: none; }
 .ste-panel.active { display: block; }

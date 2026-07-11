@@ -95,6 +95,22 @@
         font-size: 10px; font-weight: 700; text-align: center;
     }
 
+    /* ── Malzeme Kartı sol-menü paritesi: ikon yerine ring→dolu+glow dot ── */
+    .trf-tab .ic { display: none; }
+    .trf-tab::before {
+        content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+    }
+    .trf-tab:hover::before { border-color: #94a3b8; }
+    .trf-tab.active::before {
+        background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5);
+    }
+    body.app-theme-dark .trf-tab::before { border-color: rgba(255,255,255,.24); }
+    body.app-theme-dark .trf-tab:hover::before { border-color: rgba(255,255,255,.48); }
+    body.app-theme-dark .trf-tab.active::before {
+        background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55);
+    }
+
     .trf-content {
         flex: 1; padding: 18px 22px; overflow-y: auto; min-width: 0;
     }

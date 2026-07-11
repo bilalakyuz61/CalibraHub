@@ -244,9 +244,22 @@
     }
     .pte-nav-btn.is-active::before { height: 60%; }
 
-    /* Eski .pte-nav-dot — accent bar pattern'i ile yer degistirildi.
-       Class korunur (HTML'de var) ama gorunmez yapilir. */
-    .pte-nav-dot { display: none; }
+    /* Malzeme Kartı sol-menü paritesi (2026-07-11): mevcut .pte-nav-dot span'i
+       ring→dolu+glow indikatöre dönüştürülür. Accent bar (.pte-nav-btn::before)
+       KORUNUR — bu ekranda ikisi birlikte çalışır. Markup/JS değişmez. */
+    .pte-nav-dot {
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+    }
+    .pte-nav-btn:hover .pte-nav-dot { border-color: #94a3b8; }
+    .pte-nav-btn.is-active .pte-nav-dot {
+        background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5);
+    }
+    body.app-theme-dark .pte-nav-dot { border-color: rgba(255,255,255,.24); }
+    body.app-theme-dark .pte-nav-btn:hover .pte-nav-dot { border-color: rgba(255,255,255,.48); }
+    body.app-theme-dark .pte-nav-btn.is-active .pte-nav-dot {
+        background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55);
+    }
 
     .pte-nav-count {
         margin-left: auto;

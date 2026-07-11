@@ -109,8 +109,16 @@
         border-color: rgba(16,185,129,0.3);
         color: #059669;
     }
-    .cur-nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; opacity: 0.5; }
-    .cur-nav-btn.is-active .cur-nav-dot { opacity: 1; }
+    /* Malzeme Kartı sol-menü paritesi (2026-07-11): ring→dolu+glow. Boyut 8x8, aktif buton renk/border değişmez. */
+    .cur-nav-dot {
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        background: transparent; border: 1.5px solid #cbd5e1; transition: all .18s;
+    }
+    .cur-nav-btn:hover .cur-nav-dot { border-color: #94a3b8; }
+    .cur-nav-btn.is-active .cur-nav-dot { background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5); }
+    body.app-theme-dark .cur-nav-dot { border-color: rgba(255,255,255,.24); }
+    body.app-theme-dark .cur-nav-btn:hover .cur-nav-dot { border-color: rgba(255,255,255,.48); }
+    body.app-theme-dark .cur-nav-btn.is-active .cur-nav-dot { background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55); }
 
     .cur-content {
         flex: 1 1 auto; min-width: 0; overflow-y: auto;
