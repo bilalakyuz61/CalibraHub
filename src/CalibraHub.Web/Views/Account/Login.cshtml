@@ -138,87 +138,101 @@
             animation: loginShake .42s cubic-bezier(.36,.07,.19,.97) both;
         }
 
-        /* ── Kalibrasyon amblemi — cam küre + hareketli kadran ─────────── */
-        .cal-orb { width: 126px; height: 126px; margin: 2px auto 20px; position: relative; }
+        /* ── Sol hero: kalibrasyon sahnesi (cam küre + hareketli kadran) ─── */
+        .cal-hero {
+            position: relative; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: clamp(22px, 4.5vh, 46px); overflow: hidden;
+        }
+        .calh-bg { position: absolute; inset: 0; pointer-events: none;
+            background:
+                radial-gradient(58% 46% at 50% 40%, rgba(99,102,241,.22), transparent 62%),
+                radial-gradient(42% 34% at 63% 64%, rgba(34,211,238,.13), transparent 60%);
+        }
+        .calh-bg::before { content: ''; position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%);
+            width: min(680px, 86vh); height: min(680px, 86vh); border-radius: 50%;
+            background: repeating-radial-gradient(circle, rgba(148,163,184,.09) 0 1px, transparent 1px 48px);
+            -webkit-mask: radial-gradient(circle, #000 44%, transparent 72%);
+                    mask: radial-gradient(circle, #000 44%, transparent 72%);
+            opacity: .7;
+        }
+
+        .cal-orb { position: relative; z-index: 1; width: min(330px, 42vh); height: min(330px, 42vh); }
         .cal-orb-glass {
             position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
             cursor: grab; touch-action: none;
             background:
-                radial-gradient(118% 118% at 30% 22%, rgba(255,255,255,.92), rgba(255,255,255,.24) 30%, rgba(226,232,240,.04) 56%, rgba(148,163,184,.16) 100%),
-                radial-gradient(90% 90% at 50% 128%, rgba(99,102,241,.18), transparent 62%);
+                radial-gradient(120% 120% at 32% 24%, rgba(226,232,240,.52), rgba(148,163,184,.14) 30%, rgba(30,41,59,.3) 58%, rgba(2,6,23,.62) 100%),
+                radial-gradient(100% 100% at 50% 132%, rgba(99,102,241,.34), transparent 60%),
+                radial-gradient(80% 80% at 72% 80%, rgba(34,211,238,.16), transparent 55%);
             box-shadow:
-                inset 0 2px 6px rgba(255,255,255,.9),
-                inset 0 -13px 26px rgba(79,70,229,.14),
-                inset 0 0 0 1px rgba(148,163,184,.24),
-                0 16px 30px -12px rgba(30,41,59,.4),
-                0 5px 14px -6px rgba(99,102,241,.34);
-            transition: box-shadow .5s ease;
+                inset 0 3px 10px rgba(226,232,240,.34),
+                inset 0 -22px 46px rgba(2,6,23,.66),
+                inset 0 0 0 1px rgba(148,163,184,.28),
+                inset 0 0 42px rgba(99,102,241,.14),
+                0 40px 80px -24px rgba(0,0,0,.72),
+                0 0 60px -10px rgba(99,102,241,.4);
+            transition: box-shadow .55s ease;
         }
         .cal-orb-glass:active { cursor: grabbing; }
         .cal-orb.is-cal .cal-orb-glass {
             box-shadow:
-                inset 0 2px 6px rgba(255,255,255,.9),
-                inset 0 -13px 26px rgba(16,185,129,.16),
-                inset 0 0 0 1px rgba(52,211,153,.42),
-                0 16px 30px -12px rgba(30,41,59,.4),
-                0 0 0 4px rgba(52,211,153,.14), 0 0 20px rgba(52,211,153,.3);
-        }
-        body.app-theme-dark .cal-orb-glass {
-            background:
-                radial-gradient(118% 118% at 30% 22%, rgba(148,163,184,.5), rgba(148,163,184,.12) 32%, rgba(15,23,42,.24) 60%, rgba(2,6,23,.52) 100%),
-                radial-gradient(90% 90% at 50% 128%, rgba(139,92,246,.3), transparent 62%);
-            box-shadow:
-                inset 0 2px 6px rgba(226,232,240,.26),
-                inset 0 -13px 30px rgba(2,6,23,.6),
-                inset 0 0 0 1px rgba(148,163,184,.18),
-                0 20px 40px -14px rgba(0,0,0,.72),
-                0 5px 16px -6px rgba(139,92,246,.4);
-        }
-        body.app-theme-dark .cal-orb.is-cal .cal-orb-glass {
-            box-shadow:
-                inset 0 2px 6px rgba(226,232,240,.26),
-                inset 0 -13px 30px rgba(2,6,23,.6),
-                inset 0 0 0 1px rgba(52,211,153,.44),
-                0 20px 40px -14px rgba(0,0,0,.72),
-                0 0 0 4px rgba(16,185,129,.2), 0 0 22px rgba(16,185,129,.4);
+                inset 0 3px 10px rgba(226,232,240,.34),
+                inset 0 -22px 46px rgba(2,6,23,.66),
+                inset 0 0 0 1px rgba(52,211,153,.5),
+                inset 0 0 44px rgba(16,185,129,.2),
+                0 40px 80px -24px rgba(0,0,0,.72),
+                0 0 66px -8px rgba(16,185,129,.5);
         }
         .cal-orb-shine {
-            position: absolute; top: 7%; left: 11%; width: 46%; height: 32%; border-radius: 50%;
-            background: radial-gradient(closest-side, rgba(255,255,255,.9), rgba(255,255,255,0));
-            transform: rotate(-16deg); filter: blur(1.5px); pointer-events: none; z-index: 3;
+            position: absolute; top: 6%; left: 12%; width: 48%; height: 34%; border-radius: 50%;
+            background: radial-gradient(closest-side, rgba(255,255,255,.82), rgba(255,255,255,0));
+            transform: rotate(-18deg); filter: blur(2px); pointer-events: none; z-index: 3;
         }
-        body.app-theme-dark .cal-orb-shine { background: radial-gradient(closest-side, rgba(226,232,240,.42), rgba(226,232,240,0)); }
         .cal-orb-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; display: block; }
-        .cal-track { fill: none; stroke: rgba(148,163,184,.30); stroke-width: 5; stroke-linecap: round; }
-        body.app-theme-dark .cal-track { stroke: rgba(148,163,184,.22); }
-        .cal-err { fill: none; stroke: url(#calGrad); stroke-width: 5; stroke-linecap: round; }
+        .cal-track { fill: none; stroke: rgba(148,163,184,.26); stroke-width: 4.5; stroke-linecap: round; }
+        .cal-err { fill: none; stroke: url(#calGrad); stroke-width: 4.5; stroke-linecap: round; }
         .cal-orb.is-cal .cal-err { stroke: url(#calGradOk); }
-        .cal-tick { stroke: rgba(100,116,139,.5); stroke-width: 1.5; }
-        .cal-tick.maj { stroke: rgba(71,85,105,.72); stroke-width: 2.4; }
-        .cal-tick.zero { stroke: #6366f1; stroke-width: 2.6; }
-        body.app-theme-dark .cal-tick { stroke: rgba(148,163,184,.42); }
-        body.app-theme-dark .cal-tick.maj { stroke: rgba(203,213,225,.6); }
-        body.app-theme-dark .cal-tick.zero { stroke: #818cf8; }
-        .cal-needle { stroke: #4f46e5; stroke-width: 2.6; stroke-linecap: round; }
-        .cal-hub { fill: #4f46e5; } .cal-hub-in { fill: #fff; }
-        body.app-theme-dark .cal-needle { stroke: #818cf8; }
-        body.app-theme-dark .cal-hub { fill: #818cf8; } body.app-theme-dark .cal-hub-in { fill: #0a0d17; }
+        .cal-tick { stroke: rgba(148,163,184,.42); stroke-width: 1.4; }
+        .cal-tick.maj { stroke: rgba(203,213,225,.62); stroke-width: 2.3; }
+        .cal-tick.zero { stroke: #818cf8; stroke-width: 2.8; }
+        .cal-needle { stroke: #c7d2fe; stroke-width: 2.4; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(129,140,248,.75)); }
+        .cal-hub { fill: #a5b4fc; } .cal-hub-in { fill: #0a0d17; }
         .cal-check { opacity: 0; transform: scale(.4); transform-origin: 100px 66px; transition: opacity .3s, transform .3s cubic-bezier(.34,1.56,.5,1); }
         .cal-orb.is-cal .cal-check { opacity: 1; transform: scale(1); }
         .cal-orb-readout {
-            position: absolute; left: 0; right: 0; bottom: 23%; text-align: center; z-index: 3;
-            font-family: ui-monospace, Consolas, monospace; font-size: .7rem; font-weight: 700;
-            color: #4f46e5; pointer-events: none; font-variant-numeric: tabular-nums;
+            position: absolute; left: 0; right: 0; bottom: 22%; text-align: center; z-index: 3;
+            font-family: ui-monospace, Consolas, monospace; font-size: clamp(.82rem, 1.7vh, 1.06rem); font-weight: 700;
+            letter-spacing: .02em; color: #c7d2fe; pointer-events: none; font-variant-numeric: tabular-nums;
+            text-shadow: 0 0 12px rgba(99,102,241,.5);
         }
-        .cal-orb.is-cal .cal-orb-readout { color: #059669; }
-        body.app-theme-dark .cal-orb-readout { color: #a5b4fc; }
-        body.app-theme-dark .cal-orb.is-cal .cal-orb-readout { color: #34d399; }
+        .cal-orb.is-cal .cal-orb-readout { color: #6ee7b7; text-shadow: 0 0 12px rgba(16,185,129,.5); }
         .cal-orb-hint {
-            position: absolute; left: 50%; bottom: -15px; transform: translateX(-50%);
-            font-size: .62rem; letter-spacing: .03em; color: #94a3b8; white-space: nowrap;
+            position: absolute; left: 50%; bottom: -32px; transform: translateX(-50%);
+            font-size: .72rem; letter-spacing: .05em; color: rgba(203,213,225,.5); white-space: nowrap;
             opacity: 0; transition: opacity .25s; pointer-events: none;
         }
-        .cal-orb:hover .cal-orb-hint { opacity: .85; }
+        .cal-orb:hover .cal-orb-hint { opacity: .9; }
+
+        .calh-brand { position: relative; z-index: 1; text-align: center; }
+        .calh-word {
+            font-size: clamp(1.9rem, 4.6vh, 2.8rem); font-weight: 800; letter-spacing: -.02em; line-height: 1;
+            background: linear-gradient(115deg, #e0e7ff 0%, #a5b4fc 46%, #67e8f9 100%);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .calh-tag {
+            margin-top: 11px; font-size: clamp(.6rem, 1.2vh, .74rem); letter-spacing: .32em;
+            font-weight: 600; color: rgba(165,180,252,.62);
+        }
+
+        @@media (max-width: 860px) {
+            .cal-hero { gap: 10px; flex-direction: row; }
+            .cal-orb { width: 96px; height: 96px; }
+            .calh-bg::before { width: 320px; height: 320px; }
+            .calh-word { font-size: 1.5rem; } .calh-tag { display: none; }
+            .cal-orb-hint { display: none; }
+        }
+        @@media (prefers-reduced-motion: reduce) { .cal-check { transition: none; } }
     </style>
 </head>
 <body class="login-page app-theme-@runtime.ThemeCode"
@@ -264,17 +278,11 @@
 </script>
 <div class="login-shell">
     <section class="login-hero" aria-hidden="true">
-        <!-- 2026-06-04: Yeni CalibraHub Software brand resmi. Sağ alt köşedeki sparkle
-             filigranını gizlemek için: resmi içeren wrap'i overflow:hidden + border-radius
-             yapıyoruz; img object-fit:cover + object-position üst-sol ile filigran
-             ekranın dışına itiliyor (sağdan/alttan ~%5 kırpılır). -->
-        <div class="login-hero-frame">
-            <img src="~/Document/CalibraHubLoginLogo.png" alt="CalibraHub Software" />
-        </div>
-    </section>
-
-    <section class="login-panel">
-        <div class="login-card">
+        @* 2026-07-11: Statik marka görseli yerine interaktif kalibrasyon sahnesi —
+           cam küre içinde hareketli kadran (açılışta oto-kalibrasyon + sürükleyerek
+           yeniden kalibre). Eski görsel ~/Document/CalibraHubLoginLogo.png korunuyor. *@
+        <div class="cal-hero">
+            <div class="calh-bg"></div>
             <div class="cal-orb" id="calOrb" title="Sürükleyerek kalibre edin" aria-label="CalibraHub kalibrasyon amblemi">
                 <div class="cal-orb-glass" id="calGlass">
                     <svg class="cal-orb-svg" viewBox="0 0 200 200" aria-hidden="true">
@@ -303,6 +311,15 @@
                 </div>
                 <span class="cal-orb-hint">sürükleyerek kalibre et</span>
             </div>
+            <div class="calh-brand">
+                <div class="calh-word">CalibraHub</div>
+                <div class="calh-tag">Hassasiyet · Ölçüm · Kontrol</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="login-panel">
+        <div class="login-card">
             <h1>CalibraHub</h1>
 
             <form asp-action="Login" method="post" autocomplete="off" id="loginForm">
