@@ -761,7 +761,7 @@ public sealed class SalesController : Controller
         if (bindings.Count == 0 && !string.Equals(lineFormCode, "SALES_QUOTE_LINES", StringComparison.OrdinalIgnoreCase))
             bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
         var hidePricing = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase);
-        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode, id);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -907,7 +907,8 @@ public sealed class SalesController : Controller
         IReadOnlyCollection<FieldGuideBindingDto>? bindings = null,
         string lineFormCode = "SALES_QUOTE_LINES",
         bool hidePricing = false,
-        string? documentTypeCode = null)
+        string? documentTypeCode = null,
+        int? documentId = null)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
         var bindingMap = (bindings ?? [])
@@ -936,6 +937,8 @@ public sealed class SalesController : Controller
                     ["materialName"]      = "materialName",
                     ["stockCardId"]       = "id",
                     ["trackCombinations"] = "trackCombinations",
+                    ["trackSerial"]       = "trackSerial",
+                    ["autoSerial"]        = "autoSerial",
                     ["taxRate"]           = "taxRate",
                     ["locationId"]        = "defaultLocationId",
                     ["unitId"]            = "unitId",
@@ -998,6 +1001,22 @@ public sealed class SalesController : Controller
             cols.Add(new { key = "lineTotal",    label = "Satir Toplami", type = "currency", width = 140, computed = true, formula = "quantity * unitPrice * (1 - (discountRate / 100))", align = "right", icon = "Calculator" });
         }
         cols.Add(new { key = "notes", label = "Not", type = "text", placement = "row-below", align = "left", icon = "StickyNote" });
+
+        // Seri kolonu — YALNIZCA satış siparişinde (rezervasyon). Pick modu: stoktaki
+        // serilerden seçim (GetSerialsJson InStock+Reserved havuzu). Seri-takipli kalemde görünür.
+        if (string.Equals(documentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase))
+            cols.Add(new
+            {
+                key            = "serials",
+                label          = "Seri",
+                type           = "serial-entry",
+                serialMode     = "pick",
+                serialsUrl     = $"/Sales/GetOrderSerials?itemId={{stockCardId}}&documentId={documentId ?? 0}",
+                width          = 90,
+                align          = "center",
+                icon           = "Barcode",
+                visibleWhenKey = "trackSerial",
+            });
 
         return new
         {
@@ -1116,6 +1135,9 @@ public sealed class SalesController : Controller
                 MaterialName = x.Name,
                 x.TaxRate,
                 TrackCombinations = x.Combinations,
+                // Seri takibi: sipariş grid'inde "Seri" kolonu bu bayrakla aktifleşir (warehouse ile aynı kaynak).
+                TrackSerial = string.Equals(x.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase),
+                AutoSerial  = x.AutoSerial,
                 DefaultLocationId = defaultLocations.TryGetValue(x.Id, out var locId) ? (int?)locId : null,
                 // Stok kartindaki master birim — kalem secildiginde line.unitId'ye otomatik atanir
                 x.UnitId,
@@ -1123,6 +1145,60 @@ public sealed class SalesController : Controller
             .OrderBy(x => x.MaterialCode)
             .ToArray();
         return Json(materials);
+    }
+
+    // Sipariş seri seçim havuzu — stoktaki (InStock) + BU siparişin rezerve serileri.
+    // documentId: mevcut sipariş id'si (0=yeni). Düzenlemede sipariş kendi rezerve serilerini
+    // de seçili görür; başka siparişin rezervesi görünmez.
+    [HttpGet]
+    public async Task<IActionResult> GetOrderSerials(int itemId, int documentId, CancellationToken ct)
+    {
+        if (itemId <= 0) return Json(Array.Empty<object>());
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT s.[SerialNo], lot.[LotNo]
+            FROM [{_schema}].[ItemSerial] s
+            LEFT JOIN [{_schema}].[Lot] lot ON lot.[Id] = s.[LotId]
+            WHERE s.[ItemId] = @ItemId AND s.[IsActive] = 1
+              AND (s.[Status] = 1 OR (s.[Status] = 4 AND s.[ReservedForDocumentId] = @Doc))
+            ORDER BY s.[SerialNo];
+            """;
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@Doc", documentId);
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            result.Add(new { serialNo = r.GetString(0), lotNo = r.IsDBNull(1) ? null : r.GetString(1) });
+        return Json(result);
+    }
+
+    // Bir belgenin satır-seri eşlemesi (lineId → serialNo[]). Düzenleme yüklemesinde grid
+    // satırlarına serileri doldurmak için kullanılır.
+    [HttpGet]
+    public async Task<IActionResult> GetDocumentLineSerials(int documentId, CancellationToken ct)
+    {
+        if (documentId <= 0) return Json(new Dictionary<string, string[]>());
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT dls.[DocumentLineId], s.[SerialNo]
+            FROM [{_schema}].[DocumentLineSerial] dls
+            INNER JOIN [{_schema}].[DocumentLine] dl ON dl.[Id] = dls.[DocumentLineId]
+            INNER JOIN [{_schema}].[ItemSerial] s ON s.[Id] = dls.[SerialId]
+            WHERE dl.[DocumentId] = @Doc
+            ORDER BY dls.[DocumentLineId], s.[SerialNo];
+            """;
+        cmd.Parameters.AddWithValue("@Doc", documentId);
+        var map = new Dictionary<string, List<string>>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var lineId = r.GetInt32(0).ToString();
+            if (!map.TryGetValue(lineId, out var list)) { list = new List<string>(); map[lineId] = list; }
+            list.Add(r.GetString(1));
+        }
+        return Json(map.ToDictionary(k => k.Key, v => v.Value.ToArray()));
     }
 
     [HttpGet]
