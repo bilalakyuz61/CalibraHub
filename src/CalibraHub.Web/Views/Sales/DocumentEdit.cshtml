@@ -3674,11 +3674,21 @@
             // ln.itemId DB source-of-truth; materialCode/materialName/combinationCode ise server
             // JOIN ile Item + ProductConfiguration'dan turetilen display degerler. Grid row
             // stockCardId alani icin itemId'yi kullanir (legacy alias).
+            // Sipariş seri rezervasyonu: satır-seri eşlemesini çek (sipariş dışı belgede boş döner → no-op).
+            var _serialMap = {};
+            try {
+                var _srResp = await fetch('/Sales/GetDocumentLineSerials?documentId=' + (q.id || 0));
+                if (_srResp.ok) _serialMap = (await _srResp.json()) || {};
+            } catch (e) { /* seri yoksa sorun değil */ }
+
             var initialLines = (data.lines || []).map(function (ln) {
                 var m = (materials || []).find(function (x) { return x.id === ln.itemId });
                 return Object.assign({}, ln, {
                     stockCardId:       ln.itemId,
                     trackCombinations: m ? m.trackCombinations === true : false,
+                    trackSerial:       m ? m.trackSerial === true : false,
+                    autoSerial:        m ? m.autoSerial === true : false,
+                    serials:           _serialMap[String(ln.id)] || [],
                     taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
                 });
             });
@@ -4075,7 +4085,9 @@
                     combinationDetails: Array.isArray(r.combinationDetails) ? r.combinationDetails : [],
                     notes:              r.notes || null,
                     notesPinned:        r.notesPinned === true,
-                    revisedFromId:      r.revisedFromId != null && Number(r.revisedFromId) > 0 ? Number(r.revisedFromId) : null
+                    revisedFromId:      r.revisedFromId != null && Number(r.revisedFromId) > 0 ? Number(r.revisedFromId) : null,
+                    // Seri-takipli kalemde siparişe seçilen seriler (satış siparişi rezervasyonu)
+                    serials:            Array.isArray(r.serials) && r.serials.length > 0 ? r.serials : null
                 };
             });
         var custIdVal  = document.getElementById('sqCustomerId').value;

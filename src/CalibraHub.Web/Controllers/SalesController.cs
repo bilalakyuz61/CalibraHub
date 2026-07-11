@@ -1469,7 +1469,7 @@ public sealed class SalesController : Controller
                     var serialRes = stockRes && (await _companyParams.GetBoolAsync(
                         StockParameters.FormCode, StockParameters.OrderSerialReservationKey, ct) ?? false);
 
-                    var reqLines = request.Lines ?? new List<SaveDocumentLineRequest>();
+                    var reqLines = (request.Lines ?? Array.Empty<SaveDocumentLineRequest>()).ToList();
                     var ordered  = savedLines.OrderBy(l => l.LineNo).ToList();
                     var lineSerials = new List<(int, int, IReadOnlyList<string>)>();
                     for (int i = 0; i < ordered.Count && i < reqLines.Count; i++)
