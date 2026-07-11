@@ -119,3 +119,23 @@
         </div>
     }
 </div>
+
+@* F5 → Kaydet, F7 → Sil, F8 → Yeni Kayit — tum edit ekranlari icin klavye kisayollari.
+   Buton id'leri aksiyon seridinin kendi ayarindan gelir (SaveBtnId/DeleteBtnId/NewBtnId).
+   Odak edit formundayken calisir; SmartBoard gomulu ekranlarda F8'i once bu yakalar (defaultPrevented). *@
+<script>
+(function () {
+    var map = { save: '@ab_saveBtnId', del: '@ab_deleteBtnId', add: '@ab_newBtnId' };
+    document.addEventListener('keydown', function (e) {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        var id = null;
+        if (e.key === 'F5' || e.keyCode === 116) id = map.save;        // F5 → Kaydet
+        else if (e.key === 'F7' || e.keyCode === 118) id = map.del;    // F7 → Sil
+        else if (e.key === 'F8' || e.keyCode === 119) id = map.add;    // F8 → Yeni Kayit
+        if (!id) return;
+        e.preventDefault();
+        var btn = document.getElementById(id);
+        if (btn) btn.click();
+    });
+})();
+</script>

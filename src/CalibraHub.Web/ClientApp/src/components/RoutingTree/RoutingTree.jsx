@@ -352,6 +352,19 @@ export default function RoutingTree({ config }) {
   var [filters, setFilters]       = useState([])
   var [exporting, setExporting]   = useState(false)
 
+  // F8 → Yeni Rota (standart SmartBoard listeleriyle tutarli "yeni kayit" kisayolu)
+  useEffect(function () {
+    function onKey(e) {
+      if (e.defaultPrevented) return   // aksiyon seridi ( or. WorkOrderEdit) F8'i onceden yakaladiysa cakisma
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      if (e.key !== 'F8' && e.keyCode !== 119) return
+      e.preventDefault()
+      setAddingRouting(true); setEditingId(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+
   // dnd-kit sensors (operasyon kartlarini surukle-birak)
   var dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

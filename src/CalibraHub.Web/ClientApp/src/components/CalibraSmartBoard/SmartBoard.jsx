@@ -362,6 +362,8 @@ export default function SmartBoard(props) {
     function trigger() { handleActionClick(primary) }
 
     function onKey(e) {
+      // Aksiyon seridi (edit ekrani) hotkey'i onceden yakalayip preventDefault ettiyse tekrar tetikleme
+      if (e.defaultPrevented) return
       var isAltN = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key || '').toLowerCase() === 'n'
       var isInsert = e.key === 'Insert' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
       var isF8 = (e.key === 'F8' || e.keyCode === 119) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
