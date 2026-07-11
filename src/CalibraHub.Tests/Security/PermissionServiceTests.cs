@@ -69,11 +69,18 @@ public sealed class PermissionServiceTests
 
     [Theory]
     [InlineData(FormCodes.SetupDefinitions)]
-    [InlineData(FormCodes.Scheduler)]
     public async Task DepartmentManager_KisitliFormlara_Red(string blockedForm)
     {
         var svc = CreateService();
         Assert.False(await svc.CheckAsync(UserId, UserRole.DepartmentManager, DeptId, blockedForm, "VIEW", default));
+    }
+
+    // 2026-07-11 — Scheduler (Zamanlanmış Görevler) artık iş ekranı → admin erişebilir (bloktan çıkarıldı).
+    [Fact]
+    public async Task DepartmentManager_Scheduler_Izinli()
+    {
+        var svc = CreateService();
+        Assert.True(await svc.CheckAsync(UserId, UserRole.DepartmentManager, DeptId, FormCodes.Scheduler, "VIEW", default));
     }
 
     // ── Default deny ──────────────────────────────────────────────────────

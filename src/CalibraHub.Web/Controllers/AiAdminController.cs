@@ -15,11 +15,14 @@ namespace CalibraHub.Web.Controllers;
 ///   POST   /Admin/AiProviders/delete/{id}→ silme
 ///   POST   /Admin/AiProviders/test/{id}  → bağlantı test (küçük ping)
 ///
-/// **Yetki:** [Authorize] + admin kontrolü (sadece sistem admini key tanımlayabilir).
+/// **Yetki:** [Authorize] + CompanySettings kapsamı. Yapay Zeka provider yönetimi
+/// Şirket Ayarları ekranının bir sekmesidir; SetupDefinitions (SystemAdmin-only sistem
+/// ayarları) DEĞİL, CompanySettings kapsamındadır → şirket admini (DepartmentManager) de
+/// yönetebilir. Ayrı "Sistem Ayarları" (Mail/ERP/Entegratör, /Gate) SystemAdmin'e özel kalır.
 /// </summary>
 [Authorize]
 [Route("Admin/[action]")]
-[PermissionScope(FormCodes.SetupDefinitions)]
+[PermissionScope(FormCodes.CompanySettings)]
 public sealed class AiAdminController : Controller
 {
     private readonly IAiProviderService _service;

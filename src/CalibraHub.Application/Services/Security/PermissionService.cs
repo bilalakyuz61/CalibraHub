@@ -133,14 +133,18 @@ public sealed class PermissionService : IPermissionService
         // 1) SystemAdmin her zaman izinli
         if (role == UserRole.SystemAdmin) return true;
 
-        // 1.5) DepartmentManager (Admin) → SetupDefinitions ve Scheduler hariç tüm ekranlar izinli.
-        // "Sistem Ayarları" sayfaları (entegratör şifreleri, SMTP, ERP, log, vb.) yalnızca SystemAdmin'e özel.
+        // 1.5) DepartmentManager (Admin) → yalnızca SetupDefinitions hariç tüm ekranlar izinli.
+        // Kullanıcı kararı (2026-07-11): "Sistem Ayarları/Yönetimi ekranı SystemAdmin'e özel,
+        // diğer TÜM sayfalar admin'e açık." SetupDefinitions = sistem/dev bucket'ı: entegratör
+        // şifreleri, SMTP, ERP, log + tehlikeli dev araçları (LegacyMigration, IntegrationTestSeed,
+        // ConnectivityTests, DatabaseMetadata, Locks, FormManagement) → SystemAdmin'e özel kalır.
+        // İş ekranları bu koddan ayrı grantable kodlara taşınır (ör. AiProviders → CompanySettings).
+        // Scheduler (Zamanlanmış Görevler) bir iş ekranıdır → bloktan çıkarıldı, admin erişebilir.
         if (role == UserRole.DepartmentManager)
         {
             var adminBlockedForms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 FormCodes.SetupDefinitions,
-                FormCodes.Scheduler,
             };
             return !adminBlockedForms.Contains(formCode);
         }
@@ -240,11 +244,11 @@ public sealed class PermissionService : IPermissionService
     {
         if (role == UserRole.SystemAdmin) return AccessScope.All;
 
-        // DepartmentManager → SetupDefinitions ve Scheduler dışında her şeye All
+        // DepartmentManager → yalnızca SetupDefinitions dışında her şeye All (bkz. CheckAsync notu)
         if (role == UserRole.DepartmentManager)
         {
             var blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                { FormCodes.SetupDefinitions, FormCodes.Scheduler };
+                { FormCodes.SetupDefinitions };
             return blocked.Contains(formCode) ? AccessScope.None : AccessScope.All;
         }
 

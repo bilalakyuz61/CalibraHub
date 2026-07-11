@@ -90,7 +90,8 @@ export default function AiProvidersPanel() {
         setProviders(d.providers || [])
         setError(null)
       } else {
-        setError(d.error || 'Liste alınamadı')
+        // Kullanıcıya sade mesaj göster; ham "FORM_CODE:ACTION" teknik string'i değil.
+        setError(d.message || d.error || 'Liste alınamadı')
       }
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
