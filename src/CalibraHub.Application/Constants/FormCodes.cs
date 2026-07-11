@@ -178,6 +178,7 @@ public static class FormCodes
     // ═══════════════════════════════════════════════════
     public const string CompanySettings    = "COMPANY_SETTINGS";
     public const string PermissionMgmt     = "PERMISSION_MGMT";
+    public const string UserManagement     = "USER_MANAGEMENT";   // Kullanıcı Tanımlamaları — admin erişir; SystemAdmin rol ataması server-side korumalı
     public const string DataVisibility     = "DATA_VISIBILITY";
     public const string IntegrationEvents  = "INTEGRATION_EVENTS";
     public const string Integrations       = "INTEGRATIONS";

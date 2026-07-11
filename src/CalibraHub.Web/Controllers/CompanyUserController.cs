@@ -22,7 +22,9 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 // "�?irket ve Kullanıcı Tanımlamaları" formu — admin kullanıcı CRUD ekranı.
-[CalibraHub.Web.Authorization.PermissionScope(FormCodes.SetupDefinitions)]
+// Kullanıcı Tanımlamaları — admin (DepartmentManager) erişir. SystemAdmin rol ataması/düzenlemesi
+// server-side korumalı (bkz. Save + GetForm IsSystemAdmin guard'ları). SetupDefinitions'tan taşındı (2026-07-11).
+[CalibraHub.Web.Authorization.PermissionScope(FormCodes.UserManagement)]
 public sealed class CompanyUserController : Controller
 {
     private const string DefaultPassword = "12345678";
@@ -218,12 +220,17 @@ public sealed class CompanyUserController : Controller
             .Select(u => new { id = u.Id, name = u.FullName, email = u.Email })
             .ToArray();
 
+        // Yetki yükseltme koruması: "Sistem Admin" seçeneği yalnızca SystemAdmin'e gösterilir.
+        var canAssignSysAdmin = IsSystemAdmin();
         var roles = new[]
         {
-            new { value = (int)UserRole.Operator,          label = "User" },
-            new { value = (int)UserRole.DepartmentManager, label = "Admin" },
-            new { value = (int)UserRole.SystemAdmin,       label = "Sistem Admin" },
-        };
+            new { value = (int)UserRole.Operator,          label = "User",         sysOnly = false },
+            new { value = (int)UserRole.DepartmentManager, label = "Admin",        sysOnly = false },
+            new { value = (int)UserRole.SystemAdmin,       label = "Sistem Admin", sysOnly = true  },
+        }
+        .Where(r => !r.sysOnly || canAssignSysAdmin)
+        .Select(r => new { r.value, r.label })
+        .ToArray();
 
         return Json(new { departments, supervisors, roles });
     }
@@ -313,6 +320,11 @@ public sealed class CompanyUserController : Controller
         if (role != UserRole.Operator && role != UserRole.DepartmentManager && role != UserRole.SystemAdmin)
             return Json(new { ok = false, error = "Yalnızca User, Admin veya Sistem Admin yetkisi atanabilir." });
 
+        // Yetki yükseltme koruması: "Sistem Admin" yetkisini yalnızca bir Sistem Admini atayabilir.
+        // (Aksi halde bir Admin kendini/başkasını SystemAdmin yaparak yetki yükseltebilir.)
+        if (role == UserRole.SystemAdmin && !IsSystemAdmin())
+            return Json(new { ok = false, error = "\"Sistem Admin\" yetkisini yalnızca bir Sistem Admini atayabilir." });
+
         try
         {
             if (dto.Id.HasValue && dto.Id.Value > 0)
@@ -321,6 +333,10 @@ public sealed class CompanyUserController : Controller
                 var existing = await _userRepo.GetByIdAsync(dto.Id.Value, ct);
                 if (existing is null || existing.CompanyId != companyId)
                     return Json(new { ok = false, error = "Kullanıcı bulunamadı." });
+
+                // Yetki yükseltme koruması: mevcut bir Sistem Admini kaydını yalnızca Sistem Admini düzenleyebilir.
+                if (existing.Role == UserRole.SystemAdmin && !IsSystemAdmin())
+                    return Json(new { ok = false, error = "Sistem Admini kullanıcıları yalnızca bir Sistem Admini düzenleyebilir." });
 
                 // 2026-06-08 — Departman artık UI'da; dto.DepartmentId ile güncellenir.
                 // 2026-06-15 — Amir artık UI'da; dto.SupervisorUserId ile güncellenir.

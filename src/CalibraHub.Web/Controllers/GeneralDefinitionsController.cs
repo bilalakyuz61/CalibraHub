@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 [Authorize]
-[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.SetupDefinitions)]
+// Genel Tanımlamalar (Satış Temsilcileri / Döviz / Cari Grupları) — iş tanımı ekranları,
+// sistem ayarı değil → GeneralDefs kapsamı (admin erişir). SetupDefinitions'tan taşındı (2026-07-11).
+[CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.GeneralDefs)]
 public sealed class GeneralDefinitionsController : Controller
 {
     private readonly ISalesRepresentativeService _salesRepService;

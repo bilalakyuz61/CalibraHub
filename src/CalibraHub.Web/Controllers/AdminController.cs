@@ -447,7 +447,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet]
-    [PermissionScope(FormCodes.SetupDefinitions)]
+    [PermissionScope(FormCodes.ViewSettings)]
     public async Task<IActionResult> ViewSettings(
         string? screenCode,
         Guid? groupId,
