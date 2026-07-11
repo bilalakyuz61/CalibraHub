@@ -347,7 +347,7 @@ export default function SmartBoard(props) {
     if (action.url) navigateInWorkspace(action.url)
   }, [])
 
-  /* ── Alt+N / Insert — primary header action ("Yeni X") kisayolu ──
+  /* ── Alt+N / Insert / F8 — primary header action ("Yeni X") kisayolu ──
      Odak iframe icindeyken dogrudan keydown yakalanir; odak Shell'de
      (sidebar/menu) iken Shell aktif tab'a calibra:hotkey mesaji forward
      eder, burada message listener'i ile yakalanir. */
@@ -364,7 +364,8 @@ export default function SmartBoard(props) {
     function onKey(e) {
       var isAltN = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key || '').toLowerCase() === 'n'
       var isInsert = e.key === 'Insert' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
-      if (!isAltN && !isInsert) return
+      var isF8 = (e.key === 'F8' || e.keyCode === 119) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
+      if (!isAltN && !isInsert && !isF8) return
       if (isInsert) {
         // Insert input icinde overwrite toggle'dir — form alanlarinda karisma
         var t = e.target
