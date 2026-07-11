@@ -338,10 +338,16 @@ public sealed class AccountController : Controller
             principal,
             authProperties);
 
+        // Kullanıcı gösterimi tüm log kayıtlarıyla tutarlı olsun diye ad-soyad kullanılır
+        // (Logout + belge/tanım kayıtları HttpContext'ten aynı ClaimTypes.Name'i okur).
+        // Ad-soyad boşsa e-postaya düşülür — HttpAuditContextProvider ile birebir aynı fallback.
+        var loginDisplayName = string.IsNullOrWhiteSpace(authenticatedUser.FullName)
+            ? authenticatedUser.Email
+            : authenticatedUser.FullName;
         _audit.LogEvent(CalibraHub.Application.Auditing.AuditActions.Login,
             detail: input.RememberMe ? "Giriş (beni hatırla)" : "Giriş",
             actor: new CalibraHub.Application.Auditing.AuditActor(
-                authenticatedUser.CompanyId, authenticatedUser.Id, authenticatedUser.Email,
+                authenticatedUser.CompanyId, authenticatedUser.Id, loginDisplayName,
                 HttpContext.Connection.RemoteIpAddress?.ToString(), "Web"),
             entity: "Session");
 
