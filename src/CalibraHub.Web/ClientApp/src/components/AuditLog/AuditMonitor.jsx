@@ -107,6 +107,26 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
   }
   const hasFilter = action || entity || user || debouncedText
 
+  // Stat kartı tıklaması → listeyi o boyuta filtrele (tekrar tıklama = temizle).
+  // Kart sayıları tüm aralığı saydığı için diğer filtreler de sıfırlanır — sayı ile liste örtüşür.
+  const applyStatFilter = (kind) => {
+    setPage(1); setText(''); setUser('')
+    if (kind === 'all') { setAction(''); setEntity(''); return }
+    if (kind === 'security') {
+      const isOn = entity === 'Session' && !action
+      setAction(''); setEntity(isOn ? '' : 'Session'); return
+    }
+    const isOn = action === kind && !entity
+    setEntity(''); setAction(isOn ? '' : kind)
+  }
+  const statActive = {
+    all: !action && !entity && !user && !debouncedText,
+    insert: action === 'Insert' && !entity,
+    update: action === 'Update' && !entity,
+    delete: action === 'Delete' && !entity,
+    security: entity === 'Session' && !action,
+  }
+
   const totalPages = Math.max(1, Math.ceil(data.total / pageSize))
 
   const exportExcel = async () => {
@@ -222,25 +242,30 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
         </div>
       </div>
 
-      {/* Stat kartları */}
+      {/* Stat kartları — tıklanınca liste ilgili işlem türüne filtrelenir */}
       <div className="al-stats">
-        <div className="al-stat al-stat--indigo">
+        <div className={'al-stat al-stat--indigo al-stat--click' + (statActive.all ? ' is-active' : '')}
+          onClick={() => applyStatFilter('all')} title="Tüm kayıtları göster (filtreleri temizle)">
           <div className="al-stat-ic"><Activity size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.total.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Toplam İşlem</div></div>
         </div>
-        <div className="al-stat al-stat--emerald">
+        <div className={'al-stat al-stat--emerald al-stat--click' + (statActive.insert ? ' is-active' : '')}
+          onClick={() => applyStatFilter('Insert')} title="Yalnızca ekleme kayıtlarını göster">
           <div className="al-stat-ic"><PlusCircle size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.inserts.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Ekleme</div></div>
         </div>
-        <div className="al-stat al-stat--amber">
+        <div className={'al-stat al-stat--amber al-stat--click' + (statActive.update ? ' is-active' : '')}
+          onClick={() => applyStatFilter('Update')} title="Yalnızca güncelleme kayıtlarını göster">
           <div className="al-stat-ic"><PencilLine size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.updates.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Güncelleme</div></div>
         </div>
-        <div className="al-stat al-stat--rose">
+        <div className={'al-stat al-stat--rose al-stat--click' + (statActive.delete ? ' is-active' : '')}
+          onClick={() => applyStatFilter('Delete')} title="Yalnızca silme kayıtlarını göster">
           <div className="al-stat-ic"><Trash2 size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.deletes.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Silme</div></div>
         </div>
-        <div className="al-stat al-stat--violet">
+        <div className={'al-stat al-stat--violet al-stat--click' + (statActive.security ? ' is-active' : '')}
+          onClick={() => applyStatFilter('security')} title="Yalnızca oturum/güvenlik olaylarını göster">
           <div className="al-stat-ic"><ShieldAlert size={16} /></div>
           <div><div className="al-stat-num">{stats ? stats.securityEvents.toLocaleString('tr-TR') : '—'}</div><div className="al-stat-lbl">Güvenlik Olayı</div></div>
         </div>

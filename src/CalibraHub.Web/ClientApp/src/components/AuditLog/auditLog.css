@@ -170,6 +170,14 @@ body.app-theme-dark .al-root {
   box-shadow: var(--al-shadow);
   min-width: 0;
 }
+/* Tıklanabilir stat kartı — tıklayınca listeyi o işlem türüne filtreler */
+.al-stat--click { cursor: pointer; user-select: none; transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s; }
+.al-stat--click:hover { border-color: var(--al-muted-2); }
+.al-stat--click:active { transform: scale(0.98); }
+.al-stat.is-active {
+  border-color: var(--al-indigo);
+  box-shadow: inset 0 0 0 1px var(--al-indigo), var(--al-shadow);
+}
 .al-stat-ic {
   width: 32px;
   height: 32px;
