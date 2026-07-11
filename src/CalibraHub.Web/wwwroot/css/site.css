@@ -10424,6 +10424,23 @@ body.app-theme-dark .ux-edit-nav {
 .ux-edit-nav__tab:disabled:hover { background: transparent; color: #475569; }
 .ux-edit-nav__icon { width: 15px; height: 15px; flex-shrink: 0; opacity: .8; }
 .ux-edit-nav__tab.is-active .ux-edit-nav__icon { opacity: 1; }
+/* Malzeme Kartı sol-menü paritesi (2026-07-11): ikon yerine ring→dolu+glow dot indikatör.
+   ::before ile eklenir → 6 paylaşan ekran (Makine/Operasyon/Vardiya/Personel/Sebep/Proje)
+   markup değişmeden dönüşür. */
+.ux-edit-nav__icon { display: none; }
+.ux-edit-nav__tab::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  border: 1.5px solid #cbd5e1; background: transparent; transition: all .18s;
+}
+.ux-edit-nav__tab:hover::before { border-color: #94a3b8; }
+.ux-edit-nav__tab.is-active::before {
+  background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.5);
+}
+body.app-theme-dark .ux-edit-nav__tab::before { border-color: rgba(255,255,255,.24); }
+body.app-theme-dark .ux-edit-nav__tab:hover::before { border-color: rgba(255,255,255,.48); }
+body.app-theme-dark .ux-edit-nav__tab.is-active::before {
+  background: #6366f1; border-color: #6366f1; box-shadow: 0 0 7px rgba(99,102,241,.55);
+}
 .ux-edit-nav__count {
   margin-left: auto; padding: 1px 7px; border-radius: 999px;
   font-size: 10px; font-weight: 700;

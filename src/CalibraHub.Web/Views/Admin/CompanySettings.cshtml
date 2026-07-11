@@ -119,8 +119,9 @@
     }
     @@media (max-width: 768px) { .cs-nav-label { display: none; } }
 
-    /* Sag: tab icerigi */
-    .cs-tab-content { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 16px 20px; }
+    /* Sag: tab icerigi. scrollbar-gutter:stable → sekmeler arası scrollbar açılıp
+       kapandığında layout kaymasını (sol menü dahil) önler. */
+    .cs-tab-content { flex: 1 1 auto; min-width: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 16px 20px; }
     .cs-tab-pane { display: none; }
     .cs-tab-pane.is-active { display: block; }
 
