@@ -231,6 +231,12 @@
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') oeCloseModal();
+        // F5 → sayfayı yenileme yerine Kaydet
+        if (e.key === 'F5' || e.keyCode === 116) {
+            e.preventDefault();
+            var sb = document.getElementById('oe-save');
+            if (sb) sb.click();
+        }
     });
 })();
 
