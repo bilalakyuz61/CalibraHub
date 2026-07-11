@@ -138,101 +138,110 @@
             animation: loginShake .42s cubic-bezier(.36,.07,.19,.97) both;
         }
 
-        /* ── Sol hero: kalibrasyon sahnesi (cam küre + hareketli kadran) ─── */
-        .cal-hero {
-            position: relative; width: 100%; height: 100%;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: clamp(22px, 4.5vh, 46px); overflow: hidden;
-        }
-        .calh-bg { position: absolute; inset: 0; pointer-events: none;
+        /* ── Kimlik kalibrasyon kadranı — girişe bağlı 3 ibreli enstrüman ──
+           Alanları doldurdukça 3 ibre merkeze yaklaşır; doğru girişte kilitlenir
+           (yeşil ✓), yanlışta saçılır (kırmızı). Kart temasına uyumlu. */
+        .cal-dial { width: 148px; margin: 2px auto 20px; position: relative; }
+        .cal-dial-glass {
+            position: relative; width: 148px; height: 148px; margin: 0 auto; border-radius: 50%; overflow: hidden;
             background:
-                radial-gradient(58% 46% at 50% 40%, rgba(99,102,241,.22), transparent 62%),
-                radial-gradient(42% 34% at 63% 64%, rgba(34,211,238,.13), transparent 60%);
+                radial-gradient(118% 118% at 30% 22%, #ffffff, rgba(255,255,255,.3) 30%, rgba(226,232,240,.06) 56%, rgba(148,163,184,.18) 100%),
+                radial-gradient(90% 90% at 50% 128%, rgba(99,102,241,.16), transparent 62%);
+            box-shadow:
+                inset 0 2px 6px rgba(255,255,255,.9),
+                inset 0 -12px 24px rgba(79,70,229,.12),
+                inset 0 0 0 1px rgba(148,163,184,.26),
+                0 14px 28px -12px rgba(30,41,59,.36),
+                0 4px 12px -6px rgba(99,102,241,.3);
+            transition: box-shadow .5s ease;
         }
-        .calh-bg::before { content: ''; position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%);
-            width: min(680px, 86vh); height: min(680px, 86vh); border-radius: 50%;
-            background: repeating-radial-gradient(circle, rgba(148,163,184,.09) 0 1px, transparent 1px 48px);
-            -webkit-mask: radial-gradient(circle, #000 44%, transparent 72%);
-                    mask: radial-gradient(circle, #000 44%, transparent 72%);
-            opacity: .7;
-        }
-
-        .cal-orb { position: relative; z-index: 1; width: min(330px, 42vh); height: min(330px, 42vh); }
-        .cal-orb-glass {
-            position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
-            cursor: grab; touch-action: none;
+        body.app-theme-dark .cal-dial-glass {
             background:
-                radial-gradient(120% 120% at 32% 24%, rgba(226,232,240,.52), rgba(148,163,184,.14) 30%, rgba(30,41,59,.3) 58%, rgba(2,6,23,.62) 100%),
-                radial-gradient(100% 100% at 50% 132%, rgba(99,102,241,.34), transparent 60%),
-                radial-gradient(80% 80% at 72% 80%, rgba(34,211,238,.16), transparent 55%);
+                radial-gradient(118% 118% at 30% 22%, rgba(148,163,184,.5), rgba(148,163,184,.12) 32%, rgba(15,23,42,.24) 60%, rgba(2,6,23,.52) 100%),
+                radial-gradient(90% 90% at 50% 128%, rgba(139,92,246,.28), transparent 62%);
             box-shadow:
-                inset 0 3px 10px rgba(226,232,240,.34),
-                inset 0 -22px 46px rgba(2,6,23,.66),
-                inset 0 0 0 1px rgba(148,163,184,.28),
-                inset 0 0 42px rgba(99,102,241,.14),
-                0 40px 80px -24px rgba(0,0,0,.72),
-                0 0 60px -10px rgba(99,102,241,.4);
-            transition: box-shadow .55s ease;
+                inset 0 2px 6px rgba(226,232,240,.24),
+                inset 0 -12px 26px rgba(2,6,23,.58),
+                inset 0 0 0 1px rgba(148,163,184,.18),
+                0 18px 34px -14px rgba(0,0,0,.66),
+                0 4px 14px -6px rgba(139,92,246,.36);
         }
-        .cal-orb-glass:active { cursor: grabbing; }
-        .cal-orb.is-cal .cal-orb-glass {
+        .cal-dial.is-cal .cal-dial-glass {
             box-shadow:
-                inset 0 3px 10px rgba(226,232,240,.34),
-                inset 0 -22px 46px rgba(2,6,23,.66),
+                inset 0 2px 6px rgba(255,255,255,.9), inset 0 -12px 24px rgba(16,185,129,.16),
                 inset 0 0 0 1px rgba(52,211,153,.5),
-                inset 0 0 44px rgba(16,185,129,.2),
-                0 40px 80px -24px rgba(0,0,0,.72),
-                0 0 66px -8px rgba(16,185,129,.5);
+                0 14px 28px -12px rgba(30,41,59,.36), 0 0 0 4px rgba(52,211,153,.16), 0 0 22px rgba(52,211,153,.42);
         }
-        .cal-orb-shine {
-            position: absolute; top: 6%; left: 12%; width: 48%; height: 34%; border-radius: 50%;
-            background: radial-gradient(closest-side, rgba(255,255,255,.82), rgba(255,255,255,0));
-            transform: rotate(-18deg); filter: blur(2px); pointer-events: none; z-index: 3;
+        body.app-theme-dark .cal-dial.is-cal .cal-dial-glass {
+            box-shadow:
+                inset 0 2px 6px rgba(226,232,240,.24), inset 0 -12px 26px rgba(2,6,23,.58),
+                inset 0 0 0 1px rgba(52,211,153,.5),
+                0 18px 34px -14px rgba(0,0,0,.66), 0 0 0 4px rgba(16,185,129,.2), 0 0 24px rgba(16,185,129,.5);
         }
-        .cal-orb-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; display: block; }
-        .cal-track { fill: none; stroke: rgba(148,163,184,.26); stroke-width: 4.5; stroke-linecap: round; }
-        .cal-err { fill: none; stroke: url(#calGrad); stroke-width: 4.5; stroke-linecap: round; }
-        .cal-orb.is-cal .cal-err { stroke: url(#calGradOk); }
-        .cal-tick { stroke: rgba(148,163,184,.42); stroke-width: 1.4; }
-        .cal-tick.maj { stroke: rgba(203,213,225,.62); stroke-width: 2.3; }
-        .cal-tick.zero { stroke: #818cf8; stroke-width: 2.8; }
-        .cal-needle { stroke: #c7d2fe; stroke-width: 2.4; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(129,140,248,.75)); }
-        .cal-hub { fill: #a5b4fc; } .cal-hub-in { fill: #0a0d17; }
-        .cal-check { opacity: 0; transform: scale(.4); transform-origin: 100px 66px; transition: opacity .3s, transform .3s cubic-bezier(.34,1.56,.5,1); }
-        .cal-orb.is-cal .cal-check { opacity: 1; transform: scale(1); }
-        .cal-orb-readout {
-            position: absolute; left: 0; right: 0; bottom: 22%; text-align: center; z-index: 3;
-            font-family: ui-monospace, Consolas, monospace; font-size: clamp(.82rem, 1.7vh, 1.06rem); font-weight: 700;
-            letter-spacing: .02em; color: #c7d2fe; pointer-events: none; font-variant-numeric: tabular-nums;
-            text-shadow: 0 0 12px rgba(99,102,241,.5);
+        .cal-dial.is-fail .cal-dial-glass {
+            box-shadow:
+                inset 0 2px 6px rgba(255,255,255,.9), inset 0 -12px 24px rgba(244,63,94,.16),
+                inset 0 0 0 1px rgba(251,113,133,.5),
+                0 14px 28px -12px rgba(30,41,59,.36), 0 0 0 4px rgba(251,113,133,.16), 0 0 22px rgba(244,63,94,.42);
         }
-        .cal-orb.is-cal .cal-orb-readout { color: #6ee7b7; text-shadow: 0 0 12px rgba(16,185,129,.5); }
-        .cal-orb-hint {
-            position: absolute; left: 50%; bottom: -32px; transform: translateX(-50%);
-            font-size: .72rem; letter-spacing: .05em; color: rgba(203,213,225,.5); white-space: nowrap;
-            opacity: 0; transition: opacity .25s; pointer-events: none;
+        body.app-theme-dark .cal-dial.is-fail .cal-dial-glass {
+            box-shadow:
+                inset 0 2px 6px rgba(226,232,240,.24), inset 0 -12px 26px rgba(2,6,23,.58),
+                inset 0 0 0 1px rgba(251,113,133,.5),
+                0 18px 34px -14px rgba(0,0,0,.66), 0 0 0 4px rgba(244,63,94,.2), 0 0 24px rgba(244,63,94,.5);
         }
-        .cal-orb:hover .cal-orb-hint { opacity: .9; }
-
-        .calh-brand { position: relative; z-index: 1; text-align: center; }
-        .calh-word {
-            font-size: clamp(1.9rem, 4.6vh, 2.8rem); font-weight: 800; letter-spacing: -.02em; line-height: 1;
-            background: linear-gradient(115deg, #e0e7ff 0%, #a5b4fc 46%, #67e8f9 100%);
-            -webkit-background-clip: text; background-clip: text; color: transparent;
+        .cal-dial-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: block; }
+        .cal-track { fill: none; stroke: rgba(148,163,184,.3); stroke-width: 4.5; stroke-linecap: round; }
+        body.app-theme-dark .cal-track { stroke: rgba(148,163,184,.22); }
+        .cal-err { fill: none; stroke: url(#calGrad); stroke-width: 4.5; stroke-linecap: round; transition: stroke .3s; }
+        .cal-dial.is-cal  .cal-err { stroke: url(#calGradOk); }
+        .cal-dial.is-fail .cal-err { stroke: url(#calGradFail); }
+        .cal-tick { stroke: rgba(100,116,139,.48); stroke-width: 1.4; }
+        .cal-tick.maj { stroke: rgba(71,85,105,.7); stroke-width: 2.2; }
+        .cal-tick.zero { stroke: #6366f1; stroke-width: 2.6; }
+        body.app-theme-dark .cal-tick { stroke: rgba(148,163,184,.4); }
+        body.app-theme-dark .cal-tick.maj { stroke: rgba(203,213,225,.58); }
+        body.app-theme-dark .cal-tick.zero { stroke: #818cf8; }
+        /* 3 ibre — farklı uzunluk/renk/kalınlık (saat ibresi hiyerarşisi) */
+        .cal-needle { stroke-linecap: round; transition: stroke .3s, filter .3s; }
+        .cal-needle.n1 { stroke: #4f46e5; stroke-width: 2.6; filter: drop-shadow(0 0 2.5px rgba(79,70,229,.5)); }
+        .cal-needle.n2 { stroke: #0891b2; stroke-width: 2.0; }
+        .cal-needle.n3 { stroke: #7c3aed; stroke-width: 1.7; opacity: .92; }
+        body.app-theme-dark .cal-needle.n1 { stroke: #818cf8; filter: drop-shadow(0 0 3px rgba(129,140,248,.7)); }
+        body.app-theme-dark .cal-needle.n2 { stroke: #22d3ee; }
+        body.app-theme-dark .cal-needle.n3 { stroke: #a78bfa; }
+        .cal-dial.is-cal  .cal-needle { stroke: #059669 !important; filter: drop-shadow(0 0 3px rgba(16,185,129,.55)); }
+        .cal-dial.is-fail .cal-needle { stroke: #e11d48 !important; filter: drop-shadow(0 0 3px rgba(244,63,94,.5)); }
+        body.app-theme-dark .cal-dial.is-cal  .cal-needle { stroke: #34d399 !important; }
+        body.app-theme-dark .cal-dial.is-fail .cal-needle { stroke: #fb7185 !important; }
+        .cal-hub { fill: #4f46e5; } .cal-hub-in { fill: #fff; }
+        body.app-theme-dark .cal-hub { fill: #818cf8; } body.app-theme-dark .cal-hub-in { fill: #0a0d17; }
+        .cal-dial.is-cal  .cal-hub { fill: #059669; } body.app-theme-dark .cal-dial.is-cal  .cal-hub { fill: #34d399; }
+        .cal-dial.is-fail .cal-hub { fill: #e11d48; } body.app-theme-dark .cal-dial.is-fail .cal-hub { fill: #fb7185; }
+        .cal-check { opacity: 0; transform: scale(.4); transform-origin: 100px 66px; transition: opacity .3s, transform .35s cubic-bezier(.34,1.56,.5,1); }
+        .cal-dial.is-cal .cal-check { opacity: 1; transform: scale(1); }
+        .cal-dial-readout {
+            position: absolute; left: 0; right: 0; bottom: 20%; text-align: center; z-index: 3;
+            font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .74rem; font-weight: 700;
+            color: #4f46e5; pointer-events: none; font-variant-numeric: tabular-nums;
         }
-        .calh-tag {
-            margin-top: 11px; font-size: clamp(.6rem, 1.2vh, .74rem); letter-spacing: .32em;
-            font-weight: 600; color: rgba(165,180,252,.62);
+        body.app-theme-dark .cal-dial-readout { color: #a5b4fc; }
+        .cal-dial.is-cal  .cal-dial-readout { color: #059669; } body.app-theme-dark .cal-dial.is-cal  .cal-dial-readout { color: #34d399; }
+        .cal-dial.is-fail .cal-dial-readout { color: #e11d48; } body.app-theme-dark .cal-dial.is-fail .cal-dial-readout { color: #fb7185; }
+        .cal-dial-status {
+            margin-top: 9px; text-align: center; font-size: .74rem; font-weight: 600;
+            min-height: 1.05em; color: #64748b; transition: color .3s;
         }
-
-        @@media (max-width: 860px) {
-            .cal-hero { gap: 10px; flex-direction: row; }
-            .cal-orb { width: 96px; height: 96px; }
-            .calh-bg::before { width: 320px; height: 320px; }
-            .calh-word { font-size: 1.5rem; } .calh-tag { display: none; }
-            .cal-orb-hint { display: none; }
+        body.app-theme-dark .cal-dial-status { color: #94a3b8; }
+        .cal-dial.is-calibrating .cal-dial-status { color: #4f46e5; } body.app-theme-dark .cal-dial.is-calibrating .cal-dial-status { color: #a5b4fc; }
+        .cal-dial.is-cal  .cal-dial-status { color: #059669; } body.app-theme-dark .cal-dial.is-cal  .cal-dial-status { color: #34d399; }
+        .cal-dial.is-fail .cal-dial-status { color: #e11d48; } body.app-theme-dark .cal-dial.is-fail .cal-dial-status { color: #fb7185; }
+        @@keyframes calShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(3px)} }
+        .cal-dial.cal-shake .cal-dial-glass { animation: calShake .5s ease; }
+        @@media (prefers-reduced-motion: reduce) {
+            .cal-check, .cal-needle, .cal-err { transition: none; }
+            .cal-dial.cal-shake .cal-dial-glass { animation: none; }
         }
-        @@media (prefers-reduced-motion: reduce) { .cal-check { transition: none; } }
     </style>
 </head>
 <body class="login-page app-theme-@runtime.ThemeCode"
@@ -278,20 +287,31 @@
 </script>
 <div class="login-shell">
     <section class="login-hero" aria-hidden="true">
-        @* 2026-07-11: Statik marka görseli yerine interaktif kalibrasyon sahnesi —
-           cam küre içinde hareketli kadran (açılışta oto-kalibrasyon + sürükleyerek
-           yeniden kalibre). Eski görsel ~/Document/CalibraHubLoginLogo.png korunuyor. *@
-        <div class="cal-hero">
-            <div class="calh-bg"></div>
-            <div class="cal-orb" id="calOrb" title="Sürükleyerek kalibre edin" aria-label="CalibraHub kalibrasyon amblemi">
-                <div class="cal-orb-glass" id="calGlass">
-                    <svg class="cal-orb-svg" viewBox="0 0 200 200" aria-hidden="true">
+        @* CalibraHub Software marka görseli. Frame overflow:hidden + img object-fit:cover
+           ile panel tamamen kaplanır, sağ-alt sparkle filigranı doğal olarak kırpılır. *@
+        <div class="login-hero-frame">
+            <img src="~/Document/CalibraHubLoginLogo.png" alt="CalibraHub Software" />
+        </div>
+    </section>
+
+    <section class="login-panel">
+        <div class="login-card">
+            <h1>CalibraHub</h1>
+
+            @* Kimlik kalibrasyon kadranı — kullanıcı adı/şirket/şifre girişine bağlı 3 ibre.
+               Doldururken "kalibre ediliyor", doğru girişte "kalibrasyon tamam", yanlışta "edilemedi". *@
+            <div class="cal-dial" id="calDial">
+                <div class="cal-dial-glass" id="calGlass" aria-hidden="true">
+                    <svg class="cal-dial-svg" viewBox="0 0 200 200">
                         <defs>
                             <linearGradient id="calGrad" x1="0" y1="0" x2="1" y2="1">
                                 <stop offset="0" stop-color="#6366f1" /><stop offset="1" stop-color="#22d3ee" />
                             </linearGradient>
                             <linearGradient id="calGradOk" x1="0" y1="0" x2="1" y2="1">
                                 <stop offset="0" stop-color="#22d3ee" /><stop offset="1" stop-color="#34d399" />
+                            </linearGradient>
+                            <linearGradient id="calGradFail" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0" stop-color="#fb7185" /><stop offset="1" stop-color="#e11d48" />
                             </linearGradient>
                         </defs>
                         <path class="cal-track" pathLength="100" d="M47.72 152.28 A74 74 0 1 1 152.28 152.28" />
@@ -300,27 +320,17 @@
                         <g class="cal-check" fill="none" stroke="#34d399" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M90 66 l6.5 7 14 -15" />
                         </g>
-                        <g id="calNeedle">
-                            <line class="cal-needle" x1="100" y1="107" x2="100" y2="47" />
-                        </g>
-                        <circle class="cal-hub" cx="100" cy="100" r="7" />
-                        <circle class="cal-hub-in" cx="100" cy="100" r="2.6" />
+                        @* İbre sırası: kısa→uzun (ana ibre en üstte çizilir) *@
+                        <g id="calNeedle3"><line class="cal-needle n3" x1="100" y1="100" x2="100" y2="62" /></g>
+                        <g id="calNeedle2"><line class="cal-needle n2" x1="100" y1="100" x2="100" y2="54" /></g>
+                        <g id="calNeedle"><line class="cal-needle n1" x1="100" y1="104" x2="100" y2="44" /></g>
+                        <circle class="cal-hub" cx="100" cy="100" r="6.5" />
+                        <circle class="cal-hub-in" cx="100" cy="100" r="2.4" />
                     </svg>
-                    <div class="cal-orb-shine"></div>
-                    <div class="cal-orb-readout"><span id="calVal">+0.00</span></div>
+                    <div class="cal-dial-readout"><span id="calVal">+0.00</span></div>
                 </div>
-                <span class="cal-orb-hint">sürükleyerek kalibre et</span>
+                <div class="cal-dial-status" id="calStatus">Kalibrasyon bekleniyor</div>
             </div>
-            <div class="calh-brand">
-                <div class="calh-word">CalibraHub</div>
-                <div class="calh-tag">Hassasiyet · Ölçüm · Kontrol</div>
-            </div>
-        </div>
-    </section>
-
-    <section class="login-panel">
-        <div class="login-card">
-            <h1>CalibraHub</h1>
 
             <form asp-action="Login" method="post" autocomplete="off" id="loginForm">
                 @Html.AntiForgeryToken()
@@ -357,8 +367,6 @@
                     </label>
                     <span class="login-remember-label">Beni hatırla</span>
                 </div>
-
-                <div id="loginError" class="login-error-msg"></div>
 
                 <button type="submit" class="btn btn-primary w-100">@ui.Text("submit")</button>
 
@@ -513,6 +521,9 @@
                     localStorage.removeItem("calibra_login_company");
                 }
 
+                // Kalibrasyon ölçümü başladı
+                if (window.CalibraLoginDial) window.CalibraLoginDial.begin();
+
                 // AJAX submit
                 try {
                     var resp = await fetch(loginForm.action || window.location.href, {
@@ -523,9 +534,14 @@
                     var json = await resp.json();
 
                     if (json.ok) {
-                        window.location.href = json.redirect;
+                        // Doğru giriş — hemen yönlenme; önce "kalibrasyon tamam" hissi, sonra login
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.success(function () { window.location.href = json.redirect; });
+                        else window.location.href = json.redirect;
                         return;
                     }
+
+                    // Hatalı giriş — "kalibre edilemedi"
+                    if (window.CalibraLoginDial) window.CalibraLoginDial.fail(json.message);
 
                     var errorDiv = document.getElementById("loginError");
                     function showError(msg) {
@@ -571,20 +587,30 @@
     })();
 </script>
 <script>
-    /* Kalibrasyon amblemi — cam küre içindeki kadran (sürükle-kalibre + açılış sıfırlama) */
+    /* ── Kimlik kalibrasyon kadranı — 3 ibre (şifre/kullanıcı/şirket) girişe bağlı ──
+       Alanları doldurdukça ibreler merkeze (0) yaklaşır ("kalibre ediliyor"); doğru
+       girişte merkeze kilitlenir (yeşil ✓ "kalibrasyon tamam"), yanlışta saçılır (kırmızı). */
     (function () {
-        var orb    = document.getElementById('calOrb');
-        if (!orb) return;
-        var glass  = document.getElementById('calGlass');
-        var needle = document.getElementById('calNeedle');
-        var errArc = document.getElementById('calErr');
-        var valEl  = document.getElementById('calVal');
-        var ticksG = document.getElementById('calTicks');
+        var dial = document.getElementById('calDial');
+        if (!dial) return;
+        var errArc   = document.getElementById('calErr');
+        var valEl    = document.getElementById('calVal');
+        var statusEl = document.getElementById('calStatus');
+        var ticksG   = document.getElementById('calTicks');
         var NS = 'http://www.w3.org/2000/svg';
         var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var CENTER = 50;
 
-        var CENTER = 50, SNAP = 3.2, BAND = 4;   // merkeze (kalibre) yakınlık eşikleri
-        var cur = 0, dragging = false, raf = 0, idleRaf = 0;
+        var emailEl = document.getElementById('Email');
+        var pwEl    = document.getElementById('Password');
+        var coEl    = document.getElementById('CompanyId');
+
+        // n1 = şifre (ana ibre), n2 = kullanıcı adı, n3 = şirket
+        var needles = [
+            { el: document.getElementById('calNeedle'),  cur: 12, tgt: 12, seek: 3.4 },
+            { el: document.getElementById('calNeedle2'), cur: 88, tgt: 88, seek: 2.6 },
+            { el: document.getElementById('calNeedle3'), cur: 30, tgt: 30, seek: 2.0 }
+        ];
 
         // ── Tick'ler: 0..100 her 5'te bir; 25'lik major; 50 (merkez) vurgulu ──
         for (var i = 0; i <= 20; i++) {
@@ -598,87 +624,108 @@
             ticksG.appendChild(ln);
         }
 
-        function render(v) {
-            cur = v;
-            needle.setAttribute('transform', 'rotate(' + (-135 + v / 100 * 270).toFixed(2) + ' 100 100)');
-            // Hata yayı: merkezden (50) iğneye kadar dolar
-            if (v >= 50) errArc.setAttribute('stroke-dasharray', '0 50 ' + (v - 50).toFixed(2) + ' 100');
-            else         errArc.setAttribute('stroke-dasharray', '0 ' + v.toFixed(2) + ' ' + (50 - v).toFixed(2) + ' 100');
-            orb.classList.toggle('is-cal', Math.abs(v - 50) <= BAND);
-            var dev = (v - 50) / 50;                 // -1.00 .. +1.00
-            if (Math.abs(dev) < 0.01) dev = 0;
+        function place(n) { n.el.setAttribute('transform', 'rotate(' + (-135 + n.cur / 100 * 270).toFixed(2) + ' 100 100)'); }
+        function renderArc() {
+            var avg = (needles[0].cur + needles[1].cur + needles[2].cur) / 3;
+            if (avg >= 50) errArc.setAttribute('stroke-dasharray', '0 50 ' + (avg - 50).toFixed(2) + ' 100');
+            else           errArc.setAttribute('stroke-dasharray', '0 ' + avg.toFixed(2) + ' ' + (50 - avg).toFixed(2) + ' 100');
+            var dev = (avg - 50) / 50; if (Math.abs(dev) < 0.01) dev = 0;
             valEl.textContent = (dev >= 0 ? '+' : '') + dev.toFixed(2);
         }
 
-        function tween(to, dur, done) {
-            cancelAnimationFrame(raf);
-            var from = cur, t0 = null;
-            orb.classList.add('cal-busy');
-            (function step(ts) {
-                if (t0 === null) t0 = ts;
-                var k = Math.min(1, (ts - t0) / dur);
-                render(from + (to - from) * (1 - Math.pow(1 - k, 3)));  // easeOutCubic
-                if (k < 1) raf = requestAnimationFrame(step);
-                else { orb.classList.remove('cal-busy'); if (done) done(); }
-            })(performance.now());
+        var mode = 'idle';        // idle | calibrating | success | fail
+        var raf = 0, running = false, busyStart = 0, lastTick = 0;
+        var STEP = 2.6;           // her tik'te ilerlenen açı adımı
+        var TICK_MS = 55;         // tik aralığı — mekanik "tik tik" hissi
+        function quant(v) { return Math.round(v / STEP) * STEP; }
+        // Mekanik kadran: ibre hedefe düz kaymaz/dalgalanmaz — sabit adımlarla tik tik ilerler
+        function frame(ts) {
+            if (reduce) {
+                for (var r = 0; r < 3; r++) { needles[r].cur = needles[r].tgt; place(needles[r]); }
+                renderArc(); running = false; return;
+            }
+            if (ts - lastTick >= TICK_MS) {
+                lastTick = ts;
+                var moved = false;
+                for (var k = 0; k < 3; k++) {
+                    var n = needles[k], target = quant(n.tgt);
+                    if (Math.abs(n.cur - target) >= STEP * 0.5) {
+                        n.cur = quant(n.cur + (target > n.cur ? STEP : -STEP));   // bir tik ilerle
+                        moved = true;
+                    } else if (n.cur !== target) { n.cur = target; moved = true; }
+                    place(n);
+                }
+                if (moved) renderArc();
+                if (!moved) { running = false; return; }
+            }
+            raf = requestAnimationFrame(frame);
         }
+        function kick() { if (!running) { running = true; lastTick = 0; raf = requestAnimationFrame(frame); } }
+        function setStatus(t) { if (statusEl) statusEl.textContent = t; }
 
-        // ── Boşta hafif titreşim — canlı enstrüman hissi ──
-        function startIdle() {
-            if (reduce) { render(CENTER); return; }
-            var t0 = performance.now();
-            (function loop(ts) {
-                if (dragging) return;
-                render(CENTER + Math.sin((ts - t0) / 950) * 0.5);
-                idleRaf = requestAnimationFrame(loop);
-            })(performance.now());
+        // ── Alanlara göre hedef ibre konumları (dolu = merkeze yakın) ──
+        function evalFields() {
+            var email = emailEl ? emailEl.value.trim() : '';
+            var pw    = pwEl ? pwEl.value : '';
+            var co    = coEl ? coEl.value : '';
+            needles[0].tgt = pw.length === 0 ? 12 : (pw.length >= 6 ? 48 : 12 + pw.length * 6);
+            needles[1].tgt = email.length === 0 ? 88 : (/.+@@.+\..+/.test(email) ? 52 : Math.max(52, 88 - email.length * 3.2));
+            needles[2].tgt = co ? 50 : 30;
+            if (mode !== 'success') {
+                var any = email || pw || co;
+                mode = any ? 'calibrating' : 'idle';
+                dial.classList.toggle('is-calibrating', mode === 'calibrating');
+                setStatus(any ? 'Kalibre ediliyor…' : 'Kalibrasyon bekleniyor');
+            }
+            kick();
         }
-        function stopIdle() { cancelAnimationFrame(idleRaf); }
+        function onFieldInput() {
+            if (mode === 'fail' || mode === 'success') { mode = 'idle'; dial.classList.remove('is-fail', 'is-cal'); }
+            evalFields();
+        }
+        if (emailEl) { emailEl.addEventListener('input', onFieldInput); emailEl.addEventListener('change', onFieldInput); }
+        if (pwEl) pwEl.addEventListener('input', onFieldInput);
+        if (coEl) coEl.addEventListener('change', onFieldInput);
 
-        // ── Açılış: enstrüman kendini sıfırlar (sönümlü salınım → merkez) ──
-        function calibrateSweep() {
-            if (reduce) { render(CENTER); startIdle(); return; }
-            cancelAnimationFrame(raf);
-            var dur = 1950, t0 = null;
-            (function step(ts) {
-                if (t0 === null) t0 = ts;
-                var t = (ts - t0) / dur;
-                if (t >= 1) { render(CENTER); startIdle(); return; }
-                render(CENTER + 50 * Math.cos(t * Math.PI * 3.1) * Math.exp(-t * 3.2));
-                raf = requestAnimationFrame(step);
-            })(performance.now());
-        }
+        // ── Dış API — submit handler çağırır ──
+        window.CalibraLoginDial = {
+            begin: function () {
+                mode = 'calibrating'; busyStart = performance.now();
+                dial.classList.remove('is-cal', 'is-fail'); dial.classList.add('is-calibrating');
+                needles[0].tgt = 50; needles[1].tgt = 50; needles[2].tgt = 50;   // ölçüm: merkeze topla
+                setStatus('Kalibre ediliyor…'); kick();
+            },
+            success: function (done) {
+                var wait = Math.max(0, 620 - (performance.now() - busyStart));
+                setTimeout(function () {
+                    mode = 'success';
+                    dial.classList.remove('is-calibrating', 'is-fail');
+                    needles[0].tgt = 50; needles[1].tgt = 50; needles[2].tgt = 50; kick();
+                    // Kilitlenme: üç ibre tam merkeze oturur — yazı YOK, sadece yeşil + ✓
+                    setTimeout(function () {
+                        cancelAnimationFrame(raf); running = false;
+                        needles[0].cur = needles[1].cur = needles[2].cur = 50;
+                        needles.forEach(place); renderArc();
+                        dial.classList.add('is-cal'); setStatus('');
+                    }, reduce ? 0 : 460);
+                    setTimeout(function () { if (done) done(); }, reduce ? 500 : 1250);
+                }, wait);
+            },
+            fail: function (msg) {
+                var wait = Math.max(0, 620 - (performance.now() - busyStart));
+                setTimeout(function () {
+                    mode = 'fail';
+                    dial.classList.remove('is-calibrating', 'is-cal'); dial.classList.add('is-fail');
+                    needles[0].tgt = 86; needles[1].tgt = 15; needles[2].tgt = 72;   // ibreler saçılır
+                    setStatus(msg || 'Kalibre edilemedi'); kick();
+                    dial.classList.remove('cal-shake'); void dial.offsetWidth; dial.classList.add('cal-shake');
+                }, wait);
+            }
+        };
 
-        // ── Sürükleyerek kalibrasyon ──
-        function valFromEvent(e) {
-            var rect = glass.getBoundingClientRect();
-            var pt = e.touches ? e.touches[0] : e;
-            var px = pt.clientX - (rect.left + rect.width / 2);
-            var py = pt.clientY - (rect.top + rect.height / 2);
-            var deg = Math.atan2(px, -py) * 180 / Math.PI;   // yukarı=0, saat yönü +
-            if (deg < -135) deg = -135; if (deg > 135) deg = 135;
-            var v = (deg + 135) / 270 * 100;
-            if (Math.abs(v - CENTER) <= SNAP) v = CENTER;    // merkeze snap
-            return v;
-        }
-        function onDown(e) {
-            dragging = true; stopIdle(); cancelAnimationFrame(raf);
-            render(valFromEvent(e)); e.preventDefault();
-        }
-        function onMove(e) { if (!dragging) return; render(valFromEvent(e)); e.preventDefault(); }
-        function onUp() {
-            if (!dragging) return; dragging = false;
-            tween(CENTER, 700, startIdle);                   // bırakınca merkeze otur (kalibre)
-        }
-        glass.addEventListener('mousedown', onDown);
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-        glass.addEventListener('touchstart', onDown, { passive: false });
-        window.addEventListener('touchmove', onMove, { passive: false });
-        window.addEventListener('touchend', onUp);
-
-        render(0);
-        setTimeout(calibrateSweep, 260);
+        // ── İlk render ──
+        needles.forEach(place); renderArc();
+        evalFields();   // "beni hatırla" alanları önceden doldurmuşsa ibreler ona göre başlar
     })();
 </script>
 </body>

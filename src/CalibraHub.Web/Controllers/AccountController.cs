@@ -198,7 +198,7 @@ public sealed class AccountController : Controller
         var (ok, strengthError) = CalibraHub.Application.Security.PasswordHasher.ValidateStrength(input.NewPassword);
         if (!ok)
         {
-            ModelState.AddModelError(nameof(input.NewPassword), strengthError ?? "�?ifre yeterince güçlü değil.");
+            ModelState.AddModelError(nameof(input.NewPassword), strengthError ?? "Şifre yeterince güçlü değil.");
             return View(input);
         }
 
@@ -299,8 +299,8 @@ public sealed class AccountController : Controller
 
             var remaining = CalibraHub.Application.Services.LoginLockoutTracker.MaxAttempts - count;
             var credMsg = remaining > 0
-                ? $"�?irket, e-posta veya şifre hatalı. ({remaining} deneme hakkı kaldı)"
-                : "�?irket, e-posta veya şifre hatalı.";
+                ? $"Şirket, e-posta veya şifre hatalı. ({remaining} deneme hakkı kaldı)"
+                : "Şirket, e-posta veya şifre hatalı.";
             if (isAjax)
                 return Json(new { ok = false, error = "credentials", message = credMsg });
             ModelState.AddModelError(string.Empty, credMsg);
