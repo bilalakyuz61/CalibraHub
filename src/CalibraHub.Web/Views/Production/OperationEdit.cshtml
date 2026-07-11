@@ -231,11 +231,19 @@
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') oeCloseModal();
-        // F5 → sayfayı yenileme yerine Kaydet
+        // F5 → Kaydet, F7 → Sil, F8 → Yeni Kayıt (tarayıcı varsayılanları engellenir)
         if (e.key === 'F5' || e.keyCode === 116) {
             e.preventDefault();
             var sb = document.getElementById('oe-save');
             if (sb) sb.click();
+        } else if (e.key === 'F7' || e.keyCode === 118) {
+            e.preventDefault();
+            var db = document.getElementById('oe-delete');
+            if (db) db.click();
+        } else if (e.key === 'F8' || e.keyCode === 119) {
+            e.preventDefault();
+            var nb = document.getElementById('ptBtnNew');
+            if (nb) nb.click();
         }
     });
 })();
