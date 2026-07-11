@@ -806,6 +806,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             foreach (var (it, loc) in decreases)
                 await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, it, loc, DateTime.Today, ct);
 
+            // 5) Seri çözümleme (yalnız satış çıkışı): siparişte rezerve/seçili seriler → Issued,
+            //    irsaliye satırına bağlanır. Satın alma (giriş) tarafında seri kabul ayrı akış (kapsamda değil).
+            if (!isPurchase)
+                await ResolveOrderSerialsToIssuedAsync(conn, tx, docId, ct);
+
             await tx.CommitAsync(ct);
             return (docId, docNo);
         }
@@ -845,6 +850,158 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         cmd.Parameters.AddWithValue("@Year", year);
         var seq = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
         return $"{prefix}-{year}-{seq:D4}";
+    }
+
+    // ── Sipariş seri rezervasyonu (2026-07-11) ────────────────────────────────
+    // Sipariş satırlarına seçilen seriler DocumentLineSerial ile bağlanır. reserve=true
+    // (ORDER_SERIAL_RESERVATION + stok rez. açık) ise InStock(1)→Reserved(4) + ReservedForDocumentId.
+    // "Reset + rebuild" deseni: her kayıtta önce belgenin tüm seri bağları/rezervasyonları
+    // sıfırlanır, sonra payload'dan yeniden kurulur — diff bug'ı ve orphan rezervasyon yok.
+    public async Task<(bool Ok, string? Error)> ReconcileOrderSerialsAsync(
+        int documentId,
+        IReadOnlyList<(int LineId, int ItemId, IReadOnlyList<string> Serials)> lineSerials,
+        bool reserve, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // 1) Reset: bu belgenin satır-seri bağlarını sil + rezervasyonlarını serbest bırak
+            await using (var reset = conn.CreateCommand())
+            {
+                reset.Transaction = tx;
+                reset.CommandText = $"""
+                    DELETE dls FROM {T("DocumentLineSerial")} dls
+                      INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = dls.[DocumentLineId]
+                      WHERE dl.[DocumentId] = @Doc;
+                    UPDATE {T("ItemSerial")} SET [Status] = 1, [ReservedForDocumentId] = NULL, [Updated] = SYSUTCDATETIME()
+                      WHERE [ReservedForDocumentId] = @Doc AND [Status] = 4;
+                    """;
+                reset.Parameters.AddWithValue("@Doc", documentId);
+                await reset.ExecuteNonQueryAsync(ct);
+            }
+
+            // 2) Payload'dan yeniden bağla (+ rezerve)
+            foreach (var (lineId, itemId, serials) in lineSerials)
+            {
+                if (serials == null || lineId <= 0 || itemId <= 0) continue;
+                foreach (var sn in serials.Where(x => !string.IsNullOrWhiteSpace(x))
+                                          .Select(x => x.Trim())
+                                          .Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    int serialId; byte status; int? resFor;
+                    await using (var find = conn.CreateCommand())
+                    {
+                        find.Transaction = tx;
+                        find.CommandText = $"SELECT TOP 1 [Id],[Status],[ReservedForDocumentId] FROM {T("ItemSerial")} WHERE [ItemId]=@It AND [SerialNo]=@Sn AND [IsActive]=1;";
+                        find.Parameters.AddWithValue("@It", itemId);
+                        find.Parameters.AddWithValue("@Sn", sn);
+                        await using var fr = await find.ExecuteReaderAsync(ct);
+                        if (!await fr.ReadAsync(ct))
+                        {
+                            await tx.RollbackAsync(ct);
+                            return (false, $"Seri bulunamadı: '{sn}'. Sipariş serisi stokta tanımlı olmalı (giriş fişiyle oluşur).");
+                        }
+                        serialId = fr.GetInt32(0);
+                        status   = fr.GetByte(1);
+                        resFor   = fr.IsDBNull(2) ? null : fr.GetInt32(2);
+                    }
+                    if (reserve)
+                    {
+                        if (status == 2)
+                        { await tx.RollbackAsync(ct); return (false, $"'{sn}' zaten çıkış yapılmış; rezerve edilemez."); }
+                        if (status == 4 && resFor.HasValue && resFor.Value != documentId)
+                        { await tx.RollbackAsync(ct); return (false, $"'{sn}' başka bir siparişte rezerve; bu siparişe eklenemez."); }
+                    }
+                    await using (var link = conn.CreateCommand())
+                    {
+                        link.Transaction = tx;
+                        link.CommandText = $"""
+                            IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
+                                INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+                            """;
+                        link.Parameters.AddWithValue("@Ln", lineId);
+                        link.Parameters.AddWithValue("@Sr", serialId);
+                        await link.ExecuteNonQueryAsync(ct);
+                    }
+                    if (reserve)
+                    {
+                        await using var upd = conn.CreateCommand();
+                        upd.Transaction = tx;
+                        upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=4, [ReservedForDocumentId]=@Doc, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr;";
+                        upd.Parameters.AddWithValue("@Doc", documentId);
+                        upd.Parameters.AddWithValue("@Sr", serialId);
+                        await upd.ExecuteNonQueryAsync(ct);
+                    }
+                }
+            }
+
+            await tx.CommitAsync(ct);
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            try { await tx.RollbackAsync(ct); } catch { }
+            return (false, "Seri rezervasyonu sırasında hata: " + ex.Message);
+        }
+    }
+
+    // Sipariş iptal/silmede rezerve serileri serbest bırak (Reserved→InStock). Bağlar kalır (iz).
+    public async Task ReleaseOrderSerialReservationsAsync(int documentId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=1, [ReservedForDocumentId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [ReservedForDocumentId]=@Doc AND [Status]=4;";
+        cmd.Parameters.AddWithValue("@Doc", documentId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // İrsaliyenin (satış çıkış) her satırı için kaynak sipariş satırının serilerini
+    // Issued(2) yapar + irsaliye satırına bağlar (InStock/Reserved kabul; Issued atlanır).
+    private async Task ResolveOrderSerialsToIssuedAsync(SqlConnection conn, SqlTransaction tx, int irsaliyeDocId, CancellationToken ct)
+    {
+        var pairs = new List<(int IrsLineId, int SrcLineId)>();
+        await using (var sel = conn.CreateCommand())
+        {
+            sel.Transaction = tx;
+            sel.CommandText = $"SELECT [Id],[SourceLineId] FROM {T("DocumentLine")} WHERE [DocumentId]=@Doc AND [SourceLineId] IS NOT NULL;";
+            sel.Parameters.AddWithValue("@Doc", irsaliyeDocId);
+            await using var r = await sel.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) pairs.Add((r.GetInt32(0), r.GetInt32(1)));
+        }
+        foreach (var (irsLine, srcLine) in pairs)
+        {
+            var serialIds = new List<int>();
+            await using (var s2 = conn.CreateCommand())
+            {
+                s2.Transaction = tx;
+                s2.CommandText = $"SELECT [SerialId] FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln;";
+                s2.Parameters.AddWithValue("@Ln", srcLine);
+                await using var r2 = await s2.ExecuteReaderAsync(ct);
+                while (await r2.ReadAsync(ct)) serialIds.Add(r2.GetInt32(0));
+            }
+            foreach (var sid in serialIds)
+            {
+                await using (var upd = conn.CreateCommand())
+                {
+                    upd.Transaction = tx;
+                    upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr AND [Status] IN (1,4);";
+                    upd.Parameters.AddWithValue("@Sr", sid);
+                    await upd.ExecuteNonQueryAsync(ct);
+                }
+                await using (var link = conn.CreateCommand())
+                {
+                    link.Transaction = tx;
+                    link.CommandText = $"""
+                        IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
+                            INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+                        """;
+                    link.Parameters.AddWithValue("@Ln", irsLine);
+                    link.Parameters.AddWithValue("@Sr", sid);
+                    await link.ExecuteNonQueryAsync(ct);
+                }
+            }
+        }
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)

@@ -400,6 +400,19 @@ export default function RoutingTree({ config }) {
     try { var d = await apiGet(urls.refresh); setRoutings(d.routings || []) } catch { /* sessiz */ }
   }, [urls.refresh])
 
+  // F6 → Yenile (standart SmartBoard listeleriyle tutarli in-place refresh)
+  useEffect(function () {
+    function onKey(e) {
+      if (e.defaultPrevented) return
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      if (e.key !== 'F6' && e.keyCode !== 117) return
+      e.preventDefault()
+      refresh()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [refresh])
+
   // ── C-Grid standart Excel export (rota seviyesi) ────────────────────────
   var handleExportExcel = useCallback(async () => {
     if (exporting) return

@@ -36,6 +36,8 @@ public sealed class SalesController : Controller
     private readonly IIntegrationOnSaveDispatcher _onSaveDispatcher;
     private readonly IApprovalFlowService _approvalFlowService;
     private readonly IPermissionService _permService;
+    private readonly IStockDocRepository _stockDocRepo;
+    private readonly ICompanyParameterService _companyParams;
     private readonly ILogger<SalesController> _logger;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
@@ -68,6 +70,8 @@ public sealed class SalesController : Controller
         IIntegrationOnSaveDispatcher onSaveDispatcher,
         IApprovalFlowService approvalFlowService,
         IPermissionService permService,
+        IStockDocRepository stockDocRepo,
+        ICompanyParameterService companyParams,
         ILogger<SalesController> logger,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
@@ -87,6 +91,8 @@ public sealed class SalesController : Controller
         _onSaveDispatcher = onSaveDispatcher;
         _approvalFlowService = approvalFlowService;
         _permService = permService;
+        _stockDocRepo = stockDocRepo;
+        _companyParams = companyParams;
         _logger = logger;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
@@ -1373,6 +1379,34 @@ public sealed class SalesController : Controller
                 }
             }
 
+            // ── Sipariş seri rezervasyonu (satis_siparisi) ────────────────────────
+            // Kaydedilen satırlara seçilen serileri bağla; ORDER_SERIAL_RESERVATION + stok
+            // rezervasyonu açıksa InStock→Reserved (hiyerarşi). Reconcile her zaman çağrılır —
+            // payload boşsa bile belgenin eski seri bağlarını/rezervasyonunu temizler (reset+rebuild).
+            if (quote != null && request.DocumentTypeId.HasValue)
+            {
+                var _serDt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
+                if (string.Equals(_serDt?.Code, "satis_siparisi", StringComparison.OrdinalIgnoreCase))
+                {
+                    var stockRes = await _companyParams.GetBoolAsync(
+                        StockParameters.FormCode, StockParameters.SalesOrderAffectsStockKey, ct) ?? false;
+                    var serialRes = stockRes && (await _companyParams.GetBoolAsync(
+                        StockParameters.FormCode, StockParameters.OrderSerialReservationKey, ct) ?? false);
+
+                    var reqLines = request.Lines ?? new List<SaveDocumentLineRequest>();
+                    var ordered  = savedLines.OrderBy(l => l.LineNo).ToList();
+                    var lineSerials = new List<(int, int, IReadOnlyList<string>)>();
+                    for (int i = 0; i < ordered.Count && i < reqLines.Count; i++)
+                        if (reqLines[i].Serials is { Count: > 0 } sers && ordered[i].ItemId > 0)
+                            lineSerials.Add((ordered[i].Id, ordered[i].ItemId, sers));
+
+                    var (serOk, serErr) = await _stockDocRepo.ReconcileOrderSerialsAsync(
+                        quote.Id, lineSerials, serialRes, ct);
+                    if (!serOk)
+                        return Json(new { success = false, message = serErr, quote });
+                }
+            }
+
             // Otomatik Save trigger'li entegrasyonlari arka planda fire et (fire-and-forget).
             // Sales document hem QUOTE hem ORDER olabilir + hem NEW hem EDIT form code'lariyla
             // wizard'da tanimlanmis olabilir — tum 4 varyanti tara. DB'de UNIQUE INDEX
@@ -1415,6 +1449,8 @@ public sealed class SalesController : Controller
         }
         var (_dOk, _dErr) = await _quoteService.DeleteQuoteAsync(body.Id, ct);
         if (!_dOk) return Json(new { success = false, message = _dErr });
+        // Silinen belgenin rezerve serileri (varsa) stoğa geri döner (idempotent).
+        try { await _stockDocRepo.ReleaseOrderSerialReservationsAsync(body.Id, ct); } catch { }
         return Json(new { success = true });
     }
 
@@ -1443,6 +1479,7 @@ public sealed class SalesController : Controller
             }
             var (_djOk, _djErr) = await _quoteService.DeleteQuoteAsync(id, ct);
             if (!_djOk) return Json(new { success = false, message = _djErr });
+            try { await _stockDocRepo.ReleaseOrderSerialReservationsAsync(id, ct); } catch { }
             return Json(new { success = true });
         }
         catch (Exception ex)
@@ -1456,6 +1493,10 @@ public sealed class SalesController : Controller
     {
         var (success, error) = await _quoteService.ChangeStatusAsync(body.Id, body.Status, ct);
         if (!success) return Json(new { success = false, message = error });
+        // İptal/Red durumunda rezerve seriler serbest bırakılır (idempotent).
+        if (string.Equals(body.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(body.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+            try { await _stockDocRepo.ReleaseOrderSerialReservationsAsync(body.Id, ct); } catch { }
         return Json(new { success = true });
     }
 

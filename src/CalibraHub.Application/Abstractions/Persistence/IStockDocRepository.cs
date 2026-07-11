@@ -30,6 +30,21 @@ public interface IStockDocRepository
     Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(int purchaseOrderId, int? createdById, CancellationToken ct);
 
     /// <summary>
+    /// Sipariş seri rezervasyonu (2026-07-11): sipariş satırlarına seçilen serileri DocumentLineSerial
+    /// ile bağlar. reserve=true (ORDER_SERIAL_RESERVATION + stok rez. açık) ise InStock→Reserved(4) +
+    /// ReservedForDocumentId. "Reset+rebuild": her kayıtta belgenin bağları/rezervasyonları sıfırlanıp
+    /// payload'dan yeniden kurulur (orphan/diff bug yok). Seri stokta yoksa / başka siparişte rezerve
+    /// ise hata döner (Ok=false, tx geri alınır).
+    /// </summary>
+    Task<(bool Ok, string? Error)> ReconcileOrderSerialsAsync(
+        int documentId,
+        IReadOnlyList<(int LineId, int ItemId, IReadOnlyList<string> Serials)> lineSerials,
+        bool reserve, CancellationToken ct);
+
+    /// <summary>Sipariş iptal/silmede rezerve serileri serbest bırakır (Reserved→InStock). Bağlar iz olarak kalır.</summary>
+    Task ReleaseOrderSerialReservationsAsync(int documentId, CancellationToken ct);
+
+    /// <summary>
     /// Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) — tek transaction'da: iş emrinin
     /// belgesine MovementType=1 (çıkış) satırları yazar; lot/seri kurallarını stok çıkışıyla
     /// birebir uygular (lot-takipli → mevcut lot zorunlu, seri-takipli → stoktaki InStock

@@ -7693,6 +7693,17 @@ END;";
                 ALTER TABLE [{s}].[ItemSerial] ADD CONSTRAINT [CK_ItemSerial_Status] CHECK ([Status] BETWEEN 1 AND 4);
             END;
 
+            -- 2026-07-11: Sipariş seri rezervasyonu — hangi belge (sipariş) rezerve etti.
+            -- Satır cascade-delete edilse bile rezervasyon bu kolonla belge bazında serbest
+            -- bırakılabilir (orphan Reserved kalmaz). NULL = rezerve değil.
+            IF COL_LENGTH(N'[{s}].[ItemSerial]', N'ReservedForDocumentId') IS NULL
+                ALTER TABLE [{s}].[ItemSerial] ADD [ReservedForDocumentId] INT NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ItemSerial_ReservedForDocument'
+                           AND object_id = OBJECT_ID(N'[{s}].[ItemSerial]'))
+               AND COL_LENGTH(N'[{s}].[ItemSerial]', N'ReservedForDocumentId') IS NOT NULL
+                CREATE INDEX [IX_ItemSerial_ReservedForDocument] ON [{s}].[ItemSerial]([ReservedForDocumentId])
+                    WHERE [ReservedForDocumentId] IS NOT NULL;
+
             IF OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[DocumentLineSerial]
@@ -11641,6 +11652,9 @@ END;";
             ("COMPANY_SETTINGS",    "Şirket Ayarları",                  "Ayarlar",              null,                       900,  false), // ayarlar sayfası, widget hedefi değil
             ("PERMISSION_MGMT",     "Yetki Yönetimi",                   "Ayarlar",              null,                       920,  false), // ayarlar sayfası
             ("DATA_VISIBILITY",     "Veri Görünürlük Kuralları",        "Ayarlar",              null,                       925,  false), // satır bazlı veri kısıtlama yönetim sayfası
+            // 2026-07-11 — SetupDefinitions'tan ayrılan iş ekranları grantable form olarak seed edilir:
+            ("USER_MANAGEMENT",     "Kullanıcı Tanımlamaları",          "Ayarlar",              null,                       915,  false), // CompanyUser + AdminUserJson (admin erişir; SystemAdmin rol ataması server-side korumalı)
+            ("VIEW_SETTINGS",       "Alan Rehberi",                     "Ayarlar",              null,                       955,  false), // AdminController.ViewSettings + WidgetsController (/api/widgets); admin erişir
             // INTEGRATION_EVENTS seed'den kaldırıldı (2026-06-11): /api/integration-events dahili API'dir, UI menüsü yok.
             // Menüde "Entegrasyon Wizard" maddesini açmak için INTEGRATIONS kodu kullanılır.
             // INTEGRATION_EVENTS PermissionDef satırları EnsurePermissionTablesAsync migration bloğunda pasifleştirilir.
@@ -11650,7 +11664,7 @@ END;";
             // "Alan Rehberi": AdminController.ViewSettings ve CompanyUserController her ikisi de
             // [PermissionScope("SETUP_DEFINITIONS")] kullanır. Yetki ekranında "Alan Rehberi" görünmesi,
             // solmenüdeki aynı isimli menü maddesini yetkilendiren form'u doğru tanımlar.
-            ("SETUP_DEFINITIONS",   "Alan Rehberi",                     "Ayarlar",              null,                       960,  false), // yönetim sayfası
+            ("SETUP_DEFINITIONS",   "Sistem Ayarları",                  "Ayarlar",              null,                       960,  false), // SystemAdmin-only sistem/dev bucket (Alan Rehberi → VIEW_SETTINGS'e taşındı 2026-07-11)
             ("APPROVAL_FLOWS",      "Onay Akışları",                    "Ayarlar",              null,                       970,  false), // yönetim sayfası
             ("DECIMAL_SETTINGS",    "Ondalık Ayarları",                 "Ayarlar",              null,                       905,  false), // form bazlı ondalık hane yönetim sayfası
             ("AUDIT_LOG",           "İşlem Logları",                    "Ayarlar",              null,                       985,  false), // dosya tabanlı audit trail izleme ekranı
@@ -17325,18 +17339,14 @@ END;";
                   AND [Label] LIKE N'Şirket ve Kullanıcı Tanımlamaları — %';
             END;
 
-            -- 2026-06-10: VIEW_SETTINGS hicbir controller tarafindan kullanilmiyor; SETUP_DEFINITIONS
-            -- zaten ayni ekrani (AdminController.ViewSettings) koruyor. Duplicate girisi pasifleştir.
+            -- 2026-07-11: VIEW_SETTINGS yeniden aktif. AdminController.ViewSettings + WidgetsController
+            -- (/api/widgets) artık [PermissionScope(VIEW_SETTINGS)] kullanıyor (Alan Rehberi menusu). Eski
+            -- 2026-06-10 pasifleştirmesi kaldırıldı; mevcut DB'lerde Forms satırı yeniden aktifleştirilir,
+            -- PermissionDef'ler discovery (PermissionDefDiscoveryService) tarafından yeniden üretilir.
             IF OBJECT_ID(N'[{s}].[Forms]', N'U') IS NOT NULL
             BEGIN
-                UPDATE [{s}].[Forms] SET [IsActive] = 0
-                WHERE [FormCode] = N'VIEW_SETTINGS' AND [IsActive] = 1;
-            END;
-            IF OBJECT_ID(N'[{s}].[PermissionDef]', N'U') IS NOT NULL
-            BEGIN
-                UPDATE [{s}].[PermissionDef]
-                SET [IsActive] = 0, [Updated] = SYSUTCDATETIME()
-                WHERE [FormCode] = N'VIEW_SETTINGS' AND [IsActive] = 1;
+                UPDATE [{s}].[Forms] SET [IsActive] = 1
+                WHERE [FormCode] = N'VIEW_SETTINGS' AND [IsActive] = 0;
             END;
 
             -- 2026-06-11: INTEGRATION_EVENTS pasifleştirildi. /api/integration-events dahili API'dir,

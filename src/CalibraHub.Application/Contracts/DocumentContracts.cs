@@ -111,7 +111,13 @@ public sealed record SaveDocumentLineRequest(
     /// NULL ise normal bir yeni satir / duzenleme. Dolu ise yeni satir INSERT'ine
     /// revised_from_id kolonuna yazilir; zincir geriye takip edilebilir.
     /// </summary>
-    int? RevisedFromId = null);
+    int? RevisedFromId = null,
+    /// <summary>
+    /// Seri-takipli kalemde siparise secilen seri numaralari (pick modu). Server-side
+    /// kayit sonrasi DocumentLineSerial'e baglanir; ORDER_SERIAL_RESERVATION + stok rez.
+    /// acikken InStock→Reserved yapilir (ReconcileOrderSerialsAsync).
+    /// </summary>
+    IReadOnlyList<string>? Serials = null);
 
 public sealed record SaveQuoteLineDetailItem(
     string FeatureName,

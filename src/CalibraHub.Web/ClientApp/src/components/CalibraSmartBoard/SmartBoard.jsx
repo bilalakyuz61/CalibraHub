@@ -381,6 +381,19 @@ export default function SmartBoard(props) {
     }
   }, [actions, handleActionClick])
 
+  /* ── F6 — board yenile (Yenile butonuyla ayni in-place refresh) ── */
+  useEffect(function () {
+    function onKey(e) {
+      if (e.defaultPrevented) return
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      if (e.key !== 'F6' && e.keyCode !== 117) return
+      e.preventDefault()
+      handleManualRefresh()
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [handleManualRefresh])
+
   var handleConfigSaved = useCallback(function (newConfig) {
     setUserConfig(newConfig)
   }, [])
