@@ -747,15 +747,15 @@ public sealed class WarehouseController : Controller
         try
         {
             var (id, docNo) = await _stockDocRepo.DeliverSalesOrderAsync(orderId, CurrentUserId(), ct);
-            // Belge soyağacı: teslimat fişi (depo_cikis) ← satış siparişi.
-            // Repo ParentDocumentId set ediyor; İlişkili Belgeler paneli DocumentSource okur.
+            // Belge soyağacı: satış irsaliyesi ← satış siparişi.
+            // Repo ParentDocumentId + kalem SourceLineId set ediyor; İlişkili Belgeler paneli DocumentSource okur.
             await _docSourceRepo.EnsureSchemaAsync(ct);
             await _docSourceRepo.AddAsync(id, orderId, ct);
-            // İşlem logu: teslimat çıkış fişi yeni bir depo_cikis belgesidir (kalem dökümüyle)
+            // İşlem logu: yeni bir satis_irsaliyesi belgesidir (kalem dökümüyle)
             IReadOnlyList<StockDocLineDto>? deliveredLines = null;
             try { deliveredLines = await _stockDocRepo.GetLinesAsync(id, ct); } catch { }
-            _audit.LogInsert("depo_cikis", id, docNo,
-                detail: $"Satış siparişi teslimatı (Sipariş #{orderId})",
+            _audit.LogInsert("satis_irsaliyesi", id, docNo,
+                detail: $"Satış siparişi teslimatı → irsaliye (Sipariş #{orderId})",
                 extraChanges: BuildInsertedLineSnapshot(deliveredLines));
             return Json(new { success = true, id, docNo });
         }
@@ -770,6 +770,35 @@ public sealed class WarehouseController : Controller
         catch (Exception)
         {
             return Json(new { success = false, message = "Teslimat sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>Satın alma siparişi mal kabulü — açık kalemler için Alış İrsaliyesi (stok girişi) yazar.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReceivePurchaseOrderJson(int orderId, CancellationToken ct)
+    {
+        if (orderId <= 0) return Json(new { success = false, message = "Sipariş bulunamadı." });
+        try
+        {
+            var (id, docNo) = await _stockDocRepo.ReceivePurchaseOrderAsync(orderId, CurrentUserId(), ct);
+            // Belge soyağacı: alış irsaliyesi ← satın alma siparişi.
+            await _docSourceRepo.EnsureSchemaAsync(ct);
+            await _docSourceRepo.AddAsync(id, orderId, ct);
+            IReadOnlyList<StockDocLineDto>? receivedLines = null;
+            try { receivedLines = await _stockDocRepo.GetLinesAsync(id, ct); } catch { }
+            _audit.LogInsert("alis_irsaliyesi", id, docNo,
+                detail: $"Satın alma siparişi mal kabulü → irsaliye (Sipariş #{orderId})",
+                extraChanges: BuildInsertedLineSnapshot(receivedLines));
+            return Json(new { success = true, id, docNo });
+        }
+        catch (InvalidOperationException ioex)
+        {
+            return Json(new { success = false, message = ioex.Message });
+        }
+        catch (Exception)
+        {
+            return Json(new { success = false, message = "Mal kabul sırasında bir hata oluştu." });
         }
     }
 

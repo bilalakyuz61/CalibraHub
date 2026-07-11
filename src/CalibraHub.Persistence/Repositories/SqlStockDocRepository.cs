@@ -611,46 +611,116 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         }
     }
 
-    public async Task<(int Id, string DocNo)> DeliverSalesOrderAsync(int salesOrderId, int? createdById, CancellationToken ct)
+    // Satış siparişi → Satış İrsaliyesi (çıkış). "Teslim Et" butonu buradan geçer.
+    public Task<(int Id, string DocNo)> DeliverSalesOrderAsync(int salesOrderId, int? createdById, CancellationToken ct)
+        => ConvertOrderToDeliveryAsync(salesOrderId, isPurchase: false, createdById, ct);
+
+    // Satın alma siparişi → Alış İrsaliyesi (giriş / mal kabul).
+    public Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(int purchaseOrderId, int? createdById, CancellationToken ct)
+        => ConvertOrderToDeliveryAsync(purchaseOrderId, isPurchase: true, createdById, ct);
+
+    /// <summary>
+    /// Sipariş → İrsaliye dönüşümü (STOK ETKİLİ). Açık sipariş kalemlerini ana birimde
+    /// hareket satırı olarak İRSALİYE belgesine yazar:
+    ///   • Satış (isPurchase=false): satis_irsaliyesi, MovementType=1 (Çıkış), FromLocationId set,
+    ///     NegativeBalanceGuard uygulanır.
+    ///   • Satın alma (isPurchase=true): alis_irsaliyesi, MovementType=2 (Giriş), LocationId set, guard yok.
+    /// Kalem bazında SourceLineId (sipariş satırı ↔ irsaliye satırı) + sipariş satırı
+    /// DeliveredQuantity=BaseQuantity ile "teslim edildi" işaretlenir (tekrar teslimat engellenir).
+    /// Belge başlığı ParentDocumentId=orderId + cari/tutar alanları siparişten kopyalanır;
+    /// DocumentSource soyağacı kenarını çağıran controller yazar. Tek transaction, hata → rollback.
+    /// </summary>
+    private async Task<(int Id, string DocNo)> ConvertOrderToDeliveryAsync(
+        int orderId, bool isPurchase, int? createdById, CancellationToken ct)
     {
-        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        var companyId    = _connectionFactory.ResolveCurrentCompanyId();
+        var expectedType = isPurchase ? "alis_siparisi"   : "satis_siparisi";
+        var targetType   = isPurchase ? "alis_irsaliyesi" : "satis_irsaliyesi";
+        var prefix       = isPurchase ? "AIR" : "SIR";
+        byte movementType = isPurchase ? (byte)2 : (byte)1; // Receipt(giriş) : Issue(çıkış)
+
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            // 0) Sipariş başlığı — tür doğrulama + cari/tutar alanları (irsaliyeye kopyalanır)
+            string? contactName = null, contactAddress = null; int? contactId = null, currencyId = null, salesRepId = null;
+            decimal subTotal = 0, discountRate = 0, discountAmount = 0, taxRate = 0, taxAmount = 0, grandTotal = 0;
+            await using (var h = conn.CreateCommand())
+            {
+                h.Transaction = tx;
+                h.CommandText = $"""
+                    SELECT dt.[Code], doc.[ContactId], doc.[ContactName], doc.[ContactAddress],
+                           doc.[CurrencyId], doc.[SalesRepId], doc.[SubTotal], doc.[DiscountRate],
+                           doc.[DiscountAmount], doc.[TaxRate], doc.[TaxAmount], doc.[GrandTotal]
+                    FROM {T("Document")} doc
+                    INNER JOIN {T("DocumentType")} dt ON dt.[Id] = doc.[DocumentTypeId]
+                    WHERE doc.[Id] = @OrderId AND doc.[CompanyId] = @Cid AND doc.[IsActive] = 1;
+                    """;
+                h.Parameters.AddWithValue("@OrderId", orderId);
+                h.Parameters.AddWithValue("@Cid", companyId);
+                await using var hr = await h.ExecuteReaderAsync(ct);
+                if (!await hr.ReadAsync(ct))
+                    throw new InvalidOperationException("Sipariş bulunamadı.");
+                var code = hr.GetString(0);
+                if (!string.Equals(code, expectedType, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        isPurchase ? "Bu belge satın alma siparişi değil; alış irsaliyesine dönüştürülemez."
+                                   : "Bu belge satış siparişi değil; satış irsaliyesine dönüştürülemez.");
+                contactId      = hr.IsDBNull(1) ? null : hr.GetInt32(1);
+                contactName    = hr.IsDBNull(2) ? null : hr.GetString(2);
+                contactAddress = hr.IsDBNull(3) ? null : hr.GetString(3);
+                currencyId     = hr.IsDBNull(4) ? null : hr.GetInt32(4);
+                salesRepId     = hr.IsDBNull(5) ? null : hr.GetInt32(5);
+                subTotal       = hr.IsDBNull(6) ? 0 : hr.GetDecimal(6);
+                discountRate   = hr.IsDBNull(7) ? 0 : hr.GetDecimal(7);
+                discountAmount = hr.IsDBNull(8) ? 0 : hr.GetDecimal(8);
+                taxRate        = hr.IsDBNull(9) ? 0 : hr.GetDecimal(9);
+                taxAmount      = hr.IsDBNull(10) ? 0 : hr.GetDecimal(10);
+                grandTotal     = hr.IsDBNull(11) ? 0 : hr.GetDecimal(11);
+            }
+
             // 1) Açık satırlar (ticari satır=MovementType NULL, açık = BaseQuantity - DeliveredQuantity > 0).
-            //    Depo = satır LocationId, yoksa siparişin belge LocationId'si.
-            var open = new List<(int LineId, int ItemId, int? CombId, int? LocId, decimal OpenBase)>();
+            //    Fiyat alanları irsaliye satırına kopyalanır (irsaliye değerli görünsün).
+            var open = new List<(int LineId, int ItemId, int? CombId, int? LocId, decimal OpenBase,
+                                 int? UnitId, decimal Qty, decimal UnitPrice, decimal DiscRate, decimal LineTotal)>();
             await using (var sel = conn.CreateCommand())
             {
                 sel.Transaction = tx;
                 sel.CommandText = $"""
                     SELECT dl.[Id], dl.[ItemId], dl.[CombinationId],
                            ISNULL(dl.[LocationId], doc.[LocationId]) AS LocId,
-                           (dl.[BaseQuantity] - dl.[DeliveredQuantity]) AS OpenBase
+                           (dl.[BaseQuantity] - dl.[DeliveredQuantity]) AS OpenBase,
+                           dl.[UnitId], dl.[Quantity], dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal]
                     FROM {T("DocumentLine")} dl
                     INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
                     WHERE dl.[DocumentId] = @OrderId AND doc.[CompanyId] = @Cid
                       AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
                       AND dl.[BaseQuantity] > dl.[DeliveredQuantity];
                     """;
-                sel.Parameters.AddWithValue("@OrderId", salesOrderId);
+                sel.Parameters.AddWithValue("@OrderId", orderId);
                 sel.Parameters.AddWithValue("@Cid", companyId);
                 await using var r = await sel.ExecuteReaderAsync(ct);
                 while (await r.ReadAsync(ct))
                     open.Add((r.GetInt32(0), r.GetInt32(1),
                              r.IsDBNull(2) ? null : r.GetInt32(2),
                              r.IsDBNull(3) ? null : r.GetInt32(3),
-                             r.GetDecimal(4)));
+                             r.GetDecimal(4),
+                             r.IsDBNull(5) ? null : r.GetInt32(5),
+                             r.GetDecimal(6), r.GetDecimal(7), r.GetDecimal(8), r.GetDecimal(9)));
             }
             if (open.Count == 0)
-                throw new InvalidOperationException("Teslim edilecek açık kalem yok.");
+                throw new InvalidOperationException(isPurchase
+                    ? "Mal kabul edilecek açık kalem yok (tümü zaten irsaliyeye dönüştürülmüş)."
+                    : "Teslim edilecek açık kalem yok (tümü zaten irsaliyeye dönüştürülmüş).");
             foreach (var o in open)
                 if (!o.LocId.HasValue)
-                    throw new InvalidOperationException("Bazı sipariş kalemlerinde depo tanımlı değil; teslimat için kalem veya belge deposu gerekli.");
+                    throw new InvalidOperationException("Bazı sipariş kalemlerinde depo tanımlı değil; irsaliye için kalem veya belge deposu gerekli.");
 
-            // 2) Yeni STOCK_OUT (depo_cikis) çıkış belgesi — siparişe ParentDocumentId ile bağlı
-            var docNo = await ResolveDocNoAsync(conn, tx, "STOCK_OUT", createdById, DateTime.Today, ct);
+            // 2) Yeni İRSALİYE belgesi — siparişe ParentDocumentId ile bağlı, cari/tutarlar kopyalı
+            var docNo = await ResolveDocNoByCodeAsync(conn, tx, targetType, prefix, createdById, DateTime.Today, ct);
+            var notes = isPurchase ? $"Satın alma siparişi mal kabulü (#{orderId})"
+                                   : $"Satış siparişi teslimatı (#{orderId})";
             int docId;
             await using (var ins = conn.CreateCommand())
             {
@@ -658,22 +728,38 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.CommandText = $"""
                     INSERT INTO {T("Document")}
                         ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
+                         [ContactId],[ContactName],[ContactAddress],[CurrencyId],[SalesRepId],
+                         [SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
                          [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
                     SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, NULL,
+                           @ContactId, @ContactName, @ContactAddress, @CurrencyId, @SalesRepId,
+                           @SubTotal, @DiscountRate, @DiscountAmount, @TaxRate, @TaxAmount, @GrandTotal,
                            @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @OrderId
-                    FROM {T("DocumentType")} dt WHERE dt.[Code] = N'depo_cikis';
+                    FROM {T("DocumentType")} dt WHERE dt.[Code] = @TargetType;
                     SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
                 ins.Parameters.AddWithValue("@CompanyId", companyId);
                 ins.Parameters.AddWithValue("@DocNo", docNo);
                 ins.Parameters.AddWithValue("@DocDate", DateTime.Today);
-                ins.Parameters.AddWithValue("@Notes", $"Satış siparişi teslimatı (#{salesOrderId})");
+                ins.Parameters.AddWithValue("@ContactId", (object?)contactId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@ContactName", (object?)contactName ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@ContactAddress", (object?)contactAddress ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@CurrencyId", (object?)currencyId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@SalesRepId", (object?)salesRepId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@SubTotal", subTotal);
+                ins.Parameters.AddWithValue("@DiscountRate", discountRate);
+                ins.Parameters.AddWithValue("@DiscountAmount", discountAmount);
+                ins.Parameters.AddWithValue("@TaxRate", taxRate);
+                ins.Parameters.AddWithValue("@TaxAmount", taxAmount);
+                ins.Parameters.AddWithValue("@GrandTotal", grandTotal);
+                ins.Parameters.AddWithValue("@Notes", notes);
                 ins.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
-                ins.Parameters.AddWithValue("@OrderId", salesOrderId);
+                ins.Parameters.AddWithValue("@OrderId", orderId);
+                ins.Parameters.AddWithValue("@TargetType", targetType);
                 docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
 
-            // 3) Her açık satır → ana birimde çıkış hareketi (MovementType=1) + sipariş satırı DeliveredQuantity=BaseQuantity
+            // 3) Her açık satır → ana birimde hareket satırı + sipariş satırı DeliveredQuantity=BaseQuantity
             var lineNo = 1;
             var decreases = new HashSet<(int ItemId, int LocId)>();
             foreach (var o in open)
@@ -681,20 +767,30 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 await using (var li = conn.CreateCommand())
                 {
                     li.Transaction = tx;
+                    // Satış=çıkış → FromLocationId; Satın alma=giriş → LocationId. MovementType yönü belirler.
                     li.CommandText = $"""
                         INSERT INTO {T("DocumentLine")}
                             ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                             [CombinationId],[FromLocationId],[LocationId],[MovementType],[Notes])
+                             [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
                         VALUES
-                            (@DocId,@LineNo,@ItemId,NULL,@Qty,@Qty,0,0,0,@CombId,@FromLoc,NULL,1,@Notes);
+                            (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
+                             @CombId,@FromLoc,@ToLoc,@Mt,@SourceLineId,@Notes);
                         """;
                     li.Parameters.AddWithValue("@DocId", docId);
                     li.Parameters.AddWithValue("@LineNo", lineNo++);
                     li.Parameters.AddWithValue("@ItemId", o.ItemId);
-                    li.Parameters.AddWithValue("@Qty", o.OpenBase);
+                    li.Parameters.AddWithValue("@UnitId", (object?)o.UnitId ?? DBNull.Value);
+                    li.Parameters.AddWithValue("@Qty", o.Qty);
+                    li.Parameters.AddWithValue("@BaseQty", o.OpenBase);
+                    li.Parameters.AddWithValue("@UnitPrice", o.UnitPrice);
+                    li.Parameters.AddWithValue("@DiscRate", o.DiscRate);
+                    li.Parameters.AddWithValue("@LineTotal", o.LineTotal);
                     li.Parameters.AddWithValue("@CombId", (object?)o.CombId ?? DBNull.Value);
-                    li.Parameters.AddWithValue("@FromLoc", o.LocId!.Value);
-                    li.Parameters.AddWithValue("@Notes", $"Sipariş #{salesOrderId} teslimat");
+                    li.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : o.LocId!.Value);
+                    li.Parameters.AddWithValue("@ToLoc",   isPurchase ? o.LocId!.Value : (object)DBNull.Value);
+                    li.Parameters.AddWithValue("@Mt", movementType);
+                    li.Parameters.AddWithValue("@SourceLineId", o.LineId);
+                    li.Parameters.AddWithValue("@Notes", $"Sipariş #{orderId} → irsaliye");
                     await li.ExecuteNonQueryAsync(ct);
                 }
                 await using (var upd = conn.CreateCommand())
@@ -704,10 +800,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     upd.Parameters.AddWithValue("@LineId", o.LineId);
                     await upd.ExecuteNonQueryAsync(ct);
                 }
-                decreases.Add((o.ItemId, o.LocId.Value));
+                if (!isPurchase) decreases.Add((o.ItemId, o.LocId!.Value));
             }
 
-            // 4) Eksi bakiye kontrolü (fiziksel çıkış) — yeni satırlar + serbest kalan rezervasyon tx içinde
+            // 4) Eksi bakiye kontrolü — yalnızca çıkış (satış irsaliyesi). Giriş bakiyeyi artırır.
             foreach (var (it, loc) in decreases)
                 await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, it, loc, DateTime.Today, ct);
 
@@ -719,6 +815,37 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    /// <summary>Belge numarasını DocumentType.Code üzerinden çözer (kural motoru → yoksa PREFIX-YYYY-NNNN).</summary>
+    private async Task<string> ResolveDocNoByCodeAsync(
+        SqlConnection conn, SqlTransaction tx, string typeCode, string prefix, int? createdById, DateTime docDate, CancellationToken ct)
+    {
+        await using (var typeCmd = conn.CreateCommand())
+        {
+            typeCmd.Transaction = tx;
+            typeCmd.CommandText = $"SELECT [Id] FROM {T("DocumentType")} WHERE [Code] = @Code;";
+            typeCmd.Parameters.AddWithValue("@Code", typeCode);
+            var typeIdObj = await typeCmd.ExecuteScalarAsync(ct);
+            if (typeIdObj is int typeId)
+            {
+                var ruleNo = await _numberService.GenerateNextAsync(
+                    new DocumentNumberContext(typeId, null, null, createdById, null, docDate), ct);
+                if (!string.IsNullOrWhiteSpace(ruleNo)) return ruleNo;
+            }
+        }
+        var year = DateTime.Now.Year;
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([DocumentNumber], LEN(@Prefix) + 7, 10) AS INT)), 0) + 1
+            FROM {T("Document")}
+            WHERE [DocumentNumber] LIKE @Prefix + '-' + CAST(@Year AS NVARCHAR(4)) + '-%';
+            """;
+        cmd.Parameters.AddWithValue("@Prefix", prefix);
+        cmd.Parameters.AddWithValue("@Year", year);
+        var seq = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        return $"{prefix}-{year}-{seq:D4}";
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)

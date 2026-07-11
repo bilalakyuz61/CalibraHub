@@ -11,13 +11,23 @@ public interface IStockDocRepository
     Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct);
 
     /// <summary>
-    /// Satış siparişi teslimatı (Faz 2 rezervasyon): siparişin açık (teslim edilmemiş) kalemleri
-    /// için tek transaction'da fiziksel çıkış (STOCK_OUT/depo_cikis, MovementType=1) yazar,
-    /// sipariş satırlarının DeliveredQuantity'sini BaseQuantity'ye çeker (açık miktar → 0, rezervasyon
-    /// serbest) ve eksi bakiye kontrolünü uygular. Yetersiz stokta NegativeBalanceException fırlatır
-    /// (tx geri alınır). Çıkış belgesi siparişe ParentDocumentId ile bağlanır.
+    /// Satış siparişi → Satış İrsaliyesi (stok etkili teslimat): siparişin açık (teslim edilmemiş)
+    /// kalemleri için tek transaction'da satis_irsaliyesi belgesi + ana birimde çıkış satırları
+    /// (MovementType=1, FromLocationId) yazar, sipariş satırlarının DeliveredQuantity'sini
+    /// BaseQuantity'ye çeker (açık miktar → 0) ve eksi bakiye kontrolünü uygular. Yetersiz stokta
+    /// NegativeBalanceException fırlatır (tx geri alınır). İrsaliye siparişe ParentDocumentId +
+    /// kalem SourceLineId ile bağlanır; cari/tutar alanları siparişten kopyalanır.
     /// </summary>
     Task<(int Id, string DocNo)> DeliverSalesOrderAsync(int salesOrderId, int? createdById, CancellationToken ct);
+
+    /// <summary>
+    /// Satın alma siparişi → Alış İrsaliyesi (stok etkili mal kabul): açık sipariş kalemleri için
+    /// alis_irsaliyesi belgesi + ana birimde giriş satırları (MovementType=2, LocationId) yazar,
+    /// sipariş satırlarının DeliveredQuantity'sini BaseQuantity'ye çeker. Giriş bakiyeyi artırdığı
+    /// için eksi bakiye kontrolü uygulanmaz. İrsaliye siparişe ParentDocumentId + kalem SourceLineId
+    /// ile bağlanır; cari/tutar alanları siparişten kopyalanır.
+    /// </summary>
+    Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(int purchaseOrderId, int? createdById, CancellationToken ct);
 
     /// <summary>
     /// Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) — tek transaction'da: iş emrinin

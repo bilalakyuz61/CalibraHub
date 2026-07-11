@@ -43,11 +43,13 @@ public static class StockParameters
     /// </summary>
     public static readonly IReadOnlyList<(string Code, string Label, string Description)> MovementCapableTypes =
     [
-        ("depo_giris",    "Depo Girişi",    "Doğrudan stok giriş fişleri (+)"),
-        ("depo_cikis",    "Depo Çıkışı",    "Ambar çıkış / sarf fişleri (−). İhtiyaç karşılama çıkışları da bu türdendir."),
-        ("depo_transfer", "Depo Transferi", "Lokasyonlar arası transfer hareketleri (+/−)"),
-        ("sayim",         "Sayım Fişi",     "Envanter sayım farkları (+/−)"),
-        ("is_emri",       "İş Emri",        "Üretim malzeme sarfı (−) ve üretim çıktısı (+)"),
+        ("depo_giris",      "Depo Girişi",      "Doğrudan stok giriş fişleri (+)"),
+        ("depo_cikis",      "Depo Çıkışı",      "Ambar çıkış / sarf fişleri (−). İhtiyaç karşılama çıkışları da bu türdendir."),
+        ("depo_transfer",   "Depo Transferi",   "Lokasyonlar arası transfer hareketleri (+/−)"),
+        ("sayim",           "Sayım Fişi",       "Envanter sayım farkları (+/−)"),
+        ("is_emri",         "İş Emri",          "Üretim malzeme sarfı (−) ve üretim çıktısı (+)"),
+        ("satis_irsaliyesi","Satış İrsaliyesi", "Müşteriye sevk — stok çıkışı (−). Siparişten teslimatla üretilir."),
+        ("alis_irsaliyesi", "Alış İrsaliyesi",  "Tedarikçiden mal kabul — stok girişi (+). Siparişten mal kabulle üretilir."),
     ];
 }
 
