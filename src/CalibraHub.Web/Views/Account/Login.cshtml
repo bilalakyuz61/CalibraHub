@@ -229,7 +229,7 @@
         .cal-dial.is-cal  .cal-dial-readout { color: #059669; } body.app-theme-dark .cal-dial.is-cal  .cal-dial-readout { color: #34d399; }
         .cal-dial.is-fail .cal-dial-readout { color: #e11d48; } body.app-theme-dark .cal-dial.is-fail .cal-dial-readout { color: #fb7185; }
         .cal-dial-status {
-            margin-top: 10px; text-align: center; font-size: .86rem; font-weight: 600;
+            margin-top: 16px; text-align: center; font-size: .86rem; font-weight: 600;
             min-height: 1.2em; white-space: nowrap; color: #64748b; transition: color .3s;
         }
         body.app-theme-dark .cal-dial-status { color: #94a3b8; }
@@ -551,7 +551,9 @@
                     } else if (json.error === "validation") {
                         if (window.CalibraLoginDial) window.CalibraLoginDial.fail('Alanları doldurun');
                     } else {   // credentials
-                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail();
+                        var rem = (typeof json.remaining === "number") ? json.remaining : -1;
+                        var det = rem > 0 ? ("Şifreniz hatalı, " + rem + " deneme kaldı") : "Şifreniz hatalı";
+                        if (window.CalibraLoginDial) window.CalibraLoginDial.fail("Kalibre edilemedi", det);
                         if (pwInput) { pwInput.value = ""; pwInput.focus(); }
                     }
                 } catch {
@@ -694,15 +696,16 @@
                     setTimeout(function () { if (done) done(); }, reduce ? 500 : 1300);
                 }, wait);
             },
-            fail: function (label) {
+            fail: function (label, detail) {
                 var msg = label || 'Kalibre edilemedi';
                 var wait = Math.max(0, 700 - (performance.now() - busyStart));
                 setTimeout(function () {
                     mode = 'fail';
                     dial.classList.remove('is-calibrating', 'is-cal'); dial.classList.add('is-fail');
-                    setStatus(msg);
+                    setStatus(msg);                          // önce: Kalibre edilemedi
                     startRoam(300);                          // yine rastgele dolaşır…
                     setTimeout(function () { stopRoam(); randTargets(); kick(); }, 1000);   // …dağınık kalır (titreme YOK)
+                    if (detail) setTimeout(function () { if (mode === 'fail') setStatus(detail); }, 1300);   // sonra: Şifreniz hatalı, N deneme kaldı
                 }, wait);
             }
         };

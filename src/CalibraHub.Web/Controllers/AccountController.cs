@@ -302,7 +302,7 @@ public sealed class AccountController : Controller
                 ? $"Şirket, e-posta veya şifre hatalı. ({remaining} deneme hakkı kaldı)"
                 : "Şirket, e-posta veya şifre hatalı.";
             if (isAjax)
-                return Json(new { ok = false, error = "credentials", message = credMsg });
+                return Json(new { ok = false, error = "credentials", message = credMsg, remaining });
             ModelState.AddModelError(string.Empty, credMsg);
             return View(input);
         }
