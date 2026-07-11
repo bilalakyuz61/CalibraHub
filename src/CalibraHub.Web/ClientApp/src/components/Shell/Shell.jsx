@@ -771,22 +771,14 @@ export default function Shell(props) {
     try { el.contentWindow.postMessage({ type: 'calibra:init', key: key }, '*') } catch (ex) { /* ignore */ }
   }
 
-  /* ── Alt+N / Insert / F8 — "yeni kayit" kisayolunu aktif tab'a forward et ──
+  /* ── F8 — "yeni kayit" kisayolunu aktif tab'a forward et ──
      Odak Shell'deyken (sidebar, header) iframe keydown'u duymaz; mesajla
      iletilir. SmartBoard iceride calibra:hotkey mesajini yakalayip primary
      action'i ("Yeni X") calistirir. SmartBoard olmayan sayfalar ignore eder. */
   useEffect(function () {
     function onNewHotkey(e) {
-      var isAltN = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key || '').toLowerCase() === 'n'
-      var isInsert = e.key === 'Insert' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
       var isF8 = (e.key === 'F8' || e.keyCode === 119) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
-      if (!isAltN && !isInsert && !isF8) return
-      if (isInsert) {
-        var t = e.target
-        var tag = (t && t.tagName) ? t.tagName.toLowerCase() : ''
-        if (tag === 'input' || tag === 'textarea' || tag === 'select') return
-        if (t && t.isContentEditable) return
-      }
+      if (!isF8) return
       if (showDashboard || !activeTabKey) return
       var el = iframeRefs.current[activeTabKey]
       if (el && el.contentWindow) {
