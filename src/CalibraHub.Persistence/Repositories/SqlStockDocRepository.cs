@@ -185,8 +185,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                        COALESCE(l.[LocationId], ic.[LocationId]) AS FromLocationId,
                        loc.[LocationName] AS FromLocationName,
                        NULL AS ToLocationId, NULL AS ToLocationName,
-                       NULL AS UnitCost, NULL AS LotNo,
-                       NULL AS TrackingType, CAST(0 AS BIT) AS AutoSerial
+                       NULL AS UnitCost, l.[LotNo],
+                       ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial
                 FROM {T("InventoryCountLine")} l
                 INNER JOIN {T("InventoryCount")} ic ON ic.[Id] = l.[InventoryCountId]
                 LEFT JOIN {T("Items")} i ON i.[Id] = l.[ItemId]

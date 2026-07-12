@@ -913,6 +913,33 @@ public sealed class WarehouseController : Controller
         return Json(result);
     }
 
+    // Sayım satırlarının seri eşlemesi (InventoryCountLine.Id → serials[]) — taslak yeniden yüklemede
+    // grid satırına serileri doldurmak için. Seriler InventoryCountLine.Serials'ta satır/virgül ile saklı.
+    [HttpGet]
+    public async Task<IActionResult> GetInventoryLineSerials(int documentId, CancellationToken ct)
+    {
+        if (documentId <= 0) return Json(new Dictionary<string, string[]>());
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT l.[Id], l.[Serials]
+            FROM [{_schema}].[InventoryCountLine] l
+            INNER JOIN [{_schema}].[InventoryCount] ic ON ic.[Id] = l.[InventoryCountId]
+            WHERE ic.[DocumentId] = @Doc AND l.[Serials] IS NOT NULL AND LEN(l.[Serials]) > 0;
+            """;
+        cmd.Parameters.AddWithValue("@Doc", documentId);
+        var map = new Dictionary<string, string[]>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var serials = (r.IsDBNull(1) ? "" : r.GetString(1))
+                .Split(new[] { '\n', '\r', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
+            if (serials.Length > 0) map[r.GetInt32(0).ToString()] = serials;
+        }
+        return Json(map);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetMaterialUnitsJson(string materialCode, CancellationToken ct)
     {

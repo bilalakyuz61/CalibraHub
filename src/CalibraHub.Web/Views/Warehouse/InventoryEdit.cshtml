@@ -523,6 +523,13 @@
                 if (notesEl) notesEl.value = doc.notes || '';
             }
 
+            // İzlenebilirlik: taslak sayımın satır-seri eşlemesini çek (lot/track flag GetLinesAsync'ten gelir)
+            var _invSerialMap = {};
+            try {
+                var _sr = await fetch('/Warehouse/GetInventoryLineSerials?documentId=' + (DOC_ID || 0));
+                if (_sr.ok) _invSerialMap = (await _sr.json()) || {};
+            } catch (e) { /* seri yoksa sorun değil */ }
+
             var rows = lines.map(function(l) {
                 return {
                     stockCardId:       l.itemId,
@@ -533,6 +540,10 @@
                     combinationCode:   l.combinationCode || '',
                     combinationId:     l.combinationId || null,
                     trackCombinations: !!l.combinationId,
+                    lotNo:             l.lotNo || '',
+                    serials:           _invSerialMap[String(l.id)] || (Array.isArray(l.serials) ? l.serials : []),
+                    trackSerial:       l.trackingType === 'Serial',
+                    autoSerial:        !!l.autoSerial,
                     notes:             l.notes || '',
                     fromLocationId:    l.fromLocationId || null,
                 };
@@ -611,6 +622,9 @@
                         notes:         r.notes || null,
                         fromLocationId: r.fromLocationId || null,
                         toLocationId:   null,
+                        // İzlenebilirlik — lot/seri (lot-takipli/seri-takipli kalemde server zorunlu kılar)
+                        lotNo:          (r.lotNo == null ? '' : String(r.lotNo)).trim() || null,
+                        serials:        (Array.isArray(r.serials) && r.serials.length > 0) ? r.serials : null,
                     };
                 });
 
