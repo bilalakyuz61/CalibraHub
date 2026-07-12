@@ -472,6 +472,18 @@ public sealed record SaveItemKitLineRequest(
     decimal Quantity,
     string? Note = null);
 
+// ── Kit snapshot kaynagi (Faz 2) — belge kaydinda aktif ItemKit icerigi ────
+// Bir kit belge kalemine eklendiginde bu icerik DocumentLineKitComponent'e dondurulur.
+public sealed record KitSnapshotSourceDto(
+    int KitItemId,
+    int VersionNo,
+    IReadOnlyList<KitSnapshotComponentDto> Components);
+
+public sealed record KitSnapshotComponentDto(
+    int ComponentItemId,
+    int? ConfigId,
+    decimal Quantity);
+
 // ── BOM Explode (multi-level patlatma) sonuclari (rapor 2026-05-17 madde 3.3) ──
 
 /// <summary>

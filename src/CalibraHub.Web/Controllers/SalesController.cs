@@ -710,6 +710,29 @@ public sealed class SalesController : Controller
         return Ok(new { success = true });
     }
 
+    /// <summary>Kit satirinin dondurulmus icerik dokumunu doner (Faz 2). Grid'de kit satiri
+    /// acilir read-only breakdown + belge yuklemede kit bilesen gosterimi icin.</summary>
+    [HttpGet]
+    public async Task<IActionResult> KitLineComponents(int lineId, CancellationToken ct)
+    {
+        if (lineId <= 0) return Json(new { found = false, components = Array.Empty<object>() });
+        var comps = await _quoteService.GetKitLineComponentsAsync(lineId, ct);
+        return Json(new
+        {
+            found = comps.Count > 0,
+            kitVersionNo = comps.Count > 0 ? comps.First().KitVersionNo : 0,
+            components = comps.Select(c => new
+            {
+                componentItemId = c.ComponentItemId,
+                code = c.ComponentCode,
+                name = c.ComponentName,
+                configId = c.ConfigId,
+                configCode = c.ConfigCode,
+                quantity = c.Quantity,
+            })
+        });
+    }
+
     [HttpGet]
     public async Task<IActionResult> DocumentEdit(int? id, string? type, int? fromRequest, CancellationToken ct)
     {

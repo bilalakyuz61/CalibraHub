@@ -1,3 +1,4 @@
+using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
@@ -34,6 +35,25 @@ public interface IDocumentRepository
     Task<string> GetNextDocumentNumberAsync(CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDetail>> GetLineDetailsAsync(int documentLineId, CancellationToken ct);
     Task SaveLineDetailsAsync(int documentLineId, IReadOnlyCollection<DocumentLineDetail> details, CancellationToken ct);
+
+    // ── Kit snapshot (Faz 2) ─────────────────────────────────────────
+    /// <summary>Verilen item id'lerinden AKTIF kit olanlarin icerigini (VersionNo + bilesenler)
+    /// doner. Kit olmayan / kit tanimi olmayan id'ler sonuca girmez.</summary>
+    Task<IReadOnlyCollection<KitSnapshotSourceDto>> GetActiveKitContentsAsync(
+        IEnumerable<int> kitItemIds, CancellationToken ct);
+
+    /// <summary>Verilen belge satiri id'leri icin mevcut kit snapshot anahtarlari (LineId, KitItemId).
+    /// Freeze: ayni satirda ayni kit zaten snapshot'landiysa yeniden alinmaz (kit revizyonu gecmis
+    /// belgeyi etkilemez). Satirin item'i baska bir kite degistiyse yeniden snapshot alinir.</summary>
+    Task<IReadOnlyCollection<(int LineId, int KitItemId)>> GetExistingKitSnapshotsAsync(
+        IEnumerable<int> documentLineIds, CancellationToken ct);
+
+    /// <summary>Bir kit satirinin snapshot'ini (DELETE + INSERT) yazar — o anki aktif kit icerigi dondurulur.</summary>
+    Task ReplaceKitSnapshotAsync(int documentLineId, int kitItemId, int versionNo,
+        IReadOnlyCollection<KitSnapshotComponentDto> components, CancellationToken ct);
+
+    /// <summary>Bir kit satirinin dondurulmus icerigini (enriched: bilesen kod/ad) doner. Faz 3 patlatma + grid gosterimi.</summary>
+    Task<IReadOnlyCollection<DocumentLineKitComponent>> GetKitSnapshotAsync(int documentLineId, CancellationToken ct);
 
     /// <summary>
     /// İhtiyaç Kaydı satırının karşılama miktarlarını günceller ve FulfillmentStatus'ı yeniden hesaplar.

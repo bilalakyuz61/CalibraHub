@@ -707,6 +707,7 @@ END;";
             // name 'dbo.ItemUnits'" (208) ile tum init'i durduruyordu.
             await EnsureItemUnitsTableAsync(connection, cancellationToken);
             await EnsureDocumentTablesAsync(connection, cancellationToken);
+            await EnsureDocumentLineKitSnapshotAsync(connection, cancellationToken);
             await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
             await EnsureDocumentTypesTableAsync(connection, cancellationToken);
             await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
@@ -5195,6 +5196,42 @@ END;";
             IF NOT EXISTS (SELECT 1 FROM sys.indexes
                            WHERE object_id = OBJECT_ID(N'[{s}].[ItemKitLine]') AND name = N'IX_ItemKitLine_ItemKitId')
                 CREATE INDEX [IX_ItemKitLine_ItemKitId] ON [{s}].[ItemKitLine]([ItemKitId]);
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Kit snapshot tablosu — DocumentLineKitComponent. Bir kit belge kalemine eklendiginde
+    /// o anki aktif ItemKit icerigi buraya DONDURULUR (Faz 2). DocumentLine'dan SONRA gelmeli
+    /// (FK). Faz 3 irsaliye patlatmasi bu tablodan okur.
+    /// </summary>
+    private async Task EnsureDocumentLineKitSnapshotAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[DocumentLineKitComponent]', N'U') IS NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+            BEGIN
+                CREATE TABLE [{s}].[DocumentLineKitComponent]
+                (
+                    [Id]              INT           NOT NULL IDENTITY(1,1) CONSTRAINT [PK_DocumentLineKitComponent] PRIMARY KEY,
+                    [DocumentLineId]  INT           NOT NULL,
+                    [KitItemId]       INT           NOT NULL,
+                    [KitVersionNo]    INT           NOT NULL CONSTRAINT [DF_DocLineKit_Version] DEFAULT 1,
+                    [ComponentItemId] INT           NOT NULL,
+                    [ConfigId]        INT           NULL,
+                    [Quantity]        DECIMAL(18,4) NOT NULL CONSTRAINT [DF_DocLineKit_Qty] DEFAULT 1,
+                    [Created]         DATETIME      NOT NULL CONSTRAINT [DF_DocLineKit_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_DocumentLineKitComponent_DocumentLine]
+                        FOREIGN KEY ([DocumentLineId]) REFERENCES [{s}].[DocumentLine]([Id]) ON DELETE CASCADE
+                );
+
+                CREATE INDEX [IX_DocumentLineKitComponent_DocumentLineId]
+                    ON [{s}].[DocumentLineKitComponent]([DocumentLineId]);
+            END;
             """;
 
         await using var cmd = connection.CreateCommand();

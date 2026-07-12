@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
+using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -38,6 +39,146 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         _quoteTable = $"[{schema}].[Document]";
         _lineTable = $"[{schema}].[DocumentLine]";
         _detailTable = $"[{schema}].[SalesQuoteLineDetail]";
+    }
+
+    /* ── Kit snapshot (Faz 2) ─────────────────────────────────────── */
+
+    public async Task<IReadOnlyCollection<KitSnapshotSourceDto>> GetActiveKitContentsAsync(
+        IEnumerable<int> kitItemIds, CancellationToken ct)
+    {
+        var ids = (kitItemIds ?? Array.Empty<int>()).Where(i => i > 0).Distinct().ToArray();
+        if (ids.Length == 0) return Array.Empty<KitSnapshotSourceDto>();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var paramNames = ids.Select((_, i) => "@k" + i).ToArray();
+        // Aktif kit = ayni ItemId icin MAX(Id) WHERE IsActive=1; satirlariyla JOIN.
+        cmd.CommandText = $"""
+            SELECT k.[ItemId], k.[VersionNo], l.[ItemId] AS ComponentItemId, l.[ConfigId], l.[Quantity]
+            FROM [{_schema}].[ItemKit] k
+            INNER JOIN [{_schema}].[ItemKitLine] l ON l.[ItemKitId] = k.[Id]
+            WHERE k.[IsActive] = 1
+              AND k.[ItemId] IN ({string.Join(",", paramNames)})
+              AND k.[Id] = (SELECT MAX([Id]) FROM [{_schema}].[ItemKit] WHERE [ItemId] = k.[ItemId] AND [IsActive] = 1)
+            ORDER BY k.[ItemId], l.[Id];
+            """;
+        for (var i = 0; i < ids.Length; i++)
+            cmd.Parameters.Add(new SqlParameter(paramNames[i], ids[i]));
+
+        var byKit = new Dictionary<int, (int Version, List<KitSnapshotComponentDto> Comps)>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var kitItemId = reader.GetInt32(0);
+            var version = reader.GetInt32(1);
+            if (!byKit.TryGetValue(kitItemId, out var entry))
+            {
+                entry = (version, new List<KitSnapshotComponentDto>());
+                byKit[kitItemId] = entry;
+            }
+            entry.Comps.Add(new KitSnapshotComponentDto(
+                reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                reader.GetDecimal(4)));
+        }
+        return byKit.Select(kv => new KitSnapshotSourceDto(kv.Key, kv.Value.Version, kv.Value.Comps)).ToList();
+    }
+
+    public async Task<IReadOnlyCollection<(int LineId, int KitItemId)>> GetExistingKitSnapshotsAsync(
+        IEnumerable<int> documentLineIds, CancellationToken ct)
+    {
+        var ids = (documentLineIds ?? Array.Empty<int>()).Where(i => i > 0).Distinct().ToArray();
+        if (ids.Length == 0) return Array.Empty<(int, int)>();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var paramNames = ids.Select((_, i) => "@l" + i).ToArray();
+        cmd.CommandText = $"""
+            SELECT DISTINCT [DocumentLineId], [KitItemId] FROM [{_schema}].[DocumentLineKitComponent]
+            WHERE [DocumentLineId] IN ({string.Join(",", paramNames)});
+            """;
+        for (var i = 0; i < ids.Length; i++)
+            cmd.Parameters.Add(new SqlParameter(paramNames[i], ids[i]));
+
+        var result = new List<(int, int)>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct)) result.Add((reader.GetInt32(0), reader.GetInt32(1)));
+        return result;
+    }
+
+    public async Task ReplaceKitSnapshotAsync(int documentLineId, int kitItemId, int versionNo,
+        IReadOnlyCollection<KitSnapshotComponentDto> components, CancellationToken ct)
+    {
+        if (documentLineId <= 0) return;
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = conn.BeginTransaction();
+
+        await using (var del = conn.CreateCommand())
+        {
+            del.Transaction = tx;
+            del.CommandText = $"DELETE FROM [{_schema}].[DocumentLineKitComponent] WHERE [DocumentLineId] = @L;";
+            del.Parameters.Add(new SqlParameter("@L", documentLineId));
+            await del.ExecuteNonQueryAsync(ct);
+        }
+
+        foreach (var c in components ?? Array.Empty<KitSnapshotComponentDto>())
+        {
+            await using var ins = conn.CreateCommand();
+            ins.Transaction = tx;
+            ins.CommandText = $"""
+                INSERT INTO [{_schema}].[DocumentLineKitComponent]
+                    ([DocumentLineId],[KitItemId],[KitVersionNo],[ComponentItemId],[ConfigId],[Quantity],[Created])
+                VALUES (@L,@K,@V,@C,@Cfg,@Q,SYSUTCDATETIME());
+                """;
+            ins.Parameters.Add(new SqlParameter("@L", documentLineId));
+            ins.Parameters.Add(new SqlParameter("@K", kitItemId));
+            ins.Parameters.Add(new SqlParameter("@V", versionNo));
+            ins.Parameters.Add(new SqlParameter("@C", c.ComponentItemId));
+            ins.Parameters.Add(new SqlParameter("@Cfg", (object?)c.ConfigId ?? DBNull.Value));
+            ins.Parameters.Add(new SqlParameter("@Q", c.Quantity));
+            await ins.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+    }
+
+    public async Task<IReadOnlyCollection<DocumentLineKitComponent>> GetKitSnapshotAsync(int documentLineId, CancellationToken ct)
+    {
+        if (documentLineId <= 0) return Array.Empty<DocumentLineKitComponent>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT s.[Id], s.[DocumentLineId], s.[KitItemId], s.[KitVersionNo], s.[ComponentItemId],
+                   s.[ConfigId], s.[Quantity], s.[Created],
+                   ci.[Code] AS CompCode, ci.[Name] AS CompName, cfg.[RecordCode] AS ConfigCode
+            FROM [{_schema}].[DocumentLineKitComponent] s
+            LEFT JOIN [{_schema}].[Items] ci ON ci.[Id] = s.[ComponentItemId]
+            LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = s.[ConfigId]
+            WHERE s.[DocumentLineId] = @L
+            ORDER BY s.[Id];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@L", documentLineId));
+
+        var list = new List<DocumentLineKitComponent>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            list.Add(new DocumentLineKitComponent
+            {
+                Id              = reader.GetInt32(0),
+                DocumentLineId  = reader.GetInt32(1),
+                KitItemId       = reader.GetInt32(2),
+                KitVersionNo    = reader.GetInt32(3),
+                ComponentItemId = reader.GetInt32(4),
+                ConfigId        = reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                Quantity        = reader.GetDecimal(6),
+                Created         = reader.GetDateTime(7),
+                ComponentCode   = reader.IsDBNull(8) ? null : reader.GetString(8),
+                ComponentName   = reader.IsDBNull(9) ? null : reader.GetString(9),
+                ConfigCode      = reader.IsDBNull(10) ? null : reader.GetString(10),
+            });
+        }
+        return list;
     }
 
     /// <summary>

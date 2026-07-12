@@ -32,6 +32,11 @@ public interface IDocumentService
     Task<IReadOnlyCollection<DocumentListItemDto>> GetMovementsByContactAsync(int contactId, int? documentTypeId, DateTime? fromDate, DateTime? toDate, CancellationToken ct);
     Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct);
+
+    /// <summary>Bir kit satirinin DONMUS icerik snapshot'ini (bilesen kod/ad/miktar) doner (Faz 2).
+    /// Grid'de kit satirinin acilir dokumu + Faz 3 patlatma icin. Kit satiri degilse bos liste.</summary>
+    Task<IReadOnlyCollection<CalibraHub.Domain.Entities.DocumentLineKitComponent>> GetKitLineComponentsAsync(
+        int documentLineId, CancellationToken ct);
     Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct);
     /// <summary>
     /// Belgeyi soft-delete eder. Karşılanmış kalem içeriyorsa (İhtiyaç Kaydı zinciri

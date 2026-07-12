@@ -303,6 +303,9 @@ public sealed class DocumentService : IDocumentService
         return q == null ? null : MapDto(q);
     }
 
+    public Task<IReadOnlyCollection<DocumentLineKitComponent>> GetKitLineComponentsAsync(int documentLineId, CancellationToken ct)
+        => _repo.GetKitSnapshotAsync(documentLineId, ct);
+
     public async Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct)
     {
         var lines = await _repo.GetLinesAsync(documentId, ct);
@@ -612,6 +615,29 @@ public sealed class DocumentService : IDocumentService
         }).ToArray();
 
         await _repo.SaveLinesAsync(quote.Id, finalLines, ct);
+
+        // ── Kit snapshot (Faz 2) — kit satirlarini o anki aktif ItemKit icerigiyle DONDUR ──
+        // Bir kit belge kalemine eklendiginde icerigi satira snapshot'lanir; kit sonradan revize
+        // edilse bile bu belge eski icerigi tasir. Freeze-on-first: ayni satirda ayni kit zaten
+        // snapshot'landiysa korunur (kit revizyonu gecmis belgeyi etkilemez). Item baska bir kite
+        // degistiyse yeniden snapshot alinir. Faz 3 irsaliye patlatmasi bu snapshot'tan uretir.
+        var savedForKit = await _repo.GetLinesAsync(quote.Id, ct);
+        var kitContents = await _repo.GetActiveKitContentsAsync(
+            savedForKit.Select(l => l.ItemId).Distinct(), ct);
+        if (kitContents.Count > 0)
+        {
+            var kitByItem = kitContents.ToDictionary(k => k.KitItemId);
+            var kitLines = savedForKit.Where(l => kitByItem.ContainsKey(l.ItemId)).ToList();
+            var existing = (await _repo.GetExistingKitSnapshotsAsync(kitLines.Select(l => l.Id), ct))
+                .ToDictionary(x => x.LineId, x => x.KitItemId);
+            foreach (var line in kitLines)
+            {
+                if (existing.TryGetValue(line.Id, out var snappedKit) && snappedKit == line.ItemId)
+                    continue; // freeze — ayni satirda ayni kit zaten donduruldu
+                var src = kitByItem[line.ItemId];
+                await _repo.ReplaceKitSnapshotAsync(line.Id, src.KitItemId, src.VersionNo, src.Components, ct);
+            }
+        }
 
         // İhtiyaç Kaydı → türetilen belge köprüsü. Sadece yeni belgede (isNew) ve
         // FromRequestId verilmişse çalışır; mevcut belge güncellemelerinde atlenir.
