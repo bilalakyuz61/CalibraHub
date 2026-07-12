@@ -70,6 +70,11 @@ function enrichMaterialPatch(patch, materialCode) {
   fillIfMissing('materialName',      readCaseInsensitive(m, 'materialName'))
   // Stok kartindaki master birim — kullanici malzeme secince Olcu Birimi alani otomatik dolar
   fillIfMissing('unitId',            readCaseInsensitive(m, 'unitId'))
+  // Seri/lot izleme bayraklari — standart rehber view'inde YOKTUR; snapshot'tan tamamla ki
+  // rehberden malzeme secilince satis siparisi grid'inde "Seri" kolonu (visibleWhenKey=trackSerial)
+  // gorunsun ve otomatik seri modali acilsin. Snapshot GetMaterials'tan boolean gelir (=== true calisir).
+  fillIfMissing('trackSerial',       readCaseInsensitive(m, 'trackSerial'))
+  fillIfMissing('autoSerial',        readCaseInsensitive(m, 'autoSerial'))
   return patch
 }
 
