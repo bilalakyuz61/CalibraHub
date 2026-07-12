@@ -426,6 +426,52 @@ public sealed record BOMComponentLineRow(
     decimal Quantity,
     decimal ScrapRatio);
 
+// ── Kit / Paket Urun (FK-based: ItemId / ConfigId) ─────────────────────────
+// Kit = birden fazla stogu tek kod altinda toplayan phantom bundle. ItemKit (versiyonlu
+// baslik) + ItemKitLine (bilesen). BOM deseninin satis klonu — rota/fire yok, versiyon +
+// fiyat modu var. Kit'in kendisi Items'ta TypeId=10 (Kit) tipinde bir malzeme kartidir.
+public sealed record ItemKitDto(
+    int Id,
+    int ItemId,                // kit'in kendisi (Items.id, TypeId=10)
+    string ItemCode,
+    string ItemName,
+    int VersionNo,
+    string PriceMode,          // KitPriceMode: "Fixed" | "RollUp"
+    decimal? FixedPrice,
+    string? Description,
+    IReadOnlyCollection<ItemKitLineDto> Lines);
+
+public sealed record ItemKitLineDto(
+    int Id,
+    int ItemKitId,
+    int ItemId,                // bilesen (Items.id)
+    string ItemCode,
+    string ItemName,
+    int? ConfigId,
+    string? ConfigCode,
+    decimal Quantity,
+    Guid LineGuid,
+    string? Note = null);
+
+// Frontend submit — backend ItemId/ConfigId ile calisir. ItemId 0 gelirse service
+// materialCode uzerinden lookup eder (legacy UI); yeni UI dogrudan ItemId gonderir.
+public sealed record SaveItemKitRequest(
+    int? Id,
+    int ItemId,
+    string? MaterialCode,       // legacy: ItemId 0 ise kit karti lookup'i icin
+    string PriceMode,           // KitPriceMode: "Fixed" | "RollUp"
+    decimal? FixedPrice,        // yalniz Fixed modda anlamli
+    string? Description,
+    IReadOnlyCollection<SaveItemKitLineRequest> Lines);
+
+public sealed record SaveItemKitLineRequest(
+    int ItemId,
+    int? ConfigId,
+    string? ComponentMaterialCode,  // legacy: ItemId 0 ise lookup icin
+    string? ComponentConfigCode,    // legacy: ConfigId null ise lookup icin
+    decimal Quantity,
+    string? Note = null);
+
 // ── BOM Explode (multi-level patlatma) sonuclari (rapor 2026-05-17 madde 3.3) ──
 
 /// <summary>

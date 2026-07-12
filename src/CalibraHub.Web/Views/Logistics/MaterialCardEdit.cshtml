@@ -1661,6 +1661,11 @@
                 Reçete
                 <span class="mce-nav-count is-empty" id="mceRecipeCount">0</span>
             </button>
+            <button type="button" class="mce-nav-btn" id="mceNavKit" style="display:none;">
+                <span class="mce-nav-dot"></span>
+                Kit İçeriği
+                <span class="mce-nav-count is-empty" id="mceKitCount">0</span>
+            </button>
 
             <!-- Skeleton: dinamik widget gruplari yuklenene kadar layout shift'i onler -->
             <div id="mceSideNavSkeleton" data-skeleton="1">
@@ -2269,6 +2274,34 @@
                 </div>
             </div>
 
+            <!-- Kit İçeriği (Paket Ürün) — yalniz Kit (10) tipi icin -->
+            <div class="mce-card mce-section-anchor" id="mceKitCard" style="display:none;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;">
+                    <p class="mce-card-title" style="margin:0;">Kit İçeriği</p>
+                    <span style="font-size:.74rem;color:rgba(255,255,255,.5);font-style:italic;">Bu paket kodunun altında toplanan bileşenleri düzenleyin.</span>
+                </div>
+                <div>
+                    <div id="mceKitEmpty" style="padding:18px;text-align:center;color:rgba(255,255,255,.4);font-size:.82rem;font-style:italic;display:none;">
+                        Önce malzeme kartını kaydedin, ardından kit içeriği düzenlenebilir hale gelir.
+                    </div>
+                    <div id="mceKitSingle" style="display:none;">
+                        <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);">
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-size:.85rem;font-weight:600;color:rgba(255,255,255,.85);">Paket İçeriği</div>
+                                <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:3px;">
+                                    Bu kit tek kod altında farklı stokları toplar; sipariş/teklifte tek kalem olarak kullanılır.
+                                    <span id="mceKitStatus" style="margin-left:6px;"></span>
+                                </div>
+                            </div>
+                            <button type="button" class="mce-btn mce-btn--secondary" onclick="mceOpenKit()" style="font-size:.78rem;padding:7px 14px;flex-shrink:0;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                Kit İçeriğini Düzenle
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             @* Ek Alanlar — DynamicWidgetRenderer grupları buraya render edilir.
                FormCode 2026-07-06'da ITEMS → MATERIAL_CARD_EDIT'e taşındı: ITEMS
                formu 2026-06-08 kararıyla Forms seed'inden çıkarıldı (taze DB'lerde
@@ -2502,6 +2535,10 @@
             // Recete nav buton gorunurlugu (Mamul/Yari Mamul ise goster)
             if (typeof window.mceRecipeSyncVisibility === 'function') {
                 window.mceRecipeSyncVisibility();
+            }
+            // Kit nav buton gorunurlugu (Kit tipinde goster)
+            if (typeof window.mceKitSyncVisibility === 'function') {
+                window.mceKitSyncVisibility();
             }
 
             // Eski sayfa kayitlari icin renderer recordId'yi reload et (integer Id ile)
@@ -3399,6 +3436,10 @@
             var recipeCard = document.getElementById('mceRecipeCard');
             if (recipeCard) recipeCard.style.display = (key === 'recipe') ? '' : 'none';
 
+            // Kit icerigi karti
+            var kitCard = document.getElementById('mceKitCard');
+            if (kitCard) kitCard.style.display = (key === 'kit') ? '' : 'none';
+
             // Her dinamik grup karti
             content.querySelectorAll('[data-dyn-group-id]').forEach(function(d) {
                 d.style.display = (d.getAttribute('data-dyn-group-id') === key) ? 'block' : 'none';
@@ -3515,6 +3556,16 @@
                 setActive(navRecipe);
                 activateSection('recipe');
                 if (typeof window.mceRecipeRender === 'function') window.mceRecipeRender();
+            });
+        }
+
+        // Kit Icerigi butonu (yalniz Kit tipinde gorunur)
+        var navKit = document.getElementById('mceNavKit');
+        if (navKit) {
+            navKit.addEventListener('click', function() {
+                setActive(navKit);
+                activateSection('kit');
+                if (typeof window.mceKitRender === 'function') window.mceKitRender();
             });
         }
 
@@ -5197,6 +5248,94 @@
             if (navBtn && navBtn.classList.contains('is-active') && typeof window.mceRecipeRender === 'function') {
                 window.mceRecipeRender();
             }
+        });
+    })();
+
+    // ── Kit (Paket Urun) sekmesi — yalniz Kit (TypeId=10) tipinde gorunur ─────
+    function mceKitIsApplicable() {
+        var typeIdStr = ($('mceMaterialTypeId') && $('mceMaterialTypeId').value) || '';
+        return parseInt(typeIdStr, 10) === 10; // Kit
+    }
+
+    window.mceKitSyncVisibility = function () {
+        var navBtn = document.getElementById('mceNavKit');
+        if (!navBtn) return;
+        var applicable = mceKitIsApplicable();
+        navBtn.style.display = applicable ? '' : 'none';
+        if (!applicable && navBtn.classList.contains('is-active') && typeof window.mceNavigateToSection === 'function') {
+            window.mceNavigateToSection('general');
+        }
+    };
+
+    window.mceKitRender = function () {
+        var emptyEl = document.getElementById('mceKitEmpty');
+        var singleEl = document.getElementById('mceKitSingle');
+        var statusEl = document.getElementById('mceKitStatus');
+        if (!emptyEl || !singleEl) return;
+        if (!currentId || currentId <= 0) {
+            emptyEl.style.display = '';
+            singleEl.style.display = 'none';
+            mceKitUpdateCount(0);
+            return;
+        }
+        emptyEl.style.display = 'none';
+        singleEl.style.display = '';
+        mceKitFetchStatus(statusEl);
+    };
+
+    function mceKitFetchStatus(targetEl) {
+        if (!currentId || currentId <= 0) return;
+        fetch('/Logistics/GetKit?itemId=' + currentId, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : { found: false }; })
+            .then(function (data) {
+                var n = (data && data.found && data.lines) ? data.lines.length : 0;
+                mceKitUpdateCount(n);
+                if (!targetEl) return;
+                if (data && data.found) {
+                    targetEl.textContent = n + ' bileşen · v' + (data.versionNo || 1);
+                    targetEl.style.color = '#34d399';
+                } else {
+                    targetEl.textContent = 'Tanımsız';
+                    targetEl.style.color = 'rgba(255,255,255,.45)';
+                }
+            })
+            .catch(function () { if (targetEl) targetEl.textContent = ''; });
+    }
+
+    function mceKitUpdateCount(n) {
+        var badge = document.getElementById('mceKitCount');
+        if (!badge) return;
+        var newText = String(n || 0);
+        var newEmpty = (n || 0) <= 0;
+        if (badge.textContent !== newText) badge.textContent = newText;
+        badge.classList.toggle('is-empty', newEmpty);
+    }
+
+    window.mceOpenKit = function () {
+        var code = ($('mceMaterialCode') && $('mceMaterialCode').value || '').trim();
+        var name = ($('mceMaterialName') && $('mceMaterialName').value || '').trim();
+        if (!currentId || currentId <= 0) {
+            if (typeof showMsg === 'function') showMsg('Önce malzeme kartını kaydedin.', false);
+            return;
+        }
+        var url = '/Logistics/KitEdit?itemId=' + currentId
+                + '&code=' + encodeURIComponent(code)
+                + '&name=' + encodeURIComponent(name);
+        try {
+            if (window.parent && window.parent !== window && typeof window.parent.location !== 'undefined') {
+                window.parent.location.href = url;
+                return;
+            }
+        } catch (e) { /* cross-origin — fallback */ }
+        window.location.href = url;
+    };
+
+    // TypeId degisince Kit nav gorunurlugunu sync et
+    (function initKitTypeSync() {
+        var sel = document.getElementById('mceMaterialTypeId');
+        if (!sel) return;
+        sel.addEventListener('change', function () {
+            if (typeof window.mceKitSyncVisibility === 'function') window.mceKitSyncVisibility();
         });
     })();
 

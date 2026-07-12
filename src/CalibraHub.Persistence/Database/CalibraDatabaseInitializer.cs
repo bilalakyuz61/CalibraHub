@@ -679,6 +679,7 @@ END;";
             await EnsureNotesTablesAsync(connection, cancellationToken);
             await EnsureNoteExtensionsAsync(connection, cancellationToken);
             await EnsureBOMTablesAsync(connection, cancellationToken);
+            await EnsureItemKitTablesAsync(connection, cancellationToken);
             await EnsureMaterialGroupTablesAsync(connection, cancellationToken);
             await EnsureFinanceTablesAsync(connection, cancellationToken);
             await EnsureAddressTablesAsync(connection, cancellationToken);
@@ -5118,6 +5119,70 @@ END;";
                         ON [{s}].[BOM]([ItemId], [ConfigId])
                         WHERE [IsActive] = 1;
                 ';
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Kit (paket urun) tablolari — ItemKit (versiyonlu baslik) + ItemKitLine (bilesen).
+    /// Yeni ozellik oldugu icin migration/backfill yok, sadece idempotent CREATE guard.
+    /// BOM deseninin yalin klonu: rota/fire kolonlari yok; VersionNo + PriceMode + FixedPrice var.
+    /// </summary>
+    private async Task EnsureItemKitTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[ItemKit]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemKit]
+                (
+                    [Id]          INT            NOT NULL IDENTITY(1,1) CONSTRAINT [PK_ItemKit] PRIMARY KEY,
+                    [ItemId]      INT            NOT NULL,
+                    [VersionNo]   INT            NOT NULL CONSTRAINT [DF_ItemKit_VersionNo] DEFAULT 1,
+                    [PriceMode]   NVARCHAR(20)   NOT NULL CONSTRAINT [DF_ItemKit_PriceMode] DEFAULT 'Fixed',
+                    [FixedPrice]  DECIMAL(18,4)  NULL,
+                    [Description] NVARCHAR(500)  NULL,
+                    [IsActive]    BIT            NOT NULL CONSTRAINT [DF_ItemKit_IsActive] DEFAULT 1,
+                    [CreatedById] INT            NULL,
+                    [Created]     DATETIME       NOT NULL CONSTRAINT [DF_ItemKit_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT            NULL,
+                    [Updated]     DATETIME       NULL
+                );
+            END;
+
+            -- Aktif kit'i (ItemId bazli) hizli cekmek icin filtered index.
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ItemKit]') AND name = N'IX_ItemKit_ItemId_Active')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_ItemKit_ItemId_Active]
+                        ON [{s}].[ItemKit]([ItemId])
+                        WHERE [IsActive] = 1;
+                ';
+
+            IF OBJECT_ID(N'[{s}].[ItemKitLine]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemKitLine]
+                (
+                    [Id]          INT              NOT NULL IDENTITY(1,1) CONSTRAINT [PK_ItemKitLine] PRIMARY KEY,
+                    [ItemKitId]   INT              NOT NULL,
+                    [ItemId]      INT              NOT NULL,
+                    [ConfigId]    INT              NULL,
+                    [Quantity]    DECIMAL(18,4)    NOT NULL CONSTRAINT [DF_ItemKitLine_Quantity] DEFAULT 1,
+                    [LineGuid]    UNIQUEIDENTIFIER NOT NULL CONSTRAINT [DF_ItemKitLine_LineGuid] DEFAULT NEWID(),
+                    [Note]        NVARCHAR(1000)   NULL,
+                    [CreatedById] INT              NULL,
+                    [Created]     DATETIME         NOT NULL CONSTRAINT [DF_ItemKitLine_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_ItemKitLine_ItemKit]
+                        FOREIGN KEY ([ItemKitId]) REFERENCES [{s}].[ItemKit]([Id]) ON DELETE CASCADE
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ItemKitLine]') AND name = N'IX_ItemKitLine_ItemKitId')
+                CREATE INDEX [IX_ItemKitLine_ItemKitId] ON [{s}].[ItemKitLine]([ItemKitId]);
             """;
 
         await using var cmd = connection.CreateCommand();

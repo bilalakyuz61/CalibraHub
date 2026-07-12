@@ -121,6 +121,27 @@ public interface ILogisticsConfigurationService
     /// </summary>
     Task DeleteBOMAsync(int id, int? userId, CancellationToken cancellationToken);
 
+    // ── Kit / Paket Urun ─────────────────────────────────────────────
+    /// <summary>
+    /// Bir kit malzeme kartinin (Items.id, TypeId=10) AKTIF icerigini doner.
+    /// Kit tanimli degilse null. MaterialCardEdit "Kit Icerigi" sekmesi yukler.
+    /// </summary>
+    Task<ItemKitDto?> GetKitByItemAsync(int itemId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Kit icerigini kaydeder (UPSERT). Yeni ise VersionNo=1; mevcut ise VersionNo++
+    /// (revizyon — sonraki kullanimi etkiler, gecmis belgeler snapshot ile korunur).
+    /// Bilesenler DELETE+INSERT. Kit'in kendisi veya bir baska kit bilesen olamaz
+    /// (ArgumentException). userId audit alanlarina yazilir.
+    /// </summary>
+    Task<int> SaveKitAsync(SaveItemKitRequest request, int? userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Kit icerigini soft-delete eder (ItemKit.IsActive=0) — kart Kit tipinden
+    /// cikarildiginda cagrilir. Gecmis belgeler snapshot tasidigindan etkilenmez.
+    /// </summary>
+    Task DeleteKitAsync(int itemId, int? userId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Multi-level BOM patlatma (rapor 2026-05-17 madde 3.3): X mamulden
     /// <paramref name="quantity"/> adet uretmek icin tum alt-receteleri gezerek

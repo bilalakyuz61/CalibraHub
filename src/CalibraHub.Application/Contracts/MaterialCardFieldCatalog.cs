@@ -50,6 +50,7 @@ public static class MaterialCardFieldCatalog
         (MaterialType, "hizmet",      "Hizmet",          7),
         (MaterialType, "ticari_mal",  "Ticari Mal",      8),
         (MaterialType, "diger",       "Diger",           9),
+        (MaterialType, "kit",         "Kit",             10),
     ];
 
     public static bool IsSupported(string key) =>

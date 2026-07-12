@@ -167,6 +167,21 @@ public interface ILogisticsConfigurationRepository
     Task<IReadOnlyCollection<BOMComponentLineRow>> GetBOMComponentLinesAsync(
         int parentItemId, CancellationToken cancellationToken);
 
+    // ── Kit / Paket Urun ─────────────────────────────────────────────
+    /// <summary>Kit malzeme kartinin AKTIF icerigini (MAX VersionNo, IsActive=1)
+    /// Items/ItemConfiguration JOIN'li enriched doner. Yoksa null.</summary>
+    Task<ItemKitDto?> GetKitByItemAsync(int itemId, CancellationToken cancellationToken);
+
+    /// <summary>Yeni kit ekler (VersionNo=1) — header + satirlar transaction icinde. Yeni Id doner.</summary>
+    Task<int> AddKitAsync(ItemKit kit, CancellationToken cancellationToken);
+
+    /// <summary>Mevcut kit'i gunceller: VersionNo++ (revizyon), satirlar DELETE+INSERT.</summary>
+    Task UpdateKitAsync(ItemKit kit, CancellationToken cancellationToken);
+
+    /// <summary>Kit icerigini soft-delete (ItemKit.IsActive=0). Fiziksel silme yok —
+    /// gecmis belgeler snapshot tasir.</summary>
+    Task DeleteKitAsync(int itemId, int? userId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Where-used (ters arama): bir bileseni DOĞRUDAN kullanan parent BOM'lari doner.
     /// 1-seviye (transitive degil). Liste ekraninda "bu malzeme hangi recetelerde

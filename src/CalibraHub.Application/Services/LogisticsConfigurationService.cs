@@ -3164,6 +3164,154 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         await _repository.DeleteBOMAsync(id, userId, cancellationToken);
     }
 
+    /* ── Kit / Paket Urun ─────────────────────────────────────────── */
+
+    public async Task<ItemKitDto?> GetKitByItemAsync(int itemId, CancellationToken cancellationToken)
+    {
+        if (itemId <= 0) return null;
+        return await _repository.GetKitByItemAsync(itemId, cancellationToken);
+    }
+
+    public async Task<int> SaveKitAsync(SaveItemKitRequest request, int? userId, CancellationToken cancellationToken)
+    {
+        // 1) Items lookup — kit karti + bilesenler (sadece bu kayda dahil ID/Code'lar).
+        var requestedIds = new List<int>();
+        if (request.ItemId > 0) requestedIds.Add(request.ItemId);
+        foreach (var line in request.Lines ?? Array.Empty<SaveItemKitLineRequest>())
+            if (line.ItemId > 0) requestedIds.Add(line.ItemId);
+
+        var byIdSnapshot = await _repository.GetItemsByIdsAsync(requestedIds, cancellationToken);
+        var activeById = byIdSnapshot.Where(x => x.IsActive).ToDictionary(x => x.Id);
+
+        // Code yolu (legacy UI) — sadece koda dayanan istekler icin lazy tetiklenir.
+        Dictionary<string, int>? activeIdByCode = null;
+        async Task<Dictionary<string, int>> EnsureCodeLookupAsync()
+        {
+            if (activeIdByCode != null) return activeIdByCode;
+            var all = await _repository.GetItemsAsync(cancellationToken);
+            activeIdByCode = all.Where(x => x.IsActive)
+                                .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var item in all.Where(x => x.IsActive))
+                activeById.TryAdd(item.Id, item);
+            return activeIdByCode;
+        }
+
+        // Kit karti ItemId resolve — yeni UI ItemId gonderir, eski UI MaterialCode.
+        int kitItemId = request.ItemId;
+        if (kitItemId <= 0 && !string.IsNullOrWhiteSpace(request.MaterialCode))
+        {
+            var codes = await EnsureCodeLookupAsync();
+            if (!codes.TryGetValue(request.MaterialCode.Trim(), out kitItemId))
+                throw new ArgumentException(
+                    $"'{request.MaterialCode.Trim()}' kodlu kit karti sistemde bulunamadi veya pasif durumda.");
+        }
+        if (kitItemId <= 0)
+            throw new ArgumentException("Kit malzeme karti secilmelidir.");
+        if (!activeById.ContainsKey(kitItemId))
+        {
+            var probe = await _repository.GetItemsByIdsAsync(new[] { kitItemId }, cancellationToken);
+            var found = probe.FirstOrDefault(x => x.IsActive && x.Id == kitItemId);
+            if (found is null)
+                throw new ArgumentException("Sectiginiz kit karti aktif degil veya sistemden silinmis.");
+            activeById[found.Id] = found;
+        }
+
+        // PriceMode normalize (whitelist) + Fixed disinda FixedPrice yok say.
+        var priceMode = string.Equals(request.PriceMode, KitPriceMode.RollUp, StringComparison.OrdinalIgnoreCase)
+            ? KitPriceMode.RollUp
+            : KitPriceMode.Fixed;
+        decimal? fixedPrice = priceMode == KitPriceMode.Fixed ? request.FixedPrice : null;
+
+        var lines = (request.Lines ?? Array.Empty<SaveItemKitLineRequest>()).ToList();
+        if (lines.Count == 0)
+            throw new ArgumentException("Kit icerisinde en az bir bilesen olmalidir.");
+
+        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, string? Note)>(lines.Count);
+        foreach (var line in lines)
+        {
+            int lineItemId = line.ItemId;
+            if (lineItemId <= 0 && !string.IsNullOrWhiteSpace(line.ComponentMaterialCode))
+            {
+                var codes = await EnsureCodeLookupAsync();
+                if (!codes.TryGetValue(line.ComponentMaterialCode.Trim(), out lineItemId))
+                    throw new ArgumentException(
+                        $"'{line.ComponentMaterialCode.Trim()}' kodlu bilesen sistemde bulunamadi veya pasif durumda.");
+            }
+            if (lineItemId <= 0)
+                throw new ArgumentException("Her bilesen icin bir malzeme secmek zorunludur.");
+            if (!activeById.ContainsKey(lineItemId))
+            {
+                var probe = await _repository.GetItemsByIdsAsync(new[] { lineItemId }, cancellationToken);
+                var found = probe.FirstOrDefault(x => x.IsActive && x.Id == lineItemId);
+                if (found is null)
+                    throw new ArgumentException(
+                        "Bilesen olarak secilen malzemelerden biri aktif degil veya sistemden silinmis. Lutfen kit icerigini gozden geciriniz.");
+                activeById[found.Id] = found;
+            }
+
+            // Kit kendi kartini bilesen alamaz (trivial dongu).
+            if (lineItemId == kitItemId)
+                throw new ArgumentException("Kit'in kendisi bilesen olarak eklenemez.");
+            // Kit-in-kit YASAK (Faz 1): bir bilesen Kit tipi (TypeId=10) olamaz.
+            if (CalibraHub.Domain.Enums.ItemTypeCatalog.IsKit(activeById[lineItemId].TypeId))
+                throw new ArgumentException(
+                    $"'{activeById[lineItemId].Code}' bir kit'tir; kit icinde baska bir kit bilesen olarak kullanilamaz.");
+
+            // Satir config'i — kod verildiyse Id'ye cozulmek zorunda.
+            int? lineConfigId = line.ConfigId;
+            if (lineConfigId is null && !string.IsNullOrWhiteSpace(line.ComponentConfigCode))
+            {
+                var lineItem = activeById[lineItemId];
+                var combos = await _repository.GetCombinationsByMaterialCodeAsync(lineItem.Code, cancellationToken);
+                var match = combos.FirstOrDefault(c => string.Equals(c.Code, line.ComponentConfigCode.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (match is null)
+                    throw new ArgumentException(
+                        $"'{lineItem.Code}' bileseni icin '{line.ComponentConfigCode.Trim()}' kodlu kombinasyon bulunamadi.");
+                lineConfigId = match.ConfigId;
+            }
+
+            resolvedLines.Add((lineItemId, lineConfigId, line.Quantity,
+                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim()));
+        }
+
+        // UPSERT hedefi — kit kartinin mevcut aktif icerigi (varsa VersionNo++).
+        var existing = await _repository.GetKitByItemAsync(kitItemId, cancellationToken);
+
+        var entity = new ItemKit
+        {
+            Id          = existing?.Id ?? 0,
+            ItemId      = kitItemId,
+            PriceMode   = priceMode,
+            FixedPrice  = fixedPrice,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            CreatedById = userId,
+            UpdatedById = userId,
+        };
+        try
+        {
+            foreach (var l in resolvedLines)
+                entity.AddLine(ItemKitLine.Create(l.ItemId, l.ConfigId, l.Qty, userId, l.Note));
+            entity.EnsureValid();
+        }
+        catch (CalibraHub.Domain.Common.DomainException dex)
+        {
+            throw new ArgumentException(dex.Message, dex);
+        }
+
+        if (entity.Id <= 0)
+            return await _repository.AddKitAsync(entity, cancellationToken);
+
+        await _repository.UpdateKitAsync(entity, cancellationToken);
+        return entity.Id;
+    }
+
+    public async Task DeleteKitAsync(int itemId, int? userId, CancellationToken cancellationToken)
+    {
+        if (itemId <= 0) return;
+        await _repository.DeleteKitAsync(itemId, userId, cancellationToken);
+    }
+
     /// <summary>
     /// 2026-05-20: BOM.RoutingId cozumleyici. Standart rehber UI'sinde frontend
     /// hidden Id'yi her zaman doldurmayabilir (kullanici input'a elle kod yazip blur

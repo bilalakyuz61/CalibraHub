@@ -2903,6 +2903,196 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /* ── Kit / Paket Urun ─────────────────────────────────────────── */
+
+    public async Task<ItemKitDto?> GetKitByItemAsync(int itemId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+
+        // AKTIF kit = ayni ItemId icin MAX(Id) WHERE IsActive=1 (BOM ile ayni desen).
+        // Items + ItemConfiguration JOIN ile enriched — frontend display icin
+        // bilesen code/name + config code tasinir.
+        command.CommandText = $"""
+            SELECT
+                k.[Id], k.[ItemId], ki.[code] AS KitItemCode, ISNULL(ki.[name], ki.[code]) AS KitItemName,
+                k.[VersionNo], k.[PriceMode], k.[FixedPrice], k.[Description],
+                l.[Id]       AS LineId,
+                l.[ItemId]   AS LineItemId,
+                ci.[code]    AS LineItemCode,
+                ISNULL(ci.[name], ci.[code]) AS LineItemName,
+                l.[ConfigId] AS LineConfigId,
+                lcfg.[RecordCode] AS LineConfigCode,
+                l.[Quantity],
+                l.[LineGuid],
+                l.[Note]     AS LineNote
+            FROM [{_schema}].[ItemKit] k
+            INNER JOIN {_stockCardsTableName} ki ON ki.[id] = k.[ItemId]
+            LEFT  JOIN [{_schema}].[ItemKitLine] l  ON l.[ItemKitId] = k.[Id]
+            LEFT  JOIN {_stockCardsTableName} ci ON ci.[id] = l.[ItemId]
+            LEFT  JOIN [{_schema}].[ItemConfiguration] lcfg ON lcfg.[Id] = l.[ConfigId]
+            WHERE k.[ItemId] = @ItemId
+              AND k.[IsActive] = 1
+              AND k.[Id] = (
+                  SELECT MAX([Id]) FROM [{_schema}].[ItemKit]
+                  WHERE [ItemId] = @ItemId AND [IsActive] = 1
+              )
+            ORDER BY l.[Id];
+            """;
+        command.Parameters.Add(new SqlParameter("@ItemId", itemId));
+
+        ItemKitDto? result = null;
+        var lines = new List<ItemKitLineDto>();
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (result is null)
+            {
+                result = new ItemKitDto(
+                    Id:         reader.GetInt32(0),
+                    ItemId:     reader.GetInt32(1),
+                    ItemCode:   reader.GetString(2),
+                    ItemName:   reader.GetString(3),
+                    VersionNo:  reader.GetInt32(4),
+                    PriceMode:  reader.GetString(5),
+                    FixedPrice: reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                    Description:reader.IsDBNull(7) ? null : reader.GetString(7),
+                    Lines:      lines);
+            }
+
+            if (!reader.IsDBNull(8))
+            {
+                lines.Add(new ItemKitLineDto(
+                    Id:        reader.GetInt32(8),
+                    ItemKitId: result.Id,
+                    ItemId:    reader.GetInt32(9),
+                    ItemCode:  reader.IsDBNull(10) ? "" : reader.GetString(10),
+                    ItemName:  reader.IsDBNull(11) ? "" : reader.GetString(11),
+                    ConfigId:  reader.IsDBNull(12) ? null : reader.GetInt32(12),
+                    ConfigCode:reader.IsDBNull(13) ? null : reader.GetString(13),
+                    Quantity:  reader.GetDecimal(14),
+                    LineGuid:  reader.IsDBNull(15) ? Guid.Empty : reader.GetGuid(15),
+                    Note:      reader.IsDBNull(16) ? null : reader.GetString(16)));
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<int> AddKitAsync(ItemKit kit, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var transaction = connection.BeginTransaction();
+
+        int newId;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.Transaction = transaction;
+            cmd.CommandText = $"""
+                INSERT INTO [{_schema}].[ItemKit]
+                    ([ItemId],[VersionNo],[PriceMode],[FixedPrice],[Description],[IsActive],[CreatedById],[Created])
+                VALUES
+                    (@ItemId,1,@PriceMode,@FixedPrice,@Description,1,@CreatedById,SYSUTCDATETIME());
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
+                """;
+            cmd.Parameters.Add(new SqlParameter("@ItemId",      kit.ItemId));
+            cmd.Parameters.Add(new SqlParameter("@PriceMode",   kit.PriceMode));
+            cmd.Parameters.Add(new SqlParameter("@FixedPrice",  (object?)kit.FixedPrice  ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Description", (object?)kit.Description ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)kit.CreatedById ?? DBNull.Value));
+            newId = (int)(await cmd.ExecuteScalarAsync(cancellationToken))!;
+        }
+
+        foreach (var line in kit.Lines)
+            await InsertKitLineAsync(connection, transaction, newId, line, kit.CreatedById, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return newId;
+    }
+
+    public async Task UpdateKitAsync(ItemKit kit, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var transaction = connection.BeginTransaction();
+
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.Transaction = transaction;
+            // VersionNo++ SQL tarafinda (revizyon — sonraki kullanimi etkiler).
+            // ItemId degismez (kit karti sabit). Satirlar DELETE+INSERT.
+            cmd.CommandText = $"""
+                UPDATE [{_schema}].[ItemKit]
+                SET [PriceMode]   = @PriceMode,
+                    [FixedPrice]  = @FixedPrice,
+                    [Description] = @Description,
+                    [VersionNo]   = [VersionNo] + 1,
+                    [Updated]     = SYSUTCDATETIME(),
+                    [UpdatedById] = @UpdatedById
+                WHERE [Id] = @Id;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Id",          kit.Id));
+            cmd.Parameters.Add(new SqlParameter("@PriceMode",   kit.PriceMode));
+            cmd.Parameters.Add(new SqlParameter("@FixedPrice",  (object?)kit.FixedPrice  ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Description", (object?)kit.Description ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)kit.UpdatedById ?? DBNull.Value));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var deleteCmd = connection.CreateCommand())
+        {
+            deleteCmd.Transaction = transaction;
+            deleteCmd.CommandText = $"DELETE FROM [{_schema}].[ItemKitLine] WHERE [ItemKitId] = @ItemKitId;";
+            deleteCmd.Parameters.Add(new SqlParameter("@ItemKitId", kit.Id));
+            await deleteCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (var line in kit.Lines)
+            await InsertKitLineAsync(connection, transaction, kit.Id, line, kit.UpdatedById, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task InsertKitLineAsync(
+        SqlConnection connection, SqlTransaction transaction, int kitId,
+        ItemKitLine line, int? fallbackUserId, CancellationToken cancellationToken)
+    {
+        await using var lineCmd = connection.CreateCommand();
+        lineCmd.Transaction = transaction;
+        lineCmd.CommandText = $"""
+            INSERT INTO [{_schema}].[ItemKitLine]
+                ([ItemKitId],[ItemId],[ConfigId],[Quantity],[LineGuid],[Note],[CreatedById],[Created])
+            VALUES
+                (@ItemKitId,@ItemId,@ConfigId,@Qty,@LineGuid,@Note,@CreatedById,SYSUTCDATETIME());
+            """;
+        lineCmd.Parameters.Add(new SqlParameter("@ItemKitId", kitId));
+        lineCmd.Parameters.Add(new SqlParameter("@ItemId",    line.ItemId));
+        lineCmd.Parameters.Add(new SqlParameter("@ConfigId",  (object?)line.ConfigId ?? DBNull.Value));
+        lineCmd.Parameters.Add(new SqlParameter("@Qty",       line.Quantity));
+        lineCmd.Parameters.Add(new SqlParameter("@LineGuid",  line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
+        lineCmd.Parameters.Add(new SqlParameter("@Note",      (object?)line.Note ?? DBNull.Value));
+        lineCmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)line.CreatedById ?? (object?)fallbackUserId ?? DBNull.Value));
+        await lineCmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteKitAsync(int itemId, int? userId, CancellationToken cancellationToken)
+    {
+        // Soft delete — ItemKit.IsActive=0. Lines dokunulmaz (header IsActive=0 zaten
+        // WHERE filtresiyle gizler). Gecmis belgeler snapshot tasidigindan etkilenmez.
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE [{_schema}].[ItemKit]
+            SET [IsActive]    = 0,
+                [Updated]     = SYSUTCDATETIME(),
+                [UpdatedById] = @UpdatedById
+            WHERE [ItemId] = @ItemId AND [IsActive] = 1;
+            """;
+        command.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        command.Parameters.Add(new SqlParameter("@UpdatedById", (object?)userId ?? DBNull.Value));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<int>> GetBOMComponentItemIdsAsync(
         int parentItemId, CancellationToken cancellationToken)
     {

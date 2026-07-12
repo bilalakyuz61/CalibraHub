@@ -35,6 +35,15 @@ public enum ItemType
 
     [Description("Diger")]
     Other = 9,
+
+    /// <summary>
+    /// Kit / paket urun (phantom bundle). Fiziksel stok degil, birden fazla stogu
+    /// tek kod altinda toplayan mantiksal gruplama. Satis/teklif/sipariste tek kalem,
+    /// irsaliyede bilesenlerine patlar. Stok/seri/lot etkisi bilesen seviyesindedir.
+    /// Icerik ItemKit + ItemKitLine tablolarinda tutulur.
+    /// </summary>
+    [Description("Kit")]
+    Kit = 10,
 }
 
 public static class ItemTypeCatalog
@@ -57,4 +66,9 @@ public static class ItemTypeCatalog
     public static bool IsProducible(int? typeId) => typeId.HasValue && ProducibleTypeIds.Contains(typeId.Value);
 
     public static bool IsConsumable(int? typeId) => typeId.HasValue && ConsumableTypeIds.Contains(typeId.Value);
+
+    /// <summary>Kit / paket urun tipi — icerik ItemKit/ItemKitLine tablolarinda; satis
+    /// satirinda tek kalem, irsaliyede bilesenlerine patlar. Ne uretilebilir ne sarf
+    /// (patlatma satis tarafinda, uretim degil).</summary>
+    public static bool IsKit(int? typeId) => typeId == (int)ItemType.Kit;
 }
