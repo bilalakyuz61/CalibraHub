@@ -222,7 +222,7 @@ public sealed class PriceListController : Controller
         return Json(filtered.Select(g => new
         {
             g.Id, g.Code, g.Name, g.Description, g.IsActive,
-            g.AllowsBuying, g.AllowsSelling, g.AllowsCost
+            g.AllowsBuying, g.AllowsSelling, g.AllowsCost, g.IsDefault
         }));
     }
 
@@ -567,6 +567,7 @@ public sealed class PriceListController : Controller
         DateTime? activeOn = null,
         int page = 1,
         int pageSize = 50,
+        int? itemId = null,
         CancellationToken ct = default)
     {
         try
@@ -579,7 +580,8 @@ public sealed class PriceListController : Controller
                 ValidToMax: validToMax,
                 ActiveOn: activeOn,
                 Page: page,
-                PageSize: pageSize);
+                PageSize: pageSize,
+                ItemId: itemId);
 
             var result = await _svc.GetEntriesByGroupAsync(groupId, filter, ct);
             return Json(new

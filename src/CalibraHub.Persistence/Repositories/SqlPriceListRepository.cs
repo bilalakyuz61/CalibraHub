@@ -286,6 +286,11 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine($"WHERE p.[GroupId] = @GroupId");
         }
 
+        if (filter.ItemId is int iid && iid > 0)
+        {
+            sb.AppendLine("  AND p.[ItemId] = @ItemId");
+            cmd.Parameters.Add(new SqlParameter("@ItemId", iid));
+        }
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             sb.AppendLine("  AND (i.[Code] LIKE @Search OR i.[Name] LIKE @Search)");
