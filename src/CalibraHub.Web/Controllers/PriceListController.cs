@@ -234,7 +234,7 @@ public sealed class PriceListController : Controller
         return Json(new
         {
             g.Id, g.Code, g.Name, g.Description, g.IsActive,
-            g.AllowsBuying, g.AllowsSelling, g.AllowsCost
+            g.AllowsBuying, g.AllowsSelling, g.AllowsCost, g.IsDefault
         });
     }
 
@@ -249,6 +249,8 @@ public sealed class PriceListController : Controller
             var (ok, err) = await _svc.UpdateGroupAsync(
                 new UpdatePriceGroupRequest(input.Id.Value, input.Code!, input.Name!, input.Description, input.IsActive,
                     input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
+            // Genel Fiyat Listesi isareti (sirket basina tek): true → genel yap, false → kaldir.
+            if (ok) await _svc.SetDefaultGroupAsync(input.Id.Value, input.IsDefault, ct);
             return Json(new { success = ok, message = ok ? "Guncellendi." : err, id = input.Id.Value });
         }
         else
@@ -256,6 +258,7 @@ public sealed class PriceListController : Controller
             var (ok, err, newId) = await _svc.CreateGroupAsync(
                 new CreatePriceGroupRequest(input.Code!, input.Name!, input.Description, input.IsActive,
                     input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
+            if (ok && newId.HasValue && input.IsDefault) await _svc.SetDefaultGroupAsync(newId.Value, true, ct);
             return Json(new { success = ok, message = ok ? "Kaydedildi." : err, id = newId });
         }
     }
@@ -272,7 +275,7 @@ public sealed class PriceListController : Controller
     [HttpPost]
     public async Task<IActionResult> SetDefaultPriceGroupJson(int id, CancellationToken ct)
     {
-        var (ok, err) = await _svc.SetDefaultGroupAsync(id, ct);
+        var (ok, err) = await _svc.SetDefaultGroupAsync(id, true, ct);
         return Json(new { success = ok, message = ok ? "Genel Liste olarak ayarlandi." : err });
     }
 
@@ -761,6 +764,8 @@ public sealed class PriceGroupInput
     public bool AllowsBuying  { get; set; } = true;
     public bool AllowsSelling { get; set; } = true;
     public bool AllowsCost    { get; set; } = true;
+    // Bu liste "Genel Fiyat Listesi" mi? (sirket basina tek). true → digerleri kalkar.
+    public bool IsDefault     { get; set; }
 }
 
 public sealed class PriceGroupsViewModel

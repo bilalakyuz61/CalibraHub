@@ -11,8 +11,8 @@ public interface IPriceListService
     Task<(bool Success, string? Error)> UpdateGroupAsync(UpdatePriceGroupRequest request, CancellationToken ct);
     Task<(bool Success, string? Error)> DeleteGroupAsync(int id, CancellationToken ct);
 
-    // "Genel Liste" (fallback) grubunu isaretle — CompanyId basina tek default.
-    Task<(bool Success, string? Error)> SetDefaultGroupAsync(int groupId, CancellationToken ct);
+    // "Genel Liste" (fallback) grubunu isaretle/kaldir — CompanyId basina tek default.
+    Task<(bool Success, string? Error)> SetDefaultGroupAsync(int groupId, bool isDefault, CancellationToken ct);
 
     // Fiyat Kalemleri — server-side pagination + filter
     Task<PagedPriceListResult> GetEntriesByGroupAsync(

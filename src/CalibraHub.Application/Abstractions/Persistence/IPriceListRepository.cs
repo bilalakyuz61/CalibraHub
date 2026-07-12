@@ -14,7 +14,8 @@ public interface IPriceListRepository
 
     // "Genel Liste" (fallback) grubu — CompanyId basina tek IsDefault=1 grup.
     Task<int?> GetDefaultGroupIdAsync(CancellationToken ct);
-    Task SetDefaultGroupAsync(int groupId, CancellationToken ct);
+    // isDefault=true → grubu Genel Liste yap (digerleri kalkar); false → yalniz bu grubu kaldir.
+    Task SetDefaultGroupAsync(int groupId, bool isDefault, CancellationToken ct);
 
     // Fiyat Kalemleri — enriched (Item/Config/Currency JOIN ile)
     // Server-side pagination + filter (frontend tum kayitlari cekmiyor; bellek korumasi).

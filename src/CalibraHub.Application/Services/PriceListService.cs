@@ -85,13 +85,14 @@ public sealed class PriceListService : IPriceListService
         return (true, null);
     }
 
-    // Verilen grubu "Genel Liste" (default) yap — ayni company'de tek default garanti edilir.
-    public async Task<(bool Success, string? Error)> SetDefaultGroupAsync(int groupId, CancellationToken ct)
+    // Grubu "Genel Liste" (default) yap/kaldir — ayni company'de tek default garanti edilir.
+    // isDefault=true: bu grup genel, digerleri kalkar. isDefault=false: yalniz bu grup kalkar.
+    public async Task<(bool Success, string? Error)> SetDefaultGroupAsync(int groupId, bool isDefault, CancellationToken ct)
     {
         var grp = await _repo.GetGroupByIdAsync(groupId, ct);
         if (grp is null) return (false, "Grup bulunamadi.");
-        if (!grp.IsActive) return (false, "Pasif grup Genel Liste yapilamaz.");
-        await _repo.SetDefaultGroupAsync(groupId, ct);
+        if (isDefault && !grp.IsActive) return (false, "Pasif grup Genel Liste yapilamaz.");
+        await _repo.SetDefaultGroupAsync(groupId, isDefault, ct);
         return (true, null);
     }
 

@@ -416,6 +416,22 @@
                 </div>
             </div>
 
+            <div class="pge-field">
+                <label class="pge-label">Genel Fiyat Listesi</label>
+                <div class="pge-switch-row">
+                    <label class="pge-switch">
+                        <input id="pgeIsDefault" type="checkbox" />
+                        <span class="pge-switch-slider"></span>
+                    </label>
+                    <span style="font-size:.78rem;">Bu listeyi genel fiyat listesi yap</span>
+                </div>
+                <div style="font-size:11px;opacity:.5;margin-top:4px;">
+                    Şirket başına yalnızca bir genel liste olur (bu işaretlenirse diğerindeki işaret kalkar).
+                    Bir cariye özel liste atanmadığında veya o listede ürünün fiyatı bulunmadığında,
+                    fiyat bu listeden çözülür.
+                </div>
+            </div>
+
             <div id="pgeMsg"></div>
         </div>
 
@@ -526,6 +542,7 @@
                 document.getElementById('pgeAllowsBuying').checked  = d.allowsBuying  !== false;
                 document.getElementById('pgeAllowsSelling').checked = d.allowsSelling !== false;
                 document.getElementById('pgeAllowsCost').checked    = d.allowsCost    !== false;
+                document.getElementById('pgeIsDefault').checked     = d.isDefault === true;
                 syncStatusLabel();
                 document.getElementById('pgeMeta').textContent = (d.code || '') + ' · ' + (d.name || '');
                 document.getElementById('pgeBtnDelete').disabled = false;
@@ -548,7 +565,8 @@
             isActive:      document.getElementById('pgeIsActive').checked,
             allowsBuying:  aB,
             allowsSelling: aS,
-            allowsCost:    aC
+            allowsCost:    aC,
+            isDefault:     document.getElementById('pgeIsDefault').checked
         };
         fetch(API('SavePriceGroupJson'), {
             method: 'POST', credentials: 'same-origin',

@@ -171,18 +171,25 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         return val is null || val == DBNull.Value ? null : Convert.ToInt32(val);
     }
 
-    // Verilen grubu default yap; ayni company'deki diger tum gruplarin default'unu kaldir.
-    // Tek UPDATE statement + CASE WHEN → filtered unique index (tek default) ihlal edilmeden atomik.
-    public async Task SetDefaultGroupAsync(int groupId, CancellationToken ct)
+    // isDefault=true → bu grubu Genel Liste yap; ayni company'deki digerlerinin default'unu kaldir
+    //   (tek UPDATE + CASE WHEN → filtered unique index ihlal edilmeden atomik).
+    // isDefault=false → yalnizca bu grubun default'unu kaldir (digerlerine dokunma).
+    public async Task SetDefaultGroupAsync(int groupId, bool isDefault, CancellationToken ct)
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = $"""
-            UPDATE {_tblGroups}
-            SET [IsDefault] = CASE WHEN [Id]=@Id THEN 1 ELSE 0 END,
-                [Updated]   = GETDATE()
-            WHERE [CompanyId]=@CompanyId;
-            """;
+        cmd.CommandText = isDefault
+            ? $"""
+                UPDATE {_tblGroups}
+                SET [IsDefault] = CASE WHEN [Id]=@Id THEN 1 ELSE 0 END,
+                    [Updated]   = GETDATE()
+                WHERE [CompanyId]=@CompanyId;
+                """
+            : $"""
+                UPDATE {_tblGroups}
+                SET [IsDefault] = 0, [Updated] = GETDATE()
+                WHERE [CompanyId]=@CompanyId AND [Id]=@Id AND [IsDefault]=1;
+                """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id",        groupId));
         await cmd.ExecuteNonQueryAsync(ct);
