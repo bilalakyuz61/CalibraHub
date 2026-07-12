@@ -322,6 +322,36 @@ public sealed class DocumentService : IDocumentService
         return result;
     }
 
+    /// <summary>
+    /// Bağlantı-kilitli satırlar — SaveQuoteAsync'teki koruma ile AYNI taban formülü:
+    /// floor = max(karşılanan miktar, türetilmiş aktif satır miktar toplamı). Kilitli
+    /// olmayan (floor yok) satırlar döndürülmez. UI önden silme engeli + miktar tabanı için kullanır.
+    /// </summary>
+    public async Task<IReadOnlyList<DocumentLineLockDto>> GetLineLocksAsync(int documentId, CancellationToken ct)
+    {
+        var result = new List<DocumentLineLockDto>();
+        if (documentId <= 0) return result;
+        var lines = await GetQuoteLinesAsync(documentId, ct);
+        if (lines.Count == 0) return result;
+
+        var derivedAgg = await _repo.GetDerivedLineAggregatesAsync(documentId, ct);
+        foreach (var ln in lines)
+        {
+            // consumed: karşılanan miktar. İhtiyaç dışı türlerde Fulfilled* zaten 0 (domain
+            // invariant) → SaveQuoteAsync'teki isPurchaseRequest-gate ile aynı sonucu verir.
+            var consumed   = ln.FulfilledFromStock + ln.FulfilledByPurchase;
+            var hasDerived = derivedAgg.TryGetValue(ln.Id, out var da);
+            if (consumed <= 0 && !hasDerived) continue;
+
+            var floor  = Math.Max(consumed, hasDerived ? da.QtySum : 0m);
+            var reason = hasDerived
+                ? $"Bu kalemden türetilmiş {da.Count} belge satırı olduğu için silinemez."
+                : $"Bu kalem {consumed:0.##} birim karşılandığı için silinemez.";
+            result.Add(new DocumentLineLockDto(ln.Id, floor, reason));
+        }
+        return result;
+    }
+
     public async Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(
         SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct)
     {

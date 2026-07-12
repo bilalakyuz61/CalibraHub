@@ -53,6 +53,15 @@ public sealed record DocumentLineDetailDto(
     string FeatureName, string ValueCode, string ValueName,
     string? Description, int LineOrder);
 
+/// <summary>
+/// Bir belge satırının "bağlantı kilidi" — düzenleme ekranı bu bilgiyle satırı önden
+/// korur: kilitli satır silinemez ve miktarı <see cref="MinQuantity"/> altına düşürülemez.
+/// Kilit nedeni: karşılanmış miktar (İhtiyaç Kaydı) veya bu satırdan türetilmiş AKTİF belge
+/// satırları. Kilitli olmayan satırlar listeye eklenmez. Sunucu tarafı zorunluluğu yine
+/// SaveQuoteAsync'te (aynı taban) uygulanır — bu yalnızca UI'ın önden uyarması içindir.
+/// </summary>
+public sealed record DocumentLineLockDto(int LineId, decimal MinQuantity, string Reason);
+
 public sealed record DocumentListItemDto(
     int Id, string DocumentNumber, DateTime DocumentDate, DateTime? ValidUntil,
     string? ContactName,

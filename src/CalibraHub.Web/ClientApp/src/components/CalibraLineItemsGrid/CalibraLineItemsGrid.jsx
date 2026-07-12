@@ -503,6 +503,7 @@ export default function CalibraLineItemsGrid(props) {
   // ── Hucre degisikligi ──
   var handleCellChange = useCallback(function(rowUid, columnKey, newValue, fillPatch) {
     var autoOpenRow = null
+    var lockWarn = null
     function _num(x) { if (x == null || x === '') return null; var n = parseFloat(String(x).replace(',', '.')); return isNaN(n) ? null : n }
     setRows(function(prev) {
       return prev.map(function(r) {
@@ -511,6 +512,17 @@ export default function CalibraLineItemsGrid(props) {
         next[columnKey] = newValue
         if (fillPatch) {
           Object.keys(fillPatch).forEach(function(k) { next[k] = fillPatch[k] })
+        }
+        // Bağlantı tabanı: karşılanmış / türetilmiş (bağlantılı) satırın miktarı, taahhüt
+        // edilen tabanın (__minQty) altına düşürülemez. Blur commit'inde tabana sabitlenir
+        // + uyarı gösterilir. SaveQuoteAsync aynı tabanı sunucuda da zorlar.
+        if (columnKey === 'quantity') {
+          var minQ = _num(next.__minQty)
+          var newQ = _num(next.quantity)
+          if (minQ != null && minQ > 0 && newQ != null && newQ < minQ) {
+            next.quantity = minQ
+            lockWarn = { name: next.materialName || next.materialCode || 'Kalem', min: minQ }
+          }
         }
         // İzlenebilirlik: malzeme seçilince (trackSerial/trackLot geldi) miktar varsayılan 1 +
         // seri/lot ekranı açılsın; miktar girişinden (blur) sonra da açılsın (düzeltmede tekrar).
@@ -531,6 +543,11 @@ export default function CalibraLineItemsGrid(props) {
         return applyComputed(next, allColumns)
       })
     })
+    if (lockWarn) {
+      var lm = "'" + lockWarn.name + "' bağlantılı olduğu için miktarı " + TR_FMT(lockWarn.min, null) + " altına düşürülemez."
+      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(lm, 'warn')
+      else if (window.CalibraAlert && window.CalibraAlert.warn) window.CalibraAlert.warn(lm)
+    }
     if (autoOpenRow && traceColumns.length > 0) setTraceModalRow({ row: autoOpenRow, column: traceColumns[0] })
   }, [allColumns, traceColumns])
 
@@ -1052,7 +1069,7 @@ export default function CalibraLineItemsGrid(props) {
                                 : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500')
                         )}
                         title={isPending ? 'Silmeyi iptal et'
-                               : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? 'Bu satir silinemez' : 'Sil'))}
+                               : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil'))}
                       >
                         {canDelete(row) || isPending ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
                       </button>

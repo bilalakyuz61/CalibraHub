@@ -1142,7 +1142,11 @@ public sealed class SalesController : Controller
             .Where(v => v > 0)
             .ToArray();
 
-        return Json(new { quote, lines, invalidLineIds });
+        // Bağlantı-kilitli satırlar (karşılanmış / türetilmiş) — grid önden silme engeli +
+        // miktar tabanı için kullanır (SaveQuoteAsync ile aynı taban).
+        var lineLocks = await _quoteService.GetLineLocksAsync(id, ct);
+
+        return Json(new { quote, lines, invalidLineIds, lineLocks });
     }
 
     [HttpGet]

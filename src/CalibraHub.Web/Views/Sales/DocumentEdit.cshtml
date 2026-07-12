@@ -3640,6 +3640,24 @@
         document.getElementById('sqQuoteNumber').value = '';
     }
 
+    // Bağlantı kilitleri: /Sales/GetQuote yanıtındaki data.lineLocks ([{lineId,minQuantity,reason}])
+    // grid satırlarına iliştirilir. Grid `__canDelete=false` ile silmeyi engeller,
+    // `__minQty` ile miktarın taban altına düşürülmesini önler (SaveQuoteAsync ile aynı taban).
+    function sqApplyLineLocks(lines, lineLocks) {
+        if (!Array.isArray(lines) || !Array.isArray(lineLocks) || lineLocks.length === 0) return lines;
+        var byId = {};
+        lineLocks.forEach(function (lk) { if (lk && lk.lineId != null) byId[String(lk.lineId)] = lk; });
+        return lines.map(function (ln) {
+            var lk = byId[String(ln.id)];
+            if (!lk) return ln;
+            return Object.assign({}, ln, {
+                __canDelete:        false,
+                __minQty:           lk.minQuantity,
+                __deleteLockReason: lk.reason,
+            });
+        });
+    }
+
     async function sqLoadQuote(id, prefetchedData) {
         try {
             var data = prefetchedData;
@@ -3736,6 +3754,7 @@
                     taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
                 });
             });
+            initialLines = sqApplyLineLocks(initialLines, data.lineLocks);
             setGridRows(initialLines);
             sqRecalc();
 
@@ -5510,6 +5529,7 @@
                         taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
                     });
                 });
+                initialLines = sqApplyLineLocks(initialLines, data.lineLocks);
                 setGridRows(initialLines);
                 var invalidArr = Array.isArray(data.invalidLineIds) ? data.invalidLineIds : [];
                 if (window.CalibraHub && window.CalibraHub.salesLineGrid
@@ -5548,6 +5568,7 @@
                         taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
                     });
                 });
+                initialLines = sqApplyLineLocks(initialLines, data.lineLocks);
                 setGridRows(initialLines);
                 var invalidArr = Array.isArray(data.invalidLineIds) ? data.invalidLineIds : [];
                 if (window.CalibraHub && window.CalibraHub.salesLineGrid

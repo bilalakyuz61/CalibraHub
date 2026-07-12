@@ -33,6 +33,14 @@ public interface IDocumentService
     Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct);
 
+    /// <summary>
+    /// Belgenin bağlantı-kilitli satırları (düzenleme ekranı önden koruması için).
+    /// Karşılanmış (İhtiyaç) veya türetilmiş aktif belge satırı olan her satır için
+    /// silme engeli + miktar tabanı (MinQuantity) döner; kilitli olmayan satır listede yer almaz.
+    /// <see cref="SaveQuoteAsync"/> aynı tabanı sunucuda zorlar (tek formül) — bu UI önizlemesidir.
+    /// </summary>
+    Task<IReadOnlyList<DocumentLineLockDto>> GetLineLocksAsync(int documentId, CancellationToken ct);
+
     /// <summary>Bir kit satirinin DONMUS icerik snapshot'ini (bilesen kod/ad/miktar) doner (Faz 2).
     /// Grid'de kit satirinin acilir dokumu + Faz 3 patlatma icin. Kit satiri degilse bos liste.</summary>
     Task<IReadOnlyCollection<CalibraHub.Domain.Entities.DocumentLineKitComponent>> GetKitLineComponentsAsync(
