@@ -523,14 +523,15 @@
                 if (notesEl) notesEl.value = doc.notes || '';
             }
 
-            // İzlenebilirlik: taslak sayımın satır-seri eşlemesini çek (lot/track flag GetLinesAsync'ten gelir)
-            var _invSerialMap = {};
+            // İzlenebilirlik: taslak sayımın satır-seri/lot eşlemesini çek (track flag GetLinesAsync'ten gelir)
+            var _invTrace = {};
             try {
                 var _sr = await fetch('/Warehouse/GetInventoryLineSerials?documentId=' + (DOC_ID || 0));
-                if (_sr.ok) _invSerialMap = (await _sr.json()) || {};
-            } catch (e) { /* seri yoksa sorun değil */ }
+                if (_sr.ok) _invTrace = (await _sr.json()) || {};
+            } catch (e) { /* iz kaydı yoksa sorun değil */ }
 
             var rows = lines.map(function(l) {
+                var _tr = _invTrace[String(l.id)] || {};
                 return {
                     stockCardId:       l.itemId,
                     materialCode:      l.materialCode || '',
@@ -540,9 +541,10 @@
                     combinationCode:   l.combinationCode || '',
                     combinationId:     l.combinationId || null,
                     trackCombinations: !!l.combinationId,
-                    lotNo:             l.lotNo || '',
-                    serials:           _invSerialMap[String(l.id)] || (Array.isArray(l.serials) ? l.serials : []),
+                    serials:           Array.isArray(_tr.serials) ? _tr.serials : [],
+                    lotBreakdown:      Array.isArray(_tr.lotBreakdown) ? _tr.lotBreakdown : [],
                     trackSerial:       l.trackingType === 'Serial',
+                    trackLot:          l.trackingType === 'Lot',
                     autoSerial:        !!l.autoSerial,
                     notes:             l.notes || '',
                     fromLocationId:    l.fromLocationId || null,
@@ -622,9 +624,10 @@
                         notes:         r.notes || null,
                         fromLocationId: r.fromLocationId || null,
                         toLocationId:   null,
-                        // İzlenebilirlik — lot/seri (lot-takipli/seri-takipli kalemde server zorunlu kılar)
-                        lotNo:          (r.lotNo == null ? '' : String(r.lotNo)).trim() || null,
+                        // İzlenebilirlik — seri listesi VEYA çoklu lot kırılımı (server zorunlu kılar)
                         serials:        (Array.isArray(r.serials) && r.serials.length > 0) ? r.serials : null,
+                        lotBreakdown:   (Array.isArray(r.lotBreakdown) && r.lotBreakdown.length > 0)
+                                          ? r.lotBreakdown.map(function(b){ return { lotNo: b.lotNo, qty: b.qty }; }) : null,
                     };
                 });
 

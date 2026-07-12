@@ -74,7 +74,12 @@ public sealed record SaveStockDocLineRequest(
     string? LotNo = null,
     // Seri-takipli stokta satırın seri no listesi. Girişte AutoSerial=1 ise boş bırakılabilir
     // (sunucu üretir); diğer tüm durumlarda adet kadar seri zorunludur.
-    IReadOnlyList<string>? Serials = null);
+    IReadOnlyList<string>? Serials = null,
+    // Sayım — lot-takipli kalemde çoklu lot kırılımı ([{LotNo, Qty}]). CountedQty = Qty toplamı.
+    IReadOnlyList<StockLotBreakdownItem>? LotBreakdown = null);
+
+/// <summary>Sayım lot kırılımı satırı — bir kalemde birden fazla lot sayılabilir.</summary>
+public sealed record StockLotBreakdownItem(string LotNo, decimal Qty);
 
 // ── Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) ─────────────────────────
 // Üretilen miktara göre bileşen sarfı: reçete önerisi + serbest satır. Satır bir

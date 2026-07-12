@@ -878,8 +878,9 @@ public sealed class WarehouseController : Controller
                 MaterialName = x.Name,
                 x.UnitId,
                 TrackCombinations = x.Combinations,
-                // Seri takibi: grid'in Seri hücresi (buton aktifliği + otomatik üretim ipucu) için
+                // İzlenebilirlik: grid'in Lot/Seri hücresi (buton aktifliği + modal tipi) için
                 TrackSerial = string.Equals(x.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase),
+                TrackLot    = string.Equals(x.TrackingType, "Lot", StringComparison.OrdinalIgnoreCase),
                 AutoSerial = x.AutoSerial,
             })
             .OrderBy(x => x.MaterialCode));
@@ -913,29 +914,40 @@ public sealed class WarehouseController : Controller
         return Json(result);
     }
 
-    // Sayım satırlarının seri eşlemesi (InventoryCountLine.Id → serials[]) — taslak yeniden yüklemede
-    // grid satırına serileri doldurmak için. Seriler InventoryCountLine.Serials'ta satır/virgül ile saklı.
+    // Sayım satırlarının izlenebilirlik eşlemesi (InventoryCountLine.Id → {serials[], lotBreakdown[]}) —
+    // taslak yeniden yüklemede grid satırına seri/lot kırılımını doldurmak için.
     [HttpGet]
     public async Task<IActionResult> GetInventoryLineSerials(int documentId, CancellationToken ct)
     {
-        if (documentId <= 0) return Json(new Dictionary<string, string[]>());
+        if (documentId <= 0) return Json(new Dictionary<string, object>());
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT l.[Id], l.[Serials]
+            SELECT l.[Id], l.[Serials], l.[LotBreakdown]
             FROM [{_schema}].[InventoryCountLine] l
             INNER JOIN [{_schema}].[InventoryCount] ic ON ic.[Id] = l.[InventoryCountId]
-            WHERE ic.[DocumentId] = @Doc AND l.[Serials] IS NOT NULL AND LEN(l.[Serials]) > 0;
+            WHERE ic.[DocumentId] = @Doc
+              AND ((l.[Serials] IS NOT NULL AND LEN(l.[Serials]) > 0) OR (l.[LotBreakdown] IS NOT NULL AND LEN(l.[LotBreakdown]) > 0));
             """;
         cmd.Parameters.AddWithValue("@Doc", documentId);
-        var map = new Dictionary<string, string[]>();
+        var map = new Dictionary<string, object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
             var serials = (r.IsDBNull(1) ? "" : r.GetString(1))
                 .Split(new[] { '\n', '\r', ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
-            if (serials.Length > 0) map[r.GetInt32(0).ToString()] = serials;
+            object[] breakdown = System.Array.Empty<object>();
+            if (!r.IsDBNull(2))
+            {
+                try
+                {
+                    var arr = System.Text.Json.JsonSerializer.Deserialize<List<StockLotBreakdownItem>>(r.GetString(2));
+                    breakdown = (arr ?? new()).Select(b => (object)new { lotNo = b.LotNo, qty = b.Qty }).ToArray();
+                }
+                catch { }
+            }
+            map[r.GetInt32(0).ToString()] = new { serials, lotBreakdown = breakdown };
         }
         return Json(map);
     }
@@ -1401,6 +1413,7 @@ public sealed class WarehouseController : Controller
                     ["stockCardId"]       = "id",
                     ["trackCombinations"] = "trackCombinations",
                     ["trackSerial"]       = "trackSerial",
+                    ["trackLot"]          = "trackLot",
                     ["autoSerial"]        = "autoSerial",
                     ["unitId"]            = "unitId",
                 },
@@ -1444,30 +1457,17 @@ public sealed class WarehouseController : Controller
             },
             new
             {
-                // Seri (Sayım): seri-takipli stokta fiziksel sayılan serileri gir (entry/scan modu).
-                // Sayılan miktar = girilen seri adedi; zorunluluk server-side (SaveInventoryCountAsync).
-                key        = "serials",
-                label      = "Seri",
-                type       = "serial-entry",
-                serialMode = "entry",
+                // İzlenebilirlik (Sayım) — tek "Lot / Seri" butonu → amaca özel modal.
+                // Seri-takipli: seri tara/gir (adet = Sayılan Miktar). Lot-takipli: çoklu lot kırılımı
+                // (Lot No + miktar), toplam = Sayılan Miktar. Zorunluluk server-side (SaveInventoryCountAsync).
+                key        = "trace",
+                label      = "Lot / Seri",
+                type       = "trace-entry",
                 serialsUrl = "/Warehouse/GetSerialsJson?itemId={stockCardId}",
-                width      = 90,
+                lotUrl     = "/Warehouse/GetLotBalancesJson?itemId={stockCardId}&locationId={fromLocationId}",
+                width      = 110,
                 align      = "center",
                 icon       = "Barcode",
-            },
-            new
-            {
-                // Lot / Parti (Sayım): lot-takipli stokta zorunlu (server-side). Mevcut lotları önerir.
-                key            = "lotNo",
-                label          = "Lot / Parti",
-                type           = "text-lookup",
-                lookupUrl      = "/Warehouse/GetLotBalancesJson?itemId={stockCardId}&locationId={fromLocationId}",
-                lookupValueKey = "lotNo",
-                lookupLabelKey = "label",
-                placeholder    = "Lot no",
-                width          = 130,
-                align          = "left",
-                icon           = "Tag",
             },
             new
             {

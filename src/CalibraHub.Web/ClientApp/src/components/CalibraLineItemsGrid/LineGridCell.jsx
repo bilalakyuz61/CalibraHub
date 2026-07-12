@@ -179,6 +179,11 @@ export default function LineGridCell(props) {
     return <SerialEntryCell column={column} row={row} value={value} onChange={onChange} />
   }
 
+  // ── Trace Entry (Sayım: tek buton → seri VEYA çoklu-lot modal) ──
+  if (column.type === 'trace-entry') {
+    return <TraceEntryCell column={column} row={row} value={value} onChange={onChange} />
+  }
+
   // ── Text (default) ─────────────────────────────────
   return (
     <input
@@ -1277,6 +1282,142 @@ function SerialEntryModal(props) {
       </div>
     </div>,
     document.body
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+ * Sayım İzlenebilirlik — tek "Lot / Seri" butonu → amaca özel modal.
+ * Seri-takipli kalem: seri tara/gir (adet = Sayılan Miktar).
+ * Lot-takipli kalem: çoklu lot kırılımı (Lot No + miktar), toplam = Sayılan Miktar.
+ * (Sayım kalem tablosunda satır-içi lot/seri kolonu yerine kullanılır.)
+ * ══════════════════════════════════════════════════════════════ */
+function LotBreakdownModal(props) {
+  var isLight = props.isLight
+  var [rows, setRows] = useState(function() {
+    var v = Array.isArray(props.value) ? props.value : []
+    return v.length > 0
+      ? v.map(function(r) { return { lotNo: r.lotNo || '', qty: (r.qty != null ? String(r.qty) : '') } })
+      : [{ lotNo: '', qty: '' }]
+  })
+  var lookup = useLookup(props.column && props.column.lotUrl ? props.column.lotUrl : null, props.row)
+
+  useEffect(function() {
+    function onKey(e) { if (e.key === 'Escape') props.onClose() }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function setCell(i, key, val) { var n = rows.slice(); n[i] = Object.assign({}, n[i]); n[i][key] = val; setRows(n) }
+  function addRow() { setRows(rows.concat([{ lotNo: '', qty: '' }])) }
+  function removeRow(i) { var n = rows.slice(); n.splice(i, 1); setRows(n.length ? n : [{ lotNo: '', qty: '' }]) }
+
+  var valid = rows.filter(function(r) { return String(r.lotNo).trim() && parseFloat(r.qty) > 0 })
+  var total = valid.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
+  var lotSuggest = (lookup.options || [])
+  var dupLot = (function() { var seen = {}, d = false; valid.forEach(function(r) { var k = String(r.lotNo).trim().toLowerCase(); if (seen[k]) d = true; seen[k] = 1 }); return d })()
+
+  var panelStyle = isLight
+    ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
+    : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2,6,23,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onMouseDown={function(e) { if (e.target === e.currentTarget) props.onClose() }}>
+      <div style={Object.assign({ width: 'min(520px, 94vw)', borderRadius: '14px', overflow: 'hidden' }, panelStyle)}>
+        <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between">
+          <div>
+            <div className="text-[13px] font-semibold text-slate-800 dark:text-white/90">Lot Kırılımı (Sayım)</div>
+            <div className="text-[11px] text-slate-500 dark:text-white/45 font-mono">{(props.row.materialCode || '') + (props.row.materialName ? ' · ' + props.row.materialName : '')}</div>
+          </div>
+          <div className="text-[12px] font-mono font-bold tabular-nums text-slate-700 dark:text-white/80">Toplam: {total}</div>
+        </div>
+        <div className="px-4 pb-2 max-h-[320px] overflow-y-auto">
+          {rows.map(function(r, i) {
+            return (
+              <div key={i} className="flex items-center gap-2 mb-1.5">
+                <input list={'lotsg-' + i} value={r.lotNo} onChange={function(e) { setCell(i, 'lotNo', e.target.value) }} placeholder="Lot / Parti No"
+                  className="flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-mono outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85" />
+                <datalist id={'lotsg-' + i}>
+                  {lotSuggest.map(function(o) { return <option key={o.lotNo} value={o.lotNo}>{o.label || o.lotNo}</option> })}
+                </datalist>
+                <input type="number" value={r.qty} min="0" step="any" onChange={function(e) { setCell(i, 'qty', e.target.value) }} placeholder="Miktar"
+                  className="w-24 rounded-lg px-2.5 py-1.5 text-[12px] text-right font-mono outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85" />
+                <button type="button" onClick={function() { removeRow(i) }} title="Satırı sil"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-[15px] leading-none text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/15">×</button>
+              </div>
+            )
+          })}
+          <button type="button" onClick={addRow} className="mt-1 text-[11.5px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-300">+ Lot Ekle</button>
+          {dupLot && <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300">Aynı lot birden fazla girildi.</div>}
+        </div>
+        <div className="px-4 py-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-white/[0.07]">
+          <button type="button" onClick={props.onClose} className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 hover:bg-slate-100 dark:text-white/60 dark:hover:bg-white/[0.07]">Vazgeç</button>
+          <button type="button" disabled={dupLot}
+            onClick={function() { props.onApply(valid.map(function(r) { return { lotNo: String(r.lotNo).trim(), qty: parseFloat(r.qty) } }), total) }}
+            className={'px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-colors ' + (dupLot ? 'bg-slate-300 dark:bg-white/15 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600')}>Uygula</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function TraceEntryCell(props) {
+  var column = props.column
+  var row = props.row
+  var onChange = props.onChange
+  var isLight = useIsLight()
+  var [open, setOpen] = useState(false)
+
+  var isSerial = row.trackSerial === true
+  var isLot = row.trackLot === true
+  if (!isSerial && !isLot) {
+    return <div className="w-full px-2.5 py-2 text-center text-[13px] text-slate-300 dark:text-white/25" title="Bu stokta izlenebilirlik yok">—</div>
+  }
+
+  if (isSerial) {
+    var serials = Array.isArray(row.serials) ? row.serials : []
+    var qty = parseNumber(row.quantity)
+    var qtyInt = (qty != null && qty > 0 && qty === Math.trunc(qty)) ? qty : null
+    var ok = serials.length > 0 && (qtyInt == null || serials.length === qtyInt)
+    var sClass = ok
+      ? 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30'
+      : 'text-rose-600 bg-rose-100 hover:bg-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:hover:bg-rose-500/30'
+    return (
+      <>
+        <button type="button" onClick={function() { setOpen(true) }}
+          className={'mx-auto h-7 min-w-[60px] px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-mono font-semibold transition-colors ' + sClass}
+          title={'Seri girişi — ' + serials.length + ' seri' + (qtyInt != null ? ' / ' + qtyInt + ' adet' : '')}>
+          {'Seri ' + serials.length}
+        </button>
+        {open && (
+          <SerialEntryModal isLight={isLight} isEntry={true} row={row} column={column} qtyInt={qtyInt} autoSerial={false} serials={serials}
+            onApply={function(list) { onChange('serials', list); onChange('quantity', list.length); setOpen(false) }}
+            onClose={function() { setOpen(false) }} />
+        )}
+      </>
+    )
+  }
+
+  var breakdown = Array.isArray(row.lotBreakdown) ? row.lotBreakdown : []
+  var lotTotal = breakdown.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
+  var lClass = breakdown.length > 0
+    ? 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30'
+    : 'text-slate-500 bg-slate-100 hover:bg-slate-200 dark:text-white/50 dark:bg-white/10 dark:hover:bg-white/[0.15]'
+  return (
+    <>
+      <button type="button" onClick={function() { setOpen(true) }}
+        className={'mx-auto h-7 min-w-[60px] px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-mono font-semibold transition-colors ' + lClass}
+        title={'Lot kırılımı — ' + breakdown.length + ' lot / ' + lotTotal + ' toplam'}>
+        {breakdown.length > 0 ? (breakdown.length + ' lot') : 'Lot'}
+      </button>
+      {open && (
+        <LotBreakdownModal isLight={isLight} row={row} column={column} value={breakdown}
+          onApply={function(list, total) { onChange('lotBreakdown', list); onChange('quantity', total); setOpen(false) }}
+          onClose={function() { setOpen(false) }} />
+      )}
+    </>
   )
 }
 

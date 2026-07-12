@@ -593,15 +593,23 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     tt.Parameters.AddWithValue("@It", itemId.Value);
                     trackingType = (await tt.ExecuteScalarAsync(ct)) as string ?? "None";
                 }
-                var lotNo = string.IsNullOrWhiteSpace(line.LotNo) ? null : line.LotNo!.Trim();
                 var serialList = (line.Serials ?? [])
                     .Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                // Lot kırılımı (çoklu lot) — geçerli satırlar (LotNo dolu + Qty>0)
+                var breakdown = (line.LotBreakdown ?? [])
+                    .Where(b => !string.IsNullOrWhiteSpace(b.LotNo) && b.Qty > 0)
+                    .Select(b => new { LotNo = b.LotNo.Trim(), b.Qty }).ToList();
 
-                if (string.Equals(trackingType, "Lot", StringComparison.OrdinalIgnoreCase) && lotNo == null)
+                if (string.Equals(trackingType, "Lot", StringComparison.OrdinalIgnoreCase))
                 {
-                    await tx.RollbackAsync(ct);
-                    throw new InvalidOperationException($"Lot No zorunlu (stok lot-takipli): '{label}'. Sayım satırında Lot / Parti No girilmelidir.");
+                    if (breakdown.Count == 0)
+                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Lot zorunlu (stok lot-takipli): '{label}'. Lot/Seri butonundan en az bir lot ve miktar girilmelidir."); }
+                    if (breakdown.Select(b => b.LotNo.ToLowerInvariant()).Distinct().Count() != breakdown.Count)
+                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Aynı lot birden fazla girildi: '{label}'."); }
+                    var lotSum = breakdown.Sum(b => b.Qty);
+                    if (Math.Abs(lotSum - line.Qty) > 0.0001m)
+                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Lot miktar toplamı sayılan miktara eşit olmalı — {lotSum:0.##} lot / {line.Qty:0.##} sayılan ('{label}')."); }
                 }
                 if (string.Equals(trackingType, "Serial", StringComparison.OrdinalIgnoreCase))
                 {
@@ -614,14 +622,18 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Seri No zorunlu (stok seri-takipli): seri adedi sayılan miktara eşit olmalı — {serialList.Count} seri / {line.Qty:0.##} adet ('{label}')."); }
                 }
                 var serialsText = serialList.Count > 0 ? string.Join("\n", serialList) : null;
+                var lotBreakdownJson = breakdown.Count > 0
+                    ? System.Text.Json.JsonSerializer.Serialize(breakdown)
+                    : null;
+                var firstLotNo = breakdown.Count > 0 ? breakdown[0].LotNo : null;
 
                 await using var lineIns = conn.CreateCommand();
                 lineIns.Transaction = tx;
                 lineIns.CommandText = $"""
                     INSERT INTO {T("InventoryCountLine")}
-                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes],[LocationId],[LotNo],[Serials])
+                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes],[LocationId],[LotNo],[LotBreakdown],[Serials])
                     VALUES
-                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId,@LotNo,@Serials);
+                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId,@LotNo,@LotBreakdown,@Serials);
                     """;
                 lineIns.Parameters.AddWithValue("@CountId", countId);
                 lineIns.Parameters.AddWithValue("@ItemId", itemId.Value);
@@ -631,7 +643,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@Notes", (object?)line.Notes ?? DBNull.Value);
                 // Kalem bazinda depo — satirda yoksa header (sayim deposu) devralinir
                 lineIns.Parameters.AddWithValue("@LocId", (object?)(line.FromLocationId ?? request.FromLocationId) ?? DBNull.Value);
-                lineIns.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@LotNo", (object?)firstLotNo ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@LotBreakdown", (object?)lotBreakdownJson ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@Serials", (object?)serialsText ?? DBNull.Value);
                 await lineIns.ExecuteNonQueryAsync(ct);
             }

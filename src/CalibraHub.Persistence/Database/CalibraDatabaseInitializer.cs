@@ -15622,6 +15622,11 @@ END;";
             IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[InventoryCountLine]', N'Serials') IS NULL
                 ALTER TABLE [{s}].[InventoryCountLine] ADD [Serials] NVARCHAR(MAX) NULL;
+            -- 2026-07-12: Çoklu lot kırılımı (sayım) — JSON dizisi (lotNo + qty nesneleri).
+            -- Bir kalemde birden fazla lot sayılabilir; CountedQty = qty toplamı.
+            IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[InventoryCountLine]', N'LotBreakdown') IS NULL
+                ALTER TABLE [{s}].[InventoryCountLine] ADD [LotBreakdown] NVARCHAR(MAX) NULL;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
