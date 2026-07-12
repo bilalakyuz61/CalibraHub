@@ -138,6 +138,7 @@
 }
 
 <div class="ke-root" id="keRoot">
+    @Html.AntiForgeryToken()
     <div class="ke-topbar">
         <button type="button" class="ke-btn ke-btn--ghost ke-btn--sm" id="keBack" title="Malzeme kartına dön">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -401,9 +402,10 @@
         };
 
         var btn = $('keSave'); btn.disabled = true;
+        var csrf = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
         fetch('@Url.Action("SaveKit", "Kit")', {
             method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf },
             body: JSON.stringify(payload)
         })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })

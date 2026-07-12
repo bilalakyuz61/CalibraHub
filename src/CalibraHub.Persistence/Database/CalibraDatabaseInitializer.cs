@@ -1797,19 +1797,31 @@ END;";
 
             -- CHECK constraint: Items.TypeId sabit ItemType enum araligina (1..9) kilitlenir.
             -- WITH NOCHECK — eski kayitlar dogrulanmaz, sadece yeni/guncellenen satirlar enforce edilir.
+            -- CK_Items_TypeId: izin verilen malzeme tipi araligi. 2026-07-12 Kit (10)
+            -- eklendi; eski 1-9 kisiti Kit INSERT'ini "CHECK constraint conflict" ile
+            -- engelliyordu. Mevcut DB'lerde eski kisit zaten kurulu oldugundan (installer
+            -- yalnizca YOK ise ekliyordu) once stale kisiti dusurup 1-10 ile yeniden kur.
             IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'TypeId') IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM sys.check_constraints
-                   WHERE [name] = N'CK_Items_TypeId'
-                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]'))
             BEGIN
-                EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Items]
-                    WITH NOCHECK
-                    ADD CONSTRAINT [CK_Items_TypeId]
-                        CHECK ([TypeId] IS NULL OR [TypeId] BETWEEN 1 AND 9);
-                ');
+                -- '10' icermeyen (yani eski 1-9) kisiti dusur
+                IF EXISTS (
+                    SELECT 1 FROM sys.check_constraints
+                    WHERE [name] = N'CK_Items_TypeId'
+                      AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]')
+                      AND [definition] NOT LIKE N'%10%')
+                    EXEC(N'ALTER TABLE [{schemaForSql}].[Items] DROP CONSTRAINT [CK_Items_TypeId];');
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM sys.check_constraints
+                    WHERE [name] = N'CK_Items_TypeId'
+                      AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]'))
+                    EXEC(N'
+                        ALTER TABLE [{schemaForSql}].[Items]
+                        WITH NOCHECK
+                        ADD CONSTRAINT [CK_Items_TypeId]
+                            CHECK ([TypeId] IS NULL OR [TypeId] BETWEEN 1 AND 10);
+                    ');
             END;
 
             -- ── AGGRESSIVE MIGRATION: Field/FieldGroup tablolari yanlis tip ile yaratilmissa
