@@ -756,6 +756,8 @@ body.app-theme-dark .ap-tab.is-active::before {
     var actionBar = document.getElementById('ap-action-bar');
 
     // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
+    // NOT: Kaydedilebilir parametresi olan HER yeni sekme buraya eklenmeli,
+    // yoksa o sekmede Kaydet butonu pasif kalir (bkz. satissiparis regresyonu).
     function syncSaveButton() {
         var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'guvenlik');
         saveBtn.disabled = !hasParams;
