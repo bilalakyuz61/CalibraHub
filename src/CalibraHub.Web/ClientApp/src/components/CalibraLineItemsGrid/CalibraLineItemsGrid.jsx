@@ -25,7 +25,7 @@ import {
   MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode,
 } from 'lucide-react'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
-import LineGridCell, { CombinationLookupCell } from './LineGridCell'
+import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, TraceEntryCell } from './LineGridCell'
 import CostViewerModal from './CostViewerModal'
 import QuoteCostSummaryModal from './QuoteCostSummaryModal'
 import { evaluate } from './formulaEvaluator'
@@ -125,10 +125,12 @@ export default function CalibraLineItemsGrid(props) {
   //   - inline     : satir icinde cell olarak
   //   - action     : Islem kolonuna buton olarak (combination-lookup burada)
   var columns = allColumns.filter(function(c) {
-    return c.placement !== 'row-below' && c.type !== 'combination-lookup'
+    return c.placement !== 'row-below' && c.type !== 'combination-lookup' && c.type !== 'trace-entry'
   })
   var belowColumns = allColumns.filter(function(c) { return c.placement === 'row-below' })
   var actionLookupColumns = allColumns.filter(function(c) { return c.type === 'combination-lookup' })
+  // İzlenebilirlik (Lot/Seri) — İŞLEM alanında kompakt buton; modal grid seviyesinde açılır.
+  var traceColumns = allColumns.filter(function(c) { return c.type === 'trace-entry' })
   var labels = config.labels || {}
   var footer = config.footer || {}
   var onRowsChange = props.onRowsChange
@@ -147,6 +149,9 @@ export default function CalibraLineItemsGrid(props) {
   //   row.id > 0 olan (kayitli) satirlar icin SALES_QUOTE_LINES formundaki
   //   dinamik alanlari DynamicWidgetRenderer ile gosterir.
   var [extrasModalRow, setExtrasModalRow] = useState(null)
+  // ── İzlenebilirlik (Lot/Seri) modalı — grid seviyesinde (miktar girişinden sonra otomatik açılır) ──
+  //   { row, column } — açık satır + trace kolonu. onApply satırın serials/lotBreakdown'ını günceller.
+  var [traceModalRow, setTraceModalRow] = useState(null)
   // ── Zorunlu widget eksik olan satir ID'leri — ⚙ butonu rengini belirler
   //   (kirmizi = eksik, yesil = saved & OK, sky = unsaved).
   var [invalidLineIds, setInvalidLineIds] = useState(function() { return [] })
@@ -497,6 +502,8 @@ export default function CalibraLineItemsGrid(props) {
 
   // ── Hucre degisikligi ──
   var handleCellChange = useCallback(function(rowUid, columnKey, newValue, fillPatch) {
+    var autoOpenRow = null
+    function _num(x) { if (x == null || x === '') return null; var n = parseFloat(String(x).replace(',', '.')); return isNaN(n) ? null : n }
     setRows(function(prev) {
       return prev.map(function(r) {
         if (r._uid !== rowUid) return r
@@ -505,10 +512,27 @@ export default function CalibraLineItemsGrid(props) {
         if (fillPatch) {
           Object.keys(fillPatch).forEach(function(k) { next[k] = fillPatch[k] })
         }
+        // İzlenebilirlik: malzeme seçilince (trackSerial/trackLot geldi) miktar varsayılan 1 +
+        // seri/lot ekranı açılsın; miktar girişinden (blur) sonra da açılsın (düzeltmede tekrar).
+        if (traceColumns.length > 0) {
+          var justPickedTrace = fillPatch && (fillPatch.trackSerial === true || fillPatch.trackLot === true)
+          if (justPickedTrace) {
+            var q0 = _num(next.quantity)
+            if (q0 == null || q0 === 0) next.quantity = 1
+          }
+          var computed0 = applyComputed(next, allColumns)
+          var traceable = computed0.trackSerial === true || computed0.trackLot === true
+          var q = _num(computed0.quantity)
+          if (traceable && q != null && q > 0 && (justPickedTrace || columnKey === 'quantity')) {
+            autoOpenRow = computed0
+          }
+          return computed0
+        }
         return applyComputed(next, allColumns)
       })
     })
-  }, [allColumns])
+    if (autoOpenRow && traceColumns.length > 0) setTraceModalRow({ row: autoOpenRow, column: traceColumns[0] })
+  }, [allColumns, traceColumns])
 
   // ── Yeni satir ekle ──
   // Guided workflow: satir eklendikten sonra stok rehberi otomatik acilir.
@@ -949,6 +973,14 @@ export default function CalibraLineItemsGrid(props) {
                           </div>
                         )
                       })}
+                      {/* İzlenebilirlik (Lot/Seri) — kompakt buton, modal grid seviyesinde açılır */}
+                      {traceColumns.map(function(col) {
+                        return (
+                          <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                            <TraceEntryCell column={col} row={row} onOpen={function(r) { setTraceModalRow({ row: r, column: col }) }} />
+                          </div>
+                        )
+                      })}
                       {/* Not butonu aksiyon seridinden cikartildi — artik ••• kisayol
                           menusunun icinde "Not Ekle / Goster / Gizle" olarak yer aliyor. */}
                       {/* Ek Alanlar (SALES_QUOTE_LINES widget'lari) — sadece kayitli satirlarda.
@@ -1169,6 +1201,34 @@ export default function CalibraLineItemsGrid(props) {
           Portal: .sqe-tab-content icine absolute konumlanir — app shell (ust bar,
           sol menu, alt panel) ve SQE sol tab navi gizlenmez, sadece icerik alani
           ortulur. */}
+      {/* İzlenebilirlik (Lot/Seri) modalı — grid seviyesinde; miktar girişinden sonra otomatik açılır.
+          onApply yalnızca serials/lotBreakdown'ı yazar (miktar sürücü; save adet=miktar zorunlu kılar). */}
+      {traceModalRow && (function () {
+        var __tl = !(typeof document !== 'undefined' && document.body.classList.contains('app-theme-dark'))
+        var trow = traceModalRow.row
+        var tcol = traceModalRow.column
+        function _n(x) { if (x == null || x === '') return null; var n = parseFloat(String(x).replace(',', '.')); return isNaN(n) ? null : n }
+        if (trow.trackSerial === true) {
+          var q = _n(trow.quantity)
+          var qi = (q != null && q > 0 && q === Math.trunc(q)) ? q : null
+          return (
+            <SerialEntryModal isLight={__tl} isEntry={true} row={trow} column={tcol} qtyInt={qi} autoSerial={false}
+              serials={Array.isArray(trow.serials) ? trow.serials : []}
+              onApply={function (list) { handleCellChange(trow._uid, 'serials', list); setTraceModalRow(null) }}
+              onClose={function () { setTraceModalRow(null) }} />
+          )
+        }
+        if (trow.trackLot === true) {
+          return (
+            <LotBreakdownModal isLight={__tl} row={trow} column={tcol} qtyTarget={trow.quantity}
+              value={Array.isArray(trow.lotBreakdown) ? trow.lotBreakdown : []}
+              onApply={function (list) { handleCellChange(trow._uid, 'lotBreakdown', list); setTraceModalRow(null) }}
+              onClose={function () { setTraceModalRow(null) }} />
+          )
+        }
+        return null
+      })()}
+
       {extrasModalRow && (function () {
         // Tema detection — kisayol menusuyle ayni chain (iframe parent fallback, default light).
         var __isLight = (function () {

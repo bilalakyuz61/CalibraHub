@@ -1330,7 +1330,15 @@ function LotBreakdownModal(props) {
             <div className="text-[13px] font-semibold text-slate-800 dark:text-white/90">Lot Kırılımı (Sayım)</div>
             <div className="text-[11px] text-slate-500 dark:text-white/45 font-mono">{(props.row.materialCode || '') + (props.row.materialName ? ' · ' + props.row.materialName : '')}</div>
           </div>
-          <div className="text-[12px] font-mono font-bold tabular-nums text-slate-700 dark:text-white/80">Toplam: {total}</div>
+          {(function () {
+            var target = parseNumber(props.qtyTarget)
+            var match = target == null || Math.abs(total - target) < 0.0001
+            return (
+              <div className={'text-[12px] font-mono font-bold tabular-nums ' + (match ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300')}>
+                Toplam: {total}{target != null ? ' / ' + target : ''}
+              </div>
+            )
+          })()}
         </div>
         <div className="px-4 pb-2 max-h-[320px] overflow-y-auto">
           {rows.map(function(r, i) {
@@ -1363,62 +1371,43 @@ function LotBreakdownModal(props) {
   )
 }
 
+// İŞLEM (sol aksiyon) alanında kompakt buton — modal grid seviyesinde render edilir
+// (miktar girişinden sonra otomatik açılabilmesi için). Seri/Lot izlenebilirliğine göre
+// renk + adet gösterir; onOpen ile grid'e satırı bildirir.
 function TraceEntryCell(props) {
-  var column = props.column
   var row = props.row
-  var onChange = props.onChange
-  var isLight = useIsLight()
-  var [open, setOpen] = useState(false)
-
   var isSerial = row.trackSerial === true
   var isLot = row.trackLot === true
-  if (!isSerial && !isLot) {
-    return <div className="w-full px-2.5 py-2 text-center text-[13px] text-slate-300 dark:text-white/25" title="Bu stokta izlenebilirlik yok">—</div>
-  }
+  if (!isSerial && !isLot) return null
 
+  var qty = parseNumber(row.quantity)
+  var count, ok
   if (isSerial) {
     var serials = Array.isArray(row.serials) ? row.serials : []
-    var qty = parseNumber(row.quantity)
-    var qtyInt = (qty != null && qty > 0 && qty === Math.trunc(qty)) ? qty : null
-    var ok = serials.length > 0 && (qtyInt == null || serials.length === qtyInt)
-    var sClass = ok
-      ? 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30'
-      : 'text-rose-600 bg-rose-100 hover:bg-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:hover:bg-rose-500/30'
-    return (
-      <>
-        <button type="button" onClick={function() { setOpen(true) }}
-          className={'mx-auto h-7 min-w-[60px] px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-mono font-semibold transition-colors ' + sClass}
-          title={'Seri girişi — ' + serials.length + ' seri' + (qtyInt != null ? ' / ' + qtyInt + ' adet' : '')}>
-          {'Seri ' + serials.length}
-        </button>
-        {open && (
-          <SerialEntryModal isLight={isLight} isEntry={true} row={row} column={column} qtyInt={qtyInt} autoSerial={false} serials={serials}
-            onApply={function(list) { onChange('serials', list); onChange('quantity', list.length); setOpen(false) }}
-            onClose={function() { setOpen(false) }} />
-        )}
-      </>
-    )
+    count = serials.length
+    ok = count > 0 && (qty == null || count === qty)
+  } else {
+    var bd = Array.isArray(row.lotBreakdown) ? row.lotBreakdown : []
+    var total = bd.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
+    count = bd.length
+    ok = count > 0 && (qty == null || Math.abs(total - qty) < 0.0001)
   }
-
-  var breakdown = Array.isArray(row.lotBreakdown) ? row.lotBreakdown : []
-  var lotTotal = breakdown.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
-  var lClass = breakdown.length > 0
-    ? 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30'
-    : 'text-slate-500 bg-slate-100 hover:bg-slate-200 dark:text-white/50 dark:bg-white/10 dark:hover:bg-white/[0.15]'
+  var cls = ok
+    ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25'
+    : (count > 0
+        ? 'text-rose-600 bg-rose-50 hover:bg-rose-100 dark:text-rose-300 dark:bg-rose-500/15 dark:hover:bg-rose-500/25'
+        : 'text-slate-400 bg-slate-100 hover:bg-slate-200 dark:text-white/40 dark:bg-white/10 dark:hover:bg-white/[0.15]')
   return (
-    <>
-      <button type="button" onClick={function() { setOpen(true) }}
-        className={'mx-auto h-7 min-w-[60px] px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-mono font-semibold transition-colors ' + lClass}
-        title={'Lot kırılımı — ' + breakdown.length + ' lot / ' + lotTotal + ' toplam'}>
-        {breakdown.length > 0 ? (breakdown.length + ' lot') : 'Lot'}
-      </button>
-      {open && (
-        <LotBreakdownModal isLight={isLight} row={row} column={column} value={breakdown}
-          onApply={function(list, total) { onChange('lotBreakdown', list); onChange('quantity', total); setOpen(false) }}
-          onClose={function() { setOpen(false) }} />
-      )}
-    </>
+    <button
+      type="button"
+      onClick={function() { if (props.onOpen) props.onOpen(row) }}
+      className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-[10px] font-mono font-bold ' + cls}
+      title={(isSerial ? 'Seri' : 'Lot') + ' girişi' + (count > 0 ? ' — ' + count : '')}
+      aria-label={(isSerial ? 'Seri' : 'Lot') + ' girişi'}
+    >
+      {count > 0 ? count : (isSerial ? 'S' : 'L')}
+    </button>
   )
 }
 
-export { CombinationLookupCell }
+export { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, TraceEntryCell }
