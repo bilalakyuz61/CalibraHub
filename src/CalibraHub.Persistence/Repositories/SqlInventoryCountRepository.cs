@@ -153,14 +153,18 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                 locationId = r.IsDBNull(1) ? null : r.GetInt32(1);
             }
 
-            // 2) Taslak satırları oku — satır kendi lokasyonunu taşıyabilir (NULL = header)
-            var lines = new List<(int ItemId, int? ConfigId, int? UnitId, decimal CountedQty, int? LineLocationId)>();
+            // 2) Taslak satırları oku — satır kendi lokasyonunu taşıyabilir (NULL = header).
+            //    İzlenebilirlik: lot-takipli kalemde LotBreakdown (JSON) ile per-lot düzeltme.
+            var lines = new List<(int ItemId, int? ConfigId, int? UnitId, decimal CountedQty, int? LineLocationId, string? TrackingType, string? LotBreakdown)>();
             await using (var selCmd = conn.CreateCommand())
             {
                 selCmd.Transaction = tx;
                 selCmd.CommandText = $"""
-                    SELECT [ItemId],[ConfigId],[UnitId],[CountedQty],[LocationId]
-                    FROM {T("InventoryCountLine")} WHERE [InventoryCountId] = @CountId;
+                    SELECT l.[ItemId], l.[ConfigId], l.[UnitId], l.[CountedQty], l.[LocationId],
+                           ISNULL(i.[TrackingType], 'None') AS TrackingType, l.[LotBreakdown]
+                    FROM {T("InventoryCountLine")} l
+                    LEFT JOIN {T("Items")} i ON i.[Id] = l.[ItemId]
+                    WHERE l.[InventoryCountId] = @CountId;
                     """;
                 selCmd.Parameters.AddWithValue("@CountId", countId);
                 await using var r = await selCmd.ExecuteReaderAsync(ct);
@@ -171,7 +175,9 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                         r.IsDBNull(1) ? null : r.GetInt32(1),
                         r.IsDBNull(2) ? null : r.GetInt32(2),
                         r.GetDecimal(3),
-                        r.IsDBNull(4) ? null : r.GetInt32(4)));
+                        r.IsDBNull(4) ? null : r.GetInt32(4),
+                        r.IsDBNull(5) ? "None" : r.GetString(5),
+                        r.IsDBNull(6) ? null : r.GetString(6)));
                 }
             }
 
@@ -179,16 +185,25 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
             foreach (var line in lines)
             {
                 var effectiveLocation = line.LineLocationId ?? locationId;
+
+                // ── Lot-takipli kalem → per-lot varyans (lot bazında bakiye düzeltmesi) ──
+                if (string.Equals(line.TrackingType, "Lot", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(line.LotBreakdown))
+                {
+                    writtenCount += await ApplyLotVarianceAsync(conn, tx, documentId, companyId,
+                        line.ItemId, line.ConfigId, line.UnitId, effectiveLocation, line.LotBreakdown!, ct);
+                    continue;
+                }
+
+                // ── Diğer (izlenebilirsiz + seri) → toplam-miktar varyansı ──
+                // NOT: seri-takipli kalemde seri BAKIYE uzlaştırması (bulundu/eksik) ayrı iş
+                // (serilerde lokasyon kolonu yok); şimdilik toplam miktar düzeltmesi yazılır.
                 var liveBalance = await GetLiveBalanceAsync(conn, tx, companyId, line.ItemId, effectiveLocation, ct);
-                // CountedQty girilen birimde; liveBalance baz birimde. Karşılaştırma için
-                // sayılan miktarı da baz birime çevir (girilen birim = ana birim ise çarpan 1).
                 var factor = await ResolveBaseFactorAsync(conn, tx, line.ItemId, line.UnitId, ct);
                 var countedBase = line.CountedQty * factor;
                 var variance = countedBase - liveBalance;
                 if (variance == 0) continue;
 
-                // unitId: null — variance baz birimde hesaplandi (countedBase - liveBalance);
-                // NULL birim "baz birim" demektir (StockUnitSql: carpan 1, BaseQuantity = Quantity).
                 await AppendAdjustLineAsync(conn, tx, documentId, line.ItemId, line.ConfigId, null,
                     Math.Abs(variance), positiveVariance: variance > 0, effectiveLocation, "Sayım farkı — Yansıt", ct);
                 writtenCount++;
@@ -368,7 +383,8 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
 
     private async Task AppendAdjustLineAsync(
         SqlConnection conn, SqlTransaction tx, int documentId, int itemId, int? configId, int? unitId,
-        decimal quantity, bool positiveVariance, int? locationId, string notes, CancellationToken ct)
+        decimal quantity, bool positiveVariance, int? locationId, string notes, CancellationToken ct,
+        int? lotId = null, string? lotNo = null)
     {
         var lineTable = T("DocumentLine");
         int nextLineNo;
@@ -397,10 +413,10 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         insCmd.CommandText = $"""
             INSERT INTO {lineTable}
                 ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                 [CombinationId],[LocationId],[FromLocationId],[MovementType],[Notes])
+                 [CombinationId],[LocationId],[FromLocationId],[MovementType],[LotId],[LotNo],[Notes])
             VALUES
                 (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{baseQtyExpr},0,0,0,
-                 @CombinationId,@ToLoc,@FromLoc,4,@Notes);
+                 @CombinationId,@ToLoc,@FromLoc,4,@LotId,@LotNo,@Notes);
             """;
         insCmd.Parameters.AddWithValue("@DocumentId", documentId);
         insCmd.Parameters.AddWithValue("@LineNo", nextLineNo);
@@ -411,7 +427,103 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         // Fazla çıktı (positiveVariance) → LocationId (giriş yönü); eksik çıktı → FromLocationId (çıkış yönü).
         insCmd.Parameters.AddWithValue("@ToLoc", positiveVariance ? (object?)locationId ?? DBNull.Value : DBNull.Value);
         insCmd.Parameters.AddWithValue("@FromLoc", !positiveVariance ? (object?)locationId ?? DBNull.Value : DBNull.Value);
+        insCmd.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+        insCmd.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
         insCmd.Parameters.AddWithValue("@Notes", notes);
         await insCmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Lot-takipli sayım satırının per-lot bakiye düzeltmesi. Sayılan her lot için
+    /// (sayılan − o lotun bakiyesi) varyansı; ayrıca depoda bakiyesi olup sayımda olmayan
+    /// lotlar sıfırlanır (eksik). Her lot için LotId'li Adjust(4) hareketi yazılır.
+    /// </summary>
+    private async Task<int> ApplyLotVarianceAsync(
+        SqlConnection conn, SqlTransaction tx, int documentId, int companyId,
+        int itemId, int? configId, int? unitId, int? location, string lotBreakdownJson, CancellationToken ct)
+    {
+        List<CalibraHub.Application.Contracts.StockLotBreakdownItem> breakdown;
+        try { breakdown = System.Text.Json.JsonSerializer.Deserialize<List<CalibraHub.Application.Contracts.StockLotBreakdownItem>>(lotBreakdownJson) ?? new(); }
+        catch { breakdown = new(); }
+        if (breakdown.Count == 0) return 0;
+
+        var factor = await ResolveBaseFactorAsync(conn, tx, itemId, unitId, ct);
+        // Sayılan: lotNo → baz-birim toplam
+        var counted = breakdown
+            .Where(b => !string.IsNullOrWhiteSpace(b.LotNo) && b.Qty > 0)
+            .GroupBy(b => b.LotNo.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty) * factor, StringComparer.OrdinalIgnoreCase);
+
+        var systemLots = await GetLotBalancesAsync(conn, tx, companyId, itemId, location, ct);
+        var written = 0;
+        var handled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var kv in counted)
+        {
+            handled.Add(kv.Key);
+            var sys = systemLots.FirstOrDefault(s => string.Equals(s.LotNo, kv.Key, StringComparison.OrdinalIgnoreCase));
+            var sysBal = sys.LotId > 0 ? sys.Balance : 0m;
+            var variance = kv.Value - sysBal;
+            if (variance == 0) continue;
+            var lotId = sys.LotId > 0 ? sys.LotId : await ResolveOrCreateLotAsync(conn, tx, itemId, kv.Key, ct);
+            await AppendAdjustLineAsync(conn, tx, documentId, itemId, configId, null,
+                Math.Abs(variance), positiveVariance: variance > 0, location, $"Sayım lot farkı ({kv.Key}) — Yansıt", ct, lotId, kv.Key);
+            written++;
+        }
+        // Sayılmayan lotlar → sıfırla (variance = 0 - balance = -balance)
+        foreach (var s in systemLots)
+        {
+            if (s.Balance == 0 || handled.Contains(s.LotNo)) continue;
+            await AppendAdjustLineAsync(conn, tx, documentId, itemId, configId, null,
+                Math.Abs(s.Balance), positiveVariance: s.Balance < 0, location, $"Sayım lot eksiği ({s.LotNo}) — Yansıt", ct, s.LotId, s.LotNo);
+            written++;
+        }
+        return written;
+    }
+
+    /// <summary>Depodaki (location) item lot bakiyeleri — (LotId, LotNo, baz-birim bakiye).</summary>
+    private async Task<List<(int LotId, string LotNo, decimal Balance)>> GetLotBalancesAsync(
+        SqlConnection conn, SqlTransaction tx, int companyId, int itemId, int? location, CancellationToken ct)
+    {
+        var list = new List<(int, string, decimal)>();
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT dl.[LotId], lot.[LotNo],
+                ISNULL(SUM(CASE WHEN dl.[MovementType] IN (2,3,4) AND dl.[LocationId]     = @Loc THEN dl.[BaseQuantity] ELSE 0 END),0)
+              - ISNULL(SUM(CASE WHEN dl.[MovementType] IN (1,3,4) AND dl.[FromLocationId] = @Loc THEN dl.[BaseQuantity] ELSE 0 END),0) AS Bal
+            FROM {T("DocumentLine")} dl
+            INNER JOIN {T("Document")} d ON d.[Id] = dl.[DocumentId]
+            INNER JOIN {T("Lot")} lot ON lot.[Id] = dl.[LotId]
+            WHERE dl.[ItemId] = @ItemId AND d.[CompanyId] = @Cid AND d.[IsActive] = 1
+              AND dl.[LotId] IS NOT NULL AND (dl.[LocationId] = @Loc OR dl.[FromLocationId] = @Loc)
+            GROUP BY dl.[LotId], lot.[LotNo];
+            """;
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@Cid", companyId);
+        cmd.Parameters.AddWithValue("@Loc", (object?)location ?? DBNull.Value);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            list.Add((r.GetInt32(0), r.IsDBNull(1) ? "" : r.GetString(1), r.IsDBNull(2) ? 0m : r.GetDecimal(2)));
+        return list;
+    }
+
+    /// <summary>Lot bul (item+lotNo), yoksa oluştur — sayımda bulunan yeni lot (fazla) için.</summary>
+    private async Task<int> ResolveOrCreateLotAsync(SqlConnection conn, SqlTransaction tx, int itemId, string lotNo, CancellationToken ct)
+    {
+        await using (var find = conn.CreateCommand())
+        {
+            find.Transaction = tx;
+            find.CommandText = $"SELECT TOP 1 [Id] FROM {T("Lot")} WHERE [ItemId] = @It AND [LotNo] = @Lot;";
+            find.Parameters.AddWithValue("@It", itemId);
+            find.Parameters.AddWithValue("@Lot", lotNo);
+            if (await find.ExecuteScalarAsync(ct) is int id) return id;
+        }
+        await using var ins = conn.CreateCommand();
+        ins.Transaction = tx;
+        ins.CommandText = $"INSERT INTO {T("Lot")} ([ItemId],[LotNo]) VALUES (@It,@Lot); SELECT CAST(SCOPE_IDENTITY() AS INT);";
+        ins.Parameters.AddWithValue("@It", itemId);
+        ins.Parameters.AddWithValue("@Lot", lotNo);
+        return Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
     }
 }
