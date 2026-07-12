@@ -244,6 +244,7 @@ public sealed class SalesController : Controller
                     label = "Sil",
                     icon = "Trash2",
                     apiUrl = $"/Sales/DeleteDocumentJson?id={quote.Id}",
+                    precheckUrl = $"/Sales/CanDeleteDocumentJson?id={quote.Id}",
                     confirm = $"Bu teklifi silmek istediginizden emin misiniz? ({quote.DocumentNumber})",
                 },
                 // Kartin sol aksiyon seridinde Duzenle + Sil'in yani sira
@@ -429,6 +430,7 @@ public sealed class SalesController : Controller
                     label = "Sil",
                     icon = "Trash2",
                     apiUrl = $"/Sales/DeleteDocumentJson?id={order.Id}",
+                    precheckUrl = $"/Sales/CanDeleteDocumentJson?id={order.Id}",
                     confirm = $"Bu siparisi silmek istediginizden emin misiniz? ({order.DocumentNumber})",
                 },
             });
@@ -540,6 +542,7 @@ public sealed class SalesController : Controller
                     url = $"/Sales/DocumentEdit?id={doc.Id}", hideButton = true },
                 secondaryAction = new { label = "Sil", icon = "Trash2",
                     apiUrl = $"/Sales/DeleteDocumentJson?id={doc.Id}",
+                    precheckUrl = $"/Sales/CanDeleteDocumentJson?id={doc.Id}",
                     confirm = $"Bu irsaliyeyi silmek istediginizden emin misiniz? ({doc.DocumentNumber})" },
             });
         }
@@ -1620,6 +1623,30 @@ public sealed class SalesController : Controller
         catch (Exception ex)
         {
             return Json(new { success = false, message = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    /// <summary>
+    /// Silme ön-kontrolü (SmartCard precheck). Belge silinebilir mi — silinemezse
+    /// gerekçesini döner (karşılanmış kalem / türetilmiş aktif belge). UI, silme
+    /// onay ekranını göstermeden ÖNCE bunu çağırır: engelliyse onay yerine doğrudan
+    /// uyarı gösterilir. DeleteQuoteAsync ile aynı kaynak → mesajlar birebir aynı.
+    /// Salt-okunur kontrol (GET) — asıl silme yine DeleteQuoteAsync'te guard'lı.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> CanDeleteDocumentJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            var reason = await _quoteService.GetDeleteBlockReasonAsync(id, ct);
+            return Json(reason is null
+                ? new { ok = true,  reason = (string?)null }
+                : new { ok = false, reason = (string?)reason });
+        }
+        catch
+        {
+            // Ön-kontrol hata verirse silmeyi engelleme — normal onay akışına düşülür.
+            return Json(new { ok = true, reason = (string?)null });
         }
     }
 

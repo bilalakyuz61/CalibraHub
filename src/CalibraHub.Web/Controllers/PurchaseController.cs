@@ -433,10 +433,11 @@ public sealed class PurchaseController : Controller
                 },
                 secondaryAction = new
                 {
-                    label   = "Sil",
-                    icon    = "Trash2",
-                    apiUrl  = $"/Sales/DeleteDocumentJson?id={doc.Id}",
-                    confirm = $"Bu {entityWord}i silmek istediginizden emin misiniz? ({doc.DocumentNumber})",
+                    label       = "Sil",
+                    icon        = "Trash2",
+                    apiUrl      = $"/Sales/DeleteDocumentJson?id={doc.Id}",
+                    precheckUrl = $"/Sales/CanDeleteDocumentJson?id={doc.Id}",
+                    confirm     = $"Bu {entityWord}i silmek istediginizden emin misiniz? ({doc.DocumentNumber})",
                 },
                 extraActions,
             });

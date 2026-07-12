@@ -431,14 +431,30 @@ export default function SmartCard(props) {
     }
   }
 
+  // Onay akışına geç — confirm varsa "Emin misiniz?" modalı, yoksa direkt çalıştır.
+  function proceedSecondary() {
+    if (secondaryAction.confirm) showConfirm(secondaryAction.confirm, executeSecondary)
+    else executeSecondary()
+  }
+
   function handleSecondary(e) {
     e.stopPropagation()
     if (!secondaryAction) return
-    if (secondaryAction.confirm) {
-      showConfirm(secondaryAction.confirm, executeSecondary)
-    } else {
-      executeSecondary()
-    }
+    // Opsiyonel sunucu ön-kontrolü (ör. silme): secondaryAction.precheckUrl varsa
+    // ONAY göstermeden ÖNCE sorulur. Sunucu { ok:false, reason } dönerse belge
+    // işlenemez → onay ekranı yerine doğrudan uyarı modalı gösterilir (karşılanmış
+    // kalem / bağlantılı belge vb.). { ok:true } ise normal onay akışına devam edilir.
+    // Hata / erişilemezlik → yine onay akışına düşülür (asıl işlem sunucuda guard'lı).
+    if (!secondaryAction.precheckUrl) { proceedSecondary(); return }
+    fetch(secondaryAction.precheckUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function(r) { return r.text() })
+      .then(function(txt) {
+        var data = null
+        if (txt) { try { data = JSON.parse(txt) } catch (_) { /* JSON değil */ } }
+        if (data && data.ok === false) { showAlert(data.reason || 'Bu belge silinemez.'); return }
+        proceedSecondary()
+      })
+      .catch(function() { proceedSecondary() })
   }
 
   // Status badge renderer

@@ -765,13 +765,17 @@ public sealed class DocumentService : IDocumentService
         return (true, null, MapDto(quote), approvalStarted);
     }
 
-    public async Task<(bool Ok, string? Error)> DeleteQuoteAsync(int id, CancellationToken ct)
+    /// <summary>
+    /// Silme ön-kontrolü — silinebilirse null, silinemezse gerekçe mesajı.
+    /// <see cref="DeleteQuoteAsync"/> ve UI precheck endpoint'i (tek kaynak) buradan çağırır.
+    /// </summary>
+    public async Task<string?> GetDeleteBlockReasonAsync(int id, CancellationToken ct)
     {
         // 1) Karşılanmış kalem içeren belge silinemez (İhtiyaç Kaydı zinciri koruması).
         //    Diğer belge türlerinde Fulfilled* = 0 olduğundan bu kontrol no-op'tur.
         var lines = await GetQuoteLinesAsync(id, ct);
         if (lines.Any(l => l.FulfilledFromStock + l.FulfilledByPurchase > 0))
-            return (false, "Bu belge karşılanmış kalem(ler) içerdiği için silinemez. Önce karşılama belgelerini geri alın.");
+            return "Bu belge karşılanmış kalem(ler) içerdiği için silinemez. Önce karşılama belgelerini geri alın.";
 
         // 2) Bu belgeden türetilmiş AKTİF belge varsa (DocumentSource: teklif→sipariş,
         //    İhtiyaç→talep/fiş...) kaynak silinemez — bağlantı bozulur. Türetilenler
@@ -786,15 +790,27 @@ public sealed class DocumentService : IDocumentService
                 if (d is { IsActive: true }) activeNos.Add(d.DocumentNumber);
             }
             if (activeNos.Count > 0)
-                return (false, $"Bu belgeden türetilmiş belge(ler) var: {string.Join(", ", activeNos)}. " +
-                               "Kaynak belge silinemez; önce türetilmiş belgeleri silin/iptal edin.");
+                return $"Bu belgeden türetilmiş belge(ler) var: {string.Join(", ", activeNos)}. " +
+                       "Kaynak belge silinemez; önce türetilmiş belgeleri silin/iptal edin.";
         }
 
-        // İşlem logu için silinen belgenin kimliğini silmeden ÖNCE al
+        return null;
+    }
+
+    public async Task<(bool Ok, string? Error)> DeleteQuoteAsync(int id, CancellationToken ct)
+    {
+        // Silme engelleri (karşılanmış kalem / türetilmiş aktif belge) — UI precheck
+        // ile aynı kaynak. Engelliyse silme.
+        var blockReason = await GetDeleteBlockReasonAsync(id, ct);
+        if (blockReason is not null) return (false, blockReason);
+
+        // İşlem logu için silinen belgenin kimliğini + kalem dökümünü silmeden ÖNCE al
         Document? docForAudit = null;
+        IReadOnlyCollection<DocumentLineDto> lines = System.Array.Empty<DocumentLineDto>();
         if (_audit is not null)
         {
             try { docForAudit = await _repo.GetByIdAsync(id, ct); } catch { }
+            try { lines = await GetQuoteLinesAsync(id, ct); } catch { }
         }
 
         await _repo.DeleteAsync(id, ct);
@@ -803,7 +819,6 @@ public sealed class DocumentService : IDocumentService
         {
             var auditEntity = await ResolveAuditEntityAsync(docForAudit.DocumentTypeId, ct);
             // Silinen belgenin kalem dökümü snapshot olarak loglanır — "ne kayboldu" izlenebilir.
-            // `lines` metodun başında karşılama kontrolü için zaten yüklendi.
             var snapshot = lines.Select(l => new AuditFieldChange(
                 $"Line[{l.Id}]",
                 $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",

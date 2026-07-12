@@ -39,8 +39,18 @@ public interface IDocumentService
         int documentLineId, CancellationToken ct);
     Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct);
     /// <summary>
+    /// Belge silinebilir mi — silinebilirse <c>null</c>, silinemezse kullanıcıya
+    /// gösterilecek gerekçe mesajını döner (karşılanmış kalem / türetilmiş aktif
+    /// belge). <see cref="DeleteQuoteAsync"/> silmeden önce bunu çağırır; UI de
+    /// silme onayını göstermeden ÖNCE çağırarak engelli belgede onay yerine
+    /// doğrudan uyarı gösterebilir (tek kaynak — mesajlar birebir aynı).
+    /// </summary>
+    Task<string?> GetDeleteBlockReasonAsync(int id, CancellationToken ct);
+
+    /// <summary>
     /// Belgeyi soft-delete eder. Karşılanmış kalem içeriyorsa (İhtiyaç Kaydı zinciri
-    /// koruması) silinmez → (false, mesaj) döner.
+    /// koruması) veya türetilmiş aktif belgesi varsa silinmez → (false, mesaj) döner.
+    /// Aynı kontrol <see cref="GetDeleteBlockReasonAsync"/> üzerinden yapılır.
     /// </summary>
     Task<(bool Ok, string? Error)> DeleteQuoteAsync(int id, CancellationToken ct);
     Task<(bool Success, string? Error)> ChangeStatusAsync(int id, string newStatus, CancellationToken ct);
