@@ -643,15 +643,17 @@
 
         // ── Rastgele dağılım: ibreler kadran boyunca serbestçe dağılır (mekanik arama) ──
         var roamId = 0;
-        function randTargets() { for (var k = 0; k < 3; k++) needles[k].tgt = 10 + Math.random() * 80; }
+        function randTargets() { for (var k = 0; k < 3; k++) needles[k].tgt = Math.random() * 100; }   // tam aralik: alt-sol/alt-sag uclara (±135°) kadar
         function startRoam(ms) { stopRoam(); randTargets(); kick(); if (!reduce) roamId = setInterval(function () { randTargets(); kick(); }, ms); }
         function stopRoam() { if (roamId) { clearInterval(roamId); roamId = 0; } }
 
-        // Yazdıkça her tuşta yeni rastgele dağılım; alanlar boşsa nötr dinlenmeye döner
+        // Yalnizca ŞIFRE yazilirken ibreler rastgele dagilir; sifre bosken notr dinlenme.
+        // (Kullanici adi / sirket alanlari ibreleri oynatmaz.)
         function evalFields() {
+            if (mode === 'fail' || mode === 'success') { mode = 'idle'; dial.classList.remove('is-fail', 'is-cal'); }
             if (mode === 'success' || mode === 'measuring') return;
-            var any = (emailEl && emailEl.value.trim()) || (pwEl && pwEl.value) || (coEl && coEl.value);
-            if (any) {
+            var pw = pwEl ? pwEl.value : '';
+            if (pw) {
                 mode = 'calibrating';
                 dial.classList.add('is-calibrating');
                 setStatus('Kalibre ediliyor…');
@@ -664,13 +666,7 @@
                 kick();
             }
         }
-        function onFieldInput() {
-            if (mode === 'fail' || mode === 'success') { mode = 'idle'; dial.classList.remove('is-fail', 'is-cal'); }
-            evalFields();
-        }
-        if (emailEl) { emailEl.addEventListener('input', onFieldInput); emailEl.addEventListener('change', onFieldInput); }
-        if (pwEl) pwEl.addEventListener('input', onFieldInput);
-        if (coEl) coEl.addEventListener('change', onFieldInput);
+        if (pwEl) pwEl.addEventListener('input', evalFields);
 
         // ── Dış API — submit handler çağırır ──
         window.CalibraLoginDial = {
@@ -712,7 +708,7 @@
 
         // ── İlk render ──
         needles.forEach(place); renderArc();
-        evalFields();   // "beni hatırla" alanları önceden doldurmuşsa ibreler ona göre başlar
+        evalFields();   // ilk durum: şifre boş → nötr dinlenme
     })();
 </script>
 </body>
