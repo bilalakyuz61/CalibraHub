@@ -788,7 +788,12 @@ public sealed class SalesController : Controller
         if (bindings.Count == 0 && !string.Equals(lineFormCode, "SALES_QUOTE_LINES", StringComparison.OrdinalIgnoreCase))
             bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
         var hidePricing = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase);
-        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode, id);
+        // Siparişte seri takibi (efektif) — hiyerarşik: stok rez. + seri takibi açık olmalı.
+        // Sadece bu durumda satış siparişi grid'ine "Seri" kolonu eklenir.
+        var _orderSerialTracking = string.Equals(typeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
+            && (await _companyParams.GetBoolAsync(StockParameters.FormCode, StockParameters.SalesOrderAffectsStockKey, ct) ?? false)
+            && (await _companyParams.GetBoolAsync(StockParameters.FormCode, StockParameters.OrderSerialTrackingKey, ct) ?? false);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing, typeCode, id, _orderSerialTracking);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -935,7 +940,8 @@ public sealed class SalesController : Controller
         string lineFormCode = "SALES_QUOTE_LINES",
         bool hidePricing = false,
         string? documentTypeCode = null,
-        int? documentId = null)
+        int? documentId = null,
+        bool orderSerialTracking = false)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
         var bindingMap = (bindings ?? [])
@@ -1029,9 +1035,9 @@ public sealed class SalesController : Controller
         }
         cols.Add(new { key = "notes", label = "Not", type = "text", placement = "row-below", align = "left", icon = "StickyNote" });
 
-        // Seri kolonu — YALNIZCA satış siparişinde (rezervasyon). Pick modu: stoktaki
-        // serilerden seçim (GetSerialsJson InStock+Reserved havuzu). Seri-takipli kalemde görünür.
-        if (string.Equals(documentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase))
+        // Seri kolonu — YALNIZCA satış siparişinde VE "Siparişte Seri Takibi" parametresi açıkken.
+        // Pick modu: stoktaki serilerden seçim (GetOrderSerials). Seri-takipli kalemde görünür.
+        if (orderSerialTracking && string.Equals(documentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase))
             cols.Add(new
             {
                 key            = "serials",
@@ -1491,9 +1497,12 @@ public sealed class SalesController : Controller
                 var _serDt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
                 if (string.Equals(_serDt?.Code, "satis_siparisi", StringComparison.OrdinalIgnoreCase))
                 {
+                    // Hiyerarşi: stok rez. → seri takibi → seri rez. Rezervasyon ancak üçü de açıkken.
                     var stockRes = await _companyParams.GetBoolAsync(
                         StockParameters.FormCode, StockParameters.SalesOrderAffectsStockKey, ct) ?? false;
-                    var serialRes = stockRes && (await _companyParams.GetBoolAsync(
+                    var tracking = stockRes && (await _companyParams.GetBoolAsync(
+                        StockParameters.FormCode, StockParameters.OrderSerialTrackingKey, ct) ?? false);
+                    var serialRes = tracking && (await _companyParams.GetBoolAsync(
                         StockParameters.FormCode, StockParameters.OrderSerialReservationKey, ct) ?? false);
 
                     var reqLines = (request.Lines ?? Array.Empty<SaveDocumentLineRequest>()).ToList();
