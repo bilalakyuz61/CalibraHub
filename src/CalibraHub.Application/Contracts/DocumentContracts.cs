@@ -25,6 +25,16 @@ public sealed record DocumentDto(
     string? LocationName = null);            // Location.LocationName (JOIN ile gelir)
 
 /// <summary>
+/// Sipariş → İrsaliye kısmi teslimat modalı için açık (teslim edilmemiş) sipariş kalemi.
+/// Miktarlar gösterim biriminde (Quantity birimi): Ordered = sipariş miktarı,
+/// Delivered = şimdiye kadar teslim, Open = kalan (teslim edilebilir). SerialTracked=true ise
+/// seri-takipli malzeme (teslim adedince seri otomatik düşülür).
+/// </summary>
+public sealed record OrderOpenLineDto(
+    int LineId, string? ItemCode, string? ItemName, string? UnitName,
+    decimal Ordered, decimal Delivered, decimal Open, bool SerialTracked);
+
+/// <summary>
 /// DocumentLineDto — UI'a gonderilen satir goruntusu. ItemId + CombinationId tablodaki
 /// gercek FK'ler; MaterialCode/Name ve CombinationCode/Name Item ve ProductConfiguration
 /// tablolarindan JOIN ile turetilir (tabloda tutulmaz).

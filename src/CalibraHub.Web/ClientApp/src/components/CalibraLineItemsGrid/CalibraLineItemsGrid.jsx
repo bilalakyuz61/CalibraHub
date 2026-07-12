@@ -135,6 +135,17 @@ export default function CalibraLineItemsGrid(props) {
   var footer = config.footer || {}
   var onRowsChange = props.onRowsChange
 
+  // ── Otomatik fiyat cozumu (config.pricing) ─────────────────────────────────
+  //   Urun/kombinasyon secilince carinin fiyat listesine (yoksa Genel Liste)
+  //   gore birim fiyat doldurulur. Cozum tamamen sunucuda (ResolveLinePrices);
+  //   istemci yalnizca contactId/currencyId/tarih gonderir ("aptal bilesen").
+  //   __priceAuto: satir otomatik dolduruldu → cari/doviz degisince yeniden cozulur.
+  //   Elle unitPrice girilen satir priceManualRef ile dondurulur (uzerine yazilmaz).
+  var pricing = config.pricing || { enabled: false }
+  var rowsRef = useRef(rows)
+  useEffect(function () { rowsRef.current = rows }, [rows])
+  var priceManualRef = useRef({})
+
   // ── Silme: modal yerine satir-ici geri sayim (Gmail "Undo" patterni) ──
   // pendingDelete[rowUid] = true ise satir 3 saniye icinde silinir; kullanici
   // "İptal" tuşuna basarsa silme iptal edilir. Timeout ID'leri ref'te tutulur.
@@ -500,6 +511,143 @@ export default function CalibraLineItemsGrid(props) {
     }
   }, [rows, columns])
 
+  // Belge context'ini DOM'dan oku (contactId / currencyId / tarih). currencyId
+  // ID (int) — save ile ayni kaynak (#sqCurrency.value = currencies.id). docCurrency
+  // state KOD gosterir; burada kullanilmaz.
+  function readPricingContext() {
+    var ctx = pricing.context || {}
+    function val(elId) {
+      var el = elId && typeof document !== 'undefined' ? document.getElementById(elId) : null
+      return el ? el.value : ''
+    }
+    var contactRaw = val(ctx.contactElId)
+    return {
+      contactId:  contactRaw ? (parseInt(contactRaw, 10) || null) : null,
+      currencyId: parseInt(val(ctx.currencyElId), 10) || 0,
+      validOn:    val(ctx.dateElId) || '',
+    }
+  }
+
+  // Batch fiyat cozumu → { "itemId:configId" : price } map (fiyat bulunmayan key yok).
+  function fetchResolvePrices(keys, ctx) {
+    var body = {
+      contactId:  ctx.contactId,
+      currencyId: ctx.currencyId,
+      validOn:    ctx.validOn,
+      direction:  pricing.direction || 's',
+      keys:       keys.map(function (k) { return { itemId: k.itemId, configId: k.configId != null ? k.configId : null } }),
+    }
+    var token = (typeof document !== 'undefined'
+      ? (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value : '') || ''
+    var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+    if (token) headers['RequestVerificationToken'] = token
+    return fetch(pricing.resolveUrl, {
+      method: 'POST', credentials: 'same-origin', headers: headers, body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.ok ? r.json() : [] })
+      .then(function (list) {
+        var map = {}
+        ;(list || []).forEach(function (row) {
+          if (row == null || row.price == null) return
+          var cfg = row.configId != null ? Number(row.configId) : ''
+          map[Number(row.itemId) + ':' + cfg] = Number(row.price)
+        })
+        return map
+      })
+      .catch(function () { return {} })
+  }
+
+  // Onceki satir + yeni patch → guncel satir (itemId/configId cikarimi icin).
+  function mergedRow(rowUid, columnKey, newValue, fillPatch) {
+    var base = (rowsRef.current || []).find(function (r) { return r._uid === rowUid }) || {}
+    var m = Object.assign({}, base)
+    m[columnKey] = newValue
+    if (fillPatch) Object.keys(fillPatch).forEach(function (k) { m[k] = fillPatch[k] })
+    return m
+  }
+
+  // Tek satirin fiyatini coz + yaz. forceBaseConfig=true → yeni urun secildi,
+  // kombinasyon henuz yok → base (configId=null) fiyat.
+  var resolveAndApplyPrice = useCallback(function (rowUid, row, forceBaseConfig) {
+    if (!pricing.enabled || priceManualRef.current[rowUid]) return
+    var itemId = Number(row[pricing.itemKey] || row.stockCardId || row.itemId || 0)
+    if (!(itemId > 0)) return
+    var configId = forceBaseConfig ? null : (row[pricing.configKey] ? Number(row[pricing.configKey]) : null)
+    var ctx = readPricingContext()
+    if (!(ctx.currencyId > 0)) return
+    fetchResolvePrices([{ itemId: itemId, configId: configId }], ctx).then(function (map) {
+      var hit = map[itemId + ':' + (configId != null ? configId : '')]
+      if (hit == null) return
+      setRows(function (prev) {
+        return prev.map(function (r) {
+          if (r._uid !== rowUid || priceManualRef.current[rowUid]) return r
+          var nr = Object.assign({}, r); nr[pricing.targetKey] = hit; nr.__priceAuto = true
+          return applyComputed(nr, allColumns)
+        })
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allColumns])
+
+  // Tum otomatik-doldurulmus (elle degistirilmemis) satirlari yeniden coz —
+  // cari/doviz/tarih degisince. Yuklenen mevcut belge satirlari (__priceAuto yok)
+  // ve elle girilenler dokunulmaz → tarihi fiyat korunur.
+  var resolveAllAutoRows = useCallback(function () {
+    if (!pricing.enabled) return
+    var ctx = readPricingContext()
+    if (!(ctx.currencyId > 0)) return
+    var targets = (rowsRef.current || []).filter(function (r) {
+      return r.__priceAuto === true && !priceManualRef.current[r._uid] &&
+             Number(r[pricing.itemKey] || r.stockCardId || 0) > 0
+    })
+    if (targets.length === 0) return
+    var keys = targets.map(function (r) {
+      return {
+        itemId:   Number(r[pricing.itemKey] || r.stockCardId),
+        configId: r[pricing.configKey] ? Number(r[pricing.configKey]) : null,
+      }
+    })
+    fetchResolvePrices(keys, ctx).then(function (map) {
+      setRows(function (prev) {
+        return prev.map(function (r) {
+          if (r.__priceAuto !== true || priceManualRef.current[r._uid]) return r
+          var itemId = Number(r[pricing.itemKey] || r.stockCardId || 0)
+          if (!(itemId > 0)) return r
+          var configId = r[pricing.configKey] ? Number(r[pricing.configKey]) : null
+          var hit = map[itemId + ':' + (configId != null ? configId : '')]
+          if (hit == null) return r
+          var nr = Object.assign({}, r); nr[pricing.targetKey] = hit
+          return applyComputed(nr, allColumns)
+        })
+      })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allColumns])
+
+  // Cari / doviz / belge tarihi degisince otomatik satirlari yeniden coz.
+  //   - Cari guide secimi (#sqCustomerId) fillTargets ile 'change' yayar → yakalanir.
+  //   - Cari kod-lookup + doviz set 'sq:contact'/'sq:currency' window event'i yayar.
+  //   - Native 'change' (doviz select, tarih input) de dinlenir.
+  useEffect(function () {
+    if (!pricing.enabled) return undefined
+    var ctx = pricing.context || {}
+    function el(id) { return id && typeof document !== 'undefined' ? document.getElementById(id) : null }
+    var dateEl = el(ctx.dateElId), currencyEl = el(ctx.currencyElId), contactEl = el(ctx.contactElId)
+    function onChange() { resolveAllAutoRows() }
+    window.addEventListener('sq:currency', onChange)
+    window.addEventListener('sq:contact', onChange)
+    if (dateEl)     dateEl.addEventListener('change', onChange)
+    if (currencyEl) currencyEl.addEventListener('change', onChange)
+    if (contactEl)  contactEl.addEventListener('change', onChange)
+    return function () {
+      window.removeEventListener('sq:currency', onChange)
+      window.removeEventListener('sq:contact', onChange)
+      if (dateEl)     dateEl.removeEventListener('change', onChange)
+      if (currencyEl) currencyEl.removeEventListener('change', onChange)
+      if (contactEl)  contactEl.removeEventListener('change', onChange)
+    }
+  }, [pricing.enabled, resolveAllAutoRows])
+
   // ── Hucre degisikligi ──
   var handleCellChange = useCallback(function(rowUid, columnKey, newValue, fillPatch) {
     var autoOpenRow = null
@@ -549,7 +697,21 @@ export default function CalibraLineItemsGrid(props) {
       else if (window.CalibraAlert && window.CalibraAlert.warn) window.CalibraAlert.warn(lm)
     }
     if (autoOpenRow && traceColumns.length > 0) setTraceModalRow({ row: autoOpenRow, column: traceColumns[0] })
-  }, [allColumns, traceColumns])
+
+    // Otomatik fiyat: urun secilince base fiyat, kombinasyon secilince varyant fiyat;
+    // elle unitPrice girilince o satiri dondur (bir daha otomatik yazma).
+    if (pricing.enabled) {
+      if (columnKey === pricing.targetKey) {
+        priceManualRef.current[rowUid] = true
+      } else if (columnKey === 'materialCode') {
+        priceManualRef.current[rowUid] = false
+        resolveAndApplyPrice(rowUid, mergedRow(rowUid, columnKey, newValue, fillPatch), true)
+      } else if (columnKey === 'combinationCode' || columnKey === pricing.configKey) {
+        resolveAndApplyPrice(rowUid, mergedRow(rowUid, columnKey, newValue, fillPatch), false)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allColumns, traceColumns, resolveAndApplyPrice])
 
   // ── Yeni satir ekle ──
   // Guided workflow: satir eklendikten sonra stok rehberi otomatik acilir.

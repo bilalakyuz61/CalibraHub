@@ -660,12 +660,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     }
 
     // Satış siparişi → Satış İrsaliyesi (çıkış). "Teslim Et" butonu buradan geçer.
-    public Task<(int Id, string DocNo)> DeliverSalesOrderAsync(int salesOrderId, int? createdById, CancellationToken ct)
-        => ConvertOrderToDeliveryAsync(salesOrderId, isPurchase: false, createdById, ct);
+    public Task<(int Id, string DocNo)> DeliverSalesOrderAsync(
+        int salesOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct)
+        => ConvertOrderToDeliveryAsync(salesOrderId, isPurchase: false, createdById, deliverByLine, ct);
 
     // Satın alma siparişi → Alış İrsaliyesi (giriş / mal kabul).
-    public Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(int purchaseOrderId, int? createdById, CancellationToken ct)
-        => ConvertOrderToDeliveryAsync(purchaseOrderId, isPurchase: true, createdById, ct);
+    public Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(
+        int purchaseOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct)
+        => ConvertOrderToDeliveryAsync(purchaseOrderId, isPurchase: true, createdById, deliverByLine, ct);
 
     /// <summary>
     /// Sipariş → İrsaliye dönüşümü (STOK ETKİLİ). Açık sipariş kalemlerini ana birimde
@@ -674,12 +676,17 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     ///     NegativeBalanceGuard uygulanır.
     ///   • Satın alma (isPurchase=true): alis_irsaliyesi, MovementType=2 (Giriş), LocationId set, guard yok.
     /// Kalem bazında SourceLineId (sipariş satırı ↔ irsaliye satırı) + sipariş satırı
-    /// DeliveredQuantity=BaseQuantity ile "teslim edildi" işaretlenir (tekrar teslimat engellenir).
-    /// Belge başlığı ParentDocumentId=orderId + cari/tutar alanları siparişten kopyalanır;
-    /// DocumentSource soyağacı kenarını çağıran controller yazar. Tek transaction, hata → rollback.
+    /// DeliveredQuantity artırılır. <paramref name="deliverByLine"/> = LineId → teslim miktarı
+    /// (gösterim birimi); null ise satırın TÜM açık miktarı teslim edilir (geriye uyum).
+    /// Kısmi teslimatta miktar açık miktara clamp edilir, DeliveredQuantity += teslim; satır tamamen
+    /// teslim edildiyse DeliveredQuantity=BaseQuantity (birebir kapanır). ≤0 giren satır atlanır.
+    /// Başlık tutarları teslim edilen kalemlerden yeniden hesaplanır (sipariş iskonto/vergi oranıyla).
+    /// Belge başlığı ParentDocumentId=orderId + cari alanları siparişten kopyalanır; DocumentSource
+    /// soyağacı kenarını çağıran controller yazar. Tek transaction, hata → rollback.
     /// </summary>
     private async Task<(int Id, string DocNo)> ConvertOrderToDeliveryAsync(
-        int orderId, bool isPurchase, int? createdById, CancellationToken ct)
+        int orderId, bool isPurchase, int? createdById,
+        IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct)
     {
         var companyId    = _connectionFactory.ResolveCurrentCompanyId();
         var expectedType = isPurchase ? "alis_siparisi"   : "satis_siparisi";

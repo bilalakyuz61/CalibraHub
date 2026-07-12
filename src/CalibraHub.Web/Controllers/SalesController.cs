@@ -38,6 +38,7 @@ public sealed class SalesController : Controller
     private readonly IPermissionService _permService;
     private readonly IStockDocRepository _stockDocRepo;
     private readonly ICompanyParameterService _companyParams;
+    private readonly IPriceListService _priceListService;
     private readonly ILogger<SalesController> _logger;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
@@ -72,6 +73,7 @@ public sealed class SalesController : Controller
         IPermissionService permService,
         IStockDocRepository stockDocRepo,
         ICompanyParameterService companyParams,
+        IPriceListService priceListService,
         ILogger<SalesController> logger,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
@@ -93,6 +95,7 @@ public sealed class SalesController : Controller
         _permService = permService;
         _stockDocRepo = stockDocRepo;
         _companyParams = companyParams;
+        _priceListService = priceListService;
         _logger = logger;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
@@ -1095,6 +1098,20 @@ public sealed class SalesController : Controller
                 showSubtotal = !hidePricing,
                 subtotalColumns = hidePricing ? System.Array.Empty<string>() : new[] { "lineTotal" },
             },
+            // Otomatik fiyat cozumu: urun/kombinasyon secilince carinin fiyat listesine gore
+            // birim fiyat doldurulur (cari yoksa Genel Liste). enabled=false → fiyat kolonu gizli
+            // belgelerde (ornek: alis_talebi / Ihtiyac Kaydi) hic cozum yapilmaz.
+            // Element id'leri config'te → JSX'e hardcode yok ("zeki veri, aptal bilesen").
+            pricing = new
+            {
+                enabled    = !hidePricing,
+                resolveUrl = "/Sales/ResolveLinePrices",
+                direction  = (documentTypeCode ?? "").StartsWith("satis", StringComparison.OrdinalIgnoreCase) ? "s" : "b",
+                targetKey  = "unitPrice",
+                itemKey    = "stockCardId",
+                configKey  = "combinationId",
+                context    = new { contactElId = "sqCustomerId", currencyElId = "sqCurrency", dateElId = "sqQuoteDate" }
+            },
         };
     }
 
@@ -1208,6 +1225,52 @@ public sealed class SalesController : Controller
             .OrderBy(x => x.MaterialCode)
             .ToArray();
         return Json(materials);
+    }
+
+    // Belge kalemine otomatik birim fiyat — carinin fiyat listesi (Contact.PriceGroupId)
+    // varsa ondan, o listede urun yoksa "Genel Liste"den cozer. direction: 's'=satis, 'b'=alis.
+    // Alis belgeleri de bu view/controller'i kullandigi icin (Purchase → /Sales/DocumentEdit
+    // redirect) tek endpoint her iki yonu de karsilar; yon config'ten (pricing.direction) gelir.
+    public sealed class ResolveLinePricesBody
+    {
+        public int? ContactId { get; set; }
+        public int CurrencyId { get; set; }
+        public string? ValidOn { get; set; }    // ISO tarih; bos → bugun
+        public string? Direction { get; set; }  // "s" | "b" | "m"
+        public List<KeyBody> Keys { get; set; } = new();
+        public sealed class KeyBody { public int ItemId { get; set; } public int? ConfigId { get; set; } }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResolveLinePrices([FromBody] ResolveLinePricesBody? body, CancellationToken ct)
+    {
+        if (body?.Keys is null || body.Keys.Count == 0 || body.CurrencyId <= 0)
+            return Json(Array.Empty<object>());
+
+        var direction = (body.Direction ?? "s").Trim().ToLowerInvariant() switch
+        {
+            "b" => PriceDirection.Purchase,
+            "m" => PriceDirection.Cost,
+            _   => PriceDirection.Sales
+        };
+        var date = DateTime.TryParse(body.ValidOn, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? d.Date : DateTime.Today;
+        var keys = body.Keys.Where(k => k.ItemId > 0)
+            .Select(k => new PriceEntryKey(k.ItemId, k.ConfigId))
+            .ToArray();
+        if (keys.Length == 0) return Json(Array.Empty<object>());
+
+        var rows = await _priceListService.ResolveLinePricesAsync(
+            new ResolveLinePricesRequest(body.ContactId, body.CurrencyId, direction, date, keys), ct);
+
+        return Json(rows.Select(r => new
+        {
+            itemId        = r.ItemId,
+            configId      = r.ConfigId,
+            price         = r.Price,
+            sourceGroupId = r.SourceGroupId,
+            source        = r.Source.ToString()
+        }));
     }
 
     // Sipariş seri seçim havuzu — stoktaki (InStock) + BU siparişin rezerve serileri.

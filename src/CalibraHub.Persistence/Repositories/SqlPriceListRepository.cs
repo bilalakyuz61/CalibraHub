@@ -54,7 +54,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
 
     private const string GroupCols =
         "[Id],[CompanyId],[Code],[Name],[Description],[IsActive]," +
-        "[AllowsBuying],[AllowsSelling],[AllowsCost],[Created],[Updated]";
+        "[AllowsBuying],[AllowsSelling],[AllowsCost],[Created],[Updated],[IsDefault]";
 
     public async Task<IReadOnlyCollection<PriceGroup>> GetAllGroupsAsync(CancellationToken ct)
     {
@@ -97,8 +97,8 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_tblGroups} ([CompanyId],[Code],[Name],[Description],[IsActive],[AllowsBuying],[AllowsSelling],[AllowsCost],[Created],[Updated])
-            VALUES (@CompanyId,@Code,@Name,@Desc,@Active,@AllowsBuying,@AllowsSelling,@AllowsCost,GETDATE(),GETDATE());
+            INSERT INTO {_tblGroups} ([CompanyId],[Code],[Name],[Description],[IsActive],[AllowsBuying],[AllowsSelling],[AllowsCost],[IsDefault],[Created],[Updated])
+            VALUES (@CompanyId,@Code,@Name,@Desc,@Active,@AllowsBuying,@AllowsSelling,@AllowsCost,@IsDefault,GETDATE(),GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         var effectiveCompanyId = g.CompanyId > 0
@@ -112,6 +112,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         cmd.Parameters.Add(new SqlParameter("@AllowsBuying",  g.AllowsBuying));
         cmd.Parameters.Add(new SqlParameter("@AllowsSelling", g.AllowsSelling));
         cmd.Parameters.Add(new SqlParameter("@AllowsCost",    g.AllowsCost));
+        cmd.Parameters.Add(new SqlParameter("@IsDefault",     g.IsDefault));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
@@ -151,6 +152,39 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id",        id));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // "Genel Liste" (fallback) grubu — CompanyId basina tek IsDefault=1 kayit.
+    public async Task<int?> GetDefaultGroupIdAsync(CancellationToken ct)
+    {
+        await using var conn = await _cf.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP(1) [Id]
+            FROM {_tblGroups}
+            WHERE [CompanyId]=@CompanyId AND [IsDefault]=1 AND [IsActive]=1
+            ORDER BY [Id];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
+        var val = await cmd.ExecuteScalarAsync(ct);
+        return val is null || val == DBNull.Value ? null : Convert.ToInt32(val);
+    }
+
+    // Verilen grubu default yap; ayni company'deki diger tum gruplarin default'unu kaldir.
+    // Tek UPDATE statement + CASE WHEN → filtered unique index (tek default) ihlal edilmeden atomik.
+    public async Task SetDefaultGroupAsync(int groupId, CancellationToken ct)
+    {
+        await using var conn = await _cf.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {_tblGroups}
+            SET [IsDefault] = CASE WHEN [Id]=@Id THEN 1 ELSE 0 END,
+                [Updated]   = GETDATE()
+            WHERE [CompanyId]=@CompanyId;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
+        cmd.Parameters.Add(new SqlParameter("@Id",        groupId));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -524,6 +558,68 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         return list;
     }
 
+    // ── Fallback'li Fiyat Cozumu (cari grubu → Genel Liste) ──────────────────
+    // Her key icin cari grubu + default grubu TEK sorguda arar; oncelik ORDER BY:
+    //   (a) cari grup + exact config, (b) cari grup + base(null config),
+    //   (c) genel grup + exact config, (d) genel grup + base.
+    // Tarih-etkinlik ve ConfigId semantigi GetExistingPricesAsync ile birebir ayni.
+    public async Task<IReadOnlyCollection<ResolvedPriceRow>> ResolveExistingPricesAsync(
+        int? contactGroupId, int defaultGroupId,
+        int currencyId, string priceType, DateTime date,
+        IReadOnlyCollection<PriceEntryKey> keys, CancellationToken ct)
+    {
+        if (keys.Count == 0) return Array.Empty<ResolvedPriceRow>();
+
+        var list = new List<ResolvedPriceRow>();
+        await using var conn = await _cf.OpenConnectionAsync(ct);
+
+        foreach (var k in keys)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT TOP(1) [Price], [GroupId],
+                       CASE WHEN [ConfigId] IS NULL THEN 0 ELSE 1 END AS ConfigExact
+                FROM {_tblEntries}
+                WHERE [GroupId] IN (@ContactGroupId, @DefaultGroupId)
+                  AND [ItemId]     = @ItemId
+                  AND [CurrencyId]  = @CurrencyId
+                  AND [PriceType]  = @PriceType
+                  AND [IsActive]   = 1
+                  AND [ValidFrom] <= @Date
+                  AND ([ValidTo] IS NULL OR [ValidTo] >= @Date)
+                  AND ([ConfigId] = @ConfigId OR [ConfigId] IS NULL)
+                ORDER BY
+                  CASE WHEN [GroupId] = @ContactGroupId THEN 0 ELSE 1 END,
+                  CASE WHEN [ConfigId] = @ConfigId THEN 0 ELSE 1 END,
+                  [ValidFrom] DESC;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@ContactGroupId", (object?)contactGroupId ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@DefaultGroupId", defaultGroupId));
+            cmd.Parameters.Add(new SqlParameter("@ItemId",     k.ItemId));
+            cmd.Parameters.Add(new SqlParameter("@ConfigId",   (object?)k.ConfigId ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CurrencyId", currencyId));
+            cmd.Parameters.Add(new SqlParameter("@PriceType",  priceType));
+            cmd.Parameters.Add(new SqlParameter("@Date",       date));
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            if (await r.ReadAsync(ct))
+            {
+                var price       = r.GetDecimal(0);
+                var groupId     = r.GetInt32(1);
+                var configExact = r.GetInt32(2) == 1;
+                var source = (contactGroupId.HasValue && groupId == contactGroupId.Value, configExact) switch
+                {
+                    (true,  true)  => PriceSource.ContactExact,
+                    (true,  false) => PriceSource.ContactBase,
+                    (false, true)  => PriceSource.DefaultExact,
+                    (false, false) => PriceSource.DefaultBase,
+                };
+                list.Add(new ResolvedPriceRow(k.ItemId, k.ConfigId, price, groupId, source));
+            }
+        }
+        return list;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static void AddEntryParams(SqlCommand cmd, PriceList e)
@@ -551,7 +647,8 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         AllowsSelling = r.GetBoolean(7),
         AllowsCost    = r.GetBoolean(8),
         CreatedAt     = r.GetDateTime(9),
-        UpdatedAt     = r.IsDBNull(10) ? DateTime.MinValue : r.GetDateTime(10)
+        UpdatedAt     = r.IsDBNull(10) ? DateTime.MinValue : r.GetDateTime(10),
+        IsDefault     = !r.IsDBNull(11) && r.GetBoolean(11)
     };
 
     // Defansif map: orphan/migration kaynakli NULL kolonlar (ItemId, CurrencyId vs.)

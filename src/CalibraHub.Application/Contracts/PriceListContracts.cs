@@ -6,6 +6,7 @@ namespace CalibraHub.Application.Contracts;
 public sealed record PriceGroupDto(
     int Id, string Code, string Name, string? Description, bool IsActive,
     bool AllowsBuying, bool AllowsSelling, bool AllowsCost,
+    bool IsDefault,
     DateTime CreatedAt, DateTime UpdatedAt);
 
 public sealed record CreatePriceGroupRequest(
@@ -65,6 +66,21 @@ public sealed record GetExistingPricesRequest(
 
 public sealed record ExistingPriceRow(
     int ItemId, int? ConfigId, decimal Price);
+
+// ── Fiyat Cozucu (belge/kit satirina fallback'li fiyat) ──────────────────────
+// Yon → PriceType: Sales='s', Purchase='b', Cost='m'.
+public enum PriceDirection { Sales, Purchase, Cost }
+
+public sealed record ResolveLinePricesRequest(
+    int? ContactId, int CurrencyId, PriceDirection Direction,
+    DateTime Date, IReadOnlyCollection<PriceEntryKey> Keys);
+
+// Fiyatin hangi listeden/eslesmeden geldigi (UI rozet/teshis; None = cozulemedi).
+// Oncelik: ContactExact > ContactBase > DefaultExact > DefaultBase.
+public enum PriceSource { None, ContactExact, ContactBase, DefaultExact, DefaultBase }
+
+public sealed record ResolvedPriceRow(
+    int ItemId, int? ConfigId, decimal? Price, int? SourceGroupId, PriceSource Source);
 
 // ── Upsert Sonucu ───────────────────────────────────────────────────────────
 public sealed record BulkUpsertResult(int Inserted, int Updated);

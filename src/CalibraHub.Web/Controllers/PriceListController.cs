@@ -143,6 +143,44 @@ public sealed class PriceListController : Controller
             if (g.AllowsCost)    allowsList.Add("Maliyet");
             var allowsTxt = allowsList.Count == 0 ? "—" : string.Join(" · ", allowsList);
 
+            // Genel Liste (default) rozeti; degilse Aktif/Pasif.
+            object statusBadge = g.IsDefault
+                ? new { label = "Genel Liste", color = "violet" }
+                : new { label = g.IsActive ? "Aktif" : "Pasif", color = g.IsActive ? "emerald" : "slate" };
+
+            // Genel Liste silinemez → Sil butonu gizlenir (servis de reddeder; ek savunma).
+            object? secondaryAction = g.IsDefault
+                ? (object?)null
+                : new
+                {
+                    label   = "Sil",
+                    icon    = "Trash2",
+                    apiUrl  = $"/PriceList/DeletePriceGroupJson?id={g.Id}",
+                    confirm = $"'{g.Code}' grubunu silmek istediginize emin misiniz? Tum fiyat kayitlari da silinecek."
+                };
+
+            var extraActions = new List<object>
+            {
+                // Yeni Fiyat Girisi — toplu fiyat giris wizard'i.
+                new { id = "new-price", label = "Yeni Fiyat Girisi", icon = "DollarSign", color = "green",
+                      url = $"/PriceList/PriceList?groupId={g.Id}" },
+                // Raporlama — paginated fiyat tablosu.
+                new { id = "report", label = "Raporlama", icon = "Table", color = "amber",
+                      url = $"/PriceList/Report?groupId={g.Id}" },
+                // Cariler — fiyat grubunu cari kartlara baglar (Contact.PriceGroupId).
+                new { id = "contacts", type = "trigger", trigger = "price-group-contacts-modal",
+                      label = "Cari Eslestir", icon = "Users", color = "blue",
+                      payload = new { groupId = g.Id, groupCode = g.Code ?? string.Empty, groupName = g.Name ?? string.Empty } }
+            };
+            // Bu grup Genel Liste degilse "Genel Liste Yap" aksiyonu (api-post → onay + in-place refresh).
+            if (!g.IsDefault)
+                extraActions.Insert(0, new
+                {
+                    id = "set-default", type = "api-post", label = "Genel Liste Yap", icon = "Star", color = "green",
+                    url = $"/PriceList/SetDefaultPriceGroupJson?id={g.Id}",
+                    confirm = $"'{g.Name}' grubunu Genel Liste yapmak istediginize emin misiniz? Cari listesi olmayan tum fiyatlar buradan cozulur."
+                });
+
             list.Add(new
             {
                 id          = g.Id,
@@ -150,11 +188,7 @@ public sealed class PriceListController : Controller
                 subtitle    = g.Code ?? string.Empty,
                 description = g.Description ?? string.Empty,
                 imageUrl    = (string?)null,
-                statusBadge = new
-                {
-                    label = g.IsActive ? "Aktif" : "Pasif",
-                    color = g.IsActive ? "emerald" : "slate"
-                },
+                statusBadge,
                 widgets = new object[]
                 {
                     new { id = "code",          type = "data", dataType = "text",    label = "Kod",     value = g.Code },
@@ -168,54 +202,8 @@ public sealed class PriceListController : Controller
                     icon  = "Edit",
                     url   = $"/PriceList/PriceGroupEdit?id={g.Id}"
                 },
-                secondaryAction = new
-                {
-                    label   = "Sil",
-                    icon    = "Trash2",
-                    apiUrl  = $"/PriceList/DeletePriceGroupJson?id={g.Id}",
-                    confirm = $"'{g.Code}' grubunu silmek istediginize emin misiniz? Tum fiyat kayitlari da silinecek."
-                },
-                extraActions = new object[]
-                {
-                    // Yeni Fiyat Girisi — wizard ekranina gider (toplu fiyat giris).
-                    // Ikon: DollarSign (para/fiyat semantigi); renk: green (yeni kayit).
-                    new
-                    {
-                        id    = "new-price",
-                        label = "Yeni Fiyat Girisi",
-                        icon  = "DollarSign",
-                        color = "green",
-                        url   = $"/PriceList/PriceList?groupId={g.Id}"
-                    },
-                    // Raporlama — fiyat listesi duzenleme/raporlama ekrani (paginated tablo).
-                    // Ikon: Table (tablo gorunumu); renk: amber (vurgu, dikkat).
-                    new
-                    {
-                        id    = "report",
-                        label = "Raporlama",
-                        icon  = "Table",
-                        color = "amber",
-                        url   = $"/PriceList/Report?groupId={g.Id}"
-                    },
-                    // Cariler — fiyat grubunu cari kartlara baglar (Contact.PriceGroupId).
-                    // Modal acilir: atanmis cariler listesi + cari arama/ekleme. Bir cari
-                    // baska gruba bagli ise ortak onay modali ile guncelleme onayi alinir.
-                    new
-                    {
-                        id      = "contacts",
-                        type    = "trigger",
-                        trigger = "price-group-contacts-modal",
-                        label   = "Cari Eslestir",
-                        icon    = "Users",
-                        color   = "blue",
-                        payload = new
-                        {
-                            groupId   = g.Id,
-                            groupCode = g.Code ?? string.Empty,
-                            groupName = g.Name ?? string.Empty
-                        }
-                    }
-                }
+                secondaryAction,
+                extraActions
             });
         }
         return list;
@@ -277,6 +265,15 @@ public sealed class PriceListController : Controller
     {
         var (ok, err) = await _svc.DeleteGroupAsync(id, ct);
         return Json(new { success = ok, message = ok ? "Silindi." : err });
+    }
+
+    // Bu grubu "Genel Liste" (default) yap — cari listesi olmayan/urun bulunmayan
+    // fiyatlar buradan cozulur. CompanyId basina tek default (servis + index garanti).
+    [HttpPost]
+    public async Task<IActionResult> SetDefaultPriceGroupJson(int id, CancellationToken ct)
+    {
+        var (ok, err) = await _svc.SetDefaultGroupAsync(id, ct);
+        return Json(new { success = ok, message = ok ? "Genel Liste olarak ayarlandi." : err });
     }
 
     // ── Fiyat Listesi Raporlama (Wizard'a girmeden once filtreli izleme) ────

@@ -8,8 +8,13 @@ namespace CalibraHub.Application.Services;
 public sealed class PriceListService : IPriceListService
 {
     private readonly IPriceListRepository _repo;
+    private readonly IFinanceService _finance;
 
-    public PriceListService(IPriceListRepository repo) => _repo = repo;
+    public PriceListService(IPriceListRepository repo, IFinanceService finance)
+    {
+        _repo = repo;
+        _finance = finance;
+    }
 
     // ── Fiyat Gruplari ────────────────────────────────────────────────────────
 
@@ -71,7 +76,22 @@ public sealed class PriceListService : IPriceListService
 
     public async Task<(bool Success, string? Error)> DeleteGroupAsync(int id, CancellationToken ct)
     {
+        // "Genel Liste" (default) grubu fallback icin zorunlu — silinemez.
+        var grp = await _repo.GetGroupByIdAsync(id, ct);
+        if (grp is null) return (false, "Grup bulunamadi.");
+        if (grp.IsDefault) return (false, "Genel Liste silinemez. Once baska bir grubu Genel Liste yapin.");
+
         await _repo.DeleteGroupAsync(id, ct);
+        return (true, null);
+    }
+
+    // Verilen grubu "Genel Liste" (default) yap — ayni company'de tek default garanti edilir.
+    public async Task<(bool Success, string? Error)> SetDefaultGroupAsync(int groupId, CancellationToken ct)
+    {
+        var grp = await _repo.GetGroupByIdAsync(groupId, ct);
+        if (grp is null) return (false, "Grup bulunamadi.");
+        if (!grp.IsActive) return (false, "Pasif grup Genel Liste yapilamaz.");
+        await _repo.SetDefaultGroupAsync(groupId, ct);
         return (true, null);
     }
 
@@ -246,6 +266,40 @@ public sealed class PriceListService : IPriceListService
             req.GroupId, req.CurrencyId, req.PriceType, req.ValidFrom, req.Keys, ct);
     }
 
+    // ── Fallback'li Fiyat Cozumu (belge/kit satiri) ─────────────────────────
+    // Cari (varsa) → Contact.PriceGroupId listesi; yoksa/urun yoksa Genel Liste.
+    // Kit rollup ileride ayni metodu bilesen key'leriyle cagirir (flat batch).
+    public async Task<IReadOnlyCollection<ResolvedPriceRow>> ResolveLinePricesAsync(
+        ResolveLinePricesRequest req, CancellationToken ct)
+    {
+        if (req.CurrencyId <= 0 || req.Keys is null || req.Keys.Count == 0)
+            return Array.Empty<ResolvedPriceRow>();
+
+        // Genel Liste (fallback) grubu — seed garanti eder; yoksa cozum yapilamaz.
+        var defaultGroupId = await _repo.GetDefaultGroupIdAsync(ct);
+        if (defaultGroupId is null || defaultGroupId.Value <= 0)
+            return Array.Empty<ResolvedPriceRow>();
+
+        // Cari → fiyat grubu (0/null → yalnizca Genel Liste kullanilir).
+        int? contactGroupId = null;
+        if (req.ContactId is > 0)
+        {
+            var contact = await _finance.GetContactByIdAsync(req.ContactId.Value, ct);
+            contactGroupId = contact?.PriceGroupId is > 0 ? contact.PriceGroupId : null;
+        }
+
+        var priceType = req.Direction switch
+        {
+            PriceDirection.Sales    => "s",
+            PriceDirection.Purchase => "b",
+            PriceDirection.Cost     => "m",
+            _                       => "s"
+        };
+
+        return await _repo.ResolveExistingPricesAsync(
+            contactGroupId, defaultGroupId.Value, req.CurrencyId, priceType, req.Date, req.Keys, ct);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     // Tek harf kod: "b" (buying / alis), "s" (selling / satis), "m" (maliyet / cost).
@@ -260,6 +314,7 @@ public sealed class PriceListService : IPriceListService
     private static PriceGroupDto MapGroup(PriceGroup g) => new(
         g.Id, g.Code, g.Name, g.Description, g.IsActive,
         g.AllowsBuying, g.AllowsSelling, g.AllowsCost,
+        g.IsDefault,
         g.CreatedAt, g.UpdatedAt);
 
     /// <summary>

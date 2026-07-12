@@ -12,6 +12,10 @@ public interface IPriceListRepository
     Task UpdateGroupAsync(PriceGroup group, CancellationToken ct);
     Task DeleteGroupAsync(int id, CancellationToken ct);
 
+    // "Genel Liste" (fallback) grubu — CompanyId basina tek IsDefault=1 grup.
+    Task<int?> GetDefaultGroupIdAsync(CancellationToken ct);
+    Task SetDefaultGroupAsync(int groupId, CancellationToken ct);
+
     // Fiyat Kalemleri — enriched (Item/Config/Currency JOIN ile)
     // Server-side pagination + filter (frontend tum kayitlari cekmiyor; bellek korumasi).
     Task<PagedPriceListResult> GetEntriesByGroupAsync(
@@ -38,5 +42,11 @@ public interface IPriceListRepository
     // Mevcut fiyat sorgusu — secilen PriceType (Buying/Selling) icin toplu anahtarla
     Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(
         int groupId, int currencyId, string priceType, DateTime validFrom,
+        IReadOnlyCollection<PriceEntryKey> keys, CancellationToken ct);
+
+    // Fallback'li cozum: cari grubu (varsa) → Genel Liste; exact/base config onceligi.
+    Task<IReadOnlyCollection<ResolvedPriceRow>> ResolveExistingPricesAsync(
+        int? contactGroupId, int defaultGroupId,
+        int currencyId, string priceType, DateTime date,
         IReadOnlyCollection<PriceEntryKey> keys, CancellationToken ct);
 }

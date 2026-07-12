@@ -3219,6 +3219,9 @@
                     disp.classList.remove('is-invalid');
                     // ffl-sync — diger lookup-bagimli alanlari tetikle
                     try { disp.dispatchEvent(new CustomEvent('ffl-sync', { bubbles: true })); } catch (_) {}
+                    // Cari degisti → kalem fiyat cozucusu yeniden fiyatlandirsin. Guide secimi
+                    // fillTargets ile zaten 'change' yayar; elle kod-lookup'ta burada manuel tetik.
+                    try { if (idEl) idEl.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
                     return;
                 }
                 if (r.status === 404) {

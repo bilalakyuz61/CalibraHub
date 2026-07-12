@@ -10473,6 +10473,7 @@ END;";
                     [AllowsBuying]  BIT NOT NULL CONSTRAINT [DF_PriceGroup_AllowsBuying]  DEFAULT(1),
                     [AllowsSelling] BIT NOT NULL CONSTRAINT [DF_PriceGroup_AllowsSelling] DEFAULT(1),
                     [AllowsCost]    BIT NOT NULL CONSTRAINT [DF_PriceGroup_AllowsCost]    DEFAULT(1),
+                    [IsDefault]     BIT NOT NULL CONSTRAINT [DF_PriceGroup_IsDefault]     DEFAULT(0),
                     [Created]       DATETIME NOT NULL,
                     [Updated]       DATETIME NULL
                 );
@@ -10498,6 +10499,12 @@ END;";
             IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[PriceGroup]', N'AllowsCost') IS NULL
                 ALTER TABLE [{s}].[PriceGroup] ADD [AllowsCost]    BIT NOT NULL CONSTRAINT [df_price_groups_allows_cost]    DEFAULT(1);
+
+            -- IsDefault ("Genel Liste" / fallback isareti): idempotent ALTER ADD (mevcut DB'lerde
+            -- default 0 ile gelir). CompanyId basina tek default → asagida filtered unique index.
+            IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[PriceGroup]', N'IsDefault') IS NULL
+                ALTER TABLE [{s}].[PriceGroup] ADD [IsDefault] BIT NOT NULL CONSTRAINT [DF_PriceGroup_IsDefault] DEFAULT(0);
 
             -- ── PriceList migration: legacy denormalized columns → FK-based schema ──
             -- Eski schema: price_group_id, item_id (NULL), material_code, material_name, combination_code, combination_name, currency
@@ -10763,6 +10770,50 @@ END;";
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // ── Batch 2 (DDL+DML): IsDefault filtered index + "Genel Liste" seed ──
+        // IsDefault kolonu Batch 1'de eklendi; AYRI ExecuteNonQuery = ayri batch oldugu
+        // icin parse-time'da kolon artik semada (deferred name resolution guvenli).
+        var defaultSeedSql = $"""
+            -- CompanyId basina tek IsDefault=1: filtered unique index (idempotent, TRY ile korumali).
+            IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N'[{s}].[PriceGroup]')
+                                 AND name = N'UX_PriceGroup_Company_Default')
+            BEGIN
+                BEGIN TRY
+                    CREATE UNIQUE INDEX [UX_PriceGroup_Company_Default]
+                        ON [{s}].[PriceGroup]([CompanyId]) WHERE [IsDefault] = 1;
+                END TRY
+                BEGIN CATCH
+                    PRINT 'WARN: UX_PriceGroup_Company_Default olusturulamadi, birden fazla default var.';
+                END CATCH
+            END;
+
+            -- Seed 1: hic grup yoksa (fresh DB) DefaultCompanyId icin "Genel Liste" olustur (IsDefault=1).
+            IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM [{s}].[PriceGroup])
+                INSERT INTO [{s}].[PriceGroup]
+                    ([CompanyId],[Code],[Name],[Description],[IsActive],[AllowsBuying],[AllowsSelling],[AllowsCost],[IsDefault],[Created],[Updated])
+                VALUES
+                    ({DefaultCompanyId}, N'GENEL', N'Genel Liste',
+                     N'Varsayilan fiyat listesi — cari listesi yoksa fiyat buradan cozulur.',
+                     1, 1, 1, 1, 1, GETDATE(), GETDATE());
+
+            -- Seed 2: default'u olmayan her company icin en eski (MIN Id) aktif grubu default yap.
+            -- Mevcut kurulumda kullanicinin ana listesi hemen fallback olur; UI'dan degistirilebilir.
+            IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
+                UPDATE pg SET [IsDefault] = 1, [Updated] = GETDATE()
+                FROM [{s}].[PriceGroup] pg
+                WHERE pg.[IsActive] = 1
+                  AND pg.[Id] = (SELECT MIN(x.[Id]) FROM [{s}].[PriceGroup] x
+                                 WHERE x.[CompanyId] = pg.[CompanyId] AND x.[IsActive] = 1)
+                  AND NOT EXISTS (SELECT 1 FROM [{s}].[PriceGroup] d
+                                  WHERE d.[CompanyId] = pg.[CompanyId] AND d.[IsDefault] = 1);
+            """;
+        await using var cmdDefault = connection.CreateCommand();
+        cmdDefault.CommandText = defaultSeedSql;
+        await cmdDefault.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task EnsureFormsTableAsync(SqlConnection connection, CancellationToken cancellationToken)

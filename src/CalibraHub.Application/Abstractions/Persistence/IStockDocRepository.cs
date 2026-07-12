@@ -10,24 +10,33 @@ public interface IStockDocRepository
     Task<IReadOnlyList<StockDocLineDto>> GetLinesAsync(int docId, CancellationToken ct);
     Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct);
 
+    /// <summary>Bir siparişin açık (teslim edilmemiş) kalemlerini kısmi teslimat modalı için döner.
+    /// Miktarlar gösterim biriminde (Quantity birimi). BaseQuantity &gt; DeliveredQuantity olan satırlar.</summary>
+    Task<IReadOnlyList<OrderOpenLineDto>> GetOrderOpenLinesAsync(int orderId, CancellationToken ct);
+
     /// <summary>
     /// Satış siparişi → Satış İrsaliyesi (stok etkili teslimat): siparişin açık (teslim edilmemiş)
     /// kalemleri için tek transaction'da satis_irsaliyesi belgesi + ana birimde çıkış satırları
-    /// (MovementType=1, FromLocationId) yazar, sipariş satırlarının DeliveredQuantity'sini
-    /// BaseQuantity'ye çeker (açık miktar → 0) ve eksi bakiye kontrolünü uygular. Yetersiz stokta
-    /// NegativeBalanceException fırlatır (tx geri alınır). İrsaliye siparişe ParentDocumentId +
-    /// kalem SourceLineId ile bağlanır; cari/tutar alanları siparişten kopyalanır.
+    /// (MovementType=1, FromLocationId) yazar, sipariş satırlarının DeliveredQuantity'sini artırır
+    /// ve eksi bakiye kontrolünü uygular. Yetersiz stokta NegativeBalanceException fırlatır (tx geri
+    /// alınır). İrsaliye siparişe ParentDocumentId + kalem SourceLineId ile bağlanır; başlık tutarları
+    /// teslim edilen kalemlerden yeniden hesaplanır (kısmi teslimatta orantılı).
+    /// <paramref name="deliverByLine"/> = LineId → teslim miktarı (gösterim birimi); null ise TÜM açık
+    /// miktar teslim edilir (geriye uyum). Miktar açık miktarı aşamaz; ≤0 olan satır atlanır.
     /// </summary>
-    Task<(int Id, string DocNo)> DeliverSalesOrderAsync(int salesOrderId, int? createdById, CancellationToken ct);
+    Task<(int Id, string DocNo)> DeliverSalesOrderAsync(
+        int salesOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct);
 
     /// <summary>
     /// Satın alma siparişi → Alış İrsaliyesi (stok etkili mal kabul): açık sipariş kalemleri için
     /// alis_irsaliyesi belgesi + ana birimde giriş satırları (MovementType=2, LocationId) yazar,
-    /// sipariş satırlarının DeliveredQuantity'sini BaseQuantity'ye çeker. Giriş bakiyeyi artırdığı
-    /// için eksi bakiye kontrolü uygulanmaz. İrsaliye siparişe ParentDocumentId + kalem SourceLineId
-    /// ile bağlanır; cari/tutar alanları siparişten kopyalanır.
+    /// sipariş satırlarının DeliveredQuantity'sini artırır. Giriş bakiyeyi artırdığı için eksi bakiye
+    /// kontrolü uygulanmaz. İrsaliye siparişe ParentDocumentId + kalem SourceLineId ile bağlanır.
+    /// <paramref name="deliverByLine"/> = LineId → kabul miktarı (gösterim birimi); null ise TÜM açık
+    /// miktar kabul edilir. Miktar açık miktarı aşamaz; ≤0 olan satır atlanır.
     /// </summary>
-    Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(int purchaseOrderId, int? createdById, CancellationToken ct);
+    Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(
+        int purchaseOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct);
 
     /// <summary>
     /// Sipariş seri rezervasyonu (2026-07-11): sipariş satırlarına seçilen serileri DocumentLineSerial

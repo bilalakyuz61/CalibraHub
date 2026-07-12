@@ -11,6 +11,9 @@ public interface IPriceListService
     Task<(bool Success, string? Error)> UpdateGroupAsync(UpdatePriceGroupRequest request, CancellationToken ct);
     Task<(bool Success, string? Error)> DeleteGroupAsync(int id, CancellationToken ct);
 
+    // "Genel Liste" (fallback) grubunu isaretle — CompanyId basina tek default.
+    Task<(bool Success, string? Error)> SetDefaultGroupAsync(int groupId, CancellationToken ct);
+
     // Fiyat Kalemleri — server-side pagination + filter
     Task<PagedPriceListResult> GetEntriesByGroupAsync(
         int groupId, PriceListFilter filter, CancellationToken ct);
@@ -25,4 +28,7 @@ public interface IPriceListService
 
     // Mevcut fiyat sorgusu — toplu stok+kombinasyon listesi icin
     Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(GetExistingPricesRequest request, CancellationToken ct);
+
+    // Belge/kit satirina fallback'li fiyat: cari listesi (varsa) → Genel Liste.
+    Task<IReadOnlyCollection<ResolvedPriceRow>> ResolveLinePricesAsync(ResolveLinePricesRequest request, CancellationToken ct);
 }
