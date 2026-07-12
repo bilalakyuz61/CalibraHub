@@ -757,7 +757,7 @@ body.app-theme-dark .ap-tab.is-active::before {
 
     // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'guvenlik');
+        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'guvenlik');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
