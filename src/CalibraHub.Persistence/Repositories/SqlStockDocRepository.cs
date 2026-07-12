@@ -582,13 +582,46 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 // Sıfır sayım geçerli giriştir ("saydım, yok") — yalnızca negatif atlanır.
                 if (line.Qty < 0) continue;
 
+                // ── İzlenebilirlik enforcement (2026-07-12) ──
+                // Sayım da fiziksel stoğu temsil eder; lot/seri-takipli kalemde lot/seri zorunlu.
+                var label = line.MaterialCode ?? $"#{itemId.Value}";
+                var trackingType = "None";
+                await using (var tt = conn.CreateCommand())
+                {
+                    tt.Transaction = tx;
+                    tt.CommandText = $"SELECT [TrackingType] FROM {T("Items")} WHERE [Id] = @It;";
+                    tt.Parameters.AddWithValue("@It", itemId.Value);
+                    trackingType = (await tt.ExecuteScalarAsync(ct)) as string ?? "None";
+                }
+                var lotNo = string.IsNullOrWhiteSpace(line.LotNo) ? null : line.LotNo!.Trim();
+                var serialList = (line.Serials ?? [])
+                    .Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                if (string.Equals(trackingType, "Lot", StringComparison.OrdinalIgnoreCase) && lotNo == null)
+                {
+                    await tx.RollbackAsync(ct);
+                    throw new InvalidOperationException($"Lot No zorunlu (stok lot-takipli): '{label}'. Sayım satırında Lot / Parti No girilmelidir.");
+                }
+                if (string.Equals(trackingType, "Serial", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (line.Qty != Math.Floor(line.Qty))
+                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Seri takipli stokta sayılan miktar tam sayı olmalı: '{label}'."); }
+                    var origCount = (line.Serials ?? []).Count(x => !string.IsNullOrWhiteSpace(x));
+                    if (serialList.Count != origCount)
+                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Aynı seri birden fazla girildi: '{label}'."); }
+                    if (serialList.Count != (int)line.Qty)
+                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Seri No zorunlu (stok seri-takipli): seri adedi sayılan miktara eşit olmalı — {serialList.Count} seri / {line.Qty:0.##} adet ('{label}')."); }
+                }
+                var serialsText = serialList.Count > 0 ? string.Join("\n", serialList) : null;
+
                 await using var lineIns = conn.CreateCommand();
                 lineIns.Transaction = tx;
                 lineIns.CommandText = $"""
                     INSERT INTO {T("InventoryCountLine")}
-                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes],[LocationId])
+                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes],[LocationId],[LotNo],[Serials])
                     VALUES
-                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId);
+                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId,@LotNo,@Serials);
                     """;
                 lineIns.Parameters.AddWithValue("@CountId", countId);
                 lineIns.Parameters.AddWithValue("@ItemId", itemId.Value);
@@ -598,6 +631,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@Notes", (object?)line.Notes ?? DBNull.Value);
                 // Kalem bazinda depo — satirda yoksa header (sayim deposu) devralinir
                 lineIns.Parameters.AddWithValue("@LocId", (object?)(line.FromLocationId ?? request.FromLocationId) ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@Serials", (object?)serialsText ?? DBNull.Value);
                 await lineIns.ExecuteNonQueryAsync(ct);
             }
 

@@ -484,6 +484,11 @@ public sealed class WarehouseController : Controller
             await LogStockDocSaveAsync(request, id, docNo, oldDoc, oldLines, ct);
             return Json(new { success = true, id, docNo });
         }
+        catch (InvalidOperationException ioex)
+        {
+            // İzlenebilirlik/doğrulama hatası — kullanıcıya doğrudan gösterilir (lot/seri zorunlu vb.)
+            return Json(new { success = false, message = ioex.Message });
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[SaveInventoryJson] HATA: {ex}");
@@ -1368,6 +1373,8 @@ public sealed class WarehouseController : Controller
                     ["materialName"]      = "materialName",
                     ["stockCardId"]       = "id",
                     ["trackCombinations"] = "trackCombinations",
+                    ["trackSerial"]       = "trackSerial",
+                    ["autoSerial"]        = "autoSerial",
                     ["unitId"]            = "unitId",
                 },
                 width    = 200,
@@ -1407,6 +1414,33 @@ public sealed class WarehouseController : Controller
                 width           = 80,
                 align           = "center",
                 icon            = "Ruler",
+            },
+            new
+            {
+                // Seri (Sayım): seri-takipli stokta fiziksel sayılan serileri gir (entry/scan modu).
+                // Sayılan miktar = girilen seri adedi; zorunluluk server-side (SaveInventoryCountAsync).
+                key        = "serials",
+                label      = "Seri",
+                type       = "serial-entry",
+                serialMode = "entry",
+                serialsUrl = "/Warehouse/GetSerialsJson?itemId={stockCardId}",
+                width      = 90,
+                align      = "center",
+                icon       = "Barcode",
+            },
+            new
+            {
+                // Lot / Parti (Sayım): lot-takipli stokta zorunlu (server-side). Mevcut lotları önerir.
+                key            = "lotNo",
+                label          = "Lot / Parti",
+                type           = "text-lookup",
+                lookupUrl      = "/Warehouse/GetLotBalancesJson?itemId={stockCardId}&locationId={fromLocationId}",
+                lookupValueKey = "lotNo",
+                lookupLabelKey = "label",
+                placeholder    = "Lot no",
+                width          = 130,
+                align          = "left",
+                icon           = "Tag",
             },
             new
             {

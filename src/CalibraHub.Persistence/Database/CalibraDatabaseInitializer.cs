@@ -15612,6 +15612,16 @@ END;";
             BEGIN
                 ALTER TABLE [{s}].[InventoryCountLine] ADD [LocationId] INT NULL;
             END;
+
+            -- 2026-07-12: Izlenebilirlik — sayim satirinda lot/seri (lot-takipli LotNo zorunlu;
+            -- seri-takipli Serials = satir\virgul ile ayrilmis liste, adedi CountedQty'ye esit).
+            -- Enforcement SaveInventoryCountAsync'te; yansitmada lot DocumentLine'a tasinir.
+            IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[InventoryCountLine]', N'LotNo') IS NULL
+                ALTER TABLE [{s}].[InventoryCountLine] ADD [LotNo] NVARCHAR(50) NULL;
+            IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[InventoryCountLine]', N'Serials') IS NULL
+                ALTER TABLE [{s}].[InventoryCountLine] ADD [Serials] NVARCHAR(MAX) NULL;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
