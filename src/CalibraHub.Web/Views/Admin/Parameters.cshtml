@@ -8,7 +8,11 @@
         as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
     var negControl = ViewData["NegBalanceControl"] as bool? ?? false;
     var salesOrderAffects = ViewData["SalesOrderAffectsStock"] as bool? ?? false;
+    var orderSerialTracking = ViewData["OrderSerialTracking"] as bool? ?? false;
     var orderSerialReservation = ViewData["OrderSerialReservation"] as bool? ?? false;
+    // Efektif (hiyerarşik): üst kademe kapalıysa alt kademe fiilen kapalı gösterilir.
+    var effTracking = salesOrderAffects && orderSerialTracking;
+    var effReservation = effTracking && orderSerialReservation;
     var sessionIdle = ViewData["SessionIdleMinutes"] as int? ?? 30;
 }
 
@@ -608,50 +612,85 @@ body.app-theme-dark .ap-tab.is-active::before {
                     </div>
                 </div>
 
-                @* Hiyerarşik alt-parametre: seri rezervasyonu — yalnızca stok rezervasyonu açıkken *@
-                <div class="ap-row" id="ap-so-serial-row" style="@(salesOrderAffects ? "" : "opacity:.5;")">
+                @* Hiyerarşi kademe 2: Siparişte Seri Takibi — yalnızca stok rezervasyonu açıkken *@
+                <div class="ap-row" id="ap-so-track-row" style="@(salesOrderAffects ? "" : "opacity:.5;")">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Siparişte Seri Takibi</div>
+                        <div class="ap-row-desc">
+                            Yalnızca <strong>stok rezervasyonu açıkken</strong> etkilidir. Açıkken, satış
+                            siparişi kaleminde (seri-takipli malzeme) <strong>"Seri" kolonu görünür</strong> ve
+                            seriler seçilip belgeye bağlanır. Kapalıyken siparişte seri kolonu hiç görünmez.
+                            Sipariş seri rezervasyonunun ön koşuludur.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-so-track"
+                                   data-on="Açık" data-off="Kapalı"
+                                   @(orderSerialTracking ? "checked" : null) @(salesOrderAffects ? null : "disabled") />
+                            <span class="ap-switch-track @(effTracking ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(effTracking ? "is-active" : "")"
+                                  id="ap-so-track-label">@(effTracking ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
+                @* Hiyerarşi kademe 3: Sipariş Seri Rezervasyonu — yalnızca seri takibi açıkken *@
+                <div class="ap-row" id="ap-so-serial-row" style="@(effTracking ? "" : "opacity:.5;")">
                     <div class="ap-row-main">
                         <div class="ap-row-title">Sipariş Seri Rezervasyonu</div>
                         <div class="ap-row-desc">
-                            Yalnızca <strong>stok rezervasyonu açıkken</strong> etkilidir. Açıkken,
-                            seri-takipli kalemlerde siparişe seçilen seriler kaydetmede rezerve edilir
-                            (stok seri havuzundan çıkar); irsaliyeye dönüşünce çıkışa, sipariş iptal/silinince
-                            tekrar stoğa döner. Stok rezervasyonu kapatılırsa bu ayar da etkisizdir.
+                            Yalnızca <strong>siparişte seri takibi açıkken</strong> etkilidir. Açıkken,
+                            siparişe seçilen seriler kaydetmede rezerve edilir (stok seri havuzundan çıkar);
+                            irsaliyeye dönüşünce çıkışa, sipariş iptal/silinince tekrar stoğa döner.
+                            Üst kademelerden biri kapatılırsa bu ayar da etkisizdir.
                         </div>
                     </div>
                     <div class="ap-row-control">
                         <label class="ap-switch">
                             <input type="checkbox" class="ap-neg-switch" id="ap-so-serial"
                                    data-on="Açık" data-off="Kapalı"
-                                   @(orderSerialReservation ? "checked" : null) @(salesOrderAffects ? null : "disabled") />
-                            <span class="ap-switch-track @(orderSerialReservation && salesOrderAffects ? "is-on" : "")">
+                                   @(orderSerialReservation ? "checked" : null) @(effTracking ? null : "disabled") />
+                            <span class="ap-switch-track @(effReservation ? "is-on" : "")">
                                 <span class="ap-switch-thumb"></span>
                             </span>
-                            <span class="ap-switch-label @(orderSerialReservation && salesOrderAffects ? "is-active" : "")"
-                                  id="ap-so-serial-label">@(orderSerialReservation && salesOrderAffects ? "Açık" : "Kapalı")</span>
+                            <span class="ap-switch-label @(effReservation ? "is-active" : "")"
+                                  id="ap-so-serial-label">@(effReservation ? "Açık" : "Kapalı")</span>
                         </label>
                     </div>
                 </div>
                 <script>
-                // Hiyerarşi: stok rezervasyonu kapanınca seri rezervasyonu switch'i devre dışı + görsel soluk.
+                // Hiyerarşi zinciri: Stok Rez. → Seri Takibi → Seri Rez.
+                // Üst kademe kapanınca alttakiler devre dışı + görsel kapalı (cascade).
                 (function () {
-                    var so = document.getElementById('ap-so-affects');
-                    var ser = document.getElementById('ap-so-serial');
-                    var row = document.getElementById('ap-so-serial-row');
-                    if (!so || !ser || !row) return;
+                    var so    = document.getElementById('ap-so-affects');   // stok rez.
+                    var track = document.getElementById('ap-so-track');     // seri takibi
+                    var ser   = document.getElementById('ap-so-serial');    // seri rez.
+                    var trackRow = document.getElementById('ap-so-track-row');
+                    var serRow   = document.getElementById('ap-so-serial-row');
+                    if (!so || !track || !ser) return;
+                    function visualOff(input, labelId) {
+                        var trk = input.closest('.ap-switch').querySelector('.ap-switch-track');
+                        var lbl = document.getElementById(labelId);
+                        if (trk) trk.classList.remove('is-on');
+                        if (lbl) { lbl.classList.remove('is-active'); lbl.textContent = 'Kapalı'; }
+                    }
                     function sync() {
-                        var on = so.checked;
-                        ser.disabled = !on;
-                        row.style.opacity = on ? '' : '.5';
-                        if (!on) {
-                            // stok rezervasyonu kapalıyken seri rezervasyonu görsel olarak kapalı gösterilir
-                            var trk = ser.closest('.ap-switch').querySelector('.ap-switch-track');
-                            var lbl = document.getElementById('ap-so-serial-label');
-                            if (trk) trk.classList.remove('is-on');
-                            if (lbl) { lbl.classList.remove('is-active'); lbl.textContent = 'Kapalı'; }
-                        }
+                        var soOn = so.checked;
+                        // Kademe 2: seri takibi — stok rez.'e bağlı
+                        track.disabled = !soOn;
+                        if (trackRow) trackRow.style.opacity = soOn ? '' : '.5';
+                        if (!soOn) visualOff(track, 'ap-so-track-label');
+                        // Kademe 3: seri rez. — (stok rez. && seri takibi)'ne bağlı
+                        var trackOn = soOn && track.checked;
+                        ser.disabled = !trackOn;
+                        if (serRow) serRow.style.opacity = trackOn ? '' : '.5';
+                        if (!trackOn) visualOff(ser, 'ap-so-serial-label');
                     }
                     so.addEventListener('change', sync);
+                    track.addEventListener('change', sync);
                     sync();
                 })();
                 </script>
@@ -878,9 +917,18 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'STOCK', paramKey: 'SALES_ORDER_AFFECTS_STOCK', paramValue: soOn ? 'true' : 'false', dataType: 3 })
                 });
                 var dso = await rso.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                // Seri rezervasyonu — hiyerarşik: stok rezervasyonu kapalıysa daima false yazılır.
+                // Hiyerarşik: seri takibi stok rez.'e, seri rez. seri takibine bağlı; üst kapalıysa alt false.
+                var trackEl = document.getElementById('ap-so-track');
+                var trackOn = soOn && !!(trackEl && trackEl.checked);
+                var rtrack = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'STOCK', paramKey: 'ORDER_SERIAL_TRACKING', paramValue: trackOn ? 'true' : 'false', dataType: 3 })
+                });
+                var dtrack = await rtrack.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 var serEl = document.getElementById('ap-so-serial');
-                var serOn = soOn && !!(serEl && serEl.checked);
+                var serOn = trackOn && !!(serEl && serEl.checked);
                 var rser = await fetch('/Admin/SaveParameter', {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -888,9 +936,9 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'STOCK', paramKey: 'ORDER_SERIAL_RESERVATION', paramValue: serOn ? 'true' : 'false', dataType: 3 })
                 });
                 var dser = await rser.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
-                ok = !!dso.ok && !!dser.ok;
+                ok = !!dso.ok && !!dtrack.ok && !!dser.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash(dso.error || dser.error || 'Kaydetme basarisiz.', false);
+                else    flash(dso.error || dtrack.error || dser.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'approval') {
                 var kinds = [];
                 document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {

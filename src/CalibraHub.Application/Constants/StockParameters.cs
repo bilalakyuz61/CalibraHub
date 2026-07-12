@@ -38,11 +38,20 @@ public static class StockParameters
     public const string SalesOrderAffectsStockKey = "SALES_ORDER_AFFECTS_STOCK";
 
     /// <summary>
-    /// Sipariş seri rezervasyonu (Bool, default false). HİYERARŞİK: yalnızca stok rezervasyonu
-    /// (<see cref="SalesOrderAffectsStockKey"/>) AÇIKken etkilidir/açılabilir. Açıkken seri-takipli
-    /// kalemlerde siparişe seçilen seriler kaydetmede InStock→Reserved (4) olur; başka siparişlerin
-    /// stok seri havuzundan (Status=1) çıkarılır. İrsaliyeye dönüşümde Reserved→Issued, sipariş
-    /// iptal/silmede Reserved→InStock. Stok rezervasyonu kapanınca seri rezervasyonu da etkisizdir.
+    /// Siparişte seri takibi (Bool, default false). HİYERARŞİK: yalnızca stok rezervasyonu
+    /// (<see cref="SalesOrderAffectsStockKey"/>) AÇIKken etkilidir/açılabilir. Açıkken satış
+    /// siparişi kaleminde (seri-takipli malzeme) "Seri" kolonu görünür ve seri seçilebilir/bağlanır.
+    /// Kapalıyken siparişte seri kolonu hiç görünmez. Sipariş seri rezervasyonunun ÖN KOŞULUdur.
+    /// </summary>
+    public const string OrderSerialTrackingKey = "ORDER_SERIAL_TRACKING";
+
+    /// <summary>
+    /// Sipariş seri rezervasyonu (Bool, default false). HİYERARŞİK: yalnızca siparişte seri takibi
+    /// (<see cref="OrderSerialTrackingKey"/>) AÇIKken etkilidir/açılabilir — o da stok rezervasyonuna
+    /// bağlı olduğundan zincir: stok rez. → seri takibi → seri rez. Açıkken seçilen seriler kaydetmede
+    /// InStock→Reserved (4) olur; başka siparişlerin stok seri havuzundan (Status=1) çıkarılır.
+    /// İrsaliyeye dönüşümde Reserved→Issued, sipariş iptal/silmede Reserved→InStock. Zincirdeki üst
+    /// parametrelerden biri kapanınca bu ayar da etkisizdir.
     /// </summary>
     public const string OrderSerialReservationKey = "ORDER_SERIAL_RESERVATION";
 

@@ -114,7 +114,9 @@ public sealed class ParametersController : Controller
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.NegBalanceControlKey)?.ParamValue == "true";
         ViewData["SalesOrderAffectsStock"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesOrderAffectsStockKey)?.ParamValue == "true";
-        // Sipariş seri rezervasyonu — hiyerarşik: yalnızca stok rezervasyonu açıkken etkili.
+        // Sipariş seri zinciri — hiyerarşik: stok rez. → seri takibi → seri rez.
+        ViewData["OrderSerialTracking"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.OrderSerialTrackingKey)?.ParamValue == "true";
         ViewData["OrderSerialReservation"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.OrderSerialReservationKey)?.ParamValue == "true";
 
