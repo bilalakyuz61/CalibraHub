@@ -743,15 +743,17 @@ public sealed class WarehouseController : Controller
         }
     }
 
-    /// <summary>Satış siparişi teslimatı — açık kalemler için fiziksel çıkış yazar + rezervasyonu serbest bırakır (Faz 2).</summary>
+    /// <summary>Satış siparişi teslimatı — açık kalemler için fiziksel çıkış yazar + rezervasyonu serbest bırakır (Faz 2).
+    /// body.Lines dolu ise kısmi teslimat (kalem başı miktar); boş/null ise tüm açık miktar teslim edilir.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeliverSalesOrderJson(int orderId, CancellationToken ct)
+    public async Task<IActionResult> DeliverSalesOrderJson([FromBody] DeliverOrderRequest body, CancellationToken ct)
     {
+        var orderId = body?.OrderId ?? 0;
         if (orderId <= 0) return Json(new { success = false, message = "Sipariş bulunamadı." });
         try
         {
-            var (id, docNo) = await _stockDocRepo.DeliverSalesOrderAsync(orderId, CurrentUserId(), ct);
+            var (id, docNo) = await _stockDocRepo.DeliverSalesOrderAsync(orderId, CurrentUserId(), BuildDeliverMap(body!.Lines), ct);
             // Belge soyağacı: satış irsaliyesi ← satış siparişi.
             // Repo ParentDocumentId + kalem SourceLineId set ediyor; İlişkili Belgeler paneli DocumentSource okur.
             await _docSourceRepo.EnsureSchemaAsync(ct);
@@ -778,15 +780,17 @@ public sealed class WarehouseController : Controller
         }
     }
 
-    /// <summary>Satın alma siparişi mal kabulü — açık kalemler için Alış İrsaliyesi (stok girişi) yazar.</summary>
+    /// <summary>Satın alma siparişi mal kabulü — açık kalemler için Alış İrsaliyesi (stok girişi) yazar.
+    /// body.Lines dolu ise kısmi mal kabul (kalem başı miktar); boş/null ise tüm açık miktar kabul edilir.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ReceivePurchaseOrderJson(int orderId, CancellationToken ct)
+    public async Task<IActionResult> ReceivePurchaseOrderJson([FromBody] DeliverOrderRequest body, CancellationToken ct)
     {
+        var orderId = body?.OrderId ?? 0;
         if (orderId <= 0) return Json(new { success = false, message = "Sipariş bulunamadı." });
         try
         {
-            var (id, docNo) = await _stockDocRepo.ReceivePurchaseOrderAsync(orderId, CurrentUserId(), ct);
+            var (id, docNo) = await _stockDocRepo.ReceivePurchaseOrderAsync(orderId, CurrentUserId(), BuildDeliverMap(body!.Lines), ct);
             // Belge soyağacı: alış irsaliyesi ← satın alma siparişi.
             await _docSourceRepo.EnsureSchemaAsync(ct);
             await _docSourceRepo.AddAsync(id, orderId, ct);
@@ -806,6 +810,36 @@ public sealed class WarehouseController : Controller
             return Json(new { success = false, message = "Mal kabul sırasında bir hata oluştu." });
         }
     }
+
+    /// <summary>Kısmi teslimat/mal kabul modalı — siparişin açık (teslim edilmemiş) kalemlerini döner.</summary>
+    [HttpGet]
+    public async Task<IActionResult> OrderOpenLinesJson(int orderId, CancellationToken ct)
+    {
+        if (orderId <= 0) return Json(new { success = false, message = "Sipariş bulunamadı." });
+        try
+        {
+            var lines = await _stockDocRepo.GetOrderOpenLinesAsync(orderId, ct);
+            return Json(new { success = true, lines });
+        }
+        catch (Exception)
+        {
+            return Json(new { success = false, message = "Açık kalemler yüklenemedi." });
+        }
+    }
+
+    // UI payload'ındaki kalem listesini repo haritasına çevirir (LineId → teslim miktarı).
+    // Boş/null → null döner = tüm açık miktar (tam teslimat). ≤0 miktarlar elenir; tekrar eden
+    // LineId'de son değer geçerli.
+    private static IReadOnlyDictionary<int, decimal>? BuildDeliverMap(IReadOnlyList<DeliverLineQtyDto>? lines)
+        => (lines is { Count: > 0 })
+            ? lines.Where(l => l.LineId > 0 && l.Quantity > 0m)
+                   .GroupBy(l => l.LineId)
+                   .ToDictionary(g => g.Key, g => g.Last().Quantity)
+            : null;
+
+    /// <summary>Kısmi teslimat isteği — OrderId + opsiyonel kalem miktarları (gösterim birimi).</summary>
+    public sealed record DeliverOrderRequest(int OrderId, IReadOnlyList<DeliverLineQtyDto>? Lines);
+    public sealed record DeliverLineQtyDto(int LineId, decimal Quantity);
 
     [HttpPost]
     [ValidateAntiForgeryToken]

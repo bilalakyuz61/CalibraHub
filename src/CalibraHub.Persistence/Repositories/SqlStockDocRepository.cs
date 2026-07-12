@@ -669,6 +669,53 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         int purchaseOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct)
         => ConvertOrderToDeliveryAsync(purchaseOrderId, isPurchase: true, createdById, deliverByLine, ct);
 
+    // Kısmi teslimat modalı için siparişin açık kalemleri (gösterim biriminde miktarlar).
+    public async Task<IReadOnlyList<OrderOpenLineDto>> GetOrderOpenLinesAsync(int orderId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        var list = new List<OrderOpenLineDto>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT dl.[Id], i.[Code], i.[Name], u.[Name],
+                   dl.[Quantity], dl.[BaseQuantity], dl.[DeliveredQuantity],
+                   ISNULL(i.[TrackingType], N'None') AS TrackingType
+            FROM {T("DocumentLine")} dl
+            INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
+            LEFT JOIN {T("Items")} i ON i.[Id] = dl.[ItemId]
+            LEFT JOIN {T("Unit")} u ON u.[Id] = dl.[UnitId]
+            WHERE dl.[DocumentId] = @OrderId AND doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
+              AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
+              AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
+            ORDER BY dl.[LineNo];
+            """;
+        cmd.Parameters.AddWithValue("@OrderId", orderId);
+        cmd.Parameters.AddWithValue("@Cid", companyId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            int lineId   = r.GetInt32(0);
+            string? code = r.IsDBNull(1) ? null : r.GetString(1);
+            string? name = r.IsDBNull(2) ? null : r.GetString(2);
+            string? unit = r.IsDBNull(3) ? null : r.GetString(3);
+            decimal qty  = r.GetDecimal(4);
+            decimal baseQ = r.GetDecimal(5);
+            decimal deliv = r.GetDecimal(6);
+            string track = r.IsDBNull(7) ? "None" : r.GetString(7);
+
+            // Açık/teslim miktarları gösterim birimine çevrilir (faktör = BaseQuantity / Quantity).
+            decimal factor       = qty != 0m ? baseQ / qty : 1m;
+            decimal openBase     = baseQ - deliv;
+            decimal openDisplay  = Math.Round(factor != 0m ? openBase / factor : openBase, 4);
+            decimal delivDisplay = Math.Round(qty - openDisplay, 4);
+            if (delivDisplay < 0m) delivDisplay = 0m;
+            bool serial = string.Equals(track, "Serial", StringComparison.OrdinalIgnoreCase);
+
+            list.Add(new OrderOpenLineDto(lineId, code, name, unit, qty, delivDisplay, openDisplay, serial));
+        }
+        return list;
+    }
+
     /// <summary>
     /// Sipariş → İrsaliye dönüşümü (STOK ETKİLİ). Açık sipariş kalemlerini ana birimde
     /// hareket satırı olarak İRSALİYE belgesine yazar:
@@ -736,8 +783,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             }
 
             // 1) Açık satırlar (ticari satır=MovementType NULL, açık = BaseQuantity - DeliveredQuantity > 0).
-            //    Fiyat alanları irsaliye satırına kopyalanır (irsaliye değerli görünsün).
-            var open = new List<(int LineId, int ItemId, int? CombId, int? LocId, decimal OpenBase,
+            //    Fiyat alanları irsaliye satırına kopyalanır (irsaliye değerli görünsün). FullBase +
+            //    Qty (gösterim) birlikte tutulur → birim çevrim faktörü = FullBase / Qty (kısmi hesap).
+            var open = new List<(int LineId, int ItemId, int? CombId, int? LocId, decimal OpenBase, decimal FullBase,
                                  int? UnitId, decimal Qty, decimal UnitPrice, decimal DiscRate, decimal LineTotal)>();
             await using (var sel = conn.CreateCommand())
             {
@@ -745,7 +793,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 sel.CommandText = $"""
                     SELECT dl.[Id], dl.[ItemId], dl.[CombinationId],
                            ISNULL(dl.[LocationId], doc.[LocationId]) AS LocId,
-                           (dl.[BaseQuantity] - dl.[DeliveredQuantity]) AS OpenBase,
+                           (dl.[BaseQuantity] - dl.[DeliveredQuantity]) AS OpenBase, dl.[BaseQuantity] AS FullBase,
                            dl.[UnitId], dl.[Quantity], dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal]
                     FROM {T("DocumentLine")} dl
                     INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
@@ -760,9 +808,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     open.Add((r.GetInt32(0), r.GetInt32(1),
                              r.IsDBNull(2) ? null : r.GetInt32(2),
                              r.IsDBNull(3) ? null : r.GetInt32(3),
-                             r.GetDecimal(4),
-                             r.IsDBNull(5) ? null : r.GetInt32(5),
-                             r.GetDecimal(6), r.GetDecimal(7), r.GetDecimal(8), r.GetDecimal(9)));
+                             r.GetDecimal(4), r.GetDecimal(5),
+                             r.IsDBNull(6) ? null : r.GetInt32(6),
+                             r.GetDecimal(7), r.GetDecimal(8), r.GetDecimal(9), r.GetDecimal(10)));
             }
             if (open.Count == 0)
                 throw new InvalidOperationException(isPurchase
@@ -813,11 +861,32 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
 
-            // 3) Her açık satır → ana birimde hareket satırı + sipariş satırı DeliveredQuantity=BaseQuantity
+            // 3) Her açık satır → teslim edilen miktarca ana birimde hareket satırı + sipariş satırı
+            //    DeliveredQuantity artışı. Kısmi: deliverByLine haritasındaki miktar (gösterim birimi)
+            //    açık miktara clamp; tam teslimatta satır birebir kapanır (DeliveredQuantity=BaseQuantity).
             var lineNo = 1;
             var decreases = new HashSet<(int ItemId, int LocId)>();
+            decimal deliveredSubTotal = 0m;
+            var anyDelivered = false;
             foreach (var o in open)
             {
+                // Birim çevrim faktörü (ana birim / gösterim birimi). Qty=0 ise 1 kabul (koruma).
+                decimal factor      = o.Qty != 0m ? o.FullBase / o.Qty : 1m;
+                decimal openDisplay = Math.Round(factor != 0m ? o.OpenBase / factor : o.OpenBase, 4);
+
+                decimal reqDisplay;
+                if (deliverByLine is null) reqDisplay = openDisplay;               // tam teslimat (geriye uyum)
+                else if (!deliverByLine.TryGetValue(o.LineId, out reqDisplay)) reqDisplay = 0m;
+                if (reqDisplay <= 0m) continue;                                     // bu teslimatta atlanır
+                if (reqDisplay > openDisplay) reqDisplay = openDisplay;            // açık miktarı aşamaz
+
+                bool closes = reqDisplay >= openDisplay - 0.00005m;                // tümü teslim → satırı kapat
+                decimal deliverBase = closes ? o.OpenBase : Math.Round(reqDisplay * factor, 4);
+                decimal deliverQty  = closes ? openDisplay : reqDisplay;
+                decimal lineTotal   = o.Qty != 0m ? Math.Round(o.LineTotal * deliverQty / o.Qty, 4) : o.LineTotal;
+                anyDelivered = true;
+                deliveredSubTotal += lineTotal;
+
                 await using (var li = conn.CreateCommand())
                 {
                     li.Transaction = tx;
@@ -834,11 +903,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     li.Parameters.AddWithValue("@LineNo", lineNo++);
                     li.Parameters.AddWithValue("@ItemId", o.ItemId);
                     li.Parameters.AddWithValue("@UnitId", (object?)o.UnitId ?? DBNull.Value);
-                    li.Parameters.AddWithValue("@Qty", o.Qty);
-                    li.Parameters.AddWithValue("@BaseQty", o.OpenBase);
+                    li.Parameters.AddWithValue("@Qty", deliverQty);
+                    li.Parameters.AddWithValue("@BaseQty", deliverBase);
                     li.Parameters.AddWithValue("@UnitPrice", o.UnitPrice);
                     li.Parameters.AddWithValue("@DiscRate", o.DiscRate);
-                    li.Parameters.AddWithValue("@LineTotal", o.LineTotal);
+                    li.Parameters.AddWithValue("@LineTotal", lineTotal);
                     li.Parameters.AddWithValue("@CombId", (object?)o.CombId ?? DBNull.Value);
                     li.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : o.LocId!.Value);
                     li.Parameters.AddWithValue("@ToLoc",   isPurchase ? o.LocId!.Value : (object)DBNull.Value);
@@ -850,11 +919,43 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 await using (var upd = conn.CreateCommand())
                 {
                     upd.Transaction = tx;
-                    upd.CommandText = $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [BaseQuantity] WHERE [Id] = @LineId;";
+                    // Tam teslimat → BaseQuantity'ye birebir eşitle (yuvarlama artığı bırakmadan kapat);
+                    // kısmi → mevcut DeliveredQuantity üzerine teslim edilen ana-birim miktarı ekle.
+                    upd.CommandText = closes
+                        ? $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [BaseQuantity] WHERE [Id] = @LineId;"
+                        : $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [DeliveredQuantity] + @Add WHERE [Id] = @LineId;";
                     upd.Parameters.AddWithValue("@LineId", o.LineId);
+                    if (!closes) upd.Parameters.AddWithValue("@Add", deliverBase);
                     await upd.ExecuteNonQueryAsync(ct);
                 }
                 if (!isPurchase) decreases.Add((o.ItemId, o.LocId!.Value));
+            }
+            if (!anyDelivered)
+                throw new InvalidOperationException(isPurchase
+                    ? "Mal kabul edilecek miktar girilmedi."
+                    : "Teslim edilecek miktar girilmedi.");
+
+            // 3b) İrsaliye başlık tutarları — teslim edilen kalemlerden yeniden hesaplanır (sipariş
+            //     iskonto/vergi oranı korunur). Kısmi teslimatta orantılı, tam teslimatta siparişle aynı.
+            decimal hSub   = Math.Round(deliveredSubTotal, 4);
+            decimal hDisc  = Math.Round(hSub * (discountRate / 100m), 4);
+            decimal hAfter = hSub - hDisc;
+            decimal hTax   = Math.Round(hAfter * (taxRate / 100m), 4);
+            decimal hGrand = Math.Round(hAfter + hTax, 4);
+            await using (var uh = conn.CreateCommand())
+            {
+                uh.Transaction = tx;
+                uh.CommandText = $"""
+                    UPDATE {T("Document")}
+                       SET [SubTotal]=@Sub, [DiscountAmount]=@Disc, [TaxAmount]=@Tax, [GrandTotal]=@Grand
+                     WHERE [Id]=@DocId;
+                    """;
+                uh.Parameters.AddWithValue("@Sub", hSub);
+                uh.Parameters.AddWithValue("@Disc", hDisc);
+                uh.Parameters.AddWithValue("@Tax", hTax);
+                uh.Parameters.AddWithValue("@Grand", hGrand);
+                uh.Parameters.AddWithValue("@DocId", docId);
+                await uh.ExecuteNonQueryAsync(ct);
             }
 
             // 4) Eksi bakiye kontrolü — yalnızca çıkış (satış irsaliyesi). Giriş bakiyeyi artırır.
@@ -1013,24 +1114,38 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
     // İrsaliyenin (satış çıkış) her satırı için kaynak sipariş satırının serilerini
     // Issued(2) yapar + irsaliye satırına bağlar (InStock/Reserved kabul; Issued atlanır).
+    // KISMİ TESLİMAT: yalnızca teslim edilen adet (irsaliye satırı BaseQuantity) kadar seri düşülür;
+    // kalan seriler siparişte rezerve kalır. Henüz Issued olmamış serilerden sıradaki N tanesi
+    // (deterministik: DocumentLineSerial.Id) seçilir — sonraki kısmi teslimat kaldığı yerden devam eder.
     private async Task ResolveOrderSerialsToIssuedAsync(SqlConnection conn, SqlTransaction tx, int irsaliyeDocId, CancellationToken ct)
     {
-        var pairs = new List<(int IrsLineId, int SrcLineId)>();
+        var pairs = new List<(int IrsLineId, int SrcLineId, decimal BaseQty)>();
         await using (var sel = conn.CreateCommand())
         {
             sel.Transaction = tx;
-            sel.CommandText = $"SELECT [Id],[SourceLineId] FROM {T("DocumentLine")} WHERE [DocumentId]=@Doc AND [SourceLineId] IS NOT NULL;";
+            sel.CommandText = $"SELECT [Id],[SourceLineId],[BaseQuantity] FROM {T("DocumentLine")} WHERE [DocumentId]=@Doc AND [SourceLineId] IS NOT NULL;";
             sel.Parameters.AddWithValue("@Doc", irsaliyeDocId);
             await using var r = await sel.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) pairs.Add((r.GetInt32(0), r.GetInt32(1)));
+            while (await r.ReadAsync(ct)) pairs.Add((r.GetInt32(0), r.GetInt32(1), r.GetDecimal(2)));
         }
-        foreach (var (irsLine, srcLine) in pairs)
+        foreach (var (irsLine, srcLine, baseQty) in pairs)
         {
+            // Seri-takipli malzemede 1 seri = 1 ana birim → teslim adedince seri. Seri-takipsiz
+            // satırda kaynak satırın DocumentLineSerial'ı yoktur → sorgu boş döner, no-op.
+            var take = (int)Math.Floor(baseQty + 0.0001m);
+            if (take <= 0) continue;
             var serialIds = new List<int>();
             await using (var s2 = conn.CreateCommand())
             {
                 s2.Transaction = tx;
-                s2.CommandText = $"SELECT [SerialId] FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln;";
+                s2.CommandText = $"""
+                    SELECT TOP (@N) dls.[SerialId]
+                    FROM {T("DocumentLineSerial")} dls
+                    INNER JOIN {T("ItemSerial")} s ON s.[Id] = dls.[SerialId]
+                    WHERE dls.[DocumentLineId]=@Ln AND s.[Status] IN (1,4)
+                    ORDER BY dls.[Id];
+                    """;
+                s2.Parameters.AddWithValue("@N", take);
                 s2.Parameters.AddWithValue("@Ln", srcLine);
                 await using var r2 = await s2.ExecuteReaderAsync(ct);
                 while (await r2.ReadAsync(ct)) serialIds.Add(r2.GetInt32(0));

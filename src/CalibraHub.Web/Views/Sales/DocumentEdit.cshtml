@@ -2053,9 +2053,6 @@
             var dlvTitle   = isPurchaseOrder
                 ? "Açık kalemleri mal kabul et — Alış İrsaliyesi oluşturur, stok girişi yazar"
                 : "Açık kalemleri teslim et — Satış İrsaliyesi oluşturur, stok çıkışı yazar";
-            var dlvConfirm = isPurchaseOrder
-                ? "Bu siparişin açık (kabul edilmemiş) kalemleri için Alış İrsaliyesi oluşturulacak: stok girişi yazılacak. Devam edilsin mi?"
-                : "Bu siparişin açık (teslim edilmemiş) kalemleri için Satış İrsaliyesi oluşturulacak: stok çıkışı yazılacak. Devam edilsin mi?";
             <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="sqBtnDeliver" data-collaboration-allow onclick="sqDeliverOrder()" title="@dlvTitle" aria-label="@dlvLabel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
                 <span class="pte-btn__label">@dlvLabel</span>
@@ -2063,38 +2060,110 @@
             <script>
             var _sqDlvEndpoint = '@dlvEndpoint';
             var _sqDlvLabel = '@dlvLabel';
+            var _sqDlvOpenUrl = '/Warehouse/OrderOpenLinesJson';
+            // Kısmi teslimat: önce açık kalemleri çek, miktar modalını aç.
             function sqDeliverOrder() {
                 var oid = @(Model.DocumentId ?? 0);
                 if (!oid) return;
-                _sqDlvConfirm(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(dlvConfirm)), function () {
-                    var tokEl = document.querySelector('input[name="__RequestVerificationToken"]');
-                    var btn = document.getElementById('sqBtnDeliver'); if (btn) btn.disabled = true;
-                    fetch(_sqDlvEndpoint + '?orderId=' + oid, {
-                        method: 'POST', credentials: 'same-origin',
-                        headers: { 'RequestVerificationToken': tokEl ? tokEl.value : '' }
-                    }).then(function (r) { return r.json(); }).then(function (d) {
-                        if (d && d.success) { _sqDlvToast('İrsaliye oluşturuldu: ' + (d.docNo || ('#' + d.id)) + '. Stok hareketi yazıldı.', true); setTimeout(function () { window.location.reload(); }, 1100); }
-                        else { _sqDlvToast((d && d.message) || (_sqDlvLabel + ' başarısız.'), false); if (btn) btn.disabled = false; }
-                    }).catch(function (e) { _sqDlvToast('İşlem sırasında hata: ' + e, false); if (btn) btn.disabled = false; });
-                });
+                fetch(_sqDlvOpenUrl + '?orderId=' + oid, { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d || !d.success) { _sqDlvToast((d && d.message) || 'Açık kalemler yüklenemedi.', false); return; }
+                        var lines = d.lines || [];
+                        if (!lines.length) { _sqDlvToast('Teslim edilecek açık kalem yok (tümü zaten irsaliyeye dönüştürülmüş).', false); return; }
+                        _sqDlvModal(oid, lines);
+                    })
+                    .catch(function (e) { _sqDlvToast('İşlem sırasında hata: ' + e, false); });
             }
-            function _sqDlvConfirm(msg, onOk) {
+            // Sayı biçimi (gösterim) — 4 haneye yuvarla, gereksiz sıfırları at, ondalık virgül.
+            function _sqFmt(n) {
+                if (n === null || n === undefined || n === '') return '0';
+                var x = Math.round((parseFloat(n) + Number.EPSILON) * 10000) / 10000;
+                if (isNaN(x)) return '0';
+                return (x % 1 === 0) ? String(x) : String(x).replace('.', ',');
+            }
+            function _sqDlvModal(oid, lines) {
                 var bd = document.createElement('div');
-                bd.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;';
-                bd.innerHTML = '<div style="max-width:420px;width:92%;background:var(--app-surface,#1a1f2e);border:1px solid var(--app-border,#334155);border-radius:14px;padding:20px;color:var(--bs-body-color,#e2e8f0);box-shadow:0 20px 60px rgba(0,0,0,.5)">'
-                    + '<div style="font-size:1rem;font-weight:700;margin-bottom:8px">' + _sqDlvLabel + ' → İrsaliye</div>'
-                    + '<div style="font-size:.86rem;line-height:1.5;opacity:.85;margin-bottom:18px"></div>'
-                    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
-                    + '<button id="_sqDlvCancel" style="padding:8px 14px;border-radius:8px;border:1px solid var(--app-border,#334155);background:transparent;color:inherit;cursor:pointer;font-weight:600">Vazgeç</button>'
-                    + '<button id="_sqDlvOk" style="padding:8px 16px;border-radius:8px;border:none;background:#10b981;color:#fff;cursor:pointer;font-weight:600">' + _sqDlvLabel + '</button>'
+                bd.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+                var brd = '1px solid var(--app-border,#334155)';
+                var rows = lines.map(function (l) {
+                    var serialBadge = l.serialTracked ? ' <span style="font-size:.6rem;font-weight:700;color:#8b5cf6;border:1px solid #8b5cf6;border-radius:4px;padding:0 4px;vertical-align:middle">SERİ</span>' : '';
+                    return '<tr>'
+                        + '<td style="padding:6px 8px;border-bottom:' + brd + '">' + ((l.itemName || l.itemCode || ('#' + l.lineId))) + serialBadge + '</td>'
+                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:center;opacity:.8">' + (l.unitName || '') + '</td>'
+                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right;opacity:.65">' + _sqFmt(l.ordered) + '</td>'
+                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right;opacity:.65">' + _sqFmt(l.delivered) + '</td>'
+                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right;font-weight:600">' + _sqFmt(l.open) + '</td>'
+                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right">'
+                        + '<input type="number" class="_sqDlvQty" data-line="' + l.lineId + '" data-open="' + l.open + '" min="0" step="any" value="' + l.open + '" '
+                        + 'style="width:96px;padding:5px 8px;border-radius:7px;border:' + brd + ';background:var(--app-input-bg,rgba(255,255,255,.06));color:inherit;text-align:right;font-weight:600" /></td>'
+                        + '</tr>';
+                }).join('');
+                bd.innerHTML = '<div style="max-width:740px;width:96%;max-height:88vh;display:flex;flex-direction:column;background:var(--app-surface,#1a1f2e);border:' + brd + ';border-radius:14px;color:var(--bs-body-color,#e2e8f0);box-shadow:0 20px 60px rgba(0,0,0,.5)">'
+                    + '<div style="padding:16px 20px 12px;border-bottom:' + brd + '">'
+                    +   '<div style="font-size:1rem;font-weight:700">' + _sqDlvLabel + ' → İrsaliye</div>'
+                    +   '<div style="font-size:.78rem;opacity:.72;margin-top:3px">Teslim edilecek miktarları girin. Kalandan az girerseniz kısmi teslimat yapılır; kalan sipariş açık kalır. 0 girilen kalem bu teslimatta atlanır.</div>'
+                    + '</div>'
+                    + '<div style="overflow:auto;padding:6px 20px 4px">'
+                    +   '<table style="width:100%;border-collapse:collapse;font-size:.82rem">'
+                    +     '<thead><tr style="opacity:.7;font-size:.68rem;text-transform:uppercase;letter-spacing:.4px">'
+                    +       '<th style="padding:6px 8px;text-align:left">Malzeme</th><th style="padding:6px 8px;text-align:center">Birim</th>'
+                    +       '<th style="padding:6px 8px;text-align:right">Sipariş</th><th style="padding:6px 8px;text-align:right">Teslim</th>'
+                    +       '<th style="padding:6px 8px;text-align:right">Kalan</th><th style="padding:6px 8px;text-align:right">Teslim Edilecek</th></tr></thead>'
+                    +     '<tbody>' + rows + '</tbody></table>'
+                    + '</div>'
+                    + '<div style="padding:12px 20px;border-top:' + brd + ';display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap">'
+                    +   '<div style="display:flex;gap:8px">'
+                    +     '<button id="_sqDlvAll" style="padding:7px 12px;border-radius:8px;border:' + brd + ';background:transparent;color:inherit;cursor:pointer;font-weight:600;font-size:.76rem">Tümünü Doldur</button>'
+                    +     '<button id="_sqDlvNone" style="padding:7px 12px;border-radius:8px;border:' + brd + ';background:transparent;color:inherit;cursor:pointer;font-weight:600;font-size:.76rem">Temizle</button>'
+                    +   '</div>'
+                    +   '<div style="display:flex;gap:8px">'
+                    +     '<button id="_sqDlvCancel" style="padding:8px 14px;border-radius:8px;border:' + brd + ';background:transparent;color:inherit;cursor:pointer;font-weight:600">Vazgeç</button>'
+                    +     '<button id="_sqDlvOk" style="padding:8px 16px;border-radius:8px;border:none;background:#10b981;color:#fff;cursor:pointer;font-weight:600">' + _sqDlvLabel + '</button>'
+                    +   '</div>'
                     + '</div></div>';
-                bd.querySelector('div > div').textContent = msg;
                 document.body.appendChild(bd);
                 function close() { if (bd.parentNode) bd.parentNode.removeChild(bd); }
                 bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
                 bd.querySelector('#_sqDlvCancel').onclick = close;
-                bd.querySelector('#_sqDlvOk').onclick = function () { close(); onOk(); };
-                bd.querySelector('#_sqDlvOk').focus();
+                var qtyInputs = bd.querySelectorAll('._sqDlvQty');
+                qtyInputs.forEach(function (inp) {
+                    inp.addEventListener('input', function () {
+                        var mx = parseFloat(inp.getAttribute('data-open')) || 0;
+                        var v = parseFloat(inp.value);
+                        if (!isNaN(v) && v > mx) inp.value = mx;
+                        if (!isNaN(v) && v < 0) inp.value = 0;
+                    });
+                });
+                bd.querySelector('#_sqDlvAll').onclick = function () {
+                    qtyInputs.forEach(function (inp) { inp.value = inp.getAttribute('data-open'); });
+                };
+                bd.querySelector('#_sqDlvNone').onclick = function () {
+                    qtyInputs.forEach(function (inp) { inp.value = 0; });
+                };
+                var okBtn = bd.querySelector('#_sqDlvOk');
+                okBtn.onclick = function () {
+                    var payload = [];
+                    qtyInputs.forEach(function (inp) {
+                        var q = parseFloat(inp.value);
+                        var mx = parseFloat(inp.getAttribute('data-open')) || 0;
+                        if (isNaN(q) || q <= 0) return;
+                        if (q > mx) q = mx;
+                        payload.push({ lineId: parseInt(inp.getAttribute('data-line'), 10), quantity: q });
+                    });
+                    if (!payload.length) { _sqDlvToast('En az bir kalem için teslim miktarı girin.', false); return; }
+                    okBtn.disabled = true; okBtn.style.opacity = '.6';
+                    var tokEl = document.querySelector('input[name="__RequestVerificationToken"]');
+                    fetch(_sqDlvEndpoint, {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': tokEl ? tokEl.value : '' },
+                        body: JSON.stringify({ orderId: oid, lines: payload })
+                    }).then(function (r) { return r.json(); }).then(function (d) {
+                        if (d && d.success) { close(); _sqDlvToast('İrsaliye oluşturuldu: ' + (d.docNo || ('#' + d.id)) + '. Stok hareketi yazıldı.', true); setTimeout(function () { window.location.reload(); }, 1100); }
+                        else { _sqDlvToast((d && d.message) || (_sqDlvLabel + ' başarısız.'), false); okBtn.disabled = false; okBtn.style.opacity = '1'; }
+                    }).catch(function (e) { _sqDlvToast('İşlem sırasında hata: ' + e, false); okBtn.disabled = false; okBtn.style.opacity = '1'; });
+                };
+                okBtn.focus();
             }
             function _sqDlvToast(msg, ok) {
                 var t = document.createElement('div');
