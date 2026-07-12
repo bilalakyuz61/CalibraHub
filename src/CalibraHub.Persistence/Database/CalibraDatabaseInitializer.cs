@@ -10771,11 +10771,13 @@ END;";
         cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 
-        // ── Batch 2 (DDL+DML): IsDefault filtered index + "Genel Liste" seed ──
-        // IsDefault kolonu Batch 1'de eklendi; AYRI ExecuteNonQuery = ayri batch oldugu
-        // icin parse-time'da kolon artik semada (deferred name resolution guvenli).
-        var defaultSeedSql = $"""
-            -- CompanyId basina tek IsDefault=1: filtered unique index (idempotent, TRY ile korumali).
+        // ── Batch 2 (DDL): IsDefault filtered unique index ──
+        // Genel fiyat listesi OTOMATIK olusturulmaz/atanmaz — kullanici, Fiyat Listesi
+        // ekranindan ("Genel Liste Yap") mevcut listelerinden birini isaretler (kod eslesmesi
+        // YOK). Bu index yalniz "CompanyId basina tek IsDefault=1" tekilligini garanti eder.
+        // IsDefault kolonu Batch 1'de eklendi; AYRI ExecuteNonQuery = ayri batch oldugu icin
+        // parse-time'da kolon artik semada (deferred name resolution guvenli).
+        var defaultIndexSql = $"""
             IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM sys.indexes
                                WHERE object_id = OBJECT_ID(N'[{s}].[PriceGroup]')
@@ -10790,29 +10792,18 @@ END;";
                 END CATCH
             END;
 
-            -- Seed 1: hic grup yoksa (fresh DB) DefaultCompanyId icin "Genel Liste" olustur (IsDefault=1).
+            -- Onceki surum otomatik 'GENEL' kodlu "Genel Liste" grubu olusturuyordu; bu
+            -- yaklasim birakildi (genel liste kullanici tarafindan isaretlenir). Otomatik
+            -- olusan BOS (hic fiyat kaydi olmayan) GENEL gruplarini temizle — kullanici o
+            -- gruba fiyat girmisse DOKUNMA. Idempotent: eslesen grup yoksa no-op.
             IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
-               AND NOT EXISTS (SELECT 1 FROM [{s}].[PriceGroup])
-                INSERT INTO [{s}].[PriceGroup]
-                    ([CompanyId],[Code],[Name],[Description],[IsActive],[AllowsBuying],[AllowsSelling],[AllowsCost],[IsDefault],[Created],[Updated])
-                VALUES
-                    ({DefaultCompanyId}, N'GENEL', N'Genel Liste',
-                     N'Varsayilan fiyat listesi — cari listesi yoksa fiyat buradan cozulur.',
-                     1, 1, 1, 1, 1, GETDATE(), GETDATE());
-
-            -- Seed 2: default'u olmayan her company icin en eski (MIN Id) aktif grubu default yap.
-            -- Mevcut kurulumda kullanicinin ana listesi hemen fallback olur; UI'dan degistirilebilir.
-            IF OBJECT_ID(N'[{s}].[PriceGroup]', N'U') IS NOT NULL
-                UPDATE pg SET [IsDefault] = 1, [Updated] = GETDATE()
-                FROM [{s}].[PriceGroup] pg
-                WHERE pg.[IsActive] = 1
-                  AND pg.[Id] = (SELECT MIN(x.[Id]) FROM [{s}].[PriceGroup] x
-                                 WHERE x.[CompanyId] = pg.[CompanyId] AND x.[IsActive] = 1)
-                  AND NOT EXISTS (SELECT 1 FROM [{s}].[PriceGroup] d
-                                  WHERE d.[CompanyId] = pg.[CompanyId] AND d.[IsDefault] = 1);
+               AND OBJECT_ID(N'[{s}].[PriceList]', N'U') IS NOT NULL
+                DELETE pg FROM [{s}].[PriceGroup] pg
+                WHERE pg.[Code] = N'GENEL' AND pg.[Name] = N'Genel Liste'
+                  AND NOT EXISTS (SELECT 1 FROM [{s}].[PriceList] pl WHERE pl.[GroupId] = pg.[Id]);
             """;
         await using var cmdDefault = connection.CreateCommand();
-        cmdDefault.CommandText = defaultSeedSql;
+        cmdDefault.CommandText = defaultIndexSql;
         await cmdDefault.ExecuteNonQueryAsync(cancellationToken);
     }
 

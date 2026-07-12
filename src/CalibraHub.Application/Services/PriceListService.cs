@@ -275,18 +275,21 @@ public sealed class PriceListService : IPriceListService
         if (req.CurrencyId <= 0 || req.Keys is null || req.Keys.Count == 0)
             return Array.Empty<ResolvedPriceRow>();
 
-        // Genel Liste (fallback) grubu — seed garanti eder; yoksa cozum yapilamaz.
+        // Genel Liste (fallback) grubu — kullanici Fiyat Listesi ekranindan isaretler;
+        // isaretlenmemisse null olabilir. O durumda yalnizca cari grubundan cozulur.
         var defaultGroupId = await _repo.GetDefaultGroupIdAsync(ct);
-        if (defaultGroupId is null || defaultGroupId.Value <= 0)
-            return Array.Empty<ResolvedPriceRow>();
 
-        // Cari → fiyat grubu (0/null → yalnizca Genel Liste kullanilir).
+        // Cari → fiyat grubu.
         int? contactGroupId = null;
         if (req.ContactId is > 0)
         {
             var contact = await _finance.GetContactByIdAsync(req.ContactId.Value, ct);
             contactGroupId = contact?.PriceGroupId is > 0 ? contact.PriceGroupId : null;
         }
+
+        // Ne cari grubu ne Genel Liste varsa cozecek kaynak yok.
+        if (contactGroupId is null && (defaultGroupId is null || defaultGroupId.Value <= 0))
+            return Array.Empty<ResolvedPriceRow>();
 
         var priceType = req.Direction switch
         {
@@ -296,8 +299,9 @@ public sealed class PriceListService : IPriceListService
             _                       => "s"
         };
 
+        // defaultGroupId null → 0 gecilir; repo'da 0 hicbir gruba eslesmez (yalniz cari grubu).
         return await _repo.ResolveExistingPricesAsync(
-            contactGroupId, defaultGroupId.Value, req.CurrencyId, priceType, req.Date, req.Keys, ct);
+            contactGroupId, defaultGroupId ?? 0, req.CurrencyId, priceType, req.Date, req.Keys, ct);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
