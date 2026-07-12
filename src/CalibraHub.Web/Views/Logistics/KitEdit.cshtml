@@ -94,6 +94,23 @@
     .ke-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
     .ke-field > span { font-size: .74rem; font-weight: 600; color: var(--ke-muted); }
 
+    /* Stok kodu rehberi (autocomplete dropdown) */
+    .ke-lookup { position: relative; }
+    .ke-dd {
+        position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+        background: var(--ke-surface); border: 1px solid var(--ke-border);
+        border-radius: 10px; box-shadow: 0 14px 36px rgba(0,0,0,.20);
+        max-height: 288px; overflow-y: auto; padding: 4px;
+    }
+    .ke-dd-item {
+        display: flex; flex-direction: column; gap: 1px; padding: 7px 10px;
+        border-radius: 7px; cursor: pointer;
+    }
+    .ke-dd-item.is-active, .ke-dd-item:hover { background: var(--ke-primary-weak); }
+    .ke-dd-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--ke-primary); font-size: .8rem; }
+    .ke-dd-name { font-size: .77rem; color: var(--ke-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ke-dd-msg  { padding: 12px; text-align: center; color: var(--ke-muted); font-size: .8rem; }
+
     /* Bileşen listesi */
     .ke-table-wrap { overflow-x: auto; border: 1px solid var(--ke-border); border-radius: 11px; }
     table.ke-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
@@ -195,7 +212,11 @@
                 <div class="ke-addrow">
                     <div class="ke-field">
                         <span>Stok Kodu *</span>
-                        <input type="text" id="keCompCode" class="ke-input" placeholder="Kod girin..." autocomplete="off" />
+                        <div class="ke-lookup">
+                            <input type="text" id="keCompCode" class="ke-input" placeholder="Kod veya ad ile ara..." autocomplete="off"
+                                   role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="keCompDD" />
+                            <div class="ke-dd" id="keCompDD" role="listbox" style="display:none;"></div>
+                        </div>
                     </div>
                     <div class="ke-field">
                         <span>Stok Adı</span>
@@ -353,6 +374,99 @@
         });
     });
 
+    // ── Stok kodu rehberi (autocomplete dropdown) ─────────────────────────
+    // Kod VEYA ad ile arayıp listeden seçtirir — StockLookup endpoint'i beslenir.
+    var ddItems  = [];   // mevcut öneriler
+    var ddActive = -1;   // klavye ile vurgulanan satır index'i
+    var ddTimer  = null; // debounce
+    var ddSeq    = 0;    // yarış koşulu koruması — yalnız son isteği kabul et
+
+    function ddIsOpen() { return $('keCompDD').style.display !== 'none'; }
+
+    function closeDD() {
+        ddItems = []; ddActive = -1;
+        var dd = $('keCompDD'); dd.style.display = 'none'; dd.innerHTML = '';
+        $('keCompCode').setAttribute('aria-expanded', 'false');
+    }
+
+    function renderDD() {
+        var dd = $('keCompDD'); dd.innerHTML = '';
+        if (ddItems.length === 0) {
+            dd.innerHTML = '<div class="ke-dd-msg">Eşleşen stok bulunamadı</div>';
+        } else {
+            ddItems.forEach(function (m, i) {
+                var it = document.createElement('div');
+                it.className = 'ke-dd-item' + (i === ddActive ? ' is-active' : '');
+                it.setAttribute('role', 'option');
+                var c = document.createElement('div'); c.className = 'ke-dd-code'; c.textContent = m.code || '';
+                var n = document.createElement('div'); n.className = 'ke-dd-name'; n.textContent = m.name || '';
+                it.appendChild(c); it.appendChild(n);
+                // mousedown: input blur'undan ÖNCE seç (blur dropdown'ı kapatır)
+                it.addEventListener('mousedown', function (e) { e.preventDefault(); selectDD(m); });
+                dd.appendChild(it);
+            });
+        }
+        dd.style.display = ''; $('keCompCode').setAttribute('aria-expanded', 'true');
+    }
+
+    function selectDD(m) {
+        $('keCompCode').value = m.code || '';
+        $('keCompName').value = m.name || '';
+        closeDD();
+        var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
+    }
+
+    function searchDD(q) {
+        q = (q || '').trim();
+        if (!q) { closeDD(); return; }
+        var seq = ++ddSeq;
+        fetch('/Logistics/StockLookup?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                if (seq !== ddSeq) return;   // eski (yarışan) istek — yoksay
+                var kitLc = (KIT_CODE || '').toLowerCase();  // kit kendi bileşeni olamaz
+                ddItems = (list || []).filter(function (s) { return (s.code || '').toLowerCase() !== kitLc; });
+                ddActive = ddItems.length ? 0 : -1;
+                renderDD();
+            })
+            .catch(function () { if (seq === ddSeq) closeDD(); });
+    }
+
+    function ddMove(delta) {
+        if (ddItems.length === 0) return;
+        ddActive = (ddActive + delta + ddItems.length) % ddItems.length;
+        var dd = $('keCompDD');
+        Array.prototype.forEach.call(dd.children, function (c, i) { c.classList.toggle('is-active', i === ddActive); });
+        var el = dd.children[ddActive];
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+    }
+
+    $('keCompCode').addEventListener('input', function () {
+        $('keCompName').value = '';   // kod değişti → eski ad artık geçersiz
+        var v = $('keCompCode').value;
+        clearTimeout(ddTimer);
+        ddTimer = setTimeout(function () { searchDD(v); }, 160);
+    });
+    $('keCompCode').addEventListener('focus', function () {
+        var v = ($('keCompCode').value || '').trim();
+        if (v) searchDD(v);
+    });
+    $('keCompCode').addEventListener('blur', function () { setTimeout(closeDD, 150); });
+    $('keCompCode').addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') {
+            if (ddIsOpen()) ddMove(1); else searchDD($('keCompCode').value);
+            e.preventDefault();
+        } else if (e.key === 'ArrowUp') {
+            if (ddIsOpen()) { ddMove(-1); e.preventDefault(); }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (ddIsOpen() && ddActive >= 0 && ddItems[ddActive]) selectDD(ddItems[ddActive]);
+            else addComponent();
+        } else if (e.key === 'Escape') {
+            if (ddIsOpen()) { closeDD(); e.preventDefault(); }
+        }
+    });
+
     function addComponent() {
         var code = ($('keCompCode').value || '').trim();
         if (!code) { showMsg('Bileşen kodu girin.', true); $('keCompCode').focus(); return; }
@@ -373,7 +487,8 @@
         });
     }
     $('keCompAdd').addEventListener('click', addComponent);
-    ['keCompCode', 'keCompQty', 'keCompNote'].forEach(function (id) {
+    // keCompCode kendi keydown'ına sahip (rehber navigasyonu + Enter). Miktar/Açıklama'da Enter = Ekle.
+    ['keCompQty', 'keCompNote'].forEach(function (id) {
         $(id).addEventListener('keydown', function (e) {
             if (e.key === 'Enter') { e.preventDefault(); addComponent(); }
         });
