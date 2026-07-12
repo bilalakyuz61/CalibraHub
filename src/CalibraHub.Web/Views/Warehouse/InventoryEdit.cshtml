@@ -631,6 +631,32 @@
                     };
                 });
 
+            // İzlenebilirlik doğrulaması (client) — seri/lot adedi sayılan miktara eşit değilse
+            // belge tamamlanamaz. (Server-side de zorunlu kılar; bu anında geri bildirim içindir.)
+            function _invTraceErr(msg) {
+                if (typeof CalibraAlert !== 'undefined' && CalibraAlert.error) CalibraAlert.error(msg);
+                else alert(msg);
+            }
+            for (var vi = 0; vi < rawLines.length; vi++) {
+                var vr = rawLines[vi];
+                if (!vr || !vr.materialCode || !String(vr.materialCode).trim()) continue;
+                var vq = parseFloat(vr.quantity) || 0;
+                if (vr.trackSerial === true) {
+                    var _sc = Array.isArray(vr.serials) ? vr.serials.length : 0;
+                    if (_sc !== vq) {
+                        _invTraceErr("'" + vr.materialCode + "' seri-takipli: girilen seri adedi (" + _sc + ") sayılan miktara (" + vq + ") eşit olmalı. Lot/Seri butonundan düzeltin.");
+                        return;
+                    }
+                } else if (vr.trackLot === true) {
+                    var _bd = Array.isArray(vr.lotBreakdown) ? vr.lotBreakdown : [];
+                    var _lt = _bd.reduce(function (s, b) { return s + (parseFloat(b.qty) || 0); }, 0);
+                    if (_bd.length === 0 || Math.abs(_lt - vq) > 0.0001) {
+                        _invTraceErr("'" + vr.materialCode + "' lot-takipli: lot miktar toplamı (" + _lt + ") sayılan miktara (" + vq + ") eşit olmalı. Lot/Seri butonundan düzeltin.");
+                        return;
+                    }
+                }
+            }
+
             var body = {
                 id:             DOC_ID,
                 docType:        'INVENTORY_COUNT',

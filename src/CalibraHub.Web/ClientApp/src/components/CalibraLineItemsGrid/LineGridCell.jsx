@@ -179,10 +179,6 @@ export default function LineGridCell(props) {
     return <SerialEntryCell column={column} row={row} value={value} onChange={onChange} />
   }
 
-  // ── Trace Entry (Sayım: tek buton → seri VEYA çoklu-lot modal) ──
-  if (column.type === 'trace-entry') {
-    return <TraceEntryCell column={column} row={row} value={value} onChange={onChange} />
-  }
 
   // ── Text (default) ─────────────────────────────────
   return (
