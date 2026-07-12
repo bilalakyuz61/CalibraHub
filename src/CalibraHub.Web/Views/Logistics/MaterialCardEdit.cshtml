@@ -4826,6 +4826,166 @@
         });
     };
 
+    // ── Fiyatlar sekmesi — genel liste (default) hedefli, tarih+doviz+alis/satis ──
+    // Baz urun fiyati (ConfigId=null). SaveBulkPriceEntries ile idempotent upsert.
+    var _mcePriceInited = false;
+    var _mcePriceGroups = [];
+
+    window.mcePriceActivate = function() {
+        var needsSave = document.getElementById('mcePriceNeedsSave');
+        var body = document.getElementById('mcePriceBody');
+        if (!(currentId > 0)) {
+            if (needsSave) needsSave.style.display = '';
+            if (body) body.style.display = 'none';
+            return;
+        }
+        if (needsSave) needsSave.style.display = 'none';
+        if (body) body.style.display = '';
+        if (_mcePriceInited) { mcePriceLoadList(); return; }
+        _mcePriceInited = true;
+
+        var dateEl = document.getElementById('mcePriceDate');
+        if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+
+        Promise.all([
+            fetch('/PriceList/GetAllPriceGroups', { credentials: 'same-origin' }).then(function(r){ return r.json(); }),
+            fetch('/PriceList/GetCurrencies', { credentials: 'same-origin' }).then(function(r){ return r.json(); })
+        ]).then(function(res) {
+            _mcePriceGroups = res[0] || [];
+            var gsel = document.getElementById('mcePriceGroup');
+            if (gsel) {
+                gsel.innerHTML = '';
+                if (!_mcePriceGroups.length) {
+                    var oe = document.createElement('option'); oe.value = ''; oe.textContent = '(Fiyat listesi tanımlı değil)'; gsel.appendChild(oe);
+                }
+                _mcePriceGroups.forEach(function(g) {
+                    var o = document.createElement('option');
+                    o.value = g.id; o.textContent = g.name + (g.isDefault ? '  (Genel)' : '');
+                    if (g.isDefault) o.selected = true;
+                    gsel.appendChild(o);
+                });
+            }
+            var csel = document.getElementById('mcePriceCurrency');
+            if (csel) {
+                csel.innerHTML = '';
+                (res[1] || []).forEach(function(c) {
+                    var o = document.createElement('option'); o.value = c.id; o.textContent = c.code || c.name; csel.appendChild(o);
+                });
+            }
+            mcePriceRefresh();
+        }).catch(function(){});
+    };
+
+    // Grup degisince: tip kisidi (allowsBuying/Selling) + prefill + liste
+    window.mcePriceRefresh = function() {
+        var gsel = document.getElementById('mcePriceGroup');
+        var g = _mcePriceGroups.filter(function(x){ return String(x.id) === String(gsel && gsel.value); })[0];
+        var buyEl = document.getElementById('mcePriceBuy');
+        var sellEl = document.getElementById('mcePriceSell');
+        if (g) {
+            if (buyEl)  { buyEl.disabled  = !g.allowsBuying;  if (!g.allowsBuying)  buyEl.value  = ''; }
+            if (sellEl) { sellEl.disabled = !g.allowsSelling; if (!g.allowsSelling) sellEl.value = ''; }
+        }
+        mcePricePrefill();
+        mcePriceLoadList();
+    };
+
+    // Doviz/tarih degisince: mevcut alis+satis fiyatini forma on-doldur (varsa duzenleme)
+    window.mcePricePrefill = function() {
+        var groupId = parseInt((document.getElementById('mcePriceGroup') || {}).value) || 0;
+        var currencyId = parseInt((document.getElementById('mcePriceCurrency') || {}).value) || 0;
+        var validOn = (document.getElementById('mcePriceDate') || {}).value || new Date().toISOString().split('T')[0];
+        if (!(groupId > 0) || !(currencyId > 0)) return;
+        ['b','s'].forEach(function(pt) {
+            fetch('/PriceList/GetExistingPrices', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                body: JSON.stringify({ groupId: groupId, currencyId: currencyId, priceType: pt, validFrom: validOn, keys: [{ itemId: currentId, configId: null }] })
+            }).then(function(r){ return r.json(); }).then(function(rows) {
+                var price = (rows && rows[0]) ? rows[0].price : null;
+                var el = document.getElementById(pt === 'b' ? 'mcePriceBuy' : 'mcePriceSell');
+                if (el && !el.disabled) el.value = (price != null ? price : '');
+            }).catch(function(){});
+        });
+    };
+
+    window.mcePriceSave = function() {
+        var groupId = parseInt((document.getElementById('mcePriceGroup') || {}).value) || 0;
+        var currencyId = parseInt((document.getElementById('mcePriceCurrency') || {}).value) || 0;
+        var validOn = (document.getElementById('mcePriceDate') || {}).value || '';
+        var buyEl = document.getElementById('mcePriceBuy');
+        var sellEl = document.getElementById('mcePriceSell');
+        var msg = document.getElementById('mcePriceMsg');
+        function showMsg(t, ok) { if (msg) { msg.style.display = ''; msg.textContent = t; msg.style.color = ok ? '#34d399' : '#f87171'; } }
+
+        if (!(currentId > 0)) { showMsg('Önce malzeme kartını kaydedin.', false); return; }
+        if (!(groupId > 0)) { showMsg('Fiyat listesi seçin.', false); return; }
+        if (!(currencyId > 0)) { showMsg('Döviz seçin.', false); return; }
+        if (!validOn) { showMsg('Geçerlilik tarihi girin.', false); return; }
+        var buy = (buyEl && !buyEl.disabled && buyEl.value !== '') ? parseFloat(buyEl.value) : null;
+        var sell = (sellEl && !sellEl.disabled && sellEl.value !== '') ? parseFloat(sellEl.value) : null;
+        if (buy == null && sell == null) { showMsg('En az bir fiyat (alış veya satış) girin.', false); return; }
+
+        function postBulk(pt, price) {
+            return fetch('/PriceList/SaveBulkPriceEntries', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                body: JSON.stringify({ groupId: groupId, currencyId: currencyId, priceType: pt, validFrom: validOn, validTo: null, lines: [{ itemId: currentId, configId: null, price: price }] })
+            }).then(function(r){ return r.json(); });
+        }
+        var calls = [];
+        if (buy != null)  calls.push(postBulk('b', buy));
+        if (sell != null) calls.push(postBulk('s', sell));
+
+        var btn = document.getElementById('mcePriceSaveBtn');
+        if (btn) btn.disabled = true;
+        Promise.all(calls).then(function(results) {
+            var failed = results.filter(function(d){ return !d || d.success === false; });
+            if (failed.length) showMsg((failed[0] && failed[0].message) || 'Fiyat kaydı başarısız.', false);
+            else showMsg('Fiyat kaydedildi.', true);
+            mcePriceLoadList();
+        }).catch(function(e){ showMsg('Bağlantı hatası: ' + e.message, false); })
+          .then(function(){ if (btn) btn.disabled = false; });
+    };
+
+    window.mcePriceLoadList = function() {
+        var groupId = parseInt((document.getElementById('mcePriceGroup') || {}).value) || 0;
+        var listEl = document.getElementById('mcePriceList');
+        if (!listEl) return;
+        if (!(currentId > 0) || !(groupId > 0)) { listEl.innerHTML = ''; return; }
+        listEl.innerHTML = '<div style="padding:10px;color:rgba(255,255,255,.4);font-size:.78rem;">Yükleniyor...</div>';
+        fetch('/PriceList/GetPriceListEntries?groupId=' + groupId + '&itemId=' + currentId + '&pageSize=200', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(data) {
+                var items = (data && data.items) || [];
+                var cntEl = document.getElementById('mcePriceCount');
+                if (cntEl) { cntEl.textContent = items.length; if (items.length) cntEl.classList.remove('is-empty'); else cntEl.classList.add('is-empty'); }
+                if (!items.length) { listEl.innerHTML = '<div style="padding:12px;color:rgba(255,255,255,.4);font-size:.8rem;font-style:italic;">Bu ürün için kayıtlı fiyat yok.</div>'; return; }
+                var rows = items.map(function(e) {
+                    var typeLabel = e.priceType === 'b' ? 'Alış' : (e.priceType === 's' ? 'Satış' : 'Maliyet');
+                    var typeColor = e.priceType === 'b' ? '#f59e0b' : (e.priceType === 's' ? '#34d399' : '#94a3b8');
+                    var priceTxt = Number(e.price).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                    return '<tr style="border-top:1px solid rgba(255,255,255,.05);">' +
+                        '<td style="padding:6px 10px;"><span style="font-size:.7rem;font-weight:700;color:' + typeColor + ';">' + typeLabel + '</span></td>' +
+                        '<td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;">' + priceTxt + '</td>' +
+                        '<td style="padding:6px 10px;">' + (e.currencyCode || '') + '</td>' +
+                        '<td style="padding:6px 10px;">' + (e.validFrom || '') + '</td>' +
+                        '<td style="padding:6px 10px;text-align:right;"><button type="button" class="mce-btn mce-btn--danger" style="padding:3px 9px;font-size:.7rem;" onclick="mcePriceDelete(' + e.id + ')">Sil</button></td>' +
+                        '</tr>';
+                }).join('');
+                listEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.8rem;">' +
+                    '<thead><tr style="text-align:left;color:rgba(255,255,255,.45);font-size:.72rem;">' +
+                    '<th style="padding:4px 10px;">Tip</th><th style="padding:4px 10px;text-align:right;">Fiyat</th><th style="padding:4px 10px;">Döviz</th><th style="padding:4px 10px;">Geçerlilik</th><th></th>' +
+                    '</tr></thead><tbody>' + rows + '</tbody></table>';
+            }).catch(function(){ listEl.innerHTML = '<div style="padding:10px;color:#f87171;font-size:.78rem;">Fiyatlar yüklenemedi.</div>'; });
+    };
+
+    window.mcePriceDelete = function(id) {
+        if (!id) return;
+        fetch('/PriceList/DeletePriceListJson?id=' + id, { method: 'POST', credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(){ mcePriceLoadList(); mcePricePrefill(); })
+            .catch(function(){});
+    };
+
     // ── Ozellik Eslestirme (Kombinasyon Takibi acik iken) ──────────
     function featureEsc(s) {
         var d = document.createElement('div');
