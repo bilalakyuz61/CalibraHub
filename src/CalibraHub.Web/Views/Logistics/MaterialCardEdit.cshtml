@@ -2230,12 +2230,13 @@
                     .mcp-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px 16px; align-items:end; }
                     .mcp-form__action { display:flex; align-items:end; }
                     .mcp-filters { display:flex; align-items:end; gap:8px; flex-wrap:wrap; }
-                    /* Basliklar (label) HER ZAMAN sahalarin (input) USTUNDE.
-                       widgetField.css `.mce-field { display:grid; grid-template-columns:max-content 1fr }`
-                       label'i sola koyuyor → block + !important ile grid'i tamamen eziyoruz (dikey duzen). */
-                    .mcp-form .mce-field, .mcp-filters .mce-field { display:block !important; grid-template-columns:none !important; }
+                    /* Basliklar (label) sahalarin USTUNDE — widgetField.css `.mce-field` grid'ini
+                       SPESIFIK selector (.mcp-form .mce-field = 0,2,0 > .mce-field = 0,1,0) ile ezer.
+                       !important YOK → gizli alanlarin (mcePriceComboWrap: inline display:none = 1,0,0,0)
+                       gorunurlugu bozulmaz. Grid yerine block: label ust satir, input alt satir. */
+                    .mcp-form .mce-field, .mcp-filters .mce-field { display:block; grid-template-columns:none; }
                     .mcp-form .mce-field > label, .mcp-form .mce-field > .mce-label,
-                    .mcp-filters .mce-field > label, .mcp-filters .mce-field > .mce-label { display:block !important; text-align:left; margin:0 0 5px; white-space:normal; overflow:visible; }
+                    .mcp-filters .mce-field > label, .mcp-filters .mce-field > .mce-label { display:block; text-align:left; margin:0 0 5px; white-space:normal; overflow:visible; }
                     .mcp-filters .mce-field > label, .mcp-filters .mce-field > .mce-label { font-size:.64rem; margin-bottom:4px; }
                     .mcp-form .mce-input, .mcp-form .mce-select,
                     .mcp-filters .mce-input, .mcp-filters .mce-select { display:block; width:100%; box-sizing:border-box; }
@@ -2279,8 +2280,12 @@
                                 <select id="mcePriceCurrency" class="mce-input mce-select" onchange="mcePricePrefill()"></select>
                             </div>
                             <div class="mce-field">
-                                <label class="mce-label">Geçerlilik Tarihi</label>
-                                <input type="date" id="mcePriceDate" class="mce-input" onchange="mcePricePrefill()" />
+                                <label class="mce-label">Başlangıç Tarihi</label>
+                                <input type="date" id="mcePriceDateFrom" class="mce-input" onchange="mcePricePrefill()" />
+                            </div>
+                            <div class="mce-field">
+                                <label class="mce-label">Bitiş Tarihi</label>
+                                <input type="date" id="mcePriceDateTo" class="mce-input" title="Boş bırakılırsa süresiz (açık uçlu)" />
                             </div>
                             <div class="mce-field">
                                 <label class="mce-label" id="mcePriceBuyLabel">Alış Fiyatı</label>
@@ -4901,7 +4906,7 @@
         if (_mcePriceInited) { mcePriceLoadList(); return; }
         _mcePriceInited = true;
 
-        var dateEl = document.getElementById('mcePriceDate');
+        var dateEl = document.getElementById('mcePriceDateFrom');
         if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
 
         Promise.all([
@@ -4955,7 +4960,7 @@
     window.mcePricePrefill = function() {
         var groupId = parseInt((document.getElementById('mcePriceGroup') || {}).value) || 0;
         var currencyId = parseInt((document.getElementById('mcePriceCurrency') || {}).value) || 0;
-        var validOn = (document.getElementById('mcePriceDate') || {}).value || new Date().toISOString().split('T')[0];
+        var validOn = (document.getElementById('mcePriceDateFrom') || {}).value || new Date().toISOString().split('T')[0];
         if (!(groupId > 0) || !(currencyId > 0)) return;
         ['b','s'].forEach(function(pt) {
             fetch('/PriceList/GetExistingPrices', {
@@ -4972,7 +4977,8 @@
     window.mcePriceSave = function() {
         var groupVal = (document.getElementById('mcePriceGroup') || {}).value || '';
         var currencyId = parseInt((document.getElementById('mcePriceCurrency') || {}).value) || 0;
-        var validOn = (document.getElementById('mcePriceDate') || {}).value || '';
+        var validFrom = (document.getElementById('mcePriceDateFrom') || {}).value || '';
+        var validTo   = (document.getElementById('mcePriceDateTo') || {}).value || '';
         var buyEl = document.getElementById('mcePriceBuy');
         var sellEl = document.getElementById('mcePriceSell');
         var msg = document.getElementById('mcePriceMsg');
@@ -4982,7 +4988,8 @@
 
         if (!(currentId > 0)) { showMsg('Önce malzeme kartını kaydedin.', false); return; }
         if (!(currencyId > 0)) { showMsg('Döviz seçin.', false); return; }
-        if (!validOn) { showMsg('Geçerlilik tarihi girin.', false); return; }
+        if (!validFrom) { showMsg('Başlangıç tarihi girin.', false); return; }
+        if (validTo && validTo < validFrom) { showMsg('Bitiş tarihi başlangıç tarihinden önce olamaz.', false); return; }
         var buy = (buyEl && !buyEl.disabled && buyEl.value !== '') ? parseFloat(buyEl.value) : null;
         var sell = (sellEl && !sellEl.disabled && sellEl.value !== '') ? parseFloat(sellEl.value) : null;
         if (buy == null && sell == null) { showMsg('En az bir fiyat (alış veya satış) girin.', false); return; }
@@ -5006,7 +5013,7 @@
             function postBulk(pt, price) {
                 return fetch('/PriceList/SaveBulkPriceEntries', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-                    body: JSON.stringify({ groupId: groupId, currencyId: currencyId, priceType: pt, validFrom: validOn, validTo: null, lines: [{ itemId: currentId, configId: null, price: price }] })
+                    body: JSON.stringify({ groupId: groupId, currencyId: currencyId, priceType: pt, validFrom: validFrom, validTo: (validTo || null), lines: [{ itemId: currentId, configId: null, price: price }] })
                 }).then(function(r){ return r.json(); });
             }
             var calls = [];
