@@ -1179,6 +1179,31 @@ function SerialEntryModal(props) {
     setSelected(next)
   }
 
+  // FIFO/FEFO otomatik doldurma (yalnızca çıkış/pick modu). Gereken adet (qtyInt) kadar
+  // seriyi yöntemine göre sıralayıp seçer; mevcut seçimi bununla değiştirir. Sessiz otomatik
+  // YOK — kullanıcı butona basınca çalışır, sonucu görüp gerekirse düzeltir.
+  // FIFO: en eski giriş (ItemSerial.Created) önce. FEFO: en yakın SKT (Lot.ExpiryDate) önce, SKT'siz en sona.
+  var canFill = !isEntry && qtyInt != null && qtyInt > 0
+  var hasExpiry = (lookup.options || []).some(function(o) { return !!o.expiryDate })
+  function fillByMethod(method) {
+    if (!canFill) return
+    var avail = (lookup.options || []).slice()
+    avail.sort(function(a, b) {
+      if (method === 'fefo') {
+        var ea = a.expiryDate ? Date.parse(a.expiryDate) : Infinity   // SKT'siz seri en sona
+        var eb = b.expiryDate ? Date.parse(b.expiryDate) : Infinity
+        if (ea !== eb) return ea - eb
+      }
+      var ca = a.created ? Date.parse(a.created) : Infinity            // FIFO / FEFO tie-break: en eski önce
+      var cb = b.created ? Date.parse(b.created) : Infinity
+      if (ca !== cb) return ca - cb
+      return String(a.serialNo || '').localeCompare(String(b.serialNo || ''))
+    })
+    var next = {}
+    avail.slice(0, qtyInt).forEach(function(o) { next[String(o.serialNo).toLowerCase()] = o.serialNo })
+    setSelected(next)
+  }
+
   var panelStyle = isLight
     ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
     : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
@@ -1232,6 +1257,34 @@ function SerialEntryModal(props) {
                 className="w-full rounded-lg pl-8 pr-3 py-1.5 text-[12px] outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85 dark:placeholder:text-white/35"
               />
             </div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-[10.5px] text-slate-400 dark:text-white/40">Otomatik doldur:</span>
+              <button
+                type="button"
+                disabled={!canFill}
+                onClick={function() { fillByMethod('fifo') }}
+                title="İlk Giren İlk Çıkar — en eski girişli serileri seçer"
+                className={'px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ' +
+                  (canFill
+                    ? 'border-indigo-300 text-indigo-600 hover:bg-indigo-50 dark:border-indigo-400/40 dark:text-indigo-300 dark:hover:bg-indigo-500/15'
+                    : 'border-slate-200 text-slate-300 dark:border-white/10 dark:text-white/25 cursor-not-allowed')}
+              >
+                FIFO
+              </button>
+              <button
+                type="button"
+                disabled={!canFill || !hasExpiry}
+                onClick={function() { fillByMethod('fefo') }}
+                title={hasExpiry ? 'İlk Son Kullanma İlk Çıkar — en yakın SKT’li serileri seçer' : 'Bu stokta son kullanma tarihi (lot) bilgisi yok'}
+                className={'px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ' +
+                  (canFill && hasExpiry
+                    ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-400/40 dark:text-emerald-300 dark:hover:bg-emerald-500/15'
+                    : 'border-slate-200 text-slate-300 dark:border-white/10 dark:text-white/25 cursor-not-allowed')}
+              >
+                FEFO
+              </button>
+              {!canFill && <span className="text-[10px] text-slate-400 dark:text-white/30">(önce miktar girin)</span>}
+            </div>
             <div className="max-h-[280px] overflow-y-auto rounded-lg border border-slate-200 dark:border-white/10">
               {lookup.loading && <div className="px-3 py-3 text-[11px] text-slate-400 dark:text-white/40">Yükleniyor…</div>}
               {!lookup.loading && options.length === 0 && (
@@ -1255,6 +1308,7 @@ function SerialEntryModal(props) {
                         : 'border-slate-300 dark:border-white/25 text-transparent')}>✓</span>
                     <span className="text-[12px] font-mono text-slate-800 dark:text-white/85">{o.serialNo}</span>
                     {o.lotNo && <span className="text-[10.5px] font-mono text-slate-400 dark:text-white/35">Lot: {o.lotNo}</span>}
+                    {o.expiryDate && <span className="ml-auto text-[10.5px] font-mono text-amber-600 dark:text-amber-300/70">SKT: {String(o.expiryDate).slice(0, 10)}</span>}
                   </button>
                 )
               })}

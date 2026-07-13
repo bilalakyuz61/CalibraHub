@@ -1283,7 +1283,7 @@ public sealed class SalesController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT s.[SerialNo], lot.[LotNo]
+            SELECT s.[SerialNo], lot.[LotNo], s.[Created], lot.[ExpiryDate]
             FROM [{_schema}].[ItemSerial] s
             LEFT JOIN [{_schema}].[Lot] lot ON lot.[Id] = s.[LotId]
             WHERE s.[ItemId] = @ItemId AND s.[IsActive] = 1
@@ -1295,7 +1295,14 @@ public sealed class SalesController : Controller
         var result = new List<object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
-            result.Add(new { serialNo = r.GetString(0), lotNo = r.IsDBNull(1) ? null : r.GetString(1) });
+            result.Add(new
+            {
+                serialNo = r.GetString(0),
+                lotNo = r.IsDBNull(1) ? null : r.GetString(1),
+                // FIFO/FEFO otomatik doldurma anahtarları (sipariş seri seçim modalı)
+                created = r.IsDBNull(2) ? (DateTime?)null : r.GetDateTime(2),      // FIFO: en eski giriş önce
+                expiryDate = r.IsDBNull(3) ? (DateTime?)null : r.GetDateTime(3),   // FEFO: en yakın SKT önce
+            });
         return Json(result);
     }
 

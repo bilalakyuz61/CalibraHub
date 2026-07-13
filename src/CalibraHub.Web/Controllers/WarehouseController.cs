@@ -929,7 +929,7 @@ public sealed class WarehouseController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT s.[SerialNo], lot.[LotNo]
+            SELECT s.[SerialNo], lot.[LotNo], s.[Created], lot.[ExpiryDate]
             FROM [{_schema}].[ItemSerial] s
             LEFT JOIN [{_schema}].[Lot] lot ON lot.[Id] = s.[LotId]
             WHERE s.[ItemId] = @ItemId AND s.[IsActive] = 1 AND s.[Status] = 1
@@ -944,6 +944,9 @@ public sealed class WarehouseController : Controller
             {
                 serialNo = r.GetString(0),
                 lotNo = r.IsDBNull(1) ? null : r.GetString(1),
+                // FIFO/FEFO otomatik doldurma anahtarları (seri seçim modalı butonları)
+                created = r.IsDBNull(2) ? (DateTime?)null : r.GetDateTime(2),      // FIFO: en eski giriş önce
+                expiryDate = r.IsDBNull(3) ? (DateTime?)null : r.GetDateTime(3),   // FEFO: en yakın SKT önce
             });
         return Json(result);
     }
