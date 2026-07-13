@@ -32,15 +32,21 @@ public sealed class PriceListService : IPriceListService
 
     public async Task<(bool Success, string? Error, int? Id)> CreateGroupAsync(CreatePriceGroupRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Code))  return (false, "Grup kodu zorunludur.", null);
         if (string.IsNullOrWhiteSpace(req.Name))  return (false, "Grup adi zorunludur.", null);
         if (!req.AllowsBuying && !req.AllowsSelling && !req.AllowsCost)
             return (false, "En az bir fiyat tipi (Alis/Satis/Maliyet) izinli olmali.", null);
 
+        // Kullanici kod girmez (CLAUDE.md) — isim uniqueness + kod otomatik turetilir.
+        var name = req.Name.Trim();
+        var existingGroups = await _repo.GetAllGroupsAsync(ct);
+        if (existingGroups.Any(g => string.Equals(g.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+            return (false, $"Ayni isimde baska bir fiyat listesi zaten var: '{name}'", null);
+
+        var code = string.IsNullOrWhiteSpace(req.Code) ? DeriveGroupCode(name, existingGroups) : req.Code.Trim();
         var entity = new PriceGroup
         {
-            Code          = req.Code.Trim(),
-            Name          = req.Name.Trim(),
+            Code          = code,
+            Name          = name,
             Description   = req.Description?.Trim(),
             IsActive      = req.IsActive,
             AllowsBuying  = req.AllowsBuying,
@@ -51,9 +57,25 @@ public sealed class PriceListService : IPriceListService
         return (true, null, id);
     }
 
+    // Kod otomatik turetme: isimden (uppercase, max 50); cakisirsa sayisal ek.
+    private static string DeriveGroupCode(string name, IEnumerable<PriceGroup> existing)
+    {
+        var baseCode = new string(name.Trim().ToUpperInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+        if (baseCode.Length > 40) baseCode = baseCode.Substring(0, 40);
+        if (string.IsNullOrWhiteSpace(baseCode)) baseCode = "LISTE";
+        var used = new HashSet<string>(existing.Select(g => g.Code ?? ""), StringComparer.OrdinalIgnoreCase);
+        if (!used.Contains(baseCode)) return baseCode;
+        for (var i = 2; i < 1000; i++)
+        {
+            var candidate = baseCode + "_" + i;
+            if (!used.Contains(candidate)) return candidate;
+        }
+        return baseCode + "_" + Guid.NewGuid().ToString("N").Substring(0, 6).ToUpperInvariant();
+    }
+
     public async Task<(bool Success, string? Error)> UpdateGroupAsync(UpdatePriceGroupRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Code)) return (false, "Grup kodu zorunludur.");
         if (string.IsNullOrWhiteSpace(req.Name)) return (false, "Grup adi zorunludur.");
         if (!req.AllowsBuying && !req.AllowsSelling && !req.AllowsCost)
             return (false, "En az bir fiyat tipi (Alis/Satis/Maliyet) izinli olmali.");
@@ -61,8 +83,14 @@ public sealed class PriceListService : IPriceListService
         var entity = await _repo.GetGroupByIdAsync(req.Id, ct);
         if (entity is null) return (false, "Grup bulunamadi.");
 
-        entity.Code          = req.Code.Trim();
-        entity.Name          = req.Name.Trim();
+        var name = req.Name.Trim();
+        var others = await _repo.GetAllGroupsAsync(ct);
+        if (others.Any(g => g.Id != req.Id && string.Equals(g.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+            return (false, $"Ayni isimde baska bir fiyat listesi zaten var: '{name}'");
+
+        // Kod kullanici tarafindan degistirilmez — bos gelirse mevcut korunur (eski referanslar bozulmasin).
+        if (!string.IsNullOrWhiteSpace(req.Code)) entity.Code = req.Code.Trim();
+        entity.Name          = name;
         entity.Description   = req.Description?.Trim();
         entity.IsActive      = req.IsActive;
         entity.AllowsBuying  = req.AllowsBuying;
@@ -83,6 +111,41 @@ public sealed class PriceListService : IPriceListService
 
         await _repo.DeleteGroupAsync(id, ct);
         return (true, null);
+    }
+
+    // "Genel Fiyat Listesi"ni garanti et — varsa Id doner, yoksa kod OTOMATIK olusturur
+    // (kullanici kod girmez). Malzeme kartindan "Genel Fiyat Listesi" secilip fiyat
+    // kaydedildiginde cagirilir → liste yoksa sessizce olusur.
+    public async Task<(bool Success, string? Error, int? GroupId)> EnsureDefaultGroupAsync(CancellationToken ct)
+    {
+        var existing = await _repo.GetDefaultGroupIdAsync(ct);
+        if (existing is int e && e > 0) return (true, null, e);
+
+        // Default yok — "GENEL" kodlu/"Genel Fiyat Listesi" isimli grup varsa onu default yap; yoksa olustur.
+        var all = await _repo.GetAllGroupsAsync(ct);
+        var genel = all.FirstOrDefault(g =>
+            string.Equals(g.Code, "GENEL", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(g.Name, "Genel Fiyat Listesi", StringComparison.OrdinalIgnoreCase));
+
+        int id;
+        if (genel is not null)
+        {
+            id = genel.Id;
+        }
+        else
+        {
+            var code = all.Any(g => string.Equals(g.Code, "GENEL", StringComparison.OrdinalIgnoreCase))
+                ? DeriveGroupCode("GENEL", all) : "GENEL";
+            id = await _repo.AddGroupAsync(new PriceGroup
+            {
+                Code = code, Name = "Genel Fiyat Listesi",
+                Description = "Varsayilan fiyat listesi (cari listesi yoksa buradan cozulur).",
+                IsActive = true, AllowsBuying = true, AllowsSelling = true, AllowsCost = true,
+                IsDefault = true
+            }, ct);
+        }
+        await _repo.SetDefaultGroupAsync(id, true, ct);
+        return (true, null, id);
     }
 
     // Grubu "Genel Liste" (default) yap/kaldir — ayni company'de tek default garanti edilir.

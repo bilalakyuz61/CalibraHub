@@ -14,6 +14,9 @@ public interface IPriceListService
     // "Genel Liste" (fallback) grubunu isaretle/kaldir — CompanyId basina tek default.
     Task<(bool Success, string? Error)> SetDefaultGroupAsync(int groupId, bool isDefault, CancellationToken ct);
 
+    // "Genel Fiyat Listesi"ni garanti et (yoksa kod otomatik olusturur) → GroupId doner.
+    Task<(bool Success, string? Error, int? GroupId)> EnsureDefaultGroupAsync(CancellationToken ct);
+
     // Fiyat Kalemleri — server-side pagination + filter
     Task<PagedPriceListResult> GetEntriesByGroupAsync(
         int groupId, PriceListFilter filter, CancellationToken ct);

@@ -370,10 +370,6 @@
             <input type="hidden" id="pgeId" value="@groupId" />
 
             <div class="pge-field">
-                <label class="pge-label">Kod *</label>
-                <input id="pgeCode" class="pge-input" maxlength="50" placeholder="Fiyat grubu kodu" />
-            </div>
-            <div class="pge-field">
                 <label class="pge-label">Ad *</label>
                 <input id="pgeName" class="pge-input" maxlength="150" placeholder="Fiyat grubu adi" />
             </div>
@@ -535,7 +531,6 @@
                 if (!d || d.success === false) {
                     pgeMsg('Grup bulunamadi.', false); return;
                 }
-                document.getElementById('pgeCode').value          = d.code || '';
                 document.getElementById('pgeName').value          = d.name || '';
                 document.getElementById('pgeDesc').value          = d.description || '';
                 document.getElementById('pgeIsActive').checked    = d.isActive !== false;
@@ -559,7 +554,6 @@
 
         var payload = {
             id:            groupId || null,
-            code:          document.getElementById('pgeCode').value,
             name:          document.getElementById('pgeName').value,
             description:   document.getElementById('pgeDesc').value || null,
             isActive:      document.getElementById('pgeIsActive').checked,

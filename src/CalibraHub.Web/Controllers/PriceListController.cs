@@ -241,8 +241,8 @@ public sealed class PriceListController : Controller
     [HttpPost]
     public async Task<IActionResult> SavePriceGroupJson([FromBody] PriceGroupInput input, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(input.Code) || string.IsNullOrWhiteSpace(input.Name))
-            return Json(new { success = false, message = "Kod ve Ad alanlari zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.Name))
+            return Json(new { success = false, message = "Ad alani zorunludur." });
 
         if (input.Id.HasValue && input.Id.Value > 0)
         {
@@ -277,6 +277,15 @@ public sealed class PriceListController : Controller
     {
         var (ok, err) = await _svc.SetDefaultGroupAsync(id, true, ct);
         return Json(new { success = ok, message = ok ? "Genel Liste olarak ayarlandi." : err });
+    }
+
+    // "Genel Fiyat Listesi"ni garanti et (yoksa kod otomatik olusturulur) → groupId doner.
+    // Malzeme kartindan "Genel Fiyat Listesi" secilip fiyat kaydedilince cagirilir.
+    [HttpPost]
+    public async Task<IActionResult> EnsureDefaultPriceGroup(CancellationToken ct)
+    {
+        var (ok, err, groupId) = await _svc.EnsureDefaultGroupAsync(ct);
+        return Json(new { success = ok, message = err, groupId });
     }
 
     // ── Fiyat Listesi Raporlama (Wizard'a girmeden once filtreli izleme) ────

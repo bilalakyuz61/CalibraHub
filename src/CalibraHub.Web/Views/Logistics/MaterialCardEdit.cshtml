@@ -2220,57 +2220,97 @@
 
             <!-- Fiyatlar -->
             <div class="mce-card mce-section-anchor" id="mcePriceCard" style="display:none;">
-                <p class="mce-card-title" style="margin:0 0 4px;">Fiyatlar</p>
-                <div style="font-size:.74rem;color:rgba(255,255,255,.5);margin-bottom:14px;">
-                    Bu ürün için fiyat listesine geçerlilik tarihi ve döviz bazında alış/satış fiyatı girin.
-                    Varsayılan olarak <strong>Genel Fiyat Listesi</strong> seçilidir.
+                <style>
+                    /* Tema-notr (slate) — hem light hem dark'ta okunur; hardcoded beyaz kullanilmaz */
+                    .mcp-panel { border:1px solid rgba(148,163,184,.24); border-radius:12px; padding:16px 18px; background:rgba(148,163,184,.055); }
+                    .mcp-panel + .mcp-panel { margin-top:16px; }
+                    .mcp-panel__head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+                    .mcp-panel__title { font-size:.84rem; font-weight:600; }
+                    .mcp-panel__sub { font-size:.72rem; color:rgba(100,116,139,.95); margin-top:2px; }
+                    .mcp-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px 16px; align-items:end; }
+                    .mcp-form__action { display:flex; align-items:end; }
+                    .mcp-filters { display:flex; align-items:end; gap:8px; flex-wrap:wrap; }
+                    .mcp-filters .mce-label { font-size:.64rem; }
+                    .mcp-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+                    .mcp-table th { text-align:left; padding:8px 12px; font-size:.68rem; font-weight:600; text-transform:none; color:rgba(100,116,139,.95); border-bottom:1px solid rgba(148,163,184,.28); white-space:nowrap; }
+                    .mcp-table td { padding:9px 12px; border-bottom:1px solid rgba(148,163,184,.14); }
+                    .mcp-table tbody tr:hover { background:rgba(148,163,184,.07); }
+                    .mcp-empty { padding:26px 16px; text-align:center; color:rgba(100,116,139,.9); font-size:.82rem; }
+                    .mcp-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:.68rem; font-weight:700; }
+                    .mcp-num { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+                </style>
+
+                <div class="mcp-panel__head" style="margin-bottom:16px;">
+                    <div>
+                        <p class="mce-card-title" style="margin:0;">Fiyatlar</p>
+                        <div class="mcp-panel__sub">Fiyat listesine geçerlilik tarihi ve döviz bazında alış/satış fiyatı girin, tarih filtresiyle raporlayın.</div>
+                    </div>
                 </div>
 
-                <div id="mcePriceNeedsSave" style="display:none;padding:14px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#fbbf24;font-size:.82rem;">
+                <div id="mcePriceNeedsSave" style="display:none;padding:16px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#b45309;font-size:.84rem;">
                     Fiyat girişi için önce malzeme kartını kaydedin.
                 </div>
 
                 <div id="mcePriceBody" style="display:none;">
-                    <div class="mce-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;padding:14px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);">
-                        <div class="mce-field">
-                            <label class="mce-label">Fiyat Listesi</label>
-                            <select id="mcePriceGroup" class="mce-input mce-select" onchange="mcePriceRefresh()"></select>
+                    <!-- Yeni Fiyat Girişi -->
+                    <div class="mcp-panel">
+                        <div class="mcp-panel__head" style="margin-bottom:12px;">
+                            <div class="mcp-panel__title">Yeni Fiyat Girişi</div>
                         </div>
-                        <div class="mce-field" id="mcePriceComboWrap" style="display:none;">
-                            <label class="mce-label">Kombinasyon</label>
-                            <select id="mcePriceCombo" class="mce-input mce-select" onchange="mcePricePrefill()"></select>
+                        <div class="mcp-form">
+                            <div class="mce-field">
+                                <label class="mce-label">Fiyat Listesi</label>
+                                <select id="mcePriceGroup" class="mce-input mce-select" onchange="mcePriceRefresh()"></select>
+                            </div>
+                            <div class="mce-field" id="mcePriceComboWrap" style="display:none;">
+                                <label class="mce-label">Kombinasyon</label>
+                                <select id="mcePriceCombo" class="mce-input mce-select" onchange="mcePricePrefill()"></select>
+                            </div>
+                            <div class="mce-field">
+                                <label class="mce-label">Döviz</label>
+                                <select id="mcePriceCurrency" class="mce-input mce-select" onchange="mcePricePrefill()"></select>
+                            </div>
+                            <div class="mce-field">
+                                <label class="mce-label">Geçerlilik Tarihi</label>
+                                <input type="date" id="mcePriceDate" class="mce-input" onchange="mcePricePrefill()" />
+                            </div>
+                            <div class="mce-field">
+                                <label class="mce-label" id="mcePriceBuyLabel">Alış Fiyatı</label>
+                                <input type="number" step="0.0001" min="0" id="mcePriceBuy" class="mce-input" placeholder="0,00" />
+                            </div>
+                            <div class="mce-field">
+                                <label class="mce-label" id="mcePriceSellLabel">Satış Fiyatı</label>
+                                <input type="number" step="0.0001" min="0" id="mcePriceSell" class="mce-input" placeholder="0,00" />
+                            </div>
+                            <div class="mce-field mcp-form__action">
+                                <button type="button" class="mce-btn mce-btn--primary" id="mcePriceSaveBtn" onclick="mcePriceSave()" style="width:100%;">Fiyat Kaydet</button>
+                            </div>
                         </div>
-                        <div class="mce-field">
-                            <label class="mce-label">Döviz</label>
-                            <select id="mcePriceCurrency" class="mce-input mce-select" onchange="mcePricePrefill()"></select>
-                        </div>
-                        <div class="mce-field">
-                            <label class="mce-label">Geçerlilik Tarihi</label>
-                            <input type="date" id="mcePriceDate" class="mce-input" onchange="mcePricePrefill()" />
-                        </div>
-                        <div class="mce-field">
-                            <label class="mce-label" id="mcePriceBuyLabel">Alış Fiyatı</label>
-                            <input type="number" step="0.0001" min="0" id="mcePriceBuy" class="mce-input" placeholder="0,00" />
-                        </div>
-                        <div class="mce-field">
-                            <label class="mce-label" id="mcePriceSellLabel">Satış Fiyatı</label>
-                            <input type="number" step="0.0001" min="0" id="mcePriceSell" class="mce-input" placeholder="0,00" />
-                        </div>
-                        <div class="mce-field">
-                            <button type="button" class="mce-btn mce-btn--primary" id="mcePriceSaveBtn" onclick="mcePriceSave()" style="width:100%;">Fiyat Kaydet</button>
-                        </div>
+                        <div id="mcePriceMsg" style="margin-top:12px;font-size:.8rem;display:none;"></div>
                     </div>
-                    <div id="mcePriceMsg" style="margin-top:10px;font-size:.8rem;display:none;"></div>
 
-                    <div style="margin-top:18px;">
-                        <div style="display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
-                            <div style="font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);">Fiyat Raporu</div>
-                            <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap;">
-                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Baş. Tarih</label><input type="date" id="mcePriceFltFrom" class="mce-input" style="padding:5px 8px;" /></div>
-                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Bit. Tarih</label><input type="date" id="mcePriceFltTo" class="mce-input" style="padding:5px 8px;" /></div>
-                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Döviz</label><select id="mcePriceFltCur" class="mce-input mce-select" style="padding:5px 8px;"><option value="">Tümü</option></select></div>
-                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Tip</label><select id="mcePriceFltType" class="mce-input mce-select" style="padding:5px 8px;"><option value="">Tümü</option><option value="b">Alış</option><option value="s">Satış</option></select></div>
-                                <button type="button" class="mce-btn mce-btn--secondary" style="padding:6px 12px;" onclick="mcePriceLoadList()">Filtrele</button>
+                    <!-- Fiyat Geçmişi / Rapor -->
+                    <div class="mcp-panel">
+                        <div class="mcp-panel__head">
+                            <div class="mcp-panel__title">Fiyat Geçmişi</div>
+                            <div class="mcp-filters">
+                                <div class="mce-field">
+                                    <label class="mce-label">Tarih Filtresi</label>
+                                    <select id="mcePriceFltMode" class="mce-input mce-select" onchange="mcePriceModeChange()">
+                                        <option value="range">Tarih Aralığı</option>
+                                        <option value="ason">Belirli Tarihte Geçerli</option>
+                                    </select>
+                                </div>
+                                <span id="mcePriceRangeInputs" style="display:inline-flex;gap:8px;">
+                                    <div class="mce-field"><label class="mce-label">Baş. Tarih</label><input type="date" id="mcePriceFltFrom" class="mce-input" /></div>
+                                    <div class="mce-field"><label class="mce-label">Bit. Tarih</label><input type="date" id="mcePriceFltTo" class="mce-input" /></div>
+                                </span>
+                                <span id="mcePriceAsonInputs" style="display:none;gap:8px;">
+                                    <div class="mce-field"><label class="mce-label">Tarih</label><input type="date" id="mcePriceFltActive" class="mce-input" /></div>
+                                </span>
+                                <div class="mce-field"><label class="mce-label">Döviz</label><select id="mcePriceFltCur" class="mce-input mce-select"><option value="">Tümü</option></select></div>
+                                <div class="mce-field"><label class="mce-label">Tip</label><select id="mcePriceFltType" class="mce-input mce-select"><option value="">Tümü</option><option value="b">Alış</option><option value="s">Satış</option></select></div>
+                                <div class="mce-field mcp-form__action"><button type="button" class="mce-btn mce-btn--secondary" onclick="mcePriceLoadList()">Filtrele</button></div>
                             </div>
                         </div>
                         <div id="mcePriceList"></div>
@@ -4864,13 +4904,18 @@
             var gsel = document.getElementById('mcePriceGroup');
             if (gsel) {
                 gsel.innerHTML = '';
-                if (!_mcePriceGroups.length) {
-                    var oe = document.createElement('option'); oe.value = ''; oe.textContent = '(Fiyat listesi tanımlı değil)'; gsel.appendChild(oe);
-                }
+                var defaultGroup = _mcePriceGroups.filter(function(g){ return g.isDefault; })[0];
+                // "Genel Fiyat Listesi" secenegi HER ZAMAN ilk sirada. Genel liste henuz yoksa
+                // '__ensure__' sentinel'i; ilk fiyat kaydinda kod otomatik olusturulur.
+                var og = document.createElement('option');
+                og.value = defaultGroup ? String(defaultGroup.id) : '__ensure__';
+                og.textContent = 'Genel Fiyat Listesi';
+                og.selected = true;
+                gsel.appendChild(og);
                 _mcePriceGroups.forEach(function(g) {
+                    if (g.isDefault) return; // genel zaten ustte
                     var o = document.createElement('option');
-                    o.value = g.id; o.textContent = g.name + (g.isDefault ? '  (Genel)' : '');
-                    if (g.isDefault) o.selected = true;
+                    o.value = String(g.id); o.textContent = g.name;
                     gsel.appendChild(o);
                 });
             }
@@ -4917,82 +4962,126 @@
     };
 
     window.mcePriceSave = function() {
-        var groupId = parseInt((document.getElementById('mcePriceGroup') || {}).value) || 0;
+        var groupVal = (document.getElementById('mcePriceGroup') || {}).value || '';
         var currencyId = parseInt((document.getElementById('mcePriceCurrency') || {}).value) || 0;
         var validOn = (document.getElementById('mcePriceDate') || {}).value || '';
         var buyEl = document.getElementById('mcePriceBuy');
         var sellEl = document.getElementById('mcePriceSell');
         var msg = document.getElementById('mcePriceMsg');
-        function showMsg(t, ok) { if (msg) { msg.style.display = ''; msg.textContent = t; msg.style.color = ok ? '#34d399' : '#f87171'; } }
+        var btn = document.getElementById('mcePriceSaveBtn');
+        function showMsg(t, ok) { if (msg) { msg.style.display = ''; msg.textContent = t; msg.style.color = ok ? '#059669' : '#dc2626'; } }
+        function unlock() { if (btn) btn.disabled = false; }
 
         if (!(currentId > 0)) { showMsg('Önce malzeme kartını kaydedin.', false); return; }
-        if (!(groupId > 0)) { showMsg('Fiyat listesi seçin.', false); return; }
         if (!(currencyId > 0)) { showMsg('Döviz seçin.', false); return; }
         if (!validOn) { showMsg('Geçerlilik tarihi girin.', false); return; }
         var buy = (buyEl && !buyEl.disabled && buyEl.value !== '') ? parseFloat(buyEl.value) : null;
         var sell = (sellEl && !sellEl.disabled && sellEl.value !== '') ? parseFloat(sellEl.value) : null;
         if (buy == null && sell == null) { showMsg('En az bir fiyat (alış veya satış) girin.', false); return; }
 
-        function postBulk(pt, price) {
-            return fetch('/PriceList/SaveBulkPriceEntries', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-                body: JSON.stringify({ groupId: groupId, currencyId: currencyId, priceType: pt, validFrom: validOn, validTo: null, lines: [{ itemId: currentId, configId: null, price: price }] })
-            }).then(function(r){ return r.json(); });
-        }
-        var calls = [];
-        if (buy != null)  calls.push(postBulk('b', buy));
-        if (sell != null) calls.push(postBulk('s', sell));
-
-        var btn = document.getElementById('mcePriceSaveBtn');
         if (btn) btn.disabled = true;
-        Promise.all(calls).then(function(results) {
-            var failed = results.filter(function(d){ return !d || d.success === false; });
-            if (failed.length) showMsg((failed[0] && failed[0].message) || 'Fiyat kaydı başarısız.', false);
-            else showMsg('Fiyat kaydedildi.', true);
-            mcePriceLoadList();
-        }).catch(function(e){ showMsg('Bağlantı hatası: ' + e.message, false); })
-          .then(function(){ if (btn) btn.disabled = false; });
+
+        // Genel liste henuz yoksa (__ensure__) kod OTOMATIK olusturulur → gercek groupId doner.
+        function withGroup(cb) {
+            if (groupVal === '__ensure__') {
+                fetch('/PriceList/EnsureDefaultPriceGroup', { method: 'POST', credentials: 'same-origin' })
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){ if (d && d.success && d.groupId) cb(d.groupId, true); else { showMsg((d && d.message) || 'Genel liste oluşturulamadı.', false); unlock(); } })
+                    .catch(function(){ showMsg('Genel liste oluşturulamadı.', false); unlock(); });
+            } else {
+                var gid = parseInt(groupVal) || 0;
+                if (gid > 0) cb(gid, false); else { showMsg('Fiyat listesi seçin.', false); unlock(); }
+            }
+        }
+
+        withGroup(function(groupId, created) {
+            function postBulk(pt, price) {
+                return fetch('/PriceList/SaveBulkPriceEntries', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+                    body: JSON.stringify({ groupId: groupId, currencyId: currencyId, priceType: pt, validFrom: validOn, validTo: null, lines: [{ itemId: currentId, configId: null, price: price }] })
+                }).then(function(r){ return r.json(); });
+            }
+            var calls = [];
+            if (buy != null)  calls.push(postBulk('b', buy));
+            if (sell != null) calls.push(postBulk('s', sell));
+            Promise.all(calls).then(function(results) {
+                var failed = results.filter(function(d){ return !d || d.success === false; });
+                if (failed.length) showMsg((failed[0] && failed[0].message) || 'Fiyat kaydı başarısız.', false);
+                else showMsg('Fiyat kaydedildi.', true);
+                if (created) { _mcePriceInited = false; mcePriceActivate(); } // yeni genel liste → dropdown+liste yenile
+                else mcePriceLoadList();
+            }).catch(function(e){ showMsg('Bağlantı hatası: ' + e.message, false); })
+              .then(unlock);
+        });
     };
 
     window.mcePriceLoadList = function() {
-        var groupId = parseInt((document.getElementById('mcePriceGroup') || {}).value) || 0;
+        var groupVal = (document.getElementById('mcePriceGroup') || {}).value || '';
         var listEl = document.getElementById('mcePriceList');
         if (!listEl) return;
-        if (!(currentId > 0) || !(groupId > 0)) { listEl.innerHTML = ''; return; }
-        listEl.innerHTML = '<div style="padding:10px;color:rgba(255,255,255,.4);font-size:.78rem;">Yükleniyor...</div>';
+        if (!(currentId > 0)) { listEl.innerHTML = ''; return; }
+        if (groupVal === '__ensure__') {
+            listEl.innerHTML = '<div class="mcp-empty">Genel fiyat listesi henüz oluşturulmadı. İlk fiyatı kaydettiğinizde otomatik oluşur.</div>';
+            var cnt0 = document.getElementById('mcePriceCount'); if (cnt0) { cnt0.textContent = '0'; cnt0.classList.add('is-empty'); }
+            return;
+        }
+        var groupId = parseInt(groupVal) || 0;
+        if (!(groupId > 0)) { listEl.innerHTML = ''; return; }
+        listEl.innerHTML = '<div class="mcp-empty">Yükleniyor…</div>';
+
         var url = '/PriceList/GetPriceListEntries?groupId=' + groupId + '&itemId=' + currentId + '&pageSize=500';
-        var fFrom = (document.getElementById('mcePriceFltFrom') || {}).value || '';
-        var fTo   = (document.getElementById('mcePriceFltTo')   || {}).value || '';
+        // Tarih modu: 'range' → ValidFrom aralığı; 'ason' → tek tarihte YÜRÜRLÜKTEKİ fiyat (ActiveOn)
+        var mode = (document.getElementById('mcePriceFltMode') || {}).value || 'range';
+        if (mode === 'ason') {
+            var fActive = (document.getElementById('mcePriceFltActive') || {}).value || '';
+            if (fActive) url += '&activeOn=' + fActive;
+        } else {
+            var fFrom = (document.getElementById('mcePriceFltFrom') || {}).value || '';
+            var fTo   = (document.getElementById('mcePriceFltTo')   || {}).value || '';
+            if (fFrom) url += '&validFromMin=' + fFrom;
+            if (fTo)   url += '&validFromMax=' + fTo;
+        }
         var fCur  = (document.getElementById('mcePriceFltCur')  || {}).value || '';
         var fType = (document.getElementById('mcePriceFltType') || {}).value || '';
-        if (fFrom) url += '&validFromMin=' + fFrom;
-        if (fTo)   url += '&validFromMax=' + fTo;
-        if (fCur)  url += '&currencyId='   + fCur;
-        if (fType) url += '&priceType='    + fType;
+        if (fCur)  url += '&currencyId=' + fCur;
+        if (fType) url += '&priceType='  + fType;
+
         fetch(url, { credentials: 'same-origin' })
             .then(function(r){ return r.json(); })
             .then(function(data) {
                 var items = (data && data.items) || [];
                 var cntEl = document.getElementById('mcePriceCount');
                 if (cntEl) { cntEl.textContent = items.length; if (items.length) cntEl.classList.remove('is-empty'); else cntEl.classList.add('is-empty'); }
-                if (!items.length) { listEl.innerHTML = '<div style="padding:12px;color:rgba(255,255,255,.4);font-size:.8rem;font-style:italic;">Bu ürün için kayıtlı fiyat yok.</div>'; return; }
+                if (!items.length) { listEl.innerHTML = '<div class="mcp-empty">Seçilen filtrede kayıtlı fiyat bulunmuyor.</div>'; return; }
                 var rows = items.map(function(e) {
-                    var typeLabel = e.priceType === 'b' ? 'Alış' : (e.priceType === 's' ? 'Satış' : 'Maliyet');
-                    var typeColor = e.priceType === 'b' ? '#f59e0b' : (e.priceType === 's' ? '#34d399' : '#94a3b8');
+                    var isBuy = e.priceType === 'b', isSell = e.priceType === 's';
+                    var typeLabel = isBuy ? 'Alış' : (isSell ? 'Satış' : 'Maliyet');
+                    var badgeBg = isBuy ? 'rgba(245,158,11,.16)' : (isSell ? 'rgba(16,185,129,.16)' : 'rgba(148,163,184,.16)');
+                    var badgeFg = isBuy ? '#b45309' : (isSell ? '#047857' : '#475569');
                     var priceTxt = Number(e.price).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-                    return '<tr style="border-top:1px solid rgba(255,255,255,.05);">' +
-                        '<td style="padding:6px 10px;"><span style="font-size:.7rem;font-weight:700;color:' + typeColor + ';">' + typeLabel + '</span></td>' +
-                        '<td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;">' + priceTxt + '</td>' +
-                        '<td style="padding:6px 10px;">' + (e.currencyCode || '') + '</td>' +
-                        '<td style="padding:6px 10px;">' + (e.validFrom || '') + '</td>' +
-                        '<td style="padding:6px 10px;text-align:right;"><button type="button" class="mce-btn mce-btn--danger" style="padding:3px 9px;font-size:.7rem;" onclick="mcePriceDelete(' + e.id + ')">Sil</button></td>' +
+                    return '<tr>' +
+                        '<td><span class="mcp-badge" style="background:' + badgeBg + ';color:' + badgeFg + ';">' + typeLabel + '</span></td>' +
+                        '<td class="mcp-num">' + priceTxt + '</td>' +
+                        '<td>' + (e.currencyCode || '') + '</td>' +
+                        '<td>' + (e.validFrom || '') + '</td>' +
+                        '<td>' + (e.validTo || '<span style="opacity:.5;">süresiz</span>') + '</td>' +
+                        '<td style="text-align:right;"><button type="button" class="mce-btn mce-btn--danger" style="padding:3px 10px;font-size:.7rem;" onclick="mcePriceDelete(' + e.id + ')">Sil</button></td>' +
                         '</tr>';
                 }).join('');
-                listEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.8rem;">' +
-                    '<thead><tr style="text-align:left;color:rgba(255,255,255,.45);font-size:.72rem;">' +
-                    '<th style="padding:4px 10px;">Tip</th><th style="padding:4px 10px;text-align:right;">Fiyat</th><th style="padding:4px 10px;">Döviz</th><th style="padding:4px 10px;">Geçerlilik</th><th></th>' +
-                    '</tr></thead><tbody>' + rows + '</tbody></table>';
-            }).catch(function(){ listEl.innerHTML = '<div style="padding:10px;color:#f87171;font-size:.78rem;">Fiyatlar yüklenemedi.</div>'; });
+                listEl.innerHTML = '<div style="overflow-x:auto;"><table class="mcp-table">' +
+                    '<thead><tr><th>Tip</th><th class="mcp-num">Fiyat</th><th>Döviz</th><th>Geçerlilik Baş.</th><th>Bitiş</th><th></th></tr></thead>' +
+                    '<tbody>' + rows + '</tbody></table></div>';
+            }).catch(function(){ listEl.innerHTML = '<div class="mcp-empty" style="color:#dc2626;">Fiyatlar yüklenemedi.</div>'; });
+    };
+
+    // Tarih filtresi modu: Aralık ↔ Belirli Tarih (ActiveOn) input gruplarını değiştir
+    window.mcePriceModeChange = function() {
+        var mode = (document.getElementById('mcePriceFltMode') || {}).value || 'range';
+        var range = document.getElementById('mcePriceRangeInputs');
+        var ason  = document.getElementById('mcePriceAsonInputs');
+        if (range) range.style.display = (mode === 'range') ? 'inline-flex' : 'none';
+        if (ason)  ason.style.display  = (mode === 'ason')  ? 'inline-flex' : 'none';
+        mcePriceLoadList();
     };
 
     window.mcePriceDelete = function(id) {
