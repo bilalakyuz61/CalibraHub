@@ -74,6 +74,7 @@ function enrichMaterialPatch(patch, materialCode) {
   // rehberden malzeme secilince satis siparisi grid'inde "Seri" kolonu (visibleWhenKey=trackSerial)
   // gorunsun ve otomatik seri modali acilsin. Snapshot GetMaterials'tan boolean gelir (=== true calisir).
   fillIfMissing('trackSerial',       readCaseInsensitive(m, 'trackSerial'))
+  fillIfMissing('trackLot',          readCaseInsensitive(m, 'trackLot'))
   fillIfMissing('autoSerial',        readCaseInsensitive(m, 'autoSerial'))
   return patch
 }

@@ -604,22 +604,22 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if (string.Equals(trackingType, "Lot", StringComparison.OrdinalIgnoreCase))
                 {
                     if (breakdown.Count == 0)
-                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Lot zorunlu (stok lot-takipli): '{label}'. Lot/Seri butonundan en az bir lot ve miktar girilmelidir."); }
+                    { throw new InvalidOperationException($"Lot zorunlu (stok lot-takipli): '{label}'. Lot/Seri butonundan en az bir lot ve miktar girilmelidir."); }
                     if (breakdown.Select(b => b.LotNo.ToLowerInvariant()).Distinct().Count() != breakdown.Count)
-                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Aynı lot birden fazla girildi: '{label}'."); }
+                    { throw new InvalidOperationException($"Aynı lot birden fazla girildi: '{label}'."); }
                     var lotSum = breakdown.Sum(b => b.Qty);
                     if (Math.Abs(lotSum - line.Qty) > 0.0001m)
-                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Lot miktar toplamı sayılan miktara eşit olmalı — {lotSum:0.##} lot / {line.Qty:0.##} sayılan ('{label}')."); }
+                    { throw new InvalidOperationException($"Lot miktar toplamı sayılan miktara eşit olmalı — {lotSum:0.##} lot / {line.Qty:0.##} sayılan ('{label}')."); }
                 }
                 if (string.Equals(trackingType, "Serial", StringComparison.OrdinalIgnoreCase))
                 {
                     if (line.Qty != Math.Floor(line.Qty))
-                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Seri takipli stokta sayılan miktar tam sayı olmalı: '{label}'."); }
+                    { throw new InvalidOperationException($"Seri takipli stokta sayılan miktar tam sayı olmalı: '{label}'."); }
                     var origCount = (line.Serials ?? []).Count(x => !string.IsNullOrWhiteSpace(x));
                     if (serialList.Count != origCount)
-                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Aynı seri birden fazla girildi: '{label}'."); }
+                    { throw new InvalidOperationException($"Aynı seri birden fazla girildi: '{label}'."); }
                     if (serialList.Count != (int)line.Qty)
-                    { await tx.RollbackAsync(ct); throw new InvalidOperationException($"Seri No zorunlu (stok seri-takipli): seri adedi sayılan miktara eşit olmalı — {serialList.Count} seri / {line.Qty:0.##} adet ('{label}')."); }
+                    { throw new InvalidOperationException($"Seri No zorunlu (stok seri-takipli): seri adedi sayılan miktara eşit olmalı — {serialList.Count} seri / {line.Qty:0.##} adet ('{label}')."); }
                 }
                 var serialsText = serialList.Count > 0 ? string.Join("\n", serialList) : null;
                 var lotBreakdownJson = breakdown.Count > 0

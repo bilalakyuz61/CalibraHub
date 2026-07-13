@@ -912,7 +912,26 @@
         _gridMounted = true;
         try {
             window.CalibraHub.mountLineItemsGrid(el, LINE_GRID_CONFIG, {
-                onRowsChange: function(rows) { window.__INV_LINES__ = rows || []; }
+                onRowsChange: function(rows) {
+                    window.__INV_LINES__ = rows || [];
+                    // Yeni kalemler header "Sayım Deposu"nu varsayılan devralır (satır bazlı override serbest).
+                    // Lokasyonu olmayan (yeni eklenen) satırlara header depoyu bas; dolu olanlara dokunma.
+                    var locEl = document.getElementById('invLocation');
+                    var headLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
+                    if (headLoc && Array.isArray(rows) && rows.length > 0) {
+                        var changed = false;
+                        var next = rows.map(function(r) {
+                            if (r && r.materialCode && (r.fromLocationId == null || r.fromLocationId === '')) {
+                                changed = true;
+                                return Object.assign({}, r, { fromLocationId: headLoc });
+                            }
+                            return r;
+                        });
+                        if (changed && window.CalibraHub && window.CalibraHub.whLineGrid) {
+                            window.CalibraHub.whLineGrid.setRows(next);
+                        }
+                    }
+                }
             });
             var tries = 0;
             var timer = setInterval(function() {
@@ -973,6 +992,14 @@
             sc.onerror = function() { console.error('[INV] Bundle yüklenemedi'); };
             document.head.appendChild(sc);
         }
+
+        // Malzeme snapshot'ı: rehber (guide) view'i trackSerial/trackLot döndürmez —
+        // enrichMaterialPatch bu global'den eksik izleme bayraklarını tamamlar, böylece
+        // seri/lot-takipli kalemde "Lot / Seri" butonu görünür (DocumentEdit ile aynı desen).
+        fetch('/Warehouse/GetMaterialsJson?docType=sayim', { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : []; })
+            .then(function(d) { window.__SQ_MATERIALS__ = Array.isArray(d) ? d : []; })
+            .catch(function() { window.__SQ_MATERIALS__ = window.__SQ_MATERIALS__ || []; });
 
         loadLocations().then(function() {
             ensureBundle(function() {
