@@ -813,12 +813,12 @@
 
     // Sadece büyüteç ikonu rehberi açar — input click/focus rehberi tetiklemez.
     // (Kullanıcı kodu biliyorsa elle yazıp Ekle'ye basabilir; rehbere zorlanmaz.)
-    $addSearch.addEventListener('click', openAddPicker);
-    $addClear.addEventListener('click', clearAdd);
+    if ($addSearch) $addSearch.addEventListener('click', openAddPicker);
+    if ($addClear) $addClear.addEventListener('click', clearAdd);
 
     // Manuel input — kullanıcı yazınca _pickedContact (rehberden seçilen) ile
     // input arasındaki uyumu kaybetmemek için sıfırlanır. Boşsa Ekle disable.
-    $addCode.addEventListener('input', function () {
+    if ($addCode) $addCode.addEventListener('input', function () {
         var typed = ($addCode.value || '').trim();
         if (_pickedContact && _pickedContact.accountCode !== typed) {
             _pickedContact = null;
@@ -832,14 +832,14 @@
     });
 
     // Enter → Ekle butonu (rehbere basmadan hızlı ekleme)
-    $addCode.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !$addBtn.disabled) {
+    if ($addCode) $addCode.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && $addBtn && !$addBtn.disabled) {
             e.preventDefault();
             $addBtn.click();
         }
     });
 
-    $addBtn.addEventListener('click', function () {
+    if ($addBtn) $addBtn.addEventListener('click', function () {
         if (!groupId) return;
         var typed = ($addCode.value || '').trim();
         if (!typed) return;

@@ -239,27 +239,38 @@ public sealed class PriceListController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> SavePriceGroupJson([FromBody] PriceGroupInput input, CancellationToken ct)
+    public async Task<IActionResult> SavePriceGroupJson([FromBody] PriceGroupInput? input, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(input.Name))
-            return Json(new { success = false, message = "Ad alani zorunludur." });
+        try
+        {
+            if (input is null || string.IsNullOrWhiteSpace(input.Name))
+                return Json(new { success = false, message = "Ad alani zorunludur." });
 
-        if (input.Id.HasValue && input.Id.Value > 0)
-        {
-            var (ok, err) = await _svc.UpdateGroupAsync(
-                new UpdatePriceGroupRequest(input.Id.Value, input.Code!, input.Name!, input.Description, input.IsActive,
-                    input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
-            // Genel Fiyat Listesi isareti (sirket basina tek): true → genel yap, false → kaldir.
-            if (ok) await _svc.SetDefaultGroupAsync(input.Id.Value, input.IsDefault, ct);
-            return Json(new { success = ok, message = ok ? "Guncellendi." : err, id = input.Id.Value });
+            // Kod kullanici tarafindan girilmez → bos gecilir; servis otomatik turetir/korur.
+            var code = input.Code ?? string.Empty;
+
+            if (input.Id.HasValue && input.Id.Value > 0)
+            {
+                var (ok, err) = await _svc.UpdateGroupAsync(
+                    new UpdatePriceGroupRequest(input.Id.Value, code, input.Name, input.Description, input.IsActive,
+                        input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
+                // Genel Fiyat Listesi isareti (sirket basina tek): true → genel yap, false → kaldir.
+                if (ok) await _svc.SetDefaultGroupAsync(input.Id.Value, input.IsDefault, ct);
+                return Json(new { success = ok, message = ok ? "Guncellendi." : err, id = input.Id.Value });
+            }
+            else
+            {
+                var (ok, err, newId) = await _svc.CreateGroupAsync(
+                    new CreatePriceGroupRequest(code, input.Name, input.Description, input.IsActive,
+                        input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
+                if (ok && newId.HasValue && input.IsDefault) await _svc.SetDefaultGroupAsync(newId.Value, true, ct);
+                return Json(new { success = ok, message = ok ? "Kaydedildi." : err, id = newId });
+            }
         }
-        else
+        catch (Exception ex)
         {
-            var (ok, err, newId) = await _svc.CreateGroupAsync(
-                new CreatePriceGroupRequest(input.Code!, input.Name!, input.Description, input.IsActive,
-                    input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
-            if (ok && newId.HasValue && input.IsDefault) await _svc.SetDefaultGroupAsync(newId.Value, true, ct);
-            return Json(new { success = ok, message = ok ? "Kaydedildi." : err, id = newId });
+            _logger.LogError(ex, "SavePriceGroupJson hatasi (name={Name})", input?.Name);
+            return Json(new { success = false, message = "Kayit sirasinda hata: " + ex.Message });
         }
     }
 
