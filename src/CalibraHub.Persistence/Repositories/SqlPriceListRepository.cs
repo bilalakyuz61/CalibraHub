@@ -311,6 +311,11 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             sb.AppendLine("  AND p.[ValidFrom] >= @ValidFromMin");
             cmd.Parameters.Add(new SqlParameter("@ValidFromMin", vfm.Date));
         }
+        if (filter.ValidFromMax is DateTime vfmx)
+        {
+            sb.AppendLine("  AND p.[ValidFrom] <= @ValidFromMax");
+            cmd.Parameters.Add(new SqlParameter("@ValidFromMax", vfmx.Date));
+        }
         if (filter.ValidToMax is DateTime vtm)
         {
             sb.AppendLine("  AND (p.[ValidTo] IS NULL OR p.[ValidTo] <= @ValidToMax)");

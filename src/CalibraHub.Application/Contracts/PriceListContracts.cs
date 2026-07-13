@@ -95,7 +95,8 @@ public sealed record PriceListFilter(
     DateTime? ActiveOn,
     int Page,
     int PageSize,
-    int? ItemId = null);   // Malzeme kartindan tek urun fiyatlarini listelemek icin
+    int? ItemId = null,           // Malzeme kartindan tek urun fiyatlarini listelemek icin
+    DateTime? ValidFromMax = null); // Tarih araligi ust siniri (ValidFrom <= max) — rapor filtresi
 
 public sealed record PagedPriceListResult(
     IReadOnlyCollection<PriceListDto> Items,

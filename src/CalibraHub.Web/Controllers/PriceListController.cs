@@ -568,6 +568,7 @@ public sealed class PriceListController : Controller
         int page = 1,
         int pageSize = 50,
         int? itemId = null,
+        DateTime? validFromMax = null,
         CancellationToken ct = default)
     {
         try
@@ -581,7 +582,8 @@ public sealed class PriceListController : Controller
                 ActiveOn: activeOn,
                 Page: page,
                 PageSize: pageSize,
-                ItemId: itemId);
+                ItemId: itemId,
+                ValidFromMax: validFromMax);
 
             var result = await _svc.GetEntriesByGroupAsync(groupId, filter, ct);
             return Json(new

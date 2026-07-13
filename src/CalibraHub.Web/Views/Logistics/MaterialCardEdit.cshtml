@@ -2263,7 +2263,16 @@
                     <div id="mcePriceMsg" style="margin-top:10px;font-size:.8rem;display:none;"></div>
 
                     <div style="margin-top:18px;">
-                        <div style="font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:8px;">Kayıtlı Fiyatlar</div>
+                        <div style="display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+                            <div style="font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);">Fiyat Raporu</div>
+                            <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap;">
+                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Baş. Tarih</label><input type="date" id="mcePriceFltFrom" class="mce-input" style="padding:5px 8px;" /></div>
+                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Bit. Tarih</label><input type="date" id="mcePriceFltTo" class="mce-input" style="padding:5px 8px;" /></div>
+                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Döviz</label><select id="mcePriceFltCur" class="mce-input mce-select" style="padding:5px 8px;"><option value="">Tümü</option></select></div>
+                                <div class="mce-field"><label class="mce-label" style="font-size:.66rem;">Tip</label><select id="mcePriceFltType" class="mce-input mce-select" style="padding:5px 8px;"><option value="">Tümü</option><option value="b">Alış</option><option value="s">Satış</option></select></div>
+                                <button type="button" class="mce-btn mce-btn--secondary" style="padding:6px 12px;" onclick="mcePriceLoadList()">Filtrele</button>
+                            </div>
+                        </div>
                         <div id="mcePriceList"></div>
                     </div>
                 </div>
@@ -4866,12 +4875,11 @@
                 });
             }
             var csel = document.getElementById('mcePriceCurrency');
-            if (csel) {
-                csel.innerHTML = '';
-                (res[1] || []).forEach(function(c) {
-                    var o = document.createElement('option'); o.value = c.id; o.textContent = c.code || c.name; csel.appendChild(o);
-                });
-            }
+            var fcur = document.getElementById('mcePriceFltCur');
+            (res[1] || []).forEach(function(c) {
+                if (csel) { var o = document.createElement('option'); o.value = c.id; o.textContent = c.code || c.name; csel.appendChild(o); }
+                if (fcur) { var o2 = document.createElement('option'); o2.value = c.id; o2.textContent = c.code || c.name; fcur.appendChild(o2); }
+            });
             mcePriceRefresh();
         }).catch(function(){});
     };
@@ -4952,7 +4960,16 @@
         if (!listEl) return;
         if (!(currentId > 0) || !(groupId > 0)) { listEl.innerHTML = ''; return; }
         listEl.innerHTML = '<div style="padding:10px;color:rgba(255,255,255,.4);font-size:.78rem;">Yükleniyor...</div>';
-        fetch('/PriceList/GetPriceListEntries?groupId=' + groupId + '&itemId=' + currentId + '&pageSize=200', { credentials: 'same-origin' })
+        var url = '/PriceList/GetPriceListEntries?groupId=' + groupId + '&itemId=' + currentId + '&pageSize=500';
+        var fFrom = (document.getElementById('mcePriceFltFrom') || {}).value || '';
+        var fTo   = (document.getElementById('mcePriceFltTo')   || {}).value || '';
+        var fCur  = (document.getElementById('mcePriceFltCur')  || {}).value || '';
+        var fType = (document.getElementById('mcePriceFltType') || {}).value || '';
+        if (fFrom) url += '&validFromMin=' + fFrom;
+        if (fTo)   url += '&validFromMax=' + fTo;
+        if (fCur)  url += '&currencyId='   + fCur;
+        if (fType) url += '&priceType='    + fType;
+        fetch(url, { credentials: 'same-origin' })
             .then(function(r){ return r.json(); })
             .then(function(data) {
                 var items = (data && data.items) || [];
