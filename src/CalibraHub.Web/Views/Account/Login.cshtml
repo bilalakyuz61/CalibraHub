@@ -649,6 +649,8 @@
 
         // Yalnizca ŞIFRE yazilirken ibreler rastgele dagilir; sifre bosken notr dinlenme.
         // (Kullanici adi / sirket alanlari ibreleri oynatmaz.)
+        // Her tuşta SIRAYLA tek bir ibre oynar: 1. tuş→ibre1, 2. tuş→ibre2, 3. tuş→ibre3, 4. tuş→ibre1…
+        var keyIdx = 0;
         function evalFields() {
             if (mode === 'fail' || mode === 'success') { mode = 'idle'; dial.classList.remove('is-fail', 'is-cal'); }
             if (mode === 'success' || mode === 'measuring') return;
@@ -657,9 +659,14 @@
                 mode = 'calibrating';
                 dial.classList.add('is-calibrating');
                 setStatus('Kalibre ediliyor…');
-                randTargets(); kick();                     // her tuşta ibreler yeniden dağılır
+                // Sadece sıradaki ibreye yeni hedef ver → o ibre mekanik tik ile oynar,
+                // diğer ikisi olduğu yerde durur. Her tuşta bir sonraki ibreye geçilir.
+                needles[keyIdx % 3].tgt = Math.random() * 100;
+                keyIdx++;
+                kick();
             } else {
                 mode = 'idle';
+                keyIdx = 0;                                // şifre boşaldı → döngü baştan (ibre1)
                 dial.classList.remove('is-calibrating');
                 setStatus('Kalibrasyon bekleniyor');
                 needles[0].tgt = 26; needles[1].tgt = 54; needles[2].tgt = 78;   // nötr dinlenme
