@@ -21,17 +21,29 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IDocumentNumberService _numberService;
+    private readonly ICompanyParameterService _companyParams;
     private readonly string _schema;
 
     public SqlStockDocRepository(
         SqlServerConnectionFactory connectionFactory,
         IDocumentNumberService numberService,
+        ICompanyParameterService companyParams,
         CalibraDatabaseOptions options)
     {
         _connectionFactory = connectionFactory;
         _numberService = numberService;
+        _companyParams = companyParams;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
     }
+
+    /// <summary>Seri benzersizlik kapsamı "Global" mi (barkod gibi tüm malzemeler arası tek)?</summary>
+    private async Task<bool> IsSerialUniqueGlobalAsync(CancellationToken ct)
+        => string.Equals(
+            await _companyParams.GetStringAsync(
+                CalibraHub.Application.Constants.TraceabilityParameters.FormCode,
+                CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeKey, ct),
+            CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeGlobal,
+            StringComparison.OrdinalIgnoreCase);
 
     private string T(string table) => $"[{_schema}].[{table}]";
 
