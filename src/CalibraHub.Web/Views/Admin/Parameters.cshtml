@@ -318,6 +318,7 @@ body.app-theme-dark .ap-tab.is-active::before {
             <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
             <button type="button" class="ap-tab"           data-pane="stok"      data-label="Stok">Stok</button>
             <button type="button" class="ap-tab"           data-pane="satissiparis" data-label="Satış Sipariş">Satış Sipariş</button>
+            <button type="button" class="ap-tab"           data-pane="izlenebilirlik" data-label="İzlenebilirlik">İzlenebilirlik</button>
             <button type="button" class="ap-tab"           data-pane="guvenlik"  data-label="Güvenlik">Güvenlik</button>
         </aside>
 
@@ -694,6 +695,33 @@ body.app-theme-dark .ap-tab.is-active::before {
                     sync();
                 })();
                 </script>
+            </section>
+
+            @* ── İzlenebilirlik ───────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-izlenebilirlik">
+                <h2>İzlenebilirlik</h2>
+                <div class="ap-hint">
+                    Lot/seri takibi malzeme bazında açılır (Malzeme Kartı → İzlenebilirlik). Buradaki
+                    ayarlar seri girişinde uygulanacak kontrolleri yönetir.
+                </div>
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Seri No Benzersizliği</div>
+                        <div class="ap-row-desc">
+                            <strong>Ürün Bazında:</strong> Aynı seri no farklı malzemelerde kullanılabilir
+                            (yalnızca aynı malzeme içinde tekildir).<br />
+                            <strong>Genel (barkod gibi):</strong> Bir seri no bir kez kullanıldıysa
+                            <strong>başka bir stok kartında kullanılamaz</strong> — tüm malzemeler arasında tekildir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <select id="ap-trace-serial-scope" class="ap-select"
+                                style="min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--ap-border);background:var(--ap-input-bg);color:var(--ap-text);font-size:.85rem;">
+                            <option value="Item"   @(traceSerialScope == "Global" ? null : "selected")>Ürün Bazında</option>
+                            <option value="Global" @(traceSerialScope == "Global" ? "selected" : null)>Genel (barkod gibi)</option>
+                        </select>
+                    </div>
+                </div>
             </section>
 
             @* ── Güvenlik ───────────────────────────────── *@

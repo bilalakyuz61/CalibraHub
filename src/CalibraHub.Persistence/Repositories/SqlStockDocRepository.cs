@@ -1633,6 +1633,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         : "Satırdaki Seri butonundan adet kadar seri no girin.")
                     : "Çıkış/transferde stoktaki serilerden adet kadar seçim zorunlu."));
 
+        // Seri benzersizlik kapsamı "Global" (barkod gibi) ise girişte YENİ seri, başka
+        // malzemede kullanılmış olamaz — kapsam bir kez okunur (giriş satırı başına).
+        var globalSerialUnique = movementType == 2 && await IsSerialUniqueGlobalAsync(ct);
+
         foreach (var serialNo in serials)
         {
             var serialId = 0; byte status = 0; var isActive = false;
@@ -1655,6 +1659,18 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             {
                 if (serialId == 0)
                 {
+                    // Global benzersizlik: aynı seri no başka bir malzemede tanımlıysa reddet.
+                    if (globalSerialUnique)
+                    {
+                        await using var gchk = conn.CreateCommand();
+                        gchk.Transaction = tx;
+                        gchk.CommandText = $"SELECT TOP 1 [ItemId] FROM {T("ItemSerial")} WHERE [SerialNo] = @SerialNo AND [ItemId] <> @ItemId AND [IsActive] = 1;";
+                        gchk.Parameters.AddWithValue("@SerialNo", serialNo);
+                        gchk.Parameters.AddWithValue("@ItemId", itemId);
+                        if (await gchk.ExecuteScalarAsync(ct) is int)
+                            throw new InvalidOperationException(
+                                $"'{serialNo}' seri no başka bir stok kartında kullanılmış. Seri benzersizliği 'Genel' modda olduğu için (barkod gibi) bu seri bu malzemede kullanılamaz.");
+                    }
                     await using var ins = conn.CreateCommand();
                     ins.Transaction = tx;
                     ins.CommandText = $"""
