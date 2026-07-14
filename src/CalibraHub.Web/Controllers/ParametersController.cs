@@ -120,6 +120,17 @@ public sealed class ParametersController : Controller
         ViewData["OrderSerialReservation"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.OrderSerialReservationKey)?.ParamValue == "true";
 
+        // İzlenebilirlik tab: seri no benzersizlik kapsamı ("Item"/"Global"). Tanımsız → "Item".
+        ViewData["TraceSerialScope"] =
+            string.Equals(
+                await _companyParameters.GetStringAsync(
+                    CalibraHub.Application.Constants.TraceabilityParameters.FormCode,
+                    CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeKey, cancellationToken),
+                CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeGlobal,
+                StringComparison.OrdinalIgnoreCase)
+            ? CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeGlobal
+            : CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeItem;
+
         // Güvenlik tab: oturum atalet süresi (dk). Tanımsız → varsayılan (30). 0 = kapalı.
         ViewData["SessionIdleMinutes"] = await _companyParameters.GetIntAsync(
             CalibraHub.Application.Constants.SecurityParameters.FormCode,

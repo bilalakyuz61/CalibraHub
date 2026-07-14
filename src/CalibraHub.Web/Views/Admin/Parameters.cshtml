@@ -14,6 +14,7 @@
     var effTracking = salesOrderAffects && orderSerialTracking;
     var effReservation = effTracking && orderSerialReservation;
     var sessionIdle = ViewData["SessionIdleMinutes"] as int? ?? 30;
+    var traceSerialScope = ViewData["TraceSerialScope"] as string ?? "Item";
 }
 
 @section Styles {
@@ -717,9 +718,15 @@ body.app-theme-dark .ap-tab.is-active::before {
                     <div class="ap-row-control">
                         <select id="ap-trace-serial-scope" class="ap-select"
                                 style="min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--ap-border);background:var(--ap-input-bg);color:var(--ap-text);font-size:.85rem;">
-                            <option value="Item"   @(traceSerialScope == "Global" ? null : "selected")>Ürün Bazında</option>
-                            <option value="Global" @(traceSerialScope == "Global" ? "selected" : null)>Genel (barkod gibi)</option>
+                            <option value="Item">Ürün Bazında</option>
+                            <option value="Global">Genel (barkod gibi)</option>
                         </select>
+                        <script>
+                            (function () {
+                                var s = document.getElementById('ap-trace-serial-scope');
+                                if (s) s.value = '@traceSerialScope';
+                            })();
+                        </script>
                     </div>
                 </div>
             </section>
@@ -787,7 +794,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     // NOT: Kaydedilebilir parametresi olan HER yeni sekme buraya eklenmeli,
     // yoksa o sekmede Kaydet butonu pasif kalir (bkz. satissiparis regresyonu).
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'guvenlik');
+        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'izlenebilirlik' || activePane === 'guvenlik');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -984,6 +991,19 @@ body.app-theme-dark .ap-tab.is-active::before {
                 ok = !!data2.ok;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(data2.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'izlenebilirlik') {
+                var scEl = document.getElementById('ap-trace-serial-scope');
+                var scVal = (scEl && scEl.value === 'Global') ? 'Global' : 'Item';
+                var rtr = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'TRACEABILITY', paramKey: 'SERIAL_UNIQUE_SCOPE', paramValue: scVal, dataType: 1 })
+                });
+                var dtr = await rtr.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!dtr.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(dtr.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'guvenlik') {
                 var idleEl = document.getElementById('ap-session-idle');
                 var idleVal = parseInt(idleEl && idleEl.value, 10);
