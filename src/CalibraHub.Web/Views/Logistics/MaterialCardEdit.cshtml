@@ -165,6 +165,9 @@
         letter-spacing: 0.02em; text-align: right; padding-right: 4px;
     }
     body.app-theme-light .mce-row > label:not(.mce-switch) { color: #64748b; }
+    /* Izlenebilirlik alt satir etiketleri (Lot / Seri / Giris Serisi Otomatik) */
+    .mce-track-label { font-size: 0.8rem; color: rgba(255,255,255,0.55); }
+    body.app-theme-light .mce-track-label { color: #64748b; }
     .mce-row .mce-input,
     .mce-row .mce-select { flex: 1 1 auto; min-width: 0; }
 
@@ -1734,15 +1737,15 @@
                             <span class="mce-switch-track"></span>
                         </label>
                         <div id="mceTrackingModeWrap" style="display:none;align-items:center;gap:10px;margin-left:22px;">
-                            <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Lot</span>
+                            <span class="mce-track-label">Lot</span>
                             <label class="mce-switch" for="mceTrackingMode">
                                 <input type="checkbox" id="mceTrackingMode" onchange="window.mceSyncTrackingUi && window.mceSyncTrackingUi();" />
                                 <span class="mce-switch-track"></span>
                             </label>
-                            <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Seri</span>
+                            <span class="mce-track-label">Seri</span>
                         </div>
                         <div id="mceAutoSerialWrap" style="display:none;align-items:center;gap:10px;margin-left:22px;">
-                            <span style="font-size:.8rem;color:rgba(255,255,255,.55);">Giriş Serisi Otomatik</span>
+                            <span class="mce-track-label">Giriş Serisi Otomatik</span>
                             <label class="mce-switch" for="mceAutoSerial" title="Açıkken giriş belgesinde seri listesi boş bırakılırsa sunucu otomatik üretir (Kod-Tarih-Sıra).">
                                 <input type="checkbox" id="mceAutoSerial" />
                                 <span class="mce-switch-track"></span>
