@@ -25,7 +25,7 @@ import {
   MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode,
 } from 'lucide-react'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
-import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, TraceEntryCell } from './LineGridCell'
+import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, SerialBreakdownModal, TraceEntryCell } from './LineGridCell'
 import CostViewerModal from './CostViewerModal'
 import QuoteCostSummaryModal from './QuoteCostSummaryModal'
 import { evaluate } from './formulaEvaluator'
@@ -1388,12 +1388,11 @@ export default function CalibraLineItemsGrid(props) {
         var tcol = traceModalRow.column
         function _n(x) { if (x == null || x === '') return null; var n = parseFloat(String(x).replace(',', '.')); return isNaN(n) ? null : n }
         if (trow.trackSerial === true) {
-          var q = _n(trow.quantity)
-          var qi = (q != null && q > 0 && q === Math.trunc(q)) ? q : null
+          // Sayım — zengin seri kırılımı tablosu (Seri No · SKT · Açıklama · Miktar; seri=parti)
           return (
-            <SerialEntryModal isLight={__tl} isEntry={true} row={trow} column={tcol} qtyInt={qi} autoSerial={false}
-              serials={Array.isArray(trow.serials) ? trow.serials : []}
-              onApply={function (list) { handleCellChange(trow._uid, 'serials', list); setTraceModalRow(null) }}
+            <SerialBreakdownModal isLight={__tl} row={trow} column={tcol} qtyTarget={trow.quantity}
+              value={Array.isArray(trow.serialBreakdown) ? trow.serialBreakdown : []}
+              onApply={function (list) { handleCellChange(trow._uid, 'serialBreakdown', list); setTraceModalRow(null) }}
               onClose={function () { setTraceModalRow(null) }} />
           )
         }

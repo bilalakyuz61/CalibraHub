@@ -1427,6 +1427,114 @@ function LotBreakdownModal(props) {
   )
 }
 
+/* ══════════════════════════════════════════════════════════════
+ * Sayım — Zengin Seri Kırılımı: Seri No | SKT | Açıklama | Miktar tablosu.
+ * Seri = parti (miktar serbest); toplam = Sayılan Miktar. Değer: row.serialBreakdown
+ * ([{serialNo, expiryDate, description, qty}]). Uygula'da backend SKT→Lot, açıklama→ItemSerial'a yansıtır.
+ * ══════════════════════════════════════════════════════════════ */
+function SerialBreakdownModal(props) {
+  var isLight = props.isLight
+  var [rows, setRows] = useState(function() {
+    var v = Array.isArray(props.value) ? props.value : []
+    return v.length > 0
+      ? v.map(function(r) { return { serialNo: r.serialNo || '', expiryDate: (r.expiryDate ? String(r.expiryDate).slice(0, 10) : ''), description: r.description || '', qty: (r.qty != null ? String(r.qty) : '') } })
+      : [{ serialNo: '', expiryDate: '', description: '', qty: '' }]
+  })
+  // Stoktaki seriler (SKT ile) — öneri + seri seçilince SKT otomatik dolar
+  var lookup = useLookup(props.column && props.column.serialsUrl ? props.column.serialsUrl : null, props.row)
+  var stockByNo = {}
+  ;(lookup.options || []).forEach(function(o) { if (o && o.serialNo) stockByNo[String(o.serialNo).toLowerCase()] = o })
+
+  useEffect(function() {
+    function onKey(e) { if (e.key === 'Escape') props.onClose() }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function setCell(i, key, val) {
+    var n = rows.slice(); n[i] = Object.assign({}, n[i]); n[i][key] = val
+    // Seri no bilinen bir stok serisiyse ve SKT boşsa, stok SKT'sini otomatik doldur
+    if (key === 'serialNo') {
+      var hit = stockByNo[String(val).trim().toLowerCase()]
+      if (hit && hit.expiryDate && !n[i].expiryDate) n[i].expiryDate = String(hit.expiryDate).slice(0, 10)
+    }
+    setRows(n)
+  }
+  function addRow() { setRows(rows.concat([{ serialNo: '', expiryDate: '', description: '', qty: '' }])) }
+  function removeRow(i) { var n = rows.slice(); n.splice(i, 1); setRows(n.length ? n : [{ serialNo: '', expiryDate: '', description: '', qty: '' }]) }
+
+  var valid = rows.filter(function(r) { return String(r.serialNo).trim() && parseFloat(r.qty) > 0 })
+  var total = valid.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
+  var serialSuggest = (lookup.options || [])
+  var dup = (function() { var seen = {}, d = false; valid.forEach(function(r) { var k = String(r.serialNo).trim().toLowerCase(); if (seen[k]) d = true; seen[k] = 1 }); return d })()
+
+  var panelStyle = isLight
+    ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
+    : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
+  var inCls = 'rounded-lg px-2.5 py-1.5 text-[12px] outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85'
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2,6,23,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onMouseDown={function(e) { if (e.target === e.currentTarget) props.onClose() }}>
+      <div style={Object.assign({ width: 'min(720px, 96vw)', borderRadius: '14px', overflow: 'hidden' }, panelStyle)}>
+        <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between">
+          <div>
+            <div className="text-[13px] font-semibold text-slate-800 dark:text-white/90">Seri Kırılımı (Sayım)</div>
+            <div className="text-[11px] text-slate-500 dark:text-white/45 font-mono">{(props.row.materialCode || '') + (props.row.materialName ? ' · ' + props.row.materialName : '')}</div>
+          </div>
+          {(function () {
+            var target = parseNumber(props.qtyTarget)
+            var match = target == null || Math.abs(total - target) < 0.0001
+            return (
+              <div className={'text-[12px] font-mono font-bold tabular-nums ' + (match ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300')}>
+                Toplam: {total}{target != null ? ' / ' + target : ''}
+              </div>
+            )
+          })()}
+        </div>
+        <div className="px-4 pb-2 max-h-[340px] overflow-y-auto">
+          <div className="flex items-center gap-2 mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-white/35">
+            <span className="flex-1">Seri No</span>
+            <span className="w-36">SKT</span>
+            <span className="flex-1">Açıklama</span>
+            <span className="w-20 text-right">Miktar</span>
+            <span className="w-7" />
+          </div>
+          {rows.map(function(r, i) {
+            return (
+              <div key={i} className="flex items-center gap-2 mb-1.5">
+                <input list={'sbsg-' + i} value={r.serialNo} onChange={function(e) { setCell(i, 'serialNo', e.target.value) }} placeholder="Seri / parti no"
+                  className={'flex-1 font-mono ' + inCls} />
+                <datalist id={'sbsg-' + i}>
+                  {serialSuggest.map(function(o) { return <option key={o.serialNo} value={o.serialNo}>{(o.lotNo ? 'Lot: ' + o.lotNo : '') + (o.expiryDate ? ' · SKT: ' + String(o.expiryDate).slice(0, 10) : '')}</option> })}
+                </datalist>
+                <input type="date" value={r.expiryDate} onChange={function(e) { setCell(i, 'expiryDate', e.target.value) }} title="Son Kullanma Tarihi"
+                  className={'w-36 font-mono ' + inCls} />
+                <input value={r.description} onChange={function(e) { setCell(i, 'description', e.target.value) }} placeholder="Açıklama"
+                  className={'flex-1 ' + inCls} />
+                <input type="number" value={r.qty} min="0" step="any" onChange={function(e) { setCell(i, 'qty', e.target.value) }} placeholder="Mkt"
+                  className={'w-20 text-right font-mono ' + inCls} />
+                <button type="button" onClick={function() { removeRow(i) }} title="Satırı sil"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-[15px] leading-none text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/15">×</button>
+              </div>
+            )
+          })}
+          <button type="button" onClick={addRow} className="mt-1 text-[11.5px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-300">+ Seri Ekle</button>
+          {dup && <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300">Aynı seri birden fazla girildi.</div>}
+        </div>
+        <div className="px-4 py-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-white/[0.07]">
+          <button type="button" onClick={props.onClose} className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 hover:bg-slate-100 dark:text-white/60 dark:hover:bg-white/[0.07]">Vazgeç</button>
+          <button type="button" disabled={dup}
+            onClick={function() { props.onApply(valid.map(function(r) { return { serialNo: String(r.serialNo).trim(), expiryDate: r.expiryDate || null, description: (r.description || '').trim() || null, qty: parseFloat(r.qty) } }), total) }}
+            className={'px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-colors ' + (dup ? 'bg-slate-300 dark:bg-white/15 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600')}>Uygula</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // İŞLEM (sol aksiyon) alanında kompakt buton — modal grid seviyesinde render edilir
 // (miktar girişinden sonra otomatik açılabilmesi için). Seri/Lot izlenebilirliğine göre
 // renk + adet gösterir; onOpen ile grid'e satırı bildirir.
@@ -1439,9 +1547,17 @@ function TraceEntryCell(props) {
   var qty = parseNumber(row.quantity)
   var count, ok
   if (isSerial) {
-    var serials = Array.isArray(row.serials) ? row.serials : []
-    count = serials.length
-    ok = count > 0 && (qty == null || count === qty)
+    var sb = Array.isArray(row.serialBreakdown) ? row.serialBreakdown : []
+    if (sb.length > 0) {
+      // Zengin seri kırılımı (seri=parti): satır sayısı rozette, miktar toplamı doğrular
+      var stot = sb.reduce(function (s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
+      count = sb.length
+      ok = count > 0 && (qty == null || Math.abs(stot - qty) < 0.0001)
+    } else {
+      var serials = Array.isArray(row.serials) ? row.serials : []
+      count = serials.length
+      ok = count > 0 && (qty == null || count === qty)
+    }
   } else {
     var bd = Array.isArray(row.lotBreakdown) ? row.lotBreakdown : []
     var total = bd.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
@@ -1466,4 +1582,4 @@ function TraceEntryCell(props) {
   )
 }
 
-export { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, TraceEntryCell }
+export { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, SerialBreakdownModal, TraceEntryCell }

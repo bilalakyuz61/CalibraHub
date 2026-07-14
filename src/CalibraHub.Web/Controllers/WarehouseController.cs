@@ -960,11 +960,13 @@ public sealed class WarehouseController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT l.[Id], l.[Serials], l.[LotBreakdown]
+            SELECT l.[Id], l.[Serials], l.[LotBreakdown], l.[SerialBreakdown]
             FROM [{_schema}].[InventoryCountLine] l
             INNER JOIN [{_schema}].[InventoryCount] ic ON ic.[Id] = l.[InventoryCountId]
             WHERE ic.[DocumentId] = @Doc
-              AND ((l.[Serials] IS NOT NULL AND LEN(l.[Serials]) > 0) OR (l.[LotBreakdown] IS NOT NULL AND LEN(l.[LotBreakdown]) > 0));
+              AND ((l.[Serials] IS NOT NULL AND LEN(l.[Serials]) > 0)
+                   OR (l.[LotBreakdown] IS NOT NULL AND LEN(l.[LotBreakdown]) > 0)
+                   OR (l.[SerialBreakdown] IS NOT NULL AND LEN(l.[SerialBreakdown]) > 0));
             """;
         cmd.Parameters.AddWithValue("@Doc", documentId);
         var map = new Dictionary<string, object>();
@@ -984,7 +986,18 @@ public sealed class WarehouseController : Controller
                 }
                 catch { }
             }
-            map[r.GetInt32(0).ToString()] = new { serials, lotBreakdown = breakdown };
+            // Zengin seri kırılımı (seri=parti): [{serialNo, expiryDate, description, qty}]
+            object[] serialBd = System.Array.Empty<object>();
+            if (!r.IsDBNull(3))
+            {
+                try
+                {
+                    var arr = System.Text.Json.JsonSerializer.Deserialize<List<CountSerialBreakdownItem>>(r.GetString(3));
+                    serialBd = (arr ?? new()).Select(b => (object)new { serialNo = b.SerialNo, expiryDate = b.ExpiryDate, description = b.Description, qty = b.Qty }).ToArray();
+                }
+                catch { }
+            }
+            map[r.GetInt32(0).ToString()] = new { serials, lotBreakdown = breakdown, serialBreakdown = serialBd };
         }
         return Json(map);
     }

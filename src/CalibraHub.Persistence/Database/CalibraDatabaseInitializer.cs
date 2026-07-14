@@ -15783,6 +15783,11 @@ END;";
             IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[InventoryCountLine]', N'LotBreakdown') IS NULL
                 ALTER TABLE [{s}].[InventoryCountLine] ADD [LotBreakdown] NVARCHAR(MAX) NULL;
+            -- 2026-07-14: Zengin seri kirilimi (sayim) — JSON dizisi (serialNo + expiryDate + description + qty nesneleri).
+            -- Seri = parti (miktar serbest); CountedQty = qty toplami. Uygula'da Lot(SKT)+ItemSerial'a yansir.
+            IF OBJECT_ID(N'[{s}].[InventoryCountLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[InventoryCountLine]', N'SerialBreakdown') IS NULL
+                ALTER TABLE [{s}].[InventoryCountLine] ADD [SerialBreakdown] NVARCHAR(MAX) NULL;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;

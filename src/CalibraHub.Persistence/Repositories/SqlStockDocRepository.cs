@@ -600,6 +600,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 var breakdown = (line.LotBreakdown ?? [])
                     .Where(b => !string.IsNullOrWhiteSpace(b.LotNo) && b.Qty > 0)
                     .Select(b => new { LotNo = b.LotNo.Trim(), b.Qty }).ToList();
+                // Zengin seri kırılımı (sayım) — seri = parti: [{SerialNo, ExpiryDate, Description, Qty}], Qty>0.
+                var serialBd = (line.SerialBreakdown ?? [])
+                    .Where(b => !string.IsNullOrWhiteSpace(b.SerialNo) && b.Qty > 0)
+                    .Select(b => new { SerialNo = b.SerialNo.Trim(), b.ExpiryDate, Description = string.IsNullOrWhiteSpace(b.Description) ? null : b.Description!.Trim(), b.Qty })
+                    .ToList();
 
                 if (string.Equals(trackingType, "Lot", StringComparison.OrdinalIgnoreCase))
                 {
@@ -613,15 +618,33 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 }
                 if (string.Equals(trackingType, "Serial", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (line.Qty != Math.Floor(line.Qty))
-                    { throw new InvalidOperationException($"Seri takipli stokta sayılan miktar tam sayı olmalı: '{label}'."); }
-                    var origCount = (line.Serials ?? []).Count(x => !string.IsNullOrWhiteSpace(x));
-                    if (serialList.Count != origCount)
-                    { throw new InvalidOperationException($"Aynı seri birden fazla girildi: '{label}'."); }
-                    if (serialList.Count != (int)line.Qty)
-                    { throw new InvalidOperationException($"Seri No zorunlu (stok seri-takipli): seri adedi sayılan miktara eşit olmalı — {serialList.Count} seri / {line.Qty:0.##} adet ('{label}')."); }
+                    if (serialBd.Count > 0)
+                    {
+                        // Seri = parti (miktar serbest): benzersizlik + toplam = sayılan miktar.
+                        if (serialBd.Select(b => b.SerialNo.ToLowerInvariant()).Distinct().Count() != serialBd.Count)
+                        { throw new InvalidOperationException($"Aynı seri birden fazla girildi: '{label}'."); }
+                        var serSum = serialBd.Sum(b => b.Qty);
+                        if (Math.Abs(serSum - line.Qty) > 0.0001m)
+                        { throw new InvalidOperationException($"Seri miktar toplamı sayılan miktara eşit olmalı — {serSum:0.##} seri / {line.Qty:0.##} sayılan ('{label}')."); }
+                    }
+                    else
+                    {
+                        // Legacy: düz seri no listesi (her seri 1 adet).
+                        if (line.Qty != Math.Floor(line.Qty))
+                        { throw new InvalidOperationException($"Seri takipli stokta sayılan miktar tam sayı olmalı: '{label}'."); }
+                        var origCount = (line.Serials ?? []).Count(x => !string.IsNullOrWhiteSpace(x));
+                        if (serialList.Count != origCount)
+                        { throw new InvalidOperationException($"Aynı seri birden fazla girildi: '{label}'."); }
+                        if (serialList.Count != (int)line.Qty)
+                        { throw new InvalidOperationException($"Seri No zorunlu (stok seri-takipli): seri adedi sayılan miktara eşit olmalı — {serialList.Count} seri / {line.Qty:0.##} adet ('{label}')."); }
+                    }
                 }
-                var serialsText = serialList.Count > 0 ? string.Join("\n", serialList) : null;
+                // Serials kolonu (back-compat): elle liste ya da seri kırılımından türet.
+                var serialsText = serialList.Count > 0 ? string.Join("\n", serialList)
+                    : (serialBd.Count > 0 ? string.Join("\n", serialBd.Select(b => b.SerialNo)) : null);
+                var serialBreakdownJson = serialBd.Count > 0
+                    ? System.Text.Json.JsonSerializer.Serialize(serialBd)
+                    : null;
                 var lotBreakdownJson = breakdown.Count > 0
                     ? System.Text.Json.JsonSerializer.Serialize(breakdown)
                     : null;
@@ -631,9 +654,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Transaction = tx;
                 lineIns.CommandText = $"""
                     INSERT INTO {T("InventoryCountLine")}
-                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes],[LocationId],[LotNo],[LotBreakdown],[Serials])
+                        ([InventoryCountId],[ItemId],[ConfigId],[UnitId],[CountedQty],[Notes],[LocationId],[LotNo],[LotBreakdown],[Serials],[SerialBreakdown])
                     VALUES
-                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId,@LotNo,@LotBreakdown,@Serials);
+                        (@CountId,@ItemId,@ConfigId,@UnitId,@Qty,@Notes,@LocId,@LotNo,@LotBreakdown,@Serials,@SerialBreakdown);
                     """;
                 lineIns.Parameters.AddWithValue("@CountId", countId);
                 lineIns.Parameters.AddWithValue("@ItemId", itemId.Value);

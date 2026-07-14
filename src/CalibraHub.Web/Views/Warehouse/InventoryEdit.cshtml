@@ -543,6 +543,7 @@
                     trackCombinations: !!l.combinationId,
                     serials:           Array.isArray(_tr.serials) ? _tr.serials : [],
                     lotBreakdown:      Array.isArray(_tr.lotBreakdown) ? _tr.lotBreakdown : [],
+                    serialBreakdown:   Array.isArray(_tr.serialBreakdown) ? _tr.serialBreakdown : [],
                     trackSerial:       l.trackingType === 'Serial',
                     trackLot:          l.trackingType === 'Lot',
                     autoSerial:        !!l.autoSerial,
@@ -628,6 +629,8 @@
                         serials:        (Array.isArray(r.serials) && r.serials.length > 0) ? r.serials : null,
                         lotBreakdown:   (Array.isArray(r.lotBreakdown) && r.lotBreakdown.length > 0)
                                           ? r.lotBreakdown.map(function(b){ return { lotNo: b.lotNo, qty: b.qty }; }) : null,
+                        serialBreakdown:(Array.isArray(r.serialBreakdown) && r.serialBreakdown.length > 0)
+                                          ? r.serialBreakdown.map(function(b){ return { serialNo: b.serialNo, expiryDate: b.expiryDate || null, description: b.description || null, qty: b.qty }; }) : null,
                     };
                 });
 
@@ -642,9 +645,10 @@
                 if (!vr || !vr.materialCode || !String(vr.materialCode).trim()) continue;
                 var vq = parseFloat(vr.quantity) || 0;
                 if (vr.trackSerial === true) {
-                    var _sc = Array.isArray(vr.serials) ? vr.serials.length : 0;
-                    if (_sc !== vq) {
-                        _invTraceErr("'" + vr.materialCode + "' seri-takipli: girilen seri adedi (" + _sc + ") sayılan miktara (" + vq + ") eşit olmalı. Lot/Seri butonundan düzeltin.");
+                    var _sb = Array.isArray(vr.serialBreakdown) ? vr.serialBreakdown : [];
+                    var _st = _sb.reduce(function (s, b) { return s + (parseFloat(b.qty) || 0); }, 0);
+                    if (_sb.length === 0 || Math.abs(_st - vq) > 0.0001) {
+                        _invTraceErr("'" + vr.materialCode + "' seri-takipli: seri miktar toplamı (" + _st + ") sayılan miktara (" + vq + ") eşit olmalı. Lot/Seri butonundan düzeltin.");
                         return;
                     }
                 } else if (vr.trackLot === true) {

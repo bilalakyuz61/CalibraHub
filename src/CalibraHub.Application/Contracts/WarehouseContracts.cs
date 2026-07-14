@@ -76,10 +76,17 @@ public sealed record SaveStockDocLineRequest(
     // (sunucu üretir); diğer tüm durumlarda adet kadar seri zorunludur.
     IReadOnlyList<string>? Serials = null,
     // Sayım — lot-takipli kalemde çoklu lot kırılımı ([{LotNo, Qty}]). CountedQty = Qty toplamı.
-    IReadOnlyList<StockLotBreakdownItem>? LotBreakdown = null);
+    IReadOnlyList<StockLotBreakdownItem>? LotBreakdown = null,
+    // Sayım — seri-takipli kalemde zengin seri kırılımı ([{SerialNo, ExpiryDate, Description, Qty}]).
+    // Seri = parti (miktar serbest); CountedQty = Qty toplamı. Uygula'da Lot(SKT)+ItemSerial'a yansır.
+    IReadOnlyList<CountSerialBreakdownItem>? SerialBreakdown = null);
 
 /// <summary>Sayım lot kırılımı satırı — bir kalemde birden fazla lot sayılabilir.</summary>
 public sealed record StockLotBreakdownItem(string LotNo, decimal Qty);
+
+/// <summary>Sayım seri kırılımı satırı — seri no + SKT + açıklama + miktar (seri = parti, miktar serbest).
+/// Uygula'da SKT → Lot.ExpiryDate, açıklama → ItemSerial kaydına yazılır.</summary>
+public sealed record CountSerialBreakdownItem(string SerialNo, DateTime? ExpiryDate, string? Description, decimal Qty);
 
 // ── Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) ─────────────────────────
 // Üretilen miktara göre bileşen sarfı: reçete önerisi + serbest satır. Satır bir
