@@ -437,7 +437,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 // çıkış/transferde stoktaki (InStock) serilerden adet kadar seçim şarttır.
                 await ResolveSerialsForLineAsync(
                     conn, tx, lineId, itemId.Value, line.MaterialCode, line.Qty, line.Serials,
-                    lotId, movementType, request.DocDate.Date, createdById, ct);
+                    lotId, movementType, line.ToLocationId ?? request.ToLocationId,
+                    request.DocDate.Date, createdById, ct);
 
                 // Azaltıcı hareket (çıkış=1 / transfer-kaynak=3) → kaynak lokasyonu kontrol kuyruğuna al
                 if (movementType is 1 or 3)
@@ -1190,7 +1191,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 await using (var upd = conn.CreateCommand())
                 {
                     upd.Transaction = tx;
-                    upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr AND [Status] IN (1,4);";
+                    upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [CurrentLocationId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Sr AND [Status] IN (1,4);";
                     upd.Parameters.AddWithValue("@Sr", sid);
                     await upd.ExecuteNonQueryAsync(ct);
                 }
@@ -1386,7 +1387,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 // Seri: çıkış (1) → InStock serilerden adet kadar seçim şart → Issued
                 await ResolveSerialsForLineAsync(
                     conn, tx, lineId, itemId.Value, line.MaterialCode, line.Qty, line.Serials,
-                    lotId, movementType: 1, docDate, createdById, ct);
+                    lotId, movementType: 1, targetLocationId: null, docDate, createdById, ct);
 
                 // Bileşen defteri: bağlı bileşen → artır; serbest → eşleştir ya da yeni kayıt aç
                 await BumpWorkOrderComponentAsync(
@@ -1591,7 +1592,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     private async Task ResolveSerialsForLineAsync(
         SqlConnection conn, SqlTransaction tx, int lineId, int itemId, string? materialCode,
         decimal qty, IReadOnlyList<string>? rawSerials, int? lotId, byte? movementType,
-        DateTime docDate, int? createdById, CancellationToken ct)
+        int? targetLocationId, DateTime docDate, int? createdById, CancellationToken ct)
     {
         string tracking = "None"; var autoSerial = false;
         var itemCode = string.IsNullOrWhiteSpace(materialCode) ? $"#{itemId}" : materialCode.Trim();
@@ -1674,13 +1675,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     await using var ins = conn.CreateCommand();
                     ins.Transaction = tx;
                     ins.CommandText = $"""
-                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[LotId],[Status],[CreatedById])
-                        VALUES (@ItemId, @SerialNo, @LotId, 1, @CreatedById);
+                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[LotId],[Status],[CurrentLocationId],[CreatedById])
+                        VALUES (@ItemId, @SerialNo, @LotId, 1, @CurrentLoc, @CreatedById);
                         SELECT CAST(SCOPE_IDENTITY() AS INT);
                         """;
                     ins.Parameters.AddWithValue("@ItemId", itemId);
                     ins.Parameters.AddWithValue("@SerialNo", serialNo);
                     ins.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                    ins.Parameters.AddWithValue("@CurrentLoc", (object?)targetLocationId ?? DBNull.Value);
                     ins.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
                     serialId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
                 }
@@ -1691,11 +1693,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     upd.Transaction = tx;
                     upd.CommandText = $"""
                         UPDATE {T("ItemSerial")}
-                        SET [Status] = 1, [IsActive] = 1, [LotId] = COALESCE(@LotId, [LotId]), [Updated] = SYSUTCDATETIME()
+                        SET [Status] = 1, [IsActive] = 1, [LotId] = COALESCE(@LotId, [LotId]),
+                            [CurrentLocationId] = @CurrentLoc, [Updated] = SYSUTCDATETIME()
                         WHERE [Id] = @Id;
                         """;
                     upd.Parameters.AddWithValue("@Id", serialId);
                     upd.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                    upd.Parameters.AddWithValue("@CurrentLoc", (object?)targetLocationId ?? DBNull.Value);
                     await upd.ExecuteNonQueryAsync(ct);
                 }
                 else if (status == 1)
@@ -1734,11 +1738,22 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         $"'{itemCode}' için '{serialNo}' serisi stokta değil ({(status == 2 ? "çıkmış" : "bloke")}).");
                 if (movementType == 1)
                 {
+                    // Çıkış: seri stoktan çıktı → Issued + konumsuz.
                     await using var iss = conn.CreateCommand();
                     iss.Transaction = tx;
-                    iss.CommandText = $"UPDATE {T("ItemSerial")} SET [Status] = 2, [Updated] = SYSUTCDATETIME() WHERE [Id] = @Id;";
+                    iss.CommandText = $"UPDATE {T("ItemSerial")} SET [Status] = 2, [CurrentLocationId] = NULL, [Updated] = SYSUTCDATETIME() WHERE [Id] = @Id;";
                     iss.Parameters.AddWithValue("@Id", serialId);
                     await iss.ExecuteNonQueryAsync(ct);
+                }
+                else if (movementType == 3)
+                {
+                    // Transfer: seri hedef lokasyona taşındı → durum InStock kalır, konum güncellenir.
+                    await using var mov = conn.CreateCommand();
+                    mov.Transaction = tx;
+                    mov.CommandText = $"UPDATE {T("ItemSerial")} SET [CurrentLocationId] = @CurrentLoc, [Updated] = SYSUTCDATETIME() WHERE [Id] = @Id;";
+                    mov.Parameters.AddWithValue("@Id", serialId);
+                    mov.Parameters.AddWithValue("@CurrentLoc", (object?)targetLocationId ?? DBNull.Value);
+                    await mov.ExecuteNonQueryAsync(ct);
                 }
             }
 

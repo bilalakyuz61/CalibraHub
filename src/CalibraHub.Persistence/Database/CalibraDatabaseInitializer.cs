@@ -7821,6 +7821,34 @@ END;";
                 EXEC(N'CREATE INDEX [IX_ItemSerial_ReservedForDocument] ON [{s}].[ItemSerial]([ReservedForDocumentId])
                     WHERE [ReservedForDocumentId] IS NOT NULL;');
 
+            -- 2026-07-14: Seri-lokasyon takibi — serinin fiziksel bulunduğu depo/lokasyon.
+            -- Giriş(2)=hedef, Transfer(3)=hedef, Çıkış(1)=NULL (stoktan çıktı). Sayım yansıtması
+            -- lokasyon-scope'lu seri farkını (fazla/eksik) bu kolonla çözer. NULL = konumsuz
+            -- (çıkmış ya da eski lotsuz/lokasyonsuz giriş). Location tablosuna soft-referans (FK yok,
+            -- DocumentLine.LocationId ile aynı stil).
+            IF COL_LENGTH(N'[{s}].[ItemSerial]', N'CurrentLocationId') IS NULL
+                ALTER TABLE [{s}].[ItemSerial] ADD [CurrentLocationId] INT NULL;
+            -- Filtered index EXEC ile ertelenmiş derlenir (yeni kolon aynı batch'te compile-time 207 üretmesin).
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_ItemSerial_Item_Location'
+                           AND object_id = OBJECT_ID(N'[{s}].[ItemSerial]'))
+               AND COL_LENGTH(N'[{s}].[ItemSerial]', N'CurrentLocationId') IS NOT NULL
+                EXEC(N'CREATE INDEX [IX_ItemSerial_Item_Location] ON [{s}].[ItemSerial]([ItemId],[CurrentLocationId])
+                    WHERE [CurrentLocationId] IS NOT NULL;');
+            -- Backfill (tek sefer etkili; sonraki başlatmalarda yalnız NULL kalanları tarar):
+            -- stoktaki (InStock) serinin konumu, en son giriş (MovementType=2) satırının lokasyonudur.
+            IF COL_LENGTH(N'[{s}].[ItemSerial]', N'CurrentLocationId') IS NOT NULL
+                EXEC(N'
+                    UPDATE s SET s.[CurrentLocationId] = x.[LocationId]
+                    FROM [{s}].[ItemSerial] s
+                    CROSS APPLY (
+                        SELECT TOP 1 dl.[LocationId]
+                        FROM [{s}].[DocumentLineSerial] dls
+                        INNER JOIN [{s}].[DocumentLine] dl ON dl.[Id] = dls.[DocumentLineId]
+                        WHERE dls.[SerialId] = s.[Id] AND dl.[MovementType] = 2 AND dl.[LocationId] IS NOT NULL
+                        ORDER BY dl.[Id] DESC
+                    ) x
+                    WHERE s.[Status] = 1 AND s.[CurrentLocationId] IS NULL;');
+
             IF OBJECT_ID(N'[{s}].[DocumentLineSerial]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[DocumentLineSerial]

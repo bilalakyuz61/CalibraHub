@@ -155,13 +155,13 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
 
             // 2) Taslak satırları oku — satır kendi lokasyonunu taşıyabilir (NULL = header).
             //    İzlenebilirlik: lot-takipli kalemde LotBreakdown (JSON) ile per-lot düzeltme.
-            var lines = new List<(int ItemId, int? ConfigId, int? UnitId, decimal CountedQty, int? LineLocationId, string? TrackingType, string? LotBreakdown)>();
+            var lines = new List<(int ItemId, int? ConfigId, int? UnitId, decimal CountedQty, int? LineLocationId, string? TrackingType, string? LotBreakdown, string? Serials)>();
             await using (var selCmd = conn.CreateCommand())
             {
                 selCmd.Transaction = tx;
                 selCmd.CommandText = $"""
                     SELECT l.[ItemId], l.[ConfigId], l.[UnitId], l.[CountedQty], l.[LocationId],
-                           ISNULL(i.[TrackingType], 'None') AS TrackingType, l.[LotBreakdown]
+                           ISNULL(i.[TrackingType], 'None') AS TrackingType, l.[LotBreakdown], l.[Serials]
                     FROM {T("InventoryCountLine")} l
                     LEFT JOIN {T("Items")} i ON i.[Id] = l.[ItemId]
                     WHERE l.[InventoryCountId] = @CountId;
@@ -177,7 +177,8 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                         r.GetDecimal(3),
                         r.IsDBNull(4) ? null : r.GetInt32(4),
                         r.IsDBNull(5) ? "None" : r.GetString(5),
-                        r.IsDBNull(6) ? null : r.GetString(6)));
+                        r.IsDBNull(6) ? null : r.GetString(6),
+                        r.IsDBNull(7) ? null : r.GetString(7)));
                 }
             }
 
@@ -195,9 +196,17 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                     continue;
                 }
 
-                // ── Diğer (izlenebilirsiz + seri) → toplam-miktar varyansı ──
-                // NOT: seri-takipli kalemde seri BAKIYE uzlaştırması (bulundu/eksik) ayrı iş
-                // (serilerde lokasyon kolonu yok); şimdilik toplam miktar düzeltmesi yazılır.
+                // ── Seri-takipli kalem → seri BAKIYE uzlaştırması (bulundu/eksik, lokasyon-scope'lu) ──
+                // ItemSerial.CurrentLocationId ile: sayılan seriler ∖ sistemdekiler = fazla (→InStock@loc),
+                // sistemdekiler ∖ sayılan = eksik (→Issued). Her yön için seri-bağlı Adjust(4) hareketi.
+                if (string.Equals(line.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase))
+                {
+                    writtenCount += await ApplySerialVarianceAsync(conn, tx, documentId,
+                        line.ItemId, line.ConfigId, effectiveLocation, line.Serials, ct);
+                    continue;
+                }
+
+                // ── Diğer (izlenebilirsiz) → toplam-miktar varyansı ──
                 var liveBalance = await GetLiveBalanceAsync(conn, tx, companyId, line.ItemId, effectiveLocation, ct);
                 var factor = await ResolveBaseFactorAsync(conn, tx, line.ItemId, line.UnitId, ct);
                 var countedBase = line.CountedQty * factor;
@@ -381,7 +390,7 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         }
     }
 
-    private async Task AppendAdjustLineAsync(
+    private async Task<int> AppendAdjustLineAsync(
         SqlConnection conn, SqlTransaction tx, int documentId, int itemId, int? configId, int? unitId,
         decimal quantity, bool positiveVariance, int? locationId, string notes, CancellationToken ct,
         int? lotId = null, string? lotNo = null)
@@ -417,6 +426,7 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
             VALUES
                 (@DocumentId,@LineNo,@ItemId,@UnitId,@Quantity,{baseQtyExpr},0,0,0,
                  @CombinationId,@ToLoc,@FromLoc,4,@LotId,@LotNo,@Notes);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         insCmd.Parameters.AddWithValue("@DocumentId", documentId);
         insCmd.Parameters.AddWithValue("@LineNo", nextLineNo);
@@ -430,7 +440,7 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         insCmd.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
         insCmd.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
         insCmd.Parameters.AddWithValue("@Notes", notes);
-        await insCmd.ExecuteNonQueryAsync(ct);
+        return Convert.ToInt32(await insCmd.ExecuteScalarAsync(ct));
     }
 
     /// <summary>
@@ -479,6 +489,172 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
             written++;
         }
         return written;
+    }
+
+    /// <summary>
+    /// Seri-takipli sayım satırının lokasyon-scope'lu seri uzlaştırması. Sayılan seri numaraları
+    /// (InventoryCountLine.Serials — satır başına 1 seri = 1 adet) ile sistemin o lokasyonda
+    /// InStock gördüğü seriler (ItemSerial.CurrentLocationId) karşılaştırılır:
+    ///   • Fazla (sayıldı, sistemde o konumda InStock değil):
+    ///       - Seri başka bir konumda InStock ise → konum düzeltme (eski konumdan −, yeni konuma +).
+    ///       - Aksi halde (yeni/çıkmış/konumsuz) → yeni giriş: +N Adjust(4) @loc, seri InStock@loc yapılır.
+    ///   • Eksik (sistemde InStock@loc, sayılmadı) → −M Adjust(4) @loc, seri Issued + konumsuz.
+    /// Her hareket satırına ilgili seriler DocumentLineSerial ile bağlanır (izlenebilirlik).
+    /// Seri = 1 ana birim olduğundan miktar = seri adedi.
+    /// </summary>
+    private async Task<int> ApplySerialVarianceAsync(
+        SqlConnection conn, SqlTransaction tx, int documentId,
+        int itemId, int? configId, int? location, string? serialsText, CancellationToken ct)
+    {
+        var counted = (serialsText ?? string.Empty)
+            .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim()).Where(s => s.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        // Sistemin bu lokasyonda InStock gördüğü seriler: SerialNo → Id
+        var systemAtLoc = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        await using (var sel = conn.CreateCommand())
+        {
+            sel.Transaction = tx;
+            sel.CommandText = location.HasValue
+                ? $"SELECT [Id],[SerialNo] FROM {T("ItemSerial")} WHERE [ItemId]=@It AND [IsActive]=1 AND [Status]=1 AND [CurrentLocationId]=@Loc;"
+                : $"SELECT [Id],[SerialNo] FROM {T("ItemSerial")} WHERE [ItemId]=@It AND [IsActive]=1 AND [Status]=1 AND [CurrentLocationId] IS NULL;";
+            sel.Parameters.AddWithValue("@It", itemId);
+            if (location.HasValue) sel.Parameters.AddWithValue("@Loc", location.Value);
+            await using var r = await sel.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) systemAtLoc[r.GetString(1)] = r.GetInt32(0);
+        }
+
+        var countedSet = new HashSet<string>(counted, StringComparer.OrdinalIgnoreCase);
+
+        // Fazla serileri sınıflandır: yeni giriş mi, başka konumdan taşınma mı?
+        var freshSurplus = new List<(int Id, string Sn)>();
+        var transfers = new List<(int Id, string Sn, int OldLoc)>();
+        foreach (var sn in counted)
+        {
+            if (systemAtLoc.ContainsKey(sn)) continue; // zaten konumda — fark yok
+            int id = 0; byte status = 0; int? curLoc = null; bool isActive = false;
+            await using (var find = conn.CreateCommand())
+            {
+                find.Transaction = tx;
+                find.CommandText = $"SELECT TOP 1 [Id],[Status],[CurrentLocationId],[IsActive] FROM {T("ItemSerial")} WHERE [ItemId]=@It AND [SerialNo]=@Sn;";
+                find.Parameters.AddWithValue("@It", itemId);
+                find.Parameters.AddWithValue("@Sn", sn);
+                await using var fr = await find.ExecuteReaderAsync(ct);
+                if (await fr.ReadAsync(ct))
+                {
+                    id = fr.GetInt32(0); status = fr.GetByte(1);
+                    curLoc = fr.IsDBNull(2) ? null : fr.GetInt32(2);
+                    isActive = fr.GetBoolean(3);
+                }
+            }
+            if (id != 0 && isActive && status == 1 && curLoc.HasValue && curLoc.Value != (location ?? -1))
+                transfers.Add((id, sn, curLoc.Value));   // başka konumda InStock → konum düzeltme
+            else
+                freshSurplus.Add((id, sn));               // yeni / çıkmış / konumsuz → yeni giriş
+        }
+
+        var missing = systemAtLoc.Where(kv => !countedSet.Contains(kv.Key)).ToList();
+        if (freshSurplus.Count == 0 && transfers.Count == 0 && missing.Count == 0) return 0;
+
+        var written = 0;
+
+        // ── Fazla (yeni giriş): +K Adjust @loc ──
+        if (freshSurplus.Count > 0)
+        {
+            var lineId = await AppendAdjustLineAsync(conn, tx, documentId, itemId, configId, null,
+                freshSurplus.Count, positiveVariance: true, location, "Sayım seri fazlası — Yansıt", ct);
+            foreach (var (id0, sn) in freshSurplus)
+            {
+                int serialId = id0;
+                if (serialId == 0)
+                {
+                    await using var ins = conn.CreateCommand();
+                    ins.Transaction = tx;
+                    ins.CommandText = $"""
+                        INSERT INTO {T("ItemSerial")} ([ItemId],[SerialNo],[Status],[CurrentLocationId])
+                        VALUES (@It,@Sn,1,@Loc);
+                        SELECT CAST(SCOPE_IDENTITY() AS INT);
+                        """;
+                    ins.Parameters.AddWithValue("@It", itemId);
+                    ins.Parameters.AddWithValue("@Sn", sn);
+                    ins.Parameters.AddWithValue("@Loc", (object?)location ?? DBNull.Value);
+                    serialId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
+                }
+                else
+                {
+                    await using var upd = conn.CreateCommand();
+                    upd.Transaction = tx;
+                    upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=1,[IsActive]=1,[CurrentLocationId]=@Loc,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+                    upd.Parameters.AddWithValue("@Id", serialId);
+                    upd.Parameters.AddWithValue("@Loc", (object?)location ?? DBNull.Value);
+                    await upd.ExecuteNonQueryAsync(ct);
+                }
+                await LinkCountSerialAsync(conn, tx, lineId, serialId, ct);
+            }
+            written++;
+        }
+
+        // ── Konum düzeltme (başka konumdan taşınma): +T @loc giriş + eski konum bazında −X çıkış ──
+        if (transfers.Count > 0)
+        {
+            var inLineId = await AppendAdjustLineAsync(conn, tx, documentId, itemId, configId, null,
+                transfers.Count, positiveVariance: true, location, "Sayım seri konum düzeltme (giriş) — Yansıt", ct);
+            foreach (var grp in transfers.GroupBy(t => t.OldLoc))
+            {
+                var outLineId = await AppendAdjustLineAsync(conn, tx, documentId, itemId, configId, null,
+                    grp.Count(), positiveVariance: false, grp.Key, "Sayım seri konum düzeltme (çıkış) — Yansıt", ct);
+                foreach (var (id, sn, _) in grp)
+                {
+                    await using (var upd = conn.CreateCommand())
+                    {
+                        upd.Transaction = tx;
+                        upd.CommandText = $"UPDATE {T("ItemSerial")} SET [CurrentLocationId]=@Loc,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+                        upd.Parameters.AddWithValue("@Id", id);
+                        upd.Parameters.AddWithValue("@Loc", (object?)location ?? DBNull.Value);
+                        await upd.ExecuteNonQueryAsync(ct);
+                    }
+                    await LinkCountSerialAsync(conn, tx, outLineId, id, ct);
+                    await LinkCountSerialAsync(conn, tx, inLineId, id, ct);
+                }
+            }
+            written++;
+        }
+
+        // ── Eksik (sistemde InStock@loc, sayılmadı): −M Adjust @loc → Issued + konumsuz ──
+        if (missing.Count > 0)
+        {
+            var lineId = await AppendAdjustLineAsync(conn, tx, documentId, itemId, configId, null,
+                missing.Count, positiveVariance: false, location, "Sayım seri eksiği — Yansıt", ct);
+            foreach (var kv in missing)
+            {
+                await using (var upd = conn.CreateCommand())
+                {
+                    upd.Transaction = tx;
+                    upd.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2,[CurrentLocationId]=NULL,[Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+                    upd.Parameters.AddWithValue("@Id", kv.Value);
+                    await upd.ExecuteNonQueryAsync(ct);
+                }
+                await LinkCountSerialAsync(conn, tx, lineId, kv.Value, ct);
+            }
+            written++;
+        }
+
+        return written;
+    }
+
+    /// <summary>Sayım düzeltme hareket satırına seri bağı (idempotent).</summary>
+    private async Task LinkCountSerialAsync(SqlConnection conn, SqlTransaction tx, int lineId, int serialId, CancellationToken ct)
+    {
+        await using var link = conn.CreateCommand();
+        link.Transaction = tx;
+        link.CommandText = $"""
+            IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
+                INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+            """;
+        link.Parameters.AddWithValue("@Ln", lineId);
+        link.Parameters.AddWithValue("@Sr", serialId);
+        await link.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>Depodaki (location) item lot bakiyeleri — (LotId, LotNo, baz-birim bakiye).</summary>
