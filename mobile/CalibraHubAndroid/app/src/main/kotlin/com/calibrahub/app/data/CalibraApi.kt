@@ -13,7 +13,7 @@ import retrofit2.http.Query
 
 /**
  * CalibraHub backend için Retrofit interface'i.
- * Mobile endpoint'leri /api/mobile/* altında — CSRF muaftır,
+ * Mobile endpoint'leri /api/mobile/ yolu altinda — CSRF muaftir,
  * cookie + X-Requested-With header'ı ile origin doğrulanır.
  */
 interface CalibraApi {

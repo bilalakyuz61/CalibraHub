@@ -56,6 +56,28 @@ implementasyonlarını verir.
 </aside>
 ```
 
+### Sol menü görünümü — Malzeme Kartı dot standardı (2026-07-11)
+
+Tüm veri-giriş ekranlarının sol sekme menüsü **Malzeme Kartı** görünümünü taşır:
+her sekme butonunun solunda **ring→dolu+glow dot** indikatör (ikon KULLANILMAZ),
+düz zemin + sol-indigo-border aktif stil, opsiyonel üst **bölüm başlığı** (uppercase + ayraç).
+
+Yeni ekranda buton class'ına bu bloğu ekle (PREFIX + aktif class'ı uyarla; buton `display:flex; align-items:center; gap:9px` olmalı):
+```css
+.PREFIX-tab::before {
+  content:''; width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  border:1.5px solid #cbd5e1; background:transparent; transition:all .18s;
+}
+.PREFIX-tab:hover::before { border-color:#94a3b8; }
+.PREFIX-tab.is-active::before { background:#6366f1; border-color:#6366f1; box-shadow:0 0 7px rgba(99,102,241,.5); }
+body.app-theme-dark .PREFIX-tab::before { border-color:rgba(255,255,255,.24); }
+body.app-theme-dark .PREFIX-tab:hover::before { border-color:rgba(255,255,255,.48); }
+body.app-theme-dark .PREFIX-tab.is-active::before { background:#6366f1; border-color:#6366f1; box-shadow:0 0 7px rgba(99,102,241,.55); }
+```
+Referans: `Views/Logistics/MaterialCardEdit.cshtml` (`.mce-nav-dot`, kanonik), paylaşılan
+`wwwroot/css/site.css` → `.ux-edit-nav__tab::before` (6 ekran), `Views/Admin/CompanySettings.cshtml` (`.cs-nav-dot`).
+İkon taşıyan eski ekranı dönüştürürken ikonu `display:none` yapıp dot ekle.
+
 ### Sağ pane'ler
 ```html
 <main class="st-content">

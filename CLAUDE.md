@@ -24,15 +24,18 @@ Tüm geliştirme akışı Claude üzerinden yürür. Kod değişikliği yaptığ
 
 ## Mimari kararlar — KALIN UYULMASI GEREKEN
 
-### DepartmentManager Rolü — Bilinçli Bypass Kararı (2026-06-25)
+### DepartmentManager Rolü — Bilinçli Bypass Kararı (2026-06-25, güncelleme 2026-07-11)
 
-`PermissionService.CheckAsync` içinde `DepartmentManager` rolü, `SetupDefinitions` ve `Scheduler` dışında tüm formlara DB grant'larına bakmaksızın `true` döndürmektedir.
+`PermissionService.CheckAsync` içinde `DepartmentManager` rolü, **yalnızca `SetupDefinitions`** dışında tüm formlara DB grant'larına bakmaksızın `true` döndürmektedir. (`GetAccessScopeAsync` aynı bloğu kullanır.)
 
-**Sebep:** DepartmentManager'ın kendi departmanındaki her operasyonu yönetmesi beklenmekte, granüler kısıtlama ihtiyacı henüz gündeme gelmemiştir.
+**Politika (2026-07-11 kullanıcı kararı):** "Sistem Ayarları / Sistem Yönetimi ekranı yalnızca SystemAdmin'e açık; **diğer TÜM sayfalar yetkilendirilebilir ve admin (DepartmentManager) kullanıcıya direk açık**." Bunun uygulanışı:
+- **`SetupDefinitions` = SystemAdmin-only "sistem/dev bucket'ı"**: entegratör şifreleri, SMTP/ERP/Mail sistem ayarları (`AdminController.MailSettings/ErpSettings/IntegratorSettings`, `_SistemAyarlariTabs`), `/Gate` (Sistem Yönetimi), sistem logları + **tehlikeli dev/sistem araçları** (`LegacyMigration`, `IntegrationTestSeed`, `ConnectivityTests`, `DatabaseMetadata`, `Locks`, `FormManagement`, `Forms`). Bu araçlar env-guard'lı DEĞİL → admin'e AÇILMAMALI.
+- **İş ekranları `SetupDefinitions`'tan ayrı grantable kodlara taşınır** (fail-safe: unutulan iş ekranı bloklu kalır, tehlikeli araç sızmaz). Taşınanlar: `AiAdminController` (Yapay Zeka sekmesi) → `CompanySettings`; `Scheduler` (Zamanlanmış Görevler) bloktan çıkarıldı → admin erişir.
+- **Şirket Ayarları** (`CompanySettings`) zaten tek POST ile kaydolur → tüm sekmeleri (AI dahil) admin'e açık.
 
-**YAPILMAMASI GEREKEN:** Bu bypass'ı sessizce kaldırmak. Kaldırılması gerekirse önce tüm DeptManager kullanıcılarına gerekli grant'lar atanmalı, ardından bypass kaldırılmalıdır.
+**Taşınanlar (2026-07-11, tamam):** `AdminController.ViewSettings` (Alan Rehberi sayfası) + menü → `ViewSettings` (`WidgetsController` `/api/widgets` zaten `ViewSettings`; sadece sayfa action + menü taşındı). `GeneralDefinitionsController` (Satış Temsilcileri/Döviz/Cari Grup) → `GeneralDefs`. `CompanyUserController` + `AdminUserJsonController` → yeni `FormCodes.UserManagement`; **yetki yükseltme guard'ı eklendi** — rol dropdown'unda "Sistem Admin" yalnız SystemAdmin'e görünür + `Save` server-side reddeder (SystemAdmin rolü atama VE mevcut SystemAdmin kaydını düzenleme yalnız SystemAdmin'e). `USER_MANAGEMENT` + `VIEW_SETTINGS` artık `SeedFormsAsync`'e eklendi (2026-07-11) → PermissionDef discovery CRUD aksiyonlarını üretir, Yetki Yönetimi matrisinde grantable. VIEW_SETTINGS'in eski 2026-06-10 pasifleştirme migration'ı kaldırılıp reaktivasyona çevrildi. `SETUP_DEFINITIONS` etiketi "Alan Rehberi" → "Sistem Ayarları" olarak düzeltildi (Alan Rehberi artık VIEW_SETTINGS).
 
-**Yeniden değerlendirme şartı:** Birden fazla müşteri "DepartmentManager farklı formlara farklı erişimde olsun" talebinde bulunursa bypass kaldırılıp grant matrix'e dahil edilebilir.
+**YAPILMAMASI GEREKEN:** `SetupDefinitions`'ı toptan bloktan çıkarmak (dev araçları sızar). Bir iş ekranını açmak için o ekranı ayrı grantable koda taşı, `SetupDefinitions` bloğuna dokunma.
 
 ### ENGINE Architecture — KARARLAŞTIRILDI: YAPILMAYACAK (2026-06-10)
 
@@ -221,6 +224,36 @@ Tüm silme/destruktif işlemler **ekranın ortasında** custom modal ile onay al
 **Referans uygulama:** `Views/PriceList/Report.cshtml` → `showConfirm({ title, message, okLabel })` Promise tabanlı helper + `.plr-modal-backdrop` CSS. Yeni ekranlarda aynı pattern'i tekrarla; promise zincirinde `.then(ok => { if (!ok) return; ... })`.
 
 Silme/destruktif fiil olmayan sıradan bilgilendirme/uyarılar için inline mesaj veya toast yeterlidir; modal sadece **kullanıcı onayı gerektiren** akışlarda zorunludur.
+
+## İşlem Log Modülü (Audit Trail) — yeni kaydetme akışlarında ZORUNLU
+
+Tüm insert/update/delete işlemleri ve oturum olayları **dosya tabanlı** işlem loguna yazılır:
+`{ContentRoot}/App_Data/AuditLogs/company-{id}/{yyyy-MM}/audit-{yyyy-MM-dd}.jsonl`.
+**DB'ye audit yazımı YOK** — bilinçli karar (2026-07-10): sistemi yormasın diye günlük JSONL dosyaları.
+Çekirdek: `CalibraHub.Application/Auditing/` (Channel → `AuditFileWriter` background yazıcı + retention temizliği;
+`AuditQueryService` dosya okuyucu). Saklama süresi şirket parametresi `SECURITY / AUDIT_RETENTION_DAYS`
+(varsayılan 365 gün, 0 = süresiz; Admin → Parametreler → Güvenlik).
+
+**KURAL — yeni bir kaydetme/silme akışı yazarken:**
+1. Servise `IAuditTrailService? audit = null` (opsiyonel ctor param, DI singleton) veya controller'a zorunlu param inject et.
+2. Başarılı işlemden SONRA logla; audit metodları exception fırlatmaz, iş akışını asla bozamaz.
+3. **Update'te yalnızca değişen alanlar loglanır**: eski kaydı mutasyondan ÖNCE çek,
+   `audit.LogUpdate(entity, id, title, oldSnapshot, newSnapshot)` — reflection diff otomatik, değişiklik yoksa log yazılmaz.
+   Kalem satırları için `LogChanges` + elle diff (referans: `DocumentService.BuildLineChanges`).
+   **Insert'te ilk değer dökümü verilir**: `LogInsert(..., snapshot: entity, snapshotIgnore: [hassas alanlar])` —
+   dolu alanlar "boş → değer" olarak yazılır; PIN/hash gibi alanlar `snapshotIgnore` ile dışarıda bırakılır (ZORUNLU).
+   **Delete'te silinen içerik dökümü verilir**: `LogDelete(..., snapshot: [kalem listesi])` — "ne kayboldu" izlenebilir.
+4. Entity kodları: belgeler için `DocumentType.Code` ("satis_siparisi", "depo_giris"...),
+   sabit entity'ler için sınıf adı ("Item", "Contact", "WorkOrder", "Personnel", "Machine", "Department", "User").
+   Türkçe etiketler `AuditFieldLabels.EntityLabels` / `FieldLabels` sözlüklerine eklenir.
+5. Yeni edit ekranına "Değişiklik Geçmişi" sekmesi ekle — paylaşılan partial (elle JS kopyalama):
+   `@await Html.PartialAsync("_AuditTrailHost", new AuditTrailHostModel { Entity = "...", RecordId = ..., WidgetFormCode = "..." })`
+   — `WidgetFormCode` verilirse Ek Alanlar (WidgetTraLog) geçmişi de aynı zaman çizelgesine merge edilir.
+   Yeni kayıt save sonrası: `window.CalibraAuditTrail.reload('<HostId>', newId)`.
+6. Merkezi izleme/raporlama ekranı `/AuditLog` (FormCode `AUDIT_LOG`, menü: Ayarlar → İşlem Logları; React `AuditMonitor`).
+
+**Referans:** `DocumentService.SaveQuoteAsync/DeleteQuoteAsync/ChangeStatusAsync` (tam pattern),
+`AccountController.Login/Logout` (oturum olayları), `Views/Sales/DocumentEdit.cshtml` (sekme retrofit).
 
 ## Dinamik Alan (Widget / Alan Yönetimi) Host — belge/tanım ekranlarında ZORUNLU
 

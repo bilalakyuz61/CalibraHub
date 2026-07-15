@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   vw_ReportDocument.sql — FastReport dizaynci icin TEK ortak belge view'i
+   vw_ReportDocument.sql — DocDesigner belge tasarimcisi icin TEK ortak belge view'i
 
    NOT: Uygulama startup'inda otomatik olarak CalibraDatabaseInitializer
    uzerinden her company DB'ye kurulur (Program.cs — EnsureReportDocumentViewAsync).
@@ -9,7 +9,7 @@
 
    YAPI:
      Grain = bir satir = bir DocumentLine kaydi. Belge ustu bilgiler her
-     satirda tekrarlanir → FastReport GroupHeader ile [BelgeId] grupla.
+     satirda tekrarlanir → DocDesigner grup band'i ile [BelgeId] grupla.
 
    KOLON BASLIKLARI (Turkce):
      Belge*     → belge header (BelgeNo, BelgeTarihi, GenelToplam...)

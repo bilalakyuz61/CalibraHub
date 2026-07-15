@@ -36,7 +36,7 @@
   Bu script ADMIN olarak calistirilmali (sc sdset elevation gerektirir).
 
 .PARAMETER ServiceNames
-  Yetki verilecek servis adlari. Default: CalibraHub Web/Worker/Grafana.
+  Yetki verilecek servis adlari. Default: CalibraHub Web/Worker.
 
 .EXAMPLE
   pwsh installer\grant-service-acl.ps1
@@ -47,7 +47,7 @@
   # Sadece tek servis
 #>
 param(
-    [string[]]$ServiceNames = @("CalibraHub Web", "CalibraHub Worker", "CalibraHub Grafana")
+    [string[]]$ServiceNames = @("CalibraHub Web", "CalibraHub Worker")
 )
 
 $ErrorActionPreference = "Stop"
