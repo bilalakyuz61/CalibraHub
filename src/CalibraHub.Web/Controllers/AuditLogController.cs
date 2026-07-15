@@ -1,6 +1,9 @@
+using System.Security.Claims;
 using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
+using CalibraHub.Application.Security;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,24 +19,49 @@ namespace CalibraHub.Web.Controllers;
 ///   GET /AuditLog/Record         → tek kaydın zaman çizelgesi (belge ekranı sekmesi);
 ///                                  WidgetTraLog (Ek Alanlar) geçmişi de merge edilir.
 ///
-/// Search/Stats ekran yetkisine (AUDIT_LOG) bağlıdır; Record yalnızca [Authorize] ister —
-/// belge ekranını zaten açabilen kullanıcı kendi kaydının geçmişini görebilir.
+/// Search/Stats ekran yetkisine (AUDIT_LOG) [PermissionScope] ile bağlıdır (admin-only veri
+/// endpoint'leri — değişmedi). Index ise 2026-07-16 itibarıyla KOŞULLU: ?entity=&recordId=
+/// ikisi de doluysa (kayda-kilitli mod — belge ekranındaki "Log Kayıtları" butonu) yalnızca
+/// [Authorize] yeterli; belge ekranını zaten açabilen kullanıcı kendi kaydının geçmişini
+/// görebilir. Parametreler eksikse (tam izleme/raporlama modu, ör. menüden doğrudan açılış)
+/// AUDIT_LOG (VIEW/VIEW_OWN) yetkisi elle kontrol edilir — PermissionEnforcementFilter'ın GET
+/// action'lar için uyguladığı aynı kontrol (bkz. GetCurrentUser/MakeForbidResult altta).
+/// Record yalnızca [Authorize] ister (değişmedi).
 /// </summary>
 [Authorize]
 public sealed class AuditLogController : Controller
 {
     private readonly IAuditQueryService _auditQuery;
     private readonly IWidgetService _widgetService;
+    private readonly IPermissionService _permService;
 
-    public AuditLogController(IAuditQueryService auditQuery, IWidgetService widgetService)
+    public AuditLogController(
+        IAuditQueryService auditQuery, IWidgetService widgetService, IPermissionService permService)
     {
         _auditQuery = auditQuery;
         _widgetService = widgetService;
+        _permService = permService;
     }
 
+    /// <summary>
+    /// entity+recordId ikisi de doluysa kayda-kilitli mod → [Authorize] yeterli.
+    /// Aksi halde (tam izleme modu) AUDIT_LOG:VIEW|VIEW_OWN yetkisi zorunlu.
+    /// </summary>
     [HttpGet("/AuditLog")]
-    [PermissionScope(FormCodes.AuditLog)]
-    public IActionResult Index() => View();
+    public async Task<IActionResult> Index(string? entity, string? recordId, CancellationToken ct)
+    {
+        var recordScoped = !string.IsNullOrWhiteSpace(entity) && !string.IsNullOrWhiteSpace(recordId);
+        if (!recordScoped)
+        {
+            var (userId, role, departmentId) = GetCurrentUser();
+            var allowed = await _permService.CheckAnyAsync(
+                userId, role, departmentId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
+            if (!allowed)
+                return MakeForbidResult();
+        }
+
+        return View();
+    }
 
     [HttpGet("/AuditLog/Search")]
     [PermissionScope(FormCodes.AuditLog)]
@@ -126,6 +154,54 @@ public sealed class AuditLogController : Controller
     }
 
     // ── Yardımcılar ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// PermissionEnforcementFilter.OnAuthorizationAsync ile birebir aynı claim çözümü
+    /// (userId/role/departmentId) — Index'teki manuel yetki kontrolü filter'ın GET path'iyle
+    /// aynı sonucu üretir. Rol claim'i hem enum adı hem Türkçe label olabilir; TryParseRole
+    /// ikisini de çözer, bilinmeyense Operator'a düşer (filter ile aynı fallback).
+    /// </summary>
+    private (int UserId, UserRole Role, int? DepartmentId) GetCurrentUser()
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int.TryParse(userIdStr, out var userId);
+
+        var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        if (!UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
+            role = UserRole.Operator;
+
+        var deptStr = User.FindFirstValue("department_id");
+        int? departmentId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
+
+        return (userId, role, departmentId);
+    }
+
+    /// <summary>
+    /// PermissionEnforcementFilter.MakeForbidResult ile birebir aynı 403 deseni — bu, Index'in
+    /// [PermissionScope(FormCodes.AuditLog)] taşıdığı zaman ürettiği sonuçla aynıdır (kaldırılan
+    /// attribute'un davranışını tam izleme modu için burada elle taklit eder). AJAX/JSON istekte
+    /// JSON 403 gövdesi, normal tarayıcı navigasyonunda ForbidResult (cookie challenge/AccessDenied).
+    /// </summary>
+    private IActionResult MakeForbidResult()
+    {
+        var req = Request;
+        var isApi = req.Headers.Accept.ToString().Contains("application/json")
+                 || req.Headers["X-Requested-With"].ToString()
+                       .Equals("XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+                 || req.Path.StartsWithSegments("/api")
+                 || (req.ContentType?.Contains("application/json") == true)
+                 || req.Method.Equals("POST", StringComparison.OrdinalIgnoreCase);
+        if (isApi)
+        {
+            return new JsonResult(new
+            {
+                ok      = false,
+                message = "Bu işlemi yapmak için yetkiniz yok.",
+                error   = $"Yetki yok: {FormCodes.AuditLog}:VIEW|VIEW_OWN",
+            }) { StatusCode = StatusCodes.Status403Forbidden };
+        }
+        return Forbid();
+    }
 
     /// <summary>
     /// Yerel gün girdilerini (yyyy-MM-dd) UTC aralığına çevirir; boşsa son 7 gün.

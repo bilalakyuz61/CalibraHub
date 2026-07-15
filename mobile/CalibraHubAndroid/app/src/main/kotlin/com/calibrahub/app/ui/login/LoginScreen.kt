@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -54,18 +55,27 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     var loading  by remember { mutableStateOf(false) }
     var showServerSettings by remember { mutableStateOf(false) }
 
-    // Şirket dropdown — birden çok şirketli sistemler için
-    var companies by remember { mutableStateOf<List<CompanyDto>>(emptyList()) }
-    var selectedCompanyId by remember { mutableStateOf<Int?>(null) }
-    var companyDropdownExpanded by remember { mutableStateOf(false) }
+    // Parola doğrulandıktan sonra dönen erişilebilir şirket listesi.
+    // Boş = kimlik bilgisi adımı gösterilir; dolu = şirket seçim adımı gösterilir.
+    var companyChoices by remember { mutableStateOf<List<CompanyDto>>(emptyList()) }
 
-    // Mevcut base URL + şirket listesi
+    // Mevcut base URL (sunucu ayarları paneli için)
     LaunchedEffect(Unit) {
         baseUrl = session.currentBaseUrl()
-        repo.companies().onSuccess { list ->
-            companies = list
-            if (list.size == 1) selectedCompanyId = list.first().id
-        }
+    }
+
+    // Seçilen şirketle asıl login çağrısı — hem "tek şirket → otomatik gir" hem de
+    // "şirket seçici → tıkla → gir" akışlarından paylaşılır. Result.fold inline olduğu için
+    // (kotlin.Result.fold inline'dır) suspend çağrılar burada askıya alma zincirini bozmaz.
+    suspend fun doLogin(companyId: Int) {
+        loading = true
+        repo.login(email.trim(), password, companyId).fold(
+            onSuccess = { onLoggedIn() },
+            onFailure = { e ->
+                snackbarHostState.showSnackbar("Giriş başarısız: ${e.message ?: "bilinmeyen hata"}")
+            }
+        )
+        loading = false
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
@@ -81,85 +91,100 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
             CalibraLoginBadge()
             Spacer(Modifier.height(40.dp))
 
-            // Şirket dropdown — sadece 2+ şirket varsa göster
-            if (companies.size > 1) {
-                ExposedDropdownMenuBox(
-                    expanded = companyDropdownExpanded,
-                    onExpandedChange = { companyDropdownExpanded = !companyDropdownExpanded },
+            if (companyChoices.isEmpty()) {
+                // ── Adım 1: kimlik bilgileri ─────────────────────────────
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("E-posta") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    singleLine = true,
+                    enabled = !loading,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = companies.firstOrNull { it.id == selectedCompanyId }?.name ?: "Şirket seçin",
-                        onValueChange = {},
-                        label = { Text("Şirket") },
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = companyDropdownExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = companyDropdownExpanded,
-                        onDismissRequest = { companyDropdownExpanded = false }
-                    ) {
-                        companies.forEach { c ->
-                            DropdownMenuItem(
-                                text = { Text(c.name) },
-                                onClick = {
-                                    selectedCompanyId = c.id
-                                    companyDropdownExpanded = false
+                )
+                Spacer(Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Parola") },
+                    singleLine = true,
+                    enabled = !loading,
+                    visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { showPwd = !showPwd }) {
+                            if (showPwd) Icon(Icons.Default.VisibilityOff, contentDescription = "Parolayı gizle")
+                            else         Icon(Icons.Default.Visibility, contentDescription = "Parolayı göster")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(24.dp))
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            loading = true
+                            repo.loginCompanies(email.trim(), password).fold(
+                                onSuccess = { list ->
+                                    when {
+                                        list.isEmpty() -> {
+                                            loading = false
+                                            snackbarHostState.showSnackbar("Kimlik geçersiz veya erişilebilir şirket yok")
+                                        }
+                                        list.size == 1 -> doLogin(list.first().id)
+                                        else -> {
+                                            loading = false
+                                            companyChoices = list
+                                        }
+                                    }
+                                },
+                                onFailure = {
+                                    loading = false
+                                    snackbarHostState.showSnackbar("Kimlik geçersiz veya erişilebilir şirket yok")
                                 }
                             )
                         }
-                    }
+                    },
+                    enabled = !loading && email.isNotBlank() && password.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    else         Text("Giriş yap")
                 }
+            } else {
+                // ── Adım 2: birden çok şirket erişimi varsa seçim ─────────
+                Text(
+                    text = "Şirket seçin",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(12.dp))
-            }
 
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("E-posta") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Parola") },
-                singleLine = true,
-                visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    IconButton(onClick = { showPwd = !showPwd }) {
-                        if (showPwd) Icon(Icons.Default.VisibilityOff, contentDescription = "Parolayı gizle")
-                        else         Icon(Icons.Default.Visibility, contentDescription = "Parolayı göster")
+                companyChoices.forEach { company ->
+                    OutlinedButton(
+                        onClick = { scope.launch { doLogin(company.id) } },
+                        enabled = !loading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(company.name)
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(8.dp))
+                }
 
-            Button(
-                onClick = {
-                    scope.launch {
-                        loading = true
-                        repo.login(email.trim(), password, selectedCompanyId).fold(
-                            onSuccess = { onLoggedIn() },
-                            onFailure = { e ->
-                                snackbarHostState.showSnackbar("Giriş başarısız: ${e.message ?: "bilinmeyen hata"}")
-                            }
-                        )
-                        loading = false
-                    }
-                },
-                enabled = !loading && email.isNotBlank() && password.isNotBlank() &&
-                          (companies.size <= 1 || selectedCompanyId != null),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                else         Text("Giriş yap")
+                if (loading) {
+                    Spacer(Modifier.height(4.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.height(4.dp))
+                }
+
+                TextButton(
+                    onClick = { companyChoices = emptyList() },
+                    enabled = !loading
+                ) { Text("Geri") }
             }
 
             Spacer(Modifier.height(32.dp))

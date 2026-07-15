@@ -61,7 +61,20 @@ class SessionManager(private val context: Context) {
      * Yeni bir Retrofit instance üretir. Pahalı değil ama her API çağrısı için
      * yeniden yaratmamak adına ApplicationScope'da cache'lenmesi önerilir.
      */
-    suspend fun buildApi(): CalibraApi {
+    suspend fun buildApi(): CalibraApi = buildRetrofit().create(CalibraApi::class.java)
+
+    /**
+     * Diğer /api/mobile/ altındaki Retrofit interface'leri (WarehouseApi gibi) için aynı
+     * cookie + X-Requested-With + timeout deseniyle client üretir.
+     * Kullanım: `session.buildApi(WarehouseApi::class.java)`.
+     *
+     * Not: reified generic (`buildApi<T>()`) yerine bilinçli olarak `Class<T>` parametresi
+     * tercih edildi — aynı isim+arity'de reified generic overload, üstteki no-arg `buildApi()`
+     * ile Kotlin tip çıkarımında (özellikle zincirleme çağrılarda) belirsizliğe yol açabiliyor.
+     */
+    suspend fun <T> buildApi(service: Class<T>): T = buildRetrofit().create(service)
+
+    private suspend fun buildRetrofit(): Retrofit {
         val baseUrl = currentBaseUrl()
         val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
 
@@ -94,7 +107,6 @@ class SessionManager(private val context: Context) {
             .client(client)
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
-            .create(CalibraApi::class.java)
     }
 
     companion object {

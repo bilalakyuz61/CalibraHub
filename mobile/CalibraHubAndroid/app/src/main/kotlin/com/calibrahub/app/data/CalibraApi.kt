@@ -21,6 +21,12 @@ interface CalibraApi {
     @GET("api/mobile/companies")
     suspend fun companies(): Response<List<CompanyDto>>
 
+    // Parola doğrulandıktan sonra kullanıcının erişebildiği şirketleri döner (boşsa []).
+    // Login akışı: önce bu çağrılır, tek şirket dönerse doğrudan login(), birden fazlaysa
+    // kullanıcıya seçtirilip seçilen companyId ile login() çağrılır.
+    @POST("api/mobile/login-companies")
+    suspend fun loginCompanies(@Body req: LoginCompaniesRequest): Response<List<CompanyDto>>
+
     @POST("api/mobile/login")
     suspend fun login(@Body req: LoginRequest): Response<LoginResponse>
 
@@ -63,6 +69,9 @@ data class CompanyDto(val id: Int, val name: String)
 
 @JsonClass(generateAdapter = true)
 data class LoginRequest(val email: String, val password: String, val companyId: Int? = null)
+
+@JsonClass(generateAdapter = true)
+data class LoginCompaniesRequest(val email: String, val password: String)
 
 @JsonClass(generateAdapter = true)
 data class LoginResponse(val ok: Boolean, val displayName: String? = null, val error: String? = null)

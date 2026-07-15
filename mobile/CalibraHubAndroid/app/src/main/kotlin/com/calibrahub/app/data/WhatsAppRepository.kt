@@ -18,6 +18,13 @@ class WhatsAppRepository(private val session: SessionManager) {
         resp.body() ?: emptyList()
     }
 
+    /** Parola doğrulandıktan sonra erişilebilir şirket listesini döner — login akışının ilk adımı. */
+    suspend fun loginCompanies(email: String, password: String): Result<List<CompanyDto>> = runCatchingApi {
+        val resp = session.buildApi().loginCompanies(LoginCompaniesRequest(email, password))
+        if (!resp.isSuccessful) error("HTTP ${resp.code()}")
+        resp.body() ?: emptyList()
+    }
+
     suspend fun login(email: String, password: String, companyId: Int? = null): Result<String> = runCatchingApi {
         val api = session.buildApi()
         val resp = api.login(LoginRequest(email, password, companyId))
