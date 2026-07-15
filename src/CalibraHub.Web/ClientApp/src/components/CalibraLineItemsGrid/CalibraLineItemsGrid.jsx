@@ -87,6 +87,12 @@ export default function CalibraLineItemsGrid(props) {
   // fiyatlandirma teklif/siparis asamasinda olusur, revize akisi gerekmez.
   var __docTypeCode = String(config.documentTypeCode || '').toLowerCase()
   var __isPurchaseRequest = __docTypeCode === 'alis_talebi'
+  // Sayım (envanter sayımı): Fiyat Geçmişi / Maliyet Gör / Revize Et satır menüsünden gizlenir —
+  // sayımda yalnız miktar sayılır, fiyatlandırma/revize akışı yoktur. decimalFormCode = INVENTORY_COUNT
+  // ile ayırt edilir (sayım grid config'i documentTypeCode/lineFormCode taşımaz).
+  var __isInventoryCount = String(config.decimalFormCode || '').toUpperCase() === 'INVENTORY_COUNT'
+    || __docTypeCode === 'sayim'
+  var __hidePricingFeatures = __isPurchaseRequest || __isInventoryCount
   // 2026-06-02: Satir ek alanlari icin form code'u config'ten al — daha once
   // hardcoded 'SALES_QUOTE_LINES' idi. Ihtiyac Kaydi (alis_talebi) icin dogru
   // kod 'PURCHASE_REQUEST_LINES' — hardcoded olunca modal YANLIS form'un
@@ -1802,9 +1808,10 @@ export default function CalibraLineItemsGrid(props) {
               disabled: false,
             },
           ]
-          // İhtiyaç Kaydi (alis_talebi): sadece Stok Kartina Git + Not Ekle.
-          // Fiyat / Maliyet / Revize talep asamasinda bir karsiligi yok.
-          if (__isPurchaseRequest) {
+          // İhtiyaç Kaydi (alis_talebi) + Sayım (INVENTORY_COUNT): sadece Stok Kartina Git + Not Ekle.
+          // Fiyat Geçmişi / Maliyet Gör / Revize Et bu bağlamlarda anlamsız (fiyatlandırma teklif/
+          // sipariş aşamasında oluşur; sayımda yalnız miktar sayılır).
+          if (__hidePricingFeatures) {
             items = items.filter(function (it) {
               return it.key === 'stock-card' || it.key === 'note'
             })
