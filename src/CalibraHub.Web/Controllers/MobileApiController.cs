@@ -22,6 +22,7 @@ namespace CalibraHub.Web.Controllers;
 /// dogrulanir. Bu, AVD emulator ve fiziksel cihaz dev cycle'ini kolaylastirir.
 ///
 /// Endpoint'ler:
+///   POST /api/mobile/login-companies          — email+parola dogrulanmis sirket listesi (login oncesi)
 ///   POST /api/mobile/login                    — cookie set + display name
 ///   POST /api/mobile/logout                   — cookie clear
 ///   GET  /api/mobile/whoami                   — oturum dogrulama
@@ -105,6 +106,66 @@ public sealed class MobileApiController : ControllerBase
             principal, props);
 
         return Ok(new MobileLoginResponse(true, user.FullName, null));
+    }
+
+    /// <summary>
+    /// Yeni mobil login akışı: kullanıcı önce şirket seçmez — e-posta + parola girer,
+    /// bu kimlik bilgileriyle GEÇERLİ olduğu (parolası doğrulanmış) şirketler listelenir.
+    /// Kullanıcı ekranda listeden şirket seçer, ardından gerçek oturum
+    /// POST /api/mobile/login {email,password,companyId} ile seçilen companyId verilerek açılır
+    /// (bu endpoint session/cookie OLUŞTURMAZ — yalnızca aday şirket listesi döner).
+    ///
+    /// Not: Company + Users tabloları her zaman sistem (master) bağlantısında tutulur
+    /// (bkz. SqlCompanyRepository / SqlUserProfileRepository → OpenSystemConnectionAsync),
+    /// Users.CompanyId kolonuyla şirkete bağlanır. Bu yüzden per-company DB'lere tek tek
+    /// bağlanmaya gerek yok — tek sorguda tüm şirketlerdeki eşleşen kullanıcı kayıtları gelir.
+    /// Şirket sayısı arttıkça bu liste büyür (in-memory filtre); ileride şirket sayısı çok
+    /// büyürse SQL tarafında email bazlı filtrelemeye taşınabilir (şu an GetAllAsync + LINQ,
+    /// AccountController.GetCompanyOptionsByEmailAsync ile aynı desen).
+    ///
+    /// Güvenlik: parola doğrulanmadan (IPasswordHashService.VerifyPassword) HİÇBİR şirket
+    /// dönülmez — email-only enumeration riskine karşı. Email bulunamadı / parola yanlış /
+    /// kullanıcı pasif / hiç eşleşme yok — hepsinde aynı sonuç: boş liste []. Hangi kısmın
+    /// hatalı olduğu asla ayrıştırılıp mesaj olarak dönülmez.
+    /// </summary>
+    [HttpPost("login-companies")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> LoginCompanies(
+        [FromServices] IUserProfileRepository userProfileRepo,
+        [FromServices] IPasswordHashService passwordHashService,
+        [FromBody] MobileLoginCompaniesRequest? req,
+        CancellationToken ct)
+    {
+        if (req is null || string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
+            return Ok(Array.Empty<object>());
+
+        var email = req.Email.Trim();
+        var allUsers = await userProfileRepo.GetAllAsync(ct);
+
+        // Aynı e-posta birden fazla şirkette ayrı Users kaydı olarak var olabilir
+        // (UX_Users_Comp_Email = CompanyId+Email bileşik unique, global değil).
+        // Parolası bu kayıtlardan HANGİLERİYLE eşleşiyorsa yalnız o şirketler adaydır.
+        var matchedCompanyIds = allUsers
+            .Where(u => u.IsActive
+                        && u.CompanyId != 0
+                        && string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase))
+            .Where(u => passwordHashService.VerifyPassword(req.Password, u.PasswordHash))
+            .Select(u => u.CompanyId)
+            .Distinct()
+            .ToHashSet();
+
+        if (matchedCompanyIds.Count == 0)
+            return Ok(Array.Empty<object>());
+
+        var companies = await _companyRepo.GetAllAsync(ct);
+        var result = companies
+            .Where(c => c.IsActive && matchedCompanyIds.Contains(c.Id))
+            .OrderBy(c => c.Name)
+            .Select(c => new { id = c.Id, name = c.Name })
+            .ToArray();
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -374,5 +435,6 @@ public sealed class MobileApiController : ControllerBase
 
 public sealed record MobileLoginRequest(string Email, string Password, int? CompanyId = null);
 public sealed record MobileLoginResponse(bool Ok, string? DisplayName, string? Error);
+public sealed record MobileLoginCompaniesRequest(string Email, string Password);
 public sealed record MobileSendTextRequest(string Phone, string Text);
 public sealed record MobileSendResponse(bool Ok, string? MessageId, string? Error);
