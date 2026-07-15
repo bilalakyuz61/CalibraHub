@@ -7,8 +7,8 @@ namespace CalibraHub.Application.Services;
 
 /// <summary>
 /// PrintDispatcher — Belge Tasarimcisi (DocDesigner) yoluyla PDF uretir.
-/// Eski FastReport sistemi kaldirildi; tum basimlar DocLayoutRule + DocLayout
-/// uzerinden DocDesigner motoru tarafindan render edilir.
+/// Tum basimlar DocLayoutRule + DocLayout uzerinden DocDesigner motoru
+/// tarafindan render edilir.
 /// </summary>
 public sealed class PrintDispatcher : IPrintDispatcher
 {

@@ -91,9 +91,7 @@ var useInMemoryPersistence = builder.Environment.IsDevelopment() && forceInMemor
 var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, ".app-data-protection");
 
 builder.Services.AddScoped<IDocumentImportService, DocumentImportService>();
-// Eski FastReport servisleri (IReportService, IDocumentGenerationService,
-// IReportTemplateRepository, IReportTemplateSourceRepository) kaldirildi —
-// tum belge basimlari artik Belge Tasarimcisi (DocDesigner) uzerinden yapilir.
+// Tum belge basimlari Belge Tasarimcisi (DocDesigner) uzerinden yapilir.
 builder.Services.AddScoped<IDocumentTypeRepository, SqlDocumentTypeRepository>();
 // Sistem Ayarlari gate + lisans dogrulama
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IGateCredentialsRepository,

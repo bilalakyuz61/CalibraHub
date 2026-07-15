@@ -1193,7 +1193,6 @@ END;";
                     [LanguageCode]        NVARCHAR(20)   NOT NULL CONSTRAINT [DF_Users_LanguageCode] DEFAULT(N'tr-TR'),
                     [ThemeCode]           NVARCHAR(20)   NOT NULL CONSTRAINT [DF_Users_ThemeCode]    DEFAULT(N'light'),
                     [GridPreferencesJson] NVARCHAR(MAX)  NULL,
-                    [GrafanaRole]         NVARCHAR(20)   NULL,
                     [PhoneNumber]         NVARCHAR(30)   NULL,
                     [IsActive]            BIT            NOT NULL CONSTRAINT [DF_Users_IsActive]     DEFAULT(1),
                     CONSTRAINT [FK_Users_Users_SupervisorUserId]
@@ -1239,6 +1238,13 @@ END;";
                                WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Users]') AND [name] = N'PasswordResetTokenExpiry')
                     ALTER TABLE [{schemaForSql}].[Users] ADD [PasswordResetTokenExpiry] DATETIME NULL;
             END;
+
+            -- 2026-07-15: Grafana/Tasarim raporlama kaldirildi — kullanilmayan [GrafanaRole]
+            -- kolonunu mevcut DB'lerden dusur (fresh DB'de CREATE'ten cikarildi, zaten yok).
+            -- Kolonun hicbir index/constraint bagimliligi yok; veri tasima gerekmez. Idempotent.
+            IF OBJECT_ID(N'[{schemaForSql}].[Users]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Users]', N'GrafanaRole') IS NOT NULL
+                EXEC(N'ALTER TABLE [{schemaForSql}].[Users] DROP COLUMN [GrafanaRole];');
 
             -- 2026-05-25: user_settings — user_id INT'e tasindi (Users.Id ile uyumlu).
             -- Eski UNIQUEIDENTIFIER kayitlari kayboluyor (data wipe).
@@ -9370,7 +9376,6 @@ END;";
                     [Name]             NVARCHAR(200)    NOT NULL,
                     [DocumentTypeId]   INT              NOT NULL,
                     [FrxFilePath]      NVARCHAR(500)    NULL,
-                    [FrxContent]       VARBINARY(MAX)   NULL,
                     [Description]      NVARCHAR(500)    NULL,
                     [SqlViewName]      NVARCHAR(150)    NULL,
                     [KeyColumn]        NVARCHAR(100)    NULL,
@@ -9387,12 +9392,12 @@ END;";
                 CREATE INDEX [IX_ReportTemplate_DocumentType] ON [{s}].[ReportTemplate]([DocumentTypeId]);
             END;
 
-            -- Eski DB'lere frx_content kolonunu ekle (idempotent)
+            -- 2026-07-15: FastReport kaldirildi — kullanilmayan [FrxContent] kolonunu mevcut
+            -- DB'lerden dusur (fresh DB'de CREATE'ten cikarildi, zaten yok). Kolon hic
+            -- kullanilmadi (kodda hic okunmuyor) → veri tasima yok, dogrudan DROP. Idempotent.
             IF OBJECT_ID(N'[{s}].[ReportTemplate]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[ReportTemplate]', N'FrxContent') IS NULL
-            BEGIN
-                ALTER TABLE [{s}].[ReportTemplate] ADD [FrxContent] VARBINARY(MAX) NULL;
-            END;
+               AND COL_LENGTH(N'[{s}].[ReportTemplate]', N'FrxContent') IS NOT NULL
+                EXEC(N'ALTER TABLE [{s}].[ReportTemplate] DROP COLUMN [FrxContent];');
 
             -- Per-template SQL view override (opsiyonel; bos ise document_types.sql_view_name kullanilir)
             IF OBJECT_ID(N'[{s}].[ReportTemplate]', N'U') IS NOT NULL

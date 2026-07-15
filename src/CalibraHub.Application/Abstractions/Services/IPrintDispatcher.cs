@@ -10,8 +10,6 @@ namespace CalibraHub.Application.Abstractions.Services;
 ///   1) IDesignProvider.TryGetEffectiveLayoutIdAsync(ctx) ile uygun LayoutId bulunur.
 ///   2) IDocDesignerService.RenderPdfAsync(layoutId, entityId) cagrilir.
 ///   3) LayoutId yoksa veya render basarisiz olursa anlamli bir hata firlatilir.
-///
-/// Eski FastReport branch'i kaldirildi — tum basimlar Belge Tasarimcisi uzerinden.
 /// </summary>
 public interface IPrintDispatcher
 {

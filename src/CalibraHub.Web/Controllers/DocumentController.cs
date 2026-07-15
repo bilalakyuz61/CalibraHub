@@ -13,10 +13,9 @@ namespace CalibraHub.Web.Controllers;
 /// Tum render isi Belge Tasarimcisi (DocDesigner) tarafindan yapilir; bu controller
 /// yalnizca HTTP endpoint'lerini PrintDispatcher'a yonlendirir.
 ///
-/// Eski FastReport sablonlari ve onlarla iliskili tum CRUD/upload/preview action'lari
-/// kaldirildi. Yeni akista belge tasarimlari "Belge Tasarimcisi" (/DocDesigner)
-/// ekranindan yonetilir, DocLayoutRule + DocLayout sistemine kaydedilir ve
-/// PrintDispatcher uzerinden render edilir.
+/// Belge tasarimlari "Belge Tasarimcisi" (/DocDesigner) ekranindan yonetilir,
+/// DocLayoutRule + DocLayout sistemine kaydedilir ve PrintDispatcher uzerinden
+/// render edilir.
 /// </summary>
 [Authorize]
 [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.DocTemplates)]
