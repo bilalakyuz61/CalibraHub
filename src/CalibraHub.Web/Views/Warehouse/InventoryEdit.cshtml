@@ -924,14 +924,15 @@
                     var locEl = document.getElementById('invLocation');
                     var headLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
                     if (!headLoc || !Array.isArray(rows)) return;
-                    var needs = rows.some(function(r) {
-                        return r && r.materialCode && (r.fromLocationId == null || r.fromLocationId === '');
-                    });
+                    // Yalnızca YENİ (kilitsiz) satırlar header depoyu devralır. Yüklenen kayıt
+                    // satırları (_locked:true) kendi kayıtlı lokasyonunu korur — üzerine yazma.
+                    var needsDefault = function(r) {
+                        return r && !r._locked && r.materialCode && (r.fromLocationId == null || r.fromLocationId === '');
+                    };
                     var api = window.CalibraHub && window.CalibraHub.whLineGrid;
-                    if (needs && api && api.patchRows) {
+                    if (rows.some(needsDefault) && api && api.patchRows) {
                         api.patchRows(function(r) {
-                            return (r && r.materialCode && (r.fromLocationId == null || r.fromLocationId === ''))
-                                ? Object.assign({}, r, { fromLocationId: headLoc }) : null;
+                            return needsDefault(r) ? Object.assign({}, r, { fromLocationId: headLoc }) : null;
                         });
                     }
                 }
