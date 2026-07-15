@@ -82,7 +82,9 @@ public sealed record SaveStockDocLineRequest(
     IReadOnlyList<CountSerialBreakdownItem>? SerialBreakdown = null);
 
 /// <summary>Sayım lot kırılımı satırı — bir kalemde birden fazla lot sayılabilir.</summary>
-public sealed record StockLotBreakdownItem(string LotNo, decimal Qty);
+// Lot kırılımı — Seri kırılımıyla aynı zengin düzen (Lot No · SKT · Açıklama · Miktar).
+// SKT → Lot.ExpiryDate'e yazılır. ExpiryDate/Description nullable (eski JSON geriye-uyumlu).
+public sealed record StockLotBreakdownItem(string LotNo, decimal Qty, DateTime? ExpiryDate = null, string? Description = null);
 
 /// <summary>Sayım seri kırılımı satırı — seri no + SKT + açıklama + miktar (seri = parti, miktar serbest).
 /// Uygula'da SKT → Lot.ExpiryDate, açıklama → ItemSerial kaydına yazılır.</summary>

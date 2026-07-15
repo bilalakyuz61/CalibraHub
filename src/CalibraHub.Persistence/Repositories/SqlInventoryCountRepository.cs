@@ -463,6 +463,15 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
             .Where(b => !string.IsNullOrWhiteSpace(b.LotNo) && b.Qty > 0)
             .GroupBy(b => b.LotNo.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty) * factor, StringComparer.OrdinalIgnoreCase);
+        // Lot başına SKT + açıklama (ilk dolu değer) → Lot.ExpiryDate / Lot.Notes'a yansıtılır.
+        var lotMeta = breakdown
+            .Where(b => !string.IsNullOrWhiteSpace(b.LotNo))
+            .GroupBy(b => b.LotNo.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => (Expiry: g.Select(x => x.ExpiryDate).FirstOrDefault(d => d.HasValue),
+                      Notes:  g.Select(x => x.Description).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n))),
+                StringComparer.OrdinalIgnoreCase);
 
         var systemLots = await GetLotBalancesAsync(conn, tx, companyId, itemId, location, ct);
         var written = 0;
@@ -475,7 +484,10 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
             var sysBal = sys.LotId > 0 ? sys.Balance : 0m;
             var variance = kv.Value - sysBal;
             if (variance == 0) continue;
-            var lotId = sys.LotId > 0 ? sys.LotId : await ResolveOrCreateLotAsync(conn, tx, itemId, kv.Key, ct);
+            lotMeta.TryGetValue(kv.Key, out var meta);
+            var lotId = sys.LotId;
+            if (lotId <= 0 || meta.Expiry.HasValue || !string.IsNullOrWhiteSpace(meta.Notes))
+                lotId = await ResolveOrCreateLotAsync(conn, tx, itemId, kv.Key, meta.Expiry, meta.Notes, ct);
             await AppendAdjustLineAsync(conn, tx, documentId, itemId, configId, null,
                 Math.Abs(variance), positiveVariance: variance > 0, location, $"Sayım lot farkı ({kv.Key}) — Yansıt", ct, lotId, kv.Key);
             written++;
@@ -684,22 +696,48 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
         return list;
     }
 
-    /// <summary>Lot bul (item+lotNo), yoksa oluştur — sayımda bulunan yeni lot (fazla) için.</summary>
-    private async Task<int> ResolveOrCreateLotAsync(SqlConnection conn, SqlTransaction tx, int itemId, string lotNo, CancellationToken ct)
+    /// <summary>Lot bul (item+lotNo), yoksa oluştur — sayımda bulunan yeni lot (fazla) için.
+    /// SKT (expiryDate) + açıklama (notes) verilirse: oluşturmada set edilir; MEVCUT lotta yalnız
+    /// BOŞ olan alan doldurulur (var olan değer EZİLMEZ).</summary>
+    private async Task<int> ResolveOrCreateLotAsync(SqlConnection conn, SqlTransaction tx, int itemId, string lotNo,
+        DateTime? expiryDate, string? notes, CancellationToken ct)
     {
+        var notesVal = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
         await using (var find = conn.CreateCommand())
         {
             find.Transaction = tx;
             find.CommandText = $"SELECT TOP 1 [Id] FROM {T("Lot")} WHERE [ItemId] = @It AND [LotNo] = @Lot;";
             find.Parameters.AddWithValue("@It", itemId);
             find.Parameters.AddWithValue("@Lot", lotNo);
-            if (await find.ExecuteScalarAsync(ct) is int id) return id;
+            if (await find.ExecuteScalarAsync(ct) is int id)
+            {
+                // Mevcut lot — SKT/açıklama verildiyse yalnız boş alanları doldur (ezme).
+                if (expiryDate.HasValue || notesVal != null)
+                {
+                    await using var upd = conn.CreateCommand();
+                    upd.Transaction = tx;
+                    upd.CommandText = $"""
+                        UPDATE {T("Lot")}
+                           SET [ExpiryDate] = COALESCE([ExpiryDate], @Exp),
+                               [Notes]      = CASE WHEN [Notes] IS NULL OR LTRIM(RTRIM([Notes])) = '' THEN @Notes ELSE [Notes] END,
+                               [Updated]    = SYSUTCDATETIME()
+                         WHERE [Id] = @Id;
+                        """;
+                    upd.Parameters.AddWithValue("@Exp", (object?)expiryDate ?? DBNull.Value);
+                    upd.Parameters.AddWithValue("@Notes", (object?)notesVal ?? DBNull.Value);
+                    upd.Parameters.AddWithValue("@Id", id);
+                    await upd.ExecuteNonQueryAsync(ct);
+                }
+                return id;
+            }
         }
         await using var ins = conn.CreateCommand();
         ins.Transaction = tx;
-        ins.CommandText = $"INSERT INTO {T("Lot")} ([ItemId],[LotNo]) VALUES (@It,@Lot); SELECT CAST(SCOPE_IDENTITY() AS INT);";
+        ins.CommandText = $"INSERT INTO {T("Lot")} ([ItemId],[LotNo],[ExpiryDate],[Notes]) VALUES (@It,@Lot,@Exp,@Notes); SELECT CAST(SCOPE_IDENTITY() AS INT);";
         ins.Parameters.AddWithValue("@It", itemId);
         ins.Parameters.AddWithValue("@Lot", lotNo);
+        ins.Parameters.AddWithValue("@Exp", (object?)expiryDate ?? DBNull.Value);
+        ins.Parameters.AddWithValue("@Notes", (object?)notesVal ?? DBNull.Value);
         return Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
     }
 }

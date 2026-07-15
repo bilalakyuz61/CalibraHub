@@ -1349,13 +1349,18 @@ function SerialEntryModal(props) {
  * ══════════════════════════════════════════════════════════════ */
 function LotBreakdownModal(props) {
   var isLight = props.isLight
+  // Seri modalıyla AYNI zengin düzen: Lot No | SKT | Açıklama | Miktar.
+  // Fark: lot'ta miktar SERBEST (pozitif); seri'de kilitli 1 (SerialBreakdownModal).
   var [rows, setRows] = useState(function() {
     var v = Array.isArray(props.value) ? props.value : []
     return v.length > 0
-      ? v.map(function(r) { return { lotNo: r.lotNo || '', qty: (r.qty != null ? String(r.qty) : '') } })
-      : [{ lotNo: '', qty: '' }]
+      ? v.map(function(r) { return { lotNo: r.lotNo || '', expiryDate: (r.expiryDate ? String(r.expiryDate).slice(0, 10) : ''), description: r.description || '', qty: (r.qty != null ? String(r.qty) : '') } })
+      : [{ lotNo: '', expiryDate: '', description: '', qty: '' }]
   })
+  // Stoktaki lotlar (SKT ile) — öneri + lot seçilince SKT otomatik dolar
   var lookup = useLookup(props.column && props.column.lotUrl ? props.column.lotUrl : null, props.row)
+  var stockByNo = {}
+  ;(lookup.options || []).forEach(function(o) { if (o && o.lotNo) stockByNo[String(o.lotNo).toLowerCase()] = o })
 
   useEffect(function() {
     function onKey(e) { if (e.key === 'Escape') props.onClose() }
@@ -1364,9 +1369,16 @@ function LotBreakdownModal(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function setCell(i, key, val) { var n = rows.slice(); n[i] = Object.assign({}, n[i]); n[i][key] = val; setRows(n) }
-  function addRow() { setRows(rows.concat([{ lotNo: '', qty: '' }])) }
-  function removeRow(i) { var n = rows.slice(); n.splice(i, 1); setRows(n.length ? n : [{ lotNo: '', qty: '' }]) }
+  function setCell(i, key, val) {
+    var n = rows.slice(); n[i] = Object.assign({}, n[i]); n[i][key] = val
+    if (key === 'lotNo') {
+      var hit = stockByNo[String(val).trim().toLowerCase()]
+      if (hit && hit.expiryDate && !n[i].expiryDate) n[i].expiryDate = String(hit.expiryDate).slice(0, 10)
+    }
+    setRows(n)
+  }
+  function addRow() { setRows(rows.concat([{ lotNo: '', expiryDate: '', description: '', qty: '' }])) }
+  function removeRow(i) { var n = rows.slice(); n.splice(i, 1); setRows(n.length ? n : [{ lotNo: '', expiryDate: '', description: '', qty: '' }]) }
 
   var valid = rows.filter(function(r) { return String(r.lotNo).trim() && parseFloat(r.qty) > 0 })
   var total = valid.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
@@ -1376,11 +1388,12 @@ function LotBreakdownModal(props) {
   var panelStyle = isLight
     ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
     : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
+  var inCls = 'rounded-lg px-2.5 py-1.5 text-[12px] outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85'
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2,6,23,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onMouseDown={function(e) { if (e.target === e.currentTarget) props.onClose() }}>
-      <div style={Object.assign({ width: 'min(520px, 94vw)', borderRadius: '14px', overflow: 'hidden' }, panelStyle)}>
+      <div style={Object.assign({ width: 'min(720px, 96vw)', borderRadius: '14px', overflow: 'hidden' }, panelStyle)}>
         <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between">
           <div>
             <div className="text-[13px] font-semibold text-slate-800 dark:text-white/90">Lot Kırılımı (Sayım)</div>
@@ -1396,17 +1409,28 @@ function LotBreakdownModal(props) {
             )
           })()}
         </div>
-        <div className="px-4 pb-2 max-h-[320px] overflow-y-auto">
+        <div className="px-4 pb-2 max-h-[340px] overflow-y-auto">
+          <div className="flex items-center gap-2 mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-white/35">
+            <span className="flex-1">Lot No</span>
+            <span className="w-36">SKT</span>
+            <span className="flex-1">Açıklama</span>
+            <span className="w-20 text-right">Miktar</span>
+            <span className="w-7" />
+          </div>
           {rows.map(function(r, i) {
             return (
               <div key={i} className="flex items-center gap-2 mb-1.5">
-                <input list={'lotsg-' + i} value={r.lotNo} onChange={function(e) { setCell(i, 'lotNo', e.target.value) }} placeholder="Lot / Parti No"
-                  className="flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-mono outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85" />
+                <input list={'lotsg-' + i} value={r.lotNo} onChange={function(e) { setCell(i, 'lotNo', e.target.value) }} placeholder="Lot / parti no"
+                  className={'flex-1 font-mono ' + inCls} />
                 <datalist id={'lotsg-' + i}>
-                  {lotSuggest.map(function(o) { return <option key={o.lotNo} value={o.lotNo}>{o.label || o.lotNo}</option> })}
+                  {lotSuggest.map(function(o) { return <option key={o.lotNo} value={o.lotNo}>{(o.label || '') + (o.expiryDate ? ' · SKT: ' + String(o.expiryDate).slice(0, 10) : '')}</option> })}
                 </datalist>
-                <input type="number" value={r.qty} min="0" step="any" onChange={function(e) { setCell(i, 'qty', e.target.value) }} placeholder="Miktar"
-                  className="w-24 rounded-lg px-2.5 py-1.5 text-[12px] text-right font-mono outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85" />
+                <input type="date" value={r.expiryDate} onChange={function(e) { setCell(i, 'expiryDate', e.target.value) }} title="Son Kullanma Tarihi"
+                  className={'w-36 font-mono ' + inCls} />
+                <input value={r.description} onChange={function(e) { setCell(i, 'description', e.target.value) }} placeholder="Açıklama"
+                  className={'flex-1 ' + inCls} />
+                <input type="number" value={r.qty} min="0" step="any" onChange={function(e) { setCell(i, 'qty', e.target.value) }} placeholder="Mkt"
+                  className={'w-20 text-right font-mono ' + inCls} />
                 <button type="button" onClick={function() { removeRow(i) }} title="Satırı sil"
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-[15px] leading-none text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/15">×</button>
               </div>
@@ -1418,7 +1442,7 @@ function LotBreakdownModal(props) {
         <div className="px-4 py-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-white/[0.07]">
           <button type="button" onClick={props.onClose} className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 hover:bg-slate-100 dark:text-white/60 dark:hover:bg-white/[0.07]">Vazgeç</button>
           <button type="button" disabled={dupLot}
-            onClick={function() { props.onApply(valid.map(function(r) { return { lotNo: String(r.lotNo).trim(), qty: parseFloat(r.qty) } }), total) }}
+            onClick={function() { props.onApply(valid.map(function(r) { return { lotNo: String(r.lotNo).trim(), expiryDate: r.expiryDate || null, description: (r.description || '').trim() || null, qty: parseFloat(r.qty) } }), total) }}
             className={'px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-colors ' + (dupLot ? 'bg-slate-300 dark:bg-white/15 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600')}>Uygula</button>
         </div>
       </div>

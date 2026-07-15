@@ -982,7 +982,7 @@ public sealed class WarehouseController : Controller
                 try
                 {
                     var arr = System.Text.Json.JsonSerializer.Deserialize<List<StockLotBreakdownItem>>(r.GetString(2));
-                    breakdown = (arr ?? new()).Select(b => (object)new { lotNo = b.LotNo, qty = b.Qty }).ToArray();
+                    breakdown = (arr ?? new()).Select(b => (object)new { lotNo = b.LotNo, expiryDate = b.ExpiryDate, description = b.Description, qty = b.Qty }).ToArray();
                 }
                 catch { }
             }
