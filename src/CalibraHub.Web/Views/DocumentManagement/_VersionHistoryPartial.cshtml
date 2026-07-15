@@ -4,75 +4,27 @@
 }
 <style>
 .dm-vh { font-family:inherit; }
-.dm-vh-empty { text-align:center; padding:28px; color:var(--bs-secondary-color,#64748b); font-size:0.88rem; }
-
-/* ── Versiyon Timeline — arge-tl imza öğesinin uyarlaması (bkz. wwwroot/css/arge.css) ──────── */
-.dm-tl { list-style:none; margin:4px 0 0; padding:0; }
-.dm-tl__step { position:relative; padding:0 0 20px 34px; min-height:40px; }
-.dm-tl__step:last-child { padding-bottom:2px; }
-.dm-tl__step::before {  /* dikey bağlantı çizgisi */
-    content:""; position:absolute; left:10px; top:20px; bottom:-2px; width:2px;
-    background: var(--app-border,#e2e8f0);
+.dm-vh table { width:100%; border-collapse:collapse; font-size:0.84rem; }
+.dm-vh th { padding:8px 10px; font-size:0.72rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--bs-secondary-color,#64748b); border-bottom:2px solid var(--app-border,#e2e8f0);
+    text-align:left; white-space:nowrap; }
+.dm-vh td { padding:9px 10px; border-bottom:1px solid var(--app-border,#f1f5f9); vertical-align:middle; }
+.dm-vh tr.dm-vh-active td { background:rgba(99,102,241,.05); }
+.dm-vh .dm-vh-badge {
+    display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700;
 }
-.dm-tl__step:last-child::before { display:none; }
-.dm-tl__step.is-done::before    { background: rgba(99,102,241,.32); }
-.dm-tl__step.is-current::before { background: linear-gradient(180deg,#6366f1,rgba(99,102,241,.18)); }
-
-.dm-tl__node {
-    position:absolute; left:2px; top:1px; width:19px; height:19px; border-radius:50%;
-    border:2px solid var(--app-border,#cbd5e1); background: var(--app-surface,#fff);
-    display:inline-flex; align-items:center; justify-content:center; z-index:1;
+.dm-vh .dm-vh-badge--active { background:rgba(34,197,94,.15); color:#15803d; }
+.dm-vh .dm-vh-badge--old    { background:rgba(100,116,139,.12); color:#64748b; }
+.dm-vh .dm-vh-badge--ver    { background:rgba(245,158,11,.15); color:#b45309; }
+.dm-vh .dm-vh-dl {
+    padding:4px 10px; border-radius:5px; font-size:0.78rem; font-weight:600;
+    background:rgba(99,102,241,.1); color:#6366f1; text-decoration:none; white-space:nowrap;
 }
-.dm-tl__node svg { width:11px; height:11px; }
-.dm-tl__step.is-done .dm-tl__node     { background:#6366f1; border-color:#6366f1; }
-.dm-tl__step.is-done .dm-tl__node svg { stroke:#fff; }
-.dm-tl__step.is-current .dm-tl__node {
-    background: linear-gradient(135deg,#6366f1,#7c3aed); border-color:#6366f1;
-    box-shadow: 0 0 0 5px rgba(99,102,241,.20);
-    animation: dm-tl-pulse 2.4s ease-in-out infinite;
-}
-@@keyframes dm-tl-pulse {
-    0%,100% { box-shadow: 0 0 0 4px rgba(99,102,241,.22); }
-    50%     { box-shadow: 0 0 0 8px rgba(99,102,241,.06); }
-}
-
-.dm-tl__head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.dm-tl__ver {
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; font-weight:700;
-    color:#6366f1; background:rgba(99,102,241,.1); padding:2px 8px; border-radius:6px; white-space:nowrap;
-}
-.dm-tl__badge {
-    font-size:10.5px; font-weight:700; letter-spacing:.02em; padding:2px 8px; border-radius:999px;
-    background:rgba(34,197,94,.15); color:#15803d; white-space:nowrap;
-}
-.dm-tl__file {
-    font-size:13px; font-weight:600; color:var(--bs-body-color,#0f172a);
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:320px;
-}
-.dm-tl__meta {
-    display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:4px;
-    font-size:11.5px; color:var(--bs-secondary-color,#64748b);
-}
-.dm-tl__meta > span { display:inline-flex; align-items:center; gap:4px; }
-.dm-tl__meta svg { width:12px; height:12px; opacity:.75; flex-shrink:0; }
-.dm-tl__user { font-family: ui-monospace, Menlo, Consolas, monospace; }
-.dm-tl__note {
-    margin-top:7px; font-size:12.5px; line-height:1.5; color:var(--bs-body-color,#334155);
-    background: var(--app-surface-2,#f8fafc); border:1px solid var(--app-border,#e2e8f0);
-    border-radius:8px; padding:8px 10px;
-}
-.dm-tl__dl {
-    display:inline-flex; align-items:center; gap:5px; margin-top:9px; padding:4px 11px; border-radius:6px;
-    font-size:12px; font-weight:600; background:rgba(99,102,241,.1); color:#6366f1; text-decoration:none;
-}
-.dm-tl__dl:hover { background:#6366f1; color:#fff; }
-.dm-tl__dl svg { width:12px; height:12px; }
-
-body.app-theme-dark .dm-tl__step::before { background: rgba(255,255,255,.12); }
-body.app-theme-dark .dm-tl__node { background:#0b1220; border-color:#334155; }
-body.app-theme-dark .dm-tl__file { color:#e2e8f0; }
-body.app-theme-dark .dm-tl__meta { color:#94a3b8; }
-body.app-theme-dark .dm-tl__note { background:#0b1220; border-color:#334155; color:#cbd5e1; }
+.dm-vh .dm-vh-dl:hover { background:#6366f1; color:#fff; }
+.dm-vh .dm-vh-empty { text-align:center; padding:28px; color:var(--bs-secondary-color,#64748b); font-size:0.88rem; }
+body.app-theme-dark .dm-vh th { color:#94a3b8; border-color:#334155; }
+body.app-theme-dark .dm-vh td { border-color:#1e293b; }
+body.app-theme-dark .dm-vh tr.dm-vh-active td { background:rgba(99,102,241,.1); }
 </style>
 
 <div class="dm-vh">
@@ -82,48 +34,41 @@ body.app-theme-dark .dm-tl__note { background:#0b1220; border-color:#334155; col
 }
 else
 {
-    <ol class="dm-tl">
-    @foreach (var a in Model)
-    {
-        <li class="dm-tl__step @(a.IsActive ? "is-current" : "is-done")">
-            <span class="dm-tl__node">
-                @if (!a.IsActive)
-                {
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                }
-            </span>
-            <div class="dm-tl__head">
-                <span class="dm-tl__ver">v@a.RevisionNumber</span>
-                @if (a.IsActive)
-                {
-                    <span class="dm-tl__badge">Güncel</span>
-                }
-                <span class="dm-tl__file" title="@a.FileName">@a.FileName</span>
-            </div>
-            <div class="dm-tl__meta">
-                <span title="Yükleme tarihi">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                    @a.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
-                </span>
-                <span title="Dosya boyutu">@FmtSize(a.FileSize)</span>
-                @if (a.CreatedById is int uid)
-                {
-                    <span class="dm-tl__user" title="Yükleyen kullanıcı">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg>
-                        Kullanıcı #@uid
-                    </span>
-                }
-            </div>
-            @if (!string.IsNullOrWhiteSpace(a.Description))
-            {
-                <div class="dm-tl__note">@a.Description</div>
-            }
-            <a class="dm-tl__dl" href="/DocumentManagement/Download/@a.Id" download="@a.FileName">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                İndir
-            </a>
-        </li>
-    }
-    </ol>
+    <table>
+        <thead>
+        <tr>
+            <th>Versiyon</th>
+            <th>Durum</th>
+            <th>Dosya Adı</th>
+            <th>Boyut</th>
+            <th>Tarih</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var a in Model)
+        {
+            <tr class="@(a.IsActive ? "dm-vh-active" : "")">
+                <td><span class="dm-vh-badge dm-vh-badge--ver">v@a.RevisionNumber</span></td>
+                <td>
+                    @if (a.IsActive)
+                    {
+                        <span class="dm-vh-badge dm-vh-badge--active">Güncel</span>
+                    }
+                    else
+                    {
+                        <span class="dm-vh-badge dm-vh-badge--old">Eski</span>
+                    }
+                </td>
+                <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@a.FileName">@a.FileName</td>
+                <td style="white-space:nowrap;">@FmtSize(a.FileSize)</td>
+                <td style="white-space:nowrap;">@a.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                <td>
+                    <a class="dm-vh-dl" href="/DocumentManagement/Download/@a.Id" download="@a.FileName">↓ İndir</a>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
 }
 </div>

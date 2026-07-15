@@ -1,5 +1,3 @@
-@using System.Text.Json
-@using System.Globalization
 @inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
@@ -7,151 +5,9 @@
     ViewData["FormCode"]  = "DOC_MANAGEMENT";
     ViewData["BodyClass"] = "page-docmgmt";
     var token = Antiforgery.GetAndStoreTokens(Context).RequestToken;
-
-    // ── Blueprint hero stat-tile verisi ── zaten üretilmiş BoardConfigJson'dan (entities[].widgets)
-    // türetilir; ek backend çağrısı YOK. Parse edilemezse hero sade (0) kalır, akış bozulmaz.
-    var boardConfigJson = (string?)ViewBag.BoardConfigJson;
-    int heroTotalDocs = 0, heroThisMonthDocs = 0, heroTotalVersions = 0;
-    if (!string.IsNullOrEmpty(boardConfigJson))
-    {
-        try
-        {
-            using var cfgDoc = JsonDocument.Parse(boardConfigJson);
-            if (cfgDoc.RootElement.TryGetProperty("entities", out var entitiesEl) && entitiesEl.ValueKind == JsonValueKind.Array)
-            {
-                heroTotalDocs = entitiesEl.GetArrayLength();
-                var now = DateTime.Now;
-                foreach (var ent in entitiesEl.EnumerateArray())
-                {
-                    if (!ent.TryGetProperty("widgets", out var widgetsEl) || widgetsEl.ValueKind != JsonValueKind.Array) continue;
-                    foreach (var w in widgetsEl.EnumerateArray())
-                    {
-                        var wid = w.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
-                        var val = w.TryGetProperty("value", out var valEl) ? valEl.GetString() : null;
-                        if (string.IsNullOrEmpty(val)) continue;
-                        if (wid == "w_version")
-                        {
-                            var numPart = val.TrimStart('v', 'V');
-                            if (int.TryParse(numPart, out var vNum)) heroTotalVersions += vNum;
-                        }
-                        else if (wid == "w_date"
-                            && DateTime.TryParseExact(val, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)
-                            && dt.Year == now.Year && dt.Month == now.Month)
-                        {
-                            heroThisMonthDocs++;
-                        }
-                    }
-                }
-            }
-        }
-        catch { /* board config parse edilemezse hero sade kalır */ }
-    }
 }
 
 <style>
-/* ── Blueprint Hero (Komuta Güvertesi teması — bkz. wwwroot/css/arge.css) ───── */
-body.page-docmgmt {
-    --dm-ink-1: #0a1022;
-    --dm-ink-2: #16205a;
-    --dm-ink-3: #3b2f9e;
-    --dm-ink-text: #eef2ff;
-    --dm-ink-sub: #aeb8e8;
-    --dm-ink-line: rgba(148,163,255,.14);
-}
-body.app-theme-dark.page-docmgmt {
-    --dm-ink-1: #04060d;
-    --dm-ink-2: #0d1633;
-    --dm-ink-3: #241c66;
-}
-.dm-hero {
-    position:relative; flex-shrink:0; overflow:hidden;
-    padding:16px 26px 14px; margin-bottom:10px; border-radius:16px;
-    background:
-        radial-gradient(120% 140% at 88% -20%, rgba(124,58,237,.42), transparent 55%),
-        radial-gradient(120% 160% at 8% 120%, rgba(99,102,241,.28), transparent 50%),
-        linear-gradient(118deg, var(--dm-ink-1) 0%, var(--dm-ink-2) 56%, var(--dm-ink-3) 130%);
-    color: var(--dm-ink-text);
-}
-.dm-hero::before {
-    content:""; position:absolute; inset:0; pointer-events:none;
-    background-image:
-        linear-gradient(var(--dm-ink-line) 1px, transparent 1px),
-        linear-gradient(90deg, var(--dm-ink-line) 1px, transparent 1px);
-    background-size:34px 34px;
-    mask-image: linear-gradient(180deg, rgba(0,0,0,.9), transparent 82%);
-}
-.dm-hero > * { position:relative; z-index:1; }
-.dm-hero__row { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap; }
-.dm-hero__kicker {
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size:11px; font-weight:600; letter-spacing:.12em;
-    color: var(--dm-ink-sub); display:inline-flex; align-items:center; gap:8px; margin-bottom:7px;
-}
-.dm-hero__kicker::before {
-    content:""; width:15px; height:1.5px; border-radius:2px;
-    background: linear-gradient(90deg, #7c3aed, #6366f1);
-}
-.dm-hero__title { margin:0; font-size:23px; font-weight:700; line-height:1.08; letter-spacing:-.015em; color:#fff; }
-.dm-hero__sub { margin:5px 0 0; font-size:12.5px; color: var(--dm-ink-sub); font-variant-numeric: tabular-nums; }
-.dm-hero__actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.dm-hero__upload {
-    display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border-radius:10px;
-    border:1px solid rgba(255,255,255,.16); cursor:pointer; font-family:inherit;
-    font-size:13px; font-weight:600; color:#fff; white-space:nowrap;
-    background: linear-gradient(135deg, #6366f1, #4f46e5 60%, #7c3aed);
-    box-shadow: 0 4px 14px -3px rgba(79,70,229,.6);
-    transition: filter .14s, transform .14s;
-}
-.dm-hero__upload:hover { filter:brightness(1.09); transform:translateY(-1px); }
-.dm-hero__upload svg { width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-@@media (max-width:640px) {
-    .dm-hero { padding-left:16px; padding-right:16px; }
-}
-
-/* ── Alt Özet Çubuğu (board altı, açılır-kapanır) ─────────────────────────── */
-.dm-summary {
-    flex-shrink:0; margin-top:14px; border-radius:12px; overflow:hidden;
-    background: var(--app-surface,#fff); border:1px solid var(--app-border,#e2e8f0);
-}
-.dm-summary__bar {
-    width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px;
-    padding:9px 16px; border:none; background:transparent; cursor:pointer; font-family:inherit;
-    color: var(--bs-body-color,#0f172a); text-align:left;
-}
-.dm-summary__bar:hover { background: var(--app-surface-2,#f8fafc); }
-.dm-summary__bar:focus-visible { outline:2px solid #6366f1; outline-offset:-2px; border-radius:8px; }
-.dm-summary__label { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; white-space:nowrap; flex-shrink:0; }
-.dm-summary__chevron { width:15px; height:15px; stroke:#6366f1; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; transition:transform .2s ease; flex-shrink:0; }
-.dm-summary.is-open .dm-summary__chevron { transform:rotate(180deg); }
-.dm-summary__inline {
-    font-size:12px; color: var(--bs-secondary-color,#64748b); overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; font-variant-numeric:tabular-nums;
-}
-.dm-summary__inline strong { color: var(--bs-body-color,#0f172a); font-weight:700; }
-.dm-summary.is-open .dm-summary__inline { display:none; }
-
-.dm-summary__panel { max-height:0; opacity:0; overflow:hidden; transition: max-height .28s ease, opacity .22s ease; }
-.dm-summary.is-open .dm-summary__panel { max-height:220px; opacity:1; }
-.dm-summary__stats { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; padding:4px 16px 14px; }
-.dm-sum-stat { padding:11px 14px; border-radius:10px; background: var(--app-surface-2,#f8fafc); border:1px solid var(--app-border,#e2e8f0); }
-.dm-sum-stat__val { font-size:20px; font-weight:700; line-height:1; color:#6366f1; font-variant-numeric:tabular-nums; }
-.dm-sum-stat__lbl { margin-top:5px; font-size:11px; font-weight:500; color: var(--bs-secondary-color,#64748b); letter-spacing:.01em; }
-
-@@media (prefers-reduced-motion: reduce) {
-    .dm-summary__panel, .dm-summary__chevron { transition:none !important; }
-}
-@@media (max-width:640px) {
-    .dm-summary__inline { display:none; }
-    .dm-summary__stats { grid-template-columns:1fr; }
-}
-
-body.app-theme-dark .dm-summary { background:#0b1220; border-color:#1e293b; }
-body.app-theme-dark .dm-summary__bar { color:#e2e8f0; }
-body.app-theme-dark .dm-summary__bar:hover { background:#111a2e; }
-body.app-theme-dark .dm-summary__inline { color:#94a3b8; }
-body.app-theme-dark .dm-summary__inline strong { color:#e2e8f0; }
-body.app-theme-dark .dm-sum-stat { background:#111a2e; border-color:#1e293b; }
-body.app-theme-dark .dm-sum-stat__lbl { color:#94a3b8; }
-
 /* ── Upload Modal ──────────────────────────────────────────────────────────── */
 .dm-modal-backdrop {
     display:none; position:fixed; inset:0; z-index:9999;
@@ -160,21 +16,15 @@ body.app-theme-dark .dm-sum-stat__lbl { color:#94a3b8; }
 }
 .dm-modal-backdrop.open { display:flex; }
 .dm-modal-card {
-    position:relative;
     background:var(--app-surface,#fff); border-radius:14px; width:520px; max-width:95vw;
     max-height:90vh; overflow-y:auto; padding:28px 28px 24px;
     box-shadow:0 20px 60px rgba(0,0,0,.25);
     border:1px solid var(--app-border,#e2e8f0);
 }
-.dm-modal-card::before {
-    content:""; position:absolute; top:0; left:0; right:0; height:3px; border-radius:14px 14px 0 0;
-    background: linear-gradient(90deg,#6366f1,#7c3aed);
-}
 .dm-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
 .dm-modal-icon {
     width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
-    background:linear-gradient(135deg,#6366f1,#4f46e5 60%,#7c3aed); flex-shrink:0;
-    box-shadow:0 6px 16px -6px rgba(99,102,241,.55);
+    background:linear-gradient(135deg,#6366f1,#4f46e5); flex-shrink:0;
 }
 .dm-modal-icon svg { width:20px; height:20px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; }
 .dm-modal-title { font-size:1.08rem; font-weight:700; color:var(--bs-body-color,#0f172a); }
@@ -218,12 +68,9 @@ body.app-theme-dark .dm-sum-stat__lbl { color:#94a3b8; }
     padding:8px 20px; border-radius:7px; font-size:0.88rem; font-weight:600;
     border:none; cursor:pointer; transition:background .15s; font-family:inherit;
 }
-.dm-btn--primary {
-    background:linear-gradient(135deg,#6366f1,#4f46e5 60%,#7c3aed); color:#fff;
-    box-shadow:0 4px 14px -4px rgba(79,70,229,.55); transition:filter .14s,transform .14s;
-}
-.dm-btn--primary:hover { filter:brightness(1.08); transform:translateY(-1px); }
-.dm-btn--primary:disabled { opacity:.5; cursor:default; transform:none; filter:none; }
+.dm-btn--primary { background:#6366f1; color:#fff; }
+.dm-btn--primary:hover { background:#4f46e5; }
+.dm-btn--primary:disabled { opacity:.5; cursor:default; }
 .dm-btn--secondary { background:var(--app-surface-2,#f1f5f9); color:var(--bs-body-color,#0f172a); }
 .dm-btn--secondary:hover { background:var(--app-border,#e2e8f0); }
 .dm-status { font-size:0.8rem; margin-top:8px; min-height:18px; text-align:center; }
@@ -312,78 +159,10 @@ body.app-theme-dark .dm-btn--secondary:hover { background:#334155; }
     </div>
 </div>
 
-<!-- ── Blueprint Hero ───────────────────────────────────────────────────── -->
-<header class="dm-hero">
-    <div class="dm-hero__row">
-        <div class="dm-hero__id">
-            <div class="dm-hero__kicker">Belge Arşivi · Sürüm Kontrolü</div>
-            <h1 class="dm-hero__title">Doküman Yönetimi</h1>
-            <p class="dm-hero__sub">@heroTotalDocs belge kayıtlı · bu ay @heroThisMonthDocs yeni ekleme</p>
-        </div>
-        <div class="dm-hero__actions">
-            <button type="button" class="dm-hero__upload" onclick="window.dmOpenUpload && window.dmOpenUpload()">
-                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Belge Yükle
-            </button>
-        </div>
-    </div>
-</header>
-
 <!-- ── SmartBoard mount ──────────────────────────────────────────────────── -->
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
     <div id="reactDocBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </section>
-
-<!-- ── Alt Özet Çubuğu (açılır-kapanır) ────────────────────────────────────── -->
-<footer class="dm-summary" id="dmSummary">
-    <button type="button" class="dm-summary__bar" id="dmSummaryToggle" aria-expanded="false" aria-controls="dmSummaryPanel">
-        <span class="dm-summary__label">
-            <svg class="dm-summary__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m18 15-6-6-6 6"/></svg>
-            Özet
-        </span>
-        <span class="dm-summary__inline">Toplam Belge <strong>@heroTotalDocs</strong> · Bu Ay <strong>@heroThisMonthDocs</strong> · Toplam Versiyon <strong>@heroTotalVersions</strong></span>
-    </button>
-    <div class="dm-summary__panel" id="dmSummaryPanel">
-        <div class="dm-summary__stats">
-            <div class="dm-sum-stat">
-                <div class="dm-sum-stat__val">@heroTotalDocs</div>
-                <div class="dm-sum-stat__lbl">Toplam Belge</div>
-            </div>
-            <div class="dm-sum-stat">
-                <div class="dm-sum-stat__val">@heroThisMonthDocs</div>
-                <div class="dm-sum-stat__lbl">Bu Ay Eklenen</div>
-            </div>
-            <div class="dm-sum-stat">
-                <div class="dm-sum-stat__val">@heroTotalVersions</div>
-                <div class="dm-sum-stat__lbl">Toplam Versiyon</div>
-            </div>
-        </div>
-    </div>
-</footer>
-<script>
-(function () {
-    var LS_KEY = 'dm-summary-open';
-    var root = document.getElementById('dmSummary');
-    var btn  = document.getElementById('dmSummaryToggle');
-    if (!root || !btn) return;
-
-    function apply(open) {
-        root.classList.toggle('is-open', open);
-        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    }
-
-    // Sayfa parse edilirken senkron uygulanır — kapanış/açılış flash'ı olmaz.
-    var stored = null;
-    try { stored = localStorage.getItem(LS_KEY); } catch (e) { /* gizli sekme / erişim engeli */ }
-    apply(stored === '1');
-
-    btn.addEventListener('click', function () {
-        var next = !root.classList.contains('is-open');
-        apply(next);
-        try { localStorage.setItem(LS_KEY, next ? '1' : '0'); } catch (e) { /* yoksay */ }
-    });
-})();
-</script>
 
 @section Scripts {
 <script>
