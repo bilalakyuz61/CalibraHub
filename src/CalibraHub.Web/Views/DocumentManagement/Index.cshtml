@@ -65,7 +65,7 @@ body.app-theme-dark.page-docmgmt {
 }
 .dm-hero {
     position:relative; flex-shrink:0; overflow:hidden;
-    padding:20px 26px 18px; margin-bottom:14px; border-radius:16px;
+    padding:16px 26px 14px; margin-bottom:10px; border-radius:16px;
     background:
         radial-gradient(120% 140% at 88% -20%, rgba(124,58,237,.42), transparent 55%),
         radial-gradient(120% 160% at 8% 120%, rgba(99,102,241,.28), transparent 50%),
@@ -103,14 +103,54 @@ body.app-theme-dark.page-docmgmt {
 }
 .dm-hero__upload:hover { filter:brightness(1.09); transform:translateY(-1px); }
 .dm-hero__upload svg { width:16px; height:16px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-.dm-hero__stats { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-top:18px; max-width:640px; }
-.dm-stat { padding:11px 14px; border-radius:12px; background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.09); backdrop-filter:blur(4px); }
-.dm-stat__val { font-size:22px; font-weight:700; line-height:1; color:#fff; font-variant-numeric:tabular-nums; }
-.dm-stat__lbl { margin-top:5px; font-size:11px; font-weight:500; color: var(--dm-ink-sub); letter-spacing:.01em; }
 @@media (max-width:640px) {
-    .dm-hero__stats { grid-template-columns:1fr; }
     .dm-hero { padding-left:16px; padding-right:16px; }
 }
+
+/* ── Alt Özet Çubuğu (board altı, açılır-kapanır) ─────────────────────────── */
+.dm-summary {
+    flex-shrink:0; margin-top:14px; border-radius:12px; overflow:hidden;
+    background: var(--app-surface,#fff); border:1px solid var(--app-border,#e2e8f0);
+}
+.dm-summary__bar {
+    width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px;
+    padding:9px 16px; border:none; background:transparent; cursor:pointer; font-family:inherit;
+    color: var(--bs-body-color,#0f172a); text-align:left;
+}
+.dm-summary__bar:hover { background: var(--app-surface-2,#f8fafc); }
+.dm-summary__bar:focus-visible { outline:2px solid #6366f1; outline-offset:-2px; border-radius:8px; }
+.dm-summary__label { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; white-space:nowrap; flex-shrink:0; }
+.dm-summary__chevron { width:15px; height:15px; stroke:#6366f1; fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; transition:transform .2s ease; flex-shrink:0; }
+.dm-summary.is-open .dm-summary__chevron { transform:rotate(180deg); }
+.dm-summary__inline {
+    font-size:12px; color: var(--bs-secondary-color,#64748b); overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; font-variant-numeric:tabular-nums;
+}
+.dm-summary__inline strong { color: var(--bs-body-color,#0f172a); font-weight:700; }
+.dm-summary.is-open .dm-summary__inline { display:none; }
+
+.dm-summary__panel { max-height:0; opacity:0; overflow:hidden; transition: max-height .28s ease, opacity .22s ease; }
+.dm-summary.is-open .dm-summary__panel { max-height:220px; opacity:1; }
+.dm-summary__stats { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; padding:4px 16px 14px; }
+.dm-sum-stat { padding:11px 14px; border-radius:10px; background: var(--app-surface-2,#f8fafc); border:1px solid var(--app-border,#e2e8f0); }
+.dm-sum-stat__val { font-size:20px; font-weight:700; line-height:1; color:#6366f1; font-variant-numeric:tabular-nums; }
+.dm-sum-stat__lbl { margin-top:5px; font-size:11px; font-weight:500; color: var(--bs-secondary-color,#64748b); letter-spacing:.01em; }
+
+@@media (prefers-reduced-motion: reduce) {
+    .dm-summary__panel, .dm-summary__chevron { transition:none !important; }
+}
+@@media (max-width:640px) {
+    .dm-summary__inline { display:none; }
+    .dm-summary__stats { grid-template-columns:1fr; }
+}
+
+body.app-theme-dark .dm-summary { background:#0b1220; border-color:#1e293b; }
+body.app-theme-dark .dm-summary__bar { color:#e2e8f0; }
+body.app-theme-dark .dm-summary__bar:hover { background:#111a2e; }
+body.app-theme-dark .dm-summary__inline { color:#94a3b8; }
+body.app-theme-dark .dm-summary__inline strong { color:#e2e8f0; }
+body.app-theme-dark .dm-sum-stat { background:#111a2e; border-color:#1e293b; }
+body.app-theme-dark .dm-sum-stat__lbl { color:#94a3b8; }
 
 /* ── Upload Modal ──────────────────────────────────────────────────────────── */
 .dm-modal-backdrop {
@@ -287,26 +327,63 @@ body.app-theme-dark .dm-btn--secondary:hover { background:#334155; }
             </button>
         </div>
     </div>
-    <div class="dm-hero__stats">
-        <div class="dm-stat">
-            <div class="dm-stat__val">@heroTotalDocs</div>
-            <div class="dm-stat__lbl">Toplam Belge</div>
-        </div>
-        <div class="dm-stat">
-            <div class="dm-stat__val">@heroThisMonthDocs</div>
-            <div class="dm-stat__lbl">Bu Ay Eklenen</div>
-        </div>
-        <div class="dm-stat">
-            <div class="dm-stat__val">@heroTotalVersions</div>
-            <div class="dm-stat__lbl">Toplam Versiyon</div>
-        </div>
-    </div>
 </header>
 
 <!-- ── SmartBoard mount ──────────────────────────────────────────────────── -->
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
     <div id="reactDocBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </section>
+
+<!-- ── Alt Özet Çubuğu (açılır-kapanır) ────────────────────────────────────── -->
+<footer class="dm-summary" id="dmSummary">
+    <button type="button" class="dm-summary__bar" id="dmSummaryToggle" aria-expanded="false" aria-controls="dmSummaryPanel">
+        <span class="dm-summary__label">
+            <svg class="dm-summary__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m18 15-6-6-6 6"/></svg>
+            Özet
+        </span>
+        <span class="dm-summary__inline">Toplam Belge <strong>@heroTotalDocs</strong> · Bu Ay <strong>@heroThisMonthDocs</strong> · Toplam Versiyon <strong>@heroTotalVersions</strong></span>
+    </button>
+    <div class="dm-summary__panel" id="dmSummaryPanel">
+        <div class="dm-summary__stats">
+            <div class="dm-sum-stat">
+                <div class="dm-sum-stat__val">@heroTotalDocs</div>
+                <div class="dm-sum-stat__lbl">Toplam Belge</div>
+            </div>
+            <div class="dm-sum-stat">
+                <div class="dm-sum-stat__val">@heroThisMonthDocs</div>
+                <div class="dm-sum-stat__lbl">Bu Ay Eklenen</div>
+            </div>
+            <div class="dm-sum-stat">
+                <div class="dm-sum-stat__val">@heroTotalVersions</div>
+                <div class="dm-sum-stat__lbl">Toplam Versiyon</div>
+            </div>
+        </div>
+    </div>
+</footer>
+<script>
+(function () {
+    var LS_KEY = 'dm-summary-open';
+    var root = document.getElementById('dmSummary');
+    var btn  = document.getElementById('dmSummaryToggle');
+    if (!root || !btn) return;
+
+    function apply(open) {
+        root.classList.toggle('is-open', open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    // Sayfa parse edilirken senkron uygulanır — kapanış/açılış flash'ı olmaz.
+    var stored = null;
+    try { stored = localStorage.getItem(LS_KEY); } catch (e) { /* gizli sekme / erişim engeli */ }
+    apply(stored === '1');
+
+    btn.addEventListener('click', function () {
+        var next = !root.classList.contains('is-open');
+        apply(next);
+        try { localStorage.setItem(LS_KEY, next ? '1' : '0'); } catch (e) { /* yoksay */ }
+    });
+})();
+</script>
 
 @section Scripts {
 <script>
