@@ -103,22 +103,6 @@ body.app-theme-dark .al-root {
 .al-header-sub { font-size: 12px; color: var(--al-muted); margin-top: 2px; }
 .al-header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* ── Kayıt-kilitli mod (bkz. _AuditTrailHost.cshtml "Log Kayıtları" derin linki) ── */
-.al-locked-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 10px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--al-indigo-soft);
-  color: var(--al-indigo);
-  font-size: 12px;
-  font-weight: 600;
-  vertical-align: middle;
-}
-.al-back-btn { color: var(--al-indigo); border-color: var(--al-indigo); text-decoration: none; }
-.al-back-btn:hover { background: var(--al-indigo-soft); }
-
 .al-search {
   display: flex;
   align-items: center;
@@ -163,6 +147,24 @@ body.app-theme-dark .al-root {
 .al-btn:disabled { opacity: 0.55; cursor: default; }
 .al-btn .al-spin { animation: al-rotate 1s linear infinite; }
 @keyframes al-rotate { to { transform: rotate(360deg); } }
+
+/* ── Kayıt-kilitli mod (bkz. _AuditTrailHost.cshtml "Log Kayıtları" derin linki) ──
+   NOT: .al-btn'den SONRA tanımlanmalı — aksi halde .al-btn'in border/color shorthand'ı
+   aynı özgüllükte (0,0,1,0) kaynak sırası gereği bu override'ı ezer. */
+.al-back-btn.al-btn { color: var(--al-indigo); border-color: var(--al-indigo); text-decoration: none; }
+.al-back-btn.al-btn:hover { background: var(--al-indigo-soft); }
+.al-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--al-indigo-soft);
+  color: var(--al-indigo);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
 
 /* ── Stat kartları ───────────────────────────────────────────────────── */
 .al-stats {
