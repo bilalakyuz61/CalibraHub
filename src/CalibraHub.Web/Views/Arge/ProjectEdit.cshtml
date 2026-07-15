@@ -1,5 +1,6 @@
 @using CalibraHub.Domain.Enums
 @model CalibraHub.Application.Contracts.ArgeProjectDetail?
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @{
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni AR-GE Projesi" : $"AR-GE Projesi: {Model!.Name}";
@@ -22,6 +23,8 @@
     };
     var inv = System.Globalization.CultureInfo.InvariantCulture;
 }
+
+<link rel="stylesheet" href="@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/css/arge.css")" />
 
 <div class="ux-edit-shell">
   @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
@@ -66,6 +69,22 @@
 
     <section class="ux-edit-content">
       <div class="ux-edit-pane is-active" data-tab="general">
+        @if (!isNew)
+        {
+            var isUrgeEdit = Model!.ProjectType == 1;
+            <div class="arge-idcard @(isUrgeEdit ? "arge-idcard--urge" : "")">
+              <div class="arge-idcard__badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6.5L4.5 19a1.5 1.5 0 0 0 1.3 2.3h12.4a1.5 1.5 0 0 0 1.3-2.3L14 9.5V3"/><path d="M7 14h10"/></svg>
+              </div>
+              <div class="arge-idcard__body">
+                <div class="arge-idcard__no">@Model!.DocumentNumber · @(isUrgeEdit ? "ÜR-GE — Ürün Geliştirme" : "AR-GE — Araştırma-Geliştirme")</div>
+                <div class="arge-idcard__name">@Model!.Name</div>
+              </div>
+              <div class="arge-idcard__meta">
+                <span class="arge-status" style="--h:@EditHue((int)statusEnum)"><span class="arge-status__dot"></span>@statusLabel</span>
+              </div>
+            </div>
+        }
         <h2>Genel Bilgiler</h2>
         <div class="ux-edit-hint">AR-GE projesinin temel bilgileri. Yaşam döngüsü geçişleri "Durum" sekmesinden yapılır.</div>
 
@@ -116,15 +135,40 @@
       {
       <div class="ux-edit-pane" data-tab="lifecycle">
         <h2>Durum & Yaşam Döngüsü</h2>
-        <div class="ux-edit-hint">Projeyi yaşam döngüsünde ilerletin. Yalnızca geçerli geçişler gösterilir (Planlama → Geliştirme → Prototip → Test → Tasarım Onayı → Onaylandı → Üretime Aktarıldı).</div>
-        <div class="ux-field">
-          <label>Mevcut Durum</label>
-          <div><span class="ux-edit-bar__status" id="ap-cur-status">@statusLabel</span></div>
-        </div>
-        <div class="ux-field">
-          <label>İleri Adım</label>
-          <div id="ap-lc-actions" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
-        </div>
+        <div class="ux-edit-hint">Projenin inovasyon hattındaki konumu. Aktif adımın altındaki butonlarla yalnızca geçerli geçişler yapılabilir.</div>
+        @{
+            var curStatus = (int)statusEnum;
+            var isOffCur = curStatus == 7 || curStatus == 8;
+        }
+        <span id="ap-cur-status" style="display:none;">@statusLabel</span>
+        <ol class="arge-tl">
+          @for (int s = 0; s <= 6; s++)
+          {
+              var cls = isOffCur ? "" : (s < curStatus ? "is-done" : (s == curStatus ? "is-current" : ""));
+              <li class="arge-tl__step @cls" style="--h:@EditHue(s)">
+                <span class="arge-tl__node">
+                  @if (!isOffCur && s < curStatus)
+                  {
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                  }
+                </span>
+                <div class="arge-tl__label">@StageFull(s)</div>
+                @if (!isOffCur && s == curStatus)
+                {
+                    <div class="arge-tl__actions" id="ap-lc-actions"></div>
+                }
+              </li>
+          }
+          @if (isOffCur)
+          {
+              <li class="arge-tl__step is-off" style="--h:#f43f5e">
+                <span class="arge-tl__node"></span>
+                <div class="arge-tl__label">@statusLabel</div>
+                <div class="arge-tl__hint">Dallanma / terminal durum.</div>
+                <div class="arge-tl__actions" id="ap-lc-actions"></div>
+              </li>
+          }
+        </ol>
         <div id="ap-lc-err" style="display:none;" class="ux-err"></div>
       </div>
       }
@@ -746,3 +790,31 @@ function protoCloseDelModal() {
     if (refreshBtn) refreshBtn.addEventListener('click', function () { loaded = false; loadCost(); });
 })();
 </script>
+
+@functions {
+    static string StageFull(int s) => s switch
+    {
+        0 => "Planlama",
+        1 => "Geliştirme",
+        2 => "Prototip",
+        3 => "Test",
+        4 => "Tasarım Onayında",
+        5 => "Onaylandı",
+        6 => "Üretime Aktarıldı",
+        _ => "—",
+    };
+
+    static string EditHue(int s) => s switch
+    {
+        0 => "#64748b",
+        1 => "#3b82f6",
+        2 => "#6366f1",
+        3 => "#8b5cf6",
+        4 => "#f59e0b",
+        5 => "#10b981",
+        6 => "#059669",
+        7 => "#f43f5e",
+        8 => "#94a3b8",
+        _ => "#64748b",
+    };
+}

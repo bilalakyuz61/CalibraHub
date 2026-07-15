@@ -919,21 +919,20 @@
                 onRowsChange: function(rows) {
                     window.__INV_LINES__ = rows || [];
                     // Yeni kalemler header "Sayım Deposu"nu varsayılan devralır (satır bazlı override serbest).
-                    // Lokasyonu olmayan (yeni eklenen) satırlara header depoyu bas; dolu olanlara dokunma.
+                    // Lokasyonu boş (yeni eklenen) satırlara header depoyu bas; dolu olanlara dokunma.
+                    // patchRows KİLİTLEMEZ → kullanıcının aktif düzenlemesini bozmaz; needs guard'ı loop'u keser.
                     var locEl = document.getElementById('invLocation');
                     var headLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
-                    if (headLoc && Array.isArray(rows) && rows.length > 0) {
-                        var changed = false;
-                        var next = rows.map(function(r) {
-                            if (r && r.materialCode && (r.fromLocationId == null || r.fromLocationId === '')) {
-                                changed = true;
-                                return Object.assign({}, r, { fromLocationId: headLoc });
-                            }
-                            return r;
+                    if (!headLoc || !Array.isArray(rows)) return;
+                    var needs = rows.some(function(r) {
+                        return r && r.materialCode && (r.fromLocationId == null || r.fromLocationId === '');
+                    });
+                    var api = window.CalibraHub && window.CalibraHub.whLineGrid;
+                    if (needs && api && api.patchRows) {
+                        api.patchRows(function(r) {
+                            return (r && r.materialCode && (r.fromLocationId == null || r.fromLocationId === ''))
+                                ? Object.assign({}, r, { fromLocationId: headLoc }) : null;
                         });
-                        if (changed && window.CalibraHub && window.CalibraHub.whLineGrid) {
-                            window.CalibraHub.whLineGrid.setRows(next);
-                        }
                     }
                 }
             });
@@ -1013,15 +1012,12 @@
             });
         });
 
-        // Header lokasyon değişince tüm satırlara propagate et
+        // Header lokasyon değişince tüm satırlara propagate et (kilitlemeden — patchRows).
         document.getElementById('invLocation')?.addEventListener('change', function() {
             var newLocId = this.value ? parseInt(this.value, 10) : null;
-            if (!window.CalibraHub || !window.CalibraHub.whLineGrid) return;
-            var rows = window.CalibraHub.whLineGrid.getRows() || [];
-            if (rows.length === 0) return;
-            window.CalibraHub.whLineGrid.setRows(
-                rows.map(function(r) { return Object.assign({}, r, { fromLocationId: newLocId }); })
-            );
+            var api = window.CalibraHub && window.CalibraHub.whLineGrid;
+            if (!api || !api.patchRows) return;
+            api.patchRows(function(r) { return Object.assign({}, r, { fromLocationId: newLocId }); });
         });
 
         // Buton olayları

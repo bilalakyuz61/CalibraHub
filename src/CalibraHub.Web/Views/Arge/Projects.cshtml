@@ -1,82 +1,352 @@
+@using System.Globalization
+@using System.Linq
+@using CalibraHub.Application.Contracts
 @model CalibraHub.Web.Models.Arge.ArgeProjectsViewModel
-@using System.Text.Json
 @inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @{
-    ViewData["Title"] = "AR-GE Projeleri";
+    ViewData["Title"] = "AR-GE / ÜR-GE Projeleri";
     ViewData["FormCode"] = "ARGE_PROJECT_EDIT";
-    ViewData["BodyClass"] = "page-arge-projects";
+    ViewData["BodyClass"] = "page-arge-projects workspace-frame-body";
 
-    var jsonOpts = new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
-    var boardConfigJson = Model.BoardConfig != null
-        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
-        : "null";
+    var projects = Model.Projects;
+    var today = DateTime.Today;
+    var inv = CultureInfo.InvariantCulture;
+    var tr = CultureInfo.GetCultureInfo("tr-TR");
+
+    var total   = projects.Count;
+    var active  = projects.Count(p => p.Status <= 5);
+    var inProd  = projects.Count(p => p.Status == 6);
+    var risk    = projects.Count(p => p.Status <= 5 && p.TargetDate is { } rd && rd.Date < today);
+    var offCount = projects.Count(p => IsOff(p.Status));
+
+    var stageCounts = new int[7];
+    foreach (var p in projects) { if (p.Status <= 6) stageCounts[p.Status]++; }
 }
 
-<style>
-    .page-arge-projects .integrator-dashboard {
-        height: 100% !important; min-height: 0 !important;
-        padding: 0 !important; max-width: none !important;
-        background: transparent !important; box-shadow: none !important;
-        border: none !important; border-radius: 0 !important;
-    }
-    .workspace-frame-body.page-arge-projects .app-content-area--workspace-frame {
-        height: 100dvh; display: flex; flex-direction: column;
-        overflow: hidden; padding: 0;
-    }
-    .workspace-frame-body.page-arge-projects .integrator-dashboard {
-        flex: 1 1 auto; min-height: 0; height: 100%;
-    }
-</style>
+<link rel="stylesheet" href="@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/css/arge.css")" />
 
-<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
-    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
-</section>
+<div class="arge-board">
+
+  @* ── 1) HERO — kimlik bandı ─────────────────────────────────────────── *@
+  <header class="arge-hero">
+    <div class="arge-hero__row">
+      <div class="arge-hero__id">
+        <div class="arge-hero__kicker">AR-GE · ÜR-GE Portföyü</div>
+        <h1 class="arge-hero__title">Proje Komuta Güvertesi</h1>
+        <p class="arge-hero__sub" id="argeSub">@total proje · @active tanesi devam ediyor</p>
+      </div>
+      <div class="arge-hero__actions">
+        <div class="arge-seg" id="argeTypeSeg" role="group" aria-label="Tür filtresi">
+          <button type="button" class="arge-seg__btn is-active" data-type="all">Tümü</button>
+          <button type="button" class="arge-seg__btn" data-type="0"><span class="arge-seg__dot"></span>AR-GE</button>
+          <button type="button" class="arge-seg__btn" data-type="1"><span class="arge-seg__dot"></span>ÜR-GE</button>
+        </div>
+        <div class="arge-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="argeSearch" type="search" placeholder="Ara — proje no, ad, sorumlu…" autocomplete="off" />
+        </div>
+        <a class="arge-new" href="/Arge/ProjectEdit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Yeni Proje
+        </a>
+      </div>
+    </div>
+    <div class="arge-hero__stats">
+      <div class="arge-stat"><div class="arge-stat__val">@total</div><div class="arge-stat__lbl">Toplam Proje</div></div>
+      <div class="arge-stat"><div class="arge-stat__val">@active</div><div class="arge-stat__lbl">Devam Eden</div></div>
+      <div class="arge-stat"><div class="arge-stat__val">@inProd</div><div class="arge-stat__lbl">Üretime Aktarıldı</div></div>
+      <div class="arge-stat arge-stat--risk @(risk == 0 ? "is-zero" : "")">
+        <div class="arge-stat__val"><span class="arge-stat__spark"></span>@risk</div>
+        <div class="arge-stat__lbl">Riskli · Gecikmiş</div>
+      </div>
+    </div>
+  </header>
+
+  @* ── 2) İMZA ÖĞE — Yaşam Döngüsü Hattı ──────────────────────────────── *@
+  <nav class="arge-rail" id="argeRail" aria-label="Yaşam döngüsü aşamaları">
+    <button type="button" class="arge-rail__node arge-rail__node--all is-active" data-stage="all">
+      <span class="arge-rail__chip">@total</span>
+      <span class="arge-rail__lbl">Tümü</span>
+    </button>
+    @for (int i = 0; i < MainStages.Length; i++)
+    {
+        var stg = MainStages[i];
+        var cnt = stageCounts[stg.Id];
+        var prevHue = i == 0 ? "#4f46e5" : MainStages[i - 1].Hue;
+        <span class="arge-rail__link" style="--from:@prevHue;--to:@stg.Hue"></span>
+        <button type="button" class="arge-rail__node @(cnt == 0 ? "is-empty" : "")" data-stage="@stg.Id" title="@stg.Full">
+            <span class="arge-rail__chip" style="--h:@stg.Hue">@cnt</span>
+            <span class="arge-rail__lbl">@stg.Rail</span>
+        </button>
+    }
+    @if (offCount > 0)
+    {
+        <span class="arge-rail__sep"></span>
+        <button type="button" class="arge-rail__node arge-rail__node--off" data-stage="off" title="Reddedildi / İptal">
+            <span class="arge-rail__chip">@offCount</span>
+            <span class="arge-rail__lbl">Red / İptal</span>
+        </button>
+    }
+  </nav>
+
+  @* ── 3) PROJE GRID ──────────────────────────────────────────────────── *@
+  <div class="arge-scroll">
+    @if (total == 0)
+    {
+      <div class="arge-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6.5L4.5 19a1.5 1.5 0 0 0 1.3 2.3h12.4a1.5 1.5 0 0 0 1.3-2.3L14 9.5V3"/><path d="M7 14h10"/></svg>
+        <div class="arge-empty__title">Henüz AR-GE / ÜR-GE projesi yok</div>
+        <div class="arge-empty__hint">Sağ üstteki “Yeni Proje” ile ilk projeyi oluşturun.</div>
+      </div>
+    }
+    else
+    {
+      <div class="arge-grid" id="argeGrid">
+        @foreach (var p in projects)
+        {
+            var isUrge = p.ProjectType == 1;
+            var st = (int)p.Status;
+            var off = IsOff(st);
+            var overdue = !off && st <= 5 && p.TargetDate is { } d && d.Date < today;
+            var searchKey = ((p.DocumentNumber ?? "") + " " + (p.Name ?? "") + " " + (p.OwnerName ?? "")).ToLower(tr);
+            <article class="arge-card @(isUrge ? "arge-card--urge" : "")"
+                     data-status="@st" data-off="@(off ? "1" : "0")" data-type="@p.ProjectType"
+                     data-search="@searchKey" data-name="@p.Name"
+                     onclick="argeOpen(@p.DocumentId, event)">
+              <div class="arge-card__top">
+                <div class="arge-card__ids">
+                  <span class="arge-card__no">@p.DocumentNumber</span>
+                  <span class="arge-type">@(isUrge ? "ÜR-GE" : "AR-GE")</span>
+                </div>
+                <button type="button" class="arge-card__del" title="Projeyi sil" data-del="@p.DocumentId" onclick="argeAskDelete(event, this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                </button>
+              </div>
+
+              <h3 class="arge-card__name">@p.Name</h3>
+              @if (!string.IsNullOrWhiteSpace(p.Description))
+              {
+                <p class="arge-card__desc">@p.Description</p>
+              }
+
+              <div class="arge-stepper @(off ? "arge-stepper--off" : "")">
+                @for (int s = 0; s <= 6; s++)
+                {
+                    var cls = off ? "" : (s < st ? "is-done" : (s == st ? "is-current" : ""));
+                    var styleH = (s == st && !off) ? $"--h:{Hue(st)}" : "";
+                    <span class="arge-step @cls" style="@styleH"></span>
+                }
+              </div>
+
+              <div class="arge-card__mid">
+                <span class="arge-status" style="--h:@Hue(st)">
+                  <span class="arge-status__dot"></span>@FullLabel(st)
+                </span>
+                <span class="arge-meter">
+                  <span class="arge-meter__track"><span class="arge-meter__fill" style="width:@p.ProgressPercent.ToString("0.#", inv)%"></span></span>
+                  <span class="arge-meter__val">@p.ProgressPercent.ToString("0", tr)%</span>
+                </span>
+              </div>
+
+              <footer class="arge-card__foot">
+                @if (!string.IsNullOrWhiteSpace(p.OwnerName))
+                {
+                  <span class="arge-owner"><span class="arge-owner__ini">@Initials(p.OwnerName)</span><span class="arge-owner__name">@p.OwnerName</span></span>
+                }
+                else
+                {
+                  <span class="arge-owner arge-owner--empty">Sorumlu atanmadı</span>
+                }
+                <span class="arge-foot-sep"></span>
+                <span class="arge-foot-item arge-foot-item--target @(overdue ? "is-overdue" : "")">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  @(p.TargetDate?.ToString("dd.MM.yyyy", tr) ?? "—")
+                </span>
+                @if (p.PrototypeCount > 0)
+                {
+                  <span class="arge-foot-item arge-foot-item--proto" title="Prototip sayısı">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>
+                    @p.PrototypeCount
+                  </span>
+                }
+              </footer>
+            </article>
+        }
+      </div>
+      <div class="arge-empty" id="argeNoResults" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/></svg>
+        <div class="arge-empty__title">Eşleşen proje yok</div>
+        <div class="arge-empty__hint">Arama veya aşama filtresini temizleyin.</div>
+      </div>
+    }
+  </div>
+</div>
+
+@* ── Silme onay modalı (global ux-modal) ─────────────────────────────── *@
+<div id="argeDelModal" class="ux-modal-backdrop" style="display:none;" onclick="argeCloseDelete()">
+  <div class="ux-modal" onclick="event.stopPropagation()">
+    <div class="ux-modal-icon">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <div class="ux-modal-title">AR-GE Projesini Sil</div>
+    <div class="ux-modal-msg" id="argeDelMsg"></div>
+    <div class="ux-modal-actions">
+      <button class="ux-modal-cancel" onclick="argeCloseDelete()">Vazgeç</button>
+      <button class="ux-modal-del" id="argeDelConfirm">Sil</button>
+    </div>
+  </div>
+</div>
+
+@Html.AntiForgeryToken()
 
 <script>
 (function () {
-    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
-    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
-    var CSS_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var search  = document.getElementById('argeSearch');
+    var rail    = document.getElementById('argeRail');
+    var typeSeg = document.getElementById('argeTypeSeg');
+    var grid    = document.getElementById('argeGrid');
+    var noRes   = document.getElementById('argeNoResults');
+    var sub     = document.getElementById('argeSub');
+    if (!grid) return;
 
-    var el = document.getElementById('reactSmartBoard');
-    if (!el) { return; }
+    var cards = Array.prototype.slice.call(grid.querySelectorAll('.arge-card'));
+    var state = { stage: 'all', type: 'all', q: '' };
 
-    function showError(msg) {
-        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:300px;color:#ef4444;font-size:14px;">' + msg + '</div>';
+    function apply() {
+        var q = state.q.trim().toLowerCase();
+        var shown = 0;
+        cards.forEach(function (c) {
+            var okType = state.type === 'all' || c.getAttribute('data-type') === state.type;
+            var okStage;
+            if (state.stage === 'all') okStage = true;
+            else if (state.stage === 'off') okStage = c.getAttribute('data-off') === '1';
+            else okStage = c.getAttribute('data-status') === state.stage;
+            var okQ = !q || (c.getAttribute('data-search') || '').indexOf(q) !== -1;
+            var vis = okType && okStage && okQ;
+            c.style.display = vis ? '' : 'none';
+            if (vis) shown++;
+        });
+        if (noRes) noRes.style.display = (shown === 0 && cards.length > 0) ? 'flex' : 'none';
+        if (sub) sub.textContent = shown + ' / ' + cards.length + ' proje gösteriliyor';
     }
 
-    function doMount() {
-        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
-        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard mount fonksiyonu bulunamadı'); return; }
-        try { window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG); }
-        catch (ex) { console.error('[Arge] Mount exception:', ex); showError('Mount hatası: ' + (ex.message || ex)); }
-    }
+    if (search) search.addEventListener('input', function () { state.q = search.value; apply(); });
 
-    function loadCss() {
-        if (document.querySelector('link[data-arge-smartboard]')) return;
-        var link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = CSS_URL;
-        link.setAttribute('data-arge-smartboard', '1');
-        document.head.appendChild(link);
-    }
+    if (rail) rail.addEventListener('click', function (e) {
+        var node = e.target.closest ? e.target.closest('.arge-rail__node') : null;
+        if (!node) return;
+        var stage = node.getAttribute('data-stage');
+        if (state.stage === stage && stage !== 'all') stage = 'all';   // tekrar tıkla → temizle
+        state.stage = stage;
+        rail.querySelectorAll('.arge-rail__node').forEach(function (n) {
+            n.classList.toggle('is-active', n.getAttribute('data-stage') === state.stage);
+        });
+        apply();
+    });
 
-    function loadScript(cb) {
-        if (document.querySelector('script[data-arge-smartboard]')) { cb(); return; }
-        var script = document.createElement('script');
-        script.src = BUNDLE_URL;
-        script.setAttribute('data-arge-smartboard', '1');
-        script.onload = function () { setTimeout(cb, 0); };
-        script.onerror = function () { showError('Bundle yüklenemedi'); };
-        document.head.appendChild(script);
-    }
+    if (typeSeg) typeSeg.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('.arge-seg__btn') : null;
+        if (!btn) return;
+        state.type = btn.getAttribute('data-type');
+        typeSeg.querySelectorAll('.arge-seg__btn').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+        apply();
+    });
+})();
 
-    loadCss();
-    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
-    else loadScript(doMount);
+function argeOpen(id, ev) {
+    if (ev && ev.target && ev.target.closest && ev.target.closest('.arge-card__del')) return;
+    window.location.href = '/Arge/ProjectEdit?id=' + id;
+}
+
+var _argeDelId = 0;
+function argeEsc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function argeAskDelete(ev, btn) {
+    ev.stopPropagation();
+    _argeDelId = parseInt(btn.getAttribute('data-del'), 10) || 0;
+    var card = btn.closest('.arge-card');
+    var name = card ? (card.getAttribute('data-name') || '') : '';
+    var msg = document.getElementById('argeDelMsg');
+    if (msg) msg.innerHTML = '<strong>' + argeEsc(name) + '</strong> projesini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.';
+    var m = document.getElementById('argeDelModal');
+    if (m) m.style.display = 'flex';
+    var c = document.getElementById('argeDelConfirm');
+    if (c) c.focus();
+}
+function argeCloseDelete() {
+    var m = document.getElementById('argeDelModal');
+    if (m) m.style.display = 'none';
+    var c = document.getElementById('argeDelConfirm');
+    if (c) { c.disabled = false; c.textContent = 'Sil'; }
+}
+(function () {
+    var c = document.getElementById('argeDelConfirm');
+    if (!c) return;
+    c.addEventListener('click', function () {
+        if (!_argeDelId) return;
+        c.disabled = true; c.textContent = 'Siliniyor…';
+        var tok = document.querySelector('input[name="__RequestVerificationToken"]');
+        fetch('/Arge/DeleteProjectJson?id=' + _argeDelId, {
+            method: 'POST',
+            headers: { 'RequestVerificationToken': tok ? tok.value : '' },
+            credentials: 'same-origin'
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d && d.ok) window.location.reload(); else argeCloseDelete(); })
+        .catch(function () { argeCloseDelete(); });
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') argeCloseDelete(); });
 })();
 </script>
+
+@functions {
+    // Ana yaşam döngüsü aşamaları (0..6) — rail için kısa etiket, kart için tam etiket, hue rampası.
+    static readonly (int Id, string Rail, string Full, string Hue)[] MainStages = new[]
+    {
+        (0, "Planlama",   "Planlama",          "#64748b"),
+        (1, "Geliştirme", "Geliştirme",        "#3b82f6"),
+        (2, "Prototip",   "Prototip",          "#6366f1"),
+        (3, "Test",       "Test",              "#8b5cf6"),
+        (4, "Onay",       "Tasarım Onayında",  "#f59e0b"),
+        (5, "Onaylı",     "Onaylandı",         "#10b981"),
+        (6, "Üretim",     "Üretime Aktarıldı", "#059669"),
+    };
+
+    static bool IsOff(int s) => s == 7 || s == 8;
+
+    static string FullLabel(int s) => s switch
+    {
+        0 => "Planlama",
+        1 => "Geliştirme",
+        2 => "Prototip",
+        3 => "Test",
+        4 => "Tasarım Onayında",
+        5 => "Onaylandı",
+        6 => "Üretime Aktarıldı",
+        7 => "Reddedildi",
+        8 => "İptal",
+        _ => "—",
+    };
+
+    static string Hue(int s) => s switch
+    {
+        0 => "#64748b",
+        1 => "#3b82f6",
+        2 => "#6366f1",
+        3 => "#8b5cf6",
+        4 => "#f59e0b",
+        5 => "#10b981",
+        6 => "#059669",
+        7 => "#f43f5e",
+        8 => "#94a3b8",
+        _ => "#64748b",
+    };
+
+    static string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "—";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1)
+            return parts[0].Substring(0, Math.Min(2, parts[0].Length)).ToUpperInvariant();
+        return (parts[0][0].ToString() + parts[^1][0]).ToUpperInvariant();
+    }
+}

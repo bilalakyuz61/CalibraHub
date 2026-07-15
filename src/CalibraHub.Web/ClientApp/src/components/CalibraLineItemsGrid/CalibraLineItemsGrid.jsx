@@ -496,6 +496,15 @@ export default function CalibraLineItemsGrid(props) {
           })
         })
       },
+      // Satirlari KILITLEMEDEN in-place guncelle (header -> satir varsayilan lokasyon gibi).
+      // setRows'tan farki: _locked:true BASMAZ → kullanicinin aktif duzenlemesini bozmaz.
+      // mapFn(row) => yeni obje (degisiklik) VEYA null (o satira dokunma).
+      patchRows: function(mapFn) {
+        if (typeof mapFn !== 'function') return
+        setRows(function(prev) {
+          return prev.map(function(r) { var p = mapFn(r); return p ? applyComputed(p, allColumns) : r })
+        })
+      },
       // Satirlardaki eksik zorunlu widget state'i — ⚙ rengini kirmizi yapar.
       setInvalidLines: function(ids) {
         var arr = Array.isArray(ids) ? ids.map(function(n) { return Number(n) }).filter(function(n) { return n > 0 }) : []
@@ -510,10 +519,10 @@ export default function CalibraLineItemsGrid(props) {
     }
     window.CalibraHub = window.CalibraHub || {}
     window.CalibraHub.salesLineGrid = api
+    window.CalibraHub.whLineGrid = api   // Ambar/Sayım ekranları bu adı kullanır (alias — aynı API)
     return function() {
-      if (window.CalibraHub && window.CalibraHub.salesLineGrid === api) {
-        window.CalibraHub.salesLineGrid = null
-      }
+      if (window.CalibraHub && window.CalibraHub.salesLineGrid === api) window.CalibraHub.salesLineGrid = null
+      if (window.CalibraHub && window.CalibraHub.whLineGrid === api) window.CalibraHub.whLineGrid = null
     }
   }, [rows, columns])
 
@@ -1054,7 +1063,7 @@ export default function CalibraLineItemsGrid(props) {
     <div
       ref={gridRootRef}
       onKeyDown={handleGridKeyDown}
-      className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
+      className="calibra-line-grid rounded-2xl overflow-x-auto overflow-y-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
       {/* Header row */}
       <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
         <div className="w-[140px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
