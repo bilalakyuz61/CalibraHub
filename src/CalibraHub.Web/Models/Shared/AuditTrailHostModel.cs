@@ -3,18 +3,21 @@ namespace CalibraHub.Web.Models.Shared;
 /// <summary>
 /// Paylaşılan "Değişiklik Geçmişi" (audit trail) host'u için model — `_AuditTrailHost.cshtml`.
 ///
-/// Belge/tanım düzenleme ekranı bu partial'ı bir sekme içine include eder; panel
-/// /AuditLog/Record endpoint'inden kaydın işlem geçmişini çeker (dosya tabanlı audit log +
-/// opsiyonel WidgetTraLog "Ek Alanlar" geçmişi) ve zaman çizelgesi olarak gösterir.
+/// 2026-07-16: Bu host artık kaydın geçmişini İNLINE göstermez. Bunun yerine merkezi
+/// İşlem Logları ekranına (/AuditLog?entity=&amp;recordId=&amp;formCode=) giden, SADECE bu
+/// kaydın loglarını gösterecek şekilde kilitlenmiş bir "Log Kayıtları" kartı/butonu render
+/// eder (yeni workspace tab'ında açılır). Kayıt henüz kaydedilmemişse (RecordId boş) buton
+/// disabled görünür.
 ///
 /// Kullanım:
 ///   @await Html.PartialAsync("_AuditTrailHost", new AuditTrailHostModel {
 ///       Entity = "satis_siparisi",          // audit entity kodu (DocumentType.Code veya sabit entity adı)
 ///       RecordId = Model.DocumentId?.ToString(),
-///       WidgetFormCode = "SALES_ORDER_EDIT" // opsiyonel — Ek Alanlar geçmişi de gelsin
+///       WidgetFormCode = "SALES_ORDER_EDIT" // opsiyonel — Ek Alanlar (widget) logları da /AuditLog'da merge edilsin
 ///   })
 ///
-/// Yeni kayıt save sonrası: window.CalibraAuditTrail.reload('&lt;HostId&gt;', newId)
+/// Yeni kayıt save sonrası (sayfa reload olmadan Id alan SPA akışlarında):
+///   window.CalibraAuditTrail.reload('&lt;HostId&gt;', newId)
 /// </summary>
 public sealed class AuditTrailHostModel
 {

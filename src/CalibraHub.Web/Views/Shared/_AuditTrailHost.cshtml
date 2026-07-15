@@ -1,62 +1,167 @@
 @model CalibraHub.Web.Models.Shared.AuditTrailHostModel
 @*
-    Paylaşılan "Değişiklik Geçmişi" host'u — dosya tabanlı işlem loglarının (audit trail)
-    kayıt bazlı zaman çizelgesi. React AuditTrailPanel'i mount eder; bundle hazır olana
-    kadar polling ile bekler (aynı pattern: _DynamicWidgetHost).
+    Paylaşılan "Değişiklik Geçmişi" host'u.
 
-    ENTEGRASYON:
+    2026-07-16 DAVRANIŞ DEĞİŞİKLİĞİ: Bu partial artık belge üzerinde INLINE zaman
+    çizelgesi GÖSTERMEZ. Bunun yerine merkezi İşlem Logları ekranına (/AuditLog)
+    giden, SADECE bu kaydın loglarını gösterecek şekilde önceden filtrelenmiş bir
+    "Log Kayıtları" kartı/butonu render eder. Tıklanınca uygulamanın standart
+    workspace-tab mekanizmasıyla (window.top.CalibraHub.openWorkspaceTab, yoksa
+    aynı sekmede navigasyon) YENİ bir sekmede açılır:
+
+        /AuditLog?entity=<Entity>&recordId=<RecordId>[&formCode=<WidgetFormCode>]
+
+    AuditMonitor (ClientApp/src/components/AuditLog/AuditMonitor.jsx) bu query
+    parametrelerini okuyup "kayıt kilitli" moda geçer — sadece o kaydın geçmişini
+    gösterir + "Tüm Loglara Dön" linki sunar. Parametreler yoksa (ör. menüden
+    doğrudan /AuditLog açılırsa) tam izleme/raporlama ekranı gibi davranır.
+
+    Saf HTML/CSS/JS'tir — React bundle beklemez (önceki mountAuditTrail/AuditTrailPanel
+    inline mount'u kaldırıldı; AuditTrailPanel.jsx artık bu host tarafından kullanılmıyor).
+
+    ENTEGRASYON (değişmedi):
       1) Bir sekme/panel içine include et (model ile Entity + RecordId + ops. WidgetFormCode ver).
-      2) Yeni kayıt save sonrası:  window.CalibraAuditTrail.reload('<HostId>', newId)
+      2) Yeni kayıt save sonrası (sayfa reload olmadan Id alan SPA akışlarında):
+         window.CalibraAuditTrail.reload('<HostId>', newId)
+         → kart aktif hale gelir, butonun linkine yeni Id işlenir.
 *@
 @{
     var hostId = string.IsNullOrWhiteSpace(Model.HostId) ? "auditTrailHost" : Model.HostId.Trim();
+    var entityLabel = CalibraHub.Application.Auditing.AuditFieldLabels.EntityLabel(Model.Entity);
+    var hasRecord = !string.IsNullOrWhiteSpace(Model.RecordId);
+
+    // CSS'i istek başına bir kez yaz (aynı sayfada birden çok host olsa da tek stil) — _DynamicWidgetHost ile aynı desen.
+    var cssKey = "__cat_styles_emitted";
+    var emitCss = Context.Items[cssKey] is null;
+    if (emitCss) { Context.Items[cssKey] = true; }
+}
+
+@if (emitCss)
+{
+    <style>
+        /* Audit trail host — kayıt logu link kartı. Light default → dark override (CLAUDE.md). */
+        .cat-card {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            padding: 18px 20px; border-radius: 12px;
+            background: var(--app-surface, #fff);
+            border: 1px solid var(--app-border, #e2e8f0);
+        }
+        .cat-card-icon {
+            width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff;
+        }
+        .cat-card-body { min-width: 180px; flex: 1 1 auto; }
+        .cat-card-title { font-size: 0.94rem; font-weight: 700; color: var(--app-text, #0f172a); }
+        .cat-card-sub { font-size: 0.8rem; color: var(--app-text-muted, #64748b); margin-top: 3px; line-height: 1.45; }
+        .cat-card-btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 9px 16px; border-radius: 9px; border: none;
+            background: #4f46e5; color: #fff; font-size: 0.82rem; font-weight: 600;
+            cursor: pointer; white-space: nowrap; transition: background .15s;
+            flex-shrink: 0;
+        }
+        .cat-card-btn:hover:not(:disabled) { background: #4338ca; }
+        .cat-card-btn:disabled { opacity: .5; cursor: default; background: var(--app-text-muted, #94a3b8); }
+        .cat-card-btn svg { flex-shrink: 0; }
+        body.app-theme-dark .cat-card { background: var(--app-surface, #101a2b); border-color: var(--app-border, #232f47); }
+        body.app-theme-dark .cat-card-title { color: var(--app-text, #e2e8f0); }
+        body.app-theme-dark .cat-card-sub { color: var(--app-text-muted, #94a3b8); }
+    </style>
 }
 
 <div id="@hostId" class="cat-root"
      data-entity="@Model.Entity"
+     data-entity-label="@entityLabel"
      data-record-id="@(Model.RecordId ?? "")"
-     data-widget-form-code="@(Model.WidgetFormCode ?? "")"></div>
+     data-widget-form-code="@(Model.WidgetFormCode ?? "")">
+    <div class="cat-card">
+        <div class="cat-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="19" height="19">
+                <path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/>
+                <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/>
+            </svg>
+        </div>
+        <div class="cat-card-body">
+            <div class="cat-card-title">Log Kayıtları</div>
+            <div class="cat-card-sub" data-cat-sub>
+                @(hasRecord
+                    ? "Bu kaydın tüm işlem geçmişini merkezi İşlem Logları ekranında görüntüleyin."
+                    : "Kayıt henüz oluşturulmadı — log kayıtları ilk kayıttan sonra görüntülenebilir.")
+            </div>
+        </div>
+        <button type="button" class="cat-card-btn" data-cat-btn @(hasRecord ? "" : "disabled")>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                <path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            </svg>
+            Log Kayıtlarını Görüntüle
+        </button>
+    </div>
+</div>
 
 <script>
 (function () {
     // ── Merkezi audit trail registry (bir kez tanımlanır) ───────────────────
     window.CalibraAuditTrail = window.CalibraAuditTrail || (function () {
-        var reg = {};
-        function mount(id) {
+        function render(id) {
             var host = document.getElementById(id);
-            if (!host || !window.CalibraHub || !window.CalibraHub.mountAuditTrail) return null;
-            var handle = window.CalibraHub.mountAuditTrail(host, {
-                entity: host.getAttribute('data-entity') || '',
-                recordId: host.getAttribute('data-record-id') || '',
-                widgetFormCode: host.getAttribute('data-widget-form-code') || null,
-            });
-            reg[id] = handle;
-            return handle;
+            if (!host) return;
+            var recordId = host.getAttribute('data-record-id') || '';
+            var btn = host.querySelector('[data-cat-btn]');
+            var sub = host.querySelector('[data-cat-sub]');
+            if (btn) btn.disabled = !recordId;
+            if (sub) {
+                sub.textContent = recordId
+                    ? 'Bu kaydın tüm işlem geçmişini merkezi İşlem Logları ekranında görüntüleyin.'
+                    : 'Kayıt henüz oluşturulmadı — log kayıtları ilk kayıttan sonra görüntülenebilir.';
+            }
+        }
+        function openLog(id) {
+            var host = document.getElementById(id);
+            if (!host) return;
+            var entity = host.getAttribute('data-entity') || '';
+            var recordId = host.getAttribute('data-record-id') || '';
+            if (!entity || !recordId) return;
+            var formCode = host.getAttribute('data-widget-form-code') || '';
+            var entityLabel = host.getAttribute('data-entity-label') || entity;
+            var qs = 'entity=' + encodeURIComponent(entity) + '&recordId=' + encodeURIComponent(recordId);
+            if (formCode) qs += '&formCode=' + encodeURIComponent(formCode);
+            var url = '/AuditLog?' + qs;
+            var title = entityLabel + ' — Log Kayıtları';
+            try {
+                var topWin = window.top || window;
+                if (topWin && topWin.CalibraHub && typeof topWin.CalibraHub.openWorkspaceTab === 'function') {
+                    topWin.CalibraHub.openWorkspaceTab({ url: url, title: title });
+                    return;
+                }
+            } catch (e) { /* cross-origin — shell'e erişilemedi */ }
+            try { window.location.href = url; } catch (e2) { window.top.location.href = url; }
         }
         return {
-            _mount: mount,
-            get: function (id) { return reg[id] || null; },
-            // Kayıt Id değişince (yeni kayıt save edilince) çizelgeyi yeni Id ile yeniden kur.
+            _render: render,
+            _open: openLog,
+            // Kayıt Id değişince (SPA akışında sayfa reload olmadan yeni kayıt save edilince)
+            // kart bu yeni Id ile güncellenir.
             reload: function (id, recordId) {
                 var host = document.getElementById(id);
                 if (!host) return;
                 if (recordId != null) host.setAttribute('data-record-id', String(recordId));
-                mount(id);
+                render(id);
             },
         };
     })();
 
     var HOST_ID = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(hostId));
-    var tries = 0;
-    (function tryMount() {
-        if (window.CalibraAuditTrail.get(HOST_ID)) return;
-        if (window.CalibraHub && window.CalibraHub.mountAuditTrail) {
-            try { window.CalibraAuditTrail._mount(HOST_ID); }
-            catch (e) { console.warn('[AuditTrail] mount hatasi (' + HOST_ID + '):', e); }
-            return;
+    var host = document.getElementById(HOST_ID);
+    if (host) {
+        window.CalibraAuditTrail._render(HOST_ID);
+        var btn = host.querySelector('[data-cat-btn]');
+        if (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.disabled) return;
+                window.CalibraAuditTrail._open(HOST_ID);
+            });
         }
-        if (++tries <= 120) { setTimeout(tryMount, 50); }
-        else { console.warn('[AuditTrail] React bundle yuklenemedi: ' + HOST_ID); }
-    })();
+    }
 })();
 </script>

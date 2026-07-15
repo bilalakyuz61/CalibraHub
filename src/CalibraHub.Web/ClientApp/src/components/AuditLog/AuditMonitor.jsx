@@ -34,10 +34,31 @@ function presetRange(id) {
 }
 
 /**
+ * URL'den kayıt-kilitli mod parametrelerini okur: ?entity=&recordId=&formCode=
+ * İkisi (entity + recordId) birlikte varsa ekran SADECE o kaydın loglarını gösterir
+ * (bkz. Views/Shared/_AuditTrailHost.cshtml — "Log Kayıtları" kartı bu URL'i üretir).
+ */
+function readLockedParams() {
+  if (typeof window === 'undefined') return null
+  const p = new URLSearchParams(window.location.search)
+  const entity = p.get('entity')
+  const recordId = p.get('recordId')
+  if (!entity || !recordId) return null
+  return { entity, recordId, formCode: p.get('formCode') || null }
+}
+
+/**
  * İşlem Logları izleme/raporlama ekranı.
  * Veri kaynağı dosya tabanlı audit trail (AuditLogController).
+ *
+ * Kayıt-kilitli mod: URL'de ?entity=&recordId= varsa (bkz. readLockedParams) ekran
+ * tarih aralığı / istatistik / tür filtrelerini gizler, yalnızca /AuditLog/Record
+ * üzerinden o kaydın tüm geçmişini çeker ve arama/işlem/kullanıcı filtrelerini
+ * istemci tarafında uygular. Parametreler yoksa tam izleme ekranı değişmeden çalışır.
  */
 export default function AuditMonitor({ apiBase = '/AuditLog' }) {
+  const locked = useMemo(readLockedParams, [])
+
   const [preset, setPreset] = useState('7d')
   const [range, setRange] = useState(() => presetRange('7d'))
   const [action, setAction] = useState('')
@@ -54,6 +75,23 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [exporting, setExporting] = useState(false)
   const fetchSeq = useRef(0)
+
+  // ── Kayıt-kilitli mod veri kaynağı ────────────────────────────────────────
+  const [lockedItems, setLockedItems] = useState(null) // null = henüz yüklenmedi
+  const [lockedLoading, setLockedLoading] = useState(false)
+
+  const loadLocked = useCallback((silent) => {
+    if (!locked) return
+    const seq = ++fetchSeq.current
+    if (!silent) setLockedLoading(true)
+    const p = new URLSearchParams({ entity: locked.entity, id: locked.recordId, max: '500' })
+    if (locked.formCode) p.set('widgetFormCode', locked.formCode)
+    fetch(apiBase + '/Record?' + p.toString(), { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(d => { if (seq === fetchSeq.current) setLockedItems(d && d.ok ? (d.items || []) : []) })
+      .catch(() => { if (seq === fetchSeq.current) setLockedItems([]) })
+      .finally(() => { if (seq === fetchSeq.current) setLockedLoading(false) })
+  }, [apiBase, locked])
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedText(text.trim()); setPage(1) }, 350)
@@ -72,6 +110,7 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
   }, [range, action, entity, user, debouncedText])
 
   const load = useCallback((silent) => {
+    if (locked) return
     const seq = ++fetchSeq.current
     if (!silent) setLoading(true)
     const searchUrl = apiBase + '/Search?' + query({ page: String(page), pageSize: String(pageSize) })
@@ -87,15 +126,16 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
       })
       .catch(() => { /* ağ hatası — mevcut veri korunur */ })
       .finally(() => { if (seq === fetchSeq.current) setLoading(false) })
-  }, [apiBase, query, page, pageSize, range])
+  }, [apiBase, query, page, pageSize, range, locked])
 
-  useEffect(() => { load(false) }, [load])
+  useEffect(() => { if (!locked) load(false) }, [load, locked])
+  useEffect(() => { if (locked) loadLocked(false) }, [locked, loadLocked])
 
   useEffect(() => {
     if (!autoRefresh) return undefined
-    const t = setInterval(() => load(true), 15000)
+    const t = setInterval(() => { if (locked) loadLocked(true); else load(true) }, 15000)
     return () => clearInterval(t)
-  }, [autoRefresh, load])
+  }, [autoRefresh, locked, load, loadLocked])
 
   const applyPreset = (id) => {
     setPreset(id)
@@ -109,6 +149,7 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
 
   // Stat kartı tıklaması → listeyi o boyuta filtrele (tekrar tıklama = temizle).
   // Kart sayıları tüm aralığı saydığı için diğer filtreler de sıfırlanır — sayı ile liste örtüşür.
+  // (Yalnızca tam izleme modunda render edilir — bkz. al-stats bloğu.)
   const applyStatFilter = (kind) => {
     setPage(1); setText(''); setUser('')
     if (kind === 'all') { setAction(''); setEntity(''); return }
@@ -127,23 +168,86 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
     security: entity === 'Session' && !action,
   }
 
-  const totalPages = Math.max(1, Math.ceil(data.total / pageSize))
+  // ── Kayıt-kilitli mod: istemci tarafı arama/işlem/kullanıcı filtresi + facet'ler ──
+  const lockedFiltered = useMemo(() => {
+    if (!locked) return null
+    let items = lockedItems || []
+    if (action) items = items.filter(e => e.action === action)
+    if (user) items = items.filter(e => e.user === user)
+    if (debouncedText) {
+      const q = debouncedText.toLowerCase()
+      items = items.filter(e => {
+        if ((e.title || '').toLowerCase().includes(q)) return true
+        if ((e.detail || '').toLowerCase().includes(q)) return true
+        if ((e.user || '').toLowerCase().includes(q)) return true
+        return (e.changes || []).some(c =>
+          String(c.old ?? '').toLowerCase().includes(q) ||
+          String(c.new ?? '').toLowerCase().includes(q) ||
+          (c.label || c.field || '').toLowerCase().includes(q))
+      })
+    }
+    return items
+  }, [locked, lockedItems, action, user, debouncedText])
+
+  const lockedFacets = useMemo(() => {
+    if (!locked) return null
+    const items = lockedItems || []
+    const actionsMap = new Map()
+    const usersSet = new Set()
+    items.forEach(e => {
+      if (e.action) actionsMap.set(e.action, e.actionLabel || e.action)
+      if (e.user) usersSet.add(e.user)
+    })
+    return {
+      actions: Array.from(actionsMap, ([code, label]) => ({ code, label })),
+      users: Array.from(usersSet).sort((a, b) => a.localeCompare(b, 'tr')),
+    }
+  }, [locked, lockedItems])
+
+  const lockedEntityLabel = useMemo(() => {
+    if (!locked) return ''
+    if (lockedItems && lockedItems.length > 0 && lockedItems[0].entityLabel) return lockedItems[0].entityLabel
+    return locked.entity
+  }, [locked, lockedItems])
+
+  // ── Render için etkin veri seti (kilitli mod ↔ tam izleme modu) ───────────
+  const viewTotal = locked ? (lockedFiltered ? lockedFiltered.length : 0) : data.total
+  const viewItems = locked
+    ? (lockedFiltered || []).slice((page - 1) * pageSize, page * pageSize)
+    : data.items
+  const viewLoading = locked ? lockedLoading : loading
+  const facetActions = locked
+    ? (lockedFacets ? lockedFacets.actions : [])
+    : ((data.facets && data.facets.actions) || [])
+  const facetEntities = (data.facets && data.facets.entities) || []
+  const facetUsers = locked
+    ? (lockedFacets ? lockedFacets.users : [])
+    : ((data.facets && data.facets.users) || [])
+
+  const totalPages = Math.max(1, Math.ceil(viewTotal / pageSize))
 
   const exportExcel = async () => {
     if (exporting) return
     setExporting(true)
     try {
-      // Filtrelenmiş sonucun tamamını (2000 satır sınırıyla) sayfa sayfa çek
-      const rows = []
-      for (let p = 1; p <= 4; p++) {
-        const res = await fetch(apiBase + '/Search?' + query({ page: String(p), pageSize: '500' }),
-          { credentials: 'same-origin' }).then(r => r.json())
-        if (!res || !res.ok) break
-        rows.push(...(res.items || []))
-        if (rows.length >= (res.total || 0) || (res.items || []).length < 500) break
+      let rows
+      if (locked) {
+        rows = lockedFiltered || []
+      } else {
+        // Filtrelenmiş sonucun tamamını (2000 satır sınırıyla) sayfa sayfa çek
+        rows = []
+        for (let p = 1; p <= 4; p++) {
+          const res = await fetch(apiBase + '/Search?' + query({ page: String(p), pageSize: '500' }),
+            { credentials: 'same-origin' }).then(r => r.json())
+          if (!res || !res.ok) break
+          rows.push(...(res.items || []))
+          if (rows.length >= (res.total || 0) || (res.items || []).length < 500) break
+        }
       }
       const payload = {
-        fileName: 'islem-loglari-' + range.from + '_' + range.to + '.xlsx',
+        fileName: locked
+          ? ('kayit-loglari-' + locked.entity + '-' + locked.recordId + '.xlsx')
+          : ('islem-loglari-' + range.from + '_' + range.to + '.xlsx'),
         sheetName: 'İşlem Logları',
         headers: [
           { id: 'ts', label: 'Zaman' }, { id: 'user', label: 'Kullanıcı' },
@@ -203,22 +307,28 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
     }
   }
 
-  const facetActions = (data.facets && data.facets.actions) || []
-  const facetEntities = (data.facets && data.facets.entities) || []
-  const facetUsers = (data.facets && data.facets.users) || []
-
   return (
     <div className="al-root">
       {/* Header */}
       <div className="al-header">
         <div className="al-header-icon"><ScrollText size={20} /></div>
         <div className="al-header-titles">
-          <div className="al-header-title">İşlem Logları</div>
+          <div className="al-header-title">
+            {locked ? 'Kayıt Log Kayıtları' : 'İşlem Logları'}
+            {locked && <span className="al-locked-badge">{lockedEntityLabel} #{locked.recordId}</span>}
+          </div>
           <div className="al-header-sub">
-            {data.total.toLocaleString('tr-TR')} kayıt · {range.from.split('-').reverse().join('.')} – {range.to.split('-').reverse().join('.')}
+            {locked
+              ? (viewTotal.toLocaleString('tr-TR') + ' işlem · bu kayda ait tüm geçmiş')
+              : (data.total.toLocaleString('tr-TR') + ' kayıt · ' + range.from.split('-').reverse().join('.') + ' – ' + range.to.split('-').reverse().join('.'))}
           </div>
         </div>
         <div className="al-header-actions">
+          {locked && (
+            <a className="al-btn al-back-btn" href="/AuditLog" title="Tüm işlem loglarına dön">
+              <ChevronLeft size={14} /> Tüm Loglara Dön
+            </a>
+          )}
           <div className="al-search">
             <Search size={14} />
             <input
@@ -233,8 +343,8 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
             onClick={() => setAutoRefresh(v => !v)}>
             <Activity size={14} /> Canlı
           </button>
-          <button type="button" className="al-btn" onClick={() => load(false)} disabled={loading} title="Yenile">
-            <RefreshCw size={14} className={loading ? 'al-spin' : ''} />
+          <button type="button" className="al-btn" onClick={() => (locked ? loadLocked(false) : load(false))} disabled={viewLoading} title="Yenile">
+            <RefreshCw size={14} className={viewLoading ? 'al-spin' : ''} />
           </button>
           <button type="button" className="al-btn" onClick={exportExcel} disabled={exporting} title="Excel'e aktar">
             <Download size={14} /> Excel
@@ -242,7 +352,8 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
         </div>
       </div>
 
-      {/* Stat kartları — tıklanınca liste ilgili işlem türüne filtrelenir */}
+      {/* Stat kartları — tıklanınca liste ilgili işlem türüne filtrelenir (yalnızca tam izleme modu) */}
+      {!locked && (
       <div className="al-stats">
         <div className={'al-stat al-stat--indigo al-stat--click' + (statActive.all ? ' is-active' : '')}
           onClick={() => applyStatFilter('all')} title="Tüm kayıtları göster (filtreleri temizle)">
@@ -284,17 +395,20 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
           </div>
         </div>
       </div>
+      )}
 
       {/* Filtreler */}
       <div className="al-filters">
-        <div className="al-chipset">
-          {RANGE_PRESETS.map(r => (
-            <button key={r.id} type="button"
-              className={'al-chip' + (preset === r.id ? ' is-active' : '')}
-              onClick={() => applyPreset(r.id)}>{r.label}</button>
-          ))}
-        </div>
-        {preset === 'custom' && (
+        {!locked && (
+          <div className="al-chipset">
+            {RANGE_PRESETS.map(r => (
+              <button key={r.id} type="button"
+                className={'al-chip' + (preset === r.id ? ' is-active' : '')}
+                onClick={() => applyPreset(r.id)}>{r.label}</button>
+            ))}
+          </div>
+        )}
+        {!locked && preset === 'custom' && (
           <>
             <input type="date" data-native-date value={range.from}
               onChange={e => { setRange(r => ({ ...r, from: e.target.value || r.from })); setPage(1) }} />
@@ -302,15 +416,17 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
               onChange={e => { setRange(r => ({ ...r, to: e.target.value || r.to })); setPage(1) }} />
           </>
         )}
-        <div className="al-sep" />
+        {!locked && <div className="al-sep" />}
         <select value={action} onChange={e => { setAction(e.target.value); setPage(1) }}>
           <option value="">Tüm İşlemler</option>
           {facetActions.map(a => <option key={a.code} value={a.code}>{a.label}</option>)}
         </select>
-        <select value={entity} onChange={e => { setEntity(e.target.value); setPage(1) }}>
-          <option value="">Tüm Kayıt Türleri</option>
-          {facetEntities.map(e2 => <option key={e2.code} value={e2.code}>{e2.label}</option>)}
-        </select>
+        {!locked && (
+          <select value={entity} onChange={e => { setEntity(e.target.value); setPage(1) }}>
+            <option value="">Tüm Kayıt Türleri</option>
+            {facetEntities.map(e2 => <option key={e2.code} value={e2.code}>{e2.label}</option>)}
+          </select>
+        )}
         <select value={user} onChange={e => { setUser(e.target.value); setPage(1) }}>
           <option value="">Tüm Kullanıcılar</option>
           {facetUsers.map(u => <option key={u} value={u}>{u}</option>)}
@@ -324,10 +440,10 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
 
       {/* Tablo */}
       <div className="al-table-wrap">
-        {data.items.length === 0 ? (
+        {viewItems.length === 0 ? (
           <div className="al-empty">
             <ScrollText size={34} />
-            <div>{loading ? 'Yükleniyor…' : 'Seçili aralık ve filtrelerde log kaydı bulunamadı.'}</div>
+            <div>{viewLoading ? 'Yükleniyor…' : 'Seçili aralık ve filtrelerde log kaydı bulunamadı.'}</div>
           </div>
         ) : (
           <table className="al-table">
@@ -344,7 +460,7 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
               </tr>
             </thead>
             <tbody>
-              {data.items.map((e, i) => {
+              {viewItems.map((e, i) => {
                 const key = e.ts + '|' + i
                 const open = expanded === key
                 const meta = ACTION_META[(e.action || '').toLowerCase()] || ACTION_META.event
@@ -426,7 +542,7 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
       {/* Alt bar */}
       <div className="al-footer">
         <span>
-          Toplam <b>{data.total.toLocaleString('tr-TR')}</b> kayıt
+          Toplam <b>{viewTotal.toLocaleString('tr-TR')}</b> kayıt
           {hasFilter ? ' (filtreli)' : ''}
         </span>
         <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}>

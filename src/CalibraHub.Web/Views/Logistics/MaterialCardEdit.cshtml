@@ -2169,10 +2169,13 @@
             <!-- Değişiklik Geçmişi (işlem logu — dosya tabanlı audit trail) -->
             <div class="mce-card mce-section-anchor" id="mceAuditTrailCard" style="display:none;">
                 <p class="mce-card-title">Değişiklik Geçmişi</p>
-                <div id="mceAuditNeedsSave" style="display:none;padding:22px;text-align:center;color:rgba(148,163,184,.8);font-size:.85rem;">
-                    Değişiklik geçmişini görüntülemek için önce malzeme kartını kaydedin.
-                </div>
-                <div id="mceAuditTrailHost" style="padding:6px 2px;"></div>
+                @await Html.PartialAsync("_AuditTrailHost", new CalibraHub.Web.Models.Shared.AuditTrailHostModel
+                {
+                    Entity = "Item",
+                    RecordId = editId > 0 ? editId.ToString() : null,
+                    WidgetFormCode = "MATERIAL_CARD_EDIT",
+                    HostId = "mceAuditTrail",
+                })
             </div>
 
             <!-- Özellikler (Özellik Eşleştirme) — sadece trackCombinations açıkken -->
@@ -3193,6 +3196,9 @@
                     if (location.search.indexOf('workspace=1') !== -1) newUrl += '&workspace=1';
                     history.replaceState({}, '', newUrl);
                 }
+                // Degisiklik Gecmisi (audit trail) karti — yeni kayitta Id az once atandi,
+                // "Log Kayitlarini Goruntule" butonunu etkinlestir + link'i guncelle.
+                if (window.CalibraAuditTrail) window.CalibraAuditTrail.reload('mceAuditTrail', currentId);
                 _setDisp('mceDeleteBtn', 'inline-flex');
                 mceFormatMeta(data.id, code, name);
             }
@@ -3638,31 +3644,14 @@
             });
         }
 
-        // Degisiklik Gecmisi (audit trail) butonu — panel ilk tiklamada mount edilir
+        // Degisiklik Gecmisi (audit trail) butonu — _AuditTrailHost.cshtml sayfa yuklenirken
+        // kendi kendine mount olur (statik link karti, React beklemez); burada sadece sekme
+        // gecisini yapiyoruz.
         var navAuditTrail = document.getElementById('mceNavAuditTrail');
         if (navAuditTrail) {
             navAuditTrail.addEventListener('click', function() {
                 setActive(navAuditTrail);
                 activateSection('audittrail');
-                var host = document.getElementById('mceAuditTrailHost');
-                var needsSave = document.getElementById('mceAuditNeedsSave');
-                if (!host) return;
-                if (!(currentId > 0)) {
-                    if (needsSave) needsSave.style.display = '';
-                    host.style.display = 'none';
-                    return;
-                }
-                if (needsSave) needsSave.style.display = 'none';
-                host.style.display = '';
-                if (window.CalibraHub && window.CalibraHub.mountAuditTrail) {
-                    window.CalibraHub.mountAuditTrail(host, {
-                        entity: 'Item',
-                        recordId: currentId,
-                        widgetFormCode: 'MATERIAL_CARD_EDIT',
-                    });
-                } else {
-                    host.innerHTML = '<div style="padding:16px;font-size:.8rem;opacity:.6;">React bundle yüklenemedi.</div>';
-                }
             });
         }
 

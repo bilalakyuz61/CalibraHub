@@ -103,6 +103,22 @@ body.app-theme-dark .al-root {
 .al-header-sub { font-size: 12px; color: var(--al-muted); margin-top: 2px; }
 .al-header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* ── Kayıt-kilitli mod (bkz. _AuditTrailHost.cshtml "Log Kayıtları" derin linki) ── */
+.al-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--al-indigo-soft);
+  color: var(--al-indigo);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.al-back-btn { color: var(--al-indigo); border-color: var(--al-indigo); text-decoration: none; }
+.al-back-btn:hover { background: var(--al-indigo-soft); }
+
 .al-search {
   display: flex;
   align-items: center;
