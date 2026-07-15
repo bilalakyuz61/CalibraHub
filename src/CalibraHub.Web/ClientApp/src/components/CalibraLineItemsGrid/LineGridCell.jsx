@@ -1436,9 +1436,11 @@ function SerialBreakdownModal(props) {
   var isLight = props.isLight
   var [rows, setRows] = useState(function() {
     var v = Array.isArray(props.value) ? props.value : []
+    // Seri takibinde her seri = 1 fiziksel adet → miktar DAİMA 1 (sabit, değiştirilemez).
+    // (Lot takibinde miktar serbesttir; o LotBreakdownModal'da ele alınır.)
     return v.length > 0
-      ? v.map(function(r) { return { serialNo: r.serialNo || '', expiryDate: (r.expiryDate ? String(r.expiryDate).slice(0, 10) : ''), description: r.description || '', qty: (r.qty != null ? String(r.qty) : '') } })
-      : [{ serialNo: '', expiryDate: '', description: '', qty: '' }]
+      ? v.map(function(r) { return { serialNo: r.serialNo || '', expiryDate: (r.expiryDate ? String(r.expiryDate).slice(0, 10) : ''), description: r.description || '', qty: '1' } })
+      : [{ serialNo: '', expiryDate: '', description: '', qty: '1' }]
   })
   // Stoktaki seriler (SKT ile) — öneri + seri seçilince SKT otomatik dolar
   var lookup = useLookup(props.column && props.column.serialsUrl ? props.column.serialsUrl : null, props.row)
@@ -1461,11 +1463,12 @@ function SerialBreakdownModal(props) {
     }
     setRows(n)
   }
-  function addRow() { setRows(rows.concat([{ serialNo: '', expiryDate: '', description: '', qty: '' }])) }
-  function removeRow(i) { var n = rows.slice(); n.splice(i, 1); setRows(n.length ? n : [{ serialNo: '', expiryDate: '', description: '', qty: '' }]) }
+  function addRow() { setRows(rows.concat([{ serialNo: '', expiryDate: '', description: '', qty: '1' }])) }
+  function removeRow(i) { var n = rows.slice(); n.splice(i, 1); setRows(n.length ? n : [{ serialNo: '', expiryDate: '', description: '', qty: '1' }]) }
 
-  var valid = rows.filter(function(r) { return String(r.serialNo).trim() && parseFloat(r.qty) > 0 })
-  var total = valid.reduce(function(s, r) { return s + (parseFloat(r.qty) || 0) }, 0)
+  // Seri = 1 adet (sabit) → geçerli satır sayısı = toplam.
+  var valid = rows.filter(function(r) { return String(r.serialNo).trim() })
+  var total = valid.length
   var serialSuggest = (lookup.options || [])
   var dup = (function() { var seen = {}, d = false; valid.forEach(function(r) { var k = String(r.serialNo).trim().toLowerCase(); if (seen[k]) d = true; seen[k] = 1 }); return d })()
 
@@ -1513,8 +1516,8 @@ function SerialBreakdownModal(props) {
                   className={'w-36 font-mono ' + inCls} />
                 <input value={r.description} onChange={function(e) { setCell(i, 'description', e.target.value) }} placeholder="Açıklama"
                   className={'flex-1 ' + inCls} />
-                <input type="number" value={r.qty} min="0" step="any" onChange={function(e) { setCell(i, 'qty', e.target.value) }} placeholder="Mkt"
-                  className={'w-20 text-right font-mono ' + inCls} />
+                <input type="number" value="1" readOnly tabIndex={-1} title="Seri takibinde her seri = 1 adet — değiştirilemez"
+                  className={'w-20 text-right font-mono opacity-60 cursor-not-allowed ' + inCls} />
                 <button type="button" onClick={function() { removeRow(i) }} title="Satırı sil"
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-[15px] leading-none text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/15">×</button>
               </div>
@@ -1526,7 +1529,7 @@ function SerialBreakdownModal(props) {
         <div className="px-4 py-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-white/[0.07]">
           <button type="button" onClick={props.onClose} className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 hover:bg-slate-100 dark:text-white/60 dark:hover:bg-white/[0.07]">Vazgeç</button>
           <button type="button" disabled={dup}
-            onClick={function() { props.onApply(valid.map(function(r) { return { serialNo: String(r.serialNo).trim(), expiryDate: r.expiryDate || null, description: (r.description || '').trim() || null, qty: parseFloat(r.qty) } }), total) }}
+            onClick={function() { props.onApply(valid.map(function(r) { return { serialNo: String(r.serialNo).trim(), expiryDate: r.expiryDate || null, description: (r.description || '').trim() || null, qty: 1 } }), total) }}
             className={'px-3.5 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-colors ' + (dup ? 'bg-slate-300 dark:bg-white/15 cursor-not-allowed' : 'bg-indigo-500 hover:bg-indigo-600')}>Uygula</button>
         </div>
       </div>
