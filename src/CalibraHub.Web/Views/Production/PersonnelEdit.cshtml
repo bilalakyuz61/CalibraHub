@@ -55,6 +55,31 @@
     body.page-personnel-edit .ux-edit-pane .ux-switch-row {
         margin-top: 2px;
     }
+    /* pe-phone artık type="tel" (telefon maskesi enhancer'ı input[type=tel] seçer —
+       datepicker enhancer emsali). Bu tip .ux-edit-pane'in paylaşılan input listesinde
+       (site.css) YOK; kutu görünümünü burada Personel'e özel karşılıyoruz ki enhancer
+       yüklenmeden/yüklenmezse alan çıplak (unstyled) görünmesin. */
+    body.page-personnel-edit .ux-edit-pane input[type="tel"] {
+        width: 100%;
+        padding: 7px 10px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #0f172a;
+        font-size: 13px;
+        outline: none;
+        font-family: inherit;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    body.page-personnel-edit .ux-edit-pane input[type="tel"]:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    }
+    body.app-theme-dark.page-personnel-edit .ux-edit-pane input[type="tel"] {
+        background: rgba(255,255,255,0.05);
+        color: #e2e8f0;
+        border-color: rgba(255,255,255,0.12);
+    }
 </style>
 
 <form class="integrator-form" style="display:none" aria-hidden="true"
@@ -113,8 +138,8 @@
         <div class="ux-row2">
           <div class="ux-field">
             <label for="pe-phone">Telefon</label>
-            <input id="pe-phone" type="text" maxlength="40"
-                   value="@(Model?.Phone ?? "")" placeholder="Örn: 0532 ..." />
+            <input id="pe-phone" type="tel" maxlength="40"
+                   value="@(Model?.Phone ?? "")" placeholder="0 (5xx) xxx xx xx" />
           </div>
           <div class="ux-field">
             <label for="pe-email">E-posta</label>
