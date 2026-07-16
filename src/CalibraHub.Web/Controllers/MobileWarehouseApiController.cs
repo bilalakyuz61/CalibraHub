@@ -786,15 +786,20 @@ public sealed class MobileWarehouseApiController : ControllerBase
     }
 
     /// <summary>
-    /// Malzeme dogrulama + V1 kapsam reddi (lot/seri/varyant) — Transfer ve Sayim yazma
-    /// endpoint'lerinin ORTAK kapisi. SaveStockDocAsync (Giris/Cikis) icindeki ayni kontrolun
-    /// davranissal ikizi — o metod calisan/canli oldugu icin DOKUNULMADAN birakildi, kucuk bir
-    /// kod tekrari (DRY ihlali) kapsam disi risk almamak icin bilerek kabul edildi.
-    /// Basarili → itemMap dolu, Error null. Basarisiz → itemMap null, Error dolu IActionResult
-    /// (404 malzeme yok/pasif — Stock() GET action'iyla ayni HTTP semantigi; 400 lot/seri/varyant reddi).
+    /// Malzeme dogrulama + V1 kapsam reddi (varyant + kosullu lot/seri) — Transfer, Sayim ve
+    /// Delivery yazma endpoint'lerinin ORTAK kapisi. SaveStockDocAsync (Giris/Cikis) icindeki ayni
+    /// kontrolun davranissal ikizi — o metod calisan/canli oldugu icin DOKUNULMADAN birakildi, kucuk
+    /// bir kod tekrari (DRY ihlali) kapsam disi risk almamak icin bilerek kabul edildi.
+    /// <paramref name="allowLotSerial"/> = true (yalnizca Delivery) → lot/seri takipli malzeme
+    /// REDDEDILMEZ (repo delivery akisi lot/seri'yi web ambar paritesiyle isler); varyant
+    /// (kombinasyon) reddi HER durumda kalir (mobil V1 kombinasyon secici yok).
+    /// NOT: GetItemsByIdsAsync projeksiyonu TrackingType'i doldurmadigindan (her kayit "None") bu
+    /// metodun lot/seri REDDI zaten dormant — asil takip cozumu repoda (Items'tan) yapilir; flag
+    /// niyeti acik tutmak + projeksiyon ileride duzelirse dogru davranmak icindir.
+    /// Basarili → itemMap dolu, Error null. Basarisiz → itemMap null, Error dolu IActionResult.
     /// </summary>
     private async Task<(Dictionary<int, Item>? ItemMap, IActionResult? Error)> ValidateWriteItemsAsync(
-        IEnumerable<int> itemIds, CancellationToken ct)
+        IEnumerable<int> itemIds, CancellationToken ct, bool allowLotSerial = false)
     {
         var ids = itemIds.Distinct().ToList();
         var items = await _logisticsRepo.GetItemsByIdsAsync(ids, ct);
@@ -805,12 +810,15 @@ public sealed class MobileWarehouseApiController : ControllerBase
             if (!itemMap.TryGetValue(itemId, out var item) || !item.IsActive)
                 return (null, NotFound(new { error = $"Malzeme bulunamadı veya pasif (Id: {itemId})." }));
 
-            // Mobil V1: lot/seri/varyant takipli malzeme reddi — StockIn/StockOut ile ayni karar
-            // (sade {itemId, quantity} DTO'su lot secimi/seri listesi/kombinasyon tasiyamaz).
-            if (string.Equals(item.TrackingType, "Lot", StringComparison.OrdinalIgnoreCase))
-                return (null, BadRequest(new { error = $"'{item.Code}' lot takipli — işlemi web'den yapın." }));
-            if (string.Equals(item.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase))
-                return (null, BadRequest(new { error = $"'{item.Code}' seri takipli — işlemi web'den yapın." }));
+            // Lot/seri reddi yalnizca allowLotSerial=false iken (Transfer/Sayim — eski davranis KALIR).
+            if (!allowLotSerial)
+            {
+                if (string.Equals(item.TrackingType, "Lot", StringComparison.OrdinalIgnoreCase))
+                    return (null, BadRequest(new { error = $"'{item.Code}' lot takipli — işlemi web'den yapın." }));
+                if (string.Equals(item.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase))
+                    return (null, BadRequest(new { error = $"'{item.Code}' seri takipli — işlemi web'den yapın." }));
+            }
+            // Varyant (kombinasyon) reddi HER durumda (delivery dahil) — mobil V1 kombinasyon secici yok.
             if (item.Combinations)
                 return (null, BadRequest(new { error = $"'{item.Code}' varyant (kombinasyon) takipli — işlemi web'den yapın." }));
         }
@@ -948,22 +956,47 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // POST delivery (irsaliye — FIFO sipariş bağlama)
     // ──────────────────────────────────────────────────────────────────────
     // Sozlesme (mobil istemci birebir tuketir — Kotlin delivery-mobile ile PAYLASILAN):
-    //   body: { docType:"purchase"|"sales", contactId:int, note?:string, lines:[{ itemId:int, quantity:number }] }
+    //   body: {
+    //     docType:"purchase"|"sales", contactId:int, note?:string,
+    //     externalRefNumber?:string,          // Tedarikçi İrsaliye No — KABUL EDİLİR, şu an KALICI DEĞİL (kolon yok; bkz. rapor)
+    //     lines:[{
+    //       itemId:int, quantity:number,
+    //       serials?:string[],                // satış: rezerve override/seçim · alış: girilen seriler
+    //       lotCode?:string,                  // V1 tek lot/satır
+    //       autoGenerateSerials?:bool         // yalnız ALIŞ + AutoSerial kartı
+    //     }]
+    //   }
     //   200 { ok:true, documentNumber:string,
-    //         lines:[{ itemId:int, linked:[{ orderNumber:string, quantity:number }], unlinkedQuantity:number }] }
-    //   400 { error:string }              — is kurali reddi (docType, cari, kalem, lot/seri/varyant,
-    //                                        bağlantısız-yasak, varsayilan depo yok, eksi bakiye)
+    //         lines:[{ itemId:int, linked:[{ orderNumber:string, quantity:number }], unlinkedQuantity:number,
+    //                  serials:string[], lotCode:string|null }] }   // serials = FİİLEN kullanılan (rezerve/override/FIFO)
+    //   400 { error:string }              — is kurali reddi (docType, cari, kalem, varyant, seri sayısı≠adet,
+    //                                        sipariş serisi değiştirilemez (param kapalı), müsait seri/lot yok,
+    //                                        bağlantısız-yasak, varsayilan depo yok, eksi/lot bakiye)
     //   404 { error:string }              — cari veya malzeme bulunamadi/pasif
     //   403 { ok:false, message, error }  — yetki yok
+    //
+    // LOT + SERİ: lot/seri-takipli malzeme artık delivery yolunda REDDEDİLMEZ (yalnız varyant reddi kalır).
+    // Seri kuralı (satış): (1) bağlanan siparişe rezerve seri varsa öncelik odur; (2) SALES_DELIVERY_SERIAL_
+    // OVERRIDE açıksa istemci serileri rezervi override eder (kapalıyken farklı seri → 400); (3) rezerve yok +
+    // istemci boş → FIFO otomatik (en eski müsait). Alış: seriler girilir ya da autoGenerateSerials ile üretilir.
     //
     // Miktarlar ANA BIRIMDE (stock-in/out ile ayni konvansiyon). FIFO tahsisi + stok etkisi +
     // SourceLineId + DeliveredQuantity repo transaction'inda (SaveDeliveryFifoAsync — web
     // ConvertOrderToDeliveryAsync ikizi, AYNI bag alanlari). Fiyat: bağlanan satır sipariş
     // fiyati; bağlantısız satır ResolveLinePrices (standart fiyat listesi cozucu, currency=1).
 
-    public sealed record MobileDeliveryBodyLine(int ItemId, decimal Quantity);
+    // LOT + SERİ (2026-07-16): kalem opsiyonel seri/lot alanları — takipsiz malzemede yok sayılır.
+    //   serials            → satış: rezerve override / seçim; alış: girilen/okutulan seriler.
+    //   lotCode            → V1 tek lot/satır (alışta oluşturulur, satışta mevcut lot şart).
+    //   autoGenerateSerials→ yalnız ALIŞ + AutoSerial kartı: sunucu seri üretir (seri listesi verilmez).
+    public sealed record MobileDeliveryBodyLine(
+        int ItemId, decimal Quantity,
+        IReadOnlyList<string>? Serials = null, string? LotCode = null, bool AutoGenerateSerials = false);
+
+    // ExternalRefNumber = Tedarikçi İrsaliye No (alış mal kabulünde tedarikçinin kendi irsaliye no'su).
     public sealed record MobileDeliveryBody(
-        string? DocType, int ContactId, string? Note, IReadOnlyList<MobileDeliveryBodyLine>? Lines);
+        string? DocType, int ContactId, string? Note, IReadOnlyList<MobileDeliveryBodyLine>? Lines,
+        string? ExternalRefNumber = null);
 
     /// <summary>Irsaliye (satış teslimat / alış mal kabul) — FIFO ile açık siparişlere bağlar.</summary>
     [HttpPost("delivery")]
@@ -999,8 +1032,9 @@ public sealed class MobileWarehouseApiController : ControllerBase
         if (contact is null || !contact.IsActive)
             return NotFound(new { error = "Cari bulunamadı veya pasif." });
 
-        // (b) Lot/seri/varyant takipli malzeme reddi (mobil V1) — Transfer/Sayım ile ortak kapı.
-        var (itemMap, itemError) = await ValidateWriteItemsAsync(lines.Select(l => l.ItemId), ct);
+        // (b) Malzeme doğrulama — LOT/SERİ artık delivery yolunda REDDEDİLMEZ (allowLotSerial:true);
+        //     repo lot/seri'yi web ambar paritesiyle işler. Varyant (kombinasyon) reddi korunur.
+        var (itemMap, itemError) = await ValidateWriteItemsAsync(lines.Select(l => l.ItemId), ct, allowLotSerial: true);
         if (itemError is not null) return itemError;
 
         // (c/d) FIFO bağlama + bağlantısız-yasak parametreleri. Okuma-zamanı varsayılanları:
@@ -1009,6 +1043,16 @@ public sealed class MobileWarehouseApiController : ControllerBase
         var forbidKey = isPurchase ? StockParameters.PurchaseDeliveryRequireOrderKey : StockParameters.SalesDeliveryRequireOrderKey;
         var fifoEnabled    = await _companyParams.GetBoolAsync(StockParameters.FormCode, fifoKey, ct)   ?? true;
         var forbidUnlinked = await _companyParams.GetBoolAsync(StockParameters.FormCode, forbidKey, ct) ?? false;
+        // Satış irsaliyesinde sipariş serisi değiştirilebilir mi (default AÇIK). Yalnız satış çıkışında
+        // anlamlı — repo alış girişinde bu bayrağı yok sayar. Okuma-zamanı varsayılanı Parametreler'le aynı.
+        var serialOverrideEnabled = await _companyParams.GetBoolAsync(
+            StockParameters.FormCode, StockParameters.SalesDeliverySerialOverrideKey, ct) ?? true;
+
+        // Tedarikçi İrsaliye No (ExternalRefNumber): Document tablosunda bunu tutacak ADANMIŞ bir kolon
+        // YOK (RefNo bile gerçek kolon değil — Notes'a katlanır). Kolon EKLEME kararı/DDL db-uzman
+        // sahası olduğundan alan KABUL edilir ama şu an KALICI DEĞİL (sessizce yok sayılır; 400 verilmez).
+        // Sözleşme stabil kalır → Kotlin istemci alanı gönderebilir. Kolon eklenince burada persist edilecek.
+        _ = body.ExternalRefNumber;
 
         // Bağlantısız satır fiyatı: standart fiyat çözücü (cari listesi → Genel Liste). Bağlanan
         // satırda repo sipariş fiyatını kullanır. CurrencyId mobil V1'de şirket varsayılanı (1).
@@ -1027,7 +1071,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
         var repoLines = lines.Select(l => new MobileDeliveryLineInput(
             l.ItemId, l.Quantity, itemMap[l.ItemId].UnitId,
             priceByItem.TryGetValue(l.ItemId, out var pr) ? pr : 0m,
-            itemMap[l.ItemId].Code)).ToList();
+            itemMap[l.ItemId].Code,
+            l.Serials, l.LotCode, l.AutoGenerateSerials)).ToList();
 
         try
         {
@@ -1036,7 +1081,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
             //     guard'ı tek transaction'da (SaveDeliveryFifoAsync, ConvertOrderToDeliveryAsync ikizi).
             var result = await _stockDocRepo.SaveDeliveryFifoAsync(
                 isPurchase, body.ContactId, body.Note, repoLines, fifoEnabled, forbidUnlinked,
-                userId > 0 ? userId : null, ct);
+                serialOverrideEnabled, userId > 0 ? userId : null, ct);
 
             // Belge soyağacı — irsaliye ← sipariş(ler). Web DeliverSalesOrderJson paritesi; çok
             // siparişli FIFO'da her kaynak sipariş için ayrı kenar (İlişkili Belgeler paneli).
@@ -1073,6 +1118,10 @@ public sealed class MobileWarehouseApiController : ControllerBase
                     itemId           = l.ItemId,
                     linked           = l.Linked.Select(x => new { orderNumber = x.OrderNumber, quantity = x.Quantity }),
                     unlinkedQuantity = l.UnlinkedQuantity,
+                    // FİİLEN kullanılan seriler (rezerve/override/FIFO çözümü) + uygulanan lot — istemci
+                    // gerçek sonucu buradan okur (takipsiz malzemede boş dizi / null).
+                    serials          = l.Serials ?? (IReadOnlyList<string>)Array.Empty<string>(),
+                    lotCode          = l.LotCode,
                 }),
             });
         }
@@ -1105,9 +1154,13 @@ public sealed class MobileWarehouseApiController : ControllerBase
 
             var linkedCount   = result.Lines.Sum(l => l.Linked.Count);
             var unlinkedItems = result.Lines.Count(l => l.UnlinkedQuantity > 0m);
+            var serialCount   = result.Lines.Sum(l => l.Serials?.Count ?? 0);
+            var lotItems      = result.Lines.Count(l => !string.IsNullOrWhiteSpace(l.LotCode));
             _audit.LogInsert(entity, result.Id, result.DocNo,
                 detail: $"Mobil irsaliye — {result.Lines.Count} malzeme, {linkedCount} sipariş bağı"
-                        + (unlinkedItems > 0 ? $", {unlinkedItems} bağlantısız" : ""),
+                        + (unlinkedItems > 0 ? $", {unlinkedItems} bağlantısız" : "")
+                        + (serialCount > 0 ? $", {serialCount} seri" : "")
+                        + (lotItems > 0 ? $", {lotItems} lot" : ""),
                 actor: new AuditActor(Source: "Mobile"),
                 extraChanges: deliveredLines is { Count: > 0 }
                     ? deliveredLines.Select(l => new AuditFieldChange(
@@ -1118,6 +1171,117 @@ public sealed class MobileWarehouseApiController : ControllerBase
                     : null);
         }
         catch { /* audit yazımı belge kaydını asla bozmaz */ }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // GET items/{itemId}/serials  &  items/{itemId}/lots  (seri/lot seçici besleme)
+    // ──────────────────────────────────────────────────────────────────────
+    // Sozlesme (mobil istemci birebir tuketir):
+    //   GET items/{itemId}/serials?locationId=&q=&take=50 → [{ serialNo:string, lotCode:string|null, entryDate:string|null }]
+    //     — lokasyondaki MÜSAİT (InStock) seriler, FIFO (en eski önce), q = SerialNo LIKE.
+    //   GET items/{itemId}/lots?locationId=&take=20        → [{ lotCode:string, quantity:number, expiry:string|null }]
+    //     — lokasyondaki müsait (bakiye > 0) lotlar, FEFO (SKT yakın önce, SKT'siz sonda).
+    //   403 { ok:false, message, error }                   — yetki yok
+    // Yetki: irsaliye VIEW (DeliveryFormCodes) — seri/lot seçimi teslimat ekranının parçasıdır.
+    // Sorgular web seçicileriyle (WarehouseController.GetSerialsJson / GetLotBalancesJson) aynı hareket
+    // cebiri; tek fark seri tarafında lokasyon (CurrentLocationId) + q filtresi eklenmesi.
+
+    /// <summary>Bir malzemenin lokasyondaki MÜSAİT (InStock) serileri — FIFO (en eski giriş önce), q LIKE.</summary>
+    [HttpGet("items/{itemId:int}/serials")]
+    public async Task<IActionResult> ItemSerials(
+        int itemId, [FromQuery] int? locationId, [FromQuery] string? q, [FromQuery] int? take, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(DeliveryFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+        if (itemId <= 0) return Ok(Array.Empty<object>());
+
+        var pageSize = take.GetValueOrDefault(50);
+        if (pageSize <= 0) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+        int? locId = locationId is > 0 ? locationId : null;
+        var query = (q ?? string.Empty).Trim();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP (@Take) s.[SerialNo], lot.[LotNo], s.[Created]
+            FROM [{_schema}].[ItemSerial] s
+            LEFT JOIN [{_schema}].[Lot] lot ON lot.[Id] = s.[LotId]
+            WHERE s.[ItemId] = @ItemId AND s.[IsActive] = 1 AND s.[Status] = 1
+              AND (@LocId IS NULL OR s.[CurrentLocationId] = @LocId)
+              AND (@Q = N'' OR s.[SerialNo] LIKE @QLike)
+            ORDER BY s.[Created], s.[Id];
+            """;
+        cmd.Parameters.AddWithValue("@Take", pageSize);
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@LocId", (object?)locId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Q", query);
+        cmd.Parameters.AddWithValue("@QLike", "%" + query + "%");
+
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            result.Add(new
+            {
+                serialNo  = r.GetString(0),
+                lotCode   = r.IsDBNull(1) ? null : r.GetString(1),
+                entryDate = r.IsDBNull(2) ? (DateTime?)null : r.GetDateTime(2),
+            });
+        return Ok(result);
+    }
+
+    /// <summary>Bir malzemenin lokasyondaki müsait (bakiye > 0) lotları — FEFO (SKT yakın önce, SKT'siz sonda).</summary>
+    [HttpGet("items/{itemId:int}/lots")]
+    public async Task<IActionResult> ItemLots(
+        int itemId, [FromQuery] int? locationId, [FromQuery] int? take, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(DeliveryFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+        if (itemId <= 0) return Ok(Array.Empty<object>());
+
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        var pageSize = take.GetValueOrDefault(20);
+        if (pageSize <= 0) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
+        int? locId = locationId is > 0 ? locationId : null;
+
+        // WarehouseController.GetLotBalancesJson ile aynı FEFO net-bakiye cebiri (yalnız > 0), TOP ile sınırlı.
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP (@Take) lot.[LotNo], lot.[ExpiryDate],
+                   SUM(CASE WHEN dl.[MovementType] IN (2,3,4) AND dl.[LocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[LocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END)
+                 - SUM(CASE WHEN dl.[MovementType] IN (1,3,4) AND dl.[FromLocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[FromLocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END) AS bal
+            FROM [{_schema}].[DocumentLine] dl
+            INNER JOIN [{_schema}].[Document] doc ON doc.[Id] = dl.[DocumentId]
+            INNER JOIN [{_schema}].[Lot] lot ON lot.[Id] = dl.[LotId]
+            WHERE dl.[ItemId] = @ItemId AND dl.[LotId] IS NOT NULL
+              AND doc.[CompanyId] = @CompanyId AND doc.[IsActive] = 1
+              AND dl.[MovementType] IN (1,2,3,4)
+            GROUP BY lot.[Id], lot.[LotNo], lot.[ExpiryDate]
+            HAVING SUM(CASE WHEN dl.[MovementType] IN (2,3,4) AND dl.[LocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[LocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END)
+                 - SUM(CASE WHEN dl.[MovementType] IN (1,3,4) AND dl.[FromLocationId] IS NOT NULL
+                                 AND (@LocId IS NULL OR dl.[FromLocationId] = @LocId) THEN dl.[BaseQuantity] ELSE 0 END) > 0
+            ORDER BY CASE WHEN lot.[ExpiryDate] IS NULL THEN 1 ELSE 0 END, lot.[ExpiryDate], lot.[LotNo];
+            """;
+        cmd.Parameters.AddWithValue("@Take", pageSize);
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@LocId", (object?)locId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            result.Add(new
+            {
+                lotCode  = r.GetString(0),
+                expiry   = r.IsDBNull(1) ? (DateTime?)null : r.GetDateTime(1),
+                quantity = r.GetDecimal(2),
+            });
+        return Ok(result);
     }
 
     // ──────────────────────────────────────────────────────────────────────

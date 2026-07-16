@@ -1580,6 +1580,263 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         }
     }
 
+    // ── Mobil delivery seri/lot yardımcıları (2026-07-16) ────────────────────────────
+
+    /// <summary>Malzemenin takip tipi + AutoSerial + Code'unu Items'tan çözer (GetItemsByIdsAsync
+    /// projeksiyonu TrackingType/AutoSerial doldurmadığı için delivery serisi/lotu DB'den okunur;
+    /// web ambar akışıyla aynı kaynak). Kayıt yoksa ("None", false, "#id") döner.</summary>
+    private async Task<(string Tracking, bool AutoSerial, string Code)> GetItemTrackingAsync(
+        SqlConnection conn, SqlTransaction tx, int itemId, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"SELECT ISNULL([TrackingType],'None'), ISNULL([AutoSerial],0), [Code] FROM {T("Items")} WHERE [Id] = @Id;";
+        cmd.Parameters.AddWithValue("@Id", itemId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (await r.ReadAsync(ct))
+            return (r.GetString(0), r.GetBoolean(1), r.IsDBNull(2) ? $"#{itemId}" : r.GetString(2));
+        return ("None", false, $"#{itemId}");
+    }
+
+    /// <summary>Bir irsaliye satırına bağlı seri no'ları (DocumentLineSerial → ItemSerial) sırayla okur —
+    /// otomatik üretilen (AutoSerial) serilerin gerçek numaralarını response'a döndürmek için.</summary>
+    private async Task<List<string>> GetLineSerialNosAsync(
+        SqlConnection conn, SqlTransaction tx, int lineId, CancellationToken ct)
+    {
+        var list = new List<string>();
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT s.[SerialNo]
+            FROM {T("DocumentLineSerial")} dls
+            INNER JOIN {T("ItemSerial")} s ON s.[Id] = dls.[SerialId]
+            WHERE dls.[DocumentLineId] = @Ln
+            ORDER BY dls.[Id];
+            """;
+        cmd.Parameters.AddWithValue("@Ln", lineId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct)) list.Add(r.GetString(0));
+        return list;
+    }
+
+    /// <summary>FIFO otomatik seri seçimi (satış çıkışı): en eski müsait (InStock=1, rezervesiz)
+    /// seriler. Lokasyon-farkında — serinin bulunduğu depo teslimatın kaynak depoları arasında ya da
+    /// konumsuz (eski/lotsuz giriş) olmalı. Web çıkış seri seçimi lokasyon zorlamaz; burada FIFO
+    /// otomatik seçim kaynak depo tutarlılığını korur (yalnız seçime uygulanır, istemci-seçili seride değil).</summary>
+    private async Task<List<string>> PickFifoAvailableSerialsAsync(
+        SqlConnection conn, SqlTransaction tx, int itemId, IReadOnlyCollection<int> sourceLocs, int need, CancellationToken ct)
+    {
+        if (need <= 0) return new List<string>();
+        var picked = new List<string>();
+        var locFilter = "";
+        if (sourceLocs.Count > 0)
+        {
+            var names = sourceLocs.Select((_, i) => $"@loc{i}").ToArray();
+            locFilter = $" AND ([CurrentLocationId] IS NULL OR [CurrentLocationId] IN ({string.Join(",", names)}))";
+        }
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT TOP (@N) [SerialNo]
+            FROM {T("ItemSerial")}
+            WHERE [ItemId] = @It AND [IsActive] = 1 AND [Status] = 1 AND [ReservedForDocumentId] IS NULL{locFilter}
+            ORDER BY [Created], [Id];
+            """;
+        cmd.Parameters.AddWithValue("@N", need);
+        cmd.Parameters.AddWithValue("@It", itemId);
+        var i = 0;
+        foreach (var loc in sourceLocs) cmd.Parameters.AddWithValue($"@loc{i++}", loc);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct)) picked.Add(r.GetString(0));
+        return picked;
+    }
+
+    /// <summary>
+    /// Delivery satırının serilerini çözer + bağlar (mobil V1). Seri-takipli olmayan malzeme çağrılmaz.
+    ///  • ALIŞ (giriş): client serileri satırlara dilimlenip web giriş semantiğiyle (ResolveSerialsForLineAsync)
+    ///    işlenir; <paramref name="autoGenerate"/> AÇIKKEN AutoSerial kartında sunucu üretir.
+    ///  • SATIŞ (çıkış): 3-öncelik zinciri — (1) bağlanan sipariş(ler)e rezerve seriler (Status=4,
+    ///    ReservedForDocumentId ∈ <paramref name="allocatedOrderIds"/>); (2) client seriler:
+    ///    <paramref name="serialOverrideEnabled"/> AÇIKSA rezerveyi override eder (dışlanan rezerveler
+    ///    InStock'a döner), KAPALIYSA rezervelerden farklı istemci listesi hata verir; (3) rezerve yok +
+    ///    client boş → FIFO otomatik. Seçilen seriler InStock/kendi-rezervemiz olmalı → Issued(2).
+    /// Fiilen kullanılan seri no'ları döner.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ResolveDeliverySerialsAsync(
+        SqlConnection conn, SqlTransaction tx, bool isPurchase,
+        int itemId, string itemCode, bool autoSerialCard,
+        IReadOnlyList<(int LineId, decimal BaseQty, int LocId)> itemLines,
+        decimal linkedBase, IReadOnlyList<int> allocatedOrderIds,
+        IReadOnlyList<string> clientSerials, bool autoGenerate, bool serialOverrideEnabled,
+        int? lotId, DateTime docDate, int? createdById, CancellationToken ct)
+    {
+        // Satır adetleri tam sayı olmalı (1 seri = 1 ana birim). Her satırı ayrı doğrula → dağıtım kesin.
+        var perLineQty = new List<int>(itemLines.Count);
+        foreach (var l in itemLines)
+        {
+            if (l.BaseQty != decimal.Truncate(l.BaseQty))
+                throw new InvalidOperationException($"'{itemCode}' seri takipli — teslim adedi tam sayı olmalı (satır: {l.BaseQty:0.##}).");
+            perLineQty.Add((int)l.BaseQty);
+        }
+        var totalQty = perLineQty.Sum();
+        if (totalQty <= 0) return Array.Empty<string>();
+
+        // ── ALIŞ (giriş) — web ambar giriş semantiği, satır başına ResolveSerialsForLineAsync.
+        if (isPurchase)
+        {
+            if (autoGenerate && !autoSerialCard)
+                throw new InvalidOperationException(
+                    $"'{itemCode}' — otomatik seri kapalı (kart AutoSerial değil); seri no girin.");
+            var trimmed = (clientSerials ?? Array.Empty<string>())
+                .Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
+            var used = new List<string>();
+            var cursor = 0;
+            for (var li = 0; li < itemLines.Count; li++)
+            {
+                var (lineId, baseQty, locId) = itemLines[li];
+                var n = perLineQty[li];
+                List<string>? slice = null;
+                if (!autoGenerate && trimmed.Count > 0)
+                {
+                    slice = trimmed.Skip(cursor).Take(n).ToList();
+                    cursor += n;
+                }
+                // slice null + AutoSerial → otomatik üretim; değilse adet kadar seri zorunlu (giriş guard'ı).
+                await ResolveSerialsForLineAsync(
+                    conn, tx, lineId, itemId, itemCode, baseQty, slice, lotId, (byte)2, locId, docDate, createdById, ct);
+                used.AddRange(await GetLineSerialNosAsync(conn, tx, lineId, ct));
+            }
+            return used;
+        }
+
+        // ── SATIŞ (çıkış) — 3-öncelik zinciri ────────────────────────────────────────
+        // (1) Bağlanan sipariş(ler)e rezerve seriler (Status=4), en eski (Created,Id), linked adedince.
+        var reserved = new List<string>();
+        var linkedQty = (int)Math.Round(linkedBase, 0);
+        if (allocatedOrderIds.Count > 0 && linkedQty > 0)
+        {
+            var oidParams = allocatedOrderIds.Select((_, i) => $"@ro{i}").ToArray();
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = $"""
+                SELECT TOP (@N) [SerialNo]
+                FROM {T("ItemSerial")}
+                WHERE [ItemId] = @It AND [IsActive] = 1 AND [Status] = 4
+                  AND [ReservedForDocumentId] IN ({string.Join(",", oidParams)})
+                ORDER BY [Created], [Id];
+                """;
+            cmd.Parameters.AddWithValue("@N", linkedQty);
+            cmd.Parameters.AddWithValue("@It", itemId);
+            for (var i = 0; i < allocatedOrderIds.Count; i++)
+                cmd.Parameters.AddWithValue($"@ro{i}", allocatedOrderIds[i]);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) reserved.Add(r.GetString(0));
+        }
+
+        var client = (clientSerials ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        List<string> final;
+        if (client.Count > 0)
+        {
+            // Parametre KAPALI + rezerve var → sipariş serisi değiştirilemez: her rezerve seri istemcide olmalı.
+            if (!serialOverrideEnabled && reserved.Count > 0)
+            {
+                var missing = reserved.Where(rs => !client.Contains(rs, StringComparer.OrdinalIgnoreCase)).ToList();
+                if (missing.Count > 0)
+                    throw new InvalidOperationException(
+                        $"'{itemCode}' — satış irsaliyesinde sipariş serisi değiştirilemez (parametre kapalı). Rezerve seri(ler) teslimat listesinde yok: {string.Join(", ", missing)}.");
+            }
+            if (client.Count != totalQty)
+                throw new InvalidOperationException(
+                    $"'{itemCode}' seri takipli — {totalQty} adet için {client.Count} seri gönderildi (seri sayısı teslim adedine eşit olmalı).");
+            final = client;
+        }
+        else
+        {
+            // İstemci seçmedi → rezerve seriler + kalan için FIFO otomatik (en eski müsait).
+            final = new List<string>(reserved);
+            var need = totalQty - final.Count;
+            if (need > 0)
+            {
+                var sourceLocs = itemLines.Select(l => l.LocId).Distinct().ToList();
+                final.AddRange(await PickFifoAvailableSerialsAsync(conn, tx, itemId, sourceLocs, need, ct));
+            }
+            if (final.Count != totalQty)
+                throw new InvalidOperationException(
+                    $"'{itemCode}' için yeterli müsait seri yok — gerekli {totalQty}, bulunan {final.Count}. Stoğa seri girin ya da siparişte seri rezerve edin.");
+        }
+
+        // Override: istemci listesinde olmayan rezerveleri serbest bırak (Reserved→InStock).
+        foreach (var sn in reserved.Where(rs => !final.Contains(rs, StringComparer.OrdinalIgnoreCase)))
+        {
+            await using var rel = conn.CreateCommand();
+            rel.Transaction = tx;
+            rel.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=1, [ReservedForDocumentId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [ItemId]=@It AND [SerialNo]=@Sn AND [Status]=4;";
+            rel.Parameters.AddWithValue("@It", itemId);
+            rel.Parameters.AddWithValue("@Sn", sn);
+            await rel.ExecuteNonQueryAsync(ct);
+        }
+
+        // final serilerini satırlara dağıt + Issued'a çek. Durum guard'ları web çıkışıyla aynı; rezerve (4)
+        // yalnız KENDİ siparişlerimiz için kabul (ResolveOrderSerialsToIssued semantiğinin genişletilmişi).
+        var allocSet = new HashSet<int>(allocatedOrderIds);
+        var idx = 0;
+        for (var li = 0; li < itemLines.Count; li++)
+        {
+            var lineId = itemLines[li].LineId;
+            for (var k = 0; k < perLineQty[li]; k++)
+            {
+                var sn = final[idx++];
+                int serialId = 0; byte status = 0; var isActive = false; int? resFor = null;
+                await using (var find = conn.CreateCommand())
+                {
+                    find.Transaction = tx;
+                    find.CommandText = $"SELECT [Id],[Status],[IsActive],[ReservedForDocumentId] FROM {T("ItemSerial")} WHERE [ItemId]=@It AND [SerialNo]=@Sn;";
+                    find.Parameters.AddWithValue("@It", itemId);
+                    find.Parameters.AddWithValue("@Sn", sn);
+                    await using var fr = await find.ExecuteReaderAsync(ct);
+                    if (await fr.ReadAsync(ct))
+                    {
+                        serialId = fr.GetInt32(0);
+                        status   = fr.GetByte(1);
+                        isActive = fr.GetBoolean(2);
+                        resFor   = fr.IsDBNull(3) ? null : fr.GetInt32(3);
+                    }
+                }
+                if (serialId == 0 || !isActive)
+                    throw new InvalidOperationException($"'{itemCode}' için '{sn}' serisi bulunamadı — çıkış yalnız stoktaki serilerle yapılabilir.");
+                if (status == 2)
+                    throw new InvalidOperationException($"'{itemCode}' için '{sn}' serisi zaten çıkış yapılmış.");
+                if (status == 3)
+                    throw new InvalidOperationException($"'{itemCode}' için '{sn}' serisi bloke — çıkış yapılamaz.");
+                if (status == 4 && (!resFor.HasValue || !allocSet.Contains(resFor.Value)))
+                    throw new InvalidOperationException($"'{itemCode}' için '{sn}' serisi başka bir siparişte rezerve — bu teslimatta kullanılamaz.");
+                // status 1 (InStock) veya 4 (kendi siparişimize rezerve) → Issued.
+                await using (var iss = conn.CreateCommand())
+                {
+                    iss.Transaction = tx;
+                    iss.CommandText = $"UPDATE {T("ItemSerial")} SET [Status]=2, [ReservedForDocumentId]=NULL, [CurrentLocationId]=NULL, [Updated]=SYSUTCDATETIME() WHERE [Id]=@Id;";
+                    iss.Parameters.AddWithValue("@Id", serialId);
+                    await iss.ExecuteNonQueryAsync(ct);
+                }
+                await using (var link = conn.CreateCommand())
+                {
+                    link.Transaction = tx;
+                    link.CommandText = $"""
+                        IF NOT EXISTS (SELECT 1 FROM {T("DocumentLineSerial")} WHERE [DocumentLineId]=@Ln AND [SerialId]=@Sr)
+                            INSERT INTO {T("DocumentLineSerial")} ([DocumentLineId],[SerialId]) VALUES (@Ln,@Sr);
+                        """;
+                    link.Parameters.AddWithValue("@Ln", lineId);
+                    link.Parameters.AddWithValue("@Sr", serialId);
+                    await link.ExecuteNonQueryAsync(ct);
+                }
+            }
+        }
+        return final;
+    }
+
     public async Task DeleteAsync(int id, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
