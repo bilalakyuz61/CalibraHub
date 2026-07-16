@@ -6,7 +6,7 @@
  * calisir — sadece render farklidir ("ayni entity verisi, farkli render").
  *
  * Sutunlar:
- *   [Kod / Ad kimlik sutunu] [widget sutunlari...] [Islem]
+ *   [Sil] [Kod / Ad kimlik sutunu] [widget sutunlari...] [Islemler]
  * Widget sutun genisligi resolveChipWidth ile (kart modundaki chip genisligiyle
  * ayni tablo) — boylece basliklar hucrelerle hizali kalir. `columnConfig` prop'u
  * (SmartColumnSettings.jsx'in ürettiği { <id>: {align,width,pin,fontSize,
@@ -15,9 +15,15 @@
  * gibi kalır (regresyonsuz).
  *
  * Pin (sabitleme): sabitlenmiş sütunlar listenin başına (kimlik sütunundan
- * hemen sonra) alınır ve sticky-left ile kaydırmada sabit kalır — kimlik
- * sütunu da (Kod/Ad) her zaman sticky-left'tir, aksi halde pin'lenmiş bir
- * sütun kaydırıldığında kimlik bağlamı kaybolurdu.
+ * hemen sonra) alınır ve sticky-left ile kaydırmada sabit kalır. Sil sütunu +
+ * kimlik sütunu (Kod/Ad) da her zaman sticky-left'tir (0'dan başlar) — aksi
+ * halde pin'lenmiş bir sütun kaydırıldığında satır kimliği/sil butonu bağlamı
+ * kaybolurdu.
+ *
+ * Satır aksiyonları (SmartTableRow icinde render edilir, bkz. o dosyanin ustu):
+ *   - Sil (secondaryAction) → satır BAŞINDAKİ dar sütunda (danger buton).
+ *   - "İşlemler" menüsü (primaryAction + entity.extraActions[]) → satır
+ *     SONUNDAKİ sütunda (kebab buton + dropdown).
  *
  * KORU edilen mekanizmalar (SmartBoard seviyesinde zaten calisir, bu bilesen
  * sadece render eder): in-place refresh (onRefresh/recentIds), filter paneli,
@@ -28,12 +34,9 @@ import { useMemo } from 'react'
 import SmartTableRow from './SmartTableRow'
 import { resolveIcon, resolveChipWidth } from './DynamicWidgetFactory'
 
+var DELETE_COL_WIDTH   = 44
 var IDENTITY_COL_WIDTH = 280
-var ACTION_COL_WIDTH   = 92
-
-function justifyFor(align) {
-  return align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start'
-}
+var ACTION_COL_WIDTH   = 56
 
 /**
  * Her widget id'si icin butun entity'ler taranarak "her zaman gorunur" ve
@@ -69,8 +72,9 @@ function buildWidgetMeta(entities) {
  * columnConfig verilmisse (SmartColumnSettings) her sutuna { label, align,
  * width, pinned, fontSize, fontWeight } cozumlenmis alanlari eklenir + pin'li
  * sutunlar listenin basina alinir (stabil: kendi aralarindaki sira korunur).
- * Pin'li sutunlar icin kumulatif `stickyLeft` (kimlik sutunundan sonra) da
- * burada hesaplanir — SmartTable/SmartTableRow bu degeri dogrudan render eder.
+ * Pin'li sutunlar icin kumulatif `stickyLeft` (Sil + kimlik sutunlarindan
+ * sonra) da burada hesaplanir — SmartTable/SmartTableRow bu degeri dogrudan
+ * render eder.
  */
 function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig) {
   var candidates = masterWidgets.filter(function (w) {
@@ -141,7 +145,7 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
   var unpinned = enriched.filter(function (c) { return !c.pinned })
   var ordered = pinned.concat(unpinned)
 
-  var offset = IDENTITY_COL_WIDTH
+  var offset = DELETE_COL_WIDTH + IDENTITY_COL_WIDTH
   ordered.forEach(function (c) {
     if (c.pinned) { c.stickyLeft = offset; offset += c.width }
   })
@@ -154,19 +158,20 @@ export default function SmartTable(props) {
   var masterWidgets = Array.isArray(props.masterWidgets) ? props.masterWidgets : []
   var visibleIds = Array.isArray(props.visibleIds) ? props.visibleIds : null
   var order = Array.isArray(props.order) ? props.order : null
+  var columnConfig = (props.columnConfig && typeof props.columnConfig === 'object') ? props.columnConfig : null
   var onRefresh = typeof props.onRefresh === 'function' ? props.onRefresh : null
   var recentIds = props.recentIds instanceof Set ? props.recentIds : new Set()
   var isDark = !!props.isDark
 
   var widgetMeta = useMemo(function () { return buildWidgetMeta(entities) }, [entities])
   var columns = useMemo(
-    function () { return computeColumns(masterWidgets, visibleIds, order, widgetMeta) },
-    [masterWidgets, visibleIds, order, widgetMeta]
+    function () { return computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig) },
+    [masterWidgets, visibleIds, order, widgetMeta, columnConfig]
   )
 
   var totalWidth = useMemo(function () {
-    var sum = IDENTITY_COL_WIDTH + ACTION_COL_WIDTH
-    columns.forEach(function (c) { sum += resolveChipWidth(c.dataType, c.type) })
+    var sum = DELETE_COL_WIDTH + IDENTITY_COL_WIDTH + ACTION_COL_WIDTH
+    columns.forEach(function (c) { sum += c.width })
     return sum
   }, [columns])
 
@@ -175,22 +180,34 @@ export default function SmartTable(props) {
       <div className="cst-wrap">
         <table className="cst-table" style={{ width: totalWidth }}>
           <colgroup>
+            <col style={{ width: DELETE_COL_WIDTH }} />
             <col style={{ width: IDENTITY_COL_WIDTH }} />
             {columns.map(function (c) {
-              return <col key={c.id} style={{ width: resolveChipWidth(c.dataType, c.type) }} />
+              return <col key={c.id} style={{ width: c.width }} />
             })}
             <col style={{ width: ACTION_COL_WIDTH }} />
           </colgroup>
           <thead>
             <tr>
+              <th className="cst-th cst-th--delete" aria-label="Sil" />
               <th className="cst-th cst-th--identity">Kod / Ad</th>
               {columns.map(function (c) {
                 var Icon = resolveIcon(c.icon, null, c.dataType)
+                var thStyle = { textAlign: c.align }
+                if (c.pinned) thStyle.left = c.stickyLeft
+                var labelStyle = {}
+                if (c.fontSize) labelStyle.fontSize = c.fontSize + 'px'
+                if (c.fontWeight) labelStyle.fontWeight = c.fontWeight
                 return (
-                  <th key={c.id} className="cst-th" title={c.label}>
+                  <th
+                    key={c.id}
+                    className={'cst-th' + (c.pinned ? ' cst-th--pinned' : '')}
+                    title={c.label}
+                    style={thStyle}
+                  >
                     <span className="cst-th__inner">
                       <Icon size={12} strokeWidth={2} className="cst-th__icon" />
-                      <span className="cst-th__label">{c.label}</span>
+                      <span className="cst-th__label" style={labelStyle}>{c.label}</span>
                     </span>
                   </th>
                 )

@@ -3,19 +3,38 @@
  *
  * SmartCard ile ayni entity JSON sozlesmesini kullanir (id, title, subtitle,
  * description, imageUrl, statusBadge, widgets, primaryAction, secondaryAction,
- * recordValues). Aksiyon hucresi kapsam geregi sadece primaryAction +
- * secondaryAction'i render eder (extraActions/inline-kitt kart moduna ozgu
- * kalir — bkz. gorev tanimi). Silme onayi native confirm() DEGIL, SmartCard
+ * extraActions, recordValues). Silme onayi native confirm() DEGIL, SmartCard
  * ile ayni portal-modal deseni (CLAUDE.md "Silme onay standardi").
+ *
+ * Satir aksiyon duzeni (2026-07-16 revizyonu):
+ *   - Sil (secondaryAction) satirin EN BASINDAKI dar/sabit sutunda — danger
+ *     buton, onay yine ekran-ortasi custom modal.
+ *   - "Islemler" menusu satirin SONUNDAKI sutunda — kebab tetikleyici +
+ *     dropdown. Icerigi GENERIC olarak primaryAction + entity.extraActions[]
+ *     dizisinden turer (hardcode yok) — board config'e yeni bir extraAction
+ *     eklendiginde otomatik menude belirir. Bugun tek ogesi primaryAction
+ *     ("Duzenle"). Dropdown, tablo `overflow` kirpmasindan kacmak icin
+ *     document.body'ye portal edilir; cross-document (iframe→top) portal
+ *     senaryosunda CSS class'lari uygulanamayabildigi icin (ayri document,
+ *     ayri stylesheet) mevcut confirm/alert modallerindeki gibi INLINE
+ *     stil kullanilir — ama isDark'a gore tema-farkindadir (mevcut
+ *     confirm/alert modellerinin aksine, onlar herzaman koyu).
+ *   - Satir tiklamasi (kimlik hucresi) → Duzenle davranisi KORUNUR.
+ *
+ * Per-sutun bicim (SmartColumnSettings.jsx): SmartTable.computeColumns her
+ * `column` objesine align/width/pinned/stickyLeft/fontSize/fontWeight/label
+ * cozumlenmis olarak ekler; bu dosya sadece render eder (tdStyleFor/
+ * justifyFor/fontStyleFor helper'lari).
  */
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Trash2, Loader2, X, ArrowUpRight, List } from 'lucide-react'
+import { AlertTriangle, Trash2, Loader2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
 import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import { getTopBody } from '../../utils/topPortal'
+import { DELETE_COL_WIDTH } from './SmartTable'
 
 var hoverBgMap = {
   amber: 'hover:bg-amber-100 dark:hover:bg-amber-500/10',
@@ -28,6 +47,26 @@ var hoverTextMap = {
   slate: 'group-hover:text-slate-600 dark:group-hover:text-slate-400/70',
 }
 
+/* ── Per-sutun render yardimcilari — align/pin/font tum hucre tiplerinde ortak ── */
+function tdStyleFor(column) {
+  var style = { textAlign: (column && column.align) || 'left' }
+  if (column && column.pinned) {
+    style.position = 'sticky'
+    style.left = column.stickyLeft || 0
+  }
+  return style
+}
+function justifyFor(column) {
+  var align = column && column.align
+  return align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start'
+}
+function fontStyleFor(column) {
+  var style = {}
+  if (column && column.fontSize) style.fontSize = column.fontSize + 'px'
+  if (column && column.fontWeight) style.fontWeight = column.fontWeight
+  return style
+}
+
 /* ── Deger hucresi — link/guide-list/boolean/default dispatch ──────────── */
 function TableValueCell(props) {
   var column = props.column
@@ -36,8 +75,16 @@ function TableValueCell(props) {
   var recordValues = props.recordValues
   var isDark = props.isDark
 
+  var tdClass = 'cst-td cst-td--value' + (column.pinned ? ' cst-td--pinned' : '')
+  var tdStyle = tdStyleFor(column)
+  var fontStyle = fontStyleFor(column)
+
   if (!widget) {
-    return <td className="cst-td cst-td--value"><span className="cst-value cst-value--empty">—</span></td>
+    return (
+      <td className={tdClass} style={tdStyle}>
+        <span className="cst-value cst-value--empty" style={{ justifyContent: justifyFor(column) }}>—</span>
+      </td>
+    )
   }
 
   var dataType = widget.dataType || column.dataType || null
@@ -46,7 +93,7 @@ function TableValueCell(props) {
 
   if (dtLower === 'guide-list') {
     return (
-      <td className="cst-td cst-td--value">
+      <td className={tdClass} style={tdStyle}>
         <GuideListTableTrigger widget={widget} column={column} recordValues={recordValues} isDark={isDark} />
       </td>
     )
@@ -54,8 +101,8 @@ function TableValueCell(props) {
 
   if (type === 'link') {
     return (
-      <td className="cst-td cst-td--value">
-        <LinkValueCell widget={widget} isDark={isDark} />
+      <td className={tdClass} style={tdStyle}>
+        <LinkValueCell widget={widget} column={column} isDark={isDark} />
       </td>
     )
   }
@@ -69,10 +116,10 @@ function TableValueCell(props) {
     var isTrue = (widget.value === true || widget.value === 'true' || widget.value === 1 || widget.value === '1')
     var boolColor = isTrue ? '#10b981' : '#ef4444'
     return (
-      <td className="cst-td cst-td--value" title={widget.detail || ''}>
-        <span className="cst-value">
+      <td className={tdClass} style={tdStyle} title={widget.detail || ''}>
+        <span className="cst-value" style={{ justifyContent: justifyFor(column) }}>
           <BoolIcon size={14} style={{ color: boolColor, flexShrink: 0 }} />
-          <span className="cst-value__text" style={{ color: boolColor }}>{displayValue}</span>
+          <span className="cst-value__text" style={Object.assign({ color: boolColor }, fontStyle)}>{displayValue}</span>
         </span>
       </td>
     )
@@ -83,12 +130,12 @@ function TableValueCell(props) {
   var tooltip = violation ? (displayValue + ' — Kısıt ihlali: ' + violation) : (widget.detail || displayValue)
 
   return (
-    <td className="cst-td cst-td--value" title={tooltip}>
-      <span className="cst-value">
+    <td className={tdClass} style={tdStyle} title={tooltip}>
+      <span className="cst-value" style={{ justifyContent: justifyFor(column) }}>
         {violation && <AlertTriangle size={12} style={{ color: '#f59e0b', flexShrink: 0 }} />}
         <span
           className={'cst-value__text' + (numericFamily ? ' cst-value--numeric' : '') + (!hasValue ? ' cst-value--empty' : '')}
-          style={{ color: violation ? '#f59e0b' : (hasValue ? palette.text : undefined) }}
+          style={Object.assign({ color: violation ? '#f59e0b' : (hasValue ? palette.text : undefined) }, fontStyle)}
         >
           {displayValue}
         </span>
@@ -100,11 +147,13 @@ function TableValueCell(props) {
 /* ── Link tipi widget — kisa yol butonu, deger yoksa label gosterir ─────── */
 function LinkValueCell(props) {
   var widget = props.widget
+  var column = props.column || {}
   var isDark = props.isDark
   var palette = resolveColorForTheme(widget.color, widget.dataType, isDark)
   var Icon = resolveIcon(widget.icon, ArrowUpRight, widget.dataType)
   var hasValue = widget.value != null && widget.value !== ''
   var text = hasValue ? formatValue(widget.value, widget.dataType) : (widget.label || 'Git')
+  var textStyle = Object.assign({ color: palette.text }, fontStyleFor(column))
 
   function handleClick(e) {
     e.stopPropagation()
@@ -114,7 +163,7 @@ function LinkValueCell(props) {
   return (
     <button type="button" onClick={handleClick} className="cst-link" title={widget.detail || (widget.url ? ('Git: ' + widget.url) : '')}>
       <Icon size={13} style={{ color: palette.icon, flexShrink: 0 }} />
-      <span style={{ color: palette.text }}>{text}</span>
+      <span style={textStyle}>{text}</span>
     </button>
   )
 }
@@ -155,7 +204,7 @@ function GuideListTableTrigger(props) {
         title={meta.guideCode ? ('Rehber: ' + meta.guideCode) : 'Rehber tanımlı değil'}
       >
         <Icon size={13} style={{ color: palette.icon, flexShrink: 0 }} />
-        <span style={{ color: palette.text }}>Aç</span>
+        <span style={fontStyleFor(column)}>Aç</span>
       </button>
       {open && createPortal(
         <div
@@ -223,6 +272,11 @@ export default function SmartTableRow(props) {
   var recordValues = (entity.recordValues && typeof entity.recordValues === 'object') ? entity.recordValues : {}
   var primaryAction = entity.primaryAction || null
   var secondaryAction = entity.secondaryAction || null
+  // Forward-looking, generic — bugun board config'lerinde gonderilmiyor ama
+  // SmartCard'daki extraActions ile ayni sozlesme; "Islemler" menusu bunu
+  // otomatik listeler (hardcode yok, bkz. dosya ustu aciklama).
+  var extraActions = Array.isArray(entity.extraActions) ? entity.extraActions.filter(function (a) { return !!a }) : []
+  var menuActions = (primaryAction ? [primaryAction] : []).concat(extraActions)
 
   var widgetById = useMemo(function () {
     var map = {}
@@ -260,6 +314,12 @@ export default function SmartTableRow(props) {
   var [alertMsg, setAlertMsg] = useState('')
   var [busy, setBusy] = useState(false)
 
+  // ── "Islemler" dropdown menusu ──
+  var [menuOpen, setMenuOpen] = useState(false)
+  var [menuPos, setMenuPos] = useState(null)
+  var menuBtnRef = useRef(null)
+  var menuRef = useRef(null)
+
   useEffect(function () {
     if (!confirmOpen) return
     function onKey(e) { if (e.key === 'Escape') setConfirmOpen(false) }
@@ -273,6 +333,22 @@ export default function SmartTableRow(props) {
     document.addEventListener('keydown', onKey)
     return function () { document.removeEventListener('keydown', onKey) }
   }, [alertOpen])
+
+  useEffect(function () {
+    if (!menuOpen) return undefined
+    function onDocDown(e) {
+      if (menuRef.current && menuRef.current.contains(e.target)) return
+      if (menuBtnRef.current && menuBtnRef.current.contains(e.target)) return
+      setMenuOpen(false)
+    }
+    function onKey(e) { if (e.key === 'Escape') setMenuOpen(false) }
+    document.addEventListener('mousedown', onDocDown)
+    document.addEventListener('keydown', onKey)
+    return function () {
+      document.removeEventListener('mousedown', onDocDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
 
   function dispatchActionUrl(action) {
     if (!action || !action.url) return
@@ -365,6 +441,64 @@ export default function SmartTableRow(props) {
   function handleConfirmYes() { setConfirmOpen(false); executeSecondary() }
   function handleConfirmNo() { setConfirmOpen(false) }
 
+  // ── "Islemler" menusundeki jenerik aksiyon calistirici — url ise
+  // dispatchActionUrl, apiUrl ise basit POST (confirm/precheck destegi
+  // bugun sadece secondaryAction/Sil icin var — menude ilerde confirm
+  // gereken bir aksiyon eklenirse buraya tasinabilir). ──
+  function runMenuApiAction(action) {
+    var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]')
+    var token = tokenEl ? tokenEl.value : ''
+    var method = (action.apiMethod || 'POST').toUpperCase()
+    var hasBody = action.apiBody != null
+    var headers = { 'Accept': 'application/json' }
+    if (token) headers['RequestVerificationToken'] = token
+    if (hasBody) headers['Content-Type'] = 'application/json'
+
+    var fetchOpts = { method: method, credentials: 'same-origin', headers: headers }
+    if (hasBody) fetchOpts.body = JSON.stringify(action.apiBody)
+
+    setBusy(true)
+    fetch(action.apiUrl, fetchOpts)
+      .then(function (r) { return r.text().then(function (txt) { return { status: r.status, ok: r.ok, txt: txt } }) })
+      .then(function (res) {
+        var data = null
+        if (res.txt) { try { data = JSON.parse(res.txt) } catch (_) { /* JSON degil */ } }
+        var serverFailMsg = data && (data.error || data.message)
+        if (!res.ok || (data && (data.ok === false || data.success === false))) {
+          var msg = serverFailMsg || ('İstek başarısız (HTTP ' + res.status + ')')
+          if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err')
+          else alert('Hata: ' + msg)
+          return
+        }
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('İşlem tamamlandı.', 'ok')
+        if (onRefresh) setTimeout(function () { onRefresh(id) }, 400)
+        else setTimeout(function () { window.location.reload() }, 600)
+      })
+      .catch(function (err) {
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Hata: ' + err.message, 'err')
+        else alert('Hata: ' + err.message)
+      })
+      .finally(function () { setBusy(false) })
+  }
+
+  function dispatchMenuAction(action) {
+    if (!action || busy) return
+    if (action.apiUrl) { runMenuApiAction(action); return }
+    dispatchActionUrl(action)
+  }
+
+  function toggleMenu(e) {
+    if (e) e.stopPropagation()
+    if (busy) return
+    if (menuOpen) { setMenuOpen(false); return }
+    var el = menuBtnRef.current
+    if (el) {
+      var rect = el.getBoundingClientRect()
+      setMenuPos({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) })
+    }
+    setMenuOpen(true)
+  }
+
   function renderActionButton(action, handler, colorHint) {
     if (!action || action.hideButton) return null
     var ActionIcon = resolveIcon(action.icon)
@@ -396,8 +530,15 @@ export default function SmartTableRow(props) {
   return (
     <>
       <tr className={'cst-row' + (isHighlighted ? ' cst-row--highlight' : '')}>
+        <td className="cst-td cst-td--delete">
+          <div className="flex items-center justify-center">
+            {renderActionButton(secondaryAction, handleSecondary, 'red')}
+          </div>
+        </td>
+
         <td
           className={'cst-td cst-td--identity' + (clickableIdentity ? ' cst-td--clickable' : '')}
+          style={{ left: DELETE_COL_WIDTH }}
           onClick={clickableIdentity ? handlePrimary : undefined}
           title={primaryAction && primaryAction.label ? (primaryAction.label + ' — ' + title) : title}
         >
@@ -452,11 +593,72 @@ export default function SmartTableRow(props) {
 
         <td className="cst-td cst-td--action">
           <div className="cst-actions">
-            {renderActionButton(primaryAction, handlePrimary, 'amber')}
-            {renderActionButton(secondaryAction, handleSecondary, 'red')}
+            <button
+              ref={menuBtnRef}
+              type="button"
+              onClick={toggleMenu}
+              disabled={busy}
+              className={'p-1.5 rounded-lg transition-colors group ' +
+                (busy ? 'opacity-50 cursor-not-allowed'
+                  : menuOpen ? 'bg-indigo-100 dark:bg-indigo-500/15' : 'hover:bg-slate-100 dark:hover:bg-white/5')
+              }
+              title="İşlemler"
+              aria-label="İşlemler"
+            >
+              <MoreVertical
+                size={15}
+                className={menuOpen
+                  ? 'text-indigo-600 dark:text-indigo-400'
+                  : 'text-slate-400 dark:text-white/40 group-hover:text-slate-600 dark:group-hover:text-white/60 transition-colors'}
+              />
+            </button>
           </div>
         </td>
       </tr>
+
+      {/* "Islemler" dropdown — cross-document portal oldugu icin (getTopBody
+          iframe→top pencereye tasabilir, ayri stylesheet) INLINE stil, ama
+          isDark'a gore tema-farkinda. */}
+      {menuOpen && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          onClick={function (e) { e.stopPropagation() }}
+          style={{
+            position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 10010,
+            minWidth: 190, maxWidth: 260, padding: 6, borderRadius: 12,
+            background: isDark ? '#1e293b' : '#ffffff',
+            border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #e2e8f0',
+            boxShadow: isDark ? '0 12px 32px rgba(0,0,0,0.5)' : '0 12px 32px rgba(15,23,42,0.18)',
+          }}
+        >
+          {menuActions.length === 0 ? (
+            <div style={{ padding: '10px 12px', fontSize: 12, color: isDark ? 'rgba(255,255,255,0.35)' : '#94a3b8' }}>
+              Aksiyon yok
+            </div>
+          ) : menuActions.map(function (action, i) {
+            var ActionIcon = resolveIcon(action.icon)
+            return (
+              <button
+                key={action.id || action.label || i}
+                type="button"
+                onClick={function (e) { e.stopPropagation(); setMenuOpen(false); dispatchMenuAction(action) }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  padding: '8px 10px', borderRadius: 8, border: 'none', background: 'transparent',
+                  cursor: 'pointer', fontSize: 12.5, fontWeight: 600, textAlign: 'left',
+                  color: isDark ? 'rgba(255,255,255,0.82)' : '#334155',
+                }}
+                onMouseEnter={function (e) { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}
+                onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
+              >
+                <ActionIcon size={14} />
+                {action.label}
+              </button>
+            )
+          })}
+        </div>,
+        getTopBody()
+      )}
 
       {confirmOpen && createPortal(
         <div
