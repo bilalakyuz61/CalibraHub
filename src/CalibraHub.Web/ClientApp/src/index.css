@@ -3876,7 +3876,7 @@ body.app-theme-dark .nw-card-del:hover { color: #f87171; background: rgba(248,11
   --cst-row-bg:               rgba(255, 255, 255, 0.96);
   --cst-row-border:           rgba(15, 23, 42, 0.07);
   --cst-row-hover:            rgba(99, 102, 241, 0.05);
-  /* Sticky hucreler (Sil/Islemler/Kimlik/pin) icin TAM OPAK yuzey token'lari —
+  /* Sticky hucreler (Islemler/Kimlik/pin) icin TAM OPAK yuzey token'lari —
      glassmorphic --cst-row-bg'nin (light'ta %96, dark'ta sadece %4 opak!)
      AKSINE. --cst-row-bg tek basina sticky hucrede kullanilirsa (ozellikle
      dark temada) kaydirilan veri sutunlari altindan seffaf gorunur/uzerine
@@ -3954,15 +3954,14 @@ body.app-theme-dark .cst-root {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Kimlik/Sil/Islemler/pin'li sutunlarin basliklari sticky-left'tir (kaydirmada
+/* Islemler/Kimlik/pin'li sutunlarin basliklari sticky-left'tir (kaydirmada
    sabit kalir) — z-index 4, dikeyde sticky olan basliklarin (z-index 3)
    UZERINDE kalmasi icin (kose hucre: hem yatay hem dikey sticky kesisimi).
-   `left` degeri Sil/Islemler icin sabit (0 / DELETE_COL_WIDTH), Kimlik ve
-   pin'li sutunlar icin dinamiktir — hepsi JS tarafindan inline style ile
-   verilir (bkz. SmartTable.jsx), burada sadece z-index/sabit davranis
+   `left` degeri Islemler icin sabit (0 — en soldaki tek sabit sutun), Kimlik
+   ve pin'li sutunlar icin dinamiktir — Kimlik/pin JS tarafindan inline style
+   ile verilir (bkz. SmartTable.jsx), burada sadece z-index/sabit davranis
    tanimlanir. */
-.cst-th--delete { z-index: 4; left: 0; }
-.cst-th--menu { z-index: 4; text-align: center; }
+.cst-th--menu { z-index: 4; left: 0; text-align: center; }
 .cst-th--identity { z-index: 4; }
 .cst-th--pinned { z-index: 4; }
 .cst-th__inner { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
@@ -3986,44 +3985,41 @@ body.app-theme-dark .cst-root {
   vertical-align: middle;
   overflow: hidden;
   /* Her hucrenin kendi arka plani olur (glassmorphic ton — .cst-wrap'in arka
-     planiyla ayni token). Sticky (Sil/Islemler/Kimlik/pin) hucreler asagida
+     planiyla ayni token). Sticky (Islemler/Kimlik/pin) hucreler asagida
      TAM OPAK bir tabanla EZILIR (ayri kural bloku) — normal hucreler bu
      glass gorunumu korur. */
   background-color: var(--cst-row-bg);
 }
 
-/* ── Sticky hucreler: Sil + Islemler + Kimlik + pin'li veri sutunlari ──
+/* ── Sticky hucreler: Islemler + Kimlik + pin'li veri sutunlari ──
    Hepsi TAM OPAK taban tasir (--cst-sticky-bg) ki kaydirilan veri sutunlari
-   altlarindan "seffaf" gorunmeden/uzerine binmeden gecsin (2026-07-16
-   duzeltmesi — onceki --cst-row-bg kullanimi dark temada ~%4 opakti).
-   Hover/highlight durumlari da ONCEDEN HARMANLANMIS opak tonlar kullanir
-   (background-color degismeye devam eder → highlight'in mevcut 0.4s
-   gecisi bozulmaz; background-image gradient katmanlama transition
-   ANINDA degisir, kullanilmadi). Esit ozgunlukte ama sonraki sirada
-   oldugu icin genel .cst-td / .cst-row:hover>.cst-td / .cst-row--highlight>
-   .cst-td kurallarini ezer (cascade sirasi). */
-.cst-td--delete,
+   altlarindan "seffaf" gorunmeden/uzerine binmeden gecsin (onceki
+   --cst-row-bg kullanimi dark temada ~%4 opakti). Hover/highlight
+   durumlari da ONCEDEN HARMANLANMIS opak tonlar kullanir (background-color
+   degismeye devam eder → highlight'in mevcut 0.4s gecisi bozulmaz;
+   background-image gradient katmanlama transition ANINDA degisir,
+   kullanilmadi). Esit ozgunlukte ama sonraki sirada oldugu icin genel
+   .cst-td / .cst-row:hover>.cst-td / .cst-row--highlight>.cst-td
+   kurallarini ezer (cascade sirasi). */
 .cst-td--menu,
 .cst-td--identity,
 .cst-td--pinned {
   position: sticky;
   background-color: var(--cst-sticky-bg);
 }
-.cst-row:hover > .cst-td--delete,
 .cst-row:hover > .cst-td--menu,
 .cst-row:hover > .cst-td--identity,
 .cst-row:hover > .cst-td--pinned {
   background-color: var(--cst-sticky-hover-bg);
 }
-.cst-row--highlight > .cst-td--delete,
 .cst-row--highlight > .cst-td--menu,
 .cst-row--highlight > .cst-td--identity,
 .cst-row--highlight > .cst-td--pinned {
   background-color: var(--cst-sticky-highlight-bg);
 }
 
-.cst-td--delete { left: 0; z-index: 2; text-align: center; }
-.cst-td--menu   { z-index: 2; text-align: center; }
+/* Islemler — tablodaki tek sabit sutun, her zaman en solda (0). */
+.cst-td--menu   { left: 0; z-index: 2; text-align: center; }
 .cst-td--identity { z-index: 2; }
 .cst-td--pinned { z-index: 1; }
 .cst-td--clickable { cursor: pointer; }

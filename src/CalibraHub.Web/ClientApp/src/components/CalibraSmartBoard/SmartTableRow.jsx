@@ -6,16 +6,19 @@
  * extraActions, recordValues). Silme onayi native confirm() DEGIL, SmartCard
  * ile ayni portal-modal deseni (CLAUDE.md "Silme onay standardi").
  *
- * Satir aksiyon duzeni (2026-07-16 revizyon 2 — Islemler basa tasindi):
- *   - Sabit sol blok, sirasiyla: [Sil][Islemler][Kod/Ad] — UCU DE sticky-left,
- *     birbirini takip eden offset'lerle (bkz. DynamicWidgetFactory.js
- *     TABLE_DELETE_COL_WIDTH/TABLE_MENU_COL_WIDTH).
- *   - Sil (secondaryAction) → danger buton, onay ekran-ortasi custom modal.
- *   - "Islemler" menusu → kebab tetikleyici + dropdown, Sil'in hemen yaninda.
- *     Icerigi GENERIC olarak primaryAction + entity.extraActions[] dizisinden
- *     turer (hardcode yok) — board config'e yeni bir extraAction eklendiginde
- *     otomatik menude belirir. Bugun tek ogesi primaryAction ("Duzenle").
- *     Dropdown, tablo `overflow` kirpmasindan kacmak icin document.body'ye
+ * Satir aksiyon duzeni (2026-07-16 revizyon 3 — Sil, Islemler menusune tasindi):
+ *   - Sabit sol blok TEK sutuna indi: [Islemler (basliksiz kebab)][Kod/Ad] —
+ *     ikisi de sticky-left, ardisik offset'lerle (bkz. DynamicWidgetFactory.js
+ *     TABLE_MENU_COL_WIDTH). Ayri bir Sil sutunu YOK.
+ *   - "Islemler" menusu: Duzenle (primaryAction) + entity.extraActions[]
+ *     (GENERIC, hardcode yok — board config'e yeni aksiyon eklendiginde
+ *     otomatik menude belirir) + en altta, ayracin ardindan, danger renkli
+ *     **Sil** ogesi (secondaryAction). Sil'e tiklamak mevcut
+ *     handleSecondary/proceedSecondary/executeSecondary akisini AYNEN
+ *     tetikler — precheckUrl → ekran-ortasi custom onay modali → apiUrl POST.
+ *     Sadece tetik NOKTASI degisti (standalone buton yerine menu item), akis
+ *     mantigi hic degismedi.
+ *   - Dropdown, tablo `overflow` kirpmasindan kacmak icin document.body'ye
  *     portal edilir; cross-document (iframe→top) portal senaryosunda CSS
  *     class'lari uygulanamayabildigi icin (ayri document, ayri stylesheet)
  *     mevcut confirm/alert modallerindeki gibi INLINE stil kullanilir — ama
@@ -28,37 +31,24 @@
  * cozumlenmis olarak ekler; bu dosya sadece render eder (tdStyleFor/
  * justifyFor/fontStyleFor helper'lari).
  *
- * Sticky opaklik (2026-07-16 revizyon 2 duzeltmesi): sticky hucreler
- * `--cst-sticky-bg` (TAM OPAK, glassmorphic `--cst-row-bg`'den FARKLI bir
- * token) kullanir — aksi halde (ozellikle dark temada `--cst-row-bg` ~%4
- * opak oldugu icin) kaydirilan veri sutunlari sticky hucrelerin altindan
- * "seffaf" gorunerek uzerine biniyormus gibi gorunur. Bkz. index.css.
+ * Sticky opaklik: sticky hucreler `--cst-sticky-bg` (TAM OPAK, glassmorphic
+ * `--cst-row-bg`'den FARKLI bir token) kullanir — aksi halde (ozellikle dark
+ * temada `--cst-row-bg` ~%4 opak oldugu icin) kaydirilan veri sutunlari
+ * sticky hucrelerin altindan "seffaf" gorunerek uzerine biniyormus gibi
+ * gorunur. Bkz. index.css.
  */
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Trash2, Loader2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
-import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon, TABLE_DELETE_COL_WIDTH, TABLE_MENU_COL_WIDTH } from './DynamicWidgetFactory'
+import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
+import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon, TABLE_MENU_COL_WIDTH } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import { getTopBody } from '../../utils/topPortal'
 
-// SmartTable.jsx ile ayni sabitler — dongusel import'tan kacinmak icin
+// SmartTable.jsx ile ayni sabit — dongusel import'tan kacinmak icin
 // DynamicWidgetFactory.js'ten (bagimliligi olmayan ortak dosya) gelir.
-var DELETE_COL_WIDTH = TABLE_DELETE_COL_WIDTH
-var MENU_COL_WIDTH   = TABLE_MENU_COL_WIDTH
-var IDENTITY_LEFT    = DELETE_COL_WIDTH + MENU_COL_WIDTH
-
-var hoverBgMap = {
-  amber: 'hover:bg-amber-100 dark:hover:bg-amber-500/10',
-  red:   'hover:bg-red-100 dark:hover:bg-red-500/10',
-  slate: 'hover:bg-slate-100 dark:hover:bg-white/5',
-}
-var hoverTextMap = {
-  amber: 'group-hover:text-amber-600 dark:group-hover:text-amber-400/70',
-  red:   'group-hover:text-red-600 dark:group-hover:text-red-400/70',
-  slate: 'group-hover:text-slate-600 dark:group-hover:text-slate-400/70',
-}
+var MENU_COL_WIDTH = TABLE_MENU_COL_WIDTH
 
 /* ── Per-sutun render yardimcilari — align/pin/font tum hucre tiplerinde ortak ── */
 function tdStyleFor(column) {
@@ -390,6 +380,8 @@ export default function SmartTableRow(props) {
     if (primaryAction) dispatchActionUrl(primaryAction)
   }
 
+  // ── Sil (secondaryAction) akisi — DEGISMEDI, sadece tetik noktasi (artik
+  // menu item'i) degisti. precheckUrl → confirm modal → apiUrl POST. ──
   function executeSecondary() {
     if (!secondaryAction) return
     if (secondaryAction.apiUrl) {
@@ -454,10 +446,19 @@ export default function SmartTableRow(props) {
   function handleConfirmYes() { setConfirmOpen(false); executeSecondary() }
   function handleConfirmNo() { setConfirmOpen(false) }
 
-  // ── "Islemler" menusundeki jenerik aksiyon calistirici — url ise
-  // dispatchActionUrl, apiUrl ise basit POST (confirm/precheck destegi
-  // bugun sadece secondaryAction/Sil icin var — menude ilerde confirm
-  // gereken bir aksiyon eklenirse buraya tasinabilir). ──
+  // Menu'den Sil — mevcut handleSecondary akisini AYNEN tetikler, sadece
+  // menuyu de kapatir.
+  function handleMenuDelete(e) {
+    if (busy) return
+    setMenuOpen(false)
+    handleSecondary(e)
+  }
+
+  // ── "Islemler" menusundeki jenerik aksiyon calistirici (Duzenle +
+  // extraActions) — url ise dispatchActionUrl, apiUrl ise basit POST
+  // (confirm/precheck destegi bugun sadece Sil/secondaryAction icin var —
+  // menude ilerde confirm gereken baska bir aksiyon eklenirse buraya
+  // tasinabilir). ──
   function runMenuApiAction(action) {
     var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]')
     var token = tokenEl ? tokenEl.value : ''
@@ -512,28 +513,6 @@ export default function SmartTableRow(props) {
     setMenuOpen(true)
   }
 
-  function renderActionButton(action, handler, colorHint) {
-    if (!action || action.hideButton) return null
-    var ActionIcon = resolveIcon(action.icon)
-    var disabled = !!action.disabled || busy
-    var bg = hoverBgMap[colorHint] || hoverBgMap.slate
-    var tx = hoverTextMap[colorHint] || hoverTextMap.slate
-    return (
-      <button
-        key={action.label}
-        type="button"
-        onClick={disabled ? function (e) { e.stopPropagation() } : handler}
-        disabled={disabled}
-        className={'p-1.5 rounded-lg transition-colors group ' + (disabled ? 'opacity-50 cursor-not-allowed' : bg)}
-        title={busy ? 'İşleniyor…' : (action.label || '')}
-      >
-        {busy
-          ? <Loader2 size={15} className="text-slate-400 dark:text-white/40 animate-spin" />
-          : <ActionIcon size={15} className={'text-slate-400 dark:text-white/40 transition-colors ' + (disabled ? '' : tx)} />}
-      </button>
-    )
-  }
-
   var preserveCase = entity.subtitleCase === 'normal' || (typeof subtitle === 'string' && subtitle.indexOf('@') !== -1)
   var clickableIdentity = !!primaryAction
   var badgePalette = (statusBadge && statusBadge.label)
@@ -543,13 +522,7 @@ export default function SmartTableRow(props) {
   return (
     <>
       <tr className={'cst-row' + (isHighlighted ? ' cst-row--highlight' : '')}>
-        <td className="cst-td cst-td--delete">
-          <div className="flex items-center justify-center">
-            {renderActionButton(secondaryAction, handleSecondary, 'red')}
-          </div>
-        </td>
-
-        <td className="cst-td cst-td--menu" style={{ left: DELETE_COL_WIDTH }}>
+        <td className="cst-td cst-td--menu">
           <div className="flex items-center justify-center">
             <button
               ref={menuBtnRef}
@@ -575,7 +548,7 @@ export default function SmartTableRow(props) {
 
         <td
           className={'cst-td cst-td--identity' + (clickableIdentity ? ' cst-td--clickable' : '')}
-          style={{ left: IDENTITY_LEFT }}
+          style={{ left: MENU_COL_WIDTH }}
           onClick={clickableIdentity ? handlePrimary : undefined}
           title={primaryAction && primaryAction.label ? (primaryAction.label + ' — ' + title) : title}
         >
@@ -631,7 +604,8 @@ export default function SmartTableRow(props) {
 
       {/* "Islemler" dropdown — cross-document portal oldugu icin (getTopBody
           iframe→top pencereye tasabilir, ayri stylesheet) INLINE stil, ama
-          isDark'a gore tema-farkinda. */}
+          isDark'a gore tema-farkinda. Duzenle + extraActions + (varsa) ayrac
+          + Sil (danger). */}
       {menuOpen && menuPos && createPortal(
         <div
           ref={menuRef}
@@ -644,31 +618,57 @@ export default function SmartTableRow(props) {
             boxShadow: isDark ? '0 12px 32px rgba(0,0,0,0.5)' : '0 12px 32px rgba(15,23,42,0.18)',
           }}
         >
-          {menuActions.length === 0 ? (
+          {menuActions.length === 0 && !secondaryAction ? (
             <div style={{ padding: '10px 12px', fontSize: 12, color: isDark ? 'rgba(255,255,255,0.35)' : '#94a3b8' }}>
               Aksiyon yok
             </div>
-          ) : menuActions.map(function (action, i) {
-            var ActionIcon = resolveIcon(action.icon)
-            return (
-              <button
-                key={action.id || action.label || i}
-                type="button"
-                onClick={function (e) { e.stopPropagation(); setMenuOpen(false); dispatchMenuAction(action) }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                  padding: '8px 10px', borderRadius: 8, border: 'none', background: 'transparent',
-                  cursor: 'pointer', fontSize: 12.5, fontWeight: 600, textAlign: 'left',
-                  color: isDark ? 'rgba(255,255,255,0.82)' : '#334155',
-                }}
-                onMouseEnter={function (e) { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}
-                onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
-              >
-                <ActionIcon size={14} />
-                {action.label}
-              </button>
-            )
-          })}
+          ) : (
+            <>
+              {menuActions.map(function (action, i) {
+                var ActionIcon = resolveIcon(action.icon)
+                return (
+                  <button
+                    key={action.id || action.label || i}
+                    type="button"
+                    onClick={function (e) { e.stopPropagation(); setMenuOpen(false); dispatchMenuAction(action) }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      padding: '8px 10px', borderRadius: 8, border: 'none', background: 'transparent',
+                      cursor: 'pointer', fontSize: 12.5, fontWeight: 600, textAlign: 'left',
+                      color: isDark ? 'rgba(255,255,255,0.82)' : '#334155',
+                    }}
+                    onMouseEnter={function (e) { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}
+                    onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <ActionIcon size={14} />
+                    {action.label}
+                  </button>
+                )
+              })}
+
+              {secondaryAction && (
+                <>
+                  <div style={{ height: 1, margin: '4px 6px', background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
+                  <button
+                    type="button"
+                    onClick={handleMenuDelete}
+                    disabled={busy}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      padding: '8px 10px', borderRadius: 8, border: 'none', background: 'transparent',
+                      cursor: busy ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 600, textAlign: 'left',
+                      color: '#ef4444', opacity: busy ? 0.5 : 1,
+                    }}
+                    onMouseEnter={function (e) { if (!busy) e.currentTarget.style.background = isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)' }}
+                    onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <Trash2 size={14} />
+                    {secondaryAction.label || 'Sil'}
+                  </button>
+                </>
+              )}
+            </>
+          )}
         </div>,
         getTopBody()
       )}
