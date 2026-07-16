@@ -1547,6 +1547,10 @@ public sealed class SalesController : Controller
                     return Json(new { success = false, message = "Belge tipi kayıtlı belgeyle uyuşmuyor. Mevcut belgenin tipi değiştirilemez." });
                 if (_sDoc.DocumentTypeId.HasValue)
                     _sDocType = await _documentTypeRepo.GetByIdAsync(_sDoc.DocumentTypeId.Value, ct);
+                else if (request.DocumentTypeId.HasValue)
+                    // Tipsiz (NULL) legacy belge beyan edilen tiple damgalanır (SaveQuoteAsync) — izin de hedef tipe
+                    // göre kontrol edilir; SALES_QUOTE fallback'ine düşmek yetki yükseltmeye açıktı (2026-07-16).
+                    _sDocType = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
             }
             else if (request.DocumentTypeId.HasValue)
             {

@@ -101,6 +101,23 @@ public sealed class WarehouseController : Controller
         _                 => FormCodes.StockIn,
     };
 
+    /// <summary>
+    /// Belge tipini kanonik UI token'ına ("STOCK_IN" / "STOCK_OUT" / "TRANSFER" /
+    /// "INVENTORY_COUNT") indirger. İstemci-beyanlı DocType'a güvenilmez (2026-07-16):
+    /// mevcut belgede tip DB'den çözülüp istek tipiyle karşılaştırılır. Repo GetByIdAsync
+    /// doğrudan belgelerde DocumentType.Code ("depo_giris"/"depo_cikis"/"depo_transfer"),
+    /// sayımda "INVENTORY_COUNT" literal'i döndürdüğü için iki gösterim burada tek sözlüğe
+    /// indirilir. Depo belgesi olmayan tip (satis_siparisi vb.) → null, çağıran reddeder.
+    /// </summary>
+    private static string? NormalizeStockDocType(string? docType) => docType switch
+    {
+        "STOCK_IN"        or "depo_giris"    => "STOCK_IN",
+        "STOCK_OUT"       or "depo_cikis"    => "STOCK_OUT",
+        "TRANSFER"        or "depo_transfer" => "TRANSFER",
+        "INVENTORY_COUNT" or "sayim"         => "INVENTORY_COUNT",
+        _                                    => null,
+    };
+
     private async Task<bool> CheckStockDocPermissionAsync(
         string? docType, IReadOnlyList<string> actionCodes, CancellationToken ct)
     {
@@ -504,12 +521,29 @@ public sealed class WarehouseController : Controller
     {
         if (request is null)
             return Json(new { success = false, message = "Geçersiz istek." });
+
+        // İstemci-beyanlı DocType'a güvenilmez (2026-07-16): kapı [PermissionScope(InventoryCount)]
+        // ama repo SaveAsync akışı istek tipinden seçiyor — sayım yetkisiyle docType="STOCK_OUT"
+        // gönderilerek stok belgesi yazılabiliyordu. Bu endpoint yalnız sayım kabul eder;
+        // Giriş/Çıkış/Transfer kendi yetkisiyle SaveDocJson'dan geçer.
+        if (!string.Equals(request.DocType, "INVENTORY_COUNT", StringComparison.Ordinal))
+            return Json(new { success = false, message = "Bu ekrandan yalnız sayım belgesi kaydedilebilir." });
         try
         {
-            // İşlem logu: güncellemede eski header + kalem snapshot'ı kaydetmeden ÖNCE alınır
-            var (oldDoc, oldLines) = request.Id is > 0
-                ? await TryGetStockDocForAuditAsync(request.Id.Value, ct)
-                : ((StockDocDto?)null, (IReadOnlyList<StockDocLineDto>?)null);
+            // İşlem logu: güncellemede eski header + kalem snapshot'ı kaydetmeden ÖNCE alınır.
+            // Aynı okuma güvenlik kararı için de kullanılır: güncellenen belgenin DB'deki gerçek
+            // tipi de sayım olmalı — sayım yetkisiyle mevcut bir Giriş/Çıkış/Transfer belge
+            // id'si ezilemesin (belgede tip DB'den çözülür, uyuşmazlık reddedilir).
+            StockDocDto? oldDoc = null;
+            IReadOnlyList<StockDocLineDto>? oldLines = null;
+            if (request.Id is > 0)
+            {
+                (oldDoc, oldLines) = await TryGetStockDocForAuditAsync(request.Id.Value, ct);
+                if (oldDoc is null)
+                    return Json(new { success = false, message = "Belge bulunamadı." });
+                if (NormalizeStockDocType(oldDoc.DocType) != "INVENTORY_COUNT")
+                    return Json(new { success = false, message = "Belge tipi uyuşmuyor — kayıt reddedildi." });
+            }
 
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
 
@@ -704,11 +738,18 @@ public sealed class WarehouseController : Controller
         var docType = string.Equals(type, "out", StringComparison.OrdinalIgnoreCase)
             ? "STOCK_OUT" : "STOCK_IN";
 
-        // Mevcut belge varsa gerçek tipini oku
+        // Mevcut belgede tip DB'den çözülür (2026-07-16): bu ekran yalnız Giriş/Çıkış belgesi
+        // düzenler — transfer/sayım/stok-dışı bir belge id'si StockIn görünümüne düşüp yanlış
+        // ekranda render edilmesin. Repo doğrudan belgelerde DocumentType.Code ("depo_giris"...)
+        // döndürdüğünden view/save akışının beklediği token'a ("STOCK_IN"...) normalize edilir —
+        // ham kod DOC_TYPE olarak sayfaya sızınca kaydetme repo TypeCodeFor'da patlıyordu.
         if (id.HasValue && id.Value > 0)
         {
             var existing = await _stockDocRepo.GetByIdAsync(id.Value, ct);
-            if (existing != null) docType = existing.DocType;
+            if (existing is null) return NotFound();
+            var resolvedType = NormalizeStockDocType(existing.DocType);
+            if (resolvedType is not ("STOCK_IN" or "STOCK_OUT")) return NotFound();
+            docType = resolvedType;
         }
 
         // Statik [PermissionScope(StockIn)] bu ekranı STOCK_OUT'ta da yanlışlıkla StockIn
@@ -771,17 +812,36 @@ public sealed class WarehouseController : Controller
         if (request is null)
             return Json(new { success = false, message = "Geçersiz istek." });
 
+        // İstemci-beyanlı DocType'a güvenilmez (2026-07-16): bu paylaşılan endpoint yalnız
+        // Giriş/Çıkış/Transfer kaydeder — sayım SaveInventoryJson'dan geçer, sipariş vb.
+        // diğer tipler hiç kabul edilmez. Yeni kayıtta whitelist istek tipine uygulanır.
+        if (request.DocType is not ("STOCK_IN" or "STOCK_OUT" or "TRANSFER"))
+            return Json(new { success = false, message = "Bu belge tipi bu ekrandan kaydedilemez." });
+
+        // Güncellemede yetki/tip kararı DB'deki GERÇEK belgeden verilir: salt STOCK_IN
+        // yetkisiyle docType="STOCK_IN" beyan edip mevcut bir Çıkış/Transfer (veya stok-dışı)
+        // belgeyi ezme açığı kapatıldı — satırlar MovementTypeFor(request.DocType) ile
+        // yeniden yazıldığından tip uyuşmazlığı stok bakiyesini bozuyordu. Aynı okuma
+        // audit diff'inin "eski snapshot"ı olarak da kullanılır.
+        StockDocDto? oldDoc = null;
+        IReadOnlyList<StockDocLineDto>? oldLines = null;
+        if (request.Id is > 0)
+        {
+            (oldDoc, oldLines) = await TryGetStockDocForAuditAsync(request.Id.Value, ct);
+            if (oldDoc is null)
+                return Json(new { success = false, message = "Belge bulunamadı." });
+            if (!string.Equals(NormalizeStockDocType(oldDoc.DocType), request.DocType, StringComparison.Ordinal))
+                return Json(new { success = false, message = "Belge tipi uyuşmuyor — kayıt reddedildi." });
+        }
+
         // Statik [PermissionScope(StockIn)] bu paylaşılan endpoint'te STOCK_OUT/TRANSFER
         // kayıtlarını da yanlışlıkla StockIn yetkisine bağlıyordu (bkz. CheckStockDocPermissionAsync).
+        // Güncellemede request.DocType'ın DB tipine eşitliği yukarıda doğrulandı → form kodu
+        // fiilen DB'deki tipten çözülmüş olur.
         if (!await CheckStockDocPermissionAsync(request.DocType, new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" }, ct))
             return Json(new { success = false, message = "Bu belge için yetkiniz bulunmuyor." });
         try
         {
-            // İşlem logu: güncellemede eski header + kalem snapshot'ı kaydetmeden ÖNCE alınır
-            var (oldDoc, oldLines) = request.Id is > 0
-                ? await TryGetStockDocForAuditAsync(request.Id.Value, ct)
-                : ((StockDocDto?)null, (IReadOnlyList<StockDocLineDto>?)null);
-
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
 
             await LogStockDocSaveAsync(request, id, docNo, oldDoc, oldLines, ct);
