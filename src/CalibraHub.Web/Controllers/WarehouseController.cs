@@ -3,6 +3,8 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Helpers;
@@ -28,6 +30,7 @@ public sealed class WarehouseController : Controller
     private readonly IDocumentSourceRepository _docSourceRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IAuditTrailService _audit;
+    private readonly IPermissionService _permService;
     private readonly string _schema;
 
     private static readonly JsonSerializerOptions BoardJsonOpts = new()
@@ -48,6 +51,7 @@ public sealed class WarehouseController : Controller
         IDocumentSourceRepository docSourceRepo,
         SqlServerConnectionFactory connectionFactory,
         IAuditTrailService audit,
+        IPermissionService permService,
         CalibraDatabaseOptions dbOptions)
     {
         _stockDocRepo = stockDocRepo;
@@ -60,6 +64,7 @@ public sealed class WarehouseController : Controller
         _docSourceRepo = docSourceRepo;
         _connectionFactory = connectionFactory;
         _audit = audit;
+        _permService = permService;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -77,6 +82,29 @@ public sealed class WarehouseController : Controller
         "INVENTORY_COUNT" => "sayim",
         _                 => "depo_giris",
     };
+
+    // ── Yetki: paylaşılan Giriş/Çıkış/Transfer endpoint'leri ───────────────
+    // StockEntryEdit / SaveDocJson / DeleteDocJson tek action üzerinden STOCK_IN,
+    // STOCK_OUT ve TRANSFER belgelerini birlikte yönetir (bkz. StockDocEdit.cshtml).
+    // [PermissionScope] statik attribute tek FormCode taşıyabildiği için bu üçünü
+    // ayırt edemez — SalesController.SaveDocument/DeleteDocument ile aynı desen:
+    // attribute yerine burada request/DB'den okunan DocType'a göre dinamik çözülür.
+
+    private static string FormCodeForDocType(string? docType) => docType switch
+    {
+        "TRANSFER"  => FormCodes.Transfer,
+        "STOCK_OUT" => FormCodes.StockOut,
+        _           => FormCodes.StockIn,
+    };
+
+    private async Task<bool> CheckStockDocPermissionAsync(
+        string? docType, IReadOnlyList<string> actionCodes, CancellationToken ct)
+    {
+        var formCode = FormCodeForDocType(docType);
+        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
+        int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+        return await _permService.CheckAnyAsync(CurrentUserId() ?? 0, role, deptId, formCode, actionCodes, ct);
+    }
 
     /// <summary>RefNo repo tarafında Notes'a "[Ref: x]" olarak gömülür (CombineNotesWithRef) —
     /// diff'te yanlış pozitif olmaması için request tarafında aynı birleşim uygulanır.</summary>
@@ -665,7 +693,6 @@ public sealed class WarehouseController : Controller
         => Json(await BuildStockEntryBoardConfigAsync("out", ct));
 
     [HttpGet]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> StockEntryEdit(int? id, string? type, CancellationToken ct)
     {
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
@@ -679,6 +706,11 @@ public sealed class WarehouseController : Controller
             var existing = await _stockDocRepo.GetByIdAsync(id.Value, ct);
             if (existing != null) docType = existing.DocType;
         }
+
+        // Statik [PermissionScope(StockIn)] bu ekranı STOCK_OUT'ta da yanlışlıkla StockIn
+        // yetkisine bağlıyordu — belge tipine göre dinamik kontrol (bkz. CheckStockDocPermissionAsync).
+        if (!await CheckStockDocPermissionAsync(docType, new[] { "VIEW", "VIEW_OWN" }, ct))
+            return Forbid();
 
         var lineFormCode = docType == "STOCK_OUT" ? FormCodes.StockOutLines : FormCodes.StockInLines;
         var bindings = await GetLineGuideBindingsAsync(lineFormCode, ct);
@@ -711,11 +743,15 @@ public sealed class WarehouseController : Controller
     }
 
     [HttpPost]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> SaveDocJson([FromBody] SaveStockDocRequest? request, CancellationToken ct)
     {
         if (request is null)
             return Json(new { success = false, message = "Geçersiz istek." });
+
+        // Statik [PermissionScope(StockIn)] bu paylaşılan endpoint'te STOCK_OUT/TRANSFER
+        // kayıtlarını da yanlışlıkla StockIn yetkisine bağlıyordu (bkz. CheckStockDocPermissionAsync).
+        if (!await CheckStockDocPermissionAsync(request.DocType, new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" }, ct))
+            return Json(new { success = false, message = "Bu belge için yetkiniz bulunmuyor." });
         try
         {
             // İşlem logu: güncellemede eski header + kalem snapshot'ı kaydetmeden ÖNCE alınır
@@ -843,13 +879,18 @@ public sealed class WarehouseController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> DeleteDocJson(int id, CancellationToken ct)
     {
         try
         {
-            // İşlem logu: silinen belgenin kimliği + kalem dökümü silmeden ÖNCE okunur
+            // İşlem logu: silinen belgenin kimliği + kalem dökümü silmeden ÖNCE okunur.
+            // Aynı okuma DocType'a göre doğru form koduyla dinamik izin kontrolü için de
+            // kullanılır — statik [PermissionScope(StockIn)] STOCK_OUT/TRANSFER silme işlemlerini
+            // de yanlışlıkla StockIn yetkisine bağlıyordu (bkz. CheckStockDocPermissionAsync).
             var (docForAudit, linesForAudit) = await TryGetStockDocForAuditAsync(id, ct);
+
+            if (!await CheckStockDocPermissionAsync(docForAudit?.DocType, new[] { "DELETE_OWN", "DELETE_ALL" }, ct))
+                return Json(new { ok = false, error = "Bu belgeyi silmek için yetkiniz bulunmuyor." });
 
             await _stockDocRepo.DeleteAsync(id, ct);
 
