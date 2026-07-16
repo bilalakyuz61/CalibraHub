@@ -141,7 +141,9 @@
         /* ── Kimlik kalibrasyon kadranı v2 — 3 katmanlı harf-bulmacalı kilit ──
            CALIBRAHUB'ın 10 harfi (decoy YOK) üç yarı-saydam katmanda AYNI merkez +
            AYNI yarıçapta üst üste (superimposed, konsantrik DEĞİL) çizilir. Katmanlar
-           hizasızken hayalet/üçlenmiş harfler görünür. Şifre karakteri yazıldıkça bir
+           hizasızken 12°'lik adımlarla örülü/serpiştirilmiş durur — üç renk (indigo/
+           cyan/violet) açıkça ayrı katmanlar olarak okunur, harfler tam üst üste
+           binmez (bkz. LAYERS residue yorumu). Şifre karakteri yazıldıkça bir
            katman bir adım döner (döngüsel: 1.→L1, 2.→L2, 3.→L3, 4.→L1…), silme geri
            sarar. Çözülme YALNIZ sunucu login onayında (server-truth) tetiklenir —
            client parola doğrulamaz; matematiksel olarak yazarak hizalanmak imkansızdır
@@ -571,18 +573,24 @@
 <script>
     /* ── Kimlik kalibrasyon kadranı v2 — 3 katmanlı harf-bulmacalı kilit ──
        CALIBRAHUB'ın 10 harfi (decoy YOK) üç yarı-saydam katmanda AYNI merkez + AYNI
-       yarıçapta üst üste (superimposed) döner; hizasızken hayalet/üçlenmiş harfler
-       görünür. Şifre her karakterinde bir katman bir adım döner (döngüsel: 1.→L1,
-       2.→L2, 3.→L3, 4.→L1…), silme geri sarar (adım sayısı doğrudan parola
+       yarıçapta üst üste (superimposed) döner. Hizasızken üç katman 12°'lik adımlarla
+       ÖRÜLÜ (braided) durur — her katmanın harfi kendi rengiyle ayrı bir açısal
+       noktada görünür, üç kopya birbirinin TAM üzerine binmez (bkz. LAYERS residue
+       yorumu altta). Şifre her karakterinde bir katman bir adım döner (döngüsel:
+       1.→L1, 2.→L2, 3.→L3, 4.→L1…), silme geri sarar (adım sayısı doğrudan parola
        uzunluğundan türetilir, tuş yönünden bağımsızdır).
 
-       Matematiksel imkansızlık garantisi: her katmanın taban ofseti (base) BİLEREK
-       yarım-slot kesirlidir (base mod 36° ≡ 18°). Yazma adımları hep TAM slot (36°)
-       olduğundan bir katmanın mutlak açısı yazarak ASLA 360°'nin tam katına
-       ulaşamaz — hizalanma (üç katmanın da aynı ortak faza gelmesi) yalnız Solved
-       animasyonuyla (en yakın 360° katına programatik "snap") gerçekleşir. Yani
-       doğru şifre yazarak CALIBRAHUB'ı hizalamak yapısal olarak imkansızdır; çözülme
-       YALNIZ sunucu login onayıyla (window.CalibraLoginDial.success) tetiklenir. */
+       Matematiksel imkansızlık garantisi: her katmanın taban ofseti (base) 36°'nin
+       (SLOT_DEG) TAM katı DEĞİLDİR ve üç katmanın da 36'ya göre kalanı (residue)
+       BİRBİRİNDEN FARKLIDIR. Yazma adımları hep TAM slot (36°) eklediğinden bir
+       katmanın "mod 36" kalanı yazarak asla değişmez — dolayısıyla iki katman
+       ASLA aynı mutlak açıya (mod 360) gelemez (aynı açı için aynı "mod 36" kalanı
+       şart, üçü de farklı olduğundan bu yapısal olarak imkansızdır). Hizalanma
+       yalnız Solved animasyonuyla (her katman kendi en yakın 360° katına
+       programatik "snap" eder — 360° her zaman ≡0 mod 36 olduğundan üç katman da
+       AYNI görünüme oturur) gerçekleşir. Yani doğru şifre yazarak CALIBRAHUB'ı
+       hizalamak yapısal olarak imkansızdır; çözülme YALNIZ sunucu login onayıyla
+       (window.CalibraLoginDial.success) tetiklenir. */
     (function () {
         var dial = document.getElementById('caldDial');
         if (!dial) return;
@@ -595,12 +603,19 @@
         var SLOT_DEG = 360 / SLOTS;              // 36°
         var RADIUS   = 68;
 
-        // 3 katman: base'ler kasıtlı olarak 36°'nin yarım-slot (18°) kesirli katları —
-        // bkz. üstteki yorum. dir yalnız kozmetik (hangi yöne "karıştığını" belirler).
+        // 3 katman: base'lerin 36'ya göre kalanı (residue) KASITLI olarak hem sıfırdan
+        // hem birbirinden farklı: 6°, 18°, 30° — 36°'lik slot bandını 3'e eşit böler
+        // (12°'lik adımlarla "örülü" görünüm — matematiksel olarak ulaşılabilecek en
+        // geniş eşit ayrım). Kullanıcı geri bildirimi (2026-07-16): eski değerler
+        // (18/-90/162) hepsi AYNI 18°'lik kalana sahipti → üç katman aynı 10 açısal
+        // slotta tam üst üste biniyordu (yalnız hangi harfin göründüğü değişiyordu).
+        // Farklı kalan hem daha güçlü bir "yazarak çözülemez" ispatı verir (üstteki
+        // yorum) hem de idle'da üç katmanın açıkça ayrı/serpiştirilmiş durmasını
+        // sağlar. dir yalnız kozmetik (hangi yöne "karıştığını" belirler).
         var LAYERS = [
-            { base: 18,  dir: +1, id: 'caldLayer1' },
-            { base: -90, dir: -1, id: 'caldLayer2' },
-            { base: 162, dir: +1, id: 'caldLayer3' }
+            { base: 6,  dir: +1, id: 'caldLayer1' },
+            { base: 18, dir: -1, id: 'caldLayer2' },
+            { base: 30, dir: +1, id: 'caldLayer3' }
         ];
 
         var groups  = LAYERS.map(function (l) { return document.getElementById(l.id); });
