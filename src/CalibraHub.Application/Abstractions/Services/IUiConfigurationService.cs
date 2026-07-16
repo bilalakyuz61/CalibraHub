@@ -26,4 +26,6 @@ public interface IUiConfigurationService
     Task SaveGridColumnPreferencesAsync(int userId, string gridKey, IReadOnlyCollection<string> columns, CancellationToken cancellationToken);
     Task<string?> GetShellShortcutsAsync(int userId, CancellationToken cancellationToken);
     Task SaveShellShortcutsAsync(int userId, string configJson, CancellationToken cancellationToken);
+    Task<string?> GetBoardColumnsAsync(int userId, string boardKey, CancellationToken cancellationToken);
+    Task SaveBoardColumnsAsync(int userId, string boardKey, string configJson, CancellationToken cancellationToken);
 }

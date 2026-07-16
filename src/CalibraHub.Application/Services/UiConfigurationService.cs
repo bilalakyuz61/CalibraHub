@@ -554,4 +554,24 @@ public sealed class UiConfigurationService : IUiConfigurationService
         if (userId <= 0) return;
         await _userSettingRepository.SetAsync(userId, "ui.shell.shortcuts", configJson, cancellationToken);
     }
+
+    // ── SmartBoard tablo modu "Sütun Ayarları" (board columns) tercihi (user_settings tablosu) ──
+    // Aynı desen: tek opak JSON string per user_settings key, sunucu şemayı yorumlamaz.
+    // Anahtar boardKey bazlı olduğu için grid kolon tercihleriyle aynı normalize (trim+lower) uygulanır.
+
+    public async Task<string?> GetBoardColumnsAsync(int userId, string boardKey, CancellationToken cancellationToken)
+    {
+        if (userId <= 0) return null;
+        var normalizedBoardKey = NormalizeGridPreferenceKey(boardKey);
+        if (string.IsNullOrEmpty(normalizedBoardKey)) return null;
+        return await _userSettingRepository.GetAsync(userId, $"ui.board.columns.{normalizedBoardKey}", cancellationToken);
+    }
+
+    public async Task SaveBoardColumnsAsync(int userId, string boardKey, string configJson, CancellationToken cancellationToken)
+    {
+        if (userId <= 0) return;
+        var normalizedBoardKey = NormalizeGridPreferenceKey(boardKey);
+        if (string.IsNullOrEmpty(normalizedBoardKey)) return;
+        await _userSettingRepository.SetAsync(userId, $"ui.board.columns.{normalizedBoardKey}", configJson, cancellationToken);
+    }
 }

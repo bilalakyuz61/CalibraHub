@@ -1001,6 +1001,55 @@ public sealed class AccountController : Controller
 
     public sealed record SaveShellShortcutsRequest(string? Config);
 
+    // ── SmartBoard tablo modu "Sütun Ayarları" (board columns) — per-user, per-board kalıcılık ──
+    // col-panel (frontend, paralel iş): GET ?boardKey= → { ok, config: string|null };
+    // POST { boardKey, config } → { ok }. Config opak bir JSON string olarak taşınır,
+    // sunucu tarafında şekli yorumlanmaz — ShellShortcuts ile birebir aynı desen, tek fark
+    // boardKey'in dinamik (çoklu board, per-board key) olması. Bkz. UiConfigurationService
+    // GetBoardColumnsAsync/SaveBoardColumnsAsync — key = "ui.board.columns.{boardKey}".
+
+    private const int MaxBoardColumnsConfigBytes = 64 * 1024;
+
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> GetBoardColumns(string? boardKey, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(boardKey))
+            return Json(new { ok = false, config = (string?)null });
+
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var userId) || userId <= 0)
+            return Json(new { ok = true, config = (string?)null });
+
+        var config = await _uiConfigurationService.GetBoardColumnsAsync(userId, boardKey, cancellationToken);
+        return Json(new { ok = true, config });
+    }
+
+    [Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveBoardColumns(
+        [FromBody] SaveBoardColumnsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var boardKey = request?.BoardKey;
+        if (string.IsNullOrWhiteSpace(boardKey))
+            return Json(new { ok = false });
+
+        var config = request?.Config ?? string.Empty;
+        if (System.Text.Encoding.UTF8.GetByteCount(config) > MaxBoardColumnsConfigBytes)
+            return Json(new { ok = false });
+
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var userId) || userId <= 0)
+            return Json(new { ok = false });
+
+        await _uiConfigurationService.SaveBoardColumnsAsync(userId, boardKey, config, cancellationToken);
+        return Json(new { ok = true });
+    }
+
+    public sealed record SaveBoardColumnsRequest(string? BoardKey, string? Config);
+
     /// <summary>
     /// Shell menüsünü anlık yetkilerle döndürür.
     /// Shell.jsx focus/visibility değişiminde bu endpoint'i poll ederek
