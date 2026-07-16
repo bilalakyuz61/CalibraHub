@@ -228,6 +228,42 @@ public sealed class CalibraDatabaseInitializer
         var tableEsc  = tableName.Replace("]", "]]");
         var keyEsc    = baseRecordKey.Replace("]", "]]");
 
+        // ── FK cozulmus Kod/Ad kolonlari ──────────────────────────────────────
+        // Entegrasyon eslemesinde ham FK Id (ContactId=42) yerine insan-okur kodu
+        // (ContactCode) gonderebilmek icin, base tablonun FK kolonlarini referans
+        // master tabloya LEFT JOIN ile cozup {Ref}Code/{Ref}Name kolonu ekleriz.
+        // Referans tablolarin kolon envanterini tek sorguda cek → resolver hangi
+        // FK'lerin cozulebilecegine karar verir (yoksa sessizce atlar, view kirilmaz).
+        var fkRefCols = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var fkRefTables = FlatViewFkResolver.ReferencedTables;
+        if (fkRefTables.Count > 0 && baseColSet.Overlaps(FlatViewFkResolver.Map.Select(m => m.FkColumn)))
+        {
+            await using var refCmd = conn.CreateCommand();
+            var inParams = string.Join(",", fkRefTables.Select((_, i) => "@rt" + i));
+            refCmd.CommandText =
+                "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
+                "WHERE TABLE_SCHEMA = @s AND TABLE_NAME IN (" + inParams + ")";
+            refCmd.Parameters.Add(new SqlParameter("@s", schema));
+            for (int i = 0; i < fkRefTables.Count; i++)
+                refCmd.Parameters.Add(new SqlParameter("@rt" + i, fkRefTables[i]));
+            await using var refReader = await refCmd.ExecuteReaderAsync(ct);
+            while (await refReader.ReadAsync(ct))
+            {
+                var tn = refReader.GetString(0);
+                var cn = refReader.GetString(1);
+                if (!fkRefCols.TryGetValue(tn, out var set))
+                {
+                    set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    fkRefCols[tn] = set;
+                }
+                set.Add(cn);
+            }
+        }
+        var (fkSelectParts, fkJoinParts) = FlatViewFkResolver.Build(
+            schemaEsc, baseColSet, pivotWidgets.Select(w => w.WidgetCode),
+            (table, code, name) => fkRefCols.TryGetValue(table, out var cs)
+                && cs.Contains("Id") && cs.Contains(code) && cs.Contains(name));
+
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"CREATE OR ALTER VIEW [{schemaEsc}].[{viewName}] AS");
         sb.AppendLine("SELECT");
@@ -248,11 +284,15 @@ public sealed class CalibraDatabaseInitializer
             };
             selectParts.Add($"    {castExpr} AS [{col}]");
         }
+        // Cozulmus FK Kod/Ad kolonlari — pivot widget kolonlarindan sonra
+        selectParts.AddRange(fkSelectParts);
         sb.AppendLine(string.Join(",\n", selectParts));
         sb.AppendLine($"FROM [{schemaEsc}].[{tableEsc}] base");
         sb.AppendLine($"LEFT JOIN [{schemaEsc}].[WidgetMas] m ON m.[FormId] = {formId}");
         sb.AppendLine($"LEFT JOIN [{schemaEsc}].[WidgetTra] t ON t.[WidgetId] = m.[Id]");
         sb.AppendLine($"    AND t.[RecordId] = CAST(base.[{keyEsc}] AS NVARCHAR(60))");
+        // Cozulmus FK LEFT JOIN'leri (NULL-safe; MAX ile aggregate edildigi icin GROUP BY'a girmez)
+        foreach (var j in fkJoinParts) sb.AppendLine(j);
         sb.AppendLine("GROUP BY");
         sb.AppendLine(string.Join(",\n", columns.Select(c => $"    base.[{c.Replace("]", "]]")}]")));
         sb.Append(';');

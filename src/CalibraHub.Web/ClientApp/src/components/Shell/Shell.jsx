@@ -2876,32 +2876,12 @@ function TabBar(props) {
             : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100')
 
   var showDash = !!props.showDashboard
-  var homeActive = showDash || props.tabs.length === 0
 
   return (
     <div
       className={'flex items-center h-11 border-b flex-shrink-0 ' + borderColor}
       style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
     >
-      {/* Ana Sayfa butonu — sol tarafta sabit, tab'lar sağa doğru büyür */}
-      {typeof props.onGoHome === 'function' && (
-        <button
-          type="button"
-          onClick={props.onGoHome}
-          title="Ana Sayfa"
-          className={
-            'h-full px-3 flex items-center justify-center flex-shrink-0 border-r transition-colors ' +
-            borderColor + ' ' +
-            (homeActive
-              ? (isDark ? 'text-indigo-400 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-50/80')
-              : (isDark ? 'text-white/40 hover:text-white/70 hover:bg-white/[0.04]'
-                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'))
-          }
-        >
-          <Home size={15} strokeWidth={1.8} />
-        </button>
-      )}
-
       {/* Scrollable tab alanı */}
       <div className="relative flex-1 overflow-hidden h-full">
         {canLeft && (

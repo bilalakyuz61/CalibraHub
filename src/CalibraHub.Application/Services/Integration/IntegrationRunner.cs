@@ -329,12 +329,14 @@ public sealed class IntegrationRunner : IIntegrationRunner
                             cascadeRecordId = resolvedId;
                         }
 
-                        // Daha once Sent edilmis mi?
+                        // Daha once Sent edilmis mi, ya da kullanici Aktarim Kuyrugu'nda
+                        // manuel "haric tut" (Skipped) demis mi?
                         var existingStatus = await _recordStatusRepo.GetAsync(targetIntegrationId, cascadeRecordId, ct);
                         if (existingStatus is not null &&
-                            existingStatus.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Sent)
+                            (existingStatus.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Sent ||
+                             existingStatus.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Skipped))
                         {
-                            continue;   // atla — ERP'de zaten var
+                            continue;   // atla — ERP'de zaten var veya kullanici haric tuttu
                         }
 
                         // Recursive cascade — child run

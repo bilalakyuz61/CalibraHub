@@ -49,10 +49,11 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                 var repo   = scope.ServiceProvider.GetRequiredService<IIntegrationRepository>();
                 var runner = scope.ServiceProvider.GetRequiredService<IIntegrationRunner>();
                 // Tekrar-push guard icin — kayit bu entegrasyona daha once basariyla gonderildiyse
-                // (Aktarim Kuyrugu / RecordStatus.Sent) atlanir. Servis kaydi yoksa (beklenmez,
+                // (Aktarim Kuyrugu / RecordStatus.Sent) atlanir. Servis kayitlari yoksa (beklenmez,
                 // Program.cs'de her zaman kayitli) guard sessizce devre disi kalir — dispatcher
                 // eskisi gibi kosulsuz calisir; hata firlatmaz.
                 var recordStatusRepo = scope.ServiceProvider.GetService<IIntegrationRecordStatusRepository>();
+                var formMeta = scope.ServiceProvider.GetService<IFormMetadataService>();
 
                 foreach (var formCode in codes)
                 {
@@ -66,6 +67,28 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                     {
                         _log.LogError(ex, "[OnSaveDispatcher] ListByFormCodeAsync hatasi (formCode={FormCode})", formCode);
                         continue;
+                    }
+                    if (integrations.Count == 0) continue;
+
+                    // RecordStatus tablosu IntegrationRunner'in kullandigi "kanonik" RecordId ile
+                    // anahtarlanir: Forms.BaseRecordKey "Id" degilse (orn. Document formlarinda
+                    // "DocumentNumber") IntegrationRunner.RunInternalAsync sample.RecordId'yi (yani
+                    // "TKL202600000013" gibi is anahtarini) kullanir — bu metoda gelen ham recordId
+                    // ("13") degil. Guard'in dogru satiri bulmasi icin ayni cozumleme burada bir kez
+                    // (formCode basina) tekrarlanir; formMeta yoksa/hata olursa ham recordId'ye duser.
+                    var statusRecordId = recordId;
+                    if (recordStatusRepo is not null && formMeta is not null)
+                    {
+                        try
+                        {
+                            var sample = await formMeta.GetSampleRecordAsync(formCode, recordId, CancellationToken.None);
+                            if (sample?.RecordId is { Length: > 0 } resolvedId)
+                                statusRecordId = resolvedId;
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.LogWarning(ex, "[OnSaveDispatcher] GetSampleRecordAsync hatasi — guard ham recordId ile devam ediyor (formCode={FormCode})", formCode);
+                        }
                     }
 
                     foreach (var integ in integrations.Where(i => i.IsActive))
@@ -84,11 +107,11 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                                     t.IsActive && t.TriggerType == IntegrationTriggerType.OnSave);
                                 if (ParseOnlyIfNotSent(onSaveTrigger?.Config))
                                 {
-                                    var existingStatus = await recordStatusRepo.GetAsync(integ.Id, recordId, CancellationToken.None);
+                                    var existingStatus = await recordStatusRepo.GetAsync(integ.Id, statusRecordId, CancellationToken.None);
                                     if (existingStatus?.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Sent)
                                     {
                                         _log.LogInformation("[OnSaveDispatcher] {IntegrationName} (#{Id}) atlandi — zaten gonderilmis (RecordStatus.Sent) — recordId={RecordId}",
-                                            integ.Name, integ.Id, recordId);
+                                            integ.Name, integ.Id, statusRecordId);
                                         continue;
                                     }
                                 }
@@ -118,5 +141,28 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                     string.Join(",", codes), recordId);
             }
         });
+    }
+
+    /// <summary>
+    /// Trigger Config JSON'indan onlyIfNotSent bayragini okur. Alan yoksa veya JSON parse
+    /// hatasi olursa varsayilan TRUE (guvenli taraf) — WidgetsController.ParseOnlyIfNotSent
+    /// ile ayni davranis (Wizard Adim 5 "Sadece bir kez gonder" anahtari).
+    /// </summary>
+    private static bool ParseOnlyIfNotSent(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson)) return true; // default TRUE
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(configJson);
+            if (doc.RootElement.TryGetProperty("onlyIfNotSent", out var v))
+                return v.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.True  => true,
+                    System.Text.Json.JsonValueKind.False => false,
+                    _ => true,
+                };
+        }
+        catch { /* malformed JSON → default true */ }
+        return true;
     }
 }
