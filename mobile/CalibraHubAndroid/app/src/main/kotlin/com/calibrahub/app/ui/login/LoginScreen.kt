@@ -300,14 +300,25 @@ private data class LockLayerSpec(
 
 /**
  * 3 katman — hepsi [LockDialWord]'ün aynı 10 harfini, aynı yarıçap bandında taşır. Taban
- * fazları kasıtlı farklı + kesirli (0 / +0.35 / -0.30 slot) → boşta üç kopya hafif kaymış
- * açılarda üst üste biner ("hayalet" görünüm). Alpha değerleri kademeli (derinlik hissi);
- * üçü hizalandığında toplam kaplama ~%93'e çıkar ve tek net kelime gibi görünür.
+ * fazları TAM ÜÇTE-BİR TUR ayrık (0 / +10/3 / -10/3 slot ≈ 0° / +120° / -120°) → boşta üç
+ * kopya çemberin üç ayrı üçte-birine SERPİŞTİRİLİR: her 36°'lik harf diliminde üç katman
+ * birbirinden 12° arayla üç ayrı alt-konumda oturur, dolayısıyla aynı harf üç kez neredeyse
+ * üst üste yığılmaz — marker çevresinde üç FARKLI harf (üç farklı katmandan) iç içe görünür ve
+ * üç ayrı katman olduğu açıkça ayırt edilir (eski ~13°'lik toplam span'de üçü tek harf gibi
+ * kümeleniyordu, "3 katman" hissi kayboluyordu). Alpha değerleri kademeli (derinlik hissi)
+ * katman ayrımını pekiştirir; üçü hizalandığında (yalnız sunucu onayıyla) toplam kaplama
+ * ~%93'e çıkar ve tek net kelime gibi görünür.
+ *
+ * NOT — simetri tuzağı: +10/3 ve -10/3 BİLEREK üçte-bir (yarım DEĞİL) seçildi. Yarım-slot
+ * simetride (ör. +3.5 / -3.5) iki katmanın farkı (3.5 - (-3.5) = 7.0) TAM SAYIYA düşer ve bu
+ * ikili kendi arasında yazarak hizalanabilir hale gelirdi; üçte-bir simetride fark her zaman
+ * 2/3 slot (kesirli) kalır — "yazarak çözülemez" garantisi ikili bazında da yapısal olarak
+ * korunur (bkz. [LockLayerSpec] dokümantasyonu).
  */
 private val LockDialLayers = listOf(
-    LockLayerSpec(baseScramble =  0.00f, direction = +1, alpha = 0.55f),
-    LockLayerSpec(baseScramble =  0.35f, direction = -1, alpha = 0.60f),
-    LockLayerSpec(baseScramble = -0.30f, direction = +1, alpha = 0.65f),
+    LockLayerSpec(baseScramble = 0.00f,                        direction = +1, alpha = 0.55f),
+    LockLayerSpec(baseScramble = LockDialWord.length / 3f,     direction = -1, alpha = 0.60f),
+    LockLayerSpec(baseScramble = -(LockDialWord.length / 3f),  direction = +1, alpha = 0.65f),
 )
 
 private const val LockDialRadiusDp = 74f   // üç katmanın da PAYLAŞTIĞI ortak yarıçap
@@ -393,7 +404,8 @@ private fun CalibraLoginBadge(
  *
  * Durum davranışları:
  * - Idle: kadran tamamen sabittir (sürekli animasyon yok); katmanlar taban faz farklarıyla
- *   hizasız durur (üst üste binen harfler karışık, kelime oluşmaz).
+ *   (üçte-bir tur ayrık) hizasız durur — üç kopya çember boyunca serpiştirilmiş konumlanır,
+ *   aynı harf üç kez üst üste yığılmaz, üç katman net ayırt edilir; kelime yine de oluşmaz.
  * - Typing: her karakter bir katmanı bir slot döndürür (tuş sırası katmanları döngüsel
  *   gezer), silme geri sarar; spring geçişi mekanik "dişli" hissi verir. Taban fazlar
  *   kesirli olduğundan yazarken katmanlar arası fark asla tam sayıya düşmez — CALIBRAHUB
