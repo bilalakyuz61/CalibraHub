@@ -576,8 +576,20 @@ export default function SmartBoard(props) {
     }
   }, [exporting, isPaginated, apiUrl, pageSize, search, filters, filteredEntities, masterWidgets, boardKey, title])
 
-  var visibleIds = userConfig && Array.isArray(userConfig.visibleIds) ? userConfig.visibleIds : null
-  var order = userConfig && Array.isArray(userConfig.order) ? userConfig.order : null
+  // Kart modu: userConfig/widgetConfigService (localStorage-only) — AYNEN eskisi
+  // gibi, degismedi. Tablo modu: tableColumnConfig/columnConfigService (backend +
+  // localStorage fallback) — SmartColumnSettings'in urettigi genisletilmis sema.
+  // Ikisi birbirinden tamamen izole; SmartCard'a giden visibleIds/order kart
+  // modunda HICBIR ZAMAN tableColumnConfig'ten etkilenmez.
+  var isTableMode = viewMode === 'table'
+  var visibleIds = isTableMode
+    ? (tableColumnConfig && Array.isArray(tableColumnConfig.visibleIds) ? tableColumnConfig.visibleIds : null)
+    : (userConfig && Array.isArray(userConfig.visibleIds) ? userConfig.visibleIds : null)
+  var order = isTableMode
+    ? (tableColumnConfig && Array.isArray(tableColumnConfig.order) ? tableColumnConfig.order : null)
+    : (userConfig && Array.isArray(userConfig.order) ? userConfig.order : null)
+  var tableColumnFormats = (isTableMode && tableColumnConfig && tableColumnConfig.columns && typeof tableColumnConfig.columns === 'object')
+    ? tableColumnConfig.columns : null
 
   var meshStyle = isDark
     ? {
@@ -740,9 +752,9 @@ export default function SmartBoard(props) {
             acilir; kart modunda AYNEN eskisi gibi Widget Ayarlari (SmartBoardConfigPanel).
             Regresyonsuz: viewMode!=='table' oldugunda bu dal hicbir zaman calismaz. */}
         <button
-          onClick={function () { if (viewMode === 'table') setColumnSettingsOpen(true); else setConfigOpen(true) }}
+          onClick={function () { if (isTableMode) setColumnSettingsOpen(true); else setConfigOpen(true) }}
           className="p-2.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] transition-all group flex-shrink-0"
-          title={viewMode === 'table' ? 'Sütun Ayarları' : 'Widget Ayarlari'}
+          title={isTableMode ? 'Sütun Ayarları' : 'Widget Ayarlari'}
         >
           <Settings2 size={15} className="text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors" />
         </button>
@@ -850,6 +862,7 @@ export default function SmartBoard(props) {
               masterWidgets={masterWidgets}
               visibleIds={visibleIds}
               order={order}
+              columnConfig={tableColumnFormats}
               onRefresh={refreshUrl ? refreshBoard : undefined}
               recentIds={recentIds}
               isDark={isDark}
@@ -875,7 +888,7 @@ export default function SmartBoard(props) {
         )}
       </div>
 
-      {/* ── Widget Config Panel ─────────────── */}
+      {/* ── Widget Config Panel (kart modu) ─── */}
       <SmartBoardConfigPanel
         isOpen={configOpen}
         onClose={function () { setConfigOpen(false) }}
@@ -883,6 +896,20 @@ export default function SmartBoard(props) {
         masterWidgets={masterWidgets}
         onSaved={handleConfigSaved}
       />
+
+      {/* ── Sutun Ayarlari Paneli (tablo modu) ─
+          Sadece isTableMode iken mount edilir — kart modu board'lari icin bu
+          bilesen HIC render edilmez (extra network call / hook calismaz,
+          regresyon riski sifir). */}
+      {isTableMode && (
+        <SmartColumnSettings
+          isOpen={columnSettingsOpen}
+          onClose={function () { setColumnSettingsOpen(false) }}
+          boardKey={boardKey}
+          masterWidgets={masterWidgets}
+          onSaved={function (cfg) { setTableColumnConfig(cfg) }}
+        />
+      )}
 
       {/* ── Filter Panel (hayalet mod) ─────── */}
       <SmartBoardFilterPanel

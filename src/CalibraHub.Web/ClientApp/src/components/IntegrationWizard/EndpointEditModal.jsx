@@ -11,7 +11,8 @@
  *
  * Hem Wizard Step 2'de inline hem admin sayfasında kullanılır.
  */
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Save, X, Loader2, Settings2, FileCode, Maximize2, Minimize2, Sparkles, Search, Download, BookmarkPlus, Trash2, ChevronDown, KeyRound } from 'lucide-react'
 
 function getCsrf() {
@@ -756,24 +757,72 @@ function SaveTemplateModal({ initial, onClose, onSaved }) {
  * Combobox davranışı:
  *   • Free-text yazma: kullanıcı kendi URL'ini girebilir
  *   • Dropdown: katalog (mevcut endpoint'lerden distinct) Resource bazında gruplı
+ *   • Method filtresi: `httpMethod` prop'u dolu ise yalnız o method'a uyan
+ *     şablonlar listelenir (Temel tab'ındaki HTTP Method select'i ile senkron;
+ *     metin aramasıyla AND mantığında birleşir)
  *   • Arama: input'a yazılan harf URL/resource/method/name'de filtre
  *   • Seçim: URL + HttpMethod + Description otomatik dolar (parent onPick)
+ *   • Dropdown paneli document.body'e PORTAL edilir — modal'in `.eem-content`
+ *     (overflow:auto) ve `.eem-body`/`.eem-modal` (overflow:hidden)
+ *     kapsayıcılarına hapsolup kırpılmasını önler. Konum trigger'in
+ *     getBoundingClientRect()'inden hesaplanır, scroll/resize'da güncellenir.
  *
  * Katalog: GET /Integrations/api/endpoint-catalog (distinct URL+method)
  * Cache: parent component fetch eder, prop olarak verir (modal her açılışta
  * tekrar fetch'lemesin).
  */
-function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled }) {
-  const [open, setOpen]     = useState(false)
-  const [query, setQuery]   = useState('')
-  const wrapRef             = useRef(null)
-  const inputRef            = useRef(null)
+function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled, httpMethod }) {
+  const [open, setOpen]       = useState(false)
+  const [query, setQuery]     = useState('')
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 280, maxHeight: 360 })
+  const wrapRef  = useRef(null)   // trigger (input + chevron buton)
+  const inputRef = useRef(null)
+  const menuRef  = useRef(null)   // portal edilen panel — dışarı-tık algısına dahil edilmeli
 
-  // Click outside → kapat
-  useEffect(() => {
+  // Panel konumunu trigger'in bounding rect'inden hesapla. Alt tarafta yeterli
+  // yer yoksa (modal alt kenarına yakınsa) yukarı açılır (flip) — ekranı taşmaz.
+  function calcPos() {
+    if (!wrapRef.current) return
+    const r = wrapRef.current.getBoundingClientRect()
+    const gap = 4
+    const spaceBelow = window.innerHeight - r.bottom - 12
+    const spaceAbove = r.top - 12
+    const preferred = 360
+    const width = Math.max(r.width, 260)
+    if (spaceBelow >= 200 || spaceBelow >= spaceAbove) {
+      setMenuPos({ top: r.bottom + gap, left: r.left, width, maxHeight: Math.max(160, Math.min(preferred, spaceBelow)) })
+    } else {
+      const maxHeight = Math.max(160, Math.min(preferred, spaceAbove))
+      setMenuPos({ top: r.top - gap - maxHeight, left: r.left, width, maxHeight })
+    }
+  }
+
+  // Açılışta konumu senkron hesapla (paint öncesi) — 0,0'da flash olmasın
+  useLayoutEffect(() => {
     if (!open) return
+    calcPos()
+  }, [open])
+
+  // Scroll (capture — iç içe scroll container'lar için) / resize'da yeniden hesapla
+  useEffect(() => {
+    if (!open) return undefined
+    const onReposition = () => calcPos()
+    window.addEventListener('scroll', onReposition, true)
+    window.addEventListener('resize', onReposition)
+    return () => {
+      window.removeEventListener('scroll', onReposition, true)
+      window.removeEventListener('resize', onReposition)
+    }
+  }, [open])
+
+  // Dışarı tık → kapat. Panel portal ile document.body'e render edildiği için
+  // hem trigger hem de portal panel ref'i "içeri" sayılmalı.
+  useEffect(() => {
+    if (!open) return undefined
     const handler = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
+      if (wrapRef.current && wrapRef.current.contains(e.target)) return
+      if (menuRef.current && menuRef.current.contains(e.target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -781,16 +830,24 @@ function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled }) {
 
   // Esc → kapat
   useEffect(() => {
-    if (!open) return
+    if (!open) return undefined
     const h = (e) => { if (e.key === 'Escape') setOpen(false) }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [open])
 
-  // Filtrele + Resource bazlı grupla
+  // Method bazlı ön-filtre (Fix 1) — httpMethod boşsa tüm şablonlar geçer
+  const methodFiltered = useMemo(() => {
+    const list = catalog || []
+    if (!httpMethod) return list
+    const m = String(httpMethod).toUpperCase()
+    return list.filter(it => (it.httpMethod || 'POST').toUpperCase() === m)
+  }, [catalog, httpMethod])
+
+  // Metin filtresi (method-filtreli liste üzerinde AND) + Resource bazlı grupla
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const filtered = (catalog || []).filter(it => {
+    const filtered = methodFiltered.filter(it => {
       if (!q) return true
       return (it.urlTemplate || '').toLowerCase().includes(q)
         || (it.resource    || '').toLowerCase().includes(q)
@@ -807,9 +864,10 @@ function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled }) {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b, 'tr'))
       .map(([resource, items]) => ({ resource, items }))
-  }, [catalog, query])
+  }, [methodFiltered, query])
 
-  const totalCount  = (catalog || []).length
+  const totalCount    = (catalog || []).length
+  const methodCount   = methodFiltered.length
   const filteredCount = grouped.reduce((sum, g) => sum + g.items.length, 0)
 
   return (
@@ -844,59 +902,53 @@ function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled }) {
         </button>
       </div>
 
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
-          background: 'var(--iw-surface)', border: '1px solid var(--iw-indigo-bdr)',
-          borderRadius: 8, boxShadow: '0 12px 32px rgba(0,0,0,.25)',
-          maxHeight: 360, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      {open && createPortal(
+        <div ref={menuRef} className="eup-menu" style={{
+          top: menuPos.top, left: menuPos.left, width: menuPos.width, maxHeight: menuPos.maxHeight,
         }}>
           {/* Sticky search */}
-          <div style={{
-            padding: 8, borderBottom: '1px solid var(--iw-border)',
-            background: 'var(--iw-bg)', display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <Search size={12} style={{ color: 'var(--iw-muted)' }} />
+          <div className="eup-menu-search">
+            <Search size={12} />
             <input
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder={`Resource / URL ara... (${filteredCount} / ${totalCount})`}
-              style={{
-                flex: 1, padding: '4px 6px', fontSize: 12,
-                border: 'none', outline: 'none', background: 'transparent',
-                color: 'var(--iw-text)',
-              }}
+              placeholder={`Resource / URL ara... (${filteredCount} / ${methodCount})`}
+              className="eup-menu-search-input"
             />
           </div>
 
+          {/* Method filtre bilgisi — hangi method'a göre daraltıldığını gösterir */}
+          {httpMethod && totalCount > 0 && (
+            <div className="eup-menu-filter-note">
+              <span className="eup-menu-filter-badge">{httpMethod}</span>
+              method'una uygun {methodCount} şablon{methodCount !== totalCount ? ` (toplam ${totalCount})` : ''}
+            </div>
+          )}
+
           {/* Liste */}
-          <div style={{ overflowY: 'auto', flex: 1 }}>
+          <div className="eup-menu-list">
             {totalCount === 0 && (
-              <div style={{
-                padding: 20, textAlign: 'center', fontSize: 12, color: 'var(--iw-muted)',
-              }}>
+              <div className="eup-menu-empty">
                 Katalog boş. Hub → Endpointler tab'ından "Toplu Import" ile
                 NetsisRestEndpoints.csv yükleyebilirsiniz.
               </div>
             )}
-            {totalCount > 0 && filteredCount === 0 && (
-              <div style={{
-                padding: 20, textAlign: 'center', fontSize: 12, color: 'var(--iw-muted)',
-              }}>
+            {totalCount > 0 && methodCount === 0 && (
+              <div className="eup-menu-empty">
+                <strong>{httpMethod}</strong> method'una uygun şablon yok. Yukarıdaki inputa
+                yazdığınız değer custom URL olarak kalır.
+              </div>
+            )}
+            {totalCount > 0 && methodCount > 0 && filteredCount === 0 && (
+              <div className="eup-menu-empty">
                 Eşleşen endpoint yok. Yukarıdaki inputa yazdığınız değer custom URL olarak kalır.
               </div>
             )}
             {grouped.map(({ resource, items }) => (
               <div key={resource}>
-                <div style={{
-                  position: 'sticky', top: 0, zIndex: 1,
-                  padding: '5px 10px', fontSize: 10, fontWeight: 700,
-                  textTransform: 'uppercase', letterSpacing: 0.5,
-                  background: 'var(--iw-bg)', color: 'var(--iw-muted)',
-                  borderBottom: '1px solid var(--iw-border)',
-                }}>
-                  {resource} <span style={{ opacity: 0.6, fontWeight: 500 }}>({items.length})</span>
+                <div className="eup-menu-group-header">
+                  {resource} <span>({items.length})</span>
                 </div>
                 {items.map((it, i) => {
                   const itKind = classifyInputType(it.inputType)
@@ -904,32 +956,13 @@ function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled }) {
                   return (
                     <button key={`${resource}-${i}`}
                             type="button"
-                            onClick={() => { onPick(it); setOpen(false); setQuery('') }}
-                            style={{
-                              display: 'grid', gridTemplateColumns: '60px 1fr auto', gap: 8,
-                              width: '100%', padding: '6px 10px',
-                              background: 'transparent', border: 'none',
-                              borderBottom: '1px solid var(--iw-border)',
-                              textAlign: 'left', cursor: 'pointer',
-                              alignItems: 'center',
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'var(--iw-hover)'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                      <span style={{
-                        padding: '1px 6px', borderRadius: 3,
-                        fontSize: 9, fontWeight: 700, textAlign: 'center',
-                        background: 'var(--iw-indigo-bg)', color: 'var(--iw-indigo-color)',
-                      }}>{(it.httpMethod || 'POST').toUpperCase()}</span>
-                      <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                        <div style={{
-                          fontSize: 11, fontFamily: 'monospace', color: 'var(--iw-text)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>{it.urlTemplate}</div>
+                            className="eup-menu-item"
+                            onClick={() => { onPick(it); setOpen(false); setQuery('') }}>
+                      <span className="eup-menu-item-method">{(it.httpMethod || 'POST').toUpperCase()}</span>
+                      <div className="eup-menu-item-body">
+                        <div className="eup-menu-item-url">{it.urlTemplate}</div>
                         {(it.summary || it.methodName || it.name) && (
-                          <div style={{
-                            fontSize: 10, color: 'var(--iw-muted)',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
+                          <div className="eup-menu-item-sub">
                             {it.summary || it.methodName || it.name}
                           </div>
                         )}
@@ -937,12 +970,10 @@ function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled }) {
                       {/* InputType rozeti — kullanıcıya body tipini göster */}
                       {it.inputType && (
                         <span title={`InputType: ${it.inputType} — ${inputTypeLabel(itKind)}`}
+                              className="eup-menu-item-badge"
                               style={{
-                                padding: '1px 6px', borderRadius: 3,
-                                fontSize: 9, fontWeight: 600,
-                                fontFamily: 'monospace', whiteSpace: 'nowrap',
-                                background: `var(--iw-${itColor}-bg)`,
-                                color: `var(--iw-${itColor}-color)`,
+                                background: `var(--eup-${itColor}-bg)`,
+                                color: `var(--eup-${itColor}-color)`,
                               }}>
                           {it.inputType}
                         </span>
@@ -953,7 +984,8 @@ function EndpointUrlPicker({ value, onChange, onPick, catalog, disabled }) {
               </div>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -1391,10 +1423,12 @@ export default function EndpointEditModal({ profileId, profiles, endpoint, onClo
                       }}
                       catalog={catalog}
                       disabled={saving}
+                      httpMethod={form.httpMethod}
                     />
                     <span className="iw-field-hint">
                       Profile'ın base URL'i sonuna eklenir. Sağdaki ▾ ile katalogdan seçin
-                      ({catalog.length} endpoint), veya custom URL yazın.
+                      ({catalog.length} endpoint), veya custom URL yazın — liste soldaki HTTP
+                      Method'a göre daraltılır.
                     </span>
                   </div>
                 </div>

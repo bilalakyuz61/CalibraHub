@@ -32,12 +32,12 @@
  */
 import { useMemo } from 'react'
 import SmartTableRow from './SmartTableRow'
-import { resolveIcon, resolveChipWidth } from './DynamicWidgetFactory'
+import { resolveIcon, resolveChipWidth, TABLE_DELETE_COL_WIDTH } from './DynamicWidgetFactory'
 
-// DELETE_COL_WIDTH export edilir — SmartTableRow, kimlik hucresinin sticky-left
-// offset'ini bu sabitten turetir (Sil sutunu 0'dan basliyor, kimlik hemen
-// ardindan gelir — tek kaynak, iki dosyada sihirli sayi tekrari yok).
-export var DELETE_COL_WIDTH   = 44
+// DELETE_COL_WIDTH, DynamicWidgetFactory.js'ten gelir (SmartTableRow de ayni
+// sabiti kullanir — kimlik hucresinin sticky-left offset'i icin; iki dosyanin
+// birbirini import etmesi/dongusel import yerine ortak kaynaktan paylasilir).
+var DELETE_COL_WIDTH   = TABLE_DELETE_COL_WIDTH
 var IDENTITY_COL_WIDTH = 280
 var ACTION_COL_WIDTH   = 56
 

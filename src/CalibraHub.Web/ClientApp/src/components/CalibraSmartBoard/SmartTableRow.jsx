@@ -29,12 +29,15 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Trash2, Loader2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
-import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
+import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon, TABLE_DELETE_COL_WIDTH } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import { getTopBody } from '../../utils/topPortal'
-import { DELETE_COL_WIDTH } from './SmartTable'
+
+// SmartTable.jsx ile ayni sabit — dongusel import'tan kacinmak icin
+// DynamicWidgetFactory.js'ten (bagimliligi olmayan ortak dosya) gelir.
+var DELETE_COL_WIDTH = TABLE_DELETE_COL_WIDTH
 
 var hoverBgMap = {
   amber: 'hover:bg-amber-100 dark:hover:bg-amber-500/10',

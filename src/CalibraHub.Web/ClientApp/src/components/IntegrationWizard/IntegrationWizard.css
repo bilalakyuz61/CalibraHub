@@ -602,3 +602,112 @@ body.app-theme-dark .iq-root {
   padding: 12px 16px; border-top: 1px solid var(--iw-border);
   background: var(--iw-bg); flex-shrink: 0;
 }
+
+/* ── EndpointUrlPicker dropdown paneli — createPortal ile document.body'e
+   render edilir (modal'in overflow:hidden/auto kapsayıcılarına hapsolup
+   kırpılmasını önlemek için). Portal, .iw-root'un DOM alt ağacı DIŞINDA
+   olduğundan --iw-* değişkenlerini miras alamaz — bu yüzden kendi
+   light/dark değişken setini taşır (tek dark selector: body.app-theme-dark). */
+.eup-menu {
+  color-scheme: light;
+  --eup-surface:       #ffffff;
+  --eup-border:        #e2e8f0;
+  --eup-text:          #0f172a;
+  --eup-muted:         #64748b;
+  --eup-bg:            #f8fafc;
+  --eup-hover:         #f1f5f9;
+  --eup-indigo-bg:     rgba(99,102,241,.10);
+  --eup-indigo-color:  #6366f1;
+  --eup-indigo-bdr:    rgba(99,102,241,.35);
+  --eup-emerald-bg:    rgba(16,185,129,.10);
+  --eup-emerald-color: #059669;
+  --eup-amber-bg:      rgba(245,158,11,.10);
+  --eup-amber-color:   #d97706;
+  --eup-rose-bg:       rgba(239,68,68,.10);
+  --eup-rose-color:    #dc2626;
+  --eup-slate-bg:      #f1f5f9;
+  --eup-slate-color:   #64748b;
+
+  position: fixed; z-index: 10050;
+  display: flex; flex-direction: column;
+  background: var(--eup-surface);
+  border: 1px solid var(--eup-indigo-bdr);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.25);
+  overflow: hidden;
+}
+body.app-theme-dark .eup-menu {
+  color-scheme: dark;
+  --eup-surface:       #0d1323;
+  --eup-border:        rgba(255,255,255,.08);
+  --eup-text:          #e2e8f0;
+  --eup-muted:         #94a3b8;
+  --eup-bg:            #080c17;
+  --eup-hover:         #111827;
+  --eup-indigo-bg:     rgba(99,102,241,.18);
+  --eup-indigo-color:  #a5b4fc;
+  --eup-indigo-bdr:    rgba(99,102,241,.4);
+  --eup-emerald-bg:    rgba(16,185,129,.18);
+  --eup-emerald-color: #34d399;
+  --eup-amber-bg:      rgba(245,158,11,.18);
+  --eup-amber-color:   #fbbf24;
+  --eup-rose-bg:       rgba(239,68,68,.18);
+  --eup-rose-color:    #f87171;
+  --eup-slate-bg:      rgba(255,255,255,.06);
+  --eup-slate-color:   rgba(255,255,255,.6);
+  box-shadow: 0 12px 32px rgba(0,0,0,.55);
+}
+.eup-menu-search {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 8px; border-bottom: 1px solid var(--eup-border);
+  background: var(--eup-bg);
+}
+.eup-menu-search svg { color: var(--eup-muted); flex-shrink: 0; }
+.eup-menu-search-input {
+  flex: 1; padding: 4px 6px; font-size: 12px;
+  border: none; outline: none; background: transparent; color: var(--eup-text);
+}
+.eup-menu-filter-note {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 6px 10px; font-size: 11px; color: var(--eup-muted);
+  border-bottom: 1px solid var(--eup-border); background: var(--eup-indigo-bg);
+}
+.eup-menu-filter-badge {
+  padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 700;
+  background: var(--eup-indigo-color); color: #fff;
+}
+.eup-menu-list { overflow-y: auto; flex: 1; }
+.eup-menu-empty { padding: 20px; text-align: center; font-size: 12px; color: var(--eup-muted); line-height: 1.5; }
+.eup-menu-group-header {
+  position: sticky; top: 0; z-index: 1;
+  padding: 5px 10px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px;
+  background: var(--eup-bg); color: var(--eup-muted);
+  border-bottom: 1px solid var(--eup-border);
+}
+.eup-menu-group-header span { opacity: .6; font-weight: 500; }
+.eup-menu-item {
+  display: grid; grid-template-columns: 60px 1fr auto; gap: 8px;
+  width: 100%; padding: 6px 10px;
+  background: transparent; border: none; border-bottom: 1px solid var(--eup-border);
+  text-align: left; cursor: pointer; align-items: center;
+  color: inherit; font: inherit;
+}
+.eup-menu-item:hover { background: var(--eup-hover); }
+.eup-menu-item-method {
+  padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; text-align: center;
+  background: var(--eup-indigo-bg); color: var(--eup-indigo-color);
+}
+.eup-menu-item-body { min-width: 0; overflow: hidden; }
+.eup-menu-item-url {
+  font-size: 11px; font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--eup-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.eup-menu-item-sub {
+  font-size: 10px; color: var(--eup-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.eup-menu-item-badge {
+  padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 600;
+  font-family: ui-monospace, Menlo, Consolas, monospace; white-space: nowrap;
+}
