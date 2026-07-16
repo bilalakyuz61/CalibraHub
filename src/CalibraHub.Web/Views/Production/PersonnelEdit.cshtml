@@ -16,6 +16,47 @@
 @* PJAX wrapper — production-defs-pjax.js bu div'i swap eder; üst tab bar dışarıda kalır. *@
 <div id="pdt-tab-content" data-pdt-key="personnel" data-pdt-body-class="page-personnel-edit">
 
+<style>
+    /* Personel ekranı kompaktlaştırma (2026-07-16) — .ux-field/.ux-row2/.ux-row3/input
+       paddingleri Machine/Operation/Shift/ActivityReason/ProjectEdit edit ekranlarıyla
+       PAYLAŞILAN sınıflardır (site.css). Global davranışı değiştirmemek için tüm
+       override'lar yalnızca body.page-personnel-edit altında scope'lanır. */
+    body.page-personnel-edit .ux-edit-content {
+        padding: 16px 22px 20px;
+    }
+    body.page-personnel-edit .ux-edit-pane .ux-field {
+        margin-bottom: 10px;
+        gap: 4px;
+    }
+    body.page-personnel-edit .ux-edit-pane .ux-row2,
+    body.page-personnel-edit .ux-edit-pane .ux-row3 {
+        gap: 12px;
+    }
+    /* Yalnız dikey padding + font-size sıkılaştırılır; sağ/sol padding korunur
+       (tarih alanı .calibra-date-input ikon boşluğu (padding-right:34px) buna bağlı — bkz.
+       calibra-datepicker.css). */
+    body.page-personnel-edit .ux-edit-pane input[type="text"],
+    body.page-personnel-edit .ux-edit-pane input[type="number"],
+    body.page-personnel-edit .ux-edit-pane input[type="email"],
+    body.page-personnel-edit .ux-edit-pane input[type="time"],
+    body.page-personnel-edit .ux-edit-pane input[type="color"],
+    body.page-personnel-edit .ux-edit-pane textarea,
+    body.page-personnel-edit .ux-edit-pane select {
+        padding-top: 7px;
+        padding-bottom: 7px;
+        font-size: 13px;
+    }
+    body.page-personnel-edit .ux-edit-pane textarea {
+        min-height: 54px;
+    }
+    body.page-personnel-edit .ux-edit-pane .ux-hint {
+        margin-top: 3px;
+    }
+    body.page-personnel-edit .ux-edit-pane .ux-switch-row {
+        margin-top: 2px;
+    }
+</style>
+
 <form class="integrator-form" style="display:none" aria-hidden="true"
       data-collaboration-record-type="PERSONNEL_EDIT"
       data-collaboration-record-id="@_colId"
@@ -47,9 +88,6 @@
 
     <section class="ux-edit-content">
       <div class="ux-edit-pane is-active" data-tab="general">
-        <h2>Genel Bilgiler</h2>
-        <div class="ux-edit-hint">Personel kimlik, iletişim ve sistem bilgileri.</div>
-
         <input type="hidden" id="pe-id" value="@(Model?.Id.ToString() ?? "")" />
 
         <div class="ux-field ux-field--wide">
@@ -85,16 +123,12 @@
           </div>
         </div>
 
-        <div class="ux-row2">
+        <div class="ux-row3">
           <div class="ux-field">
             <label for="pe-birthdate">Doğum Tarihi</label>
             <input id="pe-birthdate" type="date"
                    value="@(Model?.BirthDate?.ToString("yyyy-MM-dd") ?? "")" />
           </div>
-          <div class="ux-field"></div>
-        </div>
-
-        <div class="ux-row2">
           <div class="ux-field">
             <label for="pe-pin">PIN Kodu</label>
             <input id="pe-pin" type="text" maxlength="20"
@@ -107,30 +141,31 @@
           </div>
         </div>
 
-        <div class="ux-field ux-field--wide">
-          <label for="pe-user">Sistem Kullanıcısı</label>
-          <select id="pe-user" data-current="@(Model?.UserId?.ToString() ?? "")">
-            <option value="">— Sistem girişi yok —</option>
-          </select>
-          <span class="ux-hint">Bu personelin web/masaüstü giriş hesabı varsa eşleştirin. Boş bırakılırsa yalnızca terminalde PIN/kart ile çalışır.</span>
-        </div>
-
-        <div class="ux-field ux-field--wide">
-          <label for="pe-location">Varsayılan Depo</label>
-          <select id="pe-location" data-current="@(Model?.LocationId?.ToString() ?? "")">
-            <option value="">— Seçiniz —</option>
-            @{
-                var personnelLocs = ViewData["PersonnelLocationList"] as System.Collections.IEnumerable;
-                if (personnelLocs != null)
-                {
-                    foreach (dynamic loc in personnelLocs)
-                    {
-                        <option value="@loc.Id">@loc.Name</option>
-                    }
-                }
-            }
-          </select>
-          <span class="ux-hint">Personelin ihtiyaç kayıtlarında otomatik seçilecek depo. Değiştirilebilir.</span>
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="pe-user">Sistem Kullanıcısı</label>
+            <select id="pe-user" data-current="@(Model?.UserId?.ToString() ?? "")">
+              <option value="">— Sistem girişi yok —</option>
+            </select>
+            <span class="ux-hint">Bu personelin web/masaüstü giriş hesabı varsa eşleştirin. Boş bırakılırsa yalnızca terminalde PIN/kart ile çalışır.</span>
+          </div>
+          <div class="ux-field">
+            <label for="pe-location">Varsayılan Depo</label>
+            <select id="pe-location" data-current="@(Model?.LocationId?.ToString() ?? "")">
+              <option value="">— Seçiniz —</option>
+              @{
+                  var personnelLocs = ViewData["PersonnelLocationList"] as System.Collections.IEnumerable;
+                  if (personnelLocs != null)
+                  {
+                      foreach (dynamic loc in personnelLocs)
+                      {
+                          <option value="@loc.Id">@loc.Name</option>
+                      }
+                  }
+              }
+            </select>
+            <span class="ux-hint">Personelin ihtiyaç kayıtlarında otomatik seçilecek depo. Değiştirilebilir.</span>
+          </div>
         </div>
 
         <div class="ux-field ux-field--wide">

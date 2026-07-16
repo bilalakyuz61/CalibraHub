@@ -187,6 +187,14 @@ public sealed class SmartBoardEntityBuilder
         return this;
     }
 
+    /// <summary>Telefon widget — deger frontend'de "0 (5XX) XXX XX XX" formatiyla gosterilir (dataType "phone").</summary>
+    public SmartBoardEntityBuilder AddPhoneWidget(string id, string label, string? value,
+        string? detail = null, string color = "indigo")
+    {
+        _widgets.Add(new { id, type = "data", dataType = "phone", label, value, detail, color });
+        return this;
+    }
+
     /// <summary>Numeric widget — value string olarak formatlanmis sayi.</summary>
     public SmartBoardEntityBuilder AddNumericWidget(string id, string label, string value,
         string? detail = null, string color = "indigo")

@@ -308,7 +308,7 @@ public sealed class FinanceController : Controller
         var contactsSchema = await _widgetService.GetFormSchemaByCodeAsync("CONTACTS", ct);
         var masterWidgets = SmartBoardFilterHelpers.BuildAdminFormWidgets(contactsSchema);
         var typeOptions = SmartBoardFilterHelpers.ToOptionsList(new[] { "Musteri", "Tedarikci" });
-        masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_phone",    "Telefon",  "text"));
+        masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_phone",    "Telefon",  "phone"));
         masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_email",    "E-Posta",  "text"));
         masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_tax_no",   "Vergi No", "text"));
         masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_city",     "İl",       "text"));
@@ -330,7 +330,7 @@ public sealed class FinanceController : Controller
         {
             var widgets = new List<object>();
             if (!string.IsNullOrWhiteSpace(account.Phone))
-                widgets.Add(new { id = "sys_phone",  type = "data", dataType = "text", label = "Telefon",  value = account.Phone,      color = "blue"    });
+                widgets.Add(new { id = "sys_phone",  type = "data", dataType = "phone", label = "Telefon",  value = account.Phone,      color = "blue"    });
             if (!string.IsNullOrWhiteSpace(account.Email))
                 widgets.Add(new { id = "sys_email",  type = "data", dataType = "text", label = "E-Posta",  value = account.Email,      color = "cyan"    });
             if (!string.IsNullOrWhiteSpace(account.TaxNumber))

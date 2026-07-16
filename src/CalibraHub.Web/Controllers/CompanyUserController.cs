@@ -148,7 +148,7 @@ public sealed class CompanyUserController : Controller
                 if (u.SupervisorUserId.HasValue && supervisorLookup.TryGetValue(u.SupervisorUserId.Value, out var supName))
                     eb.AddTextWidget("w_sup", "Amir", supName, color: "blue");
                 if (!string.IsNullOrWhiteSpace(u.PhoneNumber))
-                    eb.AddTextWidget("w_phone", "Telefon", u.PhoneNumber, color: "emerald");
+                    eb.AddPhoneWidget("w_phone", "Telefon", u.PhoneNumber, color: "emerald");
 
                 eb.WithPrimaryAction(
                     label: "Düzenle",

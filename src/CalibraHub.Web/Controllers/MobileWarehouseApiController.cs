@@ -896,4 +896,263 @@ public sealed class MobileWarehouseApiController : ControllerBase
             request.Notes,
         };
     }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // GET contacts/search?q=<query>&take=<n>&docType=<sales|purchase>
+    // ──────────────────────────────────────────────────────────────────────
+    // Sozlesme (mobil istemci birebir tuketir):
+    //   200 [{ id:int, code:string, name:string }]
+    //   403 { ok:false, message, error }  — yetki yok
+    //
+    // items/search'un CARI karsiligi: Contact tablosunda AccountCode/AccountTitle/TaxNumber LIKE
+    // (Turkce collation) + CompanyId + IsActive + satir gorunurluk kurallari — hepsi
+    // IFinanceService.GetContactsAsync icinde (paylasilan sorgu, masaustu cari rehberiyle ayni).
+    // docType OPSIYONEL tip filtresi: AccountType 1=Musteri, 2=Tedarikci, 3=Her Ikisi.
+    //   sales    → musteri|ikisi (1,3)   purchase → tedarikci|ikisi (2,3)   yoksa → tum cariler.
+
+    /// <summary>Cari arama — irsaliye ekranlarinin cari rehberi (opsiyonel musteri/tedarikci filtresi).</summary>
+    [HttpGet("contacts/search")]
+    public async Task<IActionResult> SearchContacts(
+        [FromQuery] string? q, [FromQuery] int? take, [FromQuery] string? docType, CancellationToken ct)
+    {
+        // Yetki: irsaliye form kodlarindan (Satis/Alis Irsaliyesi) herhangi birinde VIEW.
+        if (await RequirePermissionAsync(DeliveryFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+
+        var query = (q ?? string.Empty).Trim();
+        if (query.Length == 0)
+            return Ok(Array.Empty<object>());
+
+        var pageSize = take.GetValueOrDefault(20);
+        if (pageSize <= 0) pageSize = 20;
+        if (pageSize > 50) pageSize = 50;
+
+        var contacts = await _financeService.GetContactsAsync(null, query, ct);
+        IEnumerable<ContactDto> filtered = contacts.Where(c => c.IsActive);
+
+        if (string.Equals(docType, "sales", StringComparison.OrdinalIgnoreCase))
+            filtered = filtered.Where(c => c.AccountType == 1 || c.AccountType == 3);
+        else if (string.Equals(docType, "purchase", StringComparison.OrdinalIgnoreCase))
+            filtered = filtered.Where(c => c.AccountType == 2 || c.AccountType == 3);
+
+        var result = filtered.Take(pageSize).Select(c => new
+        {
+            id   = c.Id,
+            code = c.AccountCode,
+            name = c.AccountTitle,
+        });
+        return Ok(result);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // POST delivery (irsaliye — FIFO sipariş bağlama)
+    // ──────────────────────────────────────────────────────────────────────
+    // Sozlesme (mobil istemci birebir tuketir — Kotlin delivery-mobile ile PAYLASILAN):
+    //   body: { docType:"purchase"|"sales", contactId:int, note?:string, lines:[{ itemId:int, quantity:number }] }
+    //   200 { ok:true, documentNumber:string,
+    //         lines:[{ itemId:int, linked:[{ orderNumber:string, quantity:number }], unlinkedQuantity:number }] }
+    //   400 { error:string }              — is kurali reddi (docType, cari, kalem, lot/seri/varyant,
+    //                                        bağlantısız-yasak, varsayilan depo yok, eksi bakiye)
+    //   404 { error:string }              — cari veya malzeme bulunamadi/pasif
+    //   403 { ok:false, message, error }  — yetki yok
+    //
+    // Miktarlar ANA BIRIMDE (stock-in/out ile ayni konvansiyon). FIFO tahsisi + stok etkisi +
+    // SourceLineId + DeliveredQuantity repo transaction'inda (SaveDeliveryFifoAsync — web
+    // ConvertOrderToDeliveryAsync ikizi, AYNI bag alanlari). Fiyat: bağlanan satır sipariş
+    // fiyati; bağlantısız satır ResolveLinePrices (standart fiyat listesi cozucu, currency=1).
+
+    public sealed record MobileDeliveryBodyLine(int ItemId, decimal Quantity);
+    public sealed record MobileDeliveryBody(
+        string? DocType, int ContactId, string? Note, IReadOnlyList<MobileDeliveryBodyLine>? Lines);
+
+    /// <summary>Irsaliye (satış teslimat / alış mal kabul) — FIFO ile açık siparişlere bağlar.</summary>
+    [HttpPost("delivery")]
+    public async Task<IActionResult> Delivery([FromBody] MobileDeliveryBody? body, CancellationToken ct)
+    {
+        // (a) docType → yön + form kodu + yazma yetkisi.
+        var isPurchase = string.Equals(body?.DocType, "purchase", StringComparison.OrdinalIgnoreCase);
+        var isSales    = string.Equals(body?.DocType, "sales",    StringComparison.OrdinalIgnoreCase);
+        if (body is null || (!isPurchase && !isSales))
+            return BadRequest(new { error = "Geçersiz belge türü. docType 'sales' veya 'purchase' olmalı." });
+
+        var formCode = isPurchase ? FormCodes.PurchaseDelivery : FormCodes.SalesDelivery;
+        if (await RequirePermissionAsync(new[] { formCode }, WriteActions, ct) is { } denied)
+            return denied;
+
+        if (body.ContactId <= 0)
+            return BadRequest(new { error = "Cari seçimi zorunlu." });
+
+        var lines = (body.Lines ?? Array.Empty<MobileDeliveryBodyLine>()).Where(l => l is not null).ToList();
+        if (lines.Count == 0)
+            return BadRequest(new { error = "En az bir kalem girilmelidir." });
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].ItemId <= 0)
+                return BadRequest(new { error = $"Kalem {i + 1}: geçersiz malzeme." });
+            if (lines[i].Quantity <= 0)
+                return BadRequest(new { error = $"Kalem {i + 1}: miktar 0'dan büyük olmalı." });
+        }
+
+        // Cari doğrulama — aktif olmalı (404, Stock() GET ile aynı HTTP semantiği).
+        var contact = await _financeService.GetContactByIdAsync(body.ContactId, ct);
+        if (contact is null || !contact.IsActive)
+            return NotFound(new { error = "Cari bulunamadı veya pasif." });
+
+        // (b) Lot/seri/varyant takipli malzeme reddi (mobil V1) — Transfer/Sayım ile ortak kapı.
+        var (itemMap, itemError) = await ValidateWriteItemsAsync(lines.Select(l => l.ItemId), ct);
+        if (itemError is not null) return itemError;
+
+        // (c/d) FIFO bağlama + bağlantısız-yasak parametreleri. Okuma-zamanı varsayılanları:
+        //       bağlama AÇIK (?? true), yasak KAPALI (?? false). Belge yönüne göre ayrı anahtar.
+        var fifoKey   = isPurchase ? StockParameters.PurchaseDeliveryFifoBindKey     : StockParameters.SalesDeliveryFifoBindKey;
+        var forbidKey = isPurchase ? StockParameters.PurchaseDeliveryRequireOrderKey : StockParameters.SalesDeliveryRequireOrderKey;
+        var fifoEnabled    = await _companyParams.GetBoolAsync(StockParameters.FormCode, fifoKey, ct)   ?? true;
+        var forbidUnlinked = await _companyParams.GetBoolAsync(StockParameters.FormCode, forbidKey, ct) ?? false;
+
+        // Bağlantısız satır fiyatı: standart fiyat çözücü (cari listesi → Genel Liste). Bağlanan
+        // satırda repo sipariş fiyatını kullanır. CurrencyId mobil V1'de şirket varsayılanı (1).
+        var direction = isPurchase ? PriceDirection.Purchase : PriceDirection.Sales;
+        var keys = itemMap!.Keys.Select(id => new PriceEntryKey(id, null)).ToArray();
+        var priceByItem = new Dictionary<int, decimal>();
+        try
+        {
+            var resolved = await _priceListService.ResolveLinePricesAsync(
+                new ResolveLinePricesRequest(body.ContactId, 1, direction, DateTime.Today, keys), ct);
+            foreach (var r in resolved)
+                if (r.Price.HasValue) priceByItem[r.ItemId] = r.Price.Value;
+        }
+        catch { /* fiyat çözümü teslimatı bloklamaz — bağlantısız satır 0 fiyatla yazılır */ }
+
+        var repoLines = lines.Select(l => new MobileDeliveryLineInput(
+            l.ItemId, l.Quantity, itemMap[l.ItemId].UnitId,
+            priceByItem.TryGetValue(l.ItemId, out var pr) ? pr : 0m,
+            itemMap[l.ItemId].Code)).ToList();
+
+        try
+        {
+            var (userId, _, _) = GetCurrentUser();
+            // (e) Kaydet — stok etkisi (MovementType) + SourceLineId + DeliveredQuantity + eksi bakiye
+            //     guard'ı tek transaction'da (SaveDeliveryFifoAsync, ConvertOrderToDeliveryAsync ikizi).
+            var result = await _stockDocRepo.SaveDeliveryFifoAsync(
+                isPurchase, body.ContactId, body.Note, repoLines, fifoEnabled, forbidUnlinked,
+                userId > 0 ? userId : null, ct);
+
+            // Belge soyağacı — irsaliye ← sipariş(ler). Web DeliverSalesOrderJson paritesi; çok
+            // siparişli FIFO'da her kaynak sipariş için ayrı kenar (İlişkili Belgeler paneli).
+            if (result.SourceOrderIds.Count > 0)
+            {
+                try
+                {
+                    await _docSourceRepo.EnsureSchemaAsync(ct);
+                    foreach (var oid in result.SourceOrderIds)
+                        await _docSourceRepo.AddAsync(result.Id, oid, ct);
+                }
+                catch { /* soyağacı yazımı teslimatı bozmaz */ }
+            }
+
+            // (f) OnSave entegrasyon dispatch — SalesController.SaveDocument paritesi. Repo doğrudan
+            //     çağrıldığından OnSave otomatik tetiklenmez; burada BİLİNÇLİ tetiklenir.
+            var entity = isPurchase ? "alis_irsaliyesi" : "satis_irsaliyesi";
+            if (result.Id > 0)
+            {
+                var fc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(entity);
+                _onSaveDispatcher.FireOnSave(new[] { fc.HeaderNew, fc.Header }, result.Id.ToString(), User?.Identity?.Name);
+            }
+
+            // Audit — entity kodu DocumentType.Code (web DeliverSalesOrderJson ile aynı /AuditLog kanalı).
+            await LogDeliveryInsertAsync(entity, result, ct);
+
+            // (g) Bağlama özeti response.
+            return Ok(new
+            {
+                ok = true,
+                documentNumber = result.DocNo,
+                lines = result.Lines.Select(l => new
+                {
+                    itemId           = l.ItemId,
+                    linked           = l.Linked.Select(x => new { orderNumber = x.OrderNumber, quantity = x.Quantity }),
+                    unlinkedQuantity = l.UnlinkedQuantity,
+                }),
+            });
+        }
+        catch (NegativeBalanceException nbex)
+        {
+            return BadRequest(new { error = nbex.Message });
+        }
+        catch (InvalidOperationException ioex)
+        {
+            // Bağlantısız-yasak reddi / varsayılan depo yok / sipariş kalem deposu yok — mesaj aynen gösterilir.
+            return BadRequest(new { error = ioex.Message });
+        }
+        catch (Exception)
+        {
+            return BadRequest(new { error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// FIFO irsaliye insert audit'i — web DeliverSalesOrderJson/ReceivePurchaseOrderJson ile aynı
+    /// entity kodu (satis_irsaliyesi/alis_irsaliyesi) + kalem dökümü; Src="Mobile" damgası. Audit
+    /// hatası kaydı asla bozmaz.
+    /// </summary>
+    private async Task LogDeliveryInsertAsync(string entity, MobileDeliveryResult result, CancellationToken ct)
+    {
+        try
+        {
+            IReadOnlyList<StockDocLineDto>? deliveredLines = null;
+            try { deliveredLines = await _stockDocRepo.GetLinesAsync(result.Id, ct); } catch { }
+
+            var linkedCount   = result.Lines.Sum(l => l.Linked.Count);
+            var unlinkedItems = result.Lines.Count(l => l.UnlinkedQuantity > 0m);
+            _audit.LogInsert(entity, result.Id, result.DocNo,
+                detail: $"Mobil irsaliye — {result.Lines.Count} malzeme, {linkedCount} sipariş bağı"
+                        + (unlinkedItems > 0 ? $", {unlinkedItems} bağlantısız" : ""),
+                actor: new AuditActor(Source: "Mobile"),
+                extraChanges: deliveredLines is { Count: > 0 }
+                    ? deliveredLines.Select(l => new AuditFieldChange(
+                        $"Line[{l.Id}]",
+                        $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",
+                        null,
+                        $"{AuditDiff.Normalize(l.Qty)} {l.UnitCode ?? "birim"}")).ToList()
+                    : null);
+        }
+        catch { /* audit yazımı belge kaydını asla bozmaz */ }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // POST inventory-count/{id}/apply (Yansıt — sayım farkını stoğa yaz)
+    // ──────────────────────────────────────────────────────────────────────
+    // Sozlesme (mobil istemci birebir tuketir):
+    //   200 { ok:true, writtenCount:int }
+    //   400 { error:string }              — idempotent red (belge Draft değil) / geçersiz belge
+    //   403 { ok:false, message, error }  — yetki yok
+    //
+    // Web ApplyInventoryJson PARITESI: IInventoryCountRepository.ApplyAsync taslak sayım farklarını
+    // DocumentLine'a (MovementType=4/Adjust) atomik yazar. IDEMPOTENT — ikinci çağrı (Status Draft
+    // değil) InvalidOperationException fırlatır, mesaj AYNEN {error} olarak döner (çift tıklama koruması).
+
+    /// <summary>Sayım "Yansıt" — taslak sayım farklarını stok bakiyesine işler (idempotent).</summary>
+    [HttpPost("inventory-count/{id:int}/apply")]
+    public async Task<IActionResult> ApplyInventoryCount(int id, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(new[] { FormCodes.InventoryCount }, WriteActions, ct) is { } denied)
+            return denied;
+        if (id <= 0)
+            return BadRequest(new { error = "Geçersiz belge." });
+        try
+        {
+            var writtenCount = await _inventoryCountRepo.ApplyAsync(id, ct);
+            return Ok(new { ok = true, writtenCount });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Optimistic-lock idempotency (belge zaten Yansıtılmış/Draft değil) — mesaj aynen döner.
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception)
+        {
+            return BadRequest(new { error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
 }

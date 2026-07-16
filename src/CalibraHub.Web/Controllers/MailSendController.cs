@@ -550,7 +550,7 @@ public sealed class MailSendController : Controller
                 if (!string.IsNullOrWhiteSpace(rcp.ContactTitle))
                     b.AddTextWidget("w_contact", "Cari", rcp.ContactTitle, color: "indigo");
                 if (!string.IsNullOrWhiteSpace(rcp.Phone))
-                    b.AddTextWidget("w_phone", "Telefon", rcp.Phone, color: "slate");
+                    b.AddPhoneWidget("w_phone", "Telefon", rcp.Phone, color: "slate");
                 return b;
             })
             .Build();
