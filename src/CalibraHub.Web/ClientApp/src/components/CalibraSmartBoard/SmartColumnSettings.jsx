@@ -38,8 +38,24 @@ import {
   X, GripVertical, Plus, Check, RotateCcw, Columns3, Search, ChevronDown,
   Pin, PinOff, AlignLeft, AlignCenter, AlignRight, Minus, Loader2,
 } from 'lucide-react'
-import { resolveIcon, resolveColor, resolveChipWidth } from './DynamicWidgetFactory'
+import { resolveIcon, resolveColor, resolveChipWidth, TABLE_LEAD_WIDGET_IDS } from './DynamicWidgetFactory'
 import { loadBoardColumnConfig, saveBoardColumnConfig } from '../../services/columnConfigService'
+
+/**
+ * candidates/allIds listesini TABLE_LEAD_WIDGET_IDS (Stok Kodu, Stok Adi)
+ * sirasina gore basa alir (varsa) — SmartTable.jsx'teki leadsFirst() ile
+ * AYNI mantik; "config hic yokken" ve "Sifirla" akislarinda panelin
+ * gosterdigi sira, tablonun fiilen gosterdigi sirayla tutarli olsun diye.
+ */
+function leadsFirstIds(ids) {
+  var idSet = {}
+  ids.forEach(function (id) { idSet[id] = true })
+  var lead = TABLE_LEAD_WIDGET_IDS.filter(function (lid) { return idSet[lid] })
+  var leadSet = {}
+  lead.forEach(function (lid) { leadSet[lid] = true })
+  var rest = ids.filter(function (id) { return !leadSet[id] })
+  return lead.concat(rest)
+}
 
 var ALIGN_OPTIONS = [
   { value: 'left', label: 'Sola Hizala', icon: AlignLeft },
@@ -187,7 +203,7 @@ function ColumnRow(props) {
               value={format.label || ''}
               placeholder={column.label}
               onChange={function (e) { props.onSetLabel(e.target.value) }}
-              className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] text-xs text-slate-700 dark:text-white/70 placeholder-slate-400 dark:placeholder-white/25 focus:outline-none focus:border-indigo-400/50"
+              className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] text-xs text-slate-700 dark:text-white/70 placeholder-slate-400 dark:placeholder-white/25 focus:outline-none focus:border-indigo-400/50 dark:focus:border-indigo-400/40"
             />
           </div>
 
@@ -388,9 +404,12 @@ export default function SmartColumnSettings(props) {
         setOrder(cleanOrder)
         setColumns(cleanColumns)
       } else {
-        // Ilk acilis / hic kayit yok — tum master sutunlar gorunur, dogal sira.
-        setVisibleIds(allIds.slice())
-        setOrder(allIds.slice())
+        // Ilk acilis / hic kayit yok — tum master sutunlar gorunur; Stok Kodu/
+        // Stok Adi (varsa) basa alinir — SmartTable'in "config yokken" varsayilan
+        // sirasiyla ayni (bkz. leadsFirstIds).
+        var defaultOrder = leadsFirstIds(allIds)
+        setVisibleIds(defaultOrder.slice())
+        setOrder(defaultOrder.slice())
         setColumns({})
       }
     }).finally(function () {
@@ -534,12 +553,13 @@ export default function SmartColumnSettings(props) {
 
   async function handleReset() {
     var ok = window.CalibraAlert && window.CalibraAlert.confirm
-      ? await window.CalibraAlert.confirm('Tum sutun ayarlari sifirlanacak (tum sutunlar gorunur + varsayilan sira/bicim). Devam edilsin mi?',
-          { title: 'Sutun Ayarlarini Sifirla', okText: 'Evet, Sifirla', cancelText: 'Vazgec', danger: true })
-      : window.confirm('Tum sutun ayarlari sifirlanacak (tum sutunlar gorunur + varsayilan sira/bicim). Devam edilsin mi?')
+      ? await window.CalibraAlert.confirm('Tüm sütun ayarları sıfırlanacak (tüm sütunlar görünür + varsayılan sıra/biçim). Devam edilsin mi?',
+          { title: 'Sütun Ayarlarını Sıfırla', okText: 'Evet, Sıfırla', cancelText: 'Vazgeç', danger: true })
+      : window.confirm('Tüm sütun ayarları sıfırlanacak (tüm sütunlar görünür + varsayılan sıra/biçim). Devam edilsin mi?')
     if (!ok) return
     var allIds = localMasterWidgets.map(function (w) { return w.id })
-    var defaultConfig = { visibleIds: allIds.slice(), order: allIds.slice(), columns: {} }
+    var defaultOrder = leadsFirstIds(allIds)
+    var defaultConfig = { visibleIds: defaultOrder.slice(), order: defaultOrder.slice(), columns: {} }
     try {
       var normalized = saveBoardColumnConfig(boardKey, defaultConfig)
       setVisibleIds(normalized.visibleIds)
@@ -547,7 +567,7 @@ export default function SmartColumnSettings(props) {
       setColumns(normalized.columns)
       if (onSaved) onSaved(normalized)
     } catch (e) {
-      var em2 = 'Sifirlanamadi: ' + e.message
+      var em2 = 'Sıfırlanamadı: ' + e.message
       if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em2, 'err')
       else alert(em2)
     }
@@ -557,11 +577,15 @@ export default function SmartColumnSettings(props) {
     <AnimatePresence>
       {isOpen && (
         <>
+          {/* Backdrop — BLURSUZ (kullanici sutun ayari yaparken tabloyu net
+              gormeli, "canli onizleme" hissi). Hafif seffaf karartma +
+              tikla-kapat davranisi korunur; panelin KENDI yuzeyi (asagida)
+              hala opak/okunur — sadece ARKA PLAN netlesiyor. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[9998] bg-black/25"
             onClick={onClose}
           />
 
@@ -715,7 +739,7 @@ export default function SmartColumnSettings(props) {
                 <button
                   onClick={handleReset}
                   className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.06] border border-slate-200 dark:border-white/[0.06] text-xs font-medium text-slate-500 dark:text-white/40 hover:text-slate-700 dark:hover:text-white/60 transition-all flex items-center gap-1.5"
-                  title="Varsayilana sifirla"
+                  title="Varsayılana sıfırla"
                 >
                   <RotateCcw size={13} />
                   Sıfırla

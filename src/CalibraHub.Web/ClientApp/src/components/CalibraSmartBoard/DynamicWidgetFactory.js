@@ -168,6 +168,19 @@ export var CHIP_WIDTH_WIDE    = 192  // text, textarea, lookup, guide-list, link
 // (pin'liler once, bkz. SmartTable.computeColumns).
 export var TABLE_MENU_COL_WIDTH = 44
 
+// Kompozit "Kod/Ad" kimlik sutunu kaldirildiginda (2026-07-16 revizyon 4)
+// yerini alan iki normal widget — LogisticsController.BuildMaterialCardsBoardConfigAsync
+// icinde MakeWidget("w_kod","Stok Kodu",...) / MakeWidget("w_ad","Stok Adi",...)
+// ile üretilir (id ile baglanir, isimle DEGIL — admin bu plain-field'lari
+// custom widget'a maplerse bu id'ler masterWidgets'ta hic bulunmayabilir,
+// tum kullanim yerleri bunu tolere eder). Kullanim: (1) SmartTable.computeColumns
+// — config yokken varsayilan ilk iki sira + kullanici tum sutunlari
+// kaldirdiginda "asla tamamen bos tablo olmasin" fallback'i, (2) SmartColumnSettings
+// — ilk acilis ve Sifirla'da ayni varsayilan sirayi yansitmak icin. Ikisi de
+// (varsa) DIGER sutunlarla AYNI ayarlara tabi — burada sadece "varsayilan
+// sirada once gelsinler" bilgisini tasir, baska hicbir ayricalik yok.
+export var TABLE_LEAD_WIDGET_IDS = ['w_kod', 'w_ad']
+
 var dataTypeWidthMap = {
   boolean:        CHIP_WIDTH_COMPACT,
   numeric:        CHIP_WIDTH_COMPACT,

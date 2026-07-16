@@ -5,8 +5,14 @@
  * bileseni render eder. Ayni entities/masterWidgets/visibleIds/order veriyle
  * calisir — sadece render farklidir ("ayni entity verisi, farkli render").
  *
- * Sutunlar (2026-07-16 revizyon 3 — Sil, Islemler menusune tasindi):
- *   [Islemler (basliksiz kebab)] [Kod / Ad kimlik sutunu] [widget sutunlari...]
+ * Sutunlar (2026-07-16 revizyon 4 — kompozit kimlik sutunu kaldirildi):
+ *   [Islemler (basliksiz kebab)] [widget sutunlari... (Stok Kodu + Stok Adi
+ *   dahil, normal sutun olarak)]
+ * Onceki "Kod/Ad" ozel kimlik hucresi TAMAMEN KALKTI — Stok Kodu (w_kod) ve
+ * Stok Adi (w_ad) artik DIGER TUM sutunlarla AYNI pipeline'dan geçen normal
+ * widget sutunlari (align/width/pin/font/rename/sirala hepsi kullanilabilir).
+ * Bkz. DynamicWidgetFactory.js TABLE_LEAD_WIDGET_IDS.
+ *
  * Widget sutun genisligi resolveChipWidth ile (kart modundaki chip genisligiyle
  * ayni tablo) — boylece basliklar hucrelerle hizali kalir. `columnConfig` prop'u
  * (SmartColumnSettings.jsx'in ürettiği { <id>: {align,width,pin,fontSize,
@@ -14,28 +20,28 @@
  * yoksa (kart modu board'ları bu prop'u hiç göndermez) davranış AYNEN eskisi
  * gibi kalır (regresyonsuz).
  *
- * Sabit sol blok — Islemler + Kod/Ad UCU DE sticky-left'tir, birbirini takip
- * eden offset'lerle (0 → MENU_COL_WIDTH). Pin'li veri sutunlari bu bloktan
- * hemen sonra baslar. Opaklik/z-index: bkz. index.css ".cst-td--menu/
- * --identity/--pinned" — sticky hucreler TAM OPAK arka plan (`--cst-sticky-bg`)
- * tasir ki kaydirilan veri sutunlari altlarindan gecerken seffaflik/overlap
- * gorunmesin.
+ * Sabit sol blok — sadece Islemler, sticky-left (0'da). Pin'li veri sutunlari
+ * bu sutundan hemen sonra baslar. Opaklik/z-index: bkz. index.css
+ * ".cst-td--menu/--pinned" — sticky hucreler TAM OPAK arka plan
+ * (`--cst-sticky-bg`) tasir ki kaydirilan veri sutunlari altlarindan gecerken
+ * seffaflik/overlap gorunmesin.
  *
  * Satır aksiyonları (SmartTableRow icinde render edilir, bkz. o dosyanin ustu):
  *   - "İşlemler" menüsü (primaryAction + entity.extraActions[] + en altta Sil)
  *     → tek sabit sutunda (kebab buton + dropdown). Sil, secondaryAction'in
- *     mevcut onay-modal akisini AYNEN tetikler (sadece tetik noktasi degisti).
+ *     mevcut onay-modal akisini AYNEN tetikler.
+ *   - Satır tıklaması (kimlik hucresi kalktigi icin artik TUM SATIR) →
+ *     Duzenle (primaryAction) — bkz. SmartTableRow.
  *
- * Gorunurluk semantigi (2026-07-16 revizyon 3 duzeltmesi — "hayalet sutun"
- * bug'i): computeColumns ARTIK "alwaysVisible" sistem-widget bypass'ini
- * UYGULAMAZ (SmartCard/kart modundaki ayni-isimli mekanizmadan BILINCLI
- * FARKLI — o dosyaya dokunulmadi). Tablo modunda gorunur sutun seti SADECE
- * kullanicinin visibleIds'i; visibleIds bos dizi ise (kullanici bilinçli
- * olarak tum sutunlari gizlemis) hicbir veri sutunu gorunmez — sadece
- * Islemler + Kod/Ad kalir (ikisi de columns dizisinin DISINDA, ayri sabit
- * hucreler, bu semantikten etkilenmez). visibleIds hic yoksa (null — config
- * hic kaydedilmemis, ilk kullanim) tum sutunlar gorunur (varsayilan, asagidaki
- * ilk `if` kolu).
+ * Gorunurluk semantigi (revizyon 3'ten devam, revizyon 4'te fallback eklendi):
+ *   - visibleIds === null (config hic yok, ilk kullanim) → tum sutunlar
+ *     gorunur; Stok Kodu/Stok Adi (varsa) DOGAL SIRANIN BASINA alinir (ilk
+ *     iki sutun), gerisi dogal sirada — leadsFirst().
+ *   - visibleIds = [...] (kullanici secim yapmis) → sadece secilenler,
+ *     "alwaysVisible" gibi bir zorunlu-gosterim bypass'i YOK.
+ *   - visibleIds = [] VE filtre sonucu SIFIR sutun kaldiysa (kullanici
+ *     bilincli olarak TUM sutunlari kaldirmis) → Stok Kodu + Stok Adi (varsa)
+ *     fallback olarak gosterilir — asla tamamen bos/anlamsiz tablo olmaz.
  *
  * KORU edilen mekanizmalar (SmartBoard seviyesinde zaten calisir, bu bilesen
  * sadece render eder): in-place refresh (onRefresh/recentIds), filter paneli,
@@ -44,21 +50,20 @@
  */
 import { useMemo } from 'react'
 import SmartTableRow from './SmartTableRow'
-import { resolveIcon, resolveChipWidth, TABLE_MENU_COL_WIDTH } from './DynamicWidgetFactory'
+import { resolveIcon, resolveChipWidth, TABLE_MENU_COL_WIDTH, TABLE_LEAD_WIDGET_IDS } from './DynamicWidgetFactory'
 
 // MENU_COL_WIDTH, DynamicWidgetFactory.js'ten gelir (SmartTableRow de ayni
-// sabiti kullanir — kimlik hucresinin sticky-left offset'i icin; iki dosyanin
-// birbirini import etmesi/dongusel import yerine ortak kaynaktan paylasilir).
-var MENU_COL_WIDTH     = TABLE_MENU_COL_WIDTH
-var IDENTITY_COL_WIDTH = 280
+// sabiti kullanir; iki dosyanin birbirini import etmesi/dongusel import
+// yerine ortak kaynaktan paylasilir).
+var MENU_COL_WIDTH = TABLE_MENU_COL_WIDTH
 
 /**
  * Her widget id'si icin butun entity'ler taranarak "guide-list displayScope"
  * bilgisi cikarilir. masterWidgets bu alani tasimaz (sadece ilk-gorulen
  * entity instance'inda bulunur) — bkz. SmartCard widgets useMemo'daki ayni
  * mantik (kart bazinda calisir, burada board capinda tek sefer hesaplanir).
- * NOT: "alwaysVisible" burada ARTIK OKUNMUYOR (2026-07-16 rev.3) — tablo
- * modunda sistem-widget zorunlu-gorunurluk bypass'i yok, bkz. dosya ustu not.
+ * NOT: "alwaysVisible" burada okunmuyor — tablo modunda sistem-widget
+ * zorunlu-gorunurluk bypass'i yok, bkz. dosya ustu not.
  */
 function buildWidgetMeta(entities) {
   var meta = {}
@@ -78,6 +83,24 @@ function buildWidgetMeta(entities) {
 }
 
 /**
+ * candidates listesini TABLE_LEAD_WIDGET_IDS sirasina gore basa alir (varsa) —
+ * "config hic yokken varsayilan sira" ve "bos secim fallback'i" ikisi de bunu
+ * kullanir. Lead id'ler candidates'ta yoksa (ör. admin Kod/Ad'i custom widget'a
+ * maplemis) sessizce atlanir — hicbir zaman crash/hayalet sutun uretmez.
+ */
+function leadsFirst(list) {
+  var byId = {}
+  list.forEach(function (w) { if (w && w.id) byId[w.id] = w })
+  var lead = []
+  var leadIdSet = {}
+  TABLE_LEAD_WIDGET_IDS.forEach(function (lid) {
+    if (byId[lid]) { lead.push(byId[lid]); leadIdSet[lid] = true }
+  })
+  var rest = list.filter(function (w) { return w && w.id && !leadIdSet[w.id] })
+  return lead.concat(rest)
+}
+
+/**
  * masterWidgets + kullanici tercihleri (visibleIds/order) + widgetMeta'dan
  * kanonik sutun listesini uretir. Burada board capinda TEK sefer calisir
  * (tum satirlar ayni sutunlari kullanmali ki gercek bir tablo hizalamasi
@@ -86,9 +109,8 @@ function buildWidgetMeta(entities) {
  * columnConfig verilmisse (SmartColumnSettings) her sutuna { label, align,
  * width, pinned, fontSize, fontWeight } cozumlenmis alanlari eklenir + pin'li
  * sutunlar listenin basina alinir (stabil: kendi aralarindaki sira korunur).
- * Pin'li sutunlar icin kumulatif `stickyLeft` (Islemler + kimlik
- * sutunlarindan sonra) da burada hesaplanir — SmartTable/SmartTableRow bu
- * degeri dogrudan render eder.
+ * Pin'li sutunlar icin kumulatif `stickyLeft` (Islemler sutunundan sonra) da
+ * burada hesaplanir — SmartTable/SmartTableRow bu degeri dogrudan render eder.
  */
 function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig) {
   var candidates = masterWidgets.filter(function (w) {
@@ -98,8 +120,9 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
 
   var base
   if (!visibleIds && !order) {
-    // Config hic yok (ilk kullanim) — tum sutunlar gorunur, dogal sira.
-    base = candidates
+    // Config hic yok (ilk kullanim) — tum sutunlar gorunur; Stok Kodu/Stok
+    // Adi (varsa) ilk iki sirada, gerisi dogal sirada.
+    base = leadsFirst(candidates)
   } else {
     (function () {
       var map = {}
@@ -126,6 +149,13 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
         if (!w || !w.id || usedIds[w.id]) return
         if (visibleIds && visibleIds.indexOf(w.id) === -1) return
         result.push(w)
+      })
+
+      // Kullanici bilincli olarak TUM sutunlari kaldirmis (visibleIds sonucu
+      // sifir eslesme) — tamamen bos/anlamsiz tablo yerine Stok Kodu + Stok
+      // Adi (varsa) fallback'i.
+      if (result.length === 0) result = leadsFirst(candidates).filter(function (w) {
+        return TABLE_LEAD_WIDGET_IDS.indexOf(w.id) !== -1
       })
 
       base = result
@@ -158,7 +188,7 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
   var unpinned = enriched.filter(function (c) { return !c.pinned })
   var ordered = pinned.concat(unpinned)
 
-  var offset = MENU_COL_WIDTH + IDENTITY_COL_WIDTH
+  var offset = MENU_COL_WIDTH
   ordered.forEach(function (c) {
     if (c.pinned) { c.stickyLeft = offset; offset += c.width }
   })
@@ -183,7 +213,7 @@ export default function SmartTable(props) {
   )
 
   var totalWidth = useMemo(function () {
-    var sum = MENU_COL_WIDTH + IDENTITY_COL_WIDTH
+    var sum = MENU_COL_WIDTH
     columns.forEach(function (c) { sum += c.width })
     return sum
   }, [columns])
@@ -194,7 +224,6 @@ export default function SmartTable(props) {
         <table className="cst-table" style={{ width: totalWidth }}>
           <colgroup>
             <col style={{ width: MENU_COL_WIDTH }} />
-            <col style={{ width: IDENTITY_COL_WIDTH }} />
             {columns.map(function (c) {
               return <col key={c.id} style={{ width: c.width }} />
             })}
@@ -202,7 +231,6 @@ export default function SmartTable(props) {
           <thead>
             <tr>
               <th className="cst-th cst-th--menu" aria-label="İşlemler" />
-              <th className="cst-th cst-th--identity" style={{ left: MENU_COL_WIDTH }}>Kod / Ad</th>
               {columns.map(function (c) {
                 var Icon = resolveIcon(c.icon, null, c.dataType)
                 var thStyle = { textAlign: c.align }

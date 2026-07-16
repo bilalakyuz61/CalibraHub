@@ -1,30 +1,41 @@
 /**
  * SmartTableRow — SmartTable icin tek satir (<tr>).
  *
- * SmartCard ile ayni entity JSON sozlesmesini kullanir (id, title, subtitle,
- * description, imageUrl, statusBadge, widgets, primaryAction, secondaryAction,
- * extraActions, recordValues). Silme onayi native confirm() DEGIL, SmartCard
- * ile ayni portal-modal deseni (CLAUDE.md "Silme onay standardi").
+ * SmartCard ile ayni entity JSON sozlesmesini kullanir (id, title, widgets,
+ * primaryAction, secondaryAction, extraActions, recordValues). Silme onayi
+ * native confirm() DEGIL, SmartCard ile ayni portal-modal deseni (CLAUDE.md
+ * "Silme onay standardi").
  *
- * Satir aksiyon duzeni (2026-07-16 revizyon 3 — Sil, Islemler menusune tasindi):
- *   - Sabit sol blok TEK sutuna indi: [Islemler (basliksiz kebab)][Kod/Ad] —
- *     ikisi de sticky-left, ardisik offset'lerle (bkz. DynamicWidgetFactory.js
- *     TABLE_MENU_COL_WIDTH). Ayri bir Sil sutunu YOK.
- *   - "Islemler" menusu: Duzenle (primaryAction) + entity.extraActions[]
- *     (GENERIC, hardcode yok — board config'e yeni aksiyon eklendiginde
- *     otomatik menude belirir) + en altta, ayracin ardindan, danger renkli
- *     **Sil** ogesi (secondaryAction). Sil'e tiklamak mevcut
- *     handleSecondary/proceedSecondary/executeSecondary akisini AYNEN
- *     tetikler — precheckUrl → ekran-ortasi custom onay modali → apiUrl POST.
- *     Sadece tetik NOKTASI degisti (standalone buton yerine menu item), akis
- *     mantigi hic degismedi.
- *   - Dropdown, tablo `overflow` kirpmasindan kacmak icin document.body'ye
- *     portal edilir; cross-document (iframe→top) portal senaryosunda CSS
- *     class'lari uygulanamayabildigi icin (ayri document, ayri stylesheet)
- *     mevcut confirm/alert modallerindeki gibi INLINE stil kullanilir — ama
- *     isDark'a gore tema-farkindadir (mevcut confirm/alert modellerinin
- *     aksine, onlar herzaman koyu).
- *   - Satir tiklamasi (kimlik hucresi) → Duzenle davranisi KORUNUR.
+ * Satir yapisi (2026-07-16 revizyon 4 — kompozit kimlik hucresi kaldirildi):
+ *   [Islemler (basliksiz kebab, sticky-left 0'da)] [widget sutunlari...]
+ * Onceki ozel "Kod/Ad" kimlik hucresi TAMAMEN KALKTI — entity.title/subtitle/
+ * description/imageUrl/statusBadge burada ARTIK OKUNMUYOR (Stok Kodu/Stok
+ * Adi artik normal widget sutunu olarak columns[] icinden geliyor, bkz.
+ * SmartTable.jsx). Row-level aggregate "violations" rozeti de kimlik
+ * hucresiyle birlikte kalkti — per-hucre ihlal gostergesi (TableValueCell
+ * icindeki checkConstraintViolation) ETKILENMEDI, o ayri bir mekanizma.
+ *
+ * Satır tıklaması → Düzenle (primaryAction): kimlik hucresi kalktigi icin
+ * artik TUM SATIRA (<tr onClick>) tasindi. Menu/link/guide-list butonlari
+ * kendi onClick'lerinde stopPropagation cagirir, bu yuzden satir-tiklamasi
+ * ile cakismaz.
+ *
+ * Tek-satir/kompakt: her deger hucresi tek satir (white-space:nowrap +
+ * ellipsis + title tooltip) — bkz. index.css ".cst-value__text" (zaten
+ * boyleydi; kimlik hucresinin kalkmasiyla artik TUM satir tek-satirlik oldu).
+ *
+ * Satir aksiyon menusu — "Islemler": Duzenle (primaryAction) + entity.
+ * extraActions[] (GENERIC, hardcode yok — board config'e yeni aksiyon
+ * eklendiginde otomatik menude belirir) + en altta, ayracin ardindan, danger
+ * renkli **Sil** ogesi (secondaryAction). Sil'e tiklamak mevcut
+ * handleSecondary/proceedSecondary/executeSecondary akisini AYNEN tetikler —
+ * precheckUrl → ekran-ortasi custom onay modali → apiUrl POST. Sadece tetik
+ * NOKTASI degisti (standalone buton yerine menu item), akis mantigi hic
+ * degismedi. Dropdown, tablo `overflow` kirpmasindan kacmak icin
+ * document.body'ye portal edilir; cross-document (iframe→top) portal
+ * senaryosunda CSS class'lari uygulanamayabildigi icin (ayri document, ayri
+ * stylesheet) mevcut confirm/alert modallerindeki gibi INLINE stil
+ * kullanilir — ama isDark'a gore tema-farkindadir.
  *
  * Per-sutun bicim (SmartColumnSettings.jsx): SmartTable.computeColumns her
  * `column` objesine align/width/pinned/stickyLeft/fontSize/fontWeight/label
@@ -40,15 +51,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
-import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon, TABLE_MENU_COL_WIDTH } from './DynamicWidgetFactory'
+import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import { getTopBody } from '../../utils/topPortal'
-
-// SmartTable.jsx ile ayni sabit — dongusel import'tan kacinmak icin
-// DynamicWidgetFactory.js'ten (bagimliligi olmayan ortak dosya) gelir.
-var MENU_COL_WIDTH = TABLE_MENU_COL_WIDTH
 
 /* ── Per-sutun render yardimcilari — align/pin/font tum hucre tiplerinde ortak ── */
 function tdStyleFor(column) {
@@ -81,6 +88,11 @@ function TableValueCell(props) {
   var tdClass = 'cst-td cst-td--value' + (column.pinned ? ' cst-td--pinned' : '')
   var tdStyle = tdStyleFor(column)
   var fontStyle = fontStyleFor(column)
+  // Stok Kodu (w_kod) — onceki kimlik hucresindeki kod estetigini korur
+  // (monospace); DIGER hicbir ayari (align/width/pin/font/rename) etkilemez,
+  // sadece taban font-family secimi — kullanici Boyut/Kalinlik ile serbestce
+  // degistirebilir (fontStyle Object.assign ile bunun UZERINE yazar).
+  var isCodeStyle = column.id === 'w_kod'
 
   if (!widget) {
     return (
@@ -119,7 +131,7 @@ function TableValueCell(props) {
     var isTrue = (widget.value === true || widget.value === 'true' || widget.value === 1 || widget.value === '1')
     var boolColor = isTrue ? '#10b981' : '#ef4444'
     return (
-      <td className={tdClass} style={tdStyle} title={widget.detail || ''}>
+      <td className={tdClass} style={tdStyle} title={widget.detail || displayValue}>
         <span className="cst-value" style={{ justifyContent: justifyFor(column) }}>
           <BoolIcon size={14} style={{ color: boolColor, flexShrink: 0 }} />
           <span className="cst-value__text" style={Object.assign({ color: boolColor }, fontStyle)}>{displayValue}</span>
@@ -137,7 +149,7 @@ function TableValueCell(props) {
       <span className="cst-value" style={{ justifyContent: justifyFor(column) }}>
         {violation && <AlertTriangle size={12} style={{ color: '#f59e0b', flexShrink: 0 }} />}
         <span
-          className={'cst-value__text' + (numericFamily ? ' cst-value--numeric' : '') + (!hasValue ? ' cst-value--empty' : '')}
+          className={'cst-value__text' + ((numericFamily || isCodeStyle) ? ' cst-value--numeric' : '') + (!hasValue ? ' cst-value--empty' : '')}
           style={Object.assign({ color: violation ? '#f59e0b' : (hasValue ? palette.text : undefined) }, fontStyle)}
         >
           {displayValue}
@@ -266,11 +278,6 @@ export default function SmartTableRow(props) {
   var isDark = !!props.isDark
 
   var id = entity.id
-  var title = entity.title || ''
-  var subtitle = entity.subtitle || ''
-  var description = entity.description || ''
-  var imageUrl = entity.imageUrl || null
-  var statusBadge = entity.statusBadge || null
   var rawWidgets = Array.isArray(entity.widgets) ? entity.widgets : []
   var recordValues = (entity.recordValues && typeof entity.recordValues === 'object') ? entity.recordValues : {}
   var primaryAction = entity.primaryAction || null
@@ -300,16 +307,6 @@ export default function SmartTableRow(props) {
     if (w.colorType === 0) return w.colorValue || null
     return null
   }
-
-  var violations = useMemo(function () {
-    var msgs = []
-    rawWidgets.forEach(function (w) {
-      if (!w) return
-      var msg = checkConstraintViolation(w)
-      if (msg) msgs.push(msg)
-    })
-    return msgs
-  }, [rawWidgets])
 
   var [confirmOpen, setConfirmOpen] = useState(false)
   var [confirmMsg, setConfirmMsg] = useState('')
@@ -513,15 +510,15 @@ export default function SmartTableRow(props) {
     setMenuOpen(true)
   }
 
-  var preserveCase = entity.subtitleCase === 'normal' || (typeof subtitle === 'string' && subtitle.indexOf('@') !== -1)
-  var clickableIdentity = !!primaryAction
-  var badgePalette = (statusBadge && statusBadge.label)
-    ? resolveColorForTheme(statusBadge.color, null, isDark)
-    : null
+  var clickableRow = !!primaryAction
 
   return (
     <>
-      <tr className={'cst-row' + (isHighlighted ? ' cst-row--highlight' : '')}>
+      <tr
+        className={'cst-row' + (isHighlighted ? ' cst-row--highlight' : '') + (clickableRow ? ' cst-row--clickable' : '')}
+        onClick={clickableRow ? handlePrimary : undefined}
+        title={primaryAction && primaryAction.label ? primaryAction.label : undefined}
+      >
         <td className="cst-td cst-td--menu">
           <div className="flex items-center justify-center">
             <button
@@ -543,47 +540,6 @@ export default function SmartTableRow(props) {
                   : 'text-slate-400 dark:text-white/40 group-hover:text-slate-600 dark:group-hover:text-white/60 transition-colors'}
               />
             </button>
-          </div>
-        </td>
-
-        <td
-          className={'cst-td cst-td--identity' + (clickableIdentity ? ' cst-td--clickable' : '')}
-          style={{ left: MENU_COL_WIDTH }}
-          onClick={clickableIdentity ? handlePrimary : undefined}
-          title={primaryAction && primaryAction.label ? (primaryAction.label + ' — ' + title) : title}
-        >
-          <div className="cst-identity">
-            {imageUrl && <img src={imageUrl} alt={title} className="cst-identity__img" />}
-            <div className="cst-identity__text">
-              {(subtitle || (statusBadge && statusBadge.label) || violations.length > 0) && (
-                <div className="cst-identity__top">
-                  {subtitle && (
-                    <span className={'cst-identity__code' + (preserveCase ? '' : ' cst-identity__code--upper')}>
-                      {subtitle}
-                    </span>
-                  )}
-                  {statusBadge && statusBadge.label && (
-                    <span
-                      className="cst-badge"
-                      style={{
-                        background: badgePalette.bg,
-                        border: '1px solid ' + badgePalette.border,
-                        color: badgePalette.text,
-                      }}
-                    >
-                      {statusBadge.label}
-                    </span>
-                  )}
-                  {violations.length > 0 && (
-                    <span className="cst-violation" title={'Kısıt ihlali:\n' + violations.join('\n')}>
-                      <AlertTriangle size={9} strokeWidth={2.5} />{violations.length}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="cst-identity__title">{title}</div>
-              {description && <div className="cst-identity__desc">{description}</div>}
-            </div>
           </div>
         </td>
 

@@ -3887,9 +3887,7 @@ body.app-theme-dark .nw-card-del:hover { color: #f87171; background: rgba(248,11
   --cst-sticky-bg:            #ffffff;
   --cst-sticky-hover-bg:      #f7f7fe;
   --cst-sticky-highlight-bg:  #f1f1fe;
-  --cst-identity-title:       #0f172a;
   --cst-identity-code:        #334155;
-  --cst-desc:                 #64748b;
   --cst-empty-value:          #94a3b8;
   --cst-highlight-bg:         rgba(99, 102, 241, 0.09);
   --cst-highlight-border:     rgba(99, 102, 241, 0.55);
@@ -3907,9 +3905,7 @@ body.app-theme-dark .cst-root {
   --cst-sticky-bg:            #0f1320;
   --cst-sticky-hover-bg:      #171b35;
   --cst-sticky-highlight-bg:  #1b1f3d;
-  --cst-identity-title:       #ffffff;
   --cst-identity-code:        rgba(255, 255, 255, 0.82);
-  --cst-desc:                 rgba(255, 255, 255, 0.5);
   --cst-empty-value:          rgba(255, 255, 255, 0.32);
   --cst-highlight-bg:         rgba(99, 102, 241, 0.14);
   --cst-highlight-border:     rgba(99, 102, 241, 0.6);
@@ -3948,21 +3944,19 @@ body.app-theme-dark .cst-root {
   font-size: 11px;
   font-weight: 700;
   text-align: left;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--cst-border);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Islemler/Kimlik/pin'li sutunlarin basliklari sticky-left'tir (kaydirmada
-   sabit kalir) — z-index 4, dikeyde sticky olan basliklarin (z-index 3)
-   UZERINDE kalmasi icin (kose hucre: hem yatay hem dikey sticky kesisimi).
-   `left` degeri Islemler icin sabit (0 — en soldaki tek sabit sutun), Kimlik
-   ve pin'li sutunlar icin dinamiktir — Kimlik/pin JS tarafindan inline style
-   ile verilir (bkz. SmartTable.jsx), burada sadece z-index/sabit davranis
-   tanimlanir. */
+/* Islemler/pin'li sutunlarin basliklari sticky-left'tir (kaydirmada sabit
+   kalir) — z-index 4, dikeyde sticky olan basliklarin (z-index 3) UZERINDE
+   kalmasi icin (kose hucre: hem yatay hem dikey sticky kesisimi). `left`
+   degeri Islemler icin sabit (0 — tablodaki tek sabit sutun), pin'li
+   sutunlar icin dinamiktir (JS tarafindan inline style ile verilir, bkz.
+   SmartTable.jsx), burada sadece z-index/sabit davranis tanimlanir. */
 .cst-th--menu { z-index: 4; left: 0; text-align: center; }
-.cst-th--identity { z-index: 4; }
 .cst-th--pinned { z-index: 4; }
 .cst-th__inner { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
 .cst-th__icon { flex-shrink: 0; opacity: 0.75; }
@@ -3977,21 +3971,26 @@ body.app-theme-dark .cst-root {
   box-shadow: inset 3px 0 0 var(--cst-highlight-border);
   transition: background-color 0.4s ease, box-shadow 0.4s ease;
 }
+/* Satır tıklaması → Düzenle (kimlik hücresi kalktığı için artık TÜM SATIR
+   tıklanabilir, bkz. SmartTableRow.jsx <tr onClick>). */
+.cst-row--clickable { cursor: pointer; }
 
 .cst-td {
-  padding: 8px 12px;
+  /* Kompakt/tek-satır tablo — kimlik hücresinin (kod üstte + ad altta) kalkmasıyla
+     TÜM hücreler artık tek satır; dar padding bunu pekiştirir. */
+  padding: 6px 12px;
   font-size: 12.5px;
   color: var(--cst-identity-code);
   vertical-align: middle;
   overflow: hidden;
   /* Her hucrenin kendi arka plani olur (glassmorphic ton — .cst-wrap'in arka
-     planiyla ayni token). Sticky (Islemler/Kimlik/pin) hucreler asagida
-     TAM OPAK bir tabanla EZILIR (ayri kural bloku) — normal hucreler bu
-     glass gorunumu korur. */
+     planiyla ayni token). Sticky (Islemler/pin) hucreler asagida TAM OPAK
+     bir tabanla EZILIR (ayri kural bloku) — normal hucreler bu glass
+     gorunumu korur. */
   background-color: var(--cst-row-bg);
 }
 
-/* ── Sticky hucreler: Islemler + Kimlik + pin'li veri sutunlari ──
+/* ── Sticky hucreler: Islemler + pin'li veri sutunlari ──
    Hepsi TAM OPAK taban tasir (--cst-sticky-bg) ki kaydirilan veri sutunlari
    altlarindan "seffaf" gorunmeden/uzerine binmeden gecsin (onceki
    --cst-row-bg kullanimi dark temada ~%4 opakti). Hover/highlight
@@ -4002,83 +4001,22 @@ body.app-theme-dark .cst-root {
    .cst-td / .cst-row:hover>.cst-td / .cst-row--highlight>.cst-td
    kurallarini ezer (cascade sirasi). */
 .cst-td--menu,
-.cst-td--identity,
 .cst-td--pinned {
   position: sticky;
   background-color: var(--cst-sticky-bg);
 }
 .cst-row:hover > .cst-td--menu,
-.cst-row:hover > .cst-td--identity,
 .cst-row:hover > .cst-td--pinned {
   background-color: var(--cst-sticky-hover-bg);
 }
 .cst-row--highlight > .cst-td--menu,
-.cst-row--highlight > .cst-td--identity,
 .cst-row--highlight > .cst-td--pinned {
   background-color: var(--cst-sticky-highlight-bg);
 }
 
 /* Islemler — tablodaki tek sabit sutun, her zaman en solda (0). */
 .cst-td--menu   { left: 0; z-index: 2; text-align: center; }
-.cst-td--identity { z-index: 2; }
 .cst-td--pinned { z-index: 1; }
-.cst-td--clickable { cursor: pointer; }
-.cst-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.cst-identity__img { width: 26px; height: 26px; border-radius: 7px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--cst-border); }
-.cst-identity__text { min-width: 0; flex: 1; }
-.cst-identity__top { display: flex; align-items: center; gap: 6px; margin-bottom: 1px; }
-.cst-identity__code {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--cst-identity-code);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cst-identity__code--upper { text-transform: uppercase; }
-.cst-identity__title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--cst-identity-title);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 0.15s ease;
-}
-.cst-td--clickable:hover .cst-identity__title { color: #6366f1; }
-.cst-identity__desc {
-  font-size: 11px;
-  color: var(--cst-desc);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cst-badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
-  letter-spacing: 0.03em;
-  flex-shrink: 0;
-}
-.cst-violation {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  font-size: 9px;
-  font-weight: 700;
-  flex-shrink: 0;
-  background: rgba(245, 158, 11, 0.15);
-  color: #d97706;
-  border: 1px solid rgba(245, 158, 11, 0.35);
-}
-body.app-theme-dark .cst-violation { color: #fbbf24; }
 
 /* Deger hucreleri — SmartWidget chip'lerinin aksine kutu/border yok (yogun
    tablo icin sade); ikon + renkli deger. Etiket basliga tasindigi icin
