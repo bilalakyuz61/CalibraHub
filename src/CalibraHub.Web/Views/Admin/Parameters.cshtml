@@ -7,6 +7,10 @@
     var stockEffects = ViewData["StockEffectStates"]
         as List<CalibraHub.Web.Controllers.ParametersController.StockEffectState> ?? new();
     var negControl = ViewData["NegBalanceControl"] as bool? ?? false;
+    var purchaseDeliveryFifoBind = ViewData["PurchaseDeliveryFifoBind"] as bool? ?? true;
+    var salesDeliveryFifoBind = ViewData["SalesDeliveryFifoBind"] as bool? ?? true;
+    var purchaseDeliveryRequireOrder = ViewData["PurchaseDeliveryRequireOrder"] as bool? ?? false;
+    var salesDeliveryRequireOrder = ViewData["SalesDeliveryRequireOrder"] as bool? ?? false;
     var salesOrderAffects = ViewData["SalesOrderAffectsStock"] as bool? ?? false;
     var orderSerialTracking = ViewData["OrderSerialTracking"] as bool? ?? false;
     var orderSerialReservation = ViewData["OrderSerialReservation"] as bool? ?? false;
@@ -244,6 +248,13 @@ body.app-theme-dark .ap-tab.is-active::before {
 .ap-row-title { font-size: 13px; font-weight: 600; color: var(--ap-text); }
 .ap-row-desc  { font-size: 11.5px; color: var(--ap-text-muted); line-height: 1.4; }
 .ap-row-control { flex-shrink: 0; padding-top: 2px; }
+
+/* ── Sekme içi alt-grup başlığı (Title Case, uppercase yok) ── */
+.ap-group-title {
+    font-size: 12px; font-weight: 700; letter-spacing: .02em;
+    color: var(--ap-text-muted); margin: 22px 0 4px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--ap-border-light);
+}
 
 /* ── Switch ── */
 .ap-switch { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
@@ -581,6 +592,90 @@ body.app-theme-dark .ap-tab.is-active::before {
                     Depo bazında eksi bakiye izni <strong>Lokasyon Tanımlamaları</strong> ekranından,
                     ilgili deponun <em>Eksi Bakiye İzni</em> switch'i ile verilir. Kendi ayarı olmayan
                     depolarda varsayılan davranış <strong>engelle</strong>'dir.
+                </div>
+
+                <div class="ap-group-title">İrsaliye / Sipariş Bağlama</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Alış İrsaliyesi FIFO Sipariş Bağlama</div>
+                        <div class="ap-row-desc">
+                            Doğrudan girilen irsaliye satırları carinin açık siparişlerine eskiden-yeniye
+                            otomatik bağlanır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-purchase-fifo"
+                                   data-on="Açık" data-off="Kapalı" @(purchaseDeliveryFifoBind ? "checked" : null) />
+                            <span class="ap-switch-track @(purchaseDeliveryFifoBind ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(purchaseDeliveryFifoBind ? "is-active" : "")"
+                                  id="ap-purchase-fifo-label">@(purchaseDeliveryFifoBind ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satış İrsaliyesi FIFO Sipariş Bağlama</div>
+                        <div class="ap-row-desc">
+                            Doğrudan girilen irsaliye satırları carinin açık siparişlerine eskiden-yeniye
+                            otomatik bağlanır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-fifo"
+                                   data-on="Açık" data-off="Kapalı" @(salesDeliveryFifoBind ? "checked" : null) />
+                            <span class="ap-switch-track @(salesDeliveryFifoBind ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(salesDeliveryFifoBind ? "is-active" : "")"
+                                  id="ap-sales-fifo-label">@(salesDeliveryFifoBind ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Alış: Sipariş Bağlantısız Teslimat Yasak</div>
+                        <div class="ap-row-desc">
+                            Açıkken, açık siparişe bağlanamayan satır içeren irsaliye kaydedilmez.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-purchase-require-order"
+                                   data-on="Açık" data-off="Kapalı" @(purchaseDeliveryRequireOrder ? "checked" : null) />
+                            <span class="ap-switch-track @(purchaseDeliveryRequireOrder ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(purchaseDeliveryRequireOrder ? "is-active" : "")"
+                                  id="ap-purchase-require-order-label">@(purchaseDeliveryRequireOrder ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satış: Sipariş Bağlantısız Teslimat Yasak</div>
+                        <div class="ap-row-desc">
+                            Açıkken, açık siparişe bağlanamayan satır içeren irsaliye kaydedilmez.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-require-order"
+                                   data-on="Açık" data-off="Kapalı" @(salesDeliveryRequireOrder ? "checked" : null) />
+                            <span class="ap-switch-track @(salesDeliveryRequireOrder ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(salesDeliveryRequireOrder ? "is-active" : "")"
+                                  id="ap-sales-require-order-label">@(salesDeliveryRequireOrder ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
                 </div>
             </section>
 
@@ -934,11 +1029,21 @@ body.app-theme-dark .ap-tab.is-active::before {
                 else    flash((d1.error || d2.error || d3.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
                 var negCtrlEl = document.getElementById('ap-neg-control');
+                var pFifoEl = document.getElementById('ap-purchase-fifo');
+                var sFifoEl = document.getElementById('ap-sales-fifo');
+                var pReqEl  = document.getElementById('ap-purchase-require-order');
+                var sReqEl  = document.getElementById('ap-sales-require-order');
                 var rs = await fetch('/Admin/SaveStockParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                    body: JSON.stringify({ negControl: !!(negCtrlEl && negCtrlEl.checked) })
+                    body: JSON.stringify({
+                        negControl: !!(negCtrlEl && negCtrlEl.checked),
+                        purchaseDeliveryFifoBind: !!(pFifoEl && pFifoEl.checked),
+                        salesDeliveryFifoBind: !!(sFifoEl && sFifoEl.checked),
+                        purchaseDeliveryRequireOrder: !!(pReqEl && pReqEl.checked),
+                        salesDeliveryRequireOrder: !!(sReqEl && sReqEl.checked)
+                    })
                 });
                 var datas = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
                 ok = !!datas.ok;

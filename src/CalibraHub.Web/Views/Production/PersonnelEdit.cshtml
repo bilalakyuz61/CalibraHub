@@ -80,6 +80,16 @@
         color: #e2e8f0;
         border-color: rgba(255,255,255,0.12);
     }
+    /* pe-email, Sistem Kullanıcısı bağlıyken disabled olur (kaynak-of-truth kullanıcı
+       hesabı) — .ux-edit-pane'de genel bir input:disabled deseni yok, burada tanımlıyoruz. */
+    body.page-personnel-edit .ux-edit-pane input:disabled {
+        opacity: .6;
+        cursor: not-allowed;
+        background: #f1f5f9;
+    }
+    body.app-theme-dark.page-personnel-edit .ux-edit-pane input:disabled {
+        background: rgba(255,255,255,0.03);
+    }
 </style>
 
 <form class="integrator-form" style="display:none" aria-hidden="true"
@@ -356,7 +366,7 @@
         if (!email && opt) {
             // Fallback: "Ad (email)" etiketinden parantez içini parse et.
             var m = /\(([^()]+)\)\s*$/.exec(opt.textContent || '');
-            if (m && m[1] && m[1].indexOf('@') > -1) email = m[1].trim();
+            if (m && m[1] && m[1].indexOf('@@') > -1) email = m[1].trim();
         }
 
         if (!email) {
@@ -426,6 +436,9 @@
                 userId:               (function () { var v = document.getElementById('pe-user').value; return v ? parseInt(v, 10) : null; })(),
                 locationId:           (function () { var v = document.getElementById('pe-location').value; return v ? parseInt(v, 10) : null; })(),
                 phone:                document.getElementById('pe-phone').value.trim() || null,
+                // pe-email Sistem Kullanıcısı bağlıyken disabled olabilir; JS property
+                // erişimi (.value) disabled input'ta da çalışır (yalnız form-submit/FormData
+                // disabled alanı atlar — burada öyle bir akış yok), payload'a her durumda girer.
                 email:                document.getElementById('pe-email').value.trim() || null,
                 notes:                document.getElementById('pe-notes').value.trim() || null,
                 birthDate:            document.getElementById('pe-birthdate').value || null
