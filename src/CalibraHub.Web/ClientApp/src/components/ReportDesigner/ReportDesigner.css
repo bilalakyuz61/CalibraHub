@@ -1059,7 +1059,7 @@
 /* ── Bölüm başlığı + sayaç ──────────────────────────────────────── */
 .rs-secthead { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
 .rs-secthead--mt { margin-top: 22px; }
-.rs-secthead__title { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }
+.rs-secthead__title { font-size: 11px; font-weight: 600; color: #94a3b8; letter-spacing: .08em; }
 .rs-secthead__count {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
@@ -1198,7 +1198,7 @@
 .rs-form__actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
 
 .rs-field { display: flex; flex-direction: column; gap: 6px; }
-.rs-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .07em; }
+.rs-label { font-size: 10px; color: #64748b; letter-spacing: .07em; }
 
 .rs-input {
   width: 100%; padding: 7px 10px; border-radius: 6px;
@@ -1890,7 +1890,6 @@
 .rd-topbar__group-label {
   font-size: 10px;
   color: #475569;
-  text-transform: uppercase;
   letter-spacing: .07em;
   white-space: nowrap;
 }
@@ -1944,7 +1943,6 @@
   font-weight: 700;
   color: #475569;
   letter-spacing: .1em;
-  text-transform: uppercase;
 }
 
 .rd-nav__group-row {
@@ -1959,7 +1957,6 @@
 .rd-nav__group-label {
   font-size: 9px;
   color: #475569;
-  text-transform: uppercase;
   letter-spacing: .07em;
   white-space: nowrap;
   flex-shrink: 0;
@@ -2256,7 +2253,6 @@
   font-weight: 700;
   color: #475569;
   letter-spacing: .1em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 .rd-page-src__sel {

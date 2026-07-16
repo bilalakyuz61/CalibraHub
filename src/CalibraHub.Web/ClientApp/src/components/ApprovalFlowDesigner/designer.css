@@ -47,7 +47,7 @@ body.app-theme-dark .afd-root {
     overflow-y: auto;
 }
 .afd-palette__title {
-    font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    font-size: .72rem; font-weight: 700;
     letter-spacing: .06em; color: var(--afd-muted);
 }
 .afd-palette__hint {
@@ -771,7 +771,7 @@ body.app-theme-dark .afd-vars-err { color: #fca5a5; }
 .afd-vars-table-wrap { overflow: auto; padding: 12px 16px; flex: 1 1 auto; }
 .afd-vars-table { width: 100%; border-collapse: collapse; }
 .afd-vars-table th {
-    text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    text-align: left; font-size: 11px; font-weight: 700;
     color: var(--afd-muted); padding: 4px 6px; border-bottom: 1px solid var(--afd-border);
     letter-spacing: .03em;
 }

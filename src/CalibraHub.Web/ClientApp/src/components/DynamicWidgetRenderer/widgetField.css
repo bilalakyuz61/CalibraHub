@@ -287,7 +287,7 @@ body.app-theme-dark .wf-guide-list-table thead {
   font-weight: 600; font-size: 11px;
   color: rgba(71, 85, 105, 0.85);
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   user-select: none;
 }

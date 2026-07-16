@@ -455,7 +455,7 @@ body.app-theme-dark .dash-modal { background: var(--app-surface, #15182b); }
 }
 .dash-picker-row:hover { background: var(--dash-row-hover); }
 .dash-picker-group-label {
-  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
   color: var(--dash-text-muted); margin: 12px 0 4px;
 }
 .dash-picker-group-label:first-child { margin-top: 0; }
@@ -577,7 +577,7 @@ body.app-theme-dark .react-resizable-handle-se::after {
 .dash-settings-label {
   display: block; font-size: 11.5px; font-weight: 700;
   color: var(--dash-text-secondary); margin-bottom: 5px;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  letter-spacing: 0.04em;
 }
 .dash-settings-input {
   width: 100%; padding: 7px 10px; border-radius: 9px;

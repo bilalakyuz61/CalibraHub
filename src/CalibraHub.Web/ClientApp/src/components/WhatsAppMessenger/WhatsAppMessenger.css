@@ -612,7 +612,6 @@ body.app-theme-dark .wa-attach-popup__divider { background: rgba(255,255,255,.10
     font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: .04em;
-    text-transform: uppercase;
     color: var(--app-text-muted, #94a3b8);
     padding: 2px 8px 4px;
 }
@@ -1207,7 +1206,6 @@ body.app-theme-dark .wa-conv-menu__item:hover { background: rgba(255,255,255,.06
     font-size: 0.78rem;
     font-weight: 600;
     color: var(--app-text-muted, #64748b);
-    text-transform: uppercase;
     letter-spacing: .05em;
     margin-bottom: 8px;
 }
@@ -1650,7 +1648,6 @@ body.app-theme-dark .wa-starred-item__body { color: #e2e8f0; }
     padding: 6px 14px 4px;
     font-size: .7rem;
     font-weight: 700;
-    text-transform: uppercase;
     letter-spacing: .06em;
     color: var(--app-text-muted, #94a3b8);
 }

@@ -413,7 +413,7 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.2)
   padding: 10px 14px 8px; display: flex; align-items: center; justify-content: space-between;
 }
 .nw-folders-title {
-  font-size: .7rem; font-weight: 700; text-transform: uppercase;
+  font-size: .7rem; font-weight: 700;
   letter-spacing: .06em; color: #94a3b8; margin: 0;
 }
 .nw-folder-add-btn {
@@ -1006,7 +1006,7 @@ html:not(.dark) .nw-info-label { color:#64748b; }
 }
 .dark .nw-color-picker { background: #1e293b; border-color: rgba(255,255,255,.1); }
 .nw-color-section-title {
-  font-size: .7rem; font-weight: 600; color: #64748b; text-transform: uppercase;
+  font-size: .7rem; font-weight: 600; color: #64748b;
   letter-spacing: .5px; margin-bottom: 6px;
   display: flex; align-items: center; gap: 4px;
 }
@@ -1241,7 +1241,7 @@ body.app-theme-dark .nw-attach-act--del:hover { color: #f87171; background: rgba
 }
 .nw-insert-section {
   padding: 8px 14px 4px; font-size: .65rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .06em; color: #94a3b8;
+  letter-spacing: .06em; color: #94a3b8;
 }
 .dark .nw-insert-section { color: rgba(255,255,255,.5); }
 .nw-insert-item {
@@ -1737,7 +1737,7 @@ body.app-theme-dark .nw-toc-panel { box-shadow: -3px 0 14px rgba(0,0,0,.35); }
   display: flex; align-items: center; justify-content: space-between;
   padding: 9px 12px 7px;
   border-bottom: 1px solid var(--app-border, #e2e8f0);
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  font-size: 10px; font-weight: 700;
   letter-spacing: .07em;
   color: var(--nw-find-ico, #94a3b8);
   flex-shrink: 0;
@@ -2049,7 +2049,7 @@ body.app-theme-dark .nw-shortcuts-head { border-bottom-color: rgba(255,255,255,.
 }
 .nw-shortcuts-group-title {
   font-size: 10px; font-weight: 700; letter-spacing: .06em;
-  text-transform: uppercase; color: #94a3b8;
+  color: #94a3b8;
   margin-bottom: 6px;
 }
 .nw-shortcuts-row {
@@ -2193,7 +2193,7 @@ body.app-theme-dark .nw-readonly-banner { color: #fcd34d; background: rgba(251,1
 }
 .oc-sidebar-title {
   display: flex; align-items: center; gap: 6px;
-  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  font-size: .72rem; font-weight: 700;
   letter-spacing: .05em; color: #94a3b8; margin: 0;
 }
 .oc-sidebar-add {
@@ -2621,7 +2621,7 @@ body.app-theme-dark .nw-readonly-banner { color: #fcd34d; background: rgba(251,1
 .dark .wf-template-picker__header h2 { color: #f1f5f9; }
 .wf-template-picker__name-row { margin-bottom: 24px; }
 .wf-template-picker__section-title {
-  font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  font-size: .78rem; font-weight: 600; letter-spacing: .06em;
   color: #94a3b8; margin-bottom: 12px;
 }
 .wf-template-picker__grid { display: flex; flex-direction: column; gap: 10px; }
@@ -2734,7 +2734,7 @@ body.app-theme-dark .nw-readonly-banner { color: #fcd34d; background: rgba(251,1
 }
 .dark .nw-enc-warn { color: #fbbf24; background: rgba(251,191,36,0.08); }
 .nw-enc-label {
-  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  font-size: 0.68rem; font-weight: 700;
   letter-spacing: 0.05em; color: #64748b; margin-top: 6px;
 }
 .dark .nw-enc-label { color: rgba(255,255,255,0.5); }
@@ -3018,7 +3018,7 @@ body.app-theme-dark .nw-readonly-banner { color: #fcd34d; background: rgba(251,1
 .nw-sidebar-section-hdr {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 14px 4px;
-  font-size: .67rem; font-weight: 700; text-transform: uppercase;
+  font-size: .67rem; font-weight: 700;
   letter-spacing: .06em; color: #94a3b8;
   flex-shrink: 0;
 }
@@ -3346,7 +3346,7 @@ body.app-theme-dark .bpmd-root {
   background: var(--bpmd-panel); overflow-y: auto;
 }
 .bpmd-section-head {
-  font-size: .65rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  font-size: .65rem; font-weight: 700; letter-spacing: .07em;
   color: var(--bpmd-muted); padding: 10px 12px 4px;
   border-top: 1px solid var(--bpmd-border); margin-top: 4px;
 }
@@ -3786,7 +3786,7 @@ body.app-theme-dark .nw-share-modal-close-btn:hover { background: rgba(255,255,2
 .nw-share-section-header {
   display: flex; align-items: center; gap: 8px;
   padding: 14px 20px 8px;
-  font-size: .78rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .05em;
+  font-size: .78rem; font-weight: 700; color: #475569; letter-spacing: .05em;
 }
 body.app-theme-dark .nw-share-section-header { color: rgba(255,255,255,.35); }
 .nw-share-user-search-wrap { padding: 0 20px 10px; position: relative; }

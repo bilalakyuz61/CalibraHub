@@ -140,7 +140,7 @@ body.app-theme-dark .lt-root {
 }
 .lt-types-form-title {
   font-size: 12px; font-weight: 600; color: var(--lt-muted);
-  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
+  letter-spacing: .04em; margin-bottom: 4px;
 }
 .lt-types-fl {
   display: flex; flex-direction: column; gap: 4px;
@@ -185,7 +185,7 @@ body.app-theme-dark .lt-root {
 .lt-types-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lt-types-table thead th {
   text-align: left; padding: 6px 10px; font-weight: 600;
-  font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+  font-size: 11px; letter-spacing: .03em;
   color: var(--lt-muted); border-bottom: 2px solid var(--lt-border);
   background: var(--lt-bg); position: sticky; top: 0;
 }
@@ -255,7 +255,7 @@ body.app-theme-dark .lt-root {
 .lt-tile:hover { border-color: var(--lt-indigo-bdr); }
 .lt-tile__label {
   font-size: 9px; font-weight: 600; color: var(--lt-muted);
-  text-transform: uppercase; letter-spacing: .04em;
+  letter-spacing: .04em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lt-tile__value {

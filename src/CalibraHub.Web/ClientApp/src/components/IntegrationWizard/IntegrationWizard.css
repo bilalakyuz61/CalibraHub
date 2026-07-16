@@ -681,7 +681,7 @@ body.app-theme-dark .eup-menu {
 .eup-menu-group-header {
   position: sticky; top: 0; z-index: 1;
   padding: 5px 10px; font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .5px;
+  letter-spacing: .5px;
   background: var(--eup-bg); color: var(--eup-muted);
   border-bottom: 1px solid var(--eup-border);
 }
