@@ -404,7 +404,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     x.TaxRate,
                     TrackingType: x.TrackingType,
                     MinStock: x.MinStock,
-                    AutoSerial: x.AutoSerial))
+                    AutoSerial: x.AutoSerial,
+                    Barcode: x.Barcode))
                 .ToArray(),
             Properties: properties
                 .Select(x => new FeatureDto(
@@ -1113,6 +1114,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         {
             Code = code,
             Name = name,
+            Barcode = NormalizeOptionalField(request.Barcode, 50),
             TypeId = request.TypeId,
             UnitId = request.UnitId,
             Combinations = request.Combinations,
@@ -1169,6 +1171,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             Id = request.ItemId,
             Code = code,
             Name = name,
+            Barcode = NormalizeOptionalField(request.Barcode, 50),
             TypeId = request.TypeId,
             UnitId = request.UnitId,
             Combinations = request.Combinations,
@@ -2771,7 +2774,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var dtos = cards.Select(x => new ItemDto(
             x.Id, x.Code, x.Name,
             x.TypeId, x.IsActive, x.Created, x.Updated,
-            x.UnitId, x.Combinations, x.TaxRate)).ToList();
+            x.UnitId, x.Combinations, x.TaxRate,
+            Barcode: x.Barcode)).ToList();
         return (dtos, totalCount);
     }
 

@@ -100,6 +100,8 @@ public sealed class SaveMaterialCardJsonInput
     public int? ItemId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    /// <summary>Opsiyonel barkod — Code'dan ayrı, kullanıcı doğrudan girer/tarar.</summary>
+    public string? Barcode { get; set; }
     public int? TypeId { get; set; }
     public int? UnitId { get; set; }
     public bool Combinations { get; set; }

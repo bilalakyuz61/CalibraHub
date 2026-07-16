@@ -1366,9 +1366,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType], [MinStock], [AutoSerial])
+                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [Created], [Combinations], [TaxRate], [TrackingType], [MinStock], [AutoSerial], [Barcode])
             VALUES
-                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType, @MinStock, @AutoSerial);
+                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @Created, @Combinations, @TaxRate, @TrackingType, @MinStock, @AutoSerial, @Barcode);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -1384,6 +1384,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@TrackingType", (object?)stockCard.TrackingType ?? "None"));
         command.Parameters.Add(new SqlParameter("@MinStock", stockCard.MinStock));
         command.Parameters.Add(new SqlParameter("@AutoSerial", stockCard.AutoSerial ? 1 : 0));
+        command.Parameters.Add(new SqlParameter("@Barcode", (object?)stockCard.Barcode ?? DBNull.Value));
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -1405,6 +1406,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [TrackingType] = @TrackingType,
                 [MinStock] = @MinStock,
                 [AutoSerial] = @AutoSerial,
+                [Barcode] = @Barcode,
                 [Updated] = @Updated
             WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
@@ -1423,6 +1425,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         // hiç eklenmiyordu (update çağrısı "Must declare the scalar variable" ile düşerdi).
         command.Parameters.Add(new SqlParameter("@MinStock", stockCard.MinStock));
         command.Parameters.Add(new SqlParameter("@AutoSerial", stockCard.AutoSerial ? 1 : 0));
+        command.Parameters.Add(new SqlParameter("@Barcode", (object?)stockCard.Barcode ?? DBNull.Value));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
