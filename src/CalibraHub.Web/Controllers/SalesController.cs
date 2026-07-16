@@ -1532,14 +1532,28 @@ public sealed class SalesController : Controller
             return Json(new { success = false, message = "Gecersiz istek govdesi. Tarih ve zorunlu alanlari kontrol ediniz." });
 
         // Belge tipine göre doğru parent form kodu ile dinamik izin kontrolü.
+        // Tip bypass kapatıldı (2026-07-16): güncellemede tip DB'den çözülür — istemci beyanı,
+        // yalnız yetkili olduğu tipi beyan ederek başka tipteki belgeyi değiştirmeye izin veriyordu.
+        CalibraHub.Domain.Entities.DocumentType? _sDocType = null;
         {
-            var _sDtCode = "satis_teklifi";
-            if (request.DocumentTypeId.HasValue)
+            var _sIsUpdate = request.Id.HasValue && request.Id.Value != 0; // SaveQuoteAsync isNew semantiğiyle aynı
+            if (_sIsUpdate)
             {
-                var _sDt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
-                if (_sDt != null) _sDtCode = _sDt.Code;
+                var _sDoc = await _quoteService.GetQuoteByIdAsync(request.Id!.Value, ct);
+                if (_sDoc == null)
+                    return Json(new { success = false, message = "Güncellenmek istenen belge bulunamadı." });
+                if (request.DocumentTypeId.HasValue && _sDoc.DocumentTypeId.HasValue
+                    && request.DocumentTypeId.Value != _sDoc.DocumentTypeId.Value)
+                    return Json(new { success = false, message = "Belge tipi kayıtlı belgeyle uyuşmuyor. Mevcut belgenin tipi değiştirilemez." });
+                if (_sDoc.DocumentTypeId.HasValue)
+                    _sDocType = await _documentTypeRepo.GetByIdAsync(_sDoc.DocumentTypeId.Value, ct);
             }
-            var _sPfc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_sDtCode).Parent;
+            else if (request.DocumentTypeId.HasValue)
+            {
+                // Yeni kayıt: beyan edilen tip kullanılır (aşağıdaki izin kontrolüne tabi).
+                _sDocType = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
+            }
+            var _sPfc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_sDocType?.Code).Parent;
             UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var _sRole);
             int? _sDept = int.TryParse(User.FindFirstValue("department_id"), out var _sd) && _sd > 0 ? _sd : null;
             if (!await _permService.CheckAnyAsync(GetUserId(), _sRole, _sDept, _sPfc,
@@ -1561,12 +1575,8 @@ public sealed class SalesController : Controller
             {
                 savedLines = await _quoteService.GetQuoteLinesAsync(quote.Id, ct);
                 var lineIds    = savedLines.Select(l => l.Id.ToString()).ToArray();
-                var saveLineFormCode = "SALES_QUOTE_LINES";
-                if (request.DocumentTypeId.HasValue)
-                {
-                    var dt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
-                    saveLineFormCode = DocumentTypeFormMap.Resolve(dt?.Code).Lines;
-                }
+                // İzin bloğunda DB-doğrulanmış tip (_sDocType) kullanılır — istemci beyanı tekrar sorgulanmaz.
+                var saveLineFormCode = DocumentTypeFormMap.Resolve(_sDocType?.Code).Lines;
                 var missing    = await _widgetService.ValidateRequiredAsync(saveLineFormCode, lineIds, ct);
                 if (missing.Count > 0)
                 {
@@ -1592,10 +1602,10 @@ public sealed class SalesController : Controller
             // Kaydedilen satırlara seçilen serileri bağla; ORDER_SERIAL_RESERVATION + stok
             // rezervasyonu açıksa InStock→Reserved (hiyerarşi). Reconcile her zaman çağrılır —
             // payload boşsa bile belgenin eski seri bağlarını/rezervasyonunu temizler (reset+rebuild).
-            if (quote != null && request.DocumentTypeId.HasValue)
+            if (quote != null && _sDocType != null)
             {
-                var _serDt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
-                if (string.Equals(_serDt?.Code, "satis_siparisi", StringComparison.OrdinalIgnoreCase))
+                // Tip, izin bloğundaki DB-doğrulanmış _sDocType'tan okunur (tekrar sorgu yok).
+                if (string.Equals(_sDocType.Code, "satis_siparisi", StringComparison.OrdinalIgnoreCase))
                 {
                     // Hiyerarşi: stok rez. → seri takibi → seri rez. Rezervasyon ancak üçü de açıkken.
                     var stockRes = await _companyParams.GetBoolAsync(
