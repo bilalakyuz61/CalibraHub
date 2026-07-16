@@ -140,6 +140,59 @@ var dataTypeIconMap = {
   status:   Activity,
 }
 
+/* ── dataType/type → sabit chip genisligi (px) ──────────────────
+   SmartCard'daki widget chip'leri (SmartWidget) icerige gore degisken
+   genislikte degil, tipe gore SABIT genislikte render edilir. Bir
+   board'daki tum kartlar ayni widget setini/sirasini tasidigi icin
+   (bkz. SmartBoard masterWidgets), her pozisyondaki chip her kartta
+   ayni genislikte olursa kumulatif x-offset de her kartta ayni olur →
+   dikey "sutun" hizalamasi elde edilir (gercek tablo gibi), icerik
+   uzunlugundan bagimsiz. Uzun icerik (uzun stok adi vb.) bu sabit
+   genislik icinde ellipsis ile kirpilir; tam metin WidgetTooltip
+   hover'inda gorunur — bkz. SmartWidget.jsx.
+   3 kademe (tek genislik yerine): kisa/sabit formatli tipler dar,
+   serbest-metin tipler genis — boylece "Durum: Aktif" gibi kisa
+   chip'ler gereksiz yere sismez, "Stok Adi" gibi metin alanlari da
+   asiri kirpilmez. */
+export var CHIP_WIDTH_COMPACT = 132  // boolean, numeric, percent, date, status
+export var CHIP_WIDTH_MEDIUM  = 158  // currency, datetime, dropdown/options, attachment
+export var CHIP_WIDTH_WIDE    = 192  // text, textarea, lookup, guide-list, link, multi-select, default
+
+var dataTypeWidthMap = {
+  boolean:        CHIP_WIDTH_COMPACT,
+  numeric:        CHIP_WIDTH_COMPACT,
+  percent:        CHIP_WIDTH_COMPACT,
+  date:           CHIP_WIDTH_COMPACT,
+  status:         CHIP_WIDTH_COMPACT,
+  currency:       CHIP_WIDTH_MEDIUM,
+  datetime:       CHIP_WIDTH_MEDIUM,
+  dropdown:       CHIP_WIDTH_MEDIUM,
+  options:        CHIP_WIDTH_MEDIUM,
+  attachment:     CHIP_WIDTH_MEDIUM,
+  text:           CHIP_WIDTH_WIDE,
+  textarea:       CHIP_WIDTH_WIDE,
+  lookup:         CHIP_WIDTH_WIDE,
+  'multi-select': CHIP_WIDTH_WIDE,
+  multiselect:    CHIP_WIDTH_WIDE,
+  multi_select:   CHIP_WIDTH_WIDE,
+}
+
+/**
+ * Widget chip'i icin sabit genislik (px) doner — icerige (value/label
+ * uzunluguna) DEGIL sadece dataType/type'a bakar; ayni widget her
+ * kartta ayni genislikte cizilir (hizalama sarti bunu gerektirir).
+ * type='link' ve dataType='guide-list' her zaman WIDE (ok ikonu +
+ * serbest etiket tasirlar). Taninmayan/tanimsiz dataType → WIDE
+ * (guvenli taraf: dar kirpmaktansa biraz bosluk).
+ */
+export function resolveChipWidth(dataType, type) {
+  if (type === 'link') return CHIP_WIDTH_WIDE
+  var dt = String(dataType || '').toLowerCase()
+  if (dt === 'guide-list') return CHIP_WIDTH_WIDE
+  if (Object.prototype.hasOwnProperty.call(dataTypeWidthMap, dt)) return dataTypeWidthMap[dt]
+  return CHIP_WIDTH_WIDE
+}
+
 /* ── dataType → varsayilan renk ───────────────── */
 var dataTypeColorMap = {
   text:     'slate',

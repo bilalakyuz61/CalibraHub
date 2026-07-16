@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, AlertTriangle, X } from 'lucide-react'
-import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
+import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon, resolveChipWidth } from './DynamicWidgetFactory'
 import WidgetTooltip from './WidgetTooltip'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 
@@ -105,6 +105,12 @@ export default function SmartWidget(props) {
   var type = widget.type || 'data'
   var dataType = widget.dataType || null
 
+  // Sabit chip genisligi (px) — icerige degil dataType/type'a bagli, boylece
+  // ayni board'daki tum kartlarda ayni pozisyondaki widget ayni genislikte
+  // olur ve dikey sutun hizalamasi saglanir (bkz. DynamicWidgetFactory.js).
+  var chipWidth = resolveChipWidth(dataType, type)
+  var chipBoxStyle = { flex: '0 0 ' + chipWidth + 'px', width: chipWidth + 'px', maxWidth: chipWidth + 'px' }
+
   // Icon: widget.icon > dataType > fallback. Boolean icin dinamik.
   var Icon
   if (dataType === 'boolean' && !widget.icon) {
@@ -133,6 +139,7 @@ export default function SmartWidget(props) {
         Icon={Icon}
         label={label}
         recordValues={props.recordValues || {}}
+        chipWidth={chipWidth}
       />
     )
   }
@@ -150,13 +157,13 @@ export default function SmartWidget(props) {
     }
 
     return (
-      <WidgetTooltip label={label} value={value} detail={detail || (url ? 'Git: ' + url : '')}>
+      <WidgetTooltip label={label} value={value} detail={detail || (url ? 'Git: ' + url : '')} style={chipBoxStyle}>
         <motion.a
           href={url || '#'}
           onClick={handleClick}
           whileHover={{ scale: 1.03, y: -1 }}
           transition={{ type: 'spring', stiffness: 350, damping: 26, mass: 0.7 }}
-          className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer select-none whitespace-nowrap no-underline"
+          className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer select-none whitespace-nowrap no-underline w-full overflow-hidden"
           style={{
             background: palette.bg,
             border: '1px dashed ' + palette.border,
@@ -169,12 +176,12 @@ export default function SmartWidget(props) {
           >
             <Icon size={14} style={{ color: palette.icon }} strokeWidth={1.8} />
           </div>
-          <div className="flex flex-col min-w-0 gap-1">
-            <span className="text-[9px] font-semibold uppercase tracking-wider leading-none text-slate-600 dark:text-white/70">
+          <div className="flex flex-col min-w-0 flex-1 gap-1">
+            <span className="text-[9px] font-semibold uppercase tracking-wider leading-none text-slate-600 dark:text-white/70 truncate">
               Kisa Yol
             </span>
             <span
-              className="text-xs font-bold leading-none tracking-tight"
+              className="text-xs font-bold leading-none tracking-tight truncate"
               style={{ color: palette.text }}
             >
               {label}
@@ -184,7 +191,7 @@ export default function SmartWidget(props) {
             initial={{ opacity: 0, x: -4 }}
             whileHover={{ opacity: 1, x: 0 }}
             animate={{ opacity: 0 }}
-            className="group-hover:opacity-100 transition-opacity duration-200 -ml-1"
+            className="group-hover:opacity-100 transition-opacity duration-200 -ml-1 flex-shrink-0"
           >
             <ArrowUpRight size={12} style={{ color: palette.icon }} strokeWidth={2} />
           </motion.span>

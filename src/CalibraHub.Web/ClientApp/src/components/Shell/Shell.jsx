@@ -2007,6 +2007,445 @@ function Header(props) {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   MiniSwitch — CLAUDE.md standardı: boolean alan = toggle switch,
+   checkbox değil. Header kısayol çubuğu + kısayol picker'ı ortak kullanır.
+   ══════════════════════════════════════════════════════════════ */
+function MiniSwitch(props) {
+  var isDark = props.isDark
+  var checked = !!props.checked
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={props.label}
+      onClick={props.onClick}
+      className={
+        'relative inline-flex items-center h-4 w-7 rounded-full transition-colors flex-shrink-0 ' +
+        (checked ? 'bg-indigo-500' : (isDark ? 'bg-white/15' : 'bg-slate-300'))
+      }
+    >
+      <span
+        className="inline-block h-3 w-3 rounded-full bg-white shadow transform transition-transform"
+        style={{ transform: checked ? 'translateX(14px)' : 'translateX(2px)' }}
+      />
+    </button>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ShortcutsBar — header hızlı erişim çubuğu.
+   Normal mod : 🏠 + kullanıcı kısayolları (ikon; "İsimler" açıksa ikon+ad) + ✏️
+   Düzenleme  : kısayollar ad+X (kaldır) + "+" (picker) + "İsimler" switch + ✓ (kaydet)
+   Kalıcılık  : services/shellShortcutsService.js (user_settings → yoksa localStorage).
+   ══════════════════════════════════════════════════════════════ */
+function ShortcutsBar(props) {
+  var isDark = props.isDark
+  var lang = props.lang || 'TR'
+  var menu = props.menu || []
+  var onNavigate = props.onNavigate
+  var onGoHome = props.onGoHome
+
+  var [shortcutKeys, setShortcutKeys] = useState([])
+  var [showNames, setShowNames] = useState(false)
+  var [loaded, setLoaded] = useState(false)
+  var [editMode, setEditMode] = useState(false)
+  var [pickerOpen, setPickerOpen] = useState(false)
+  var savedSnapshotRef = useRef({ ids: [], showNames: false })
+
+  var options = useMemo(function() { return flattenMenuLeaves(menu) }, [menu])
+  var optionIndex = useMemo(function() {
+    var m = {}
+    options.forEach(function(o) { m[o.key] = o })
+    return m
+  }, [options])
+
+  // ── İlk yükleme — kullanıcının kayıtlı kısayolları ──
+  useEffect(function() {
+    var alive = true
+    loadShellShortcuts().then(function(cfg) {
+      if (!alive) return
+      setShortcutKeys(cfg.ids)
+      setShowNames(cfg.showNames)
+      savedSnapshotRef.current = { ids: cfg.ids, showNames: cfg.showNames }
+      setLoaded(true)
+    })
+    return function() { alive = false }
+  }, [])
+
+  function enterEditMode() {
+    savedSnapshotRef.current = { ids: shortcutKeys, showNames: showNames }
+    setEditMode(true)
+  }
+  function commitEdit() {
+    var next = { ids: shortcutKeys, showNames: showNames }
+    savedSnapshotRef.current = next
+    saveShellShortcuts(next)
+    setEditMode(false)
+    setPickerOpen(false)
+  }
+  function cancelEdit() {
+    setShortcutKeys(savedSnapshotRef.current.ids)
+    setShowNames(savedSnapshotRef.current.showNames)
+    setEditMode(false)
+    setPickerOpen(false)
+  }
+
+  // Esc → düzenleme modundan (picker kapalıyken) çık, kaydedilmemiş değişiklikleri at
+  useEffect(function() {
+    if (!editMode) return undefined
+    function onKey(e) {
+      if (e.key !== 'Escape' || pickerOpen) return
+      cancelEdit()
+    }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+  }, [editMode, pickerOpen, shortcutKeys, showNames]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function removeShortcut(key) {
+    setShortcutKeys(function(prev) { return prev.filter(function(k) { return k !== key }) })
+  }
+  function applyPicker(nextKeys) {
+    setShortcutKeys(nextKeys)
+    setPickerOpen(false)
+  }
+
+  var resolved = shortcutKeys.map(function(k) { return optionIndex[k] }).filter(Boolean)
+
+  return (
+    <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto overflow-y-hidden smartcard-widgets-scroll">
+      {/* Ana Sayfa — sabit, kısayol listesinden bağımsız, kaldırılamaz */}
+      <button
+        type="button"
+        onClick={onGoHome}
+        title={tShell('go_home', lang)}
+        aria-label={tShell('go_home', lang)}
+        className={
+          'flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors ' +
+          (isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900')
+        }
+      >
+        <Home size={15} strokeWidth={1.8} />
+      </button>
+
+      {loaded && (resolved.length > 0 || editMode) && (
+        <div className={'w-px h-5 flex-shrink-0 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />
+      )}
+
+      {loaded && resolved.map(function(item) {
+        return (
+          <ShortcutChip
+            key={item.key}
+            isDark={isDark}
+            item={item}
+            editMode={editMode}
+            showLabel={showNames || editMode}
+            onClick={function() { if (!editMode && onNavigate) onNavigate(item) }}
+            onRemove={function() { removeShortcut(item.key) }}
+            removeLabel={tShell('shortcuts_remove', lang)}
+          />
+        )
+      })}
+
+      {loaded && editMode && (
+        <button
+          type="button"
+          onClick={function() { setPickerOpen(true) }}
+          title={tShell('shortcuts_add', lang)}
+          className={
+            'flex items-center justify-center gap-1 w-8 h-8 rounded-lg flex-shrink-0 border border-dashed transition-colors ' +
+            (isDark ? 'border-white/20 text-white/60 hover:text-white hover:border-white/40 hover:bg-white/[0.05]'
+                    : 'border-slate-300 text-slate-500 hover:text-slate-800 hover:border-slate-400 hover:bg-slate-50')
+          }
+        >
+          <Plus size={13} strokeWidth={2.4} />
+        </button>
+      )}
+
+      {loaded && editMode && (
+        <label
+          className={
+            'flex items-center gap-1.5 h-8 px-2 rounded-lg flex-shrink-0 cursor-pointer select-none ' +
+            (isDark ? 'text-white/60 hover:text-white' : 'text-slate-500 hover:text-slate-800')
+          }
+          title={tShell('shortcuts_shownames', lang)}
+        >
+          <span className="text-[11px] font-medium whitespace-nowrap">{tShell('shortcuts_shownames', lang)}</span>
+          <MiniSwitch
+            isDark={isDark}
+            checked={showNames}
+            label={tShell('shortcuts_shownames', lang)}
+            onClick={function() { setShowNames(function(v) { return !v }) }}
+          />
+        </label>
+      )}
+
+      {loaded && (
+        <div className="flex-shrink-0">
+          {editMode ? (
+            <button
+              type="button"
+              onClick={commitEdit}
+              title={tShell('shortcuts_save', lang)}
+              aria-label={tShell('shortcuts_save', lang)}
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-white transition-transform hover:scale-105"
+              style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)', boxShadow: '0 4px 12px rgba(34,197,94,0.35)' }}
+            >
+              <Check size={15} strokeWidth={2.6} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={enterEditMode}
+              title={tShell('shortcuts_edit', lang)}
+              aria-label={tShell('shortcuts_edit', lang)}
+              className={
+                'w-8 h-8 rounded-xl flex items-center justify-center transition-colors ' +
+                (isDark ? 'text-white/40 hover:text-white hover:bg-white/[0.06]' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-100')
+              }
+            >
+              <Pencil size={14} strokeWidth={2} />
+            </button>
+          )}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {pickerOpen && (
+          <ShortcutPickerModal
+            isDark={isDark}
+            lang={lang}
+            options={options}
+            selectedKeys={shortcutKeys}
+            onApply={applyPicker}
+            onClose={function() { setPickerOpen(false) }}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+/* Tek bir kısayol çubuğu öğesi — normal modda ikon (+ opsiyonel ad),
+   düzenleme modunda her zaman ikon+ad+kaldır (x) butonu. */
+function ShortcutChip(props) {
+  var isDark = props.isDark
+  var item = props.item
+  var editMode = props.editMode
+  var showLabel = props.showLabel
+  var Icon = resolveIcon(item.icon)
+
+  var chipClasses =
+    'group relative flex items-center h-8 rounded-lg flex-shrink-0 transition-colors select-none cursor-pointer gap-1.5 ' +
+    (showLabel ? ('pl-2.5 ' + (editMode ? 'pr-6' : 'pr-2.5')) : 'w-8 justify-center') + ' ' +
+    (isDark ? 'text-white/70 hover:bg-white/[0.06] hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900')
+
+  return (
+    <div onClick={props.onClick} title={item.label} className={chipClasses}>
+      <Icon size={15} strokeWidth={1.8} className="flex-shrink-0" />
+      {showLabel && (
+        <span className="text-[12px] font-medium truncate max-w-[130px]">{item.label}</span>
+      )}
+      {editMode && (
+        <button
+          type="button"
+          onClick={function(e) { e.stopPropagation(); props.onRemove() }}
+          title={props.removeLabel}
+          aria-label={props.removeLabel}
+          className={
+            'absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center transition-colors ' +
+            (isDark ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/40' : 'bg-rose-100 text-rose-500 hover:bg-rose-200')
+          }
+        >
+          <X size={9} strokeWidth={3} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ShortcutPickerModal — menüden yeni kısayol seçme paneli.
+   QuickLinksPickerModal (Dashboard/widgets) ile aynı UX sözleşmesi: arama +
+   groupLabel'a göre gruplama + switch toggle + Uygula/Vazgeç. Görsel dil
+   Shell.jsx'in kendi popover'larıyla (ProfilePopover/OpenTabsPopover) tutarlı.
+   ══════════════════════════════════════════════════════════════ */
+function ShortcutPickerModal(props) {
+  var isDark = props.isDark
+  var lang = props.lang || 'TR'
+  var options = props.options || []
+  var [selected, setSelected] = useState(function() { return new Set(props.selectedKeys || []) })
+  var [search, setSearch] = useState('')
+  var searchRef = useRef(null)
+
+  useEffect(function() {
+    var t = setTimeout(function() { if (searchRef.current) searchRef.current.focus() }, 60)
+    return function() { clearTimeout(t) }
+  }, [])
+
+  useEffect(function() {
+    function onKey(e) { if (e.key === 'Escape') { if (props.onClose) props.onClose() } }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggle(key) {
+    setSelected(function(prev) {
+      var next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
+
+  var q = search.trim().toLocaleLowerCase('tr-TR')
+  var filtered = q
+    ? options.filter(function(o) {
+        return (o.label || '').toLocaleLowerCase('tr-TR').indexOf(q) !== -1 ||
+               (o.groupLabel || '').toLocaleLowerCase('tr-TR').indexOf(q) !== -1
+      })
+    : options
+  var groupsMap = {}
+  var groupOrder = []
+  filtered.forEach(function(o) {
+    var g = o.groupLabel || o.label
+    if (!groupsMap[g]) { groupsMap[g] = []; groupOrder.push(g) }
+    groupsMap[g].push(o)
+  })
+
+  var panelBg = isDark ? 'rgba(15, 18, 32, 0.98)' : 'rgba(255, 255, 255, 0.99)'
+  var panelBorder = isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(15,23,42,0.1)'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      onClick={props.onClose}
+      className="fixed inset-0 z-[10010] flex items-start justify-center p-4"
+      style={{ background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', paddingTop: '10vh' }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: -8, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -8, scale: 0.97 }}
+        transition={{ duration: 0.16 }}
+        onClick={function(e) { e.stopPropagation() }}
+        role="dialog"
+        aria-modal="true"
+        className={'w-full max-w-md rounded-2xl overflow-hidden flex flex-col ' + (isDark ? 'text-white' : 'text-slate-900')}
+        style={{ maxHeight: '70vh', background: panelBg, border: panelBorder, boxShadow: '0 24px 70px rgba(0,0,0,0.45)' }}
+      >
+        <div className={'flex items-center gap-2.5 px-4 py-3.5 border-b flex-shrink-0 ' + (isDark ? 'border-white/10' : 'border-slate-200')}>
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 6px 14px rgba(99,102,241,0.3)' }}
+          >
+            <Zap size={15} className="text-white" strokeWidth={2} />
+          </div>
+          <h3 className="flex-1 text-sm font-bold">{tShell('shortcuts_picker_title', lang)}</h3>
+          <button
+            type="button"
+            onClick={props.onClose}
+            aria-label={tShell('cancel', lang)}
+            className={
+              'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' +
+              (isDark ? 'hover:bg-white/10 text-white/50 hover:text-white' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-700')
+            }
+          >
+            <X size={14} strokeWidth={2.4} />
+          </button>
+        </div>
+
+        <div className="px-4 pt-3 pb-1 flex-shrink-0">
+          <div className="relative">
+            <Search size={13} className={'absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ' + (isDark ? 'text-white/45' : 'text-slate-400')} />
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={function(e) { setSearch(e.target.value) }}
+              placeholder={tShell('shortcuts_picker_search', lang)}
+              style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+              className={
+                'w-full pl-8 pr-3 py-1.5 rounded-lg text-[12.5px] outline-none transition-colors ' +
+                (isDark
+                  ? 'bg-white/[0.05] border border-white/10 text-white placeholder:text-white/40 focus:border-indigo-400/50'
+                  : 'bg-slate-50 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-indigo-400/60')
+              }
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 py-2 smartcard-widgets-scroll">
+          {groupOrder.length === 0 && (
+            <div className={'text-center py-8 text-[12px] ' + (isDark ? 'text-white/40' : 'text-slate-400')}>
+              {tShell('shortcuts_picker_empty', lang)}
+            </div>
+          )}
+          {groupOrder.map(function(g) {
+            return (
+              <div key={g} className="mb-1">
+                <div className={'px-2.5 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider ' + (isDark ? 'text-white/35' : 'text-slate-400')}>
+                  {g}
+                </div>
+                {groupsMap[g].map(function(o) {
+                  var Icon = resolveIcon(o.icon)
+                  var on = selected.has(o.key)
+                  return (
+                    <div
+                      key={o.key}
+                      onClick={function() { toggle(o.key) }}
+                      className={
+                        'flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ' +
+                        (isDark ? 'hover:bg-white/[0.05]' : 'hover:bg-slate-100')
+                      }
+                    >
+                      <Icon size={15} strokeWidth={1.8} className={'flex-shrink-0 ' + (isDark ? 'text-white/50' : 'text-slate-500')} />
+                      <span className="flex-1 text-[12.5px] font-medium truncate">{o.label}</span>
+                      <MiniSwitch
+                        isDark={isDark}
+                        checked={on}
+                        label={o.label}
+                        onClick={function(e) { e.stopPropagation(); toggle(o.key) }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+
+        <div className={'flex items-center gap-2 px-4 py-3 border-t flex-shrink-0 ' + (isDark ? 'border-white/10' : 'border-slate-200')}>
+          <span className={'text-[11px] font-medium mr-auto ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+            {selected.size} {tShell('shortcuts_picker_selected_suffix', lang)}
+          </span>
+          <button
+            type="button"
+            onClick={props.onClose}
+            className={
+              'px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-colors ' +
+              (isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+            }
+          >
+            {tShell('shortcuts_picker_cancel', lang)}
+          </button>
+          <button
+            type="button"
+            onClick={function() { if (props.onApply) props.onApply(Array.from(selected)) }}
+            className="px-3.5 py-1.5 rounded-lg text-[12.5px] font-bold text-white transition-all"
+            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 14px rgba(99,102,241,0.35)' }}
+          >
+            {tShell('shortcuts_picker_apply', lang)}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
    Profile popover
    ══════════════════════════════════════════════════════════════ */
 function ProfilePopover(props) {

@@ -7,9 +7,17 @@ export default function WidgetTooltip(props) {
   var value = props.value
   var detail = props.detail
 
+  // WidgetTooltip her zaman SmartCard'in yatay widget seridinde (flex row)
+  // dogrudan flex-item olarak render edilir. SmartWidget sabit chip
+  // genisligini (flexBasis/width/maxWidth) buraya `style` prop'uyla iletir —
+  // flexShrink:0 varsayilani, satir dar geldiginde chip'in sikismasini
+  // (ve boylece kartlar arasi sutun hizalamasinin bozulmasini) engeller.
+  var wrapperStyle = Object.assign({ flexShrink: 0 }, props.style || {})
+
   return (
     <div
       className="relative"
+      style={wrapperStyle}
       onMouseEnter={function() { setShow(true) }}
       onMouseLeave={function() { setShow(false) }}
     >
