@@ -904,6 +904,28 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         var tableEsc  = baseTableName.Replace("]", "]]");
         var recordKey = form.BaseRecordKey;
 
+        // 3b) FK cozulmus Kod/Ad kolonlari — base tablonun FK kolonlarini (ContactId/ItemId...)
+        // referans master tabloya LEFT JOIN ile baglayip {Ref}Code/{Ref}Name kolonu ekler.
+        // Amac: entegrasyon eslemesinde ham Id yerine cari/stok KODU gonderilebilsin. Mantik
+        // CalibraDatabaseInitializer.RebuildSingleFlatViewAsync ile ORTAK (FlatViewFkResolver
+        // tek kaynak) → iki uretici senkron kalir; runtime widget/form degisikliginde
+        // cozulmus kolonlar dusmez. Referans tablo kolonlari mevcut GetTableColumnsAsync ile
+        // dogrulanir (kendi baglantisini acar — buradaki conn asagida acildigi icin uygun).
+        var fkRefCols = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        if (baseColumnSet.Overlaps(FlatViewFkResolver.Map.Select(m => m.FkColumn)))
+        {
+            foreach (var refTable in FlatViewFkResolver.ReferencedTables)
+            {
+                var refCols = await GetTableColumnsAsync(baseSchema, refTable, ct);
+                if (refCols.Count > 0)
+                    fkRefCols[refTable] = new HashSet<string>(refCols, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        var (fkSelectParts, fkJoinParts) = FlatViewFkResolver.Build(
+            schemaEsc, baseColumnSet, finalPivot.Select(w => w.WidgetCode),
+            (table, code, name) => fkRefCols.TryGetValue(table, out var cs)
+                && cs.Contains("Id") && cs.Contains(code) && cs.Contains(name));
+
         var sb = new StringBuilder();
         sb.AppendLine($"CREATE OR ALTER VIEW [{schemaEsc}].[{viewName}] AS");
         sb.AppendLine("SELECT");
@@ -933,6 +955,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         // SELECT clause birlestir
         var allSelect = new List<string>(baseSelectParts);
         allSelect.AddRange(pivotSelectParts);
+        allSelect.AddRange(fkSelectParts);   // cozulmus FK Kod/Ad kolonlari
         sb.AppendLine(string.Join(",\n", allSelect));
 
         // FROM + JOIN (WidgetTra + WidgetMas)
@@ -940,6 +963,8 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         sb.AppendLine($"LEFT JOIN {_widgetMasTable} m ON m.[FormId] = {form.Id}");
         sb.AppendLine($"LEFT JOIN {_widgetTraTable} t ON t.[WidgetId] = m.[Id]");
         sb.AppendLine($"    AND t.[RecordId] = CAST(base.[{recordKey.Replace("]", "]]")}] AS NVARCHAR(60))");
+        // Cozulmus FK LEFT JOIN'leri (NULL-safe; MAX ile aggregate edildigi icin GROUP BY'a girmez)
+        foreach (var j in fkJoinParts) sb.AppendLine(j);
 
         // GROUP BY — base kolonlarinin tamami (pivot widget kolonlari aggregate icinde)
         sb.AppendLine("GROUP BY");
