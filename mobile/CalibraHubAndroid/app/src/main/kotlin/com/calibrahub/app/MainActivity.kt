@@ -21,6 +21,8 @@ import com.calibrahub.app.ui.home.HomeScreen
 import com.calibrahub.app.ui.login.LoginScreen
 import com.calibrahub.app.ui.production.ProductionHomeScreen
 import com.calibrahub.app.ui.theme.CalibraTheme
+import com.calibrahub.app.ui.warehouse.StockDocMode
+import com.calibrahub.app.ui.warehouse.StockDocScreen
 import com.calibrahub.app.ui.warehouse.StockQueryScreen
 import com.calibrahub.app.ui.warehouse.WarehouseHomeScreen
 
@@ -99,11 +101,19 @@ private fun AppNav() {
         composable("warehouse_home") {
             WarehouseHomeScreen(
                 onOpenStockQuery = { navController.navigate("warehouse_stock_query") },
+                onOpenStockIn    = { navController.navigate("warehouse_stock_in") },
+                onOpenStockOut   = { navController.navigate("warehouse_stock_out") },
                 onBack = { navController.popBackStack() }
             )
         }
         composable("warehouse_stock_query") {
             StockQueryScreen(onBack = { navController.popBackStack() })
+        }
+        composable("warehouse_stock_in") {
+            StockDocScreen(mode = StockDocMode.IN, onBack = { navController.popBackStack() })
+        }
+        composable("warehouse_stock_out") {
+            StockDocScreen(mode = StockDocMode.OUT, onBack = { navController.popBackStack() })
         }
         composable("production_home") {
             ProductionHomeScreen(onBack = { navController.popBackStack() })

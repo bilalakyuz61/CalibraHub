@@ -38,13 +38,15 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Depo modülü ana ekranı — operasyon listesi.
- * Increment 1: yalnız Stok Sorgu aktif; Giriş/Çıkış/Transfer/Sayım "yakında" (disabled tile,
- * Increment 2+'de dolacak — bkz. coordinator notu).
+ * Increment 2a: Stok Sorgu + Giriş + Çıkış aktif; Transfer/Sayım "yakında"
+ * (disabled tile, Increment 2b'de dolacak — bkz. coordinator notu).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WarehouseHomeScreen(
     onOpenStockQuery: () -> Unit,
+    onOpenStockIn: () -> Unit,
+    onOpenStockOut: () -> Unit,
     onBack: () -> Unit
 ) {
     Scaffold(
@@ -75,17 +77,17 @@ fun WarehouseHomeScreen(
             )
             WarehouseOperationCard(
                 title = "Giriş",
-                subtitle = "Yakında",
+                subtitle = "Depoya mal giriş belgesi oluştur",
                 icon = Icons.Default.MoveToInbox,
-                enabled = false,
-                onClick = {}
+                enabled = true,
+                onClick = onOpenStockIn
             )
             WarehouseOperationCard(
                 title = "Çıkış",
-                subtitle = "Yakında",
+                subtitle = "Depodan mal çıkış belgesi oluştur",
                 icon = Icons.Default.Outbox,
-                enabled = false,
-                onClick = {}
+                enabled = true,
+                onClick = onOpenStockOut
             )
             WarehouseOperationCard(
                 title = "Transfer",
