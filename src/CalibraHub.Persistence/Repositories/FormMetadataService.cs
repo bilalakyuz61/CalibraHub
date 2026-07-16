@@ -212,6 +212,9 @@ public sealed class FormMetadataService : IFormMetadataService
         var (tblSchema, tblName) = ParseBaseTable(form.BaseTable, _schema);
         if (string.IsNullOrWhiteSpace(tblName)) return;
 
+        // Base tablonun fiziksel kolon adlari — FK cozumleme (C bolumu) icin gerekli.
+        var baseColNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         await using (var colCmd = conn.CreateCommand())
         {
             // Sistem audit kolonlari (Created/Updated) entegrasyonda ihtimaller az; gosterilebilir.
@@ -227,6 +230,7 @@ public sealed class FormMetadataService : IFormMetadataService
             while (await rdr.ReadAsync(ct))
             {
                 var code = rdr.GetString(0);
+                baseColNames.Add(code);            // fiziksel kolon envanteri (FK cozumleme icin)
                 if (!seen.Add(code)) continue;     // Widget oncelikli
                 var sqlType  = rdr.GetString(1);
                 var nullable = rdr.GetString(2).Equals("YES", StringComparison.OrdinalIgnoreCase);
@@ -236,6 +240,30 @@ public sealed class FormMetadataService : IFormMetadataService
                     DataType:     MapSqlType(sqlType),
                     IsRequired:   !nullable,
                     IsPlainField: true,            // Tablo kolonu
+                    GroupKey:     null,
+                    Section:      section));
+            }
+        }
+
+        // ── C) FK cozulmus Kod/Ad alanlari (v_Flat_* icinde LEFT JOIN ile uretilir) ──
+        // Base tabloda FK kolonu (ContactId/ItemId...) varsa, flat view'daki cozulmus
+        // {Prefix}Code/{Prefix}Name kolonlarini SENTETIK secilebilir alan olarak yayinla.
+        // Boylece kullanici entegrasyon eslemesinde ham FK Id yerine cari/stok KODUNU
+        // dogrudan secebilir (bugunku kirilgan Lookup'a gerek kalmaz). Runtime zaten
+        // SELECT * FROM v_Flat_* okudugu icin secilen alanin degeri akar.
+        // Kaynak: FlatViewFkResolver.Map (flat view ureticileriyle TEK kaynak).
+        foreach (var fk in FlatViewFkResolver.Map)
+        {
+            if (!baseColNames.Contains(fk.FkColumn)) continue;
+            foreach (var syntheticCode in new[] { fk.OutPrefix + "Code", fk.OutPrefix + "Name" })
+            {
+                if (!seen.Add(syntheticCode)) continue;   // base kolon/widget zaten sagliyorsa atla
+                sink.Add(new IntegrationFormFieldDto(
+                    Code:         syntheticCode,
+                    Label:        HumanizeColumnName(syntheticCode),
+                    DataType:     "string",
+                    IsRequired:   false,
+                    IsPlainField: false,           // Sentetik — base tabloda yok, view'da cozulur
                     GroupKey:     null,
                     Section:      section));
             }
