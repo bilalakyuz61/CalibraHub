@@ -737,6 +737,20 @@ public sealed class WarehouseController : Controller
     {
         var doc = await _stockDocRepo.GetByIdAsync(id, ct);
         if (doc == null) return NotFound();
+
+        // Yetkisiz okuma kapatıldı (2026-07-16): endpoint hiç izin kontrolü taşımıyordu —
+        // giriş yapmış her kullanıcı her depo belgesini okuyabiliyordu. Belge tipine göre
+        // dinamik VIEW kontrolü (bkz. CheckStockDocPermissionAsync). Çağıranlar
+        // (StockDocEdit + InventoryEdit loadDoc) `r.ok` bakar → JSON gövdeli 403,
+        // PermissionEnforcementFilter.MakeForbidResult ile aynı şekil.
+        if (!await CheckStockDocPermissionAsync(doc.DocType, new[] { "VIEW", "VIEW_OWN" }, ct))
+            return new JsonResult(new
+            {
+                ok      = false,
+                message = "Bu işlemi yapmak için yetkiniz yok.",
+                error   = $"Yetki yok: {FormCodeForDocType(doc.DocType)}:VIEW|VIEW_OWN",
+            }) { StatusCode = StatusCodes.Status403Forbidden };
+
         var lines = await _stockDocRepo.GetLinesAsync(id, ct);
         // Sayım ise durum (0=Draft,1=Applied,2=Cancelled) — edit ekranı Applied'da
         // Yansıt yerine "Yansıtma İptali" gösterip Kaydet/Sil'i kilitler.
@@ -747,6 +761,11 @@ public sealed class WarehouseController : Controller
     }
 
     [HttpPost]
+    // CSRF: global AutoValidateAntiforgeryToken filtresi (Program.cs, 2026-06-27) POST'u zaten
+    // doğruluyor; attribute niyeti açık kılar (DeleteDocJson/SaveInventoryJson ile tutarlı).
+    // Token, StockDocEdit fetch'inde elle header olarak değil calibraDirty.js'in same-origin
+    // POST'lara otomatik enjeksiyonuyla taşınır (workspace layout hidden form + fetch wrapper).
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveDocJson([FromBody] SaveStockDocRequest? request, CancellationToken ct)
     {
         if (request is null)

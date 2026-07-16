@@ -91,6 +91,12 @@ public sealed class MobileApiController : ControllerBase
             new("company_id", user.CompanyId.ToString()),
             new("company_name", user.CompanyName)
         };
+        // 2026-07-16: department_id claim — mobil endpoint'lerdeki merkezi yetki kontrolu
+        // (IPermissionService, bkz. MobileWarehouseApiController.RequirePermissionAsync)
+        // departman grant'larini web ile ayni cozebilsin diye. AccountController.Login ile
+        // birebir ayni kosullu ekleme; login istek/yanit sozlesmesi degismez. NULL ise eklenmez.
+        if (user.DepartmentId.HasValue)
+            claims.Add(new Claim("department_id", user.DepartmentId.Value.ToString()));
 
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
