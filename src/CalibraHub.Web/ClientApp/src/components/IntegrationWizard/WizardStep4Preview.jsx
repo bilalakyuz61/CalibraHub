@@ -169,8 +169,8 @@ export default function WizardStep4Preview({ apiBase, state }) {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 marginBottom: 6,
               }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--iw-muted)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                  Request Body (Mapping çıktısı — düzenleyebilirsiniz)
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--iw-muted)' }}>
+                  Request Body <span style={{ fontWeight: 400 }}>(mapping çıktısı — düzenleyebilirsiniz)</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {copyToast && <span style={{ fontSize: 11, color: 'var(--iw-emerald-color)' }}>{copyToast}</span>}
@@ -197,7 +197,7 @@ export default function WizardStep4Preview({ apiBase, state }) {
                   fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
                   fontSize: 12,
                   lineHeight: 1.5,
-                  background: 'var(--iw-code-bg, rgba(15, 23, 42, 0.04))',
+                  background: 'var(--iw-bg)',
                   color: 'var(--iw-text)',
                   border: '1px solid var(--iw-border)',
                   borderRadius: 6,
@@ -210,18 +210,10 @@ export default function WizardStep4Preview({ apiBase, state }) {
               {/* 2026-05-25: Gerçek gönderim SADECE test başarılıysa görünür */}
               {result.success && (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
-                  <button type="button" onClick={sendForReal}
-                          disabled={sendingReal || !editedBody.trim()}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 6,
-                            padding: '7px 14px', fontSize: 12, fontWeight: 600,
-                            border: 'none', borderRadius: 6,
-                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                            color: '#fff', cursor: sendingReal ? 'not-allowed' : 'pointer',
-                            opacity: sendingReal || !editedBody.trim() ? 0.5 : 1,
-                          }}>
+                  <button type="button" className="iw-btn-primary" onClick={sendForReal}
+                          disabled={sendingReal || !editedBody.trim()}>
                     {sendingReal ? <Loader2 className="iw-spin" size={13} /> : <Send size={13} />}
-                    {sendingReal ? 'Gönderiliyor…' : 'Gerçek isteği gönder'}
+                    {sendingReal ? 'Gönderiliyor…' : 'Gerçek İsteği Gönder'}
                   </button>
                   <span style={{ fontSize: 11, color: 'var(--iw-muted)' }}>
                     Düzenlenmiş body endpoint'e POST edilir. IntegrationRun kaydı oluşmaz — sadece test.
@@ -234,8 +226,8 @@ export default function WizardStep4Preview({ apiBase, state }) {
           {/* Response Body (preview test sonucu) */}
           {result.responseBody && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--iw-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                Response Body (önizleme):
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--iw-muted)', marginBottom: 4 }}>
+                Response Body <span style={{ fontWeight: 400 }}>(önizleme)</span>
               </div>
               <pre className="iw-preview-json" style={{ maxWidth: 'none' }}>
                 {prettyJson(result.responseBody)}

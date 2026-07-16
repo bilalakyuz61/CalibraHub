@@ -253,9 +253,8 @@ export default function WizardStep5Trigger({ state, update, apiBase }) {
                     return (
                       <div className="iw-trigger-config">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                          <button className={'iw-switch' + (onlyIfNotSent ? ' is-on' : '')}
+                          <button className={'iw-switch iw-switch--sm' + (onlyIfNotSent ? ' is-on' : '')}
                                   onClick={() => updateTriggerConfig(2, { onlyIfNotSent: !onlyIfNotSent })}
-                                  style={{ width: 32, height: 18 }}
                                   title="Belge daha önce gönderilmişse tekrar gönderme">
                             <span className="iw-switch__thumb" />
                           </button>
@@ -409,8 +408,8 @@ function ProcedureCard({ phase, state, update, formFields }) {
                    style={{
                      width: '100%', boxSizing: 'border-box', display: 'block',
                      padding: '8px 10px', fontSize: 13, lineHeight: 1.4, height: 'auto',
-                     border: '1px solid #475569', borderRadius: 6,
-                     background: 'rgba(15,23,42,0.6)', color: '#e2e8f0', outline: 'none',
+                     border: '1px solid var(--iw-border)', borderRadius: 6,
+                     background: 'var(--iw-bg)', color: 'var(--iw-text)', outline: 'none',
                      fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
                    }} />
             <div style={{ fontSize: 11, color: 'var(--iw-muted)', marginTop: 4 }}>
@@ -419,8 +418,7 @@ function ProcedureCard({ phase, state, update, formFields }) {
           </div>
 
           {/* Parametreler */}
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--iw-muted)', marginBottom: 6,
-                        textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--iw-muted)', marginBottom: 6 }}>
             Parametreler
           </div>
           {params.length === 0 && (

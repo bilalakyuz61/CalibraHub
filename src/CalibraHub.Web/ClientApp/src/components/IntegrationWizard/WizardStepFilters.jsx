@@ -192,7 +192,7 @@ export default function WizardStepFilters({ apiBase, state, update }) {
         }}>
           {isWidget && (
             <span title="Widget alanı (form tasarımcısı)"
-                  style={{ color: '#8b5cf6', fontSize: 12 }}>◈</span>
+                  style={{ color: 'var(--iw-violet-color)', fontSize: 12 }}>◈</span>
           )}
           <span style={{
             fontWeight: isActive ? 600 : 400,
@@ -359,7 +359,7 @@ export default function WizardStepFilters({ apiBase, state, update }) {
             color: 'var(--iw-text)',
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
-            <span style={{ color: '#8b5cf6' }}>◈</span>
+            <span style={{ color: 'var(--iw-violet-color)' }}>◈</span>
             Widget Alanları
             <span style={{ fontSize: 10, color: 'var(--iw-muted)', fontWeight: 400 }}>
               ({filteredWidget.length}{search ? ` / ${widgetFields.length}` : ''})

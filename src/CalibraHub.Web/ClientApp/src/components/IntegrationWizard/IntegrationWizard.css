@@ -41,7 +41,13 @@ body.app-theme-dark .sc-menu {
   --iw-rose-color:   #dc2626;
   --iw-slate-bg:     #f1f5f9;
   --iw-slate-color:  #64748b;
+  --iw-violet-bg:    rgba(139,92,246,.10);
+  --iw-violet-color: #7c3aed;
 }
+/* color-scheme: sadece Wizard root'u — native form kontrolleri (select/input) tema ile eslesir.
+   .il-root (Entegrasyon listesi) kapsam disi birakildi — bu satir sadece .iw-root'u etkiler. */
+.iw-root { color-scheme: light; }
+body.app-theme-dark .iw-root { color-scheme: dark; }
 body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
   --iw-bg:           #080c17;
   --iw-surface:      #0d1323;
@@ -261,52 +267,38 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
 }
 .iw-footer-spacer { flex: 1; }
 
-/* ── Step 3: Mapping editor ── */
-.iw-mapping-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1400px; }
+/* ── Alan Eşleme (Mapping) tablosu ──
+   Grup kartları JSX içinde inline style ile kuruluyor (WizardStep3Mapping.jsx) —
+   burada sadece paylaşılan, durum-bağımlı (hover/focus) davranışlar tanımlanır;
+   inline style pseudo-class ifade edemediği için bunlar CSS'te kalmak zorunda. */
 .iw-mapping-pane {
   display: flex; flex-direction: column; gap: 8px;
   background: var(--iw-surface); border: 1px solid var(--iw-border);
   border-radius: 10px; padding: 16px; min-height: 420px;
 }
-.iw-mapping-pane h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
-.iw-mapping-list { display: flex; flex-direction: column; gap: 4px; }
-.iw-mapping-row {
-  display: grid; grid-template-columns: minmax(120px, 1fr) auto auto;
-  gap: 8px; align-items: center;
-  padding: 8px 10px; border-radius: 7px;
-  background: var(--iw-bg); border: 1px solid transparent;
-  font-size: 12px;
-}
-.iw-mapping-row:hover { border-color: var(--iw-indigo-bdr); }
-.iw-mapping-source-type {
-  font-size: 10px; font-weight: 600; text-transform: uppercase;
-  padding: 2px 6px; border-radius: 4px;
-}
-.iw-mapping-source-type.is-formfield { background: var(--iw-indigo-bg); color: var(--iw-indigo-color); }
-.iw-mapping-source-type.is-constant  { background: var(--iw-slate-bg);  color: var(--iw-slate-color); }
-.iw-mapping-source-type.is-formula   { background: var(--iw-amber-bg);  color: var(--iw-amber-color); }
-.iw-mapping-source-type.is-lookup    { background: var(--iw-emerald-bg); color: var(--iw-emerald-color); }
 
-.iw-mapping-add {
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  padding: 8px; border-radius: 7px; font-size: 12px;
-  background: var(--iw-bg); color: var(--iw-muted);
-  border: 1px dashed var(--iw-line); cursor: pointer; transition: all .12s;
-}
-.iw-mapping-add:hover { border-color: var(--iw-indigo-color); color: var(--iw-indigo-color); background: var(--iw-indigo-bg); }
+/* Mapping satırı — hover ile satırlar arası net ayrım (arka plan tr seviyesinde). */
+.iw-map-row { background: var(--iw-surface); transition: background .1s ease; }
+.iw-map-row:hover { background: var(--iw-hover); }
 
-/* Field editor modal-inline */
-.iw-mapping-edit {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 12px; background: var(--iw-bg); border-radius: 8px;
-  border: 1px solid var(--iw-indigo-bdr);
+/* Hücre kontrolleri (select/input) — ortak odak halkası. Değerler cogunlukla JS
+   style objesinden (cellInput) gelir; className sadece :focus glow'unu ekler. */
+.iw-cell-input {
+  width: 100%; box-sizing: border-box;
+  padding: 5px 7px; font-size: 11px;
+  border: 1px solid var(--iw-border); border-radius: 4px;
+  background: var(--iw-bg); color: var(--iw-text); outline: none;
+  transition: box-shadow .15s ease, border-color .15s ease, background-color .15s ease;
 }
-.iw-mapping-edit-row { display: flex; gap: 8px; align-items: center; }
-.iw-mapping-edit-row label { font-size: 11px; color: var(--iw-muted); width: 80px; }
-.iw-mapping-edit-row input, .iw-mapping-edit-row select {
-  flex: 1; padding: 6px 10px; border-radius: 6px; font-size: 12px;
-  border: 1px solid var(--iw-border); background: var(--iw-surface); color: var(--iw-text);
-}
+.iw-cell-input:focus { box-shadow: 0 0 0 2px var(--iw-indigo-bg); }
+
+/* İkincil (az kullanılan) alanlar — Varsayılan / Format: sakin durumda kutu kroması
+   geri çekilir (kenarlık/arka plan görünmez), hover veya focus'ta normale döner.
+   Girilmiş değer her zaman tam kontrastta okunur — sadece çerçeve soluklaşır. */
+.iw-cell-input--adv { border-color: transparent; background: transparent; }
+.iw-cell-input--adv:hover,
+.iw-cell-input--adv:focus { border-color: var(--iw-border); background: var(--iw-bg); }
+.iw-cell-input--adv:focus { border-color: var(--iw-indigo-color); }
 
 /* Step 4 preview */
 .iw-preview {
@@ -314,7 +306,7 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
   border-radius: 10px; padding: 16px; max-width: 900px;
 }
 .iw-preview-json {
-  font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 12px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
   background: var(--iw-bg); border: 1px solid var(--iw-border);
   border-radius: 8px; padding: 12px;
   overflow: auto; max-height: 400px;
@@ -331,10 +323,13 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
 .iw-trigger-card {
   display: flex; gap: 12px; align-items: flex-start;
   padding: 16px; border-radius: 10px;
-  background: var(--iw-surface); border: 2px solid var(--iw-border);
-  transition: all .15s; max-width: 600px;
+  background: var(--iw-surface); border: 1px solid var(--iw-border);
+  transition: border-color .15s, box-shadow .15s, background .15s; max-width: 600px;
 }
-.iw-trigger-card.is-checked { border-color: var(--iw-indigo-color); background: var(--iw-indigo-bg); }
+.iw-trigger-card.is-checked {
+  border-color: var(--iw-indigo-color); background: var(--iw-indigo-bg);
+  box-shadow: 0 0 0 1px var(--iw-indigo-color);
+}
 .iw-trigger-card.is-disabled { opacity: 0.5; cursor: not-allowed; background: var(--iw-bg); }
 .iw-trigger-card-body { flex: 1; }
 .iw-trigger-card-title { font-size: 14px; font-weight: 600; color: var(--iw-text); margin-bottom: 2px; }
@@ -358,6 +353,13 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
   transition: transform .18s ease;
 }
 .iw-switch.is-on .iw-switch__thumb { transform: translateX(16px); }
+
+/* Küçük (ikincil) switch varyantı — az vurgulu aç/kapa kontrolleri için (örn. Step 2
+   "Zorunlu" sütunu, Step 5 "tek seferlik gönder"). Thumb ofseti küçük track'e göre
+   yeniden hesaplanır — .iw-switch temel boyutunu (36×20) inline stille ezmek yerine
+   bu class kullanılır ki thumb izi track sınırını taşmasın. */
+.iw-switch--sm { width: 32px; height: 18px; }
+.iw-switch--sm.is-on .iw-switch__thumb { transform: translateX(12px); }
 
 /* Loading spinner */
 .iw-spin { animation: iw-spin .9s linear infinite; }
@@ -578,7 +580,7 @@ body.app-theme-dark .iq-root {
   flex: 1; min-height: 240px;
   padding: 12px; border-radius: 8px;
   border: 1px solid var(--iw-border); background: var(--iw-bg);
-  color: var(--iw-text); font-family: 'JetBrains Mono', 'Consolas', monospace;
+  color: var(--iw-text); font-family: ui-monospace, Menlo, Consolas, monospace;
   font-size: 12px; line-height: 1.5;
   outline: none; resize: none;
   transition: border-color .15s;
@@ -589,7 +591,7 @@ body.app-theme-dark .iq-root {
   font-size: 12px; color: var(--iw-rose-color);
   background: var(--iw-rose-bg); border: 1px solid var(--iw-rose-color);
   border-radius: 6px; padding: 8px 12px; flex-shrink: 0;
-  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
 }
 
 /* Footer */

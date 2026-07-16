@@ -115,8 +115,9 @@ function SearchableCombo({
     setOpen(false)
   }
 
-  // Stiller — tablo hücresinde sıkışık görünüm icin "sm" mod
-  const padY = size === 'sm' ? 4 : 7
+  // Stiller — tablo hücresinde kompakt ama nefes alan görünüm icin "sm" mod
+  // (cellInput ile aynı dikey ritim — Alan Eşleme tablosundaki tüm kontroller hizalı kalır)
+  const padY = size === 'sm' ? 5 : 7
   const padX = size === 'sm' ? 6 : 10
   const fontSz = size === 'sm' ? 11 : 12.5
 
@@ -421,20 +422,23 @@ function leafName(path) {
   return last.replace('[]', '')
 }
 
-// ── Tablo cell stilleri (Step 3 mapping table) ──
+// ── Tablo cell stilleri (Alan Eşleme tablosu) ──
 const cellHeader = {
-  padding: '6px 8px',
+  padding: '8px 8px',
   textAlign: 'left',
   borderBottom: '1px solid var(--iw-border)',
 }
+// İkincil sütun başlığı (Varsayılan / Format / Zor.) — az kullanılan kontroller;
+// ana odak Hedef Alan/Kaynak/Değer/Bağımlılık'ta kalsın diye görsel olarak geri çekilir.
+const cellHeaderAdv = { ...cellHeader, fontWeight: 500, opacity: 0.72 }
 const cellBody = {
-  padding: '4px 6px',
+  padding: '6px 7px',
   borderBottom: '1px solid var(--iw-border)',
   verticalAlign: 'top',
 }
 const cellInput = {
   width: '100%',
-  padding: '4px 6px',
+  padding: '5px 7px',
   fontSize: 11,
   border: '1px solid var(--iw-border)',
   borderRadius: 4,
@@ -442,6 +446,10 @@ const cellInput = {
   color: 'var(--iw-text)',
   outline: 'none',
 }
+// Ana alanlarla ikincil (az kullanılan) alanlar arasındaki görsel sınır — sadece
+// grubun ilk sütununda (Varsayılan) kullanılır, tüm satırlar boyunca ince bir
+// ayırıcı çizgi oluşturur.
+const advDivider = { borderLeft: '1px dashed var(--iw-border)' }
 
 export default function WizardStep3Mapping({ apiBase, state, update }) {
   const [fields, setFields]           = useState([])
@@ -849,7 +857,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
       )}
 
       {/* Gruplar */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 1700 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 1700 }}>
         {groups.filter(g => showHiddenGroups || !hiddenGroups.has(g.name)).map(group => {
           const isCollapsed = collapsedGroups.has(group.name)
           const isArray = group.kind === 'array'
@@ -859,7 +867,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
           return (
             <div key={group.name} style={{
               border: '1px solid ' + (isArray ? 'var(--iw-amber-color)' : 'var(--iw-indigo-bdr)'),
-              borderRadius: 10, background: 'var(--iw-surface)', overflow: 'visible',
+              borderRadius: 12, background: 'var(--iw-surface)', overflow: 'visible',
               opacity: isHidden ? 0.5 : 1,
             }}>
               {/* Grup header — sticky: scroll oldukca grup biter, "Alan Ekle" / "Gizle" butonu
@@ -867,24 +875,20 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                   geciskaligini onler. */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 14px',
-                background: isArray
-                  ? 'linear-gradient(var(--iw-amber-bg), var(--iw-amber-bg)), var(--iw-surface)'
-                  : isRoot
-                    ? 'linear-gradient(var(--iw-bg), var(--iw-bg)), var(--iw-surface)'
-                    : 'linear-gradient(var(--iw-indigo-bg), var(--iw-indigo-bg)), var(--iw-surface)',
+                padding: '12px 16px',
+                background: isArray ? 'var(--iw-amber-bg)' : isRoot ? 'var(--iw-bg)' : 'var(--iw-indigo-bg)',
                 borderBottom: isCollapsed ? 'none' : '1px solid var(--iw-border)',
                 cursor: 'pointer',
-                borderTopLeftRadius: 10, borderTopRightRadius: 10,
+                borderTopLeftRadius: 12, borderTopRightRadius: 12,
                 position: 'sticky', top: 0, zIndex: 10,
-                boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
               }} onClick={() => toggleGroup(group.name)}>
                 {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                 <span style={{
-                  width: 24, height: 24, borderRadius: 6,
+                  width: 25, height: 25, borderRadius: 7,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: isArray ? 'var(--iw-amber-color)' : isRoot ? 'var(--iw-muted)' : 'var(--iw-indigo-color)',
-                  color: '#fff',
+                  color: '#fff', flexShrink: 0,
                 }}>
                   {isArray ? <ListTree size={13} /> : isRoot ? <Layers size={13} /> : <Box size={13} />}
                 </span>
@@ -895,13 +899,13 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                       marginLeft: 8, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
                       background: isArray ? 'var(--iw-amber-color)' : 'var(--iw-indigo-color)', color: '#fff',
                     }}>
-                      {isArray ? 'KALEM (her satır için tekrar)' : isRoot ? 'ROOT' : 'ÜST'}
+                      {isArray ? 'Kalem (Her Satır İçin Tekrar)' : isRoot ? 'Root' : 'Üst'}
                     </span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--iw-muted)', marginTop: 1 }}>
                     {group.rows.length} alan
                     {!isRoot && (
-                      <> · <code style={{ fontSize: 10 }}>
+                      <> · <code style={{ fontSize: 10, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                         {isArray ? `${group.name}[].fieldName` : `${group.name}.fieldName`}
                       </code></>
                     )}
@@ -947,48 +951,52 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                         fontSize: 11, tableLayout: 'fixed',
                       }}>
                         <colgroup>
-                          {/* Hedef Path */}      <col style={{ width: '17%' }} />
+                          {/* Hedef Alan */}      <col style={{ width: '17%' }} />
                           {/* Tip */}              <col style={{ width: '110px' }} />
                           {/* Kaynak Tipi */}     <col style={{ width: '130px' }} />
                           {/* Section */}         {group.kind === 'array' && <col style={{ width: '90px' }} />}
                           {/* Source Field */}    <col style={{ width: 'auto' }} />
                           {/* Bağımlılık */}      <col style={{ width: '150px' }} />
-                          {/* Default */}         <col style={{ width: '105px' }} />
-                          {/* Format */}          <col style={{ width: '100px' }} />
+                          {/* Varsayılan */}      <col style={{ width: '90px' }} />
+                          {/* Format */}          <col style={{ width: '86px' }} />
                           {/* * */}               <col style={{ width: '46px' }} />
                           {/* 🗑 */}              <col style={{ width: '40px' }} />
                         </colgroup>
                         <thead>
+                          {/* Title Case başlıklar — CLAUDE.md kuralı: text-transform:uppercase yok.
+                              Ana odak (Hedef Alan / Kaynak / Alan-Değer / Bağımlılık) tam ağırlıkta;
+                              az kullanılan Varsayılan/Format/Zor. cellHeaderAdv ile görsel olarak geri
+                              çekilir (daha soluk + ince ayırıcı çizgi). */}
                           <tr style={{
-                            fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-                            letterSpacing: 0.4, color: 'var(--iw-muted)',
+                            fontSize: 10.5, fontWeight: 600,
+                            letterSpacing: 0.15, color: 'var(--iw-muted)',
                             background: 'var(--iw-bg)',
                           }}>
-                            <th style={cellHeader}>Hedef Path *</th>
+                            <th style={cellHeader}>Hedef Alan *</th>
                             <th style={cellHeader}>Tip</th>
                             <th style={cellHeader}>Kaynak</th>
                             {group.kind === 'array' && <th style={cellHeader}>Section</th>}
                             <th style={cellHeader}>Alan / Değer</th>
                             <th style={cellHeader} title="FK alanları için cascade hedef entegrasyon (ERP'de yoksa önce bu çağrılır)">Bağımlılık</th>
-                            <th style={cellHeader} title="Kaynak boş dönerse kullanılacak fallback değer">Default</th>
-                            <th style={cellHeader} title="Tipe göre format dönüşümü (date pattern, sayı format, string upper/lower)">Format</th>
-                            <th style={{ ...cellHeader, textAlign: 'center' }} title="Zorunlu alan">Zor.</th>
+                            <th style={{ ...cellHeaderAdv, ...advDivider }} title="Kaynak boş dönerse kullanılacak fallback değer">Varsayılan</th>
+                            <th style={cellHeaderAdv} title="Tipe göre format dönüşümü (date pattern, sayı format, string upper/lower)">Format</th>
+                            <th style={{ ...cellHeaderAdv, textAlign: 'center' }} title="Zorunlu alan">Zor.</th>
                             <th style={{ ...cellHeader, textAlign: 'center' }}>Sil</th>
                           </tr>
                           {/* Rehber sub-header — grup içinde en az bir Rehber (sourceType=3) satır varsa göster */}
                           {group.rows.some(r => state.mappings[r._idx]?.sourceType === 3) && (() => {
-                            const lbl = { fontSize: 9, color: 'var(--iw-muted)', userSelect: 'none', paddingLeft: 2 }
+                            const lbl = { fontSize: 10, color: 'var(--iw-muted)', userSelect: 'none', paddingLeft: 2 }
                             return (
                               <tr style={{ background: 'var(--iw-bg)' }}>
                                 <td colSpan={group.kind === 'array' ? 4 : 3} />
                                 <td style={{ padding: '0 8px 4px' }}>
                                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.1fr 10px 1fr 10px 1.4fr', gap: 3 }}>
                                     <span style={lbl}>Rehber</span>
-                                    <span style={lbl}>Form değeri</span>
+                                    <span style={lbl}>Form Değeri</span>
                                     <span />
-                                    <span style={lbl}>Eşleşme kolonu</span>
+                                    <span style={lbl}>Eşleşme Kolonu</span>
                                     <span />
-                                    <span style={lbl}>Dönecek kolon</span>
+                                    <span style={lbl}>Dönecek Kolon</span>
                                   </div>
                                 </td>
                                 <td colSpan={5} />
@@ -1018,7 +1026,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                             const doc = fieldDocs[m.targetPath]
                             const hasDoc = !!(doc && (doc.description || doc.example || doc.notes || (doc.allowedValues && doc.allowedValues.length > 0)))
                             return (
-                              <tr key={idx} style={{ background: 'var(--iw-surface)' }}>
+                              <tr key={idx} className="iw-map-row">
                                 {/* Hedef Path — searchable combo (schema leaf'larindan).
                                     fieldDoc varsa basinda 'i' info badge: hover'da aciklama + olasi degerler. */}
                                 <td style={cellBody}>
@@ -1042,7 +1050,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                 <td style={cellBody}>
                                   <select value={m.targetDataType || 'string'}
                                           onChange={e => updateRow(idx, { targetDataType: e.target.value })}
-                                          style={cellInput}>
+                                          className="iw-cell-input" style={cellInput}>
                                     {DATA_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                   </select>
                                 </td>
@@ -1050,7 +1058,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                 <td style={cellBody}>
                                   <select value={m.sourceType}
                                           onChange={e => updateRow(idx, { sourceType: parseInt(e.target.value) })}
-                                          style={cellInput}>
+                                          className="iw-cell-input" style={cellInput}>
                                     {SOURCE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                                   </select>
                                 </td>
@@ -1059,6 +1067,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                   <td style={cellBody}>
                                     <select value={currentSection}
                                             onChange={e => updateRow(idx, { sourceSection: e.target.value, sourceValue: '' })}
+                                            className="iw-cell-input"
                                             style={{ ...cellInput,
                                               background: `var(--iw-${secCfg.color}-bg)`,
                                               color:      `var(--iw-${secCfg.color}-color)`,
@@ -1075,7 +1084,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                   {m.sourceType === 0 ? (
                                     <select value={m.sourceValue || ''}
                                             onChange={e => updateRow(idx, { sourceValue: e.target.value })}
-                                            style={cellInput}>
+                                            className="iw-cell-input" style={cellInput}>
                                       <option value="">— Alan seç —</option>
                                       {sectionFields.map(f => (
                                         <option key={`${f.section || 'Header'}.${f.code}`} value={f.code}>
@@ -1156,7 +1165,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                         {/* 2) Form değeri — formdan gelen anahtar */}
                                         <select value={primary.sourceField || ''}
                                                 onChange={e => updatePrimary({ sourceField: e.target.value })}
-                                                style={{ ...cellInput, fontSize: 10 }}
+                                                className="iw-cell-input" style={{ ...cellInput, fontSize: 10 }}
                                                 title="Formdan alınacak değer — rehberin eşleşme kolonuna karşılaştırılır">
                                           <option value="">— Form alanı —</option>
                                           {sectionFields.map(f => (
@@ -1212,7 +1221,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                                   lookupReturnColumn: null,
                                                   lookupParam: null,
                                                 })}
-                                                style={{ ...cellInput, fontSize: 10 }}
+                                                className="iw-cell-input" style={{ ...cellInput, fontSize: 10 }}
                                                 title="Fonksiyon — hangi entity'den çekilecek">
                                           <option value="">— Fonksiyon —</option>
                                           {/* DB function listesi (sema.fn) — 3-paramli olanlar onerilen */}
@@ -1232,7 +1241,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                         {/* 2) Anahtar olarak gönderilecek form alanı (@P2) */}
                                         <select value={m.lookupSourceField || ''}
                                                 onChange={e => updateRow(idx, { lookupSourceField: e.target.value })}
-                                                style={{ ...cellInput, fontSize: 10 }}
+                                                className="iw-cell-input" style={{ ...cellInput, fontSize: 10 }}
                                                 title={isSqlFn ? 'Form alanı → SQL function @P2 parametresi' : "Form'daki anahtar alanı (örn. ItemId)"}>
                                           <option value="">— Anahtar —</option>
                                           {sectionFields.map(f => (
@@ -1249,7 +1258,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                         <input value={m.lookupParam || ''}
                                                onChange={e => updateRow(idx, { lookupParam: e.target.value || null })}
                                                placeholder="Manuel param (örn. USD)"
-                                               style={{ ...cellInput, fontSize: 10 }}
+                                               className="iw-cell-input" style={{ ...cellInput, fontSize: 10 }}
                                                title="SQL function 3. parametresi (@P3). Mapping satırı için sabit, kullanıcı serbest yazar." />
                                       </div>
                                     )
@@ -1261,7 +1270,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                              ''
                                            }
                                            onChange={e => updateRow(idx, { sourceValue: e.target.value })}
-                                           style={cellInput} />
+                                           className="iw-cell-input" style={cellInput} />
                                   )}
                                 </td>
                                 {/* 2026-05-22 Cascade — bu mapping bir FK alanı ise hedef cascade integration'ı.
@@ -1279,6 +1288,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                           cascadeToIntegrationId: e.target.value ? parseInt(e.target.value, 10) : null,
                                           cascadeByValue: e.target.value ? m.cascadeByValue : false,
                                         })}
+                                        className="iw-cell-input"
                                         style={{
                                           ...cellInput,
                                           background: m.cascadeToIntegrationId ? 'var(--iw-emerald-bg)' : 'var(--iw-bg)',
@@ -1317,27 +1327,28 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                     }}>(FK alanı değil)</span>
                                   )}
                                 </td>
-                                {/* Default — kaynak null/bos donerse kullanilacak fallback deger */}
-                                <td style={cellBody}>
+                                {/* Varsayılan — kaynak null/bos donerse kullanilacak fallback deger.
+                                    Az kullanılan ikincil alan: kutu kroması sakin durumda geri
+                                    çekilir (iw-cell-input--adv), değer her zaman tam kontrastta okunur. */}
+                                <td style={{ ...cellBody, ...advDivider }}>
                                   <input value={m.defaultValue || ''}
                                          placeholder="(boş = boş gönder)"
                                          onChange={e => updateRow(idx, { defaultValue: e.target.value || null })}
-                                         style={cellInput}
+                                         className="iw-cell-input iw-cell-input--adv"
                                          title="Kaynak alan boş/null dönerse bu değer gönderilir. Boş bırakılırsa hedef'e null/boş gider." />
                                 </td>
-                                {/* Format — tipe gore dinamik placeholder + tooltip */}
+                                {/* Format — tipe gore dinamik placeholder + tooltip (ikincil alan) */}
                                 <td style={cellBody}>
                                   <input value={m.formatPattern || ''}
                                          placeholder={formatPlaceholder(m.targetDataType)}
                                          onChange={e => updateRow(idx, { formatPattern: e.target.value || null })}
-                                         style={cellInput}
+                                         className="iw-cell-input iw-cell-input--adv"
                                          title={formatTooltip(m.targetDataType)} />
                                 </td>
-                                {/* Zorunlu — daha buyuk switch */}
+                                {/* Zorunlu — ikincil (küçük) switch */}
                                 <td style={{ ...cellBody, textAlign: 'center' }}>
-                                  <button className={'iw-switch' + (m.isRequired ? ' is-on' : '')}
+                                  <button className={'iw-switch iw-switch--sm' + (m.isRequired ? ' is-on' : '')}
                                           onClick={() => updateRow(idx, { isRequired: !m.isRequired })}
-                                          style={{ width: 36, height: 20 }}
                                           title="Zorunlu alan — null/boş ise validation hatası">
                                     <span className="iw-switch__thumb" />
                                   </button>
