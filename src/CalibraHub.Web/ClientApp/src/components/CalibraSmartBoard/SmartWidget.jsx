@@ -22,7 +22,7 @@ import GuideListField from '../DynamicWidgetRenderer/GuideListField'
  * destekler. Guide-list popup'inda WHERE kisitinin runtime'da resolve olmasini
  * saglar. Match yoksa empty string ile replace edilir.
  */
-function resolveTokensWithRecord(text, recordValues) {
+export function resolveTokensWithRecord(text, recordValues) {
   if (!text) return text
   if (typeof text !== 'string') return text
   if (!recordValues || typeof recordValues !== 'object') return text
@@ -49,7 +49,8 @@ function resolveTokensWithRecord(text, recordValues) {
 }
 
 // Kısıt ihlali varsa uyarı mesajını döndür, uygunsa null.
-function checkConstraintViolation(widget) {
+// (export: SmartTable/SmartTableRow tablo modunda ayni kontrolu tekrar yazmadan kullanir.)
+export function checkConstraintViolation(widget) {
   var raw = widget.value
   var dt  = (widget.dataType || '').toLowerCase()
 

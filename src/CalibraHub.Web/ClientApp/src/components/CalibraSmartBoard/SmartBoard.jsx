@@ -20,6 +20,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw } from 'lucide-react'
 import SmartCard from './SmartCard'
+import SmartTable from './SmartTable'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
 import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
@@ -47,6 +48,9 @@ export default function SmartBoard(props) {
   var emptyText = props.emptyText || 'Kayit bulunamadi'
   var searchable = props.searchable !== false
   var searchPlaceholder = props.searchPlaceholder || 'Ara...'
+  // viewMode: "table" → SmartTable (satir bazli). Varsayilan/diger her deger → kart listesi
+  // (regresyonsuz: mevcut board'lar bu prop'u hic gondermez, davranis aynen kalir).
+  var viewMode = props.viewMode === 'table' ? 'table' : 'card'
 
   // In-place refresh
   var refreshUrl = props.refreshUrl || null
@@ -575,6 +579,38 @@ export default function SmartBoard(props) {
           'radial-gradient(at 50% 80%, rgba(168,85,247,0.04) 0px, transparent 50%)',
       }
 
+  // Sonsuz kaydirma sentinel + "Daha Fazla Yukle" + ilk-yukleme spinner —
+  // kart ve tablo modunda AYNI JSX (paylasilan sentinelRef); sadece hangi
+  // listenin altina yerlestirildigi degisir (bkz. render altinda iki dal).
+  var paginationFooter = (
+    <>
+      {isPaginated && hasMore && (
+        <div ref={sentinelRef} className="flex items-center justify-center py-6 gap-3">
+          {loading ? (
+            <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-white/40">
+              <Loader2 size={16} className="animate-spin" />
+              <span>Yukleniyor...</span>
+            </div>
+          ) : (
+            <button
+              onClick={handleLoadMore}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] text-slate-600 dark:text-white/60 transition-all"
+            >
+              <ChevronDown size={14} />
+              <span>Daha Fazla Yukle ({(totalCount - entities.length).toLocaleString('tr-TR')} kalan)</span>
+            </button>
+          )}
+        </div>
+      )}
+      {isPaginated && loading && filteredEntities.length === 0 && (
+        <div className="flex items-center justify-center py-20 gap-3">
+          <Loader2 size={24} className="animate-spin text-indigo-400" />
+          <span className="text-sm text-slate-400 dark:text-white/40">Yukleniyor...</span>
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div className="h-full flex flex-col" style={meshStyle}>
 
@@ -776,12 +812,29 @@ export default function SmartBoard(props) {
         </div>
       )}
 
-      {/* ── Kart Listesi ─────────────────────── */}
+      {/* ── Kart / Tablo Listesi ─────────────────
+          viewMode==='table' → SmartTable (satir bazli); aksi halde mevcut kart
+          listesi AYNEN kalir. Her iki dal ayni filteredEntities + paginationFooter'i
+          kullanir — sonsuz kaydirma append'i (SmartBoard.entities state'i buyur)
+          otomatik olarak yeni satir/kart olarak gorunur, ekstra kod gerekmez. */}
       <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
         {filteredEntities.length === 0 && !loading ? (
           <div className="text-center py-20">
             <HeaderIcon size={36} className="mx-auto text-slate-300 dark:text-white/30 mb-3" />
             <p className="text-sm text-slate-400 dark:text-white/45">{emptyText}</p>
+          </div>
+        ) : viewMode === 'table' ? (
+          <div className="flex flex-col gap-3 min-w-0">
+            <SmartTable
+              entities={filteredEntities}
+              masterWidgets={masterWidgets}
+              visibleIds={visibleIds}
+              order={order}
+              onRefresh={refreshUrl ? refreshBoard : undefined}
+              recentIds={recentIds}
+              isDark={isDark}
+            />
+            {paginationFooter}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -797,34 +850,7 @@ export default function SmartBoard(props) {
                 />
               )
             })}
-
-            {/* Infinite scroll sentinel */}
-            {isPaginated && hasMore && (
-              <div ref={sentinelRef} className="flex items-center justify-center py-6 gap-3">
-                {loading ? (
-                  <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-white/40">
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Yukleniyor...</span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleLoadMore}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] text-slate-600 dark:text-white/60 transition-all"
-                  >
-                    <ChevronDown size={14} />
-                    <span>Daha Fazla Yukle ({(totalCount - entities.length).toLocaleString('tr-TR')} kalan)</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Loading indicator for initial/search load */}
-            {isPaginated && loading && filteredEntities.length === 0 && (
-              <div className="flex items-center justify-center py-20 gap-3">
-                <Loader2 size={24} className="animate-spin text-indigo-400" />
-                <span className="text-sm text-slate-400 dark:text-white/40">Yukleniyor...</span>
-              </div>
-            )}
+            {paginationFooter}
           </div>
         )}
       </div>

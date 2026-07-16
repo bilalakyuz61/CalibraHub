@@ -3862,3 +3862,197 @@ body.app-theme-dark .nw-share-user-item-empty { color: rgba(255,255,255,.25); }
 .nw-card-del:hover { color: #ef4444; background: rgba(239,68,68,.1); }
 body.app-theme-dark .nw-card-action { color: rgba(255,255,255,.35); }
 body.app-theme-dark .nw-card-del:hover { color: #f87171; background: rgba(248,113,113,.12); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   CalibraSmartBoard — Tablo modu (SmartTable / SmartTableRow, viewMode:"table")
+   Kart listesinin (SmartCard) yaninda ikinci bir render dali; ayni entity/
+   widget verisiyle calisir, sadece gorsel farklidir. Light degerler
+   varsayilan, dark override body.app-theme-dark ile (CLAUDE.md "CSS ve Tema
+   Kurallari" — tek dark selector kurali). ══════════════════════════════ */
+.cst-root {
+  --cst-border:           rgba(15, 23, 42, 0.1);
+  --cst-header-bg:        rgba(248, 250, 252, 0.97);
+  --cst-header-text:      #64748b;
+  --cst-row-bg:           rgba(255, 255, 255, 0.96);
+  --cst-row-border:       rgba(15, 23, 42, 0.07);
+  --cst-row-hover:        rgba(99, 102, 241, 0.05);
+  --cst-identity-title:   #0f172a;
+  --cst-identity-code:    #334155;
+  --cst-desc:             #64748b;
+  --cst-empty-value:      #94a3b8;
+  --cst-highlight-bg:     rgba(99, 102, 241, 0.09);
+  --cst-highlight-border: rgba(99, 102, 241, 0.55);
+  --cst-link-bg:          rgba(99, 102, 241, 0.06);
+  --cst-link-border:      rgba(99, 102, 241, 0.2);
+  min-width: 0;
+}
+body.app-theme-dark .cst-root {
+  --cst-border:           rgba(255, 255, 255, 0.1);
+  --cst-header-bg:        rgba(15, 19, 32, 0.94);
+  --cst-header-text:      rgba(255, 255, 255, 0.5);
+  --cst-row-bg:           rgba(255, 255, 255, 0.04);
+  --cst-row-border:       rgba(255, 255, 255, 0.06);
+  --cst-row-hover:        rgba(99, 102, 241, 0.1);
+  --cst-identity-title:   #ffffff;
+  --cst-identity-code:    rgba(255, 255, 255, 0.82);
+  --cst-desc:             rgba(255, 255, 255, 0.5);
+  --cst-empty-value:      rgba(255, 255, 255, 0.32);
+  --cst-highlight-bg:     rgba(99, 102, 241, 0.14);
+  --cst-highlight-border: rgba(99, 102, 241, 0.6);
+  --cst-link-bg:          rgba(99, 102, 241, 0.1);
+  --cst-link-border:      rgba(99, 102, 241, 0.28);
+}
+
+.cst-wrap {
+  overflow-x: auto;
+  min-width: 0;
+  border-radius: 16px;
+  border: 1px solid var(--cst-border);
+  background: var(--cst-row-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.cst-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+/* Sticky header — SmartBoard'un disaridaki overflow-y-auto kapsayicisina
+   gore sabit kalir (bu sarmalayicida sadece overflow-x tanimli oldugu icin
+   dikey scroll bir ust ataya devreder — standart sticky-table deseni). */
+.cst-th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--cst-header-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--cst-header-text);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cst-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cst-th--identity { z-index: 4; }
+.cst-th--action { text-align: right; }
+.cst-th__inner { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
+.cst-th__icon { flex-shrink: 0; opacity: 0.75; }
+.cst-th__label { overflow: hidden; text-overflow: ellipsis; }
+
+/* Satirlar */
+.cst-row { transition: background-color 0.15s ease; }
+.cst-row:hover { background: var(--cst-row-hover); }
+.cst-row + .cst-row > .cst-td { border-top: 1px solid var(--cst-row-border); }
+.cst-row--highlight > .cst-td {
+  background: var(--cst-highlight-bg);
+  box-shadow: inset 3px 0 0 var(--cst-highlight-border);
+  transition: background-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.cst-td {
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--cst-identity-code);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.cst-td--action { text-align: right; }
+
+/* Kimlik hucresi (kod/ad) */
+.cst-td--clickable { cursor: pointer; }
+.cst-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cst-identity__img { width: 26px; height: 26px; border-radius: 7px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--cst-border); }
+.cst-identity__text { min-width: 0; flex: 1; }
+.cst-identity__top { display: flex; align-items: center; gap: 6px; margin-bottom: 1px; }
+.cst-identity__code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--cst-identity-code);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cst-identity__code--upper { text-transform: uppercase; }
+.cst-identity__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cst-identity-title);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s ease;
+}
+.cst-td--clickable:hover .cst-identity__title { color: #6366f1; }
+.cst-identity__desc {
+  font-size: 11px;
+  color: var(--cst-desc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cst-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.cst-violation {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+body.app-theme-dark .cst-violation { color: #fbbf24; }
+
+/* Deger hucreleri — SmartWidget chip'lerinin aksine kutu/border yok (yogun
+   tablo icin sade); ikon + renkli deger. Etiket basliga tasindigi icin
+   hucrede TEKRAR EDILMEZ. */
+.cst-value { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cst-value__text {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cst-value--empty { color: var(--cst-empty-value); font-weight: 400; }
+.cst-value--numeric { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+/* Link / guide-list tetikleyici — kimlik disi hucrelerde kompakt buton */
+.cst-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--cst-link-bg);
+  border: 1px dashed var(--cst-link-border);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+}
+.cst-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cst-link:hover { filter: brightness(1.08); }
+
+/* Aksiyon hucresi */
+.cst-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
