@@ -71,6 +71,11 @@ public sealed class MobileWarehouseApiController : ControllerBase
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IPermissionService _permService;
     private readonly IAuditTrailService _audit;
+    private readonly IFinanceService _financeService;
+    private readonly IPriceListService _priceListService;
+    private readonly IInventoryCountRepository _inventoryCountRepo;
+    private readonly IDocumentSourceRepository _docSourceRepo;
+    private readonly IIntegrationOnSaveDispatcher _onSaveDispatcher;
     private readonly string _schema;
 
     public MobileWarehouseApiController(
@@ -82,16 +87,26 @@ public sealed class MobileWarehouseApiController : ControllerBase
         SqlServerConnectionFactory connectionFactory,
         IPermissionService permService,
         IAuditTrailService audit,
+        IFinanceService financeService,
+        IPriceListService priceListService,
+        IInventoryCountRepository inventoryCountRepo,
+        IDocumentSourceRepository docSourceRepo,
+        IIntegrationOnSaveDispatcher onSaveDispatcher,
         CalibraDatabaseOptions dbOptions)
     {
-        _logisticsService  = logisticsService;
-        _logisticsRepo     = logisticsRepo;
-        _companyParams     = companyParams;
-        _documentTypeRepo  = documentTypeRepo;
-        _stockDocRepo      = stockDocRepo;
-        _connectionFactory = connectionFactory;
-        _permService       = permService;
-        _audit             = audit;
+        _logisticsService   = logisticsService;
+        _logisticsRepo      = logisticsRepo;
+        _companyParams      = companyParams;
+        _documentTypeRepo   = documentTypeRepo;
+        _stockDocRepo       = stockDocRepo;
+        _connectionFactory  = connectionFactory;
+        _permService        = permService;
+        _audit              = audit;
+        _financeService     = financeService;
+        _priceListService   = priceListService;
+        _inventoryCountRepo = inventoryCountRepo;
+        _docSourceRepo      = docSourceRepo;
+        _onSaveDispatcher   = onSaveDispatcher;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -118,6 +133,10 @@ public sealed class MobileWarehouseApiController : ControllerBase
     /// </summary>
     private static readonly string[] StockQueryFormCodes =
         { FormCodes.StockIn, FormCodes.StockOut, FormCodes.Transfer, FormCodes.InventoryCount };
+
+    /// <summary>Irsaliye (teslimat/mal kabul) ekran kodlari — cari arama + teslimat yazma kapisi.</summary>
+    private static readonly string[] DeliveryFormCodes =
+        { FormCodes.SalesDelivery, FormCodes.PurchaseDelivery };
 
     /// <summary>GET icin aday aksiyonlar — PermissionEnforcementFilter'in GET seti ile ayni.</summary>
     private static readonly string[] ViewActions = { "VIEW", "VIEW_OWN" };
@@ -669,7 +688,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────
     // Sozlesme (mobil istemci birebir tuketir):
     //   body: { locationId:int, lines:[{ itemId:int, countedQuantity:number }], note?:string }
-    //   200 { ok:true,  documentNumber:string, applied:bool }
+    //   200 { ok:true,  id:int, documentNumber:string, applied:bool }
+    //     (id 2026-07-16'da EKLENDI — mobil "Yansit" adimi /inventory-count/{id}/apply icin kullanir)
     //   400 { error:string }             — is kurali reddi (bos kalem, negatif miktar, lot/seri/varyant)
     //   404 { error:string }             — malzeme bulunamadi/pasif
     //   403 { ok:false, message, error } — yetki yok
@@ -750,7 +770,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, userId > 0 ? userId : null, ct);
             await LogStockDocInsertAsync("INVENTORY_COUNT", request, id, docNo, ct);
             // Web SaveInventoryJson paritesi: kayit HER ZAMAN taslak kalir (yukaridaki yorum) → applied daima false.
-            return Ok(new { ok = true, documentNumber = docNo, applied = false });
+            // id EKLENDI (additive) — mobil "Yansit" (/inventory-count/{id}/apply) belgeyi bununla hedefler.
+            return Ok(new { ok = true, id, documentNumber = docNo, applied = false });
         }
         catch (InvalidOperationException ioex)
         {
