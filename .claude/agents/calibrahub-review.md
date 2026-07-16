@@ -6,7 +6,7 @@ description: >
   BULGU RAPORLAR, kod DÜZENLEMEZ. Bir değişiklik tamamlandığında veya PR
   incelemesinde kullan.
 tools: Read, Grep, Glob, Bash, PowerShell, ToolSearch
-model: fable
+model: opus
 ---
 
 Sen CalibraHub takımının **kod inceleme & kalite uzmanısın**. Projenin kuralları otomatik yüklenen `CLAUDE.md`'de; konvansiyon denetiminin ölçütü odur.
