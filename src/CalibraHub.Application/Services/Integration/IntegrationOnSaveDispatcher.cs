@@ -48,6 +48,11 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                 using var scope = _scopes.CreateScope();
                 var repo   = scope.ServiceProvider.GetRequiredService<IIntegrationRepository>();
                 var runner = scope.ServiceProvider.GetRequiredService<IIntegrationRunner>();
+                // Tekrar-push guard icin — kayit bu entegrasyona daha once basariyla gonderildiyse
+                // (Aktarim Kuyrugu / RecordStatus.Sent) atlanir. Servis kaydi yoksa (beklenmez,
+                // Program.cs'de her zaman kayitli) guard sessizce devre disi kalir — dispatcher
+                // eskisi gibi kosulsuz calisir; hata firlatmaz.
+                var recordStatusRepo = scope.ServiceProvider.GetService<IIntegrationRecordStatusRepository>();
 
                 foreach (var formCode in codes)
                 {
@@ -67,6 +72,28 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                     {
                         try
                         {
+                            // Duplicate guard: OnSave trigger config'inden onlyIfNotSent oku
+                            // (varsayilan TRUE — WidgetsController.FireOnSaveTriggersFireAndForget
+                            // ile ayni isim/varsayilan). Kayit bu entegrasyona daha once basariyla
+                            // gonderildiyse (RecordStatus.Sent) atla; aksi halde belge her
+                            // duzenlemede ERP'ye tekrar tekrar gider (spam katlanir).
+                            if (recordStatusRepo is not null)
+                            {
+                                var triggers = await repo.GetTriggersAsync(integ.Id, CancellationToken.None);
+                                var onSaveTrigger = triggers.FirstOrDefault(t =>
+                                    t.IsActive && t.TriggerType == IntegrationTriggerType.OnSave);
+                                if (ParseOnlyIfNotSent(onSaveTrigger?.Config))
+                                {
+                                    var existingStatus = await recordStatusRepo.GetAsync(integ.Id, recordId, CancellationToken.None);
+                                    if (existingStatus?.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Sent)
+                                    {
+                                        _log.LogInformation("[OnSaveDispatcher] {IntegrationName} (#{Id}) atlandi — zaten gonderilmis (RecordStatus.Sent) — recordId={RecordId}",
+                                            integ.Name, integ.Id, recordId);
+                                        continue;
+                                    }
+                                }
+                            }
+
                             var result = await runner.RunAsync(
                                 integ.Id, recordId, IntegrationTriggerType.OnSave,
                                 triggeredBy ?? "system-onsave", CancellationToken.None);

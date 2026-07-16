@@ -1634,13 +1634,16 @@ public sealed class SalesController : Controller
             }
 
             // Otomatik Save trigger'li entegrasyonlari arka planda fire et (fire-and-forget).
-            // Sales document hem QUOTE hem ORDER olabilir + hem NEW hem EDIT form code'lariyla
-            // wizard'da tanimlanmis olabilir — tum 4 varyanti tara. DB'de UNIQUE INDEX
-            // sayesinde her sorgu cok hizli; eslesmesi olmayan form code'lar no-op doner.
+            // Belge tipinden turetilen form kodlari (Yeni + Duzenle) taranir — DocumentTypeFormMap
+            // artik satis/alis/irsaliye TUM belge tiplerini kapsadigindan sabit 4 satis kodu yerine
+            // _sDocType'tan cozulur (2026-07-16) — alis siparisi/talebi/teklifi + irsaliye dahil
+            // tum belge tipleri kayitta OnSave entegrasyonlarini tetikler. DB'de UNIQUE INDEX
+            // sayesinde sorgu hizli; eslesmesi olmayan form code'lar no-op doner.
             if (quote != null && quote.Id > 0)
             {
+                var _sOnSaveFc = DocumentTypeFormMap.Resolve(_sDocType?.Code);
                 _onSaveDispatcher.FireOnSave(
-                    new[] { "SALES_QUOTE_NEW", "SALES_QUOTE_EDIT", "SALES_ORDER_NEW", "SALES_ORDER_EDIT" },
+                    new[] { _sOnSaveFc.HeaderNew, _sOnSaveFc.Header },
                     quote.Id.ToString(),
                     User?.Identity?.Name);
             }

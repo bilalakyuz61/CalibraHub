@@ -66,6 +66,8 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
   --iw-rose-color:   #f87171;
   --iw-slate-bg:     rgba(255,255,255,.05);
   --iw-slate-color:  rgba(255,255,255,.55);
+  --iw-violet-bg:    rgba(139,92,246,.18);
+  --iw-violet-color: #c4b5fd;
 }
 
 /* ── Toolbar (her iki ekranda da kullanilan) ── */
