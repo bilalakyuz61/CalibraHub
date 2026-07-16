@@ -22,9 +22,11 @@ import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSprea
 import SmartCard from './SmartCard'
 import SmartTable from './SmartTable'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
+import SmartColumnSettings from './SmartColumnSettings'
 import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
 import { loadWidgetConfig } from '../../services/widgetConfigService'
+import { loadBoardColumnConfig } from '../../services/columnConfigService'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 
 var FILTER_STORAGE_PREFIX = 'cb-sb-filters:'
@@ -70,6 +72,21 @@ export default function SmartBoard(props) {
   var [search, setSearch] = useState('')
   var [configOpen, setConfigOpen] = useState(false)
   var [userConfig, setUserConfig] = useState(null)
+
+  // ── Tablo modu "Sutun Ayarlari" (SmartColumnSettings) — kart modundan AYRI
+  //    state/servis. viewMode !== 'table' oldugunda hicbiri kullanilmaz;
+  //    panel de asagida sadece table modunda mount edilir (regresyonsuz —
+  //    kart board'lari icin bu kod yolu hic calismaz). ──
+  var [columnSettingsOpen, setColumnSettingsOpen] = useState(false)
+  var [tableColumnConfig, setTableColumnConfig] = useState(null)
+  useEffect(function () {
+    if (viewMode !== 'table') return undefined
+    var cancelled = false
+    loadBoardColumnConfig(boardKey).then(function (cfg) {
+      if (!cancelled) setTableColumnConfig(cfg)
+    })
+    return function () { cancelled = true }
+  }, [boardKey, viewMode])
 
   // ── Filter state (hayalet mod) ──
   // localStorage'dan initial yukleme — sayfa arasi tercih korunur (boardKey scope)
@@ -719,10 +736,13 @@ export default function SmartBoard(props) {
           }
         </button>
 
+        {/* Tablo modunda (viewMode:'table') Sutun Ayarlari (SmartColumnSettings)
+            acilir; kart modunda AYNEN eskisi gibi Widget Ayarlari (SmartBoardConfigPanel).
+            Regresyonsuz: viewMode!=='table' oldugunda bu dal hicbir zaman calismaz. */}
         <button
-          onClick={function () { setConfigOpen(true) }}
+          onClick={function () { if (viewMode === 'table') setColumnSettingsOpen(true); else setConfigOpen(true) }}
           className="p-2.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] transition-all group flex-shrink-0"
-          title="Widget Ayarlari"
+          title={viewMode === 'table' ? 'Sütun Ayarları' : 'Widget Ayarlari'}
         >
           <Settings2 size={15} className="text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors" />
         </button>

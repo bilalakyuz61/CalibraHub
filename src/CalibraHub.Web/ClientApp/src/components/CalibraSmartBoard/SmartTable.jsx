@@ -34,7 +34,10 @@ import { useMemo } from 'react'
 import SmartTableRow from './SmartTableRow'
 import { resolveIcon, resolveChipWidth } from './DynamicWidgetFactory'
 
-var DELETE_COL_WIDTH   = 44
+// DELETE_COL_WIDTH export edilir — SmartTableRow, kimlik hucresinin sticky-left
+// offset'ini bu sabitten turetir (Sil sutunu 0'dan basliyor, kimlik hemen
+// ardindan gelir — tek kaynak, iki dosyada sihirli sayi tekrari yok).
+export var DELETE_COL_WIDTH   = 44
 var IDENTITY_COL_WIDTH = 280
 var ACTION_COL_WIDTH   = 56
 
@@ -190,7 +193,7 @@ export default function SmartTable(props) {
           <thead>
             <tr>
               <th className="cst-th cst-th--delete" aria-label="Sil" />
-              <th className="cst-th cst-th--identity">Kod / Ad</th>
+              <th className="cst-th cst-th--identity" style={{ left: DELETE_COL_WIDTH }}>Kod / Ad</th>
               {columns.map(function (c) {
                 var Icon = resolveIcon(c.icon, null, c.dataType)
                 var thStyle = { textAlign: c.align }

@@ -3938,7 +3938,15 @@ body.app-theme-dark .cst-root {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Kimlik/Sil/pin'li sutunlar sticky-left'tir (kaydirmada sabit kalir) —
+   z-index 4, dikeyde sticky olan basliklarin (z-index 3) UZERINDE kalmasi
+   icin (kose hucre: hem yatay hem dikey sticky kesisimi). `left` degeri
+   dinamiktir (Sil sutunu genisligine / pin sirasina gore) — bu yuzden JS
+   tarafinda inline style ile verilir, burada sadece z-index/sabit davranis
+   tanimlanir. */
+.cst-th--delete { z-index: 4; left: 0; }
 .cst-th--identity { z-index: 4; }
+.cst-th--pinned { z-index: 4; }
 .cst-th--action { text-align: right; }
 .cst-th__inner { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
 .cst-th__icon { flex-shrink: 0; opacity: 0.75; }
@@ -3947,6 +3955,7 @@ body.app-theme-dark .cst-root {
 /* Satirlar */
 .cst-row { transition: background-color 0.15s ease; }
 .cst-row:hover { background: var(--cst-row-hover); }
+.cst-row:hover > .cst-td { background: var(--cst-row-hover); }
 .cst-row + .cst-row > .cst-td { border-top: 1px solid var(--cst-row-border); }
 .cst-row--highlight > .cst-td {
   background: var(--cst-highlight-bg);
@@ -3960,10 +3969,21 @@ body.app-theme-dark .cst-root {
   color: var(--cst-identity-code);
   vertical-align: middle;
   overflow: hidden;
+  /* Her hucrenin kendi arka plani olur (sticky hucrelerin altindan kayan
+     icerigi orter) — .cst-wrap'in arka planiyla ayni token, gorunumde fark
+     yaratmaz (sadece sticky/pin ozelligini dogru calistirir). */
+  background: var(--cst-row-bg);
 }
 .cst-td--action { text-align: right; }
 
-/* Kimlik hucresi (kod/ad) */
+/* Sil (en bastaki dar sutun) + pin'li veri sutunlari — sticky-left, `left`
+   JS'ten inline gelir (Sil her zaman 0). */
+.cst-td--delete { position: sticky; left: 0; z-index: 2; text-align: center; }
+.cst-td--pinned { position: sticky; z-index: 1; }
+
+/* Kimlik hucresi (kod/ad) — her zaman sticky-left (Sil sutunundan sonra);
+   aksi halde pin'lenmis bir sutun kaydirildiginda satir kimligi kaybolurdu. */
+.cst-td--identity { position: sticky; z-index: 2; }
 .cst-td--clickable { cursor: pointer; }
 .cst-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .cst-identity__img { width: 26px; height: 26px; border-radius: 7px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--cst-border); }
