@@ -138,6 +138,7 @@ var dataTypeIconMap = {
   datetime: Clock,
   boolean:  CheckCircle,
   status:   Activity,
+  phone:    Phone,
 }
 
 /* ── dataType/type → sabit chip genisligi (px) ──────────────────
@@ -192,6 +193,7 @@ var dataTypeWidthMap = {
   dropdown:       CHIP_WIDTH_MEDIUM,
   options:        CHIP_WIDTH_MEDIUM,
   attachment:     CHIP_WIDTH_MEDIUM,
+  phone:          CHIP_WIDTH_MEDIUM,
   text:           CHIP_WIDTH_WIDE,
   textarea:       CHIP_WIDTH_WIDE,
   lookup:         CHIP_WIDTH_WIDE,
@@ -226,6 +228,7 @@ var dataTypeColorMap = {
   datetime: 'cyan',
   boolean:  'emerald',
   status:   'indigo',
+  phone:    'blue',
 }
 
 /**

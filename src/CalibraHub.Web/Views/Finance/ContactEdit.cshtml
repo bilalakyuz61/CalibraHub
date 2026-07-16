@@ -3380,7 +3380,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 '<td>' + (i + 1) + '</td>' +
                 '<td>' + htmlEscape(p.title) + '</td>' +
                 '<td>' + htmlEscape(p.fullName) + '</td>' +
-                '<td>' + htmlEscape(p.phone || '') + '</td>' +
+                '<td>' + htmlEscape((window.CalibraPhone ? window.CalibraPhone.format(p.phone) : p.phone) || '') + '</td>' +
                 '<td>' + htmlEscape(p.email || '') + '</td>' +
                 '<td style="text-align:center;">' +
                     (p.isPrimary
