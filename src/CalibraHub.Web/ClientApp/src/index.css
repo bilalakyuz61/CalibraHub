@@ -4115,3 +4115,12 @@ body.app-theme-dark .cst-violation { color: #fbbf24; }
 }
 .cst-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cst-link:hover { filter: brightness(1.08); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   SmartColumnSettings.jsx — Sutun Ayarlari paneli (tablo modu Settings2
+   hedefi). Govde/satirlar Tailwind dark: varyanti ile tema-farkinda
+   (SmartBoard.jsx'in dual-theme buton deseniyle ayni); burada sadece
+   native form kontrolleri (arama/rename input'lari) icin color-scheme
+   sinyali tanimlanir — CLAUDE.md "color-scheme zorunlulugu". ══════════ */
+.scs-panel { color-scheme: light; }
+body.app-theme-dark .scs-panel { color-scheme: dark; }

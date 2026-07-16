@@ -681,19 +681,19 @@ export default function SmartColumnSettings(props) {
                     </div>
 
                     {/* Divider */}
-                    <div className="mx-5 my-3 h-px bg-white/[0.06]" />
+                    <div className="mx-5 my-3 h-px bg-slate-200 dark:bg-white/[0.06]" />
 
                     {/* Havuz */}
                     <div className="px-5 pb-4">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                        <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-white/40 uppercase tracking-wider">
                           Sütun Havuzu ({poolColumns.length}{q ? ' / ' + filteredPool.length + ' eşleşme' : ''})
                         </span>
                       </div>
 
                       {filteredPool.length === 0 ? (
-                        <div className="text-center py-5 text-white/20 text-xs">
+                        <div className="text-center py-5 text-slate-400 dark:text-white/20 text-xs">
                           {poolColumns.length === 0
                             ? 'Tüm sütunlar zaten aktif'
                             : 'Arama ile eşleşen sütun yok.'}
@@ -711,10 +711,10 @@ export default function SmartColumnSettings(props) {
               </div>
 
               {/* Footer */}
-              <div className="px-5 py-4 border-t border-white/[0.06] flex items-center gap-2 flex-shrink-0">
+              <div className="px-5 py-4 border-t border-slate-200 dark:border-white/[0.06] flex items-center gap-2 flex-shrink-0">
                 <button
                   onClick={handleReset}
-                  className="px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.06] text-xs font-medium text-white/40 hover:text-white/60 transition-all flex items-center gap-1.5"
+                  className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.06] border border-slate-200 dark:border-white/[0.06] text-xs font-medium text-slate-500 dark:text-white/40 hover:text-slate-700 dark:hover:text-white/60 transition-all flex items-center gap-1.5"
                   title="Varsayilana sifirla"
                 >
                   <RotateCcw size={13} />
@@ -723,14 +723,14 @@ export default function SmartColumnSettings(props) {
                 <div className="flex-1" />
                 <button
                   onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-sm font-medium text-white/50 hover:text-white/70 transition-all"
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.04] hover:bg-slate-200 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] text-sm font-medium text-slate-600 dark:text-white/50 hover:text-slate-800 dark:hover:text-white/70 transition-all"
                 >
                   İptal
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving || loadingCfg}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/35 border border-indigo-400/25 hover:border-indigo-400/35 text-sm font-semibold text-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                  className="px-4 py-2.5 rounded-xl bg-indigo-500/15 dark:bg-indigo-500/25 hover:bg-indigo-500/25 dark:hover:bg-indigo-500/35 border border-indigo-400/30 dark:border-indigo-400/25 hover:border-indigo-400/50 dark:hover:border-indigo-400/35 text-sm font-semibold text-indigo-700 dark:text-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50"
                 >
                   <Check size={15} />
                   {saving ? 'Kaydediliyor...' : 'Kaydet'}
