@@ -8,14 +8,18 @@ Bu klasör CalibraHub uzman ajanlarını tanımlar. Her tanım **iki modda** ça
 
 ## Kadro
 
+**2026-07-16 itibarıyla tüm takım Claude Fable 5'te** (kullanıcı kararı — maliyet bilinçli kabul edildi). Ajan prompt'ları Fable için de-prescribe edildi: sınırlar + proje kuralları kısıt olarak kaldı, adım-adım tarifler kaldırıldı, kapsam/otonomi/raporlama tarzı blokları eklendi.
+
 | Ajan | Model | Sahiplendiği katman |
 |------|-------|---------------------|
-| 🧠 **Lider** = ana session | Opus | Görev bölme, delegasyon, entegrasyon, **build/run/restart/commit**, kural denetimi |
-| ⚙️ `calibrahub-backend` | Sonnet | 7 .NET projesi: Domain/App/**Infrastructure**/**Worker**/Persistence(Repos)/**Tests**/Controllers + audit + yetki |
-| 🎨 `calibrahub-frontend` | Sonnet | `.cshtml` (201) + `.jsx` (149) + CSS / C-Grid / sekmeli-form / tema |
-| 🗄️ `calibrahub-db` | Opus | SQL / DDL / migration / naming / **kod↔DB senkron denetimi** (en yüksek risk rolü) |
-| 🔍 `calibrahub-review` | Opus | Diff inceleme / kural + tema + güvenlik audit (salt-okuma, bulgu raporlar) |
-| 📱 `calibrahub-mobile` | Sonnet | Kotlin/Compose Android app / Retrofit cookie auth / WhatsApp chat / `/api/mobile/*` sözleşmesi |
+| 🧠 **Lider** = ana session | Fable 5 | Görev bölme, delegasyon, entegrasyon, **build/run/restart/commit**, kural denetimi |
+| ⚙️ `calibrahub-backend` | Fable 5 | 7 .NET projesi: Domain/App/**Infrastructure**/**Worker**/Persistence(Repos)/**Tests**/Controllers + audit + yetki |
+| 🎨 `calibrahub-frontend` | Fable 5 | `.cshtml` (201) + `.jsx` (149) + CSS / C-Grid / sekmeli-form / tema |
+| 🗄️ `calibrahub-db` | Fable 5 | SQL / DDL / migration / naming / **kod↔DB senkron denetimi** (en yüksek risk rolü) |
+| 🔍 `calibrahub-review` | Fable 5 | Diff inceleme / kural + tema + güvenlik audit (salt-okuma, **kapsam-öncelikli** bulgu raporlar) |
+| 📱 `calibrahub-mobile` | Fable 5 | Kotlin/Compose Android app / Retrofit cookie auth / Modül Seçici + Depo + WhatsApp / `/api/mobile/*` sözleşmesi |
+
+**Fable notları (lider için):** ① Zor işlerde tek istek dakikalarca sürebilir — normal, bekle. ② Güvenlik-komşusu bir görevde ajan `refusal` ile durursa görevi **Agent çağrısında `model: "opus"` override'ı ile** yeniden koş (ajan tanımını değiştirme). ③ Görev prompt'unda hedef + kısıt ver, adımları sayma — Fable'da aşırı reçete kaliteyi düşürür.
 
 ## Lider protokolü (ana session bunu izler)
 
