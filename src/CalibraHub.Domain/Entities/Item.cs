@@ -9,6 +9,11 @@ public sealed class Item
     public int CompanyId { get; init; }
     public required string Code { get; init; }
     public required string Name { get; init; }
+
+    /// <summary>Barkod (opsiyonel, kullanıcı girer) — "kullanıcı kod girmez" kuralı Code
+    /// alanı içindir; Barcode ayrı bir alan, doğrudan kullanıcı tarafından girilir/taranır.
+    /// Boşsa arama/entegrasyon katmanları Code'a düşer (fallback), DB'de zorlanmaz.</summary>
+    public string? Barcode { get; init; }
     public int? TypeId { get; init; }
     public int? UnitId { get; init; }
     public bool Combinations { get; init; } = false;

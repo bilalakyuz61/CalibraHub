@@ -17,6 +17,9 @@ public sealed class CreateItemRequestValidator : AbstractValidator<CreateItemReq
 
         RuleFor(x => x.TaxRate)
             .InclusiveBetween(0m, 100m).WithMessage("KDV orani 0-100 araliginda olmalidir.");
+
+        RuleFor(x => x.Barcode)
+            .MaximumLength(50).WithMessage("Barkod en fazla 50 karakter olabilir.");
     }
 }
 
@@ -28,5 +31,6 @@ public sealed class UpdateItemRequestValidator : AbstractValidator<UpdateItemReq
         RuleFor(x => x.Code).NotEmpty().MaximumLength(50);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.TaxRate).InclusiveBetween(0m, 100m);
+        RuleFor(x => x.Barcode).MaximumLength(50).WithMessage("Barkod en fazla 50 karakter olabilir.");
     }
 }

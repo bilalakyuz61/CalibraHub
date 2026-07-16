@@ -86,7 +86,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [CompanyId],
                    ISNULL([TrackingType], 'None') AS [TrackingType],
                    ISNULL([MinStock], 0) AS [MinStock],
-                   ISNULL([AutoSerial], 0) AS [AutoSerial]
+                   ISNULL([AutoSerial], 0) AS [AutoSerial],
+                   [Barcode]
             FROM {_stockCardsTableName} sc
             WHERE sc.[CompanyId] = @CompanyId
             {dv.Sql}
@@ -112,7 +113,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 CompanyId = reader.GetInt32(10),
                 TrackingType = reader.IsDBNull(11) ? "None" : reader.GetString(11),
                 MinStock = reader.IsDBNull(12) ? 0m : reader.GetDecimal(12),
-                AutoSerial = !reader.IsDBNull(13) && reader.GetBoolean(13)
+                AutoSerial = !reader.IsDBNull(13) && reader.GetBoolean(13),
+                Barcode = reader.IsDBNull(14) ? null : reader.GetString(14)
             };
 
             if (!reader.GetBoolean(3))
@@ -195,9 +197,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
 
         // [Items]'in alias'i lazim cunku EXISTS subquery'de Items.Id'ye disaridan referans verecegiz.
+        // Barcode dahil (2026-07-16): bu metod masaustu malzeme rehberi + mobil barkod aramasi
+        // tarafindan PAYLASILIYOR (LogisticsController, MobileWarehouseApiController.SearchItems,
+        // PriceListController, Calibro AI tool'lari, ItemImportHandler) — tek noktadan Code/Name
+        // ile ayni LIKE semantiginde Barcode eslesmesi eklenince tum tuketiciler otomatik
+        // barkod-farkinda olur (karar: izole kopya degil, ortak sorgu genisletildi — rapora not).
         var where = "WHERE i.[CompanyId] = @CompanyId AND i.[IsActive] = 1";
         if (!string.IsNullOrWhiteSpace(search))
-            where += " AND (i.[Code] LIKE @Search OR i.[Name] LIKE @Search)";
+            where += " AND (i.[Code] LIKE @Search OR i.[Name] LIKE @Search OR i.[Barcode] LIKE @Search)";
         if (!string.IsNullOrWhiteSpace(groupCode))
             where += $" AND EXISTS (SELECT 1 FROM {_materialGroupMappingsTableName} mgm WHERE mgm.[ItemId] = i.[Id] AND mgm.[GroupCode] = @GroupCode)";
         where += dv.Sql;
@@ -208,7 +215,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 SELECT i.[Id], i.[Code], i.[Name],
                        i.[IsActive], i.[Created], i.[Updated],
                        i.[Combinations], ISNULL(i.[TaxRate], 20) AS [TaxRate], i.[TypeId],
-                       i.[UnitId], i.[CompanyId],
+                       i.[UnitId], i.[CompanyId], i.[Barcode],
                        COUNT(*) OVER() AS [_TotalCount]
                 FROM {_stockCardsTableName} i
                 {where}
@@ -239,11 +246,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     TaxRate = reader.IsDBNull(7) ? 20m : reader.GetDecimal(7),
                     TypeId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
                     UnitId = reader.IsDBNull(9) ? null : reader.GetInt32(9),
-                    CompanyId = reader.GetInt32(10)
+                    CompanyId = reader.GetInt32(10),
+                    Barcode = reader.IsDBNull(11) ? null : reader.GetString(11)
                 };
                 if (!reader.GetBoolean(3)) card.Deactivate();
                 items.Add(card);
-                if (totalCount == 0) totalCount = reader.GetInt32(11);
+                if (totalCount == 0) totalCount = reader.GetInt32(12);
             }
         }
 

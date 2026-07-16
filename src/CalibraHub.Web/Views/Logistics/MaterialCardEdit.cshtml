@@ -3166,6 +3166,7 @@
             itemId: currentId > 0 ? currentId : null,
             code: code,
             name: name,
+            barcode: ($('mceBarcode') ? $('mceBarcode').value.trim() : ''),
             typeId: $('mceMaterialTypeId').value ? parseInt($('mceMaterialTypeId').value) : null,
             unitId: unitIdRaw ? parseInt(unitIdRaw) : null,
             combinations: $('mceTrackCombinations').checked,
@@ -3461,6 +3462,7 @@
             mceFormatMeta(null, keepCode || '', '');
             _setVal('mceMaterialCode', keepCode || '');
             _setVal('mceMaterialName', '');
+            _setVal('mceBarcode', '');
             _setVal('mceMaterialTypeId', '');
             _setChk('mceTrackCombinations', false);
             _setVal('mceTaxRate', 20);
