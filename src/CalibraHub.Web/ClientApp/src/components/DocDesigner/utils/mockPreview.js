@@ -94,7 +94,7 @@ function elHtml(el) {
         xp += lw; i++
       }
       const textHtml = (el.showBarcodeText !== false)
-        ? `<div style="position:absolute;left:0;right:0;bottom:0;text-align:center;font-family:monospace;font-size:8px;color:#000">${val}</div>`
+        ? `<div style="position:absolute;left:0;right:0;bottom:0;text-align:center;font-family:ui-monospace, Menlo, Consolas, monospace;font-size:8px;color:#000">${val}</div>`
         : ''
       return `<div style="${styles};background:#fff;display:block;padding:0">${lines.join('')}${textHtml}</div>`
     }

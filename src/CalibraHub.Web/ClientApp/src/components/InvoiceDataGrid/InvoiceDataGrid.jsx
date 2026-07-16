@@ -223,7 +223,7 @@ export default function InvoiceDataGrid(props) {
 
                   {/* Belge No */}
                   <td style={{ padding: '5px 12px', whiteSpace: 'nowrap' }}>
-                    <span style={{ fontFamily: 'monospace', fontSize: 11.5, fontWeight: 500, color: 'var(--igd-text)' }}>
+                    <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11.5, fontWeight: 500, color: 'var(--igd-text)' }}>
                       {row.documentNumber}
                     </span>
                     {row.isProcessed && (
@@ -243,7 +243,7 @@ export default function InvoiceDataGrid(props) {
                   </td>
 
                   {/* Gönderici VKN */}
-                  <td style={{ padding: '5px 12px', fontFamily: 'monospace', fontSize: 11, color: 'var(--igd-text-muted)' }}>
+                  <td style={{ padding: '5px 12px', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11, color: 'var(--igd-text-muted)' }}>
                     {row.senderTaxNumber || '—'}
                   </td>
 

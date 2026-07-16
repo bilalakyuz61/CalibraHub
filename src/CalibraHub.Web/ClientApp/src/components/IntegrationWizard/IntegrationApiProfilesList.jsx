@@ -651,7 +651,7 @@ export default function IntegrationApiProfilesList({ config }) {
             </div>
             <div className="il-card-main">
               <div className="il-card-name">{p.name}</div>
-              <div className="il-card-desc" style={{ fontFamily: 'monospace' }}>{p.baseUrl}</div>
+              <div className="il-card-desc" style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{p.baseUrl}</div>
             </div>
             <div className="il-card-flow">
               <span>Auth</span>

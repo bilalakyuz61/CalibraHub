@@ -224,7 +224,7 @@ export default function ElementEditorModal({ el, dataSources, onSave, onClose })
                         border: `1px solid ${format === p.value ? 'var(--dd-accent)' : 'var(--dd-border)'}`,
                         background: format === p.value ? 'var(--dd-accent-soft)' : 'var(--dd-surface)',
                         color: 'var(--dd-text)', borderRadius: 4, cursor: 'pointer',
-                        fontFamily: 'monospace', fontSize: 11,
+                        fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11,
                       }}>
                       {p.label}
                     </button>
@@ -443,16 +443,16 @@ const leftPanel = { flex: 1, padding: 14, overflow: 'auto', borderRight: '1px so
 const rightPanel = { width: 240, padding: 10, overflow: 'auto', background: 'var(--dd-surface-alt, #fafafa)' }
 const fieldLabel = { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--dd-text-muted, #6b7280)', marginBottom: 5 }
 const textarea = {
-  width: '100%', minHeight: 100, padding: '8px 10px', fontFamily: 'monospace', fontSize: 12,
+  width: '100%', minHeight: 100, padding: '8px 10px', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12,
   background: 'var(--dd-surface-alt, #f9fafb)', color: 'var(--dd-text, #111)',
   border: '1px solid var(--dd-border, #e5e7eb)', borderRadius: 4, resize: 'vertical', boxSizing: 'border-box',
 }
 const input = {
-  width: '100%', padding: '6px 9px', fontFamily: 'monospace', fontSize: 12,
+  width: '100%', padding: '6px 9px', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12,
   background: 'var(--dd-surface, #fff)', color: 'var(--dd-text, #111)',
   border: '1px solid var(--dd-border, #e5e7eb)', borderRadius: 4, boxSizing: 'border-box',
 }
-const code = { background: 'var(--dd-surface-alt, #f3f4f6)', padding: '1px 4px', borderRadius: 2, fontFamily: 'monospace', fontSize: 10 }
+const code = { background: 'var(--dd-surface-alt, #f3f4f6)', padding: '1px 4px', borderRadius: 2, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 10 }
 const footer = {
   display: 'flex', justifyContent: 'flex-end', gap: 6,
   padding: '10px 14px', borderTop: '1px solid var(--dd-border, #e5e7eb)',

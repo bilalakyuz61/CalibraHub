@@ -368,7 +368,7 @@ function GuideListWidgetButton(props) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>{label}</div>
                 {meta.guideCode && (
-                  <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
                     {meta.guideCode}
                   </div>
                 )}

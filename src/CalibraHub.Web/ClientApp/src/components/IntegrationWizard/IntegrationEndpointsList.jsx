@@ -430,7 +430,7 @@ export default function IntegrationEndpointsList({ config }) {
                 }}>{ep.httpMethod}</span>
                 {ep.name}
               </div>
-              <div className="il-card-desc" style={{ fontFamily: 'monospace', fontSize: 11 }}>
+              <div className="il-card-desc" style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11 }}>
                 {ep.urlTemplate}
               </div>
             </div>

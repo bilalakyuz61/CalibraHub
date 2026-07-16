@@ -164,13 +164,13 @@ export default function CostViewerModal(props) {
           <div style={{ fontWeight: 600, color: textColor }}>{c.code}</div>
           <div style={{ fontSize: '.7rem', color: mutedText }}>{c.name}{c.configCode ? ' · ' + c.configCode : ''}</div>
         </td>
-        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.78rem' }}>{fmt(c.qty, 4)}</td>
-        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.78rem' }}>{fmt((c.scrapRatio || 0) * 100, 2)}</td>
-        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.78rem' }}>{fmt(c.effectiveQty, 4)}</td>
-        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.78rem', color: c.hasPrice ? textColor : mutedText }}>
+        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem' }}>{fmt(c.qty, 4)}</td>
+        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem' }}>{fmt((c.scrapRatio || 0) * 100, 2)}</td>
+        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem' }}>{fmt(c.effectiveQty, 4)}</td>
+        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem', color: c.hasPrice ? textColor : mutedText }}>
           {c.hasPrice ? fmt(c.unitPrice, 2) : '—'} {currencySymbol}
         </td>
-        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.82rem', fontWeight: 600 }}>
+        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.82rem', fontWeight: 600 }}>
           {fmt(c.lineCost, 2)} {currencySymbol}
         </td>
       </tr>
@@ -425,7 +425,7 @@ export default function CostViewerModal(props) {
                                 ({g.items.length} bileşen)
                               </span>
                             </td>
-                            <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.78rem', fontWeight: 700, color: isLight ? '#4338ca' : '#a5b4fc' }}>
+                            <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem', fontWeight: 700, color: isLight ? '#4338ca' : '#a5b4fc' }}>
                               {fmt(g.subtotal, 2)} {currencySymbol}
                             </td>
                           </tr>
@@ -473,14 +473,14 @@ export default function CostViewerModal(props) {
               <span style={{ fontSize: '.72rem', color: mutedText, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                 Birim Maliyet (1 adet)
               </span>
-              <span style={{ fontSize: '1.08rem', fontWeight: 700, color: '#fbbf24', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: '1.08rem', fontWeight: 700, color: '#fbbf24', fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                 {data && data.found ? fmt(data.totalCost, 2) : '—'} {currencySymbol}
               </span>
             </div>
             {data && data.found && quantity && quantity !== 1 ? (
               <div style={{ fontSize: '.7rem', color: mutedText }}>
                 Kalem miktarı: <strong>{fmt(quantity, 2)}</strong> ·
-                Kalem toplamı: <strong style={{ color: textColor, fontFamily: 'monospace' }}>{fmt(Number(data.totalCost) * Number(quantity), 2)} {currencySymbol}</strong>
+                Kalem toplamı: <strong style={{ color: textColor, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{fmt(Number(data.totalCost) * Number(quantity), 2)} {currencySymbol}</strong>
               </div>
             ) : null}
           </div>

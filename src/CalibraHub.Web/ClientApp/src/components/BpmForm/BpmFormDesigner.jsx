@@ -79,7 +79,7 @@ function InputMock({ field }) {
     case 'Textarea':
       return <div className="bpmd-fp-mock bpmd-fp-mock--textarea"><span>{field.placeholder || ''}</span></div>
     case 'Number':
-      return <div className="bpmd-fp-mock"><span style={{ fontFamily: 'monospace' }}>{field.placeholder || '0'}</span></div>
+      return <div className="bpmd-fp-mock"><span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{field.placeholder || '0'}</span></div>
     case 'Date':
       return <div className="bpmd-fp-mock"><span>gg.aa.yyyy</span><Calendar size={12} style={{ marginLeft: 'auto', opacity: .4 }} /></div>
     case 'Dropdown':

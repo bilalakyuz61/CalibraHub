@@ -308,7 +308,7 @@ function SqlConditionEditor({ rule, sqlQueries, canUseAdhoc, onChange }) {
           <textarea
             className="afd-props__input afd-props__input--ta"
             rows={5}
-            style={{ fontFamily: 'Consolas, Menlo, Monaco, "Courier New", monospace', fontSize: '.78rem' }}
+            style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem' }}
             value={rule.sqlText || ''}
             onChange={function (e) { onChange({ sqlText: e.target.value }) }}
             placeholder={"SELECT COUNT(*) FROM dbo.SalesOrder WHERE ContactId = {contactId} AND IsActive = 1"}

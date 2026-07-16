@@ -4,6 +4,7 @@
   background: var(--cgt-bg, #f1f5f9);
   color: var(--cgt-text, #0f172a);
   font-family: inherit; overflow: hidden;
+  color-scheme: light;
 }
 
 /* ── CSS değişkenleri ── */
@@ -25,6 +26,7 @@
   --cgt-teal-bdr:     rgba(13,148,136,.25);
 }
 body.app-theme-dark .cgt-root {
+  color-scheme: dark;
   --cgt-bg:           #080c17;
   --cgt-surface:      #0d1323;
   --cgt-border:       rgba(255,255,255,.08);

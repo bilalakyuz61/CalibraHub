@@ -1010,7 +1010,6 @@ body.app-theme-dark .workspace-frame-body {
   font-size: 0.7rem;
   color: #67e8f9;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   font-weight: 600;
   margin: 0 4px 6px 4px;
 }
@@ -1452,7 +1451,6 @@ body.app-theme-dark .workspace-frame-body {
 .integrator-stat__label {
   font-size: 0.74rem;
   color: #64748b;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
@@ -1487,7 +1485,6 @@ body.app-theme-dark .workspace-frame-body {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--integrator-muted);
 }
 
@@ -1651,7 +1648,6 @@ body.app-theme-dark .workspace-frame-body {
 .integrator-form-section h3 {
   margin: 0 0 10px 0;
   font-size: 0.82rem;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--integrator-muted);
 }
@@ -1935,7 +1931,6 @@ body.app-theme-dark .workspace-frame-body {
   border-bottom: 1px solid var(--integrator-border);
   color: var(--integrator-muted);
   font-size: 0.73rem;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
   white-space: nowrap;
@@ -2069,7 +2064,6 @@ body.app-theme-dark .workspace-frame-body {
   background: #f7fbff;
   color: #21466f;
   font-size: 0.82rem;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
 }
@@ -2137,7 +2131,6 @@ body.app-theme-dark .workspace-frame-body {
 .integrator-detail-modal__section h6 {
   margin: 0 0 8px 0;
   font-size: 0.76rem;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #365676;
 }
@@ -2358,7 +2351,6 @@ body.app-theme-dark .workspace-frame-body {
 .material-form-card__title {
   margin: 0 0 6px 0;
   font-size: 0.74rem;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #345273;
 }
@@ -3088,7 +3080,6 @@ html:has(body.setup-page) {
   color: #4f46e5 !important;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   font-size: 0.7rem !important;
   opacity: 0.9 !important;
   transform: scale(1) translateY(-8px) !important;
@@ -3659,7 +3650,6 @@ h3 {
   margin: 0 0 10px 0;
   font-size: 0.78rem;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--integrator-text);
 }
@@ -3680,7 +3670,6 @@ h3 {
   margin: 0 0 8px 0;
   font-size: 0.73rem;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--integrator-muted);
 }
@@ -4036,7 +4025,6 @@ h3 {
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .dashboard-sidebar__title {
@@ -4147,7 +4135,6 @@ h3 {
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .dashboard-sidebar__insight-value {
@@ -4353,7 +4340,6 @@ h3 {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .dashboard-stat-card__value-row {
@@ -4458,7 +4444,6 @@ h3 {
   font-size: 0.76rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .dashboard-chart__amount {
@@ -4536,7 +4521,6 @@ h3 {
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .dashboard-table__row {
@@ -5173,7 +5157,6 @@ body {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .admin-appearance-table__row + .admin-appearance-table__row {
@@ -5334,7 +5317,6 @@ body,
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .profile-preferences-select {
@@ -7272,7 +7254,6 @@ body.app-theme-midnight .entity-form-toolbar {
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: #9a3412;
   background: rgba(249, 115, 22, 0.12);
 }
@@ -7424,7 +7405,6 @@ body.app-theme-midnight .entity-form-toolbar {
   font-weight: 700;
   color: #4f4f4f;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .collaboration-user-list {
@@ -8138,7 +8118,6 @@ body.app-theme-midnight .material-delete-modal.is-error .material-delete-modal__
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--app-text-muted);
 }
 
@@ -9284,7 +9263,6 @@ body.collaboration-panel-open .utility-rail .collaboration-launcher {
 
 .integrator-table thead .calibra-grid-actions-first {
   font-size: var(--calibra-grid-header-font-size, 0.67rem);
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
 }
@@ -10107,7 +10085,8 @@ body.app-theme-light .side-subitem,
 body.app-theme-light .admin-nav-item,
 body.app-theme-light .settings-link,
 body.app-theme-light .side-group > summary,
-body.app-theme-light .admin-group > summary {
+body.app-theme-light .admin-group > summary,
+body.app-theme-light .side-subgroup__summary {
   color: #334155 !important;
 }
 body.app-theme-light .side-toggle {
@@ -10257,19 +10236,19 @@ body.app-theme-dark .cb-dbinfo-desc { color: rgba(255,255,255,0.78); }
 .cb-mount-error {
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     height:100%; min-height:400px; gap:12px;
-    background:#0c0f1a; color:#f87171; font-size:14px;
+    background:#f8fafc; color:#dc2626; font-size:14px;
     padding:24px; text-align:center;
 }
 .cb-mount-error button {
-    padding:8px 20px; border-radius:8px; border:1px solid #4f46e5;
-    background:#6366f1; color:#fff; cursor:pointer; font-size:13px;
+    padding:8px 20px; border-radius:8px; border:1px solid #4338ca;
+    background:#4f46e5; color:#fff; cursor:pointer; font-size:13px;
 }
 .cb-mount-error button:hover { background:#4f46e5; }
-body.app-theme-light .cb-mount-error {
-    background:#f8fafc; color:#dc2626;
+body.app-theme-dark .cb-mount-error {
+    background:#0c0f1a; color:#f87171;
 }
-body.app-theme-light .cb-mount-error button {
-    background:#4f46e5; border-color:#4338ca;
+body.app-theme-dark .cb-mount-error button {
+    background:#6366f1; border-color:#4f46e5;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -10404,7 +10383,7 @@ body.app-theme-dark .ux-edit-nav {
 }
 .ux-edit-nav__group {
   font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
-  text-transform: uppercase; color: #94a3b8;
+  color: #94a3b8;
   padding: 10px 14px 4px;
 }
 .ux-edit-nav__tab {
@@ -10485,7 +10464,7 @@ body.app-theme-dark .ux-edit-pane .ux-edit-hint { color: #94a3b8; }
 .ux-edit-pane .ux-field--full { max-width: none; }
 .ux-edit-pane .ux-field > label {
   display: block; font-size: 11px; font-weight: 700;
-  color: #64748b; letter-spacing: 0.03em; text-transform: uppercase;
+  color: #64748b; letter-spacing: 0.03em;
 }
 body.app-theme-dark .ux-edit-pane .ux-field > label { color: #94a3b8; }
 .ux-edit-pane .ux-row2 {

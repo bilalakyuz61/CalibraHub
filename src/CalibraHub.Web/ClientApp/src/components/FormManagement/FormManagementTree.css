@@ -5,6 +5,7 @@
 
 /* ── Kök kap ─────────────────────────────────────────────────────────────── */
 .fmt-root {
+  color-scheme: dark;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -193,6 +194,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Light mode
 ════════════════════════════════════════════════════════════════════════════ */
+body.app-theme-light .fmt-root { color-scheme: light; }
 body.app-theme-light .fmt-topbar {
   background: #f8fafc;
   border-bottom-color: #e2e8f0;

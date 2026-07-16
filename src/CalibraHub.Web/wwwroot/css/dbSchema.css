@@ -1,9 +1,8 @@
 /* DB Schema Explorer — sayfa-scoped stiller ve tema degiskenleri. */
 
 .sch-layout {
-    /* View-scoped tema degiskenleri — html.dark ile dark mode override edilir.
-       NOT: site.css'te --app-surface icin dark override yok; panel-bg'i kendi
-       scope'umuzda kontrol ediyoruz ki sag taraf beyaz kalmasin. */
+    /* View-scoped tema degiskenleri — body.app-theme-dark ile dark mode override edilir.
+       NOT: panel-bg'i kendi scope'umuzda kontrol ediyoruz ki sag taraf beyaz kalmasin. */
     --sch-panel-bg:      var(--app-surface, #fff);
     --sch-head-bg:       #f8fafc;
     --sch-hover-bg:      #f8fafc;
@@ -28,7 +27,6 @@
     color: inherit;
 }
 
-html.dark .sch-layout,
 body.app-theme-dark .sch-layout {
     /* Body'nin #0a0d17 koyu zemini panel arka planlarinin altindan gorunur. */
     --sch-panel-bg:      rgba(255,255,255,0.02);
@@ -61,13 +59,12 @@ body.app-theme-dark .sch-layout {
 .sch-table-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 0.82rem; cursor: pointer; border-bottom: 1px solid var(--sch-divider); color: inherit; }
 .sch-table-row:hover { background: var(--sch-hover-bg); }
 .sch-table-row.active { background: var(--sch-accent-soft); border-left: 3px solid var(--sch-accent); padding-left: 9px; font-weight: 600; }
-.sch-table-name { font-family: 'Consolas', 'Monaco', monospace; }
+.sch-table-name { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .sch-row-count { color: var(--app-text-muted, #94a3b8); font-size: 0.72rem; }
 .sch-detail-header { padding: 10px 16px; border-bottom: 1px solid var(--sch-border); background: var(--sch-panel-bg); display: flex; justify-content: space-between; align-items: center; }
-.sch-detail-title { font-family: 'Consolas', 'Monaco', monospace; font-size: 1rem; font-weight: 600; color: var(--sch-accent); }
+.sch-detail-title { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1rem; font-weight: 600; color: var(--sch-accent); }
 .sch-detail-meta { font-size: 0.74rem; color: var(--app-text-muted, #64748b); }
 .sch-table-summary { font-size: 0.82rem; color: var(--app-text, #1e293b); line-height: 1.4; max-width: 760px; margin-bottom: 4px; padding: 6px 10px; background: var(--sch-enum-bg); border-left: 3px solid var(--sch-accent); border-radius: 3px; }
-html.dark .sch-table-summary,
 body.app-theme-dark .sch-table-summary { color: rgba(255,255,255,0.88); }
 .sch-meta-line { font-size: 0.74rem; color: var(--app-text-muted, #64748b); }
 .sch-table-row.has-desc .sch-table-name::after { content: " •"; color: var(--sch-accent); opacity: 0.7; font-weight: 700; }
@@ -76,10 +73,10 @@ body.app-theme-dark .sch-table-summary { color: rgba(255,255,255,0.88); }
 .sch-tab.active { color: var(--sch-accent); border-bottom-color: var(--sch-accent); font-weight: 600; }
 .sch-tab-body { flex: 1 1 auto; overflow: auto; padding: 12px 16px; background: var(--sch-panel-bg); color: inherit; }
 .sch-data-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; color: inherit; }
-.sch-data-table thead th { text-align: left; padding: 6px 10px; font-weight: 600; color: var(--app-text-muted, #64748b); font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid var(--sch-border-strong); background: var(--sch-head-bg); position: sticky; top: 0; }
+.sch-data-table thead th { text-align: left; padding: 6px 10px; font-weight: 600; color: var(--app-text-muted, #64748b); font-size: 0.7rem; border-bottom: 2px solid var(--sch-border-strong); background: var(--sch-head-bg); position: sticky; top: 0; }
 .sch-data-table tbody tr { border-bottom: 1px solid var(--sch-divider); }
 .sch-data-table tbody tr:hover { background: var(--sch-hover-bg); }
-.sch-data-table td { padding: 4px 10px; vertical-align: top; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.76rem; }
+.sch-data-table td { padding: 4px 10px; vertical-align: top; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.76rem; }
 .sch-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.68rem; font-weight: 600; margin-right: 4px; }
 .sch-badge.pk { background: var(--sch-badge-pk-bg); color: var(--sch-badge-pk-fg); }
 .sch-badge.fk { background: var(--sch-badge-fk-bg); color: var(--sch-badge-fk-fg); }

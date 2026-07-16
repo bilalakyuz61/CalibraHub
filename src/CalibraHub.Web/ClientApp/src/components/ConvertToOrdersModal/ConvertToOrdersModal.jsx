@@ -525,7 +525,7 @@ export default function ConvertToOrdersModal(props) {
                               onChange={function () { toggleQuote(q.id) }}
                               style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: palette.accentGreen }}
                             />
-                            <div style={{ flex: '0 0 130px', fontWeight: 600, fontFamily: 'monospace', fontSize: '11.5px' }}>
+                            <div style={{ flex: '0 0 130px', fontWeight: 600, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '11.5px' }}>
                               {q.documentNumber}
                             </div>
                             <div style={{ flex: '0 0 90px', color: palette.textSecondary }}>
@@ -722,7 +722,7 @@ function ContactPicker(props) {
                 onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
               >
                 <div style={{ fontWeight: 600 }}>{c.accountTitle || '(isimsiz)'}</div>
-                <div style={{ fontSize: '11px', color: props.palette.textSecondary, fontFamily: 'monospace' }}>
+                <div style={{ fontSize: '11px', color: props.palette.textSecondary, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                   {c.accountCode}
                 </div>
               </div>

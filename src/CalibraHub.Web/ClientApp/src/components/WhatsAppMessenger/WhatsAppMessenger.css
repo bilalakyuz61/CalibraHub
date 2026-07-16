@@ -1,6 +1,7 @@
 /* WhatsApp Web tarzi sohbet UI — light + dark tema uyumlu */
 
 .wa-msg-app {
+    color-scheme: light;
     display: grid;
     grid-template-columns: 360px 1fr;
     width: 100%;
@@ -655,6 +656,7 @@ body.app-theme-dark .wa-attach-popup__emoji-btn:hover { background: rgba(255,255
 
 /* ── Dark theme ───────────────────────────────────────────────────── */
 body.app-theme-dark .wa-msg-app {
+    color-scheme: dark;
     background: rgba(17,24,39,1);
     color: #e2e8f0;
     border-color: rgba(255,255,255,.08);

@@ -280,7 +280,7 @@ export default function KonvaElement({
                   : (el.text || el.barcodeType || 'Barcode')}
                 x={0} y={h - 11}
                 width={w} height={10}
-                fontSize={7} fontFamily="monospace" fill="#000" align="center"
+                fontSize={7} fontFamily="ui-monospace, Menlo, Consolas, monospace" fill="#000" align="center"
               />
             )}
           </>

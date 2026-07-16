@@ -303,7 +303,7 @@ function OpAddForm({ nextSeq, lookupUrl, onAdd, onCancel, saving }) {
         <div className="rt-fi rt-fi--picker" onClick={() => setPicker(true)}>
           {selectedOp
             ? <span><b style={{ color: '#818cf8' }}>{selectedOp.code}</b> {selectedOp.name}</span>
-            : <span style={{ color: '#475569' }}>Operasyon seç...</span>}
+            : <span style={{ color: '#64748b' }}>Operasyon seç...</span>}
           <Search size={12} style={{ color: '#64748b', flexShrink: 0 }} />
         </div>
         <input className="rt-fi rt-fi--notes" value={notes}

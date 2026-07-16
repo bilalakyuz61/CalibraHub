@@ -319,7 +319,7 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
         <>
           <label style={lbl}>SQL (yalnızca SELECT)</label>
           <textarea value={adHocSql} onChange={e => setAdHocSql(e.target.value)} rows={6}
-            style={{ ...inp, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
+            style={{ ...inp, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11 }}
             placeholder={'SELECT * FROM [dbo].[ViewName]\nWHERE BelgeId = @DocumentId'} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={handleAddSource}
@@ -580,7 +580,7 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
         <>
           <label style={lbl}>Ek WHERE koşulu</label>
           <textarea value={whereExtra} onChange={e => setWhereExtra(e.target.value)} rows={6}
-            style={{ ...inp, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
+            style={{ ...inp, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11 }}
             placeholder="BelgeId = @DocumentId AND KalemId = @KalemId" />
           <div style={hintTxt}>
             Bir sonraki "Kaynak → + Ekle" işleminde yeni view'a uygulanacak.
@@ -590,7 +590,7 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
         <>
           <label style={lbl}>WHERE koşulu — <strong>{filterTarget}</strong> için</label>
           <textarea value={filterValueForExisting} onChange={e => setFilterValueForExisting(e.target.value)} rows={6}
-            style={{ ...inp, resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
+            style={{ ...inp, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11 }}
             placeholder="BelgeId = @DocumentId" />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={applyFilterToExisting}
@@ -624,7 +624,7 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
           <label style={lbl}>ORDER BY</label>
           <input type="text" value={orderBy} onChange={e => setOrderBy(e.target.value)}
             placeholder="KalemSiraNo ASC, SiraNo ASC"
-            style={{ ...inp, fontFamily: 'monospace' }} />
+            style={{ ...inp, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }} />
           <div style={hintTxt}>
             Bir sonraki "Kaynak → + Ekle" işleminde yeni view'a uygulanacak.
           </div>
@@ -634,7 +634,7 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
           <label style={lbl}>ORDER BY — <strong>{orderTarget}</strong> için</label>
           <input type="text" value={orderValueForExisting} onChange={e => setOrderValueForExisting(e.target.value)}
             placeholder="KalemSiraNo ASC, SiraNo ASC"
-            style={{ ...inp, fontFamily: 'monospace' }} />
+            style={{ ...inp, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={applyOrderToExisting}
                     style={{
@@ -984,7 +984,7 @@ function ColumnAutocomplete({ columns, value, onSelect, disabled, placeholder })
                  if (filtered[focusIdx]) { setQuery(filtered[focusIdx]); onSelect(filtered[focusIdx]); setOpen(false) }
                } else if (e.key === 'Escape') { setOpen(false) }
              }}
-             style={{ ...inp, fontFamily: 'monospace', opacity: disabled ? 0.5 : 1 }} />
+             style={{ ...inp, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', opacity: disabled ? 0.5 : 1 }} />
       {open && !disabled && filtered.length > 0 && (
         <div style={{
           position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 30,

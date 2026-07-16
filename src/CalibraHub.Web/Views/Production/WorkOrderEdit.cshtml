@@ -255,18 +255,15 @@ body.app-theme-dark .woe-nav-count { color: #a5b4fc; }
     background: var(--woe-input-disabled);
     color: var(--woe-text-muted);
 }
-body.app-theme-dark .woe-row select,
-html.dark .woe-row select { color-scheme: dark; }
-body.app-theme-dark .woe-row input[type="datetime-local"],
-html.dark .woe-row input[type="datetime-local"] { color-scheme: dark; }
+body.app-theme-dark .woe-row select { color-scheme: dark; }
+body.app-theme-dark .woe-row input[type="datetime-local"] { color-scheme: dark; }
 /* select > * = option/optgroup (Razor parser "option" kelimesini OptionTagHelper
    olarak yorumladığı için universal child selector kullanılıyor). */
 .woe-row select > * {
     background: var(--woe-surface);
     color: var(--woe-text);
 }
-body.app-theme-dark .woe-row select > *,
-html.dark .woe-row select > * {
+body.app-theme-dark .woe-row select > * {
     background-color: #0d1323;
     color: #e2e8f0;
 }
@@ -361,11 +358,9 @@ html.dark .woe-row select > * {
 .woe-unit-select:hover:not(:disabled) { border-color: var(--woe-accent); }
 .woe-unit-select:focus { border-color: var(--woe-accent); box-shadow: 0 0 0 2px rgba(99,102,241,.18); }
 .woe-unit-select:disabled { opacity: .65; cursor: not-allowed; }
-body.app-theme-dark .woe-unit-select,
-html.dark .woe-unit-select { color-scheme: dark; }
+body.app-theme-dark .woe-unit-select { color-scheme: dark; }
 .woe-unit-select > * { background: var(--woe-surface); color: var(--woe-text); }
-body.app-theme-dark .woe-unit-select > *,
-html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
+body.app-theme-dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
 
 /* ── Toast (sag alt) — auto-dismiss + manuel close ── */
 #woe-toast-host {

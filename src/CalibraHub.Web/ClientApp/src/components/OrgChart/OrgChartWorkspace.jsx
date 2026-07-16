@@ -217,7 +217,7 @@ function OrgTreeNode({ node, childMap, users, departments, existingUserIds, onAd
           <div className="oc-card-name">{displayName}</div>
           {node.positionTitle && <div className="oc-card-title">{node.positionTitle}</div>}
           {node.nodeType && node.nodeType !== 'User' && (
-            <div className="oc-card-title" style={{ color: '#94a3b8', fontSize: '.72rem' }}>
+            <div className="oc-card-title oc-card-title--muted" style={{ fontSize: '.72rem' }}>
               {nodeTypeLabel(node.nodeType)}
             </div>
           )}
@@ -379,7 +379,7 @@ function AddNodeModal({ chartId, parentNodeId, users, departments, existingUserI
 
         {step === 'vacant' && (
           <div className="oc-modal-body">
-            <label style={{ fontSize: '.8rem', fontWeight: 600, color: '#64748b' }}>Pozisyon Adı</label>
+            <label className="oc-modal-label">Pozisyon Adı</label>
             <input
               autoFocus
               className="oc-input"
@@ -431,7 +431,7 @@ function NewChartModal({ onClose, onCreated }) {
           <button className="oc-modal-close" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="oc-modal-body">
-          <label style={{ fontSize: '.8rem', fontWeight: 600, color: '#64748b' }}>Şema Adı</label>
+          <label className="oc-modal-label">Şema Adı</label>
           <input
             ref={inputRef}
             className="oc-input"
@@ -716,14 +716,14 @@ export default function OrgChartWorkspace() {
 
               {/* Validation warnings */}
               {validationWarnings.length > 0 && (
-                <div style={{ background: 'rgba(245,158,11,.1)', borderRadius: 8, padding: '8px 14px', margin: '0 16px 8px', fontSize: '.8rem', color: '#b45309' }}>
+                <div className="oc-warn-banner">
                   {validationWarnings.map(function (w, i) { return <div key={i}>⚠ {w}</div> })}
                 </div>
               )}
 
               {/* Drag error */}
               {dragError && (
-                <div style={{ background: 'rgba(239,68,68,.1)', borderRadius: 8, padding: '8px 14px', margin: '0 16px 8px', fontSize: '.8rem', color: '#dc2626' }}>
+                <div className="oc-err-banner">
                   ✕ {dragError}
                 </div>
               )}

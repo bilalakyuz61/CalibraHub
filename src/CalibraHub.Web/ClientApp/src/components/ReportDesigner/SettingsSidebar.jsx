@@ -78,7 +78,7 @@ function TypeBadge({ sqlType }) {
   const color = isTime ? '#818cf8' : isNum ? '#10b981' : '#64748b'
   return (
     <span style={{
-      fontSize: 9, fontFamily: 'monospace', color,
+      fontSize: 9, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color,
       background: `${color}18`, border: `1px solid ${color}28`,
       borderRadius: 3, padding: '1px 5px', letterSpacing: '.02em',
     }}>

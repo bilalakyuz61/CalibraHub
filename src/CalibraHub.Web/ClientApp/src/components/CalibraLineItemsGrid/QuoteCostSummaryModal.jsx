@@ -366,11 +366,11 @@ export default function QuoteCostSummaryModal() {
                           <div style={{ fontWeight: 600 }}>{l.materialCode}{l.configCode ? <span style={{ color: mutedText, fontWeight: 400 }}> · {l.configCode}</span> : null}</div>
                           <div style={{ fontSize: '.7rem', color: mutedText }}>{l.materialName || ''}</div>
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.78rem' }}>{fmt(l.quantity, 2)}</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontSize: '.78rem', color: isFound ? textColor : mutedText }}>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem' }}>{fmt(l.quantity, 2)}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '.78rem', color: isFound ? textColor : mutedText }}>
                           {isFound ? compCount : (res && !res.found ? 'recete yok' : '—')}
                         </td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: isFound ? textColor : mutedText }}>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: 600, color: isFound ? textColor : mutedText }}>
                           {isFound ? (fmt(res.totalCost, 2) + ' ' + currencySymbol) : '—'}
                         </td>
                       </tr>
@@ -397,11 +397,11 @@ export default function QuoteCostSummaryModal() {
                                           <span style={{ fontWeight: 600 }}>{c.code}</span>
                                           <span style={{ color: mutedText, marginLeft: 6 }}>{c.name}</span>
                                         </td>
-                                        <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(c.effectiveQty, 4)}</td>
-                                        <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', color: c.hasPrice ? textColor : mutedText }}>
+                                        <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{fmt(c.effectiveQty, 4)}</td>
+                                        <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: c.hasPrice ? textColor : mutedText }}>
                                           {c.hasPrice ? fmt(c.unitPrice, 2) : '—'}
                                         </td>
-                                        <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{fmt(c.lineCost, 2)}</td>
+                                        <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: 600 }}>{fmt(c.lineCost, 2)}</td>
                                       </tr>
                                     )
                                   }
@@ -437,7 +437,7 @@ export default function QuoteCostSummaryModal() {
                                             {g.code ? (g.code + (g.name ? ' · ' + g.name : '')) : 'Grupsuz'}
                                             <span style={{ marginLeft: 6, fontWeight: 500, color: mutedText, textTransform: 'none', letterSpacing: 0 }}>({g.items.length})</span>
                                           </td>
-                                          <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: isLight ? '#4338ca' : '#a5b4fc' }}>
+                                          <td style={{ padding: '3px 6px', textAlign: 'right', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: 700, color: isLight ? '#4338ca' : '#a5b4fc' }}>
                                             {fmt(g.subtotal, 2)}
                                           </td>
                                         </tr>
@@ -484,7 +484,7 @@ export default function QuoteCostSummaryModal() {
             <span style={{ fontSize: '.72rem', color: mutedText, textTransform: 'uppercase', letterSpacing: '.04em' }}>
               Belge Toplam Maliyeti
             </span>
-            <span style={{ fontSize: '1.12rem', fontWeight: 700, color: '#fbbf24', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: '1.12rem', fontWeight: 700, color: '#fbbf24', fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
               {fmt(grandTotal, 2)} {currencySymbol}
             </span>
           </div>

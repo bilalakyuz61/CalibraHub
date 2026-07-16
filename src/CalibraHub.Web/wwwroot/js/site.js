@@ -2637,11 +2637,11 @@
         overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;";
 
         var box = document.createElement("div");
-        box.style.cssText = "background:#fff;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.18);max-width:540px;width:90%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;";
+        box.style.cssText = "background:var(--app-surface, #fff);color:var(--bs-body-color, #1e293b);border:1px solid var(--app-border, transparent);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.18);max-width:540px;width:90%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;";
 
         var header = document.createElement("div");
-        header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #e2e8f0;flex-shrink:0;";
-        header.innerHTML = '<span style="font-weight:700;font-size:0.88rem;color:#1e293b;">' + title + '</span>';
+        header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--app-border, #e2e8f0);flex-shrink:0;";
+        header.innerHTML = '<span style="font-weight:700;font-size:0.88rem;color:var(--bs-body-color, #1e293b);">' + title + '</span>';
 
         var closeBtn = document.createElement("button");
         closeBtn.type = "button";
@@ -2651,7 +2651,7 @@
         header.appendChild(closeBtn);
 
         var body = document.createElement("div");
-        body.style.cssText = "padding:16px 18px;overflow-y:auto;font-size:0.8rem;color:#334155;line-height:1.6;";
+        body.style.cssText = "padding:16px 18px;overflow-y:auto;font-size:0.8rem;color:var(--bs-body-color, #334155);line-height:1.6;";
         body.innerHTML = html;
 
         box.appendChild(header);

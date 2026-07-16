@@ -592,7 +592,7 @@ export default function GuideCustomizationModal(props) {
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
           <span style={{ fontSize: 13, fontWeight: 600, color: txtClr, flex: 1 }}>
-            Alan Ayarları — <span style={{ fontFamily: 'monospace', color: accent }}>{fieldLabel || '...'}</span>
+            Alan Ayarları — <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: accent }}>{fieldLabel || '...'}</span>
           </span>
           <button type="button" onClick={onClose}
             style={{ background: 'none', border: 'none', color: lblClr, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
@@ -757,7 +757,7 @@ export default function GuideCustomizationModal(props) {
                       }} />
                     </button>
 
-                    <span style={{ fontFamily: 'monospace', fontSize: 11, color: txtClr, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11, color: txtClr, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {c.name}
                     </span>
 
@@ -923,7 +923,7 @@ export default function GuideCustomizationModal(props) {
                   width: '100%', padding: '7px 10px', fontSize: 11,
                   background: iBg, border: iBdr, borderRadius: 6,
                   color: iClr, outline: 'none', resize: 'vertical',
-                  fontFamily: 'monospace', boxSizing: 'border-box',
+                  fontFamily: 'ui-monospace, Menlo, Consolas, monospace', boxSizing: 'border-box',
                 }}
               />
               {/* @ autocomplete popup — body'ye portal edilir (modal overflow'una takilmaz),
@@ -997,9 +997,9 @@ export default function GuideCustomizationModal(props) {
             <div style={{ fontSize: 10, color: lblClr, marginTop: 4, lineHeight: 1.5 }}>
               Bu fragment view'in WHERE klauzülüne eklenir (mevcut WHERE'a AND ile bağlanır).
               <strong style={{ color: accent }}>@</strong> yazarak alan ekleyebilirsiniz (↑↓ ile gezin, Enter/Tab ile seçin).
-              Tokenler: <code style={{ fontFamily: 'monospace' }}>{'{#fieldId}'}</code> form, {' '}
-              <code style={{ fontFamily: 'monospace' }}>{'{#row.fieldKey}'}</code> kalem,{' '}
-              <code style={{ fontFamily: 'monospace' }}>{'{#row.combo.attr}'}</code> kombinasyon — runtime'da değerleri yerine geçer.
+              Tokenler: <code style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{'{#fieldId}'}</code> form, {' '}
+              <code style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{'{#row.fieldKey}'}</code> kalem,{' '}
+              <code style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{'{#row.combo.attr}'}</code> kombinasyon — runtime'da değerleri yerine geçer.
             </div>
           </div>
         </div>

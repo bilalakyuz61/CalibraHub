@@ -4,6 +4,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 .rd-root {
+  color-scheme: dark;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -1439,6 +1440,7 @@
 /* ── ReportViewer (rv-*) ──────────────────────────────────────── */
 
 .rv-root {
+  color-scheme: dark;
   display: flex;
   flex-direction: column;
   height: 100%;

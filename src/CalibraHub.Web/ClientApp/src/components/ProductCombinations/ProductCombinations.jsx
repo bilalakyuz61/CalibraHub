@@ -865,7 +865,7 @@ function GridRow({
 
       {/* Kombinasyon kodu */}
       <span style={{
-        fontFamily: 'Consolas,"Cascadia Code","Courier New",monospace',
+        fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
         fontSize: 11.5, fontWeight: 700, color: codeColor,
         letterSpacing: '.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>

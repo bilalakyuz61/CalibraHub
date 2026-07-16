@@ -4,6 +4,7 @@
   background: var(--lt-bg, #f1f5f9);
   color: var(--lt-text, #0f172a);
   font-family: inherit; overflow: hidden;
+  color-scheme: light;
   --lt-bg:           #f1f5f9;
   --lt-surface:      #ffffff;
   --lt-border:       #e2e8f0;
@@ -26,6 +27,7 @@
   --lt-slate-color:  #64748b;
 }
 body.app-theme-dark .lt-root {
+  color-scheme: dark;
   --lt-bg:           #080c17;
   --lt-surface:      #0d1323;
   --lt-border:       rgba(255,255,255,.08);
@@ -193,7 +195,7 @@ body.app-theme-dark .lt-root {
 .lt-types-table tbody tr:hover { background: var(--lt-hover); }
 .lt-types-table tbody tr.is-sel { background: var(--lt-indigo-bg); }
 .lt-types-table td { padding: 6px 10px; color: var(--lt-text); }
-.lt-types-td-code { font-family: monospace; font-weight: 600; color: var(--lt-indigo-color); }
+.lt-types-td-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; color: var(--lt-indigo-color); }
 .lt-types-status {
   display: inline-block; padding: 1px 8px; border-radius: 4px;
   font-size: 11px; font-weight: 500;

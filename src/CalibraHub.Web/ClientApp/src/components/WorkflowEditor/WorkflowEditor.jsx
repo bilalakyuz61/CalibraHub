@@ -51,20 +51,22 @@ function getJson(url) {
 function WfNode({ data, selected }) {
   var meta = NODE_TYPE_MAP[data.nodeType] || NODE_TYPE_MAP['Task']
   var Icon = meta.icon
+  var style = {
+    borderRadius: data.nodeType === 'Decision' ? '8px' : '10px',
+    padding: '10px 14px',
+    minWidth: 130,
+    cursor: 'grab',
+    display: 'flex', alignItems: 'center', gap: 8,
+    fontFamily: 'sans-serif', fontSize: '.82rem', fontWeight: 600,
+    transition: 'border-color .15s, box-shadow .15s',
+  }
+  if (selected) {
+    style.background = meta.bg
+    style.border = `2px solid ${meta.color}`
+    style.boxShadow = `0 0 0 3px ${meta.color}33`
+  }
   return (
-    <div style={{
-      background: selected ? meta.bg : '#fff',
-      border: `2px solid ${selected ? meta.color : '#e2e8f0'}`,
-      borderRadius: data.nodeType === 'Decision' ? '8px' : '10px',
-      padding: '10px 14px',
-      minWidth: 130,
-      boxShadow: selected ? `0 0 0 3px ${meta.color}33` : '0 2px 8px rgba(0,0,0,.08)',
-      cursor: 'grab',
-      display: 'flex', alignItems: 'center', gap: 8,
-      fontFamily: 'sans-serif', fontSize: '.82rem', fontWeight: 600,
-      color: '#1e293b',
-      transition: 'border-color .15s, box-shadow .15s',
-    }}>
+    <div className="wf-node" style={style}>
       <Icon size={15} style={{ color: meta.color, flexShrink: 0 }} />
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
         {data.label}

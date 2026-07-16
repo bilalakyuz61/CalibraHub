@@ -8,11 +8,13 @@
    z-index 10100: BOMs Islemler overlay'i (9999) ve toast (10000) ustunde
    gorunmesi icin. GuideLookupModal her zaman en ust katmanda olmali. */
 .gl-modal-backdrop {
+  color-scheme: light;
   position: fixed; inset: 0; z-index: 10100;
   background: rgba(0,0,0,.45); backdrop-filter: blur(2px);
   display: flex; align-items: center; justify-content: center;
   animation: glFadeIn .12s ease-out;
 }
+body.app-theme-dark .gl-modal-backdrop { color-scheme: dark; }
 @keyframes glFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Modal kutusu — sabit boyut: viewport'a orantili, buyuk monitorde kapakli.

@@ -4,6 +4,7 @@
    ════════════════════════════════════════════════════════════ */
 
 .afd-root {
+    color-scheme: light;
     --afd-bg:      var(--afe-bg, #f8fafc);
     --afd-surface: var(--afe-surface, #ffffff);
     --afd-border:  var(--afe-border, #e2e8f0);
@@ -27,6 +28,7 @@
 }
 
 body.app-theme-dark .afd-root {
+    color-scheme: dark;
     --afd-bg:      #080c17;
     --afd-surface: #0d1323;
     --afd-border:  rgba(255,255,255,.09);

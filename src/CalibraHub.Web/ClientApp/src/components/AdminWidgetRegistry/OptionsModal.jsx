@@ -193,7 +193,7 @@ function GlassSelect(props) {
                   {o.label}
                 </span>
                 {o.hint && (
-                  <span style={{ fontSize: 10, color: t.hint, fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 10, color: t.hint, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                     {o.hint}
                   </span>
                 )}

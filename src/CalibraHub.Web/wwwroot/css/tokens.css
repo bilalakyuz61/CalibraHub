@@ -51,7 +51,11 @@
     --btn-ghost-border:    transparent;
 }
 
-/* Dark mode override */
+/* Dark mode override — html.dark KASITLI: Production/ShopFloor.cshtml (Layout=null
+   kiosk sayfası) yalnızca <html class="dark"> ekler, body class'i yok. tokens.css o
+   sayfada da yüklendiği için body.app-theme-dark tek başına yetmez. Diğer tüm
+   sayfalarda iki class her zaman birlikte set edilir (Shell.jsx + _Layout.cshtml
+   tema toggle'ı) — bu yüzden ikili selector zararsız, ShopFloor için gerekli. */
 html.dark, body.app-theme-dark {
     --btn-primary-bg:         #6366f1;
     --btn-primary-bg-hover:   #818cf8;
@@ -261,7 +265,8 @@ html.dark, body.app-theme-dark {
 /* ── DARK override (premium dark-first paleti) ──
    Navy-blue tonlu katmanlar (WorkOrderEdit DNA). Pure true-black yerine
    hafifce maviye calan koyu yuzeyler — Stripe/Linear premium dark hava.
-   Kullanici raporu: "mavi tonlar daha guzel". */
+   Kullanici raporu: "mavi tonlar daha guzel".
+   html.dark KASITLI ikilisi icin yukaridaki ilk tokens bloguna bak (ShopFloor kiosk). */
 html.dark, body.app-theme-dark {
     --surface-base:    #080c17;   /* deep navy black */
     --surface-elev-1:  #0d1323;   /* navy elev-1 */

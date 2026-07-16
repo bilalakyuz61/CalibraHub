@@ -1,5 +1,6 @@
 /* OperationGrid — Operasyon Tanımlamaları — SmartBoard visual standard */
 .og-root {
+  color-scheme: dark;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -303,6 +304,7 @@
    usteki tum bloklar koyu tema (dark default) olarak kalir.
    ══════════════════════════════════════════════════════════ */
 body.app-theme-light .og-root {
+  color-scheme: light;
   background: #f8fafc;
   color: #0f172a;
 }

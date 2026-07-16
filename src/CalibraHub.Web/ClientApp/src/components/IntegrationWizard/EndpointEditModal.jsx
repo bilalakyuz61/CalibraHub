@@ -484,7 +484,7 @@ function TemplateGalleryModal({ onClose, onPick }) {
                               <span style={{
                                 padding: '0 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
                                 background: 'var(--iw-bg)', color: 'var(--iw-muted)',
-                                fontFamily: 'monospace', flexShrink: 0,
+                                fontFamily: 'ui-monospace, Menlo, Consolas, monospace', flexShrink: 0,
                               }}>{t.docType}</span>
                             )}
                             {!t.isBuiltIn && (
@@ -507,7 +507,7 @@ function TemplateGalleryModal({ onClose, onPick }) {
                         <div style={{ minWidth: 0 }}>
                           {t.urlPattern && (
                             <div style={{
-                              fontSize: 11, fontFamily: 'monospace', color: 'var(--iw-muted)',
+                              fontSize: 11, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: 'var(--iw-muted)',
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }} title={`${t.httpMethod || ''} ${t.urlPattern}`}>
                               <span style={{
@@ -1513,7 +1513,7 @@ export default function EndpointEditModal({ profileId, profiles, endpoint, onClo
                         <div style={{ color: `var(--iw-${color}-color)`, fontSize: 10 }}>
                           {pickedCatalogItem.inputType ? (
                             <>
-                              <strong style={{ fontFamily: 'monospace' }}>InputType: {pickedCatalogItem.inputType}</strong>
+                              <strong style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>InputType: {pickedCatalogItem.inputType}</strong>
                               {' — '}
                               {isComposite ? (
                                 <>
@@ -1572,7 +1572,7 @@ export default function EndpointEditModal({ profileId, profiles, endpoint, onClo
                                   display: 'flex', alignItems: 'center', gap: 5,
                                   padding: '3px 6px', background: 'var(--iw-rose-bg)',
                                   border: '1px solid var(--iw-rose-color)', borderRadius: 4,
-                                  fontFamily: 'monospace', fontSize: 10,
+                                  fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 10,
                                 }}
                                 title={`${f.type}${f.maxLength ? ` (max ${f.maxLength})` : ''}${f.enum ? ` enum: ${f.enum}` : ''}`}>
                                   <span style={{ color: 'var(--iw-rose-color)', fontWeight: 700 }}>*</span>
@@ -1599,7 +1599,7 @@ export default function EndpointEditModal({ profileId, profiles, endpoint, onClo
                                   display: 'flex', alignItems: 'center', gap: 5,
                                   padding: '2px 6px', background: 'var(--iw-bg)',
                                   border: '1px solid var(--iw-border)', borderRadius: 4,
-                                  fontFamily: 'monospace', fontSize: 10,
+                                  fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 10,
                                 }}
                                 title={`${f.type}${f.maxLength ? ` (max ${f.maxLength})` : ''}${f.enum ? ` enum: ${f.enum}` : ''}`}>
                                   <span style={{ flex: 1, color: 'var(--iw-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1633,7 +1633,7 @@ export default function EndpointEditModal({ profileId, profiles, endpoint, onClo
                       <strong style={{ color: 'var(--iw-rose-color)', fontSize: 13 }}>
                         ⚠ {resolveError.title}
                         {resolveError.httpStatusCode && (
-                          <span style={{ marginLeft: 8, fontFamily: 'monospace', fontWeight: 'normal', opacity: 0.85 }}>
+                          <span style={{ marginLeft: 8, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: 'normal', opacity: 0.85 }}>
                             HTTP {resolveError.httpStatusCode}
                           </span>
                         )}
@@ -1672,7 +1672,7 @@ export default function EndpointEditModal({ profileId, profiles, endpoint, onClo
                               <span style={{ color: 'var(--iw-muted)' }}>
                                 {i + 1}. {layerLabel(a.layer)}
                               </span>
-                              <span style={{ fontFamily: 'monospace', fontSize: 10 }}>
+                              <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 10 }}>
                                 {a.detail}
                               </span>
                             </div>

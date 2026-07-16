@@ -190,7 +190,7 @@ export default function ConvertSingleQuoteModal(props) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span style={{ color: palette.textSecondary }}>Teklif No</span>
-              <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{quoteNumber || '#' + quoteId}</span>
+              <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: 700 }}>{quoteNumber || '#' + quoteId}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span style={{ color: palette.textSecondary }}>Cari</span>

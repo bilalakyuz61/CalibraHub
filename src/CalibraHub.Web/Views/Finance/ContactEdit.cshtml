@@ -37,6 +37,15 @@ body.app-theme-light .ca-input, body.app-theme-light .ca-select {
     border-color: #cbd5e1;
 }
 
+/* Serbest (inline-style) metin renkleri icin tema-uyumlu degiskenler — dark
+   varsayilan degerler mevcutla birebir ayni, light temada okunur slate tonuna
+   doner (var(--x, fallback) inline style icinde de calisir). */
+body.app-theme-light {
+    --ca-t45: #64748b;
+    --ca-t55: #64748b;
+    --ca-t88: #1e293b;
+}
+
 /* ── Page shell ──────────────────────────────────────────────── */
 .page-contact-account-edit .integrator-dashboard {
     height: 100% !important; min-height: 0 !important;
@@ -272,8 +281,7 @@ body.app-theme-light .ca-nav-btn.is-active {
     padding: 20px 24px;
     background: transparent;
 }
-body.app-theme-dark .ca-content,
-html.dark .ca-content {
+body.app-theme-dark .ca-content {
     background: #0c0f1a;
     background-image:
         radial-gradient(at 20% 30%, rgba(99,102,241,0.12) 0px, transparent 50%),
@@ -1508,7 +1516,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                     </div>
                 </div>
                 <div id="caGroupError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
-                <div style="margin-top:10px;font-size:.72rem;color:rgba(255,255,255,.45);">
+                <div style="margin-top:10px;font-size:.72rem;color:var(--ca-t45, rgba(255,255,255,.45));">
                     Degisiklikler cari karti kaydedildiginde otomatik uygulanir.
                 </div>
             </div>
@@ -1615,7 +1623,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 <button type="button" id="cpTitleManageClose" class="ca-btn" style="font-size:.74rem;padding:4px 10px;">Kapat</button>
             </header>
             <div style="padding:14px 20px;overflow:auto;flex:1 1 auto;">
-                <div style="font-size:.78rem;color:rgba(255,255,255,0.55);margin-bottom:10px;">
+                <div style="font-size:.78rem;color:var(--ca-t55, rgba(255,255,255,0.55));margin-bottom:10px;">
                     Kullanılmayan ünvanlar silinebilir. Sistem ünvanları (★) silinemez ama pasif yapılabilir.
                 </div>
                 <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:.84rem;">
@@ -1627,7 +1635,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                         </tr>
                     </thead>
                     <tbody id="cpTitleManageList">
-                        <tr><td colspan="3" style="padding:14px;color:rgba(255,255,255,0.55);text-align:center;">Yükleniyor…</td></tr>
+                        <tr><td colspan="3" style="padding:14px;color:var(--ca-t55, rgba(255,255,255,0.55));text-align:center;">Yükleniyor…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1641,7 +1649,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 <span class="ca-grid-modal__title">İletişim Kişisini Sil</span>
             </header>
             <div style="padding:18px 20px;">
-                <div id="cpConfirmMsg" style="font-size:.86rem;color:rgba(255,255,255,0.88);line-height:1.5;">
+                <div id="cpConfirmMsg" style="font-size:.86rem;color:var(--ca-t88, rgba(255,255,255,0.88));line-height:1.5;">
                     Bu iletişim kişisini silmek istediğinize emin misiniz?
                 </div>
             </div>

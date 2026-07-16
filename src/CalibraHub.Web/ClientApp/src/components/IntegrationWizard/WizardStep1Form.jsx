@@ -131,7 +131,7 @@ export default function WizardStep1Form({ apiBase, state, update }) {
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {f.formName || f.formCode}
         </span>
-        <span style={{ fontSize: 10, opacity: 0.5, fontFamily: 'monospace' }}>{f.formCode}</span>
+        <span style={{ fontSize: 10, opacity: 0.5, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{f.formCode}</span>
       </button>
     )
   }, [state.sourceFormCode, update])
@@ -250,7 +250,7 @@ export default function WizardStep1Form({ apiBase, state, update }) {
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--iw-indigo-color)' }}>
                     {selectedForm?.formName || state.sourceFormCode}
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--iw-muted)' }}>
+                  <div style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: 'var(--iw-muted)' }}>
                     {state.sourceFormCode}
                     {selectedForm?.module && <> · {selectedForm.module}{selectedForm.subModule ? ` / ${selectedForm.subModule}` : ''}</>}
                     {fields.length > 0 && <> · {fields.length} alan</>}
@@ -282,7 +282,7 @@ export default function WizardStep1Form({ apiBase, state, update }) {
                           {it.name}
                         </span>
                         <ArrowRight size={11} style={{ color: 'var(--iw-muted)' }} />
-                        <span style={{ color: 'var(--iw-muted)', fontFamily: 'monospace', fontSize: 10 }}>
+                        <span style={{ color: 'var(--iw-muted)', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 10 }}>
                           {it.endpointName}
                         </span>
                       </div>
@@ -375,7 +375,7 @@ export default function WizardStep1Form({ apiBase, state, update }) {
                                 {fl.label}
                                 {fl.isRequired && <span style={{ color: 'var(--iw-rose-color)', marginLeft: 4 }}>*</span>}
                               </div>
-                              <div style={{ fontSize: 10, color: 'var(--iw-muted)', fontFamily: 'monospace' }}>
+                              <div style={{ fontSize: 10, color: 'var(--iw-muted)', fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                                 {fl.code} · {fl.dataType}
                                 {fl.isPlainField && <span style={{ marginLeft: 6, opacity: 0.6 }}>(base)</span>}
                               </div>

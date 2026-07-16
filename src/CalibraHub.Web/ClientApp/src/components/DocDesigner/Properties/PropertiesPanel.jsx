@@ -500,7 +500,7 @@ function ColorInput({ value, placeholder, onChange, allowTransparent }) {
       <input type="text"
              value={value ?? ''} placeholder={placeholder}
              onChange={e => onChange(e.target.value)}
-             style={{ ...gi, fontFamily: 'monospace', fontSize: 11 }} />
+             style={{ ...gi, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 11 }} />
       {allowTransparent && (
         <button onClick={() => onChange('transparent')}
                 title="Şeffaf"
@@ -928,7 +928,7 @@ function ElementGrid({ el, dispatch }) {
           <input type="color" value={el.style?.color ?? '#000000'}
             onChange={e => setStyle({ color: e.target.value })}
             style={{ width: 32, height: 20, border: 'none', padding: 0, cursor: 'pointer', background: 'none' }} />
-          <span style={{ fontSize: 10, color: '#999', fontFamily: 'monospace' }}>{el.style?.color ?? '#000000'}</span>
+          <span style={{ fontSize: 10, color: '#999', fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{el.style?.color ?? '#000000'}</span>
         </div>
       </PRow>
       <PRow label="Arkaplan">

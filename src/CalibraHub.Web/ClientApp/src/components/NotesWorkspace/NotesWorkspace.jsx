@@ -2345,7 +2345,7 @@ export default function NotesWorkspace() {
         'background:#f8fafc;border-radius:0 8px 8px 0;color:#475569;font-style:italic;'
     })
     container.querySelectorAll('code').forEach(function (el) {
-      el.style.cssText = 'font-family:monospace;font-size:12px;padding:2px 5px;background:#f1f5f9;border-radius:3px;'
+      el.style.cssText = 'font-family:ui-monospace, Menlo, Consolas, monospace;font-size:12px;padding:2px 5px;background:#f1f5f9;border-radius:3px;'
     })
     container.querySelectorAll('a').forEach(function (el) { el.style.color = '#6366f1' })
 

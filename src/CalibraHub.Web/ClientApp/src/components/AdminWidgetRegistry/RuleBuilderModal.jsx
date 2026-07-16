@@ -352,7 +352,7 @@ function FieldDropdown(props) {
                   {selected._sourceFormLabel}
                 </span>
               )}
-              <span style={{ fontFamily: 'monospace', fontSize: '10px', opacity: 0.4, flexShrink: 0 }}>
+              <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '10px', opacity: 0.4, flexShrink: 0 }}>
                 w_{selected.widgetCode}
               </span>
             </>
@@ -422,7 +422,7 @@ function FieldDropdown(props) {
                     {w._sourceFormLabel}
                   </span>
                 )}
-                <span style={{ fontSize: '10px', opacity: 0.45, fontFamily: 'monospace', flexShrink: 0 }}>
+                <span style={{ fontSize: '10px', opacity: 0.45, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', flexShrink: 0 }}>
                   w_{w.widgetCode}
                 </span>
               </button>
@@ -941,7 +941,7 @@ function QueryBuilder(props) {
           Önizleme
         </div>
         <div style={{
-          fontFamily: 'monospace',
+          fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
           fontSize: '12px',
           color: preview ? t.accentText : t.textGhost,
           wordBreak: 'break-all',
@@ -997,7 +997,7 @@ function FormulaBuilder(props) {
             borderRadius: '8px',
             color: t.text,
             fontSize: '13px',
-            fontFamily: 'monospace',
+            fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
             outline: 'none',
             resize: 'vertical',
             boxSizing: 'border-box',
@@ -1244,7 +1244,7 @@ function FormulaBuilder(props) {
           Önizleme
         </div>
         <div style={{
-          fontFamily: 'monospace',
+          fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
           fontSize: '12px',
           color: preview ? t.accentText : t.textGhost,
           wordBreak: 'break-all',
@@ -1813,7 +1813,7 @@ export default function RuleBuilderModal(props) {
                                     }}
                                   >
                                     <span style={{ fontWeight: 600 }}>{p.label}</span>
-                                    <span style={{ fontFamily: 'monospace', fontSize: '10px', opacity: 0.55 }}>{p.v}()</span>
+                                    <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '10px', opacity: 0.55 }}>{p.v}()</span>
                                   </button>
                                 )
                               })}
@@ -1980,7 +1980,7 @@ export default function RuleBuilderModal(props) {
                                   {tok.label}
                                 </span>
                                 {tok.value && (
-                                  <code style={{ marginLeft: 'auto', fontSize: '10px', color: t.textGhost, fontFamily: 'monospace' }}>
+                                  <code style={{ marginLeft: 'auto', fontSize: '10px', color: t.textGhost, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                                     {tok.value}
                                   </code>
                                 )}
@@ -2042,7 +2042,7 @@ export default function RuleBuilderModal(props) {
                                       {w._sourceFormLabel}
                                     </span>
                                   )}
-                                  <span style={{ fontFamily: 'monospace', fontSize: '10px', opacity: 0.55 }}>
+                                  <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '10px', opacity: 0.55 }}>
                                     w_{w.widgetCode}
                                   </span>
                                 </button>
@@ -2064,7 +2064,7 @@ export default function RuleBuilderModal(props) {
                             borderRadius: '8px',
                             color: t.text,
                             fontSize: '12px',
-                            fontFamily: 'monospace',
+                            fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
                             boxSizing: 'border-box',
                           }}
                         />

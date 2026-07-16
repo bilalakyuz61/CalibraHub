@@ -206,7 +206,7 @@ function RunDetailModal({ runId, onClose }) {
               <SummaryRow label="HTTP Status">
                 {run.httpStatusCode ? (
                   <span style={{
-                    fontFamily: 'monospace', fontWeight: 600,
+                    fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: 600,
                     color: run.httpStatusCode < 300 ? 'var(--iw-emerald-color)'
                          : run.httpStatusCode < 500 ? 'var(--iw-amber-color)'
                          : 'var(--iw-rose-color)',
@@ -442,7 +442,7 @@ export default function IntegrationRunsList({ config }) {
 
               <div className="il-chips">
                 {r.httpStatusCode && (
-                  <span className="il-chip il-chip-runs" style={{ fontFamily: 'monospace' }}>
+                  <span className="il-chip il-chip-runs" style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
                     HTTP {r.httpStatusCode}
                   </span>
                 )}
