@@ -73,6 +73,46 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         return list;
     }
 
+    public async Task<WorkOrderComponentDto?> GetByIdAsync(int id, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT c.[Id], c.[WorkOrderId], c.[ItemId], i.[Code] AS ItemCode, i.[Name] AS ItemName,
+                   c.[ConfigId], cfg.[RecordCode] AS ConfigCode,
+                   c.[RequiredQuantity], c.[IssuedQuantity], c.[ScrapRate],
+                   c.[UnitId], u.[Code] AS UnitCode,
+                   c.[Notes], c.[Created], c.[Updated],
+                   ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial
+            FROM {_table} c
+            LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
+            LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
+            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = c.[UnitId]
+            WHERE c.[Id] = @Id;";
+        cmd.Parameters.AddWithValue("@Id", id);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        return new WorkOrderComponentDto(
+            Id:               r.GetInt32(0),
+            WorkOrderId:      r.GetInt32(1),
+            ItemId:           r.GetInt32(2),
+            ItemCode:         r.IsDBNull(3) ? null : r.GetString(3),
+            ItemName:         r.IsDBNull(4) ? null : r.GetString(4),
+            ConfigId:         r.IsDBNull(5) ? null : r.GetInt32(5),
+            ConfigCode:       r.IsDBNull(6) ? null : r.GetString(6),
+            RequiredQuantity: r.GetDecimal(7),
+            IssuedQuantity:   r.GetDecimal(8),
+            ScrapRate:        r.GetDecimal(9),
+            UnitId:           r.IsDBNull(10) ? null : r.GetInt32(10),
+            UnitCode:         r.IsDBNull(11) ? null : r.GetString(11),
+            Notes:            r.IsDBNull(12) ? null : r.GetString(12),
+            Created:          r.GetDateTime(13),
+            Updated:          r.IsDBNull(14) ? null : r.GetDateTime(14),
+            TrackingType:     r.IsDBNull(15) ? "None" : r.GetString(15),
+            AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16));
+    }
+
     public async Task ReplaceForWorkOrderAsync(int workOrderId, IReadOnlyCollection<WorkOrderComponent> components, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);

@@ -11,6 +11,12 @@ public interface IWorkOrderComponentRepository
     Task<IReadOnlyCollection<WorkOrderComponentDto>> GetByWorkOrderAsync(int workOrderId, CancellationToken ct);
 
     /// <summary>
+    /// Tekil bileşen kaydı — sarf (Issue) öncesi eski durumu okumak (işlem logu) veya
+    /// doğrulama için. Bulunamazsa null.
+    /// </summary>
+    Task<WorkOrderComponentDto?> GetByIdAsync(int id, CancellationToken ct);
+
+    /// <summary>
     /// İş emrinin mevcut bileşenlerini sil ve yeni listeyi yaz (transactional, idempotent).
     /// </summary>
     Task ReplaceForWorkOrderAsync(int workOrderId, IReadOnlyCollection<WorkOrderComponent> components, CancellationToken ct);

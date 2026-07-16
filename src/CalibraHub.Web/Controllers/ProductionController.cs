@@ -1466,7 +1466,19 @@ public sealed class ProductionController : Controller
                 new IssueWorkOrderComponentRequest(req.WorkOrderComponentId, req.Quantity, req.OperatorPersonnelId), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
+        {
+            // Eksi bakiye — aynı desen: IssueConsumptionJson (üretim sarfı) ve
+            // Ambar Çıkış/Transfer akışları (WarehouseController/PurchaseController).
+            return Json(new { ok = false, error = nbex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // IssueAsync bu tipten fırlatır: "Bileşen bulunamadı" / lot-seri takipli bileşen
+            // bu yoldan sarf edilemez (bkz. SqlWorkOrderComponentRepository.IssueAsync).
+            return Json(new { ok = false, error = ex.Message });
+        }
+        catch (Exception) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
     }
 
     public sealed record ShopFloorCompleteRequest(int WorkOrderOperationId, int OperatorPersonnelId, decimal? FinalQuantity);

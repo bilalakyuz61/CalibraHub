@@ -198,6 +198,15 @@ public static class AuditFieldLabels
             ["AssignedPersonnelId"] = "Atanan Personel",
             ["WarehouseLocationId"] = "Depo",
             ["ConfigId"] = "Kombinasyon",
+            // ShopFloor operasyon/aktivite (2026-07-16 — audit enstrümantasyonu)
+            ["ProducedQuantity"] = "Üretilen Miktar",
+            ["ScrapQuantity"] = "Fire Miktarı",
+            ["IssuedQuantity"] = "Sarf Edilen Miktar",
+            ["ActivityType"] = "Aktivite Tipi",
+            ["ActivityReasonId"] = "Aktivite Sebebi",
+            ["StartedByPersonnelId"] = "Başlatan Personel",
+            ["CompletedByPersonnelId"] = "Tamamlayan Personel",
+            ["OperatorPersonnelId"] = "Operatör",
         };
 
     /// <summary>Alan etiketi çözümle — bulunamazsa alan adının kendisi döner.</summary>

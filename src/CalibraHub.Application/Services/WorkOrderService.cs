@@ -430,12 +430,43 @@ public sealed class WorkOrderService : IWorkOrderService
     public Task<IReadOnlyCollection<WorkOrderComponentDto>> GetComponentsAsync(int workOrderId, CancellationToken ct)
         => _workOrderComponents.GetByWorkOrderAsync(workOrderId, ct);
 
-    public Task IssueComponentAsync(IssueWorkOrderComponentRequest request, CancellationToken ct)
+    public async Task IssueComponentAsync(IssueWorkOrderComponentRequest request, CancellationToken ct)
     {
         if (request.WorkOrderComponentId <= 0) throw new ArgumentException("Bileşen kaydı zorunlu.");
         if (request.Quantity <= 0) throw new ArgumentException("Miktar 0'dan büyük olmalı.");
         if (request.OperatorPersonnelId <= 0) throw new ArgumentException("Operatör (Personnel) zorunlu.");
-        return _workOrderComponents.IssueAsync(request.WorkOrderComponentId, request.Quantity, request.OperatorPersonnelId, ct);
+
+        // İşlem logu için eski durumu mutasyondan ÖNCE oku (yalnızca audit amaçlı —
+        // okunamazsa sarf işlemi yine de devam eder, log sessizce atlanır).
+        WorkOrderComponentDto? before = null;
+        if (_audit is not null)
+        {
+            try { before = await _workOrderComponents.GetByIdAsync(request.WorkOrderComponentId, ct); }
+            catch { /* audit için eski durum okunamadı */ }
+        }
+
+        await _workOrderComponents.IssueAsync(request.WorkOrderComponentId, request.Quantity, request.OperatorPersonnelId, ct);
+
+        // ShopFloor "Malzeme Sarf Et" — İş Emri'nin ("WorkOrder") kendi Değişiklik Geçmişi
+        // zaman çizelgesine yazılır (WorkOrderEdit ekranındaki _AuditTrailHost ile aynı kova).
+        if (_audit is not null && before is not null)
+        {
+            try
+            {
+                string? workOrderNumber = null;
+                try { workOrderNumber = (await _workOrders.GetAsync(before.WorkOrderId, ct))?.OrderNumber; }
+                catch { /* başlık için WO okunamadı — title null kalır, log yine yazılır */ }
+
+                var itemLabel = before.ItemCode ?? before.ItemName ?? ("#" + before.ItemId);
+                var newIssued = before.IssuedQuantity + request.Quantity;
+                _audit.LogChanges("WorkOrder", before.WorkOrderId, workOrderNumber,
+                    [new AuditFieldChange($"Component[{before.Id}].IssuedQuantity", $"Malzeme Sarfı — {itemLabel}",
+                        AuditDiff.Normalize(before.IssuedQuantity), AuditDiff.Normalize(newIssued))],
+                    detail: $"Malzeme sarfı — {itemLabel} · +{AuditDiff.Normalize(request.Quantity)} · " +
+                            $"Operatör Personel #{request.OperatorPersonnelId}");
+            }
+            catch { /* audit yazımı sarf işlemini asla bozmaz */ }
+        }
     }
 
     private static void ValidateTransition(WorkOrderStatus current, WorkOrderStatus next)

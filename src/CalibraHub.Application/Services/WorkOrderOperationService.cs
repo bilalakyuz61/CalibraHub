@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -12,13 +13,23 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
     private readonly IWorkOrderOperationRepository _repo;
     private readonly IWorkOrderRepository _workOrders;
     private readonly ILotRepository _lots;
+    private readonly IAuditTrailService? _audit;
 
-    public WorkOrderOperationService(IWorkOrderOperationRepository repo, IWorkOrderRepository workOrders, ILotRepository lots)
+    public WorkOrderOperationService(
+        IWorkOrderOperationRepository repo,
+        IWorkOrderRepository workOrders,
+        ILotRepository lots,
+        IAuditTrailService? audit = null)
     {
         _repo = repo;
         _workOrders = workOrders;
         _lots = lots;
+        _audit = audit;
     }
+
+    /// <summary>İşlem logu satırlarında operasyonu tanımlayan kısa etiket (ör. "OP10 Kesim (Sıra 1)").</summary>
+    private static string OpLabel(WorkOrderOperationDto op) =>
+        (op.OperationCode ?? op.OperationName ?? ("Operasyon #" + op.Id)) + " (Sıra " + op.Sequence + ")";
 
     public Task<IReadOnlyCollection<WorkOrderOperationDto>> GetByWorkOrderAsync(int workOrderId, CancellationToken ct)
         => _repo.GetByWorkOrderAsync(workOrderId, ct);
@@ -66,6 +77,20 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
                 $"Önceki operasyon henüz üretim yapmadı (Sıra {op.Sequence}). " +
                 "Bu operasyonu başlatmadan önce upstream operasyonun üretimini girin.");
         await _repo.StartAsync(req.WorkOrderOperationId, req.OperatorPersonnelId, ct);
+
+        // İşlem logu — yalnızca gerçek bir Bekliyor → Devam Ediyor geçişinde (repo COALESCE
+        // ile idempotent; zaten Devam Ediyor iken tekrar Start'ta durum değişmez, gürültü olmasın).
+        if (_audit is not null && op.Status == WorkOrderOperationStatus.Pending)
+        {
+            try
+            {
+                _audit.LogChanges("WorkOrder", op.WorkOrderId, op.WorkOrderNumber,
+                    [new AuditFieldChange($"Operation[{op.Id}].Status", $"{OpLabel(op)} — Durum",
+                        op.Status.ToString(), WorkOrderOperationStatus.InProgress.ToString())],
+                    detail: $"Operasyon başlatıldı — {OpLabel(op)} · Operatör Personel #{req.OperatorPersonnelId}");
+            }
+            catch { /* audit yazımı operasyon başlatmayı asla bozmaz */ }
+        }
     }
 
     public async Task PartialCompleteAsync(PartialCompleteOperationRequest req, CancellationToken ct)
@@ -83,6 +108,31 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
                 $"Bu op'ta mevcut üretim: {op.ProducedQuantity:N2}. " +
                 $"Girebileceğiniz en fazla: {(op.UpstreamCap - op.ProducedQuantity):N2}.");
         await _repo.PartialCompleteAsync(req.WorkOrderOperationId, req.OperatorPersonnelId, req.Quantity, req.ScrapQuantity, ct);
+
+        // İşlem logu — üretilen miktar (+ girildiyse fire) artışı.
+        if (_audit is not null)
+        {
+            try
+            {
+                var changes = new List<AuditFieldChange>
+                {
+                    new($"Operation[{op.Id}].ProducedQuantity", $"{OpLabel(op)} — Üretilen Miktar",
+                        AuditDiff.Normalize(op.ProducedQuantity), AuditDiff.Normalize(newTotal)),
+                };
+                if (req.ScrapQuantity is > 0)
+                    changes.Add(new($"Operation[{op.Id}].ScrapQuantity", $"{OpLabel(op)} — Fire Miktarı",
+                        AuditDiff.Normalize(op.ScrapQuantity), AuditDiff.Normalize(op.ScrapQuantity + req.ScrapQuantity.Value)));
+                // Repo SQL'i Pending iken PartialComplete'i de InProgress'e geçirir (operatör
+                // Start'ı atlayıp direkt kısmi miktar girmiş olabilir) — o durumda durum da loglanır.
+                if (op.Status == WorkOrderOperationStatus.Pending)
+                    changes.Add(new($"Operation[{op.Id}].Status", $"{OpLabel(op)} — Durum",
+                        op.Status.ToString(), WorkOrderOperationStatus.InProgress.ToString()));
+                _audit.LogChanges("WorkOrder", op.WorkOrderId, op.WorkOrderNumber, changes,
+                    detail: $"Kısmi üretim girişi — {OpLabel(op)} · +{AuditDiff.Normalize(req.Quantity)} · " +
+                            $"Operatör Personel #{req.OperatorPersonnelId}");
+            }
+            catch { /* audit yazımı kısmi tamamlamayı asla bozmaz */ }
+        }
     }
 
     public async Task CompleteAsync(CompleteOperationRequest req, CancellationToken ct)
@@ -153,5 +203,25 @@ public sealed class WorkOrderOperationService : IWorkOrderOperationService
         }
 
         await _repo.CompleteAsync(req.WorkOrderOperationId, req.OperatorPersonnelId, req.FinalQuantity, stockLine, ct);
+
+        // İşlem logu — operasyon tamamlandı; son operasyonsa mamul girişi detail'de belirtilir.
+        if (_audit is not null)
+        {
+            try
+            {
+                var finalQty = req.FinalQuantity ?? op.ProducedQuantity;
+                var changes = new List<AuditFieldChange>();
+                if (op.Status != WorkOrderOperationStatus.Completed)
+                    changes.Add(new($"Operation[{op.Id}].Status", $"{OpLabel(op)} — Durum",
+                        op.Status.ToString(), WorkOrderOperationStatus.Completed.ToString()));
+                if (req.FinalQuantity.HasValue && req.FinalQuantity.Value != op.ProducedQuantity)
+                    changes.Add(new($"Operation[{op.Id}].ProducedQuantity", $"{OpLabel(op)} — Üretilen Miktar",
+                        AuditDiff.Normalize(op.ProducedQuantity), AuditDiff.Normalize(finalQty)));
+                var detail = $"Operasyon tamamlandı — {OpLabel(op)} · Operatör Personel #{req.OperatorPersonnelId}" +
+                    (stockLine is not null ? $" · Mamul girişi {AuditDiff.Normalize(stockLine.Quantity)}" : "");
+                _audit.LogChanges("WorkOrder", op.WorkOrderId, op.WorkOrderNumber, changes, detail: detail);
+            }
+            catch { /* audit yazımı operasyon tamamlamayı asla bozmaz */ }
+        }
     }
 }
