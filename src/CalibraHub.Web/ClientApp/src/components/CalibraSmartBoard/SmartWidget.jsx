@@ -206,9 +206,9 @@ export default function SmartWidget(props) {
   var warnBorder = isDark ? 'rgba(245,158,11,0.40)' : 'rgba(217,119,6,0.45)'
 
   return (
-    <WidgetTooltip label={label} value={violation ? (value + ' — ⚠ ' + violation) : value} detail={detail}>
+    <WidgetTooltip label={label} value={violation ? (value + ' — ⚠ ' + violation) : value} detail={detail} style={chipBoxStyle}>
       <div
-        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl select-none whitespace-nowrap"
+        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl select-none whitespace-nowrap w-full overflow-hidden"
         style={{
           background: violation ? warnBg : palette.bg,
           border: '1px solid ' + (violation ? warnBorder : palette.border),
@@ -226,15 +226,15 @@ export default function SmartWidget(props) {
             ? <AlertTriangle size={14} style={{ color: '#f59e0b' }} strokeWidth={2} />
             : <Icon size={14} style={{ color: palette.icon }} strokeWidth={1.8} />}
         </div>
-        <div className="flex flex-col min-w-0 gap-1">
+        <div className="flex flex-col min-w-0 flex-1 gap-1">
           <span
-            className={'text-[9px] font-semibold uppercase tracking-wider leading-none ' + (violation ? '' : 'text-slate-500 dark:text-white/70')}
+            className={'text-[9px] font-semibold uppercase tracking-wider leading-none truncate ' + (violation ? '' : 'text-slate-500 dark:text-white/70')}
             style={violation ? { color: '#f59e0b' } : {}}
           >
             {label}
           </span>
           <span
-            className="text-xs font-bold leading-none tracking-tight"
+            className="text-xs font-bold leading-none tracking-tight truncate"
             style={{ color: violation ? (isDark ? '#fbbf24' : '#b45309') : palette.text }}
           >
             {value}
@@ -262,6 +262,9 @@ function GuideListWidgetButton(props) {
   var label    = props.label
   var recordValues = props.recordValues || {}
   var meta     = (widget && widget.metadata) || {}
+  // Diger chip tiplerinde oldugu gibi sabit genislik — SmartWidget cagirandan iletir.
+  var chipWidth = props.chipWidth || 192
+  var chipBoxStyle = { flex: '0 0 ' + chipWidth + 'px', width: chipWidth + 'px', maxWidth: chipWidth + 'px' }
   var [open, setOpen] = useState(false)
 
   // metadata.guideConfig JSON parse → constraint cikar.
@@ -291,13 +294,13 @@ function GuideListWidgetButton(props) {
 
   return (
     <>
-      <WidgetTooltip label={label} value="Listeyi Aç" detail={meta.guideCode ? ('Rehber: ' + meta.guideCode) : 'Rehber tanımlı değil'}>
+      <WidgetTooltip label={label} value="Listeyi Aç" detail={meta.guideCode ? ('Rehber: ' + meta.guideCode) : 'Rehber tanımlı değil'} style={chipBoxStyle}>
         <motion.button
           type="button"
           onClick={handleOpen}
           whileHover={{ scale: 1.03, y: -1 }}
           transition={{ type: 'spring', stiffness: 350, damping: 26, mass: 0.7 }}
-          className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer select-none whitespace-nowrap"
+          className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer select-none whitespace-nowrap w-full overflow-hidden"
           style={{
             background: palette.bg,
             border: '1px solid ' + palette.border,
@@ -310,11 +313,11 @@ function GuideListWidgetButton(props) {
           >
             <Icon size={14} style={{ color: palette.icon }} strokeWidth={1.8} />
           </div>
-          <div className="flex flex-col min-w-0 gap-1">
-            <span className="text-[9px] font-semibold uppercase tracking-wider leading-none text-slate-600 dark:text-white/70">
+          <div className="flex flex-col min-w-0 flex-1 gap-1">
+            <span className="text-[9px] font-semibold uppercase tracking-wider leading-none text-slate-600 dark:text-white/70 truncate">
               Rehber
             </span>
-            <span className="text-xs font-bold leading-none tracking-tight" style={{ color: palette.text }}>
+            <span className="text-xs font-bold leading-none tracking-tight truncate" style={{ color: palette.text }}>
               {label}
             </span>
           </div>
@@ -322,7 +325,7 @@ function GuideListWidgetButton(props) {
             initial={{ opacity: 0, x: -4 }}
             whileHover={{ opacity: 1, x: 0 }}
             animate={{ opacity: 0 }}
-            className="group-hover:opacity-100 transition-opacity duration-200 -ml-1"
+            className="group-hover:opacity-100 transition-opacity duration-200 -ml-1 flex-shrink-0"
           >
             <ArrowUpRight size={12} style={{ color: palette.icon }} strokeWidth={2} />
           </motion.span>
