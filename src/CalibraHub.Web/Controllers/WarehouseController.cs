@@ -84,17 +84,21 @@ public sealed class WarehouseController : Controller
     };
 
     // ── Yetki: paylaşılan Giriş/Çıkış/Transfer endpoint'leri ───────────────
-    // StockEntryEdit / SaveDocJson / DeleteDocJson tek action üzerinden STOCK_IN,
-    // STOCK_OUT ve TRANSFER belgelerini birlikte yönetir (bkz. StockDocEdit.cshtml).
+    // StockEntryEdit / GetDocJson / SaveDocJson / DeleteDocJson tek action üzerinden
+    // STOCK_IN, STOCK_OUT ve TRANSFER belgelerini birlikte yönetir (bkz. StockDocEdit.cshtml).
     // [PermissionScope] statik attribute tek FormCode taşıyabildiği için bu üçünü
     // ayırt edemez — SalesController.SaveDocument/DeleteDocument ile aynı desen:
     // attribute yerine burada request/DB'den okunan DocType'a göre dinamik çözülür.
+    // INVENTORY_COUNT: sayım ekranı (InventoryEdit) GetDocJson'ı okuma için paylaşır;
+    // sayım belgesi StockIn'e değil kendi form koduna (INVENTORY_COUNT) gate edilir —
+    // sayfa gate'i [PermissionScope(FormCodes.InventoryCount)] ile aynı kullanıcı kümesi.
 
     private static string FormCodeForDocType(string? docType) => docType switch
     {
-        "TRANSFER"  => FormCodes.Transfer,
-        "STOCK_OUT" => FormCodes.StockOut,
-        _           => FormCodes.StockIn,
+        "TRANSFER"        => FormCodes.Transfer,
+        "STOCK_OUT"       => FormCodes.StockOut,
+        "INVENTORY_COUNT" => FormCodes.InventoryCount,
+        _                 => FormCodes.StockIn,
     };
 
     private async Task<bool> CheckStockDocPermissionAsync(
