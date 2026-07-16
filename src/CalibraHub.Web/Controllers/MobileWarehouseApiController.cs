@@ -342,6 +342,56 @@ public sealed class MobileWarehouseApiController : ControllerBase
     }
 
     // ──────────────────────────────────────────────────────────────────────
+    // GET items/search?q=<query>&take=<n>
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Malzeme arama (rehber) — kod/ad LIKE eslesmesi. Mobil Increment 1'de malzeme
+    /// yalnizca /stock?code= uzerinden TAM kod esitligiyle cozulebiliyordu (kullanici
+    /// kodu harfiyen bilmek zorundaydi) — bu endpoint aranabilir rehberi ekler. Sorgu
+    /// ILogisticsConfigurationService.GetItemsPagedAsync uzerinden gecer; masaustu
+    /// "rehber" ile ayni semantik (SqlLogisticsConfigurationRepository.GetItemsPagedAsync:
+    /// i.[Code] LIKE @Search OR i.[Name] LIKE @Search, yalnizca aktif + CompanyId filtreli
+    /// kayitlar — repo icinde uygulanir). Birim kodu /stock action'iyla ayni yontemle
+    /// cozulur (GetUnitsAsync + UnitId lookup).
+    /// </summary>
+    [HttpGet("items/search")]
+    public async Task<IActionResult> SearchItems([FromQuery] string? q, [FromQuery] int? take, CancellationToken ct)
+    {
+        // Yetki kontrolu validasyondan ONCE — Stock/Locations ile ayni kapi (StockQueryFormCodes).
+        if (await RequirePermissionAsync(StockQueryFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+
+        var query = (q ?? string.Empty).Trim();
+        if (query.Length == 0)
+            return Ok(Array.Empty<object>());
+
+        var pageSize = take.GetValueOrDefault(20);
+        if (pageSize <= 0) pageSize = 20;
+        if (pageSize > 50) pageSize = 50;
+
+        var (items, _) = await _logisticsService.GetItemsPagedAsync(query, 0, pageSize, ct);
+        if (items.Count == 0)
+            return Ok(Array.Empty<object>());
+
+        // Birim kodu — /stock action'indaki cozumle birebir ayni (GetUnitsAsync + UnitId lookup).
+        var units = await _logisticsService.GetUnitsAsync(ct);
+        var unitCodeById = units.ToDictionary(u => u.Id, u => u.Code);
+
+        var result = items.Select(i => new
+        {
+            id   = i.Id,
+            code = i.Code,
+            name = i.Name,
+            unit = i.UnitId.HasValue && unitCodeById.TryGetValue(i.UnitId.Value, out var unitCode)
+                ? unitCode
+                : "",
+        });
+
+        return Ok(result);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
     // POST stock-in / stock-out (Increment 2 — depo giris/cikis yazma)
     // ──────────────────────────────────────────────────────────────────────
     // Sozlesme (mobil istemci birebir tuketir):
