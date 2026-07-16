@@ -965,6 +965,42 @@ public sealed class AccountController : Controller
             .ToArray();
     }
 
+    // ── Header kısa yol çubuğu (shortcut-bar) — per-user kalıcılık ──────────
+    // shellShortcutsService.js: önce bu endpoint'leri dener, hata/404 alırsa
+    // localStorage fallback'ine düşer (bkz. dosya başı yorumu). Config opak bir
+    // JSON string olarak taşınır (şekli: { ids: string[], showNames: boolean }),
+    // sunucu tarafında ayrıştırılmaz — grid kolon tercihleriyle aynı "tek JSON
+    // string per user_settings key" deseni (bkz. UiConfigurationService).
+
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> GetShellShortcuts(CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var userId) || userId <= 0)
+            return Json(new { config = (string?)null });
+
+        var config = await _uiConfigurationService.GetShellShortcutsAsync(userId, cancellationToken);
+        return Json(new { config });
+    }
+
+    [Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveShellShortcuts(
+        [FromBody] SaveShellShortcutsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var userId) || userId <= 0)
+            return Json(new { ok = false });
+
+        await _uiConfigurationService.SaveShellShortcutsAsync(userId, request?.Config ?? string.Empty, cancellationToken);
+        return Json(new { ok = true });
+    }
+
+    public sealed record SaveShellShortcutsRequest(string? Config);
+
     /// <summary>
     /// Shell menüsünü anlık yetkilerle döndürür.
     /// Shell.jsx focus/visibility değişiminde bu endpoint'i poll ederek

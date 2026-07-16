@@ -24,4 +24,6 @@ public interface IUiConfigurationService
     Task SaveScreenDesignLayoutAsync(SaveScreenDesignLayoutRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<string>> GetGridColumnPreferencesAsync(int? userId, string gridKey, CancellationToken cancellationToken);
     Task SaveGridColumnPreferencesAsync(int userId, string gridKey, IReadOnlyCollection<string> columns, CancellationToken cancellationToken);
+    Task<string?> GetShellShortcutsAsync(int userId, CancellationToken cancellationToken);
+    Task SaveShellShortcutsAsync(int userId, string configJson, CancellationToken cancellationToken);
 }

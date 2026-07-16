@@ -540,4 +540,18 @@ public sealed class UiConfigurationService : IUiConfigurationService
         var value = string.Join(",", columns);
         await _userSettingRepository.SetAsync(userId, key, value, cancellationToken);
     }
+
+    // ── Kısa yol çubuğu (shortcut-bar) tercihi (user_settings tablosu) ───
+
+    public async Task<string?> GetShellShortcutsAsync(int userId, CancellationToken cancellationToken)
+    {
+        if (userId <= 0) return null;
+        return await _userSettingRepository.GetAsync(userId, "ui.shell.shortcuts", cancellationToken);
+    }
+
+    public async Task SaveShellShortcutsAsync(int userId, string configJson, CancellationToken cancellationToken)
+    {
+        if (userId <= 0) return;
+        await _userSettingRepository.SetAsync(userId, "ui.shell.shortcuts", configJson, cancellationToken);
+    }
 }
