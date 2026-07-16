@@ -915,6 +915,16 @@ public sealed class WarehouseController : Controller
             if (!await CheckStockDocPermissionAsync(docForAudit?.DocType, new[] { "DELETE_OWN", "DELETE_ALL" }, ct))
                 return Json(new { ok = false, error = "Bu belgeyi silmek için yetkiniz bulunmuyor." });
 
+            // Yansıtılmış (Applied) sayım immutable — DeleteInventoryJson'daki guard'ın aynısı.
+            // Sayım belgesi id'si doğrudan bu paylaşılan endpoint'e POST edilirse guard atlanıyordu;
+            // yansıtılmış sayım silinince fark satırları belgeye bağlı olduğundan stok bakiyesi bozulur.
+            if (docForAudit?.DocType == "INVENTORY_COUNT")
+            {
+                var status = await _inventoryCountRepo.GetStatusAsync(id, ct);
+                if (status == 1)
+                    return Json(new { ok = false, error = "Yansıtılmış sayım fişi silinemez. Yansıtılan stok farkları bu belgeye bağlıdır; silinmesi bakiyeyi bozar." });
+            }
+
             await _stockDocRepo.DeleteAsync(id, ct);
 
             if (docForAudit is not null)
