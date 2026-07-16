@@ -55,6 +55,24 @@ public static class StockParameters
     /// </summary>
     public const string OrderSerialReservationKey = "ORDER_SERIAL_RESERVATION";
 
+    // ── İrsaliye FIFO sipariş bağlama (2026-07-16, Mobil Depo) ──
+    // Mobil (ve otomatik) irsaliye kaydında, kalem miktarı carinin AÇIK sipariş satırlarına
+    // (aynı malzeme, kalan > 0) belge tarihi/numarası ARTAN sırada tahsis edilir; kaynak bağı
+    // DocumentLine.SourceLineId + sipariş satırı DeliveredQuantity ile web kısmi-teslimatıyla
+    // BİREBİR AYNI alanlara yazılır. Bağlanamayan (artan) miktar "bağlantısız" satır olur.
+
+    /// <summary>Alış irsaliyesinde açık satın alma siparişlerine FIFO otomatik bağlama (Bool, default TRUE=açık).</summary>
+    public const string PurchaseDeliveryFifoBindKey = "PURCHASE_DELIVERY_FIFO_BIND";
+
+    /// <summary>Satış irsaliyesinde açık satış siparişlerine FIFO otomatik bağlama (Bool, default TRUE=açık).</summary>
+    public const string SalesDeliveryFifoBindKey = "SALES_DELIVERY_FIFO_BIND";
+
+    /// <summary>Alış irsaliyesinde sipariş bağlantısız teslimat yasak (Bool, default FALSE=serbest). Açıkken herhangi bir satırda bağlantısız miktar kalırsa TÜM kayıt reddedilir.</summary>
+    public const string PurchaseDeliveryRequireOrderKey = "PURCHASE_DELIVERY_REQUIRE_ORDER";
+
+    /// <summary>Satış irsaliyesinde sipariş bağlantısız teslimat yasak (Bool, default FALSE=serbest). Açıkken herhangi bir satırda bağlantısız miktar kalırsa TÜM kayıt reddedilir.</summary>
+    public const string SalesDeliveryRequireOrderKey = "SALES_DELIVERY_REQUIRE_ORDER";
+
     /// <summary>
     /// Stok hareketi (DocumentLine.MovementType) üretebilen belge türleri —
     /// parametre ekranındaki switch listesi. Code = DocumentType.Code.

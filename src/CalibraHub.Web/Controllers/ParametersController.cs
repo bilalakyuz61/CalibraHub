@@ -120,6 +120,18 @@ public sealed class ParametersController : Controller
         ViewData["OrderSerialReservation"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.OrderSerialReservationKey)?.ParamValue == "true";
 
+        // İrsaliye FIFO sipariş bağlama (Mobil Depo) — bağlama default AÇIK (unset → true),
+        // bağlantısız teslimat yasak default KAPALI (unset → false). Okuma-zamanı varsayılanları
+        // teslimat endpoint'iyle birebir aynı (MobileWarehouseApiController.Delivery).
+        ViewData["PurchaseDeliveryFifoBind"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.PurchaseDeliveryFifoBindKey)?.ParamValue != "false";
+        ViewData["SalesDeliveryFifoBind"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesDeliveryFifoBindKey)?.ParamValue != "false";
+        ViewData["PurchaseDeliveryRequireOrder"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.PurchaseDeliveryRequireOrderKey)?.ParamValue == "true";
+        ViewData["SalesDeliveryRequireOrder"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesDeliveryRequireOrderKey)?.ParamValue == "true";
+
         // İzlenebilirlik tab: seri no benzersizlik kapsamı ("Item"/"Global"). Tanımsız → "Item".
         ViewData["TraceSerialScope"] =
             string.Equals(
@@ -323,6 +335,26 @@ public sealed class ParametersController : Controller
                 await _companyParameters.DeleteAsync(
                     form, CalibraHub.Application.Constants.StockParameters.EffectKey(t.Code), ct);
 
+            // İrsaliye FIFO sipariş bağlama + bağlantısız teslimat yasak — YALNIZCA gönderildiyse
+            // yaz (nullable). Mevcut Stok sekmesi bu alanları henüz göndermiyorsa null gelir →
+            // yazılmaz → okuma-zamanı varsayılanı (FIFO açık / yasak kapalı) korunur (sessiz reset yok).
+            if (input.PurchaseDeliveryFifoBind is bool pFifo)
+                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                    form, CalibraHub.Application.Constants.StockParameters.PurchaseDeliveryFifoBindKey,
+                    pFifo ? "true" : "false", CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            if (input.SalesDeliveryFifoBind is bool sFifo)
+                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                    form, CalibraHub.Application.Constants.StockParameters.SalesDeliveryFifoBindKey,
+                    sFifo ? "true" : "false", CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            if (input.PurchaseDeliveryRequireOrder is bool pReq)
+                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                    form, CalibraHub.Application.Constants.StockParameters.PurchaseDeliveryRequireOrderKey,
+                    pReq ? "true" : "false", CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            if (input.SalesDeliveryRequireOrder is bool sReq)
+                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                    form, CalibraHub.Application.Constants.StockParameters.SalesDeliveryRequireOrderKey,
+                    sReq ? "true" : "false", CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+
             return Json(new { ok = true });
         }
         catch (Exception ex)
@@ -372,7 +404,14 @@ public sealed class ParametersController : Controller
     public sealed record ApprovalKindInput(string Kind, bool Enabled);
     public sealed record ApprovalKindState(string Code, string Label, bool Enabled);
     public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts, bool BomAllowDuplicateComponents = false);
-    public sealed record StockParametersInput(bool NegControl);
+    public sealed record StockParametersInput(
+        bool NegControl,
+        // İrsaliye FIFO sipariş bağlama (default açık) + bağlantısız teslimat yasak (default kapalı).
+        // Nullable: gönderilmezse okuma-zamanı varsayılanı korunur (mevcut ekran geriye-uyumlu).
+        bool? PurchaseDeliveryFifoBind = null,
+        bool? SalesDeliveryFifoBind = null,
+        bool? PurchaseDeliveryRequireOrder = null,
+        bool? SalesDeliveryRequireOrder = null);
     public sealed record StockEffectInput(string Code, bool Enabled);
     public sealed record StockEffectState(string Code, string Label, string Description, bool Enabled);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);

@@ -29,6 +29,8 @@ public static class AuditFieldLabels
             ["arge_proje"]        = "AR-GE Projesi",
             ["fatura"]            = "Fatura",
             ["irsaliye"]          = "İrsaliye",
+            ["satis_irsaliyesi"]  = "Satış İrsaliyesi",
+            ["alis_irsaliyesi"]   = "Alış İrsaliyesi",
             // Sabit entity'ler
             ["Item"]           = "Malzeme Kartı",
             ["Contact"]        = "Cari Hesap",

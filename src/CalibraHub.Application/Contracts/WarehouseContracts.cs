@@ -112,3 +112,30 @@ public sealed record WorkOrderConsumptionRequest(
     int WorkOrderId,
     decimal? ProducedQuantity,  // bilgi amaçlı — satır notuna işlenir
     IReadOnlyList<WorkOrderConsumptionLineRequest> Lines);
+
+// ── Mobil FIFO teslimat / irsaliye (2026-07-16) ──────────────────────────────
+// Mobil Depo, cari + malzeme + miktar alır; FIFO param açıksa miktarı carinin açık
+// sipariş satırlarına (aynı malzeme, kalan > 0) belge tarihi/numarası ARTAN sırada tahsis
+// eder. Kaynak bağı web kısmi-teslimatıyla BİREBİR AYNI: irsaliye satırı SourceLineId +
+// sipariş satırı DeliveredQuantity. Miktarlar ANA BİRİMDE (BaseQuantity) taşınır — mobil
+// istemci malzemeyi kartın ana biriminde girer (stok-in/out ile aynı konvansiyon).
+
+/// <summary>Bir malzeme için teslim edilecek miktar. FallbackUnitPrice yalnızca bağlantısız
+/// (siparişe düşmeyen) kalan için kullanılır — ResolveLinePrices ile çözülür (yoksa 0).
+/// Bağlanan satır fiyatı SİPARİŞ satırından gelir. MaterialName reddedilen/hata mesajları içindir.</summary>
+public sealed record MobileDeliveryLineInput(
+    int ItemId, decimal Quantity, int? UnitId, decimal FallbackUnitPrice, string? MaterialName);
+
+/// <summary>Bir malzemenin tek bir açık siparişe tahsis edilen (ana birim) miktarı — response özeti.</summary>
+public sealed record MobileDeliveryLineLink(string OrderNumber, decimal Quantity);
+
+/// <summary>Bir malzemenin bağlama sonucu: hangi siparişlere ne kadar bağlandı + bağlanamayan kalan.</summary>
+public sealed record MobileDeliveryLineResult(
+    int ItemId, IReadOnlyList<MobileDeliveryLineLink> Linked, decimal UnlinkedQuantity);
+
+/// <summary>FIFO teslimat sonucu: irsaliye belgesi + kalem bazlı bağlama özeti + (varsa) kaynak
+/// sipariş id'leri (controller DocumentSource soyağacı kenarlarını bunlarla yazar).</summary>
+public sealed record MobileDeliveryResult(
+    int Id, string DocNo,
+    IReadOnlyList<int> SourceOrderIds,
+    IReadOnlyList<MobileDeliveryLineResult> Lines);

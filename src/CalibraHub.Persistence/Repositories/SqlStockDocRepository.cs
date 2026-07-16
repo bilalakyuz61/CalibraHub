@@ -1148,6 +1148,307 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    // ── Mobil FIFO teslimat (2026-07-16) ─────────────────────────────────────────
+    // ConvertOrderToDeliveryAsync'in ÇOK-SİPARİŞLİ, cari-tabanlı ikizi. Aynı bağ alanlarını
+    // yazar (irsaliye satırı SourceLineId + sipariş satırı DeliveredQuantity) — web kısmi
+    // teslimatının açık-kalem/fulfillment takibiyle BİREBİR tutarlı kalır. Fark: tek siparişin
+    // açık kalemlerini değil, carinin AÇIK sipariş satırlarını (aynı malzeme) FIFO tüketir.
+    private sealed record FifoOpenLine(
+        int Id, decimal BaseQuantity, decimal DeliveredQuantity, decimal Quantity,
+        int? UnitId, decimal UnitPrice, decimal DiscountRate, decimal LineTotal, int? CombinationId,
+        int? LocId, int OrderId, string OrderNo);
+    private sealed record FifoAlloc(FifoOpenLine Line, decimal AllocBase);
+    private sealed record FifoPlanItem(int ItemId, int? UnitId, decimal FallbackPrice, string? Name,
+        List<FifoAlloc> Allocs, decimal Unlinked);
+
+    public async Task<MobileDeliveryResult> SaveDeliveryFifoAsync(
+        bool isPurchase, int contactId, string? note,
+        IReadOnlyList<MobileDeliveryLineInput> lines,
+        bool fifoEnabled, bool forbidUnlinked, int? createdById, CancellationToken ct)
+    {
+        var companyId     = _connectionFactory.ResolveCurrentCompanyId();
+        var targetType    = isPurchase ? "alis_irsaliyesi" : "satis_irsaliyesi";
+        var orderType     = isPurchase ? "alis_siparisi"   : "satis_siparisi";
+        var prefix        = isPurchase ? "AIR" : "SIR";
+        byte movementType = isPurchase ? (byte)2 : (byte)1; // Receipt(giriş) : Issue(çıkış)
+        var docDate       = DateTime.Today;
+
+        // Aynı malzeme birden çok satırda gelirse tek kalemde topla — çift tahsis (aynı sipariş
+        // satırını iki kez tüketmek) ve response mükerrerliği önlenir.
+        var agg = lines
+            .Where(l => l is not null && l.ItemId > 0 && l.Quantity > 0m)
+            .GroupBy(l => l.ItemId)
+            .Select(g => new
+            {
+                ItemId        = g.Key,
+                Quantity      = Math.Round(g.Sum(x => x.Quantity), 4),
+                UnitId        = g.First().UnitId,
+                FallbackPrice = g.First().FallbackUnitPrice,
+                Name          = g.Select(x => x.MaterialName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)),
+            })
+            .ToList();
+        if (agg.Count == 0)
+            throw new InvalidOperationException("Teslim edilecek kalem yok.");
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // 1) Tahsis planı (yalnız okuma). Her malzeme için carinin açık sipariş satırlarını
+            //    (aynı malzeme, kalan = BaseQuantity - DeliveredQuantity > 0) belge tarihi/numarası
+            //    ARTAN sırada FIFO tüket. Bağlanamayan (artan) miktar = bağlantısız.
+            var plan = new List<FifoPlanItem>();
+            foreach (var a in agg)
+            {
+                var remaining = a.Quantity;
+                var allocs = new List<FifoAlloc>();
+                if (fifoEnabled)
+                {
+                    var openLines = new List<FifoOpenLine>();
+                    await using (var sel = conn.CreateCommand())
+                    {
+                        sel.Transaction = tx;
+                        sel.CommandText = $"""
+                            SELECT dl.[Id], dl.[BaseQuantity], dl.[DeliveredQuantity], dl.[Quantity],
+                                   dl.[UnitId], dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal], dl.[CombinationId],
+                                   ISNULL(dl.[LocationId], doc.[LocationId]) AS LocId,
+                                   doc.[Id] AS OrderId, doc.[DocumentNumber] AS OrderNo
+                            FROM {T("DocumentLine")} dl
+                            INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
+                            INNER JOIN {T("DocumentType")} dt ON dt.[Id] = doc.[DocumentTypeId]
+                            WHERE doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
+                              AND doc.[ContactId] = @ContactId AND dt.[Code] = @OrderType
+                              AND dl.[ItemId] = @ItemId AND dl.[MovementType] IS NULL
+                              AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
+                            ORDER BY doc.[DocumentDate], doc.[DocumentNumber], dl.[LineNo], dl.[Id];
+                            """;
+                        sel.Parameters.AddWithValue("@Cid", companyId);
+                        sel.Parameters.AddWithValue("@ContactId", contactId);
+                        sel.Parameters.AddWithValue("@OrderType", orderType);
+                        sel.Parameters.AddWithValue("@ItemId", a.ItemId);
+                        await using var r = await sel.ExecuteReaderAsync(ct);
+                        while (await r.ReadAsync(ct))
+                            openLines.Add(new FifoOpenLine(
+                                r.GetInt32(0), r.GetDecimal(1), r.GetDecimal(2), r.GetDecimal(3),
+                                r.IsDBNull(4) ? null : r.GetInt32(4), r.GetDecimal(5), r.GetDecimal(6), r.GetDecimal(7),
+                                r.IsDBNull(8) ? null : r.GetInt32(8),
+                                r.IsDBNull(9) ? null : r.GetInt32(9),
+                                r.GetInt32(10), r.GetString(11)));
+                    }
+                    foreach (var ol in openLines)
+                    {
+                        if (remaining <= 0.00005m) break;
+                        var openBase = ol.BaseQuantity - ol.DeliveredQuantity;
+                        if (openBase <= 0m) continue;
+                        var allocBase = Math.Round(Math.Min(remaining, openBase), 4);
+                        if (allocBase <= 0m) continue;
+                        allocs.Add(new FifoAlloc(ol, allocBase));
+                        remaining -= allocBase;
+                    }
+                }
+                var unlinked = remaining > 0.00005m ? Math.Round(remaining, 4) : 0m;
+                plan.Add(new FifoPlanItem(a.ItemId, a.UnitId, a.FallbackPrice, a.Name, allocs, unlinked));
+            }
+
+            // 2) Bağlantısız-yasak kontrolü — hiçbir şey yazmadan önce (fail-safe). İhlalde TÜM
+            //    kayıt reddedilir; hangi malzemelerin eşleşmediği net Türkçe mesajda listelenir.
+            if (forbidUnlinked)
+            {
+                var unmatched = plan.Where(p => p.Unlinked > 0m)
+                    .Select(p => p.Name ?? $"#{p.ItemId}").ToList();
+                if (unmatched.Count > 0)
+                {
+                    var kind = isPurchase ? "satın alma siparişi" : "satış siparişi";
+                    throw new InvalidOperationException(
+                        $"Sipariş bağlantısız teslimat kapalı. Şu malzeme(ler) için eşleşen açık {kind} kalemi bulunamadı: {string.Join(", ", unmatched)}. Kayıt yapılmadı.");
+                }
+            }
+
+            // 3) İrsaliye başlığı — numara + cari. Tek kaynak sipariş varsa ParentDocumentId set
+            //    edilir (çok sipariş → per-satır SourceLineId asıl bağdır, ParentDocumentId null).
+            var distinctOrderIds = plan.SelectMany(p => p.Allocs).Select(x => x.Line.OrderId).Distinct().ToList();
+            int? parentId = distinctOrderIds.Count == 1 ? distinctOrderIds[0] : (int?)null;
+            var docNo = await ResolveDocNoByCodeAsync(conn, tx, targetType, prefix, createdById, docDate, ct);
+            var notes = string.IsNullOrWhiteSpace(note)
+                ? (isPurchase ? "Mobil alış irsaliyesi (mal kabul)" : "Mobil satış irsaliyesi (teslimat)")
+                : note.Trim();
+            int docId;
+            await using (var ins = conn.CreateCommand())
+            {
+                ins.Transaction = tx;
+                // ContactName Document'ta KOLON DEĞİL (ContactId JOIN'iyle çözülür) — yazılmaz.
+                // CurrencyId mobil V1'de şirket varsayılanı (1) — SaveQuoteAsync fallback'iyle aynı.
+                ins.CommandText = $"""
+                    INSERT INTO {T("Document")}
+                        ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
+                         [ContactId],[CurrencyId],
+                         [SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
+                         [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
+                    SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, NULL,
+                           @ContactId, 1,
+                           0, 0, 0, 0, 0, 0,
+                           @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @ParentId
+                    FROM {T("DocumentType")} dt WHERE dt.[Code] = @TargetType;
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
+                    """;
+                ins.Parameters.AddWithValue("@CompanyId", companyId);
+                ins.Parameters.AddWithValue("@DocNo", docNo);
+                ins.Parameters.AddWithValue("@DocDate", docDate);
+                ins.Parameters.AddWithValue("@ContactId", contactId);
+                ins.Parameters.AddWithValue("@Notes", notes);
+                ins.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@ParentId", (object?)parentId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@TargetType", targetType);
+                docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
+            }
+
+            // 4) Kalem yazımı: her bağlanan tahsis → ana birimde hareket satırı (SourceLineId) +
+            //    sipariş satırı DeliveredQuantity artışı; her bağlantısız kalan → kaynaksız satır.
+            var lineNo = 1;
+            var decreases = new HashSet<(int ItemId, int LocId)>();
+            decimal subTotal = 0m;
+            var resultLines = new List<MobileDeliveryLineResult>();
+            foreach (var p in plan)
+            {
+                var linkSummary = new List<MobileDeliveryLineLink>();
+
+                // 4a) Bağlanan (sipariş) satırları — ConvertOrderToDeliveryAsync ile aynı formüller
+                //     (birim çevrim faktörü, orantılı LineTotal, kapanışta DeliveredQuantity=BaseQuantity).
+                foreach (var alloc in p.Allocs)
+                {
+                    var ol = alloc.Line;
+                    var openBase = ol.BaseQuantity - ol.DeliveredQuantity;
+                    var closes = alloc.AllocBase >= openBase - 0.00005m;   // tümünü tüketti → satırı kapat
+                    var deliverBase = closes ? openBase : alloc.AllocBase;
+                    var factor = ol.Quantity != 0m ? ol.BaseQuantity / ol.Quantity : 1m;
+                    var deliverQtyDisplay = Math.Round(factor != 0m ? deliverBase / factor : deliverBase, 4);
+                    var lineTotal = ol.BaseQuantity != 0m
+                        ? Math.Round(ol.LineTotal * deliverBase / ol.BaseQuantity, 4)
+                        : ol.LineTotal;
+                    if (!ol.LocId.HasValue)
+                        throw new InvalidOperationException(
+                            $"Sipariş kaleminde (#{ol.OrderNo}) depo tanımlı değil; irsaliye için kalem veya belge deposu gerekli.");
+                    subTotal += lineTotal;
+
+                    await using (var li = conn.CreateCommand())
+                    {
+                        li.Transaction = tx;
+                        // Satış=çıkış → FromLocationId; alış=giriş → LocationId. MovementType yönü belirler.
+                        li.CommandText = $"""
+                            INSERT INTO {T("DocumentLine")}
+                                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
+                            VALUES
+                                (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
+                                 @CombId,@FromLoc,@ToLoc,@Mt,@SourceLineId,@Notes);
+                            """;
+                        li.Parameters.AddWithValue("@DocId", docId);
+                        li.Parameters.AddWithValue("@LineNo", lineNo++);
+                        li.Parameters.AddWithValue("@ItemId", p.ItemId);
+                        li.Parameters.AddWithValue("@UnitId", (object?)ol.UnitId ?? DBNull.Value);
+                        li.Parameters.AddWithValue("@Qty", deliverQtyDisplay);
+                        li.Parameters.AddWithValue("@BaseQty", deliverBase);
+                        li.Parameters.AddWithValue("@UnitPrice", ol.UnitPrice);
+                        li.Parameters.AddWithValue("@DiscRate", ol.DiscountRate);
+                        li.Parameters.AddWithValue("@LineTotal", lineTotal);
+                        li.Parameters.AddWithValue("@CombId", (object?)ol.CombinationId ?? DBNull.Value);
+                        li.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : ol.LocId.Value);
+                        li.Parameters.AddWithValue("@ToLoc",   isPurchase ? ol.LocId.Value : (object)DBNull.Value);
+                        li.Parameters.AddWithValue("@Mt", movementType);
+                        li.Parameters.AddWithValue("@SourceLineId", ol.Id);
+                        li.Parameters.AddWithValue("@Notes", $"Sipariş #{ol.OrderNo} → irsaliye (mobil)");
+                        await li.ExecuteNonQueryAsync(ct);
+                    }
+                    await using (var upd = conn.CreateCommand())
+                    {
+                        upd.Transaction = tx;
+                        upd.CommandText = closes
+                            ? $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [BaseQuantity] WHERE [Id] = @LineId;"
+                            : $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [DeliveredQuantity] + @Add WHERE [Id] = @LineId;";
+                        upd.Parameters.AddWithValue("@LineId", ol.Id);
+                        if (!closes) upd.Parameters.AddWithValue("@Add", deliverBase);
+                        await upd.ExecuteNonQueryAsync(ct);
+                    }
+                    if (!isPurchase) decreases.Add((p.ItemId, ol.LocId.Value));
+                    linkSummary.Add(new MobileDeliveryLineLink(ol.OrderNo, deliverBase));
+                }
+
+                // 4b) Bağlantısız (artan) kalan — malzemenin varsayılan deposuna (ItemLocation.IsDefault).
+                //     Varsayılan depo yoksa reddedilir (bağlantısız satır için depo belirlenemez).
+                if (p.Unlinked > 0m)
+                {
+                    int? defLoc = null;
+                    await using (var lc = conn.CreateCommand())
+                    {
+                        lc.Transaction = tx;
+                        lc.CommandText = $"SELECT TOP 1 [LocationId] FROM {T("ItemLocation")} WHERE [ItemId] = @It AND [IsDefault] = 1 ORDER BY [Id];";
+                        lc.Parameters.AddWithValue("@It", p.ItemId);
+                        var o = await lc.ExecuteScalarAsync(ct);
+                        if (o is int loc) defLoc = loc;
+                    }
+                    if (!defLoc.HasValue)
+                        throw new InvalidOperationException(
+                            $"'{p.Name ?? ("#" + p.ItemId)}' için varsayılan depo tanımlı değil; sipariş bağlantısız teslimat yapılamaz (Malzeme kartı → Depo → Varsayılan).");
+                    var price = p.FallbackPrice;
+                    var lineTotal = Math.Round(p.Unlinked * price, 4);
+                    subTotal += lineTotal;
+                    await using (var li = conn.CreateCommand())
+                    {
+                        li.Transaction = tx;
+                        li.CommandText = $"""
+                            INSERT INTO {T("DocumentLine")}
+                                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
+                            VALUES
+                                (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,0,@LineTotal,
+                                 NULL,@FromLoc,@ToLoc,@Mt,NULL,@Notes);
+                            """;
+                        li.Parameters.AddWithValue("@DocId", docId);
+                        li.Parameters.AddWithValue("@LineNo", lineNo++);
+                        li.Parameters.AddWithValue("@ItemId", p.ItemId);
+                        li.Parameters.AddWithValue("@UnitId", (object?)p.UnitId ?? DBNull.Value);
+                        li.Parameters.AddWithValue("@Qty", p.Unlinked);
+                        li.Parameters.AddWithValue("@BaseQty", p.Unlinked);
+                        li.Parameters.AddWithValue("@UnitPrice", price);
+                        li.Parameters.AddWithValue("@LineTotal", lineTotal);
+                        li.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : defLoc.Value);
+                        li.Parameters.AddWithValue("@ToLoc",   isPurchase ? defLoc.Value : (object)DBNull.Value);
+                        li.Parameters.AddWithValue("@Mt", movementType);
+                        li.Parameters.AddWithValue("@Notes", "Sipariş bağlantısız (mobil)");
+                        await li.ExecuteNonQueryAsync(ct);
+                    }
+                    if (!isPurchase) decreases.Add((p.ItemId, defLoc.Value));
+                }
+
+                resultLines.Add(new MobileDeliveryLineResult(p.ItemId, linkSummary, p.Unlinked));
+            }
+
+            // 5) Başlık tutarları — kalem toplamlarından. Mobil V1: başlık iskonto/vergi taşımaz
+            //    (çok siparişli FIFO'da başlık oranı belirsiz; irsaliye öncelikle stok belgesi).
+            await using (var uh = conn.CreateCommand())
+            {
+                uh.Transaction = tx;
+                uh.CommandText = $"UPDATE {T("Document")} SET [SubTotal]=@Sub, [DiscountAmount]=0, [TaxAmount]=0, [GrandTotal]=@Sub WHERE [Id]=@DocId;";
+                uh.Parameters.AddWithValue("@Sub", Math.Round(subTotal, 4));
+                uh.Parameters.AddWithValue("@DocId", docId);
+                await uh.ExecuteNonQueryAsync(ct);
+            }
+
+            // 6) Eksi bakiye kontrolü — yalnız satış (çıkış). Giriş bakiyeyi artırır.
+            if (!isPurchase)
+                foreach (var (it, loc) in decreases)
+                    await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, it, loc, docDate, ct);
+
+            await tx.CommitAsync(ct);
+            return new MobileDeliveryResult(docId, docNo, distinctOrderIds, resultLines);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     // İrsaliyenin (satış çıkış) her satırı için kaynak sipariş satırının serilerini
     // Issued(2) yapar + irsaliye satırına bağlar (InStock/Reserved kabul; Issued atlanır).
     // KISMİ TESLİMAT: yalnızca teslim edilen adet (irsaliye satırı BaseQuantity) kadar seri düşülür;

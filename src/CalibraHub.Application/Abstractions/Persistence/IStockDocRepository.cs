@@ -54,6 +54,24 @@ public interface IStockDocRepository
     Task ReleaseOrderSerialReservationsAsync(int documentId, CancellationToken ct);
 
     /// <summary>
+    /// Mobil FIFO teslimat (2026-07-16): cari + malzeme miktarlarından tek transaction'da stok etkili
+    /// irsaliye (satis_irsaliyesi / alis_irsaliyesi) yazar. <paramref name="fifoEnabled"/> açıksa her
+    /// malzemenin miktarı carinin AÇIK sipariş satırlarına (aynı malzeme, kalan > 0) belge tarihi/numarası
+    /// ARTAN sırada tahsis edilir; bir malzeme birden çok siparişe bölünebilir (sipariş satırı başına ayrı
+    /// irsaliye satırı). Kaynak bağı web kısmi-teslimatıyla BİREBİR AYNI: irsaliye satırı SourceLineId +
+    /// sipariş satırı DeliveredQuantity. Artan (bağlanamayan) miktar bağlantısız satır olur (fiyat =
+    /// <see cref="MobileDeliveryLineInput.FallbackUnitPrice"/>, depo = malzemenin varsayılan deposu;
+    /// varsayılan depo yoksa InvalidOperationException). <paramref name="forbidUnlinked"/> açıksa herhangi
+    /// bir malzemede bağlantısız miktar kalırsa hiçbir şey yazılmadan InvalidOperationException fırlatılır.
+    /// Satış (çıkış, MovementType=1) NegativeBalanceGuard uygular; alış (giriş, MovementType=2) uygulamaz.
+    /// Numara ResolveDocNoByCode ile üretilir. Miktarlar ana birimdedir (BaseQuantity).
+    /// </summary>
+    Task<MobileDeliveryResult> SaveDeliveryFifoAsync(
+        bool isPurchase, int contactId, string? note,
+        IReadOnlyList<MobileDeliveryLineInput> lines,
+        bool fifoEnabled, bool forbidUnlinked, int? createdById, CancellationToken ct);
+
+    /// <summary>
     /// Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) — tek transaction'da: iş emrinin
     /// belgesine MovementType=1 (çıkış) satırları yazar; lot/seri kurallarını stok çıkışıyla
     /// birebir uygular (lot-takipli → mevcut lot zorunlu, seri-takipli → stoktaki InStock
