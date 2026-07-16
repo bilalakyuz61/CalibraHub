@@ -145,6 +145,7 @@
             <label for="pe-email">E-posta</label>
             <input id="pe-email" type="email" maxlength="150"
                    value="@(Model?.Email ?? "")" placeholder="ornek@firma.com" />
+            <span class="ux-hint" id="pe-email-linked-hint" style="display:none;">E-posta bağlı sistem kullanıcısından alınır.</span>
           </div>
         </div>
 
@@ -333,11 +334,48 @@
         }
     })();
 
-    // ── Sistem Kullanıcısı dropdown ──
+    // ── Sistem Kullanıcısı dropdown (+ E-posta otomatik bağlama) ──
+    // Kural: bir kullanıcı seçiliyken E-posta alanı o kullanıcının mailiyle
+    // dolar ve disable olur (source-of-truth kullanıcı hesabı). Seçim
+    // temizlenince alan tekrar enable olur, mevcut değer korunur.
+    function applyUserEmailLink() {
+        var userSel  = document.getElementById('pe-user');
+        var emailInp = document.getElementById('pe-email');
+        var hint     = document.getElementById('pe-email-linked-hint');
+        if (!userSel || !emailInp) return;
+
+        if (!userSel.value) {
+            // Bağ yok/temizlendi — daha önce kilitlenmişse aç, değeri koru.
+            if (emailInp.disabled) emailInp.disabled = false;
+            if (hint) hint.style.display = 'none';
+            return;
+        }
+
+        var opt = userSel.options[userSel.selectedIndex];
+        var email = opt ? (opt.getAttribute('data-email') || '') : '';
+        if (!email && opt) {
+            // Fallback: "Ad (email)" etiketinden parantez içini parse et.
+            var m = /\(([^()]+)\)\s*$/.exec(opt.textContent || '');
+            if (m && m[1] && m[1].indexOf('@') > -1) email = m[1].trim();
+        }
+
+        if (!email) {
+            // Bağlı kullanıcının kayıtlı e-postası yok — mevcut serbest girişi bozma.
+            if (emailInp.disabled) emailInp.disabled = false;
+            if (hint) hint.style.display = 'none';
+            return;
+        }
+
+        emailInp.value = email;
+        emailInp.disabled = true;
+        if (hint) hint.style.display = '';
+    }
+
     (function loadUsers() {
         var sel = document.getElementById('pe-user');
         if (!sel) return;
         var current = sel.getAttribute('data-current') || '';
+        sel.addEventListener('change', applyUserEmailLink);
         fetch('/CompanyUser/UsersLookup', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (list) {
@@ -345,13 +383,18 @@
                 (list || []).forEach(function (u) {
                     var s = (current && String(u.id) === String(current)) ? ' selected' : '';
                     var label = u.name + (u.email ? ' (' + u.email + ')' : '');
-                    opts.push('<option value="' + u.id + '"' + s + '>' + escUser(label) + '</option>');
+                    opts.push('<option value="' + u.id + '"' + s + ' data-email="' + escAttr(u.email || '') + '">' + escUser(label) + '</option>');
                 });
                 sel.innerHTML = opts.join('');
+                // Edit-load: kayıt açılışında kullanıcı zaten bağlıysa aynı kural (doldur+disable).
+                applyUserEmailLink();
             })
             .catch(function () { /* sessiz */ });
         function escUser(s) {
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function escAttr(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
         }
     })();
 

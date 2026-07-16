@@ -273,6 +273,34 @@ export function resolveColorForTheme(colorName, dataType, isDark) {
 }
 
 /**
+ * 'phone' dataType icin mini TR format fonksiyonu — bundle bagimsiz calisir.
+ * window.CalibraPhone (wwwroot/js/calibra-phone.js, global <script> enhancer)
+ * yuklenmisse formatValue onu kullanir (tek kaynak, ayni algoritma); bu SmartBoard
+ * React bundle'i o script'ten once veya ondan bagimsiz da calisabildigi icin
+ * ayni 10-hane algoritmasi burada lokal olarak tekrar edilir (2026-07-16).
+ */
+function formatPhoneMini(raw) {
+  if (raw == null) return ''
+  var s = String(raw)
+  var d = s.replace(/\D+/g, '')
+  if (!d) return s
+  var work = d
+  if (work.length >= 12 && work.indexOf('90') === 0) work = work.substring(2)
+  while (work.length > 1 && work.charAt(0) === '0') work = work.substring(1)
+  if (work === '0') return '0'
+  if (work.length > 10) return s
+  if (work.length === 0) return ''
+  var out = '0 (' + work.substring(0, Math.min(3, work.length))
+  if (work.length <= 3) return out
+  out += ') ' + work.substring(3, Math.min(6, work.length))
+  if (work.length <= 6) return out
+  out += ' ' + work.substring(6, Math.min(8, work.length))
+  if (work.length <= 8) return out
+  out += ' ' + work.substring(8, 10)
+  return out
+}
+
+/**
  * Raw value'yu dataType'a gore formatlar.
  * Value zaten formatlanmissa (string ve dataType text/status) oldugu gibi doner.
  */
@@ -280,6 +308,12 @@ export function formatValue(value, dataType) {
   if (value == null || value === '') return ''
   try {
     switch (dataType) {
+      case 'phone': {
+        if (typeof window !== 'undefined' && window.CalibraPhone && typeof window.CalibraPhone.format === 'function') {
+          return window.CalibraPhone.format(value)
+        }
+        return formatPhoneMini(value)
+      }
       case 'numeric': {
         var n = typeof value === 'number' ? value : parseFloat(value)
         if (isNaN(n)) return String(value)
