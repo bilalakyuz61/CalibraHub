@@ -934,7 +934,9 @@
                                 <div class="wa-connect-col__title">🔢 Telefon Kodu ile Bağlan</div>
                                 <div class="wa-connect-col__hint">WhatsApp → Bağlı Cihazlar → Cihaz Bağla → Telefon numarasıyla bağla</div>
                                 <div style="display:flex; gap:8px; align-items:center;">
-                                    <input type="tel" class="form-control form-control-sm" id="waPairPhone"
+                                    @* data-native-phone: global calibra-phone.js maskesi BU alana dokunmasin —
+                                       WhatsApp eslestirme ayracsiz uluslararasi format ister (905XXXXXXXXX). *@
+                                    <input type="tel" class="form-control form-control-sm" id="waPairPhone" data-native-phone
                                            placeholder="905XXXXXXXXX (ülke kodu, +'sız)" maxlength="14" style="flex:1;" />
                                     <button type="button" class="btn btn-sm" id="waPairBtn"
                                             style="background:linear-gradient(135deg,#25d366,#128c7e); color:#fff; border:none; padding:6px 16px; border-radius:6px; font-weight:600; white-space:nowrap;">
