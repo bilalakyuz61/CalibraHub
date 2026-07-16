@@ -27,10 +27,11 @@ namespace CalibraHub.Web.Controllers;
 /// hesaplanir — masaustu ile birebir ayni bakiye sayisi.
 ///
 /// Endpoint'ler:
-///   GET  /api/mobile/warehouse/locations   — aktif (yaprak) lokasyon listesi
-///   GET  /api/mobile/warehouse/stock       — malzeme kodu → lokasyon bazli stok bakiyesi
-///   POST /api/mobile/warehouse/stock-in    — depo giris belgesi (Increment 2)
-///   POST /api/mobile/warehouse/stock-out   — depo cikis belgesi (Increment 2)
+///   GET  /api/mobile/warehouse/locations     — aktif (yaprak) lokasyon listesi
+///   GET  /api/mobile/warehouse/stock         — malzeme kodu → lokasyon bazli stok bakiyesi
+///   GET  /api/mobile/warehouse/items/search  — malzeme arama (kod/ad LIKE, aranabilir rehber)
+///   POST /api/mobile/warehouse/stock-in      — depo giris belgesi (Increment 2)
+///   POST /api/mobile/warehouse/stock-out     — depo cikis belgesi (Increment 2)
 ///
 /// Yetki (2026-07-16): [Authorize] tek basina yeterli DEGIL — her endpoint merkezi
 /// IPermissionService.CheckAnyAsync'ten gecer (bkz. RequirePermissionAsync). Okuma
