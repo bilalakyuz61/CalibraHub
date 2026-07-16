@@ -149,7 +149,7 @@ function SectionHead({ children }) {
 function FormProps({ defName, defDesc, wfId, wfOptions, onName, onDesc, onWf, dirty }) {
   return (
     <div className="bpmd-props-body">
-      <SectionHead>GENEL</SectionHead>
+      <SectionHead>Genel</SectionHead>
       <label className="bpmd-prop-label">Form Adı</label>
       <input className="bpmd-prop-input" value={defName} placeholder="Form adı…"
         onChange={e => onName(e.target.value)} />
@@ -157,7 +157,7 @@ function FormProps({ defName, defDesc, wfId, wfOptions, onName, onDesc, onWf, di
       <textarea className="bpmd-prop-input" rows={3} value={defDesc} placeholder="Form açıklaması…"
         onChange={e => onDesc(e.target.value)} />
 
-      <SectionHead style={{ marginTop: 16 }}>BAĞLANTI</SectionHead>
+      <SectionHead style={{ marginTop: 16 }}>Bağlantı</SectionHead>
       <label className="bpmd-prop-label">Workflow</label>
       <select className="bpmd-prop-input" value={wfId} onChange={e => onWf(e.target.value)}>
         <option value="">— Bağlama —</option>
@@ -177,7 +177,7 @@ function FieldProps({ field, onChange }) {
   function upd(k, v) { onChange({ ...field, [k]: v }) }
   return (
     <div className="bpmd-props-body">
-      <SectionHead>GENEL</SectionHead>
+      <SectionHead>Genel</SectionHead>
       <label className="bpmd-prop-label">Etiket</label>
       <input className="bpmd-prop-input" value={field.label}
         onChange={e => { upd('label', e.target.value); upd('key', toKey(e.target.value)) }} />
@@ -192,7 +192,7 @@ function FieldProps({ field, onChange }) {
         {FIELD_TYPES.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
       </select>
 
-      <SectionHead style={{ marginTop: 14 }}>BOYUT</SectionHead>
+      <SectionHead style={{ marginTop: 14 }}>Boyut</SectionHead>
       <div className="bpmd-span-btns">
         {SPAN_OPTIONS.map(opt => (
           <button key={opt.span}
@@ -203,7 +203,7 @@ function FieldProps({ field, onChange }) {
         ))}
       </div>
 
-      <SectionHead style={{ marginTop: 14 }}>GELİŞMİŞ</SectionHead>
+      <SectionHead style={{ marginTop: 14 }}>Gelişmiş</SectionHead>
       {field.fieldType === 'Dropdown' && (
         <>
           <label className="bpmd-prop-label">Seçenekler (her satıra bir)</label>
@@ -504,12 +504,12 @@ export default function BpmFormDesigner({ formId }) {
 
           {/* ── Left panel ───────────────────────────────────────────────── */}
           <div className="bpmd-left">
-            <SectionHead>ARAÇLAR</SectionHead>
+            <SectionHead>Araçlar</SectionHead>
             <div className="bpmd-tool-grid">
               {FIELD_TYPES.map(t => <ToolItem key={t.type} fieldType={t.type} />)}
             </div>
 
-            <SectionHead style={{ marginTop: 20 }}>FORM YAPISI</SectionHead>
+            <SectionHead style={{ marginTop: 20 }}>Form Yapısı</SectionHead>
             <div className="bpmd-structure-list">
               {visualRows.map((rowFields, rowIdx) => (
                 <div key={rowIdx} className="bpmd-structure-item">
