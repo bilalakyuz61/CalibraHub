@@ -1,10 +1,13 @@
 using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Constants;
+using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Application.Services;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Domain.Exceptions;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using Microsoft.AspNetCore.Authorization;
@@ -24,14 +27,23 @@ namespace CalibraHub.Web.Controllers;
 /// hesaplanir — masaustu ile birebir ayni bakiye sayisi.
 ///
 /// Endpoint'ler:
-///   GET /api/mobile/warehouse/locations   — aktif (yaprak) lokasyon listesi
-///   GET /api/mobile/warehouse/stock       — malzeme kodu → lokasyon bazli stok bakiyesi
+///   GET  /api/mobile/warehouse/locations   — aktif (yaprak) lokasyon listesi
+///   GET  /api/mobile/warehouse/stock       — malzeme kodu → lokasyon bazli stok bakiyesi
+///   POST /api/mobile/warehouse/stock-in    — depo giris belgesi (Increment 2)
+///   POST /api/mobile/warehouse/stock-out   — depo cikis belgesi (Increment 2)
 ///
 /// Yetki (2026-07-16): [Authorize] tek basina yeterli DEGIL — her endpoint merkezi
 /// IPermissionService.CheckAnyAsync'ten gecer (bkz. RequirePermissionAsync). Okuma
 /// endpoint'leri dort depo ekran kodundan (STOCK_IN/STOCK_OUT/TRANSFER/INVENTORY_COUNT)
-/// herhangi birinde VIEW|VIEW_OWN ister; Increment 2 yazma endpoint'leri ayni helper'i
-/// belge turunun kendi FormCode'u + CREATE/EDIT_*/DELETE_* ile cagirmali.
+/// herhangi birinde VIEW|VIEW_OWN ister; yazma endpoint'leri belge turunun kendi
+/// FormCode'u (StockIn/StockOut) + CREATE|EDIT_OWN|EDIT_ALL ister — web'de
+/// WarehouseController.SaveDocJson'in kullandigi aksiyon setiyle birebir ayni.
+///
+/// Yazma is mantigi (Increment 2): yeni stok-hareket mantigi YAZILMADI — web'in
+/// SaveDocJson'i hangi akisi kullaniyorsa o cagrilir (IStockDocRepository.SaveAsync:
+/// belge + kalem yazimi, BaseQuantity normalizasyonu, NegativeBalanceGuard, lot/seri
+/// dogrulamalari tek transaction'da). Mobil V1 kapsam karari: lot/seri (ve varyant)
+/// takipli malzeme kibarca reddedilir — bu belgeler web'den girilir.
 /// </summary>
 [ApiController]
 [Route("api/mobile/warehouse")]
@@ -41,25 +53,34 @@ namespace CalibraHub.Web.Controllers;
 public sealed class MobileWarehouseApiController : ControllerBase
 {
     private readonly ILogisticsConfigurationService _logisticsService;
+    private readonly ILogisticsConfigurationRepository _logisticsRepo;
     private readonly ICompanyParameterService _companyParams;
     private readonly IDocumentTypeRepository _documentTypeRepo;
+    private readonly IStockDocRepository _stockDocRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IPermissionService _permService;
+    private readonly IAuditTrailService _audit;
     private readonly string _schema;
 
     public MobileWarehouseApiController(
         ILogisticsConfigurationService logisticsService,
+        ILogisticsConfigurationRepository logisticsRepo,
         ICompanyParameterService companyParams,
         IDocumentTypeRepository documentTypeRepo,
+        IStockDocRepository stockDocRepo,
         SqlServerConnectionFactory connectionFactory,
         IPermissionService permService,
+        IAuditTrailService audit,
         CalibraDatabaseOptions dbOptions)
     {
         _logisticsService  = logisticsService;
+        _logisticsRepo     = logisticsRepo;
         _companyParams     = companyParams;
         _documentTypeRepo  = documentTypeRepo;
+        _stockDocRepo      = stockDocRepo;
         _connectionFactory = connectionFactory;
         _permService       = permService;
+        _audit             = audit;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -318,5 +339,178 @@ public sealed class MobileWarehouseApiController : ControllerBase
             });
         }
         return result;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // POST stock-in / stock-out (Increment 2 — depo giris/cikis yazma)
+    // ──────────────────────────────────────────────────────────────────────
+    // Sozlesme (mobil istemci birebir tuketir):
+    //   body: { locationId:int, lines:[{ itemId:int, quantity:number }], note?:string }
+    //   200 { ok:true,  docId:int, docNumber:string }
+    //   200 { ok:false, error:string }   — is kurali reddi (yetersiz stok, lot/seri, validasyon)
+    //   403 { ok:false, message, error } — yetki yok (RequirePermissionAsync govdesi)
+    //
+    // Is mantigi web ile AYNI KAPI: WarehouseController.SaveDocJson'in cagirdigi
+    // IStockDocRepository.SaveAsync kullanilir — DocNo uretimi, BaseQuantity (ana birim)
+    // normalizasyonu, NegativeBalanceGuard (cikis) ve lot/seri dogrulamalari repo
+    // transaction'inda calisir. Mobil yalnizca sade DTO'yu SaveStockDocRequest'e map eder.
+
+    /// <summary>Mobil kalem — itemId, /warehouse/stock yanitindaki itemId'den gelir (kod cozumu orada yapildi).</summary>
+    public sealed record MobileStockDocLineRequest(int ItemId, decimal Quantity);
+
+    /// <summary>Mobil giris/cikis istegi — tek lokasyon + kalemler (+ opsiyonel not).</summary>
+    public sealed record MobileStockDocRequest(int LocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note);
+
+    /// <summary>Yazma aksiyon seti — web SaveDocJson ile birebir ayni (CREATE veya kendi/tum kayit duzenleme).</summary>
+    private static readonly string[] WriteActions = { "CREATE", "EDIT_OWN", "EDIT_ALL" };
+
+    /// <summary>Depo giris belgesi (STOCK_IN) — kalemler hedef lokasyona (+) yazilir.</summary>
+    [HttpPost("stock-in")]
+    public Task<IActionResult> StockIn([FromBody] MobileStockDocRequest? body, CancellationToken ct)
+        => SaveStockDocAsync("STOCK_IN", body, ct);
+
+    /// <summary>Depo cikis belgesi (STOCK_OUT) — kalemler kaynak lokasyondan (-) dusulur; eksi bakiye guard'i calisir.</summary>
+    [HttpPost("stock-out")]
+    public Task<IActionResult> StockOut([FromBody] MobileStockDocRequest? body, CancellationToken ct)
+        => SaveStockDocAsync("STOCK_OUT", body, ct);
+
+    private async Task<IActionResult> SaveStockDocAsync(string docType, MobileStockDocRequest? body, CancellationToken ct)
+    {
+        // Yetki: belge turunun KENDI form kodu (paylasilan okuma setinden farkli) + yazma aksiyonlari.
+        var formCode = docType == "STOCK_OUT" ? FormCodes.StockOut : FormCodes.StockIn;
+        if (await RequirePermissionAsync(new[] { formCode }, WriteActions, ct) is { } denied)
+            return denied;
+
+        // Validasyon — repo qty<=0 / itemId'siz satiri SESSIZCE atlar; mobilde sessiz kalem
+        // kaybi (hatta bos belge yazimi) kabul edilemez, o yuzden burada acikca reddedilir.
+        if (body is null || body.LocationId <= 0)
+            return Ok(new { ok = false, error = "Lokasyon seçimi zorunlu." });
+
+        var lines = (body.Lines ?? Array.Empty<MobileStockDocLineRequest>()).Where(l => l is not null).ToList();
+        if (lines.Count == 0)
+            return Ok(new { ok = false, error = "En az bir kalem girilmelidir." });
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].ItemId <= 0)
+                return Ok(new { ok = false, error = $"Kalem {i + 1}: geçersiz malzeme." });
+            if (lines[i].Quantity <= 0)
+                return Ok(new { ok = false, error = $"Kalem {i + 1}: miktar 0'dan büyük olmalı." });
+        }
+
+        // Malzeme dogrulama + V1 kapsam reddi. Takip tipi kaynagi: Items.TrackingType
+        // ("None" | "Lot" | "Serial", bkz. Domain.Entities.Item) — web grid'inin
+        // GetMaterialsJson'da okudugu alanin aynisi. GetItemsByIdsAsync yalnizca istenen
+        // id'leri ceker (50K kartli kurumda full-table okumamak icin; rapor 2026-05-17 3.10).
+        // NOT: GetItemsForLookupAsync BILINCLI kullanilmadi — o projeksiyon TrackingType'i
+        // doldurmaz (her kayit "None" default'una duser), takip kontrolu sessizce delinirdi.
+        var items = await _logisticsRepo.GetItemsByIdsAsync(lines.Select(l => l.ItemId), ct);
+        var itemMap = items.ToDictionary(x => x.Id);
+        foreach (var line in lines)
+        {
+            if (!itemMap.TryGetValue(line.ItemId, out var item) || !item.IsActive)
+                return Ok(new { ok = false, error = $"Malzeme bulunamadı veya pasif (Id: {line.ItemId})." });
+
+            // Mobil V1: lot/seri takipli malzeme reddi (lider karari) — sade {itemId, quantity}
+            // DTO'su lot secimi/seri listesi tasiyamaz; repo dogrulamasina carpip kriptik
+            // hata almak yerine kibar ve yonlendirici mesajla reddedilir.
+            if (string.Equals(item.TrackingType, "Lot", StringComparison.OrdinalIgnoreCase))
+                return Ok(new { ok = false, error = $"'{item.Code}' lot takipli — işlemi web'den yapın." });
+            if (string.Equals(item.TrackingType, "Serial", StringComparison.OrdinalIgnoreCase))
+                return Ok(new { ok = false, error = $"'{item.Code}' seri takipli — işlemi web'den yapın." });
+
+            // Varyantli (kombinasyon) malzemede CombinationId'siz satir, web'in kombinasyon
+            // kirilimli izlemesini bozar — ayni V1 kapsam reddi uygulanir (backend karari,
+            // rapora not edildi; V2'de kombinasyon secici eklenince kaldirilir).
+            if (item.Combinations)
+                return Ok(new { ok = false, error = $"'{item.Code}' varyant (kombinasyon) takipli — işlemi web'den yapın." });
+        }
+
+        // Web StockDocEdit'in gonderdigi sekle map: STOCK_IN → ToLocationId, STOCK_OUT →
+        // FromLocationId (bakiye cebirinde giris LocationId'ye +, cikis FromLocationId'den -).
+        // UnitId = kartin ana birimi: mobil miktari ana birimde girer (GET /stock bakiyeleri de
+        // ana birimde) → BaseQuantity carpani 1, web edit ekrani/audit birimi dogru gosterir.
+        var request = new SaveStockDocRequest(
+            Id: null,
+            DocType: docType,
+            DocNo: null,                       // repo uretir (ResolveDocNoAsync)
+            DocDate: DateTime.UtcNow,          // repo .Date alir — web de UTC now gonderiyor
+            FromLocationId: docType == "STOCK_OUT" ? body.LocationId : null,
+            ToLocationId: docType == "STOCK_IN" ? body.LocationId : null,
+            RefNo: null,
+            Notes: string.IsNullOrWhiteSpace(body.Note) ? null : body.Note.Trim(),
+            Lines: lines.Select(l => new SaveStockDocLineRequest(
+                Id: null,
+                ItemId: l.ItemId,
+                MaterialCode: null,
+                MaterialName: null,
+                UnitId: itemMap[l.ItemId].UnitId,
+                Qty: l.Quantity,
+                CombinationId: null,
+                Notes: null,
+                FromLocationId: null,          // null → header lokasyonuna duser (repo davranisi)
+                ToLocationId: null,
+                UnitCost: null)).ToList(),
+            ArgeProjectId: null);
+
+        try
+        {
+            var (userId, _, _) = GetCurrentUser();
+            var (id, docNo) = await _stockDocRepo.SaveAsync(request, userId > 0 ? userId : null, ct);
+            await LogStockDocInsertAsync(docType, request, id, docNo, ct);
+            return Ok(new { ok = true, docId = id, docNumber = docNo });
+        }
+        catch (NegativeBalanceException nbex)
+        {
+            // Eksi bakiye — ProductionController.ShopFloorIssueComponent ile ayni yakalama
+            // deseni: guard mesaji kullaniciya aynen gosterilir.
+            return Ok(new { ok = false, error = nbex.Message });
+        }
+        catch (InvalidOperationException ioex)
+        {
+            // Repo dogrulama mesajlari (lot zorunlulugu vb.) — ust kontroller kacirirsa
+            // son savunma hatti; mesaj kullaniciya aynen gosterilir (web SaveDocJson paritesi).
+            return Ok(new { ok = false, error = ioex.Message });
+        }
+        catch (Exception)
+        {
+            return Ok(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Islem logu (CLAUDE.md audit kurali) — web LogStockDocSaveAsync'in Insert dalinin
+    /// mobil karsiligi: ayni entity kodlari (depo_giris/depo_cikis), ayni "ilk deger dokumu +
+    /// kalem satirlari" bicimi; /AuditLog ekrani iki kanali ayni zaman cizelgesinde gosterir.
+    /// Src="Mobile" damgasi kaydin mobilden geldigini ayirt eder. Audit hatasi kaydi asla bozmaz.
+    /// </summary>
+    private async Task LogStockDocInsertAsync(
+        string docType, SaveStockDocRequest request, int id, string docNo, CancellationToken ct)
+    {
+        try
+        {
+            var entity = docType == "STOCK_OUT" ? "depo_cikis" : "depo_giris";
+            IReadOnlyList<StockDocLineDto>? insertedLines = null;
+            try { insertedLines = await _stockDocRepo.GetLinesAsync(id, ct); } catch { }
+
+            _audit.LogInsert(entity, id, docNo,
+                detail: $"{request.Lines?.Count ?? 0} kalem",
+                actor: new AuditActor(Source: "Mobile"),
+                snapshot: new
+                {
+                    DocumentDate = request.DocDate.Date,
+                    // Cikista kaynak, giriste hedef — kullanicinin sectigi lokasyon.
+                    LocationId = docType == "STOCK_OUT" ? request.FromLocationId : request.ToLocationId,
+                    request.Notes,
+                },
+                extraChanges: insertedLines is { Count: > 0 }
+                    ? insertedLines.Select(l => new AuditFieldChange(
+                        $"Line[{l.Id}]",
+                        $"Kalem — {l.MaterialName ?? l.MaterialCode ?? ("#" + l.ItemId)}",
+                        null,
+                        $"{AuditDiff.Normalize(l.Qty)} {l.UnitCode ?? "birim"}")).ToList()
+                    : null);
+        }
+        catch { /* audit yazimi belge kaydini asla bozmaz */ }
     }
 }
