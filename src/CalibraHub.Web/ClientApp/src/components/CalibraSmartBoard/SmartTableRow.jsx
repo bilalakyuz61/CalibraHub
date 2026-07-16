@@ -6,38 +6,48 @@
  * extraActions, recordValues). Silme onayi native confirm() DEGIL, SmartCard
  * ile ayni portal-modal deseni (CLAUDE.md "Silme onay standardi").
  *
- * Satir aksiyon duzeni (2026-07-16 revizyonu):
- *   - Sil (secondaryAction) satirin EN BASINDAKI dar/sabit sutunda — danger
- *     buton, onay yine ekran-ortasi custom modal.
- *   - "Islemler" menusu satirin SONUNDAKI sutunda — kebab tetikleyici +
- *     dropdown. Icerigi GENERIC olarak primaryAction + entity.extraActions[]
- *     dizisinden turer (hardcode yok) — board config'e yeni bir extraAction
- *     eklendiginde otomatik menude belirir. Bugun tek ogesi primaryAction
- *     ("Duzenle"). Dropdown, tablo `overflow` kirpmasindan kacmak icin
- *     document.body'ye portal edilir; cross-document (iframe→top) portal
- *     senaryosunda CSS class'lari uygulanamayabildigi icin (ayri document,
- *     ayri stylesheet) mevcut confirm/alert modallerindeki gibi INLINE
- *     stil kullanilir — ama isDark'a gore tema-farkindadir (mevcut
- *     confirm/alert modellerinin aksine, onlar herzaman koyu).
+ * Satir aksiyon duzeni (2026-07-16 revizyon 2 — Islemler basa tasindi):
+ *   - Sabit sol blok, sirasiyla: [Sil][Islemler][Kod/Ad] — UCU DE sticky-left,
+ *     birbirini takip eden offset'lerle (bkz. DynamicWidgetFactory.js
+ *     TABLE_DELETE_COL_WIDTH/TABLE_MENU_COL_WIDTH).
+ *   - Sil (secondaryAction) → danger buton, onay ekran-ortasi custom modal.
+ *   - "Islemler" menusu → kebab tetikleyici + dropdown, Sil'in hemen yaninda.
+ *     Icerigi GENERIC olarak primaryAction + entity.extraActions[] dizisinden
+ *     turer (hardcode yok) — board config'e yeni bir extraAction eklendiginde
+ *     otomatik menude belirir. Bugun tek ogesi primaryAction ("Duzenle").
+ *     Dropdown, tablo `overflow` kirpmasindan kacmak icin document.body'ye
+ *     portal edilir; cross-document (iframe→top) portal senaryosunda CSS
+ *     class'lari uygulanamayabildigi icin (ayri document, ayri stylesheet)
+ *     mevcut confirm/alert modallerindeki gibi INLINE stil kullanilir — ama
+ *     isDark'a gore tema-farkindadir (mevcut confirm/alert modellerinin
+ *     aksine, onlar herzaman koyu).
  *   - Satir tiklamasi (kimlik hucresi) → Duzenle davranisi KORUNUR.
  *
  * Per-sutun bicim (SmartColumnSettings.jsx): SmartTable.computeColumns her
  * `column` objesine align/width/pinned/stickyLeft/fontSize/fontWeight/label
  * cozumlenmis olarak ekler; bu dosya sadece render eder (tdStyleFor/
  * justifyFor/fontStyleFor helper'lari).
+ *
+ * Sticky opaklik (2026-07-16 revizyon 2 duzeltmesi): sticky hucreler
+ * `--cst-sticky-bg` (TAM OPAK, glassmorphic `--cst-row-bg`'den FARKLI bir
+ * token) kullanir — aksi halde (ozellikle dark temada `--cst-row-bg` ~%4
+ * opak oldugu icin) kaydirilan veri sutunlari sticky hucrelerin altindan
+ * "seffaf" gorunerek uzerine biniyormus gibi gorunur. Bkz. index.css.
  */
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Trash2, Loader2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
-import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon, TABLE_DELETE_COL_WIDTH } from './DynamicWidgetFactory'
+import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon, TABLE_DELETE_COL_WIDTH, TABLE_MENU_COL_WIDTH } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import { getTopBody } from '../../utils/topPortal'
 
-// SmartTable.jsx ile ayni sabit — dongusel import'tan kacinmak icin
+// SmartTable.jsx ile ayni sabitler — dongusel import'tan kacinmak icin
 // DynamicWidgetFactory.js'ten (bagimliligi olmayan ortak dosya) gelir.
 var DELETE_COL_WIDTH = TABLE_DELETE_COL_WIDTH
+var MENU_COL_WIDTH   = TABLE_MENU_COL_WIDTH
+var IDENTITY_LEFT    = DELETE_COL_WIDTH + MENU_COL_WIDTH
 
 var hoverBgMap = {
   amber: 'hover:bg-amber-100 dark:hover:bg-amber-500/10',
@@ -539,9 +549,33 @@ export default function SmartTableRow(props) {
           </div>
         </td>
 
+        <td className="cst-td cst-td--menu" style={{ left: DELETE_COL_WIDTH }}>
+          <div className="flex items-center justify-center">
+            <button
+              ref={menuBtnRef}
+              type="button"
+              onClick={toggleMenu}
+              disabled={busy}
+              className={'p-1.5 rounded-lg transition-colors group ' +
+                (busy ? 'opacity-50 cursor-not-allowed'
+                  : menuOpen ? 'bg-indigo-100 dark:bg-indigo-500/15' : 'hover:bg-slate-100 dark:hover:bg-white/5')
+              }
+              title="İşlemler"
+              aria-label="İşlemler"
+            >
+              <MoreVertical
+                size={15}
+                className={menuOpen
+                  ? 'text-indigo-600 dark:text-indigo-400'
+                  : 'text-slate-400 dark:text-white/40 group-hover:text-slate-600 dark:group-hover:text-white/60 transition-colors'}
+              />
+            </button>
+          </div>
+        </td>
+
         <td
           className={'cst-td cst-td--identity' + (clickableIdentity ? ' cst-td--clickable' : '')}
-          style={{ left: DELETE_COL_WIDTH }}
+          style={{ left: IDENTITY_LEFT }}
           onClick={clickableIdentity ? handlePrimary : undefined}
           title={primaryAction && primaryAction.label ? (primaryAction.label + ' — ' + title) : title}
         >
@@ -593,30 +627,6 @@ export default function SmartTableRow(props) {
             />
           )
         })}
-
-        <td className="cst-td cst-td--action">
-          <div className="cst-actions">
-            <button
-              ref={menuBtnRef}
-              type="button"
-              onClick={toggleMenu}
-              disabled={busy}
-              className={'p-1.5 rounded-lg transition-colors group ' +
-                (busy ? 'opacity-50 cursor-not-allowed'
-                  : menuOpen ? 'bg-indigo-100 dark:bg-indigo-500/15' : 'hover:bg-slate-100 dark:hover:bg-white/5')
-              }
-              title="İşlemler"
-              aria-label="İşlemler"
-            >
-              <MoreVertical
-                size={15}
-                className={menuOpen
-                  ? 'text-indigo-600 dark:text-indigo-400'
-                  : 'text-slate-400 dark:text-white/40 group-hover:text-slate-600 dark:group-hover:text-white/60 transition-colors'}
-              />
-            </button>
-          </div>
-        </td>
       </tr>
 
       {/* "Islemler" dropdown — cross-document portal oldugu icin (getTopBody

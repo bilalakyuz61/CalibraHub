@@ -574,45 +574,40 @@ export default function SmartColumnSettings(props) {
             data-nodirty
           >
             <div
-              className="h-full flex flex-col border-l border-slate-200 dark:border-white/10 shadow-[-8px_0_40px_rgba(15,23,42,0.15)] dark:shadow-[-8px_0_40px_rgba(0,0,0,0.35)]"
-              style={{
-                background: 'rgba(8, 11, 20, 0.92)',
-                backdropFilter: 'blur(32px)',
-                WebkitBackdropFilter: 'blur(32px)',
-              }}
+              className="scs-panel h-full flex flex-col border-l border-slate-200 dark:border-white/10 shadow-[-8px_0_40px_rgba(15,23,42,0.15)] dark:shadow-[-8px_0_40px_rgba(0,0,0,0.35)] bg-white/95 dark:bg-[rgba(8,11,20,0.92)] backdrop-blur-[32px]"
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-white/[0.06] flex-shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center">
                     <Columns3 size={15} className="text-indigo-400" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-white/90">Sütun Ayarları</h3>
-                    <p className="text-[11px] text-white/30 mt-0.5">Görünürlük, sıralama ve biçim</p>
+                    <h3 className="text-base font-bold text-slate-800 dark:text-white/90">Sütun Ayarları</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-white/30 mt-0.5">Görünürlük, sıralama ve biçim</p>
                   </div>
                 </div>
-                <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 transition-colors">
-                  <X size={18} className="text-white/40" />
+                <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
+                  <X size={18} className="text-slate-400 dark:text-white/40" />
                 </button>
               </div>
 
               {/* Arama */}
               <div className="px-4 pt-3 pb-2 flex-shrink-0">
                 <div className="relative">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/25 pointer-events-none" />
                   <input
                     type="search"
                     value={searchQuery}
                     onChange={function (e) { setSearchQuery(e.target.value) }}
                     placeholder="Sütun ara…"
-                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.07] text-white/70 placeholder-white/20 text-xs focus:outline-none focus:border-indigo-400/40 focus:bg-white/[0.06] transition-all"
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.07] text-slate-700 dark:text-white/70 placeholder-slate-400 dark:placeholder-white/20 text-xs focus:outline-none focus:border-indigo-400/50 dark:focus:border-indigo-400/40 focus:bg-white dark:focus:bg-white/[0.06] transition-all"
                   />
                   {searchQuery && (
                     <button
                       type="button"
                       onClick={function () { setSearchQuery('') }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors text-sm leading-none"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/60 transition-colors text-sm leading-none"
                     >
                       ×
                     </button>
@@ -623,7 +618,7 @@ export default function SmartColumnSettings(props) {
               {/* Content */}
               <div className="flex-1 overflow-y-auto min-h-0">
                 {loadingCfg ? (
-                  <div className="flex items-center justify-center gap-2 py-16 text-white/30 text-xs">
+                  <div className="flex items-center justify-center gap-2 py-16 text-slate-400 dark:text-white/30 text-xs">
                     <Loader2 size={16} className="animate-spin" />
                     Yükleniyor…
                   </div>
@@ -633,13 +628,13 @@ export default function SmartColumnSettings(props) {
                     <div className="px-5 pt-3 pb-2">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-white/40 uppercase tracking-wider">
                           Aktif Sütunlar ({activeColumns.length}{q ? ' / ' + filteredActive.length + ' eşleşme' : ''})
                         </span>
                       </div>
 
                       {filteredActive.length === 0 ? (
-                        <div className="text-center py-6 text-white/20 text-sm">
+                        <div className="text-center py-6 text-slate-400 dark:text-white/20 text-sm">
                           {activeColumns.length === 0
                             ? 'Hiçbir sütun görünür değil. Havuzdan ekleyin.'
                             : 'Arama ile eşleşen aktif sütun yok.'}

@@ -158,12 +158,15 @@ export var CHIP_WIDTH_COMPACT = 132  // boolean, numeric, percent, date, status
 export var CHIP_WIDTH_MEDIUM  = 158  // currency, datetime, dropdown/options, attachment
 export var CHIP_WIDTH_WIDE    = 192  // text, textarea, lookup, guide-list, link, multi-select, default
 
-// SmartTable'in en bastaki "Sil" sutunu genisligi (px). Burada (SmartTable.jsx
-// yerine) tanimlanmasinin sebebi: hem SmartTable.jsx hem SmartTableRow.jsx bu
-// degeri kullanir (kimlik hucresinin sticky-left offset'i icin) — iki dosyanin
-// birbirini import etmesi (dongusel import) yerine ortak, bagimliligi olmayan
-// bu dosyadan paylasilir.
+// SmartTable'in en bastaki sabit blok genislikleri (px): [Sil][Islemler][Kod/Ad].
+// Burada (SmartTable.jsx yerine) tanimlanmasinin sebebi: hem SmartTable.jsx hem
+// SmartTableRow.jsx bu degerleri kullanir (kimlik hucresinin ve Islemler
+// hucresinin sticky-left offset'i icin) — iki dosyanin birbirini import etmesi
+// (dongusel import) yerine ortak, bagimliligi olmayan bu dosyadan paylasilir.
+// Sira: Sil (0'dan) → Islemler (Sil'den sonra) → Kod/Ad (ikisinden sonra) →
+// veri sutunlari (pin'liler once, bkz. SmartTable.computeColumns).
 export var TABLE_DELETE_COL_WIDTH = 44
+export var TABLE_MENU_COL_WIDTH   = 52
 
 var dataTypeWidthMap = {
   boolean:        CHIP_WIDTH_COMPACT,

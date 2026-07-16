@@ -347,28 +347,25 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Malzeme arama (rehber) — kod/ad LIKE eslesmesi + barkod tarama girisi. Mobil
+    /// Malzeme arama (rehber) — kod/ad/barkod LIKE eslesmesi + barkod tarama girisi. Mobil
     /// Increment 1'de malzeme yalnizca /stock?code= uzerinden TAM kod esitligiyle
     /// cozulebiliyordu (kullanici kodu harfiyen bilmek zorundaydi) — bu endpoint aranabilir
     /// rehberi ekler. Sorgu ILogisticsConfigurationService.GetItemsPagedAsync uzerinden gecer;
     /// masaustu "rehber" ile ayni semantik (SqlLogisticsConfigurationRepository.GetItemsPagedAsync:
-    /// i.[Code] LIKE @Search OR i.[Name] LIKE @Search, yalnizca aktif + CompanyId filtreli
-    /// kayitlar — repo icinde uygulanir). Birim kodu /stock action'iyla ayni yontemle
-    /// cozulur (GetUnitsAsync + UnitId lookup).
+    /// i.[Code] LIKE @Search OR i.[Name] LIKE @Search OR i.[Barcode] LIKE @Search, yalnizca aktif +
+    /// CompanyId filtreli kayitlar — repo icinde uygulanir, PAYLASILAN sorgu; masaustu malzeme
+    /// rehberi/fiyat listesi/AI tool'lari da ayni degisiklikle barkod-farkinda oldu). Birim kodu
+    /// /stock action'iyla ayni yontemle cozulur (GetUnitsAsync + UnitId lookup).
     ///
-    /// BARKOD (2026-07-16 arastirmasi — dosya:satir): [{Schema}].[Items] tablosunda ayrik bir
-    /// Barcode/Gtin/Ean kolonu YOK (CalibraDatabaseInitializer.cs:1748-1764, Domain.Entities.Item.cs)
-    /// ve boyle bir alan icin standart/cok-sirketli bir WIDGET (EAV) tanimi da yok (kod genelinde
-    /// grep temiz). Masaustu barkod ETIKETI BASIMI zaten ayni yakinsamayi kullaniyor: vw_ProductBarcode
-    /// / vw_ShelfLabel view'lari (CalibraDatabaseInitializer.cs:10435-10450) ve ZplGeneratorService
-    /// Code128 alani icin Items.Code'u dogrudan barkod degeri olarak yaziyor (BarcodeValue = m.Code).
-    /// Bu endpoint AYNI "barcode = code" yakinsamasini tarama (okuma) yonunde de uyguluyor: q=<taranan
-    /// deger> zaten Code'a karsi LIKE ile eslesiyor (Items.Code sirket icinde unique — ux_Items_Company_Code),
-    /// ayrica asagida tam-esit (case-insensitive) satir sonuclarin basina alinir ve response'a
-    /// `barcode` alani (bugun icin Code'un birebir aynisi) eklenir — boylece mobil taraf
-    /// item.barcode === taranmisDeger seklinde KESIN eslesme yapabilir, siralamaya guvenmek zorunda
-    /// kalmaz. NOT: gercek/ayri bir barkod kaynagi (yeni kolon veya standart WIDGET) eklenirse tek
-    /// degisiklik noktasi asagidaki `barcode = i.Code` satiridir — karar lidere birakildi (bkz. rapor).
+    /// BARKOD (2026-07-16, guncelleme — Items.Barcode kolonu eklendi): Onceki surumde
+    /// [{Schema}].[Items] tablosunda ayrik bir Barcode kolonu YOKTU, bu yuzden asagidaki
+    /// `barcode` alani gecici olarak Code'un birebir aynisiydi (BarcodeValue = m.Code
+    /// yakinsamasi, ZplGeneratorService/vw_ProductBarcode ile ayni). Artik Items.Barcode
+    /// NVARCHAR(50) NULL kolonu var (kullanici dogrudan girer/tarar, Code'dan bagimsiz) —
+    /// bu endpoint `item.Barcode ?? item.Code` FALLBACK'i uygular: barkod girilmemis eski/
+    /// yeni kayitlarda mobil taraf yine Code ile KESIN eslesme yapabilir (geriye uyumlu),
+    /// barkod girilmisse gercek barkod deger olarak doner. Siralamada da hem Code hem
+    /// Barcode tam-esitligi (case-insensitive) kontrol edilir.
     /// </summary>
     [HttpGet("items/search")]
     public async Task<IActionResult> SearchItems([FromQuery] string? q, [FromQuery] int? take, CancellationToken ct)
@@ -393,11 +390,14 @@ public sealed class MobileWarehouseApiController : ControllerBase
         var units = await _logisticsService.GetUnitsAsync(ct);
         var unitCodeById = units.ToDictionary(u => u.Id, u => u.Code);
 
-        // Barkod/kod TAM esitligi (case-insensitive) sonuclarin basina alinir — taranan barkod
-        // bir Code'a birebir denk geliyorsa mobil ekranda ilk sirada (idealde tek sonuc) cikar.
-        // Stabil siralama: esit-olmayanlar SQL'den gelen orijinal (Code alfabetik) sirasini korur.
+        // Barkod/kod TAM esitligi (case-insensitive) sonuclarin basina alinir — taranan deger
+        // Code'a VEYA Barcode'a birebir denk geliyorsa mobil ekranda ilk sirada (idealde tek
+        // sonuc) cikar. Stabil siralama: esit-olmayanlar SQL'den gelen orijinal (Code alfabetik)
+        // sirasini korur.
         var ordered = items
-            .OrderByDescending(i => string.Equals(i.Code, query, StringComparison.OrdinalIgnoreCase));
+            .OrderByDescending(i =>
+                string.Equals(i.Code, query, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(i.Barcode, query, StringComparison.OrdinalIgnoreCase));
 
         var result = ordered.Select(i => new
         {
@@ -407,7 +407,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
             unit    = i.UnitId.HasValue && unitCodeById.TryGetValue(i.UnitId.Value, out var unitCode)
                 ? unitCode
                 : "",
-            barcode = i.Code,
+            barcode = i.Barcode ?? i.Code,
         });
 
         return Ok(result);

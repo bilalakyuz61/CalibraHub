@@ -5,8 +5,8 @@
  * bileseni render eder. Ayni entities/masterWidgets/visibleIds/order veriyle
  * calisir — sadece render farklidir ("ayni entity verisi, farkli render").
  *
- * Sutunlar:
- *   [Sil] [Kod / Ad kimlik sutunu] [widget sutunlari...] [Islemler]
+ * Sutunlar (2026-07-16 revizyon 2 — Islemler basa tasindi):
+ *   [Sil] [Islemler] [Kod / Ad kimlik sutunu] [widget sutunlari...]
  * Widget sutun genisligi resolveChipWidth ile (kart modundaki chip genisligiyle
  * ayni tablo) — boylece basliklar hucrelerle hizali kalir. `columnConfig` prop'u
  * (SmartColumnSettings.jsx'in ürettiği { <id>: {align,width,pin,fontSize,
@@ -14,16 +14,17 @@
  * yoksa (kart modu board'ları bu prop'u hiç göndermez) davranış AYNEN eskisi
  * gibi kalır (regresyonsuz).
  *
- * Pin (sabitleme): sabitlenmiş sütunlar listenin başına (kimlik sütunundan
- * hemen sonra) alınır ve sticky-left ile kaydırmada sabit kalır. Sil sütunu +
- * kimlik sütunu (Kod/Ad) da her zaman sticky-left'tir (0'dan başlar) — aksi
- * halde pin'lenmiş bir sütun kaydırıldığında satır kimliği/sil butonu bağlamı
- * kaybolurdu.
+ * Sabit sol blok — Sil + Islemler + Kod/Ad UCU DE sticky-left'tir, birbirini
+ * takip eden offset'lerle (0 → DELETE_COL_WIDTH → +MENU_COL_WIDTH). Pin'li
+ * veri sutunlari bu bloktan hemen sonra baslar. Opaklik/z-index: bkz. index.css
+ * ".cst-td--delete/--menu/--identity/--pinned" — sticky hucreler TAM OPAK
+ * arka plan (`--cst-sticky-bg`) tasir ki kaydirilan veri sutunlari altlarindan
+ * gecerken seffaflik/overlap gorunmesin (2026-07-16 revizyon 2 duzeltmesi).
  *
  * Satır aksiyonları (SmartTableRow icinde render edilir, bkz. o dosyanin ustu):
- *   - Sil (secondaryAction) → satır BAŞINDAKİ dar sütunda (danger buton).
- *   - "İşlemler" menüsü (primaryAction + entity.extraActions[]) → satır
- *     SONUNDAKİ sütunda (kebab buton + dropdown).
+ *   - Sil (secondaryAction) → en bastaki dar sutunda (danger buton).
+ *   - "İşlemler" menüsü (primaryAction + entity.extraActions[]) → Sil'in
+ *     hemen yanindaki sutunda (kebab buton + dropdown).
  *
  * KORU edilen mekanizmalar (SmartBoard seviyesinde zaten calisir, bu bilesen
  * sadece render eder): in-place refresh (onRefresh/recentIds), filter paneli,
@@ -32,14 +33,15 @@
  */
 import { useMemo } from 'react'
 import SmartTableRow from './SmartTableRow'
-import { resolveIcon, resolveChipWidth, TABLE_DELETE_COL_WIDTH } from './DynamicWidgetFactory'
+import { resolveIcon, resolveChipWidth, TABLE_DELETE_COL_WIDTH, TABLE_MENU_COL_WIDTH } from './DynamicWidgetFactory'
 
-// DELETE_COL_WIDTH, DynamicWidgetFactory.js'ten gelir (SmartTableRow de ayni
-// sabiti kullanir — kimlik hucresinin sticky-left offset'i icin; iki dosyanin
-// birbirini import etmesi/dongusel import yerine ortak kaynaktan paylasilir).
+// DELETE_COL_WIDTH / MENU_COL_WIDTH, DynamicWidgetFactory.js'ten gelir
+// (SmartTableRow de ayni sabitleri kullanir — kimlik hucresinin ve Islemler
+// hucresinin sticky-left offset'i icin; iki dosyanin birbirini import
+// etmesi/dongusel import yerine ortak kaynaktan paylasilir).
 var DELETE_COL_WIDTH   = TABLE_DELETE_COL_WIDTH
+var MENU_COL_WIDTH     = TABLE_MENU_COL_WIDTH
 var IDENTITY_COL_WIDTH = 280
-var ACTION_COL_WIDTH   = 56
 
 /**
  * Her widget id'si icin butun entity'ler taranarak "her zaman gorunur" ve
@@ -75,9 +77,9 @@ function buildWidgetMeta(entities) {
  * columnConfig verilmisse (SmartColumnSettings) her sutuna { label, align,
  * width, pinned, fontSize, fontWeight } cozumlenmis alanlari eklenir + pin'li
  * sutunlar listenin basina alinir (stabil: kendi aralarindaki sira korunur).
- * Pin'li sutunlar icin kumulatif `stickyLeft` (Sil + kimlik sutunlarindan
- * sonra) da burada hesaplanir — SmartTable/SmartTableRow bu degeri dogrudan
- * render eder.
+ * Pin'li sutunlar icin kumulatif `stickyLeft` (Sil + Islemler + kimlik
+ * sutunlarindan sonra) da burada hesaplanir — SmartTable/SmartTableRow bu
+ * degeri dogrudan render eder.
  */
 function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConfig) {
   var candidates = masterWidgets.filter(function (w) {
@@ -148,7 +150,7 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
   var unpinned = enriched.filter(function (c) { return !c.pinned })
   var ordered = pinned.concat(unpinned)
 
-  var offset = DELETE_COL_WIDTH + IDENTITY_COL_WIDTH
+  var offset = DELETE_COL_WIDTH + MENU_COL_WIDTH + IDENTITY_COL_WIDTH
   ordered.forEach(function (c) {
     if (c.pinned) { c.stickyLeft = offset; offset += c.width }
   })
@@ -173,10 +175,12 @@ export default function SmartTable(props) {
   )
 
   var totalWidth = useMemo(function () {
-    var sum = DELETE_COL_WIDTH + IDENTITY_COL_WIDTH + ACTION_COL_WIDTH
+    var sum = DELETE_COL_WIDTH + MENU_COL_WIDTH + IDENTITY_COL_WIDTH
     columns.forEach(function (c) { sum += c.width })
     return sum
   }, [columns])
+
+  var identityLeft = DELETE_COL_WIDTH + MENU_COL_WIDTH
 
   return (
     <div className="cst-root">
@@ -184,16 +188,17 @@ export default function SmartTable(props) {
         <table className="cst-table" style={{ width: totalWidth }}>
           <colgroup>
             <col style={{ width: DELETE_COL_WIDTH }} />
+            <col style={{ width: MENU_COL_WIDTH }} />
             <col style={{ width: IDENTITY_COL_WIDTH }} />
             {columns.map(function (c) {
               return <col key={c.id} style={{ width: c.width }} />
             })}
-            <col style={{ width: ACTION_COL_WIDTH }} />
           </colgroup>
           <thead>
             <tr>
               <th className="cst-th cst-th--delete" aria-label="Sil" />
-              <th className="cst-th cst-th--identity" style={{ left: DELETE_COL_WIDTH }}>Kod / Ad</th>
+              <th className="cst-th cst-th--menu" style={{ left: DELETE_COL_WIDTH }}>İşlem</th>
+              <th className="cst-th cst-th--identity" style={{ left: identityLeft }}>Kod / Ad</th>
               {columns.map(function (c) {
                 var Icon = resolveIcon(c.icon, null, c.dataType)
                 var thStyle = { textAlign: c.align }
@@ -215,7 +220,6 @@ export default function SmartTable(props) {
                   </th>
                 )
               })}
-              <th className="cst-th cst-th--action">İşlem</th>
             </tr>
           </thead>
           <tbody>
