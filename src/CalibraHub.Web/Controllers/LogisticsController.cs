@@ -198,6 +198,7 @@ public sealed class LogisticsController : Controller
             subtitle = totalCount.ToString("N0") + " malzeme",
             icon = "Package",
             iconColor = "indigo",
+            viewMode = "table",
             searchPlaceholder = "Malzeme ara... (kod, isim)",
             emptyText = "Henuz malzeme eklenmemis",
             apiUrl = "/Logistics/GetMaterialCardsPage",
