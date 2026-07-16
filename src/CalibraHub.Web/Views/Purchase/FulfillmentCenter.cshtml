@@ -348,7 +348,7 @@
         padding:4px 14px 4px 36px;
         border-bottom:1px solid rgba(255,255,255,.06);
         background:rgba(99,102,241,.04);
-        font-size:.69rem; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:.05em;
+        font-size:.69rem; font-weight:700; color:#475569; letter-spacing:.05em;
     }
     .fc3-sub-hdr-mat  { flex:1; }
     .fc3-sub-hdr-qty  { min-width:54px; text-align:right; }
@@ -368,7 +368,7 @@
     .fc3-row:hover  { background:rgba(255,255,255,.025); }
     .fc3-row.sel    { background:rgba(99,102,241,.09); }
     .fc3-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-    .fc3-num  { font-family:monospace; font-size:.82rem; font-weight:700; color:#c7d2fe; min-width:130px; }
+    .fc3-num  { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.82rem; font-weight:700; color:#c7d2fe; min-width:130px; }
     .fc3-who  { flex:1; font-size:.8rem; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .fc3-lc   { font-size:.72rem; color:#475569; white-space:nowrap; }
     .fc3-dt   { font-size:.72rem; color:#475569; white-space:nowrap; }
@@ -622,7 +622,7 @@
     .fc3-tag {
         padding:2px 9px; border-radius:999px; font-size:.71rem; font-weight:700;
         background:rgba(99,102,241,.2); border:1px solid rgba(99,102,241,.35);
-        color:#c7d2fe; font-family:monospace;
+        color:#c7d2fe; font-family:ui-monospace, Menlo, Consolas, monospace;
     }
 
     /* ── Kalem section ── */
@@ -691,7 +691,7 @@
     /* Belge linkleri */
     .fc3-doc-links { padding:9px 12px; display:flex; flex-direction:column; gap:5px; }
     .fc3-doc-row   { display:flex; align-items:center; gap:8px; font-size:.8rem; }
-    .fc3-doc-lbl   { font-family:monospace; font-size:.78rem; color:#64748b; min-width:80px; }
+    .fc3-doc-lbl   { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; color:#64748b; min-width:80px; }
     .fc3-doc-a { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:6px; font-size:.78rem; font-weight:600; text-decoration:none; transition:all .12s; }
     .fc3-doc-a--q { background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.28); color:#93c5fd; }
     .fc3-doc-a--q:hover { background:rgba(59,130,246,.22); }
@@ -2849,7 +2849,7 @@
         tb.innerHTML = _lines.map(function(l, i) {
             return '<tr data-item-id="' + l.itemId + '">'
                 + '<td style="color:#475569;font-size:.74rem;">' + (i + 1) + '</td>'
-                + '<td style="font-family:monospace;font-size:.74rem;color:#818cf8;">' + esc(l.requestNumber || '') + '</td>'
+                + '<td style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.74rem;color:#818cf8;">' + esc(l.requestNumber || '') + '</td>'
                 + '<td style="color:#cbd5e1;">' + esc(l.materialName || l.materialCode || '—') + '</td>'
                 + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
                 + '<td style="color:#94a3b8;font-size:.76rem;">' + esc(l.unitCode || '') + '</td>'
@@ -2884,7 +2884,7 @@
                 + ' data-comb-id="'  + (l.combinationId||'') + '">'
                 + '<td><input type="checkbox" class="fc3-cb fc3-tf-cb" checked></td>'
                 + '<td style="color:#cbd5e1;font-size:.79rem;">' + esc(l.materialName || l.materialCode || '—')
-                + '<br><span style="font-family:monospace;font-size:.7rem;color:#6366f1;">' + esc(l.requestNumber) + '</span></td>'
+                + '<br><span style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.7rem;color:#6366f1;">' + esc(l.requestNumber) + '</span></td>'
                 + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
                 + '<td><select class="fc3-ts fc3-tf-loc" style="min-width:130px;"><option value="">— Depo Seçin —</option>' + locOpts + '</select></td>'
                 + '<td><input type="number" class="fc3-ti fc3-tf-qty" value="' + l.quantity.toFixed(2) + '" min="0.01" step="0.01" style="min-width:65px;text-align:right;"></td>'
@@ -2950,7 +2950,7 @@
                 + ' data-comb-id="' + (l.combinationId||'') + '">'
                 + '<td><input type="checkbox" class="fc3-cb fc3-sf-cb" checked></td>'
                 + '<td style="color:#cbd5e1;font-size:.79rem;">' + esc(l.materialName || l.materialCode || '—')
-                + '<br><span style="font-family:monospace;font-size:.7rem;color:#fbbf24;">' + esc(l.requestNumber) + '</span></td>'
+                + '<br><span style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.7rem;color:#fbbf24;">' + esc(l.requestNumber) + '</span></td>'
                 + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
                 + '<td><select class="fc3-ts fc3-sf-loc" style="min-width:130px;"><option value="">— Depo Seçin —</option>' + locOpts + '</select></td>'
                 + '<td><input type="number" class="fc3-ti fc3-sf-qty" value="' + l.quantity.toFixed(2) + '" min="0.01" step="0.01" style="min-width:65px;text-align:right;"></td>'
@@ -2971,7 +2971,7 @@
                 + ' data-line-id="' + (l.lineId||'') + '">'
                 + '<td><input type="checkbox" class="fc3-cb fc3-pr-cb" checked></td>'
                 + '<td style="color:#cbd5e1;font-size:.79rem;">' + esc(l.materialName || l.materialCode || '—')
-                + '<br><span style="font-family:monospace;font-size:.7rem;color:#6ee7b7;">' + esc(l.requestNumber) + '</span></td>'
+                + '<br><span style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.7rem;color:#6ee7b7;">' + esc(l.requestNumber) + '</span></td>'
                 + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
                 + '<td style="text-align:right;color:' + (remain > 0 ? '#fbbf24' : '#34d399') + ';font-weight:600;">' + fmtN(remain) + '</td>'
                 + '<td><input type="number" class="fc3-ti fc3-pr-qty" value="' + remain.toFixed(2) + '" min="0.01" step="0.01" style="min-width:65px;text-align:right;"></td>'

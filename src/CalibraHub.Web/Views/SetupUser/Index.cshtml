@@ -111,7 +111,6 @@
     .su-form-row > label {
         font-size: .69rem !important;
         font-weight: 700 !important;
-        text-transform: uppercase !important;
         letter-spacing: .04em !important;
         color: var(--uf-muted) !important;
         text-align: right !important;
@@ -184,7 +183,6 @@
     .su-switch-row > label:first-child {
         font-size: .69rem !important;
         font-weight: 700 !important;
-        text-transform: uppercase !important;
         letter-spacing: .04em !important;
         color: var(--uf-muted) !important;
         text-align: right !important;
@@ -255,22 +253,22 @@
 
                     @* Şirket — sadece düzenlemede gösterilir *@
                     <div id="suCompanyDisplay" style="display:none;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Şirket</span>
+                        <span style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Şirket</span>
                         <span id="suCompanyName" style="font-size:.82rem;font-weight:600;color:inherit;"></span>
                     </div>
 
                     <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <label for="suFullName" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Ad Soyad <span style="color:#dc2626">*</span></label>
+                        <label for="suFullName" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Ad Soyad <span style="color:#dc2626">*</span></label>
                         <input type="text" id="suFullName" required autocomplete="off" maxlength="200"
                                style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
                     </div>
                     <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <label for="suEmail" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">E-posta <span style="color:#dc2626">*</span></label>
+                        <label for="suEmail" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">E-posta <span style="color:#dc2626">*</span></label>
                         <input type="email" id="suEmail" required autocomplete="off" maxlength="200"
                                style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
                     </div>
                     <div id="suPasswordRow" style="display:grid;grid-template-columns:90px 1fr;align-items:start;gap:0 8px;margin-bottom:6px;">
-                        <label for="suPassword" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;padding-top:7px;">Şifre</label>
+                        <label for="suPassword" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;padding-top:7px;">Şifre</label>
                         <div style="display:flex;flex-direction:column;gap:2px;">
                             <input type="password" id="suPassword" autocomplete="new-password" maxlength="100" minlength="6" placeholder="Boş → 12345678 atanır"
                                    style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
@@ -278,29 +276,29 @@
                         </div>
                     </div>
                     <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <label for="suEmployeeCode" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Personel K.</label>
+                        <label for="suEmployeeCode" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Personel K.</label>
                         <input type="text" id="suEmployeeCode" autocomplete="off" maxlength="50" placeholder="Boş → e-postadan türetilir"
                                style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
                     </div>
                     <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <label for="suPhoneNumber" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Telefon</label>
+                        <label for="suPhoneNumber" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Telefon</label>
                         <input type="tel" id="suPhoneNumber" autocomplete="off" maxlength="30"
                                style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
                     </div>
                     <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <label for="suDepartment" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Departman</label>
+                        <label for="suDepartment" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Departman</label>
                         <select id="suDepartment" style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
                             <option value="">(Departman yok)</option>
                         </select>
                     </div>
                     <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <label for="suSupervisor" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Amir</label>
+                        <label for="suSupervisor" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Amir</label>
                         <select id="suSupervisor" style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
                             <option value="">(Amir seçilmedi)</option>
                         </select>
                     </div>
                     <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <label for="suRole" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Yetki <span style="color:#dc2626">*</span></label>
+                        <label for="suRole" style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Yetki <span style="color:#dc2626">*</span></label>
                         <select id="suRole" required style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
                             <option value="4">User</option>
                             <option value="2">Admin</option>
@@ -308,7 +306,7 @@
                         </select>
                     </div>
                     <div style="display:grid;grid-template-columns:90px auto 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
-                        <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Aktif</span>
+                        <span style="font-size:.7rem;font-weight:700;letter-spacing:.04em;color:#64748b;text-align:right;">Aktif</span>
                         <label class="su-switch">
                             <input type="checkbox" id="suIsActive" checked />
                             <span class="su-switch__track"></span>

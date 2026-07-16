@@ -323,7 +323,7 @@
         display: flex; align-items: center; gap: 6px;
         padding: 9px 12px 8px;
         font-size: .68rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: .55px;
+        letter-spacing: .55px;
         color: #475569;
         border-bottom: 1px solid #e2e8f0;
     }
@@ -685,7 +685,7 @@
         border-radius: 6px;
         font-size: 0.62rem;
         font-weight: 700;
-        font-family: 'Courier New', monospace;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
         color: #7c3aed;
         background: rgba(139, 92, 246, 0.12);
         border: 1px solid rgba(139, 92, 246, 0.32);
@@ -718,7 +718,7 @@
         border: 1px solid #fecaca;
         color: #7f1d1d;
         border-radius: 6px;
-        font-family: 'Courier New', monospace;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
     }
     /* 2-column form grid */
     .sqe-form-grid {
@@ -2106,7 +2106,7 @@
                     + '</div>'
                     + '<div style="overflow:auto;padding:6px 20px 4px">'
                     +   '<table style="width:100%;border-collapse:collapse;font-size:.82rem">'
-                    +     '<thead><tr style="opacity:.7;font-size:.68rem;text-transform:uppercase;letter-spacing:.4px">'
+                    +     '<thead><tr style="opacity:.7;font-size:.68rem;letter-spacing:.4px">'
                     +       '<th style="padding:6px 8px;text-align:left">Malzeme</th><th style="padding:6px 8px;text-align:center">Birim</th>'
                     +       '<th style="padding:6px 8px;text-align:right">Sipariş</th><th style="padding:6px 8px;text-align:right">Teslim</th>'
                     +       '<th style="padding:6px 8px;text-align:right">Kalan</th><th style="padding:6px 8px;text-align:right">Teslim Edilecek</th></tr></thead>'
@@ -2599,7 +2599,7 @@
                             style="font-size:0.72rem;padding:4px 10px;"
                             onclick="sqReloadWidgets()">Yeniden yukle</button>
                 </div>
-                <div style="margin-top:8px;font-size:0.64rem;opacity:0.35;font-family:monospace;">
+                <div style="margin-top:8px;font-size:0.64rem;opacity:0.35;font-family:ui-monospace, Menlo, Consolas, monospace;">
                     ext-v: 2026-04-21-b
                 </div>
             </div>
@@ -2655,7 +2655,7 @@
     .dlg-arrow { display: flex; align-items: center; color: #cbd5e1; flex-shrink: 0; }
     body.app-theme-dark .dlg-arrow { color: #475569; }
     .dlg-col { display: flex; flex-direction: column; gap: 8px; min-width: 190px; }
-    .dlg-col-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8; padding-left: 2px; }
+    .dlg-col-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: #94a3b8; padding-left: 2px; }
     .dlg-card { position: relative; border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; padding: 10px 12px; background: var(--app-surface, #fff); transition: border-color .12s, box-shadow .12s, transform .12s; }
     body.app-theme-dark .dlg-card { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.1); }
     .dlg-card--root { border-color: #6366f1; box-shadow: 0 0 0 1px #6366f1; }
@@ -5425,14 +5425,14 @@
                 if (msgEl) msgEl.innerHTML =
                     '<div>"<strong>' + formCode + '</strong>" form kaydi veritabaninda bulunamadi.</div>'
                     + '<div style="margin-top:6px;">Widget Kayit ekranindan once formu tanimlayip aktiflestirin.</div>'
-                    + '<div style="margin-top:10px;font-family:monospace;font-size:0.68rem;opacity:0.6;">API: GET ' + probeUrl + ' → 404</div>';
+                    + '<div style="margin-top:10px;font-family:ui-monospace, Menlo, Consolas, monospace;font-size:0.68rem;opacity:0.6;">API: GET ' + probeUrl + ' → 404</div>';
                 if (emptyEl) emptyEl.classList.remove('is-hidden');
                 return;
             }
             if (!resp.ok) {
                 console.warn('[SQ probe] HTTP ' + resp.status + ' ' + probeUrl);
                 if (msgEl) msgEl.innerHTML = 'API hatasi: HTTP ' + resp.status
-                    + '<div style="margin-top:6px;font-family:monospace;font-size:0.68rem;opacity:0.6;">' + probeUrl + '</div>';
+                    + '<div style="margin-top:6px;font-family:ui-monospace, Menlo, Consolas, monospace;font-size:0.68rem;opacity:0.6;">' + probeUrl + '</div>';
                 if (emptyEl) emptyEl.classList.remove('is-hidden');
                 return;
             }
@@ -5451,7 +5451,7 @@
             });
 
             // Diagnostic ozet (her seferinde gosterilir — sub-tab gorundugunde empty zaten gizlenir)
-            var summary = '<div style="font-family:monospace;font-size:0.68rem;opacity:0.75;margin-top:10px;text-align:left;max-width:700px;margin-left:auto;margin-right:auto;">'
+            var summary = '<div style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:0.68rem;opacity:0.75;margin-top:10px;text-align:left;max-width:700px;margin-left:auto;margin-right:auto;">'
                 + '<div><strong>Teshis:</strong> formCode=<code>' + formCode + '</code> formId=<code>' + (data.formId || '?') + '</code></div>'
                 + '<div>Toplam widget: <code>' + widgets.length + '</code> — grup: <code>' + groups.length + '</code>, alan: <code>' + fields.length + '</code>'
                 + (orphans.length > 0 ? ', <span style="color:#fca5a5">orphan: ' + orphans.length + '</span>' : '')

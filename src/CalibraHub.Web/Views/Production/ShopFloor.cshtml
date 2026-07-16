@@ -169,7 +169,7 @@
         }
         .sicil-label {
             font-size: 11px; color: var(--text-muted, #94a3b8);
-            text-transform: uppercase; letter-spacing: 1px;
+            letter-spacing: 1px;
         }
         .sicil-input {
             width: 280px; max-width: 88vw;
@@ -396,7 +396,6 @@
             font-size: 11px;
             font-weight: var(--font-weight-semibold);
             letter-spacing: .04em;
-            text-transform: uppercase;
             background: var(--surface-elev-2); color: var(--text-secondary);
             border: 1px solid var(--border-subtle);
             margin-bottom: 4px;
@@ -541,7 +540,6 @@
         .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
         .modal-row label {
             font-size: 11px;
-            text-transform: uppercase;
             letter-spacing: .06em;
             color: var(--text-muted);
             font-weight: var(--font-weight-semibold);
@@ -645,7 +643,7 @@
         }
         .history-table th {
             background: rgba(255,255,255,.04); color: var(--text-muted);
-            font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+            font-size: 11px; letter-spacing: .05em;
         }
         .history-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
         .history-table tr.is-active td { background: rgba(34,197,94,.08); }
@@ -1657,7 +1655,7 @@
                     + '<span style="flex:1;"><strong>' + escapeHtml(r.name) + '</strong>'
                     +   (r.description ? '<br><small style="opacity:.7;">' + escapeHtml(r.description) + '</small>' : '')
                     + '</span>'
-                    + '<span style="font-size:11px;opacity:.5;font-family:monospace;">' + escapeHtml(r.code) + '</span>'
+                    + '<span style="font-size:11px;opacity:.5;font-family:ui-monospace, Menlo, Consolas, monospace;">' + escapeHtml(r.code) + '</span>'
                   + '</button>';
             }).join('');
             bd.innerHTML = '<div class="modal-card" style="width:min(540px,100%);">'
