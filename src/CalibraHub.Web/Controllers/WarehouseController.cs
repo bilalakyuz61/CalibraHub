@@ -779,17 +779,30 @@ public sealed class WarehouseController : Controller
         var doc = await _stockDocRepo.GetByIdAsync(id, ct);
         if (doc == null) return NotFound();
 
+        // doc.DocType burada ham DB kodu ("depo_giris"/"depo_cikis"/"depo_transfer") —
+        // FormCodeForDocType bu kodları tanımıyor, switch default'a düşüp HER belgeyi
+        // StockIn yetkisiyle kontrol ediyordu (2026-07-16 fix): StockIn-VIEW yetkisi olan
+        // kullanıcı çıkış/transfer belgelerini de okuyabiliyor, buna karşın yalnız
+        // StockOut-VIEW yetkisi olan kendi çıkış belgesini okuyamıyordu. Ham kod
+        // NormalizeStockDocType ile kanonik token'a (STOCK_IN/STOCK_OUT/TRANSFER/
+        // INVENTORY_COUNT) indirgenip yetki kontrolü ondan sonra yapılır — SaveDocJson /
+        // StockEntryEdit'teki aynı desen. GetByIdAsync tip filtresi taşımadığından
+        // (herhangi bir Document id'sini döner) normalize null dönerse bu id depo belgesi
+        // değildir → endpoint kapsamı dışı, NotFound.
+        var normalizedType = NormalizeStockDocType(doc.DocType);
+        if (normalizedType is null) return NotFound();
+
         // Yetkisiz okuma kapatıldı (2026-07-16): endpoint hiç izin kontrolü taşımıyordu —
         // giriş yapmış her kullanıcı her depo belgesini okuyabiliyordu. Belge tipine göre
         // dinamik VIEW kontrolü (bkz. CheckStockDocPermissionAsync). Çağıranlar
         // (StockDocEdit + InventoryEdit loadDoc) `r.ok` bakar → JSON gövdeli 403,
         // PermissionEnforcementFilter.MakeForbidResult ile aynı şekil.
-        if (!await CheckStockDocPermissionAsync(doc.DocType, new[] { "VIEW", "VIEW_OWN" }, ct))
+        if (!await CheckStockDocPermissionAsync(normalizedType, new[] { "VIEW", "VIEW_OWN" }, ct))
             return new JsonResult(new
             {
                 ok      = false,
                 message = "Bu işlemi yapmak için yetkiniz yok.",
-                error   = $"Yetki yok: {FormCodeForDocType(doc.DocType)}:VIEW|VIEW_OWN",
+                error   = $"Yetki yok: {FormCodeForDocType(normalizedType)}:VIEW|VIEW_OWN",
             }) { StatusCode = StatusCodes.Status403Forbidden };
 
         var lines = await _stockDocRepo.GetLinesAsync(id, ct);

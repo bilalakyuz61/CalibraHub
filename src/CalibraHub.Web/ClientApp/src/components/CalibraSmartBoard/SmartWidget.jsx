@@ -177,7 +177,7 @@ export default function SmartWidget(props) {
             <Icon size={14} style={{ color: palette.icon }} strokeWidth={1.8} />
           </div>
           <div className="flex flex-col min-w-0 flex-1 gap-1">
-            <span className="text-[9px] font-semibold uppercase tracking-wider leading-none text-slate-600 dark:text-white/70 truncate">
+            <span className="text-[9px] font-semibold leading-none text-slate-600 dark:text-white/70 truncate">
               Kisa Yol
             </span>
             <span
@@ -228,7 +228,7 @@ export default function SmartWidget(props) {
         </div>
         <div className="flex flex-col min-w-0 flex-1 gap-1">
           <span
-            className={'text-[9px] font-semibold uppercase tracking-wider leading-none truncate ' + (violation ? '' : 'text-slate-500 dark:text-white/70')}
+            className={'text-[9px] font-semibold leading-none truncate ' + (violation ? '' : 'text-slate-500 dark:text-white/70')}
             style={violation ? { color: '#f59e0b' } : {}}
           >
             {label}
@@ -314,7 +314,7 @@ function GuideListWidgetButton(props) {
             <Icon size={14} style={{ color: palette.icon }} strokeWidth={1.8} />
           </div>
           <div className="flex flex-col min-w-0 flex-1 gap-1">
-            <span className="text-[9px] font-semibold uppercase tracking-wider leading-none text-slate-600 dark:text-white/70 truncate">
+            <span className="text-[9px] font-semibold leading-none text-slate-600 dark:text-white/70 truncate">
               Rehber
             </span>
             <span className="text-xs font-bold leading-none tracking-tight truncate" style={{ color: palette.text }}>
