@@ -2877,6 +2877,10 @@ function TabBar(props) {
 
   var showDash = !!props.showDashboard
 
+  // Sekme yokken şerit tamamen gizlenir — boş 44px bant bırakma (ana sayfa
+  // doğrudan üst çubuğun altından başlar; home ikonu zaten kısayol çubuğunda).
+  if (!props.tabs || props.tabs.length === 0) return null
+
   return (
     <div
       className={'flex items-center h-11 border-b flex-shrink-0 ' + borderColor}
