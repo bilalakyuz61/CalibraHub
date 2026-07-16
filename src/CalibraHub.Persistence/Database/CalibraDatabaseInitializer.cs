@@ -1803,6 +1803,35 @@ END;";
                     ADD [AutoSerial] BIT NOT NULL CONSTRAINT [df_Items_AutoSerial] DEFAULT(0);
             END;
 
+            -- 2026-07-16: Fiziksel/üretici barkodu (EAN/GTIN). NVARCHAR(50) NULL — opsiyonel;
+            -- boş bırakılabilir, boşsa arama Code'a düşer (fallback backend'de). NOT NULL /
+            -- default YOK. TrackingType/AutoSerial gibi idempotent ALTER-ensure (CREATE TABLE'a
+            -- eklenmez; bu blok fresh DB'de CREATE TABLE'dan hemen sonra kolonu ekler).
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Items]', N'Barcode') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
+                    ADD [Barcode] NVARCHAR(50) NULL;
+            END;
+
+            -- Barkod tam-eşleşme aramasını hızlandıran filtered index (yalnız dolu barkodlar
+            -- indekslenir → küçük ve seçici). CREATE INDEX aynı batch'te eklenen [Barcode]
+            -- kolonuna baktığından deferred-compile için EXEC ile sarılır (ux_Items_Company_Code
+            -- ile aynı desen).
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[Items]', N'Barcode') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.indexes
+                   WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]')
+                     AND [name] = N'IX_Items_Barcode')
+            BEGIN
+                EXEC(N'
+                    CREATE INDEX [IX_Items_Barcode]
+                        ON [{schemaForSql}].[Items]([Barcode])
+                        WHERE [Barcode] IS NOT NULL;
+                ');
+            END;
+
             -- Eski tek-kolonlu unique index'i (Code) drop et, (CompanyId, Code) ile degistir
             IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
                AND EXISTS (

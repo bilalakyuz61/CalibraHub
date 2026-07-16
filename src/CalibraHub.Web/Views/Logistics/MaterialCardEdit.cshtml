@@ -1702,6 +1702,10 @@
                         <input type="text" id="mceMaterialName" data-field-key="name" class="mce-input" placeholder="ornegin: Celik Cubuk 12mm" maxlength="255" />
                     </div>
                     <div class="mce-row">
+                        <label for="mceBarcode">Barkod</label>
+                        <input type="text" id="mceBarcode" data-field-key="barcode" class="mce-input" placeholder="Barkod numarasini okutun veya girin" maxlength="64" />
+                    </div>
+                    <div class="mce-row">
                         <label for="mceMaterialTypeId">Malzeme Tipi</label>
                         <select id="mceMaterialTypeId" data-field-key="type_id" class="mce-select" style="max-width:200px;">
                             <option value="">Seciniz</option>
@@ -2624,6 +2628,7 @@
             mceFormatMeta(data.stockCardId, data.materialCode, data.materialName);
             _setVal('mceMaterialCode',         data.materialCode || '');
             _setVal('mceMaterialName',         data.materialName || '');
+            _setVal('mceBarcode',              data.barcode || '');
             _setVal('mceMaterialTypeId',       data.materialTypeId != null ? String(data.materialTypeId) : '');
             _setChk('mceTrackCombinations',    !!data.trackCombinations);
             _setVal('mceTaxRate',              data.taxRate != null ? data.taxRate : 20);
