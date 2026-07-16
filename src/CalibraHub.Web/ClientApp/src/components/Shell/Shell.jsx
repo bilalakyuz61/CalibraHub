@@ -20,7 +20,7 @@
  *
  * MenuNode: { key, label, icon, url, children }
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as notifApi from '../../services/notificationsService'
 // 2026-05-23 — Yapay zeka asistanı (sağ alt floating widget). Top-level Shell altında
@@ -30,11 +30,13 @@ import SessionIdleGuard from './SessionIdleGuard'
 // 2026-06-14 — Ana sayfa özelleştirilebilir pano. Hiç sekme açık değilken
 // (isHomePage) EmptyState yerine doğrudan Shell içinde render edilir (iframe yok).
 import Dashboard from '../Dashboard/Dashboard'
+// 2026-07-16 — Header hızlı-erişim (kısayol) çubuğu kalıcılık katmanı.
+import { loadShellShortcuts, saveShellShortcuts } from '../../services/shellShortcutsService'
 import {
   // Shell internals
   Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
   Layers, MessageSquare, Languages, UserCircle, LogOut, Bot, Menu,
-  X, LayoutGrid, Building2, Check, Home,
+  X, LayoutGrid, Building2, Check, Home, Plus, Pencil,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
@@ -42,7 +44,14 @@ import {
   DollarSign, MapPin, Ruler, Tag, Settings,
   Plug, Mail, Database, Zap, UserCog,
   BookOpen, Clock,
-  Warehouse, ArrowLeftRight, PackagePlus, PackageMinus, PackageCheck, ClipboardCheck
+  Warehouse, ArrowLeftRight, PackagePlus, PackageMinus, PackageCheck, ClipboardCheck,
+  // 2026-07-16 — Kısayol çubuğu picker'ı MenuDefinition'daki TÜM ikonları çözebilmeli.
+  // Önceden ICON_MAP'te eksikti (Sidebar'da da bu ikonlar sessizce CircleDot fallback'e
+  // düşüyordu) — bu ekleme her iki yeri de düzeltir.
+  BarChart3, CheckCircle2, FlaskConical, FileStack, Upload, CalendarDays,
+  MessageCircle, LayoutDashboard, PenLine, Inbox, GitBranch, Grid3X3,
+  ShoppingCart, ShoppingBag, ClipboardList, Tablet, FileUp, PenSquare,
+  SlidersHorizontal, ShieldCheck, EyeOff, ScrollText, Activity
 } from 'lucide-react'
 
 /* ══════════════════════════════════════════════════════════════
@@ -98,6 +107,19 @@ var SHELL_I18N = {
   retrying:                { TR: 'Yeniden deneniyor...',             EN: 'Retrying...' },
   try_now:                 { TR: 'Şimdi Dene',                       EN: 'Try Now' },
   refresh_page:            { TR: 'Sayfayı Yenile',                  EN: 'Refresh Page' },
+  // Kısayol çubuğu (hızlı erişim) — 2026-07-16
+  go_home:                       { TR: 'Ana sayfaya git',              EN: 'Go to home' },
+  shortcuts_edit:                 { TR: 'Kısayolları düzenle',          EN: 'Edit shortcuts' },
+  shortcuts_save:                  { TR: 'Kaydet ve çık',                EN: 'Save & exit' },
+  shortcuts_add:                    { TR: 'Kısayol ekle',                 EN: 'Add shortcut' },
+  shortcuts_remove:                  { TR: 'Kaldır',                       EN: 'Remove' },
+  shortcuts_shownames:                { TR: 'İsimler',                     EN: 'Names' },
+  shortcuts_picker_title:              { TR: 'Kısayol Seç',                 EN: 'Select Shortcut' },
+  shortcuts_picker_search:              { TR: 'Ekran ara…',                  EN: 'Search screens…' },
+  shortcuts_picker_empty:                { TR: 'Eşleşen ekran bulunamadı.',   EN: 'No matching screens found.' },
+  shortcuts_picker_apply:                  { TR: 'Uygula',                      EN: 'Apply' },
+  shortcuts_picker_cancel:                  { TR: 'Vazgeç',                      EN: 'Cancel' },
+  shortcuts_picker_selected_suffix:          { TR: 'seçili',                      EN: 'selected' },
 }
 
 function tShell(key, lang) {
@@ -114,7 +136,7 @@ var ICON_MAP = {
   Bell: Bell, Moon: Moon, Sun: Sun, Menu: Menu,
   Layers: Layers, MessageSquare: MessageSquare, Languages: Languages,
   UserCircle: UserCircle, LogOut: LogOut, X: X, LayoutGrid: LayoutGrid,
-  Building2: Building2,
+  Building2: Building2, Plus: Plus, Pencil: Pencil,
   // Menu icons
   LayoutList: LayoutList, FileText: FileText, Files: Files,
   Archive: Archive, Truck: Truck, Package: Package, Folder: Folder,
@@ -127,6 +149,16 @@ var ICON_MAP = {
   Warehouse: Warehouse, ArrowLeftRight: ArrowLeftRight,
   PackagePlus: PackagePlus, PackageMinus: PackageMinus,
   PackageCheck: PackageCheck, ClipboardCheck: ClipboardCheck,
+  // 2026-07-16 — MenuDefinition.cs'de kullanılan ama önceden haritada olmayan ikonlar
+  // (kısayol picker'ı + Sidebar için tam kapsama).
+  BarChart3: BarChart3, CheckCircle2: CheckCircle2, FlaskConical: FlaskConical,
+  FileStack: FileStack, Upload: Upload, CalendarDays: CalendarDays,
+  MessageCircle: MessageCircle, LayoutDashboard: LayoutDashboard, PenLine: PenLine,
+  Inbox: Inbox, GitBranch: GitBranch, Grid3X3: Grid3X3,
+  ShoppingCart: ShoppingCart, ShoppingBag: ShoppingBag, ClipboardList: ClipboardList,
+  Tablet: Tablet, FileUp: FileUp, PenSquare: PenSquare,
+  SlidersHorizontal: SlidersHorizontal, ShieldCheck: ShieldCheck, EyeOff: EyeOff,
+  ScrollText: ScrollText, Activity: Activity,
 }
 
 function resolveIcon(name) {
@@ -189,6 +221,35 @@ function findLabelByUrl(menu, url) {
   }
   menu.forEach(walk)
   return found
+}
+
+/* Menu agacini gezip URL'i olan yapraklari duzlestirir — kisayol cubugu
+   picker'inin veri kaynagi. HomeDashboardController.FlattenLeaves (Dashboard'un
+   "Kısayol Seç" widget'i icin kullandigi C# metodu) ile BIREBIR ayni algoritma:
+   groupLabel = en yakin ata grup basligi (top-level degil — orn. "e-Fatura"nin
+   grubu "Elektronik Belgeler", "Onay İşlemleri" degil). Boylece iki "kisayol
+   sec" ekrani (Ana Sayfa Panosu + Header cubugu) ayni gruplamayi gosterir. */
+function flattenMenuLeaves(menu) {
+  var out = []
+  function walk(nodes, parentLabel) {
+    (nodes || []).forEach(function(node) {
+      var hasChildren = Array.isArray(node.children) && node.children.length > 0
+      if (hasChildren) {
+        walk(node.children, node.label)
+      } else if (node.url) {
+        out.push({
+          key: node.key,
+          label: node.label,
+          url: node.url,
+          icon: node.icon,
+          matchPath: node.matchPath,
+          groupLabel: parentLabel || node.label,
+        })
+      }
+    })
+  }
+  walk(menu, null)
+  return out
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -883,6 +944,9 @@ export default function Shell(props) {
           hideSidebarToggle={forceSidebarHidden}
           onProfileClick={function() { setProfileOpen(function(o) { return !o }); setOpenTabsOpen(false) }}
           onOpenTabsClick={function() { setOpenTabsOpen(function(o) { return !o }); setProfileOpen(false) }}
+          menu={menu}
+          onNavigate={openNodeAsTab}
+          onGoHome={handleLogoClick}
         />
 
         <AnimatePresence>
@@ -1785,10 +1849,16 @@ function Header(props) {
         </button>
       )}
 
-      {/* Spacer — Bell + Profil saga yaslanir */}
-      <div className="flex-1" />
+      {/* Hızlı erişim (kısayol) çubuğu — kalan orta alanı kaplar, Bell + Profil sağa yaslanır */}
+      <ShortcutsBar
+        isDark={isDark}
+        lang={lang}
+        menu={props.menu}
+        onNavigate={props.onNavigate}
+        onGoHome={props.onGoHome}
+      />
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <div className="relative" ref={notifBtnRef}>
           <button
             onClick={function () { setNotifOpen(function (p) { return !p }) }}
