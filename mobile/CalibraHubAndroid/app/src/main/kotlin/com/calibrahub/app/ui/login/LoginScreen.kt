@@ -19,24 +19,35 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.calibrahub.app.R
 import com.calibrahub.app.app
 import com.calibrahub.app.data.CompanyDto
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,6 +70,11 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     // Boş = kimlik bilgisi adımı gösterilir; dolu = şirket seçim adımı gösterilir.
     var companyChoices by remember { mutableStateOf<List<CompanyDto>>(emptyList()) }
 
+    // Kilit-kadranının bulmaca durumu — YALNIZ görsel katmanı sürer, login akış mantığına
+    // karışmaz. KRİTİK: Solved (çözüldü) durumu client'ta parola kontrolüyle DEĞİL, yalnız
+    // sunucu login onayıyla (loginCompanies >= 1 şirket veya doLogin başarısı) tetiklenir.
+    var dialState by remember { mutableStateOf(LockDialState.Idle) }
+
     // Mevcut base URL (sunucu ayarları paneli için)
     LaunchedEffect(Unit) {
         baseUrl = session.currentBaseUrl()
@@ -69,9 +85,23 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     // (kotlin.Result.fold inline'dır) suspend çağrılar burada askıya alma zincirini bozmaz.
     suspend fun doLogin(companyId: Int) {
         loading = true
+        // Çok-şirket akışında kadran loginCompanies onayıyla zaten çözülmüş olabilir;
+        // o durumda Loading'e geri düşürmeyiz (çözülmüş kilit tekrar karışmasın).
+        if (dialState != LockDialState.Solved) dialState = LockDialState.Loading
         repo.login(email.trim(), password, companyId).fold(
-            onSuccess = { onLoggedIn() },
+            onSuccess = {
+                // Bulmaca sunucu onayıyla çözüldü: katmanlar kilitlenir + yeşil kutlama.
+                // Kısa kutlamadan sonra mevcut navigasyon aynen devam eder (onLoggedIn).
+                if (dialState != LockDialState.Solved) {
+                    dialState = LockDialState.Solved
+                    delay(1600)
+                } else {
+                    delay(250)
+                }
+                onLoggedIn()
+            },
             onFailure = { e ->
+                dialState = LockDialState.Failed
                 snackbarHostState.showSnackbar("Giriş başarısız: ${e.message ?: "bilinmeyen hata"}")
             }
         )
@@ -88,7 +118,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            CalibraLoginBadge()
+            CalibraLoginBadge(passwordLength = password.length, dialState = dialState)
             Spacer(Modifier.height(40.dp))
 
             if (companyChoices.isEmpty()) {
@@ -106,7 +136,12 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
 
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = {
+                        password = it
+                        // Her düzenlemede kadran "karışıyor" moduna döner (Failed'dan da çıkar);
+                        // tamamen silinince başlangıç karışık konumuna geri sarar.
+                        dialState = if (it.isEmpty()) LockDialState.Idle else LockDialState.Typing
+                    },
                     label = { Text("Parola") },
                     singleLine = true,
                     enabled = !loading,
@@ -126,22 +161,28 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                     onClick = {
                         scope.launch {
                             loading = true
+                            dialState = LockDialState.Loading
                             repo.loginCompanies(email.trim(), password).fold(
                                 onSuccess = { list ->
                                     when {
                                         list.isEmpty() -> {
                                             loading = false
+                                            dialState = LockDialState.Failed
                                             snackbarHostState.showSnackbar("Kimlik geçersiz veya erişilebilir şirket yok")
                                         }
                                         list.size == 1 -> doLogin(list.first().id)
                                         else -> {
                                             loading = false
+                                            // Parola sunucuda doğrulandı → bulmaca çözüldü;
+                                            // şirket seçimi çözülmüş (yeşil) kadranla yapılır.
+                                            dialState = LockDialState.Solved
                                             companyChoices = list
                                         }
                                     }
                                 },
                                 onFailure = {
                                     loading = false
+                                    dialState = LockDialState.Failed
                                     snackbarHostState.showSnackbar("Kimlik geçersiz veya erişilebilir şirket yok")
                                 }
                             )
@@ -182,7 +223,12 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                 }
 
                 TextButton(
-                    onClick = { companyChoices = emptyList() },
+                    onClick = {
+                        companyChoices = emptyList()
+                        // Kimlik adımına dönüldü: çözülmüş görünüm yanıltmasın, kadran
+                        // parola durumuna uygun karışık konuma geri döner (görsel reset).
+                        dialState = if (password.isEmpty()) LockDialState.Idle else LockDialState.Typing
+                    },
                     enabled = !loading
                 ) { Text("Geri") }
             }
@@ -220,24 +266,99 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
 }
 
 /**
- * Login formunun üstünde ortalı marka bloğu: kalibrasyon halkalı logo rozeti + alt başlık.
- * Tamamen stateless/dekoratif — dışarıya state sızdırmaz, parametre almaz.
+ * Kilit-kadranının görsel durum makinesi. YALNIZ görsel katmanı sürer; login akış mantığını
+ * etkilemez. Solved, client'ta parola kontrolüyle değil sadece sunucu onayıyla set edilir.
+ */
+private enum class LockDialState { Idle, Typing, Loading, Solved, Failed }
+
+/**
+ * Bir kilit katmanının (halkasının) sabit tanımı.
+ *
+ * Harf dizilimi sözleşmesi: CALIBRAHUB'ın bu katmana düşen segmenti dizinin İLK
+ * [segmentLength] karakteridir; kalanı şaşırtmaca (decoy) harflerdir. Katman ofseti slot
+ * cinsinden tam-tur katına (0, ±slotSayısı, …) geldiğinde segment, kadranın üst okuma
+ * yayında ortalanmış durur.
+ *
+ * [baseScramble] BİLEREK yarım-slot kesirlidir (x.5): yazma adımları hep tamsayı slot
+ * olduğundan, katman parola yazımı sırasında matematiksel olarak HİÇBİR uzunlukta tam
+ * hizalanamaz — "doğru kelime yazarak çözme" ihtimali yapısal olarak kapalıdır; çözülme
+ * yalnız sunucu onayında ofset tam-tur katına animasyonla oturtularak gerçekleşir.
+ */
+private data class LockRingSpec(
+    val letters: String,      // slot başına bir harf; segment + decoy'lar
+    val segmentLength: Int,   // CALIBRAHUB segmentinin uzunluğu (dizinin başı)
+    val baseScramble: Float,  // boşta duruş ofseti (slot; kasıtlı .5 kesirli)
+    val direction: Int,       // yazarken dönüş yönü: +1 saat yönü, -1 tersi
+    val radiusDp: Float,      // harf merkezlerinin yarıçapı (dp)
+    val fontSp: Float,        // harf punto boyutu (sp)
+)
+
+/**
+ * Dıştan içe 3 katman: CALI (dış, 16 slot) + BRA (orta, 14 slot) + HUB (iç, 12 slot).
+ * Hizalanınca üst yaydan dışarıdan içeriye "CALI / BRA / HUB" = CALIBRAHUB okunur.
+ * Decoy harfler segment dizilimlerini tekrar etmeyecek şekilde seçildi. Slot sayıları
+ * kasıtlı farklı (16/14/12): karışırken katmanlar farklı hızda "dağılıyor" hissi verir.
+ */
+private val LockDialRings = listOf(
+    LockRingSpec("CALIWTSKEDPNXOVZ", 4, +7.5f, +1, 84f, 11f),
+    LockRingSpec("BRAKMYTUZEWDOS",   3, -5.5f, -1, 71f, 10f),
+    LockRingSpec("HUBSTKAEMYOZ",     3, +4.5f, +1, 58f, 10f),
+)
+
+/**
+ * n. tuş vuruşu katmanları döngüsel gezer (1→dış, 2→orta, 3→iç, 4→dış…): [ring] katmanının
+ * parola [passwordLength] uzunluğundayken almış olduğu toplam adım sayısı. Uzunluktan
+ * türetildiği için silme işlemi otomatik olarak aynı adımları geri sarar.
+ */
+private fun ringSteps(passwordLength: Int, ring: Int): Int =
+    if (passwordLength <= ring) 0 else (passwordLength - ring + 2) / 3
+
+/** Yazma/karışma hedef ofseti (slot) — taban karışıklık + yönlü adımlar. */
+private fun ringTypingTarget(passwordLength: Int, ring: Int): Float {
+    val spec = LockDialRings[ring]
+    return spec.baseScramble + spec.direction * ringSteps(passwordLength, ring)
+}
+
+/**
+ * Çözülmüş hedef ofset: mevcut karışık konuma EN YAKIN tam-tur katı — kilit en kısa yoldan
+ * "klik" diye oturur; segment üst okuma yayına gelir.
+ */
+private fun ringSolvedTarget(passwordLength: Int, ring: Int): Float {
+    val slots = LockDialRings[ring].letters.length
+    return ((ringTypingTarget(passwordLength, ring) / slots).roundToInt() * slots).toFloat()
+}
+
+/**
+ * Login formunun üstünde ortalı marka bloğu: harf-bulmacalı kilit kadranı + logo + alt başlık.
+ * Stateless — kadranın tepki verdiği durum (parola uzunluğu, bulmaca durumu) parametreyle
+ * yukarıdan gelir (state hoisting), kendi state'i yoktur.
+ *
+ * @param passwordLength Parola alanındaki karakter sayısı; her karakter bir katmanı bir
+ *                       adım döndürür (katman seçimi tuş sırasına göre döngüseldir).
+ * @param dialState      Bulmaca durumu — Solved yalnız sunucu login onayında gelir.
  */
 @Composable
-private fun CalibraLoginBadge() {
+private fun CalibraLoginBadge(
+    passwordLength: Int,
+    dialState: LockDialState
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            modifier = Modifier.size(184.dp),
+            modifier = Modifier.size(200.dp),
             contentAlignment = Alignment.Center
         ) {
-            CalibrationRing(modifier = Modifier.fillMaxSize())
+            CalibrationLockDial(
+                passwordLength = passwordLength,
+                state = dialState,
+                modifier = Modifier.fillMaxSize()
+            )
 
             Image(
                 painter = painterResource(id = R.drawable.calibrahub_logo),
                 contentDescription = "CalibraHub logosu",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(136.dp)
+                    .size(92.dp)
                     .clip(CircleShape)
                     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), CircleShape)
             )
@@ -252,103 +373,222 @@ private fun CalibraLoginBadge() {
 }
 
 /**
- * Marka kimliğine uygun "kalibrasyon halkası": çentikli (tick mark'lı) bir gösterge kadranı
- * + sürekli süpüren gradyan vurgu — sanki gösterge durmadan kalibre oluyormuş hissi verir.
- * Web login ekranındaki `cal-dial` SVG kadranıyla aynı ruh (ince kadran + hareketli ibre/iz),
- * renkler burada Material3 tema token'larından (`primary`/`secondary`) gelir — hardcoded hex
- * yok, dark/light temaya otomatik uyar.
+ * 3 katmanlı harf-bulmacalı kilit kadranı. Logo çevresinde iç içe üç harf halkası döner;
+ * katman ofsetleri tam-tur katına oturduğunda üst okuma yayında dıştan içe CALI / BRA / HUB
+ * (= CALIBRAHUB) okunur, karışıkken decoy harfler okumayı bozar. Renkler Material3 tema
+ * token'larından gelir; "çözüldü" yeşili tek yerel sabittir (M3 şemasında success tokeni yok).
  *
- * Hareket düşük genlikli/yumuşak tutulur (prefers-reduced-motion muadili): tek bir ince dönen
- * vurgu (9 sn/tur, linear) + hafif nefes alma (%80-%100 opaklık, 2.6 sn) — göz yormaz,
- * dikkat dağıtmadan sürekli döngüde kalır.
+ * Durum davranışları:
+ * - Idle: kadran tamamen sabittir (sürekli animasyon yok); katmanlar taban karışık konumda.
+ * - Typing: her karakter bir katmanı bir slot döndürür (tuş sırası katmanları döngüsel
+ *   gezer), silme geri sarar; spring geçişi mekanik "dişli" hissi verir. Taban ofsetler
+ *   yarım-slot kesirli olduğundan yazarken hizalanma İMKANSIZDIR — CALIBRAHUB oluşmaz.
+ * - Loading: katmanlar düşük genlikli "ayar arıyor" salınımı yapar (kalibrasyon hissi).
+ * - Solved (YALNIZ sunucu login onayı): katmanlar sırayla en yakın hizalı konuma "klik"
+ *   diye oturur, segment harfleri yeşile döner, decoy'lar söner, kadran yeşil parıltıyla
+ *   yanar — bulmaca çözüldü.
+ * - Failed: hizalanma OLMAZ; kadran kısa sarsılma (shake) + kırmızı flaş verir, harfler
+ *   görünür kalır ama kelime oluşmaz. Yeni yazımda tekrar Typing'e dönülür.
  */
 @Composable
-private fun CalibrationRing(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "calibrationRing")
+private fun CalibrationLockDial(
+    passwordLength: Int,
+    state: LockDialState,
+    modifier: Modifier = Modifier
+) {
+    // ── Katman ofsetleri (slot birimi) — her katman kendi Animatable'ı ile döner ────────
+    val ringOffsets = remember { LockDialRings.map { Animatable(it.baseScramble) } }
 
-    val sweepAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 9000, easing = LinearEasing)
-        ),
-        label = "sweepAngle"
-    )
+    LaunchedEffect(state, passwordLength) {
+        when (state) {
+            LockDialState.Solved -> {
+                // Kombinasyon kilidi çözülüşü: katmanlar dıştan içe SIRAYLA hizaya oturur.
+                LockDialRings.indices.forEach { r ->
+                    launch {
+                        delay(r * 170L)
+                        ringOffsets[r].animateTo(
+                            targetValue = ringSolvedTarget(passwordLength, r),
+                            animationSpec = spring(dampingRatio = 0.58f, stiffness = 700f)
+                        )
+                    }
+                }
+            }
+            else -> {
+                // Idle/Typing/Loading/Failed: karışık (yazım) hedefine dön. Efekt her tuşta
+                // yeniden başlar; süren animasyon iptal olup mevcut konumdan retarget eder.
+                LockDialRings.indices.forEach { r ->
+                    launch {
+                        ringOffsets[r].animateTo(
+                            targetValue = ringTypingTarget(passwordLength, r),
+                            animationSpec = spring(dampingRatio = 0.72f, stiffness = 300f)
+                        )
+                    }
+                }
+            }
+        }
+    }
 
-    val breathe by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathe"
-    )
+    // ── Yükleme salınımı — yalnız Loading'de döner, çıkışta sıfıra iner ─────────────────
+    val wobble = remember { Animatable(0f) }
+    LaunchedEffect(state) {
+        if (state == LockDialState.Loading) {
+            wobble.snapTo(0f)
+            wobble.animateTo(
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                )
+            )
+        } else {
+            wobble.animateTo(0f, tween(durationMillis = 200))
+        }
+    }
 
-    val glowColor  = MaterialTheme.colorScheme.primary
-    val trackColor = MaterialTheme.colorScheme.outline
-    val tickColor  = MaterialTheme.colorScheme.onSurfaceVariant
-    val sweepStart = MaterialTheme.colorScheme.secondary
-    val sweepEnd   = MaterialTheme.colorScheme.primary
+    // ── Çözülme yeşili / hata kırmızısı / sarsılma geçişleri ────────────────────────────
+    val solveGlow = remember { Animatable(0f) }   // 0..1 → yeşil vurgu ağırlığı
+    val failFlash = remember { Animatable(0f) }   // 0..1 → kırmızı flaş ağırlığı
+    val shakeDeg  = remember { Animatable(0f) }   // derece → tüm katmanlara eklenen sarsılma
+    LaunchedEffect(state) {
+        when (state) {
+            LockDialState.Solved -> {
+                failFlash.snapTo(0f)
+                // Katman klikleri başladıktan hemen sonra yeşil dalga yükselir.
+                solveGlow.animateTo(1f, tween(durationMillis = 700, delayMillis = 300))
+            }
+            LockDialState.Failed -> {
+                solveGlow.animateTo(0f, tween(durationMillis = 150))
+                launch {
+                    failFlash.animateTo(1f, tween(durationMillis = 90))
+                    failFlash.animateTo(0f, tween(durationMillis = 650))
+                }
+                // Kilit "reddetti" sarsılması: sönümlenen açısal jiggle.
+                shakeDeg.animateTo(
+                    targetValue = 0f,
+                    animationSpec = keyframes {
+                        durationMillis = 500
+                        0f at 0
+                        5.5f at 70
+                        -4.5f at 160
+                        3.2f at 260
+                        -2f at 350
+                        1f at 430
+                        0f at 500
+                    }
+                )
+            }
+            else -> {
+                solveGlow.animateTo(0f, tween(durationMillis = 250))
+                failFlash.snapTo(0f)
+                shakeDeg.snapTo(0f)
+            }
+        }
+    }
+
+    // ── Harf ölçüm altyapısı — layout'lar (katman, harf) anahtarıyla cache'lenir ────────
+    val textMeasurer = rememberTextMeasurer(cacheSize = 64)
+    val ringStyles = remember {
+        LockDialRings.map { TextStyle(fontSize = it.fontSp.sp, fontWeight = FontWeight.SemiBold) }
+    }
+    val letterLayouts = remember(textMeasurer) { mutableMapOf<Pair<Int, Char>, TextLayoutResult>() }
+
+    val letterColor  = MaterialTheme.colorScheme.onSurfaceVariant
+    val trackColor   = MaterialTheme.colorScheme.outline
+    val accentColor  = MaterialTheme.colorScheme.primary
+    val errorColor   = MaterialTheme.colorScheme.error
+    val successGreen = Color(0xFF2FBF71) // "bulmaca çözüldü" yeşili — light/dark'ta okunur
 
     Canvas(modifier = modifier) {
-        val strokeW    = 2.dp.toPx()
-        val ringRadius = size.minDimension / 2f - strokeW * 2f
-        val mid        = Offset(size.width / 2f, size.height / 2f)
+        val mid   = Offset(size.width / 2f, size.height / 2f)
+        val p     = solveGlow.value
+        val q     = failFlash.value
+        val w     = wobble.value
+        val shake = shakeDeg.value
 
-        // 0) Logo ile halka arasındaki boşlukta nefes alan yumuşak parıltı
+        // 0) Merkez parıltı: nötr accent → çözülünce yeşil, hatada kısa kırmızı ton.
+        val glowCol = lerp(lerp(accentColor, successGreen, p), errorColor, q * 0.7f)
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(glowColor.copy(alpha = 0.14f * breathe), Color.Transparent),
+                colors = listOf(
+                    glowCol.copy(alpha = 0.10f + 0.16f * p + 0.05f * w + 0.10f * q),
+                    Color.Transparent
+                ),
                 center = mid,
-                radius = ringRadius * 1.05f
+                radius = size.minDimension / 2f
             ),
-            radius = ringRadius * 1.05f,
+            radius = size.minDimension / 2f,
             center = mid
         )
 
-        // 1) Sabit gösterge izi (bezel)
-        drawCircle(
-            color = trackColor.copy(alpha = 0.25f),
-            radius = ringRadius,
-            center = mid,
-            style = Stroke(width = strokeW)
-        )
-
-        // 2) Çentikli kadran — 48 ince tik, her 4'te bir majör tik (gösterge/kadran hissi)
-        val tickCount = 48
-        for (i in 0 until tickCount) {
-            val isMajor  = i % 4 == 0
-            val angleRad = i * (2.0 * PI / tickCount)
-            val dir      = Offset(cos(angleRad).toFloat(), sin(angleRad).toFloat())
-            val outerR   = ringRadius + strokeW * 0.6f
-            val innerR   = outerR - (if (isMajor) strokeW * 3f else strokeW * 1.5f)
-            drawLine(
-                color = tickColor.copy(alpha = (if (isMajor) 0.55f else 0.26f) * breathe),
-                start = mid + dir * innerR,
-                end = mid + dir * outerR,
-                strokeWidth = if (isMajor) strokeW * 0.9f else strokeW * 0.55f,
-                cap = StrokeCap.Round
-            )
-        }
-
-        // 3) Süpüren kalibrasyon vurgusu — ince "kuyruklu" gradyan (radar taraması gibi).
-        //    Dairenin ~%66'sı tamamen saydam bırakılır ki hareket net bir "geçen ışık" olarak
-        //    okunsun; geniş, her yeri kaplayan bir gradyan yerine dar/zarif bir kuyruk tercih edildi.
-        rotate(degrees = sweepAngle, pivot = mid) {
+        // 1) Yapı çemberleri — katmanları ayıran ince oluklar (rozet iskeleti).
+        val bezelCol = lerp(lerp(trackColor, successGreen, p * 0.8f), errorColor, q * 0.5f)
+        for (bezelRadiusDp in listOf(51f, 64.5f, 77.5f, 91f)) {
             drawCircle(
-                brush = Brush.sweepGradient(
-                    0.00f to Color.Transparent,
-                    0.66f to Color.Transparent,
-                    0.80f to sweepStart.copy(alpha = 0.55f * breathe),
-                    0.92f to sweepEnd.copy(alpha = 0.95f * breathe),
-                    1.00f to Color.Transparent,
-                    center = mid
-                ),
-                radius = ringRadius,
+                color = bezelCol.copy(alpha = 0.22f),
+                radius = bezelRadiusDp.dp.toPx(),
                 center = mid,
-                style = Stroke(width = strokeW * 1.7f, cap = StrokeCap.Round)
+                style = Stroke(width = 1.dp.toPx())
             )
         }
+
+        // 2) Çözüldüğünde üst okuma yayının arkasına yumuşak yeşil hale (harflerin altına).
+        if (p > 0.01f) {
+            val arcMidR = 71f.dp.toPx()
+            drawArc(
+                color = successGreen.copy(alpha = 0.14f * p),
+                startAngle = -145f,
+                sweepAngle = 110f,
+                useCenter = false,
+                topLeft = mid - Offset(arcMidR, arcMidR),
+                size = Size(arcMidR * 2f, arcMidR * 2f),
+                style = Stroke(width = 40f.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+
+        // 3) Harf katmanları. Her harf kendi slot açısında, teğetsel yönelimle (kadran gibi)
+        //    çizilir; sarsılma (shake) tüm katman açılarına eklenir. Segment harfleri
+        //    çözülmeden önce decoy'larla AYNI görünür (bulmaca ipucu sızdırmaz); çözülünce
+        //    segment yeşile döner, decoy'lar söner → CALIBRAHUB öne çıkar.
+        LockDialRings.forEachIndexed { r, spec ->
+            val slots       = spec.letters.length
+            val stepDeg     = 360f / slots
+            val wobbleSlots = w * 0.16f * spec.direction * (1f - r * 0.18f)
+            val offset      = ringOffsets[r].value + wobbleSlots
+            val radiusPx    = spec.radiusDp.dp.toPx()
+            val centerShift = (spec.segmentLength - 1) / 2f
+
+            spec.letters.forEachIndexed { j, ch ->
+                val deg = -90f + shake + (j - centerShift + offset) * stepDeg
+                val rad = deg * (PI / 180.0)
+                val letterCenter = mid + Offset(cos(rad).toFloat(), sin(rad).toFloat()) * radiusPx
+                val layout = letterLayouts.getOrPut(r to ch) {
+                    textMeasurer.measure(AnnotatedString(ch.toString()), ringStyles[r])
+                }
+                val isSegment = j < spec.segmentLength
+                val baseCol =
+                    if (isSegment) lerp(letterColor.copy(alpha = 0.85f), successGreen, p)
+                    else letterColor.copy(alpha = 0.85f - 0.60f * p)
+                val finalCol = lerp(baseCol, errorColor, q * 0.65f)
+                rotate(degrees = deg + 90f, pivot = letterCenter) {
+                    drawText(
+                        textLayoutResult = layout,
+                        color = finalCol,
+                        topLeft = letterCenter - Offset(layout.size.width / 2f, layout.size.height / 2f)
+                    )
+                }
+            }
+        }
+
+        // 4) Okuma penceresi işareti — üstte sabit indeks çentiği (kombinasyon kilidi imi).
+        //    Stator'a aittir: sarsılmadan etkilenmez, kadranın nereden okunduğunu gösterir.
+        val markerCol = lerp(lerp(accentColor, successGreen, p), errorColor, q * 0.6f)
+        val up = Offset(0f, -1f)
+        drawLine(
+            color = markerCol.copy(alpha = 0.85f),
+            start = mid + up * 92.5f.dp.toPx(),
+            end = mid + up * 97.5f.dp.toPx(),
+            strokeWidth = 2.5f.dp.toPx(),
+            cap = StrokeCap.Round
+        )
     }
 }
