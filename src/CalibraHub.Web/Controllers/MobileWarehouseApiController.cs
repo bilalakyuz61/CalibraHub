@@ -258,12 +258,19 @@ public sealed class MobileWarehouseApiController : ControllerBase
 
         var balances = await GetLocationBalancesAsync(item.Id, ct);
 
+        // Takip tipi + AutoSerial (mobil seri/lot UI gating'i) — GetItemsForLookupAsync projeksiyonu
+        // TrackingType'ı doldurmadığından Items'tan doğrudan çözülür (elle string map, raw enum değil).
+        var tracking = await GetTrackingMapAsync(new[] { item.Id }, ct);
+        var (trackingType, autoSerial) = tracking.TryGetValue(item.Id, out var tr) ? tr : ("None", false);
+
         return Ok(new
         {
             itemId   = item.Id,
             itemCode = item.Code,
             itemName = item.Name,
             unit     = unitCode,
+            trackingType,
+            autoSerial,
             balances,
         });
     }
@@ -419,6 +426,10 @@ public sealed class MobileWarehouseApiController : ControllerBase
         var units = await _logisticsService.GetUnitsAsync(ct);
         var unitCodeById = units.ToDictionary(u => u.Id, u => u.Code);
 
+        // Takip tipi + AutoSerial (mobil seri/lot UI gating'i) — GetItemsPagedAsync projeksiyonu
+        // TrackingType'ı doldurmadığından Items'tan tek batch ile çözülür (elle string map).
+        var tracking = await GetTrackingMapAsync(items.Select(i => i.Id), ct);
+
         // Barkod/kod TAM esitligi (case-insensitive) sonuclarin basina alinir — taranan deger
         // Code'a VEYA Barcode'a birebir denk geliyorsa mobil ekranda ilk sirada (idealde tek
         // sonuc) cikar. Stabil siralama: esit-olmayanlar SQL'den gelen orijinal (Code alfabetik)
@@ -437,9 +448,47 @@ public sealed class MobileWarehouseApiController : ControllerBase
                 ? unitCode
                 : "",
             barcode = i.Barcode ?? i.Code,
+            trackingType = tracking.TryGetValue(i.Id, out var tr) ? tr.Tracking : "None",
+            autoSerial   = tracking.TryGetValue(i.Id, out var tr2) && tr2.AutoSerial,
         });
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Malzeme id → (TrackingType "None"|"Lot"|"Serial", AutoSerial) haritası — Items'tan tek batch.
+    /// SearchItems/Stock yanıtlarındaki seri/lot UI gating alanlarını besler. GetItemsForLookupAsync /
+    /// GetItemsPagedAsync / GetItemsByIdsAsync projeksiyonları TrackingType/AutoSerial doldurmaz
+    /// (Item.TrackingType her kayıtta "None" default'una düşer) — bu yüzden burada DB'den doğrudan
+    /// okunur ve kanonik string'e elle map edilir (JSON enum serialize değil). Boş liste → boş harita (DB hit yok).
+    /// </summary>
+    private async Task<Dictionary<int, (string Tracking, bool AutoSerial)>> GetTrackingMapAsync(
+        IEnumerable<int> itemIds, CancellationToken ct)
+    {
+        var ids = (itemIds ?? Array.Empty<int>()).Where(i => i > 0).Distinct().ToList();
+        var map = new Dictionary<int, (string, bool)>(ids.Count);
+        if (ids.Count == 0) return map;
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var names = ids.Select((_, i) => "@id" + i).ToArray();
+        cmd.CommandText =
+            $"SELECT [Id], ISNULL([TrackingType],'None'), ISNULL([AutoSerial],0) FROM [{_schema}].[Items] WHERE [Id] IN ({string.Join(",", names)});";
+        for (var i = 0; i < ids.Count; i++)
+            cmd.Parameters.AddWithValue(names[i], ids[i]);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var raw = r.IsDBNull(1) ? "None" : r.GetString(1);
+            // Kanonik sözleşme: tam olarak "None"|"Lot"|"Serial" (bilinmeyen/boş → "None").
+            var canon = string.Equals(raw, "Lot", StringComparison.OrdinalIgnoreCase) ? "Lot"
+                      : string.Equals(raw, "Serial", StringComparison.OrdinalIgnoreCase) ? "Serial"
+                      : "None";
+            var autoSerial = !r.IsDBNull(2) && Convert.ToBoolean(r.GetValue(2));
+            map[r.GetInt32(0)] = (canon, autoSerial);
+        }
+        return map;
     }
 
     // ──────────────────────────────────────────────────────────────────────

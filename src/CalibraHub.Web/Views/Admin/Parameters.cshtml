@@ -11,6 +11,7 @@
     var salesDeliveryFifoBind = ViewData["SalesDeliveryFifoBind"] as bool? ?? true;
     var purchaseDeliveryRequireOrder = ViewData["PurchaseDeliveryRequireOrder"] as bool? ?? false;
     var salesDeliveryRequireOrder = ViewData["SalesDeliveryRequireOrder"] as bool? ?? false;
+    var salesDeliverySerialOverride = ViewData["SalesDeliverySerialOverride"] as bool? ?? true;
     var salesOrderAffects = ViewData["SalesOrderAffectsStock"] as bool? ?? false;
     var orderSerialTracking = ViewData["OrderSerialTracking"] as bool? ?? false;
     var orderSerialReservation = ViewData["OrderSerialReservation"] as bool? ?? false;
@@ -677,6 +678,27 @@ body.app-theme-dark .ap-tab.is-active::before {
                         </label>
                     </div>
                 </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Satış İrsaliyesinde Sipariş Serisi Değiştirilebilir</div>
+                        <div class="ap-row-desc">
+                            Kapalıyken, siparişe rezerve edilmiş seriler irsaliyede değiştirilemez; farklı seri
+                            seçimi reddedilir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" class="ap-neg-switch" id="ap-sales-serial-override"
+                                   data-on="Açık" data-off="Kapalı" @(salesDeliverySerialOverride ? "checked" : null) />
+                            <span class="ap-switch-track @(salesDeliverySerialOverride ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(salesDeliverySerialOverride ? "is-active" : "")"
+                                  id="ap-sales-serial-override-label">@(salesDeliverySerialOverride ? "Açık" : "Kapalı")</span>
+                        </label>
+                    </div>
+                </div>
             </section>
 
             @* ── Satış Sipariş ───────────────────────────── *@
@@ -1033,6 +1055,7 @@ body.app-theme-dark .ap-tab.is-active::before {
                 var sFifoEl = document.getElementById('ap-sales-fifo');
                 var pReqEl  = document.getElementById('ap-purchase-require-order');
                 var sReqEl  = document.getElementById('ap-sales-require-order');
+                var sSerOvEl = document.getElementById('ap-sales-serial-override');
                 var rs = await fetch('/Admin/SaveStockParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -1042,7 +1065,8 @@ body.app-theme-dark .ap-tab.is-active::before {
                         purchaseDeliveryFifoBind: !!(pFifoEl && pFifoEl.checked),
                         salesDeliveryFifoBind: !!(sFifoEl && sFifoEl.checked),
                         purchaseDeliveryRequireOrder: !!(pReqEl && pReqEl.checked),
-                        salesDeliveryRequireOrder: !!(sReqEl && sReqEl.checked)
+                        salesDeliveryRequireOrder: !!(sReqEl && sReqEl.checked),
+                        salesDeliverySerialOverride: !!(sSerOvEl && sSerOvEl.checked)
                     })
                 });
                 var datas = await rs.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
