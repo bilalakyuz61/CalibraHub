@@ -380,6 +380,14 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
   box-shadow: 0 24px 64px rgba(0,0,0,.35);
 }
 .iw-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+.iw-import-icon { color: #6366f1; }
+body.app-theme-dark .iw-import-icon { color: #a5b4fc; }
+.iw-import-box-text { color: #4338ca; }
+body.app-theme-dark .iw-import-box-text { color: #a5b4fc; }
+.iw-import-warn-text { color: #b45309; }
+body.app-theme-dark .iw-import-warn-text { color: #fbbf24; }
+.iw-import-ok-text { color: #15803d; }
+body.app-theme-dark .iw-import-ok-text { color: #4ade80; }
 .iw-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--iw-text); }
 .iw-modal-msg { font-size: 13px; color: var(--iw-muted); text-align: center; line-height: 1.55; }
 .iw-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }

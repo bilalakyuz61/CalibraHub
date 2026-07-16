@@ -281,32 +281,24 @@ export default function AiProvidersPanel() {
 
               {/* 2026-05-23: Ollama icin Ollama kurulum rehberi info karti. */}
               {editing.code === 'ollama' && (
-                <div className="ai-pp__field" style={{
-                  background: 'rgba(99, 102, 241, 0.06)',
-                  border: '1px solid rgba(99, 102, 241, 0.25)',
-                  borderRadius: 8,
-                  padding: '10px 12px',
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: 'rgba(226, 232, 240, 0.92)'
-                }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6, color: '#a5b4fc' }}>
+                <div className="ai-pp__field ai-pp__ollama-info">
+                  <div className="ai-pp__ollama-info-title">
                     Ollama Lokal Kurulum Rehberi
                   </div>
                   <ol style={{ paddingLeft: 18, margin: 0 }}>
                     <li>
                       <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer"
-                         style={{ color: '#818cf8', textDecoration: 'underline' }}>
+                         className="ai-pp__ollama-link">
                         ollama.com/download
                       </a> &mdash; uygulamayı indirip kurun.
                     </li>
                     <li>
-                      Terminalde: <code style={{ background: 'rgba(0,0,0,0.25)', padding: '1px 6px', borderRadius: 4 }}>
+                      Terminalde: <code className="ai-pp__ollama-code">
                         ollama pull llama3.1:8b
                       </code>
                     </li>
                     <li>
-                      Ollama servisi <code style={{ background: 'rgba(0,0,0,0.25)', padding: '1px 6px', borderRadius: 4 }}>
+                      Ollama servisi <code className="ai-pp__ollama-code">
                         localhost:11434
                       </code>'te otomatik açılır. Endpoint boş bırakılırsa bu adres kullanılır.
                     </li>

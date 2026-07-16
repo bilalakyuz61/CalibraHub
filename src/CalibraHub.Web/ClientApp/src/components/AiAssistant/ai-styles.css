@@ -487,6 +487,24 @@ body.app-theme-dark .ai-navigate-card {
     border-radius: 8px;
 }
 
+/* Ollama kurulum rehberi info kartı — light default, dark override */
+.ai-pp__ollama-info {
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #334155;
+}
+body.app-theme-dark .ai-pp__ollama-info { color: rgba(226, 232, 240, 0.92); }
+.ai-pp__ollama-info-title { font-weight: 600; margin-bottom: 6px; color: #4338ca; }
+body.app-theme-dark .ai-pp__ollama-info-title { color: #a5b4fc; }
+.ai-pp__ollama-link { color: #4f46e5; text-decoration: underline; }
+body.app-theme-dark .ai-pp__ollama-link { color: #818cf8; }
+.ai-pp__ollama-code { background: rgba(15,23,42,0.08); padding: 1px 6px; border-radius: 4px; }
+body.app-theme-dark .ai-pp__ollama-code { background: rgba(0,0,0,0.25); }
+
 /* Buttons */
 .ai-pp__btn {
     display: inline-flex; align-items: center; gap: 5px;

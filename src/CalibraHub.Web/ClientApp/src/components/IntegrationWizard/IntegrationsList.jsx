@@ -383,7 +383,7 @@ function ImportConfirmModal({ fileName, bundle, existingMatch, loading, onCancel
   return (
     <div className="iw-modal-bd" onClick={loading ? undefined : onCancel}>
       <div className="iw-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
-        <div className="iw-modal-icon" style={{ color: '#a5b4fc' }}>
+        <div className="iw-modal-icon iw-import-icon">
           <Upload size={32} />
         </div>
         <div className="iw-modal-title">İçe Aktar — Onay</div>
@@ -417,10 +417,10 @@ function ImportConfirmModal({ fileName, bundle, existingMatch, loading, onCancel
           {/* Faz 1.5: Profile uyarısı — bundle'da profile var ve hedefte yoksa
               credentials uyarısı göster (kullanıcı önceden bilsin). */}
           {hasApiProfile && (
-            <div style={{
+            <div className="iw-import-box-text" style={{
               padding: '8px 12px', borderRadius: 6,
               background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.25)',
-              color: '#a5b4fc', fontSize: 11.5, marginBottom: 10,
+              fontSize: 11.5, marginBottom: 10,
             }}>
               🔑 <strong>API Profile dahil:</strong> "{entry.apiProfile.name}" (Auth: {entry.apiProfile.authType}).
               Hedef ortamda profile yoksa <strong>otomatik oluşturulur</strong>, ancak <strong>credentials boş gelir</strong> —
@@ -429,16 +429,16 @@ function ImportConfirmModal({ fileName, bundle, existingMatch, loading, onCancel
           )}
 
           {existingMatch ? (
-            <div style={{
+            <div className="iw-import-warn-text" style={{
               padding: 12, borderRadius: 8, background: 'rgba(245,158,11,.10)',
-              border: '1px solid rgba(245,158,11,.4)', color: '#fbbf24', fontSize: 13,
+              border: '1px solid rgba(245,158,11,.4)', fontSize: 13,
             }}>
               ⚠ <strong>"{entry.name}"</strong> adında bir entegrasyon zaten var. Ne yapalım?
             </div>
           ) : (
-            <div style={{
+            <div className="iw-import-ok-text" style={{
               padding: 12, borderRadius: 8, background: 'rgba(34,197,94,.10)',
-              border: '1px solid rgba(34,197,94,.4)', color: '#4ade80', fontSize: 13,
+              border: '1px solid rgba(34,197,94,.4)', fontSize: 13,
             }}>
               ✓ Çakışma yok — yeni entegrasyon olarak içe alınacak.
             </div>
