@@ -108,10 +108,14 @@ public sealed class IntegrationOnSaveDispatcher : IIntegrationOnSaveDispatcher
                                 if (ParseOnlyIfNotSent(onSaveTrigger?.Config))
                                 {
                                     var existingStatus = await recordStatusRepo.GetAsync(integ.Id, statusRecordId, CancellationToken.None);
-                                    if (existingStatus?.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Sent)
+                                    if (existingStatus?.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Sent ||
+                                        existingStatus?.Status == CalibraHub.Domain.Enums.IntegrationRecordStatusType.Skipped)
                                     {
-                                        _log.LogInformation("[OnSaveDispatcher] {IntegrationName} (#{Id}) atlandi — zaten gonderilmis (RecordStatus.Sent) — recordId={RecordId}",
-                                            integ.Name, integ.Id, statusRecordId);
+                                        // Sent = zaten gonderilmis; Skipped = kullanici Aktarim Kuyrugu'nda
+                                        // manuel "haric tut" demis. Ikisinde de tekrar push etme
+                                        // (cascade Finding 1 ile simetrik — parent belge de kuyruk exclude'una saygi gosterir).
+                                        _log.LogInformation("[OnSaveDispatcher] {IntegrationName} (#{Id}) atlandi — RecordStatus.{Status} — recordId={RecordId}",
+                                            integ.Name, integ.Id, existingStatus.Status, statusRecordId);
                                         continue;
                                     }
                                 }
