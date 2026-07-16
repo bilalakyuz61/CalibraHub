@@ -422,6 +422,27 @@ function leafName(path) {
   return last.replace('[]', '')
 }
 
+/**
+ * Kaynak form alanı Id-kalıbında mı? (ContactId, ItemId, DocumentTypeId gibi FK alanları.)
+ * CLAUDE.md DB Naming Convention: "FK her zaman {Entity}Id" — bu yüzden PascalCase "Id" son
+ * eki güvenilir bir FK sinyalidir (ana sinyal). Ayrıca ikincil sinyal olarak alan metadata'sında
+ * dataType 'int' ise ve kod case-insensitive "id" ile bitiyorsa da yakalanır (camelCase/legacy).
+ *
+ * İki footgun sertleştirmesinde ortak kullanılır:
+ *   1) Cascade "Değer bazlı" toggle — Id alanında açılırsa kod→Id çözümü sayıyı kod sanır,
+ *      cascade sessizce no-op olur.
+ *   2) Lookup eşleşme kolonu — Id alanı "Code" ile eşleşmez, WHERE Code=<sayı> sessizce boş döner.
+ */
+function isIdLikeSourceField(code, fieldsList) {
+  if (!code) return false
+  const trimmed = String(code).trim()
+  if (!trimmed) return false
+  if (/Id$/.test(trimmed)) return true            // PascalCase FK konvansiyonu (ana sinyal)
+  const f = (fieldsList || []).find(x => x.code === trimmed)
+  if (f && /^int(eger)?$/i.test(f.dataType || '') && /id$/i.test(trimmed)) return true
+  return false
+}
+
 // ── Tablo cell stilleri (Alan Eşleme tablosu) ──
 const cellHeader = {
   padding: '8px 8px',
@@ -1025,6 +1046,9 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
 
                             const doc = fieldDocs[m.targetPath]
                             const hasDoc = !!(doc && (doc.description || doc.example || doc.notes || (doc.allowedValues && doc.allowedValues.length > 0)))
+                            // Footgun sertleştirme (Cascade "Değer bazlı"): kaynak FormField Id-kalıbındaysa
+                            // (ContactId gibi) kod→Id çözümü sayıyı kod sanıp bulamaz, cascade sessizce no-op olur.
+                            const sourceIsIdLikeForCascade = m.sourceType === 0 && isIdLikeSourceField(m.sourceValue, fields)
                             return (
                               <tr key={idx} className="iw-map-row">
                                 {/* Hedef Path — searchable combo (schema leaf'larindan).
@@ -1125,6 +1149,17 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                       })
                                     }
 
+                                    // Footgun sertleştirme: kaynak (Form Değeri) alanı Id-kalıbındaysa
+                                    // (ContactId gibi) "Code" ile eşleşmez — WHERE Code = <sayı> sessizce
+                                    // boş döner, ham değer fallback'e düşer. Varsayılan-zorlama sadece
+                                    // "Form Değeri" seçiminin onChange'inde (filters.length===0 iken, yani
+                                    // ilk kez seçiliyorken) uygulanır; burada sadece uyarı sinyali hesaplanır
+                                    // — yüklü/persisted satırlarda mutasyon yok.
+                                    const sourceIsIdLike = isIdLikeSourceField(primary.sourceField, fields)
+                                    const matchColumnMismatch = sourceIsIdLike
+                                      && !!primary.field
+                                      && primary.field.trim().toLowerCase() !== 'id'
+
                                     const fetchGuideMeta = (v) => {
                                       if (v && !guideColumns[v]) {
                                         fetch(`/api/guides/views/${encodeURIComponent(v)}/columns`,
@@ -1148,6 +1183,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                     }
 
                                     return (
+                                      <div>
                                       <div style={{
                                         display: 'grid',
                                         gridTemplateColumns: '2fr 1.1fr 10px 1fr 10px 1.4fr',
@@ -1164,7 +1200,16 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                           monospace size="sm" />
                                         {/* 2) Form değeri — formdan gelen anahtar */}
                                         <select value={primary.sourceField || ''}
-                                                onChange={e => updatePrimary({ sourceField: e.target.value })}
+                                                onChange={e => {
+                                                  const v = e.target.value
+                                                  // Yeni seçim akışı: satırda henüz persist edilmiş eşleşme kolonu
+                                                  // yoksa (ilk kez Form Değeri seçiliyor) VE seçilen alan Id-kalıbındaysa
+                                                  // varsayılanı Code yerine Id yap. Yüklü satırlara (filters.length>0)
+                                                  // dokunmaz.
+                                                  const patch = { sourceField: v }
+                                                  if (filters.length === 0 && isIdLikeSourceField(v, fields)) patch.field = 'Id'
+                                                  updatePrimary(patch)
+                                                }}
                                                 className="iw-cell-input" style={{ ...cellInput, fontSize: 10 }}
                                                 title="Formdan alınacak değer — rehberin eşleşme kolonuna karşılaştırılır">
                                           <option value="">— Form alanı —</option>
@@ -1194,6 +1239,17 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                             `ör. ${displayCol}`
                                           }
                                           monospace size="sm" />
+                                      </div>
+                                      {matchColumnMismatch && (
+                                        <div style={{
+                                          marginTop: 3, display: 'flex', alignItems: 'center', gap: 4,
+                                          fontSize: 10, color: 'var(--iw-amber-color)',
+                                        }}
+                                        title="Form Değeri alanı bir ID taşıyor ama Eşleşme Kolonu Id değil — sorgu sessizce boş dönebilir.">
+                                          <span>⚠</span>
+                                          <span>ID alanı {primary.field} ile eşleşmez — eşleşme kolonunu Id yapın.</span>
+                                        </div>
+                                      )}
                                       </div>
                                     )
                                   })() : m.sourceType === 4 ? (() => {
@@ -1284,10 +1340,21 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                       <select
                                         value={m.cascadeToIntegrationId ?? ''}
-                                        onChange={e => updateRow(idx, {
-                                          cascadeToIntegrationId: e.target.value ? parseInt(e.target.value, 10) : null,
-                                          cascadeByValue: e.target.value ? m.cascadeByValue : false,
-                                        })}
+                                        onChange={e => {
+                                          const nextId = e.target.value ? parseInt(e.target.value, 10) : null
+                                          // Yeni seçim akışı: cascade bu satırda ilk kez seçiliyor (önceden
+                                          // boştu) VE kaynak alan Id-kalıbındaysa "Değer bazlı"yı varsayılan
+                                          // KAPALI'ya zorla (footgun: Id alanında açılırsa cascade sessizce
+                                          // no-op olur). Var olan cascade'i değiştirmek veya yüklü/persisted
+                                          // satırlar bu koldan geçmez — kullanıcının önceki tercihi korunur.
+                                          const activatingFirstTime = !m.cascadeToIntegrationId && !!nextId
+                                          updateRow(idx, {
+                                            cascadeToIntegrationId: nextId,
+                                            cascadeByValue: !nextId
+                                              ? false
+                                              : (activatingFirstTime && sourceIsIdLikeForCascade ? false : m.cascadeByValue),
+                                          })
+                                        }}
                                         className="iw-cell-input"
                                         style={{
                                           ...cellInput,
@@ -1306,18 +1373,32 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                       </select>
                                       {/* Kod bazlı toggle — sadece FormField (sourceType=0) ve cascade seçiliyse */}
                                       {m.sourceType === 0 && m.cascadeToIntegrationId && (
-                                        <label style={{
-                                          display: 'flex', alignItems: 'center', gap: 4,
-                                          fontSize: 10, color: m.cascadeByValue ? 'var(--iw-emerald-color)' : 'var(--iw-muted)',
-                                          cursor: 'pointer', userSelect: 'none', padding: '1px 2px',
-                                        }}
-                                        title="Alan değeri (kod) doğrudan cascade key olarak kullanılır. Hedef integrasyon 'Kod Kolonu' ayarıyla entity'yi bulur.">
-                                          <input type="checkbox"
-                                                 checked={!!m.cascadeByValue}
-                                                 onChange={e => updateRow(idx, { cascadeByValue: e.target.checked })}
-                                                 style={{ margin: 0 }} />
-                                          Değer bazlı
-                                        </label>
+                                        <>
+                                          <label style={{
+                                            display: 'flex', alignItems: 'center', gap: 4,
+                                            fontSize: 10, color: m.cascadeByValue ? 'var(--iw-emerald-color)' : 'var(--iw-muted)',
+                                            cursor: 'pointer', userSelect: 'none', padding: '1px 2px',
+                                          }}
+                                          title="Alan değeri (kod) doğrudan cascade key olarak kullanılır. Hedef integrasyon 'Kod Kolonu' ayarıyla entity'yi bulur.">
+                                            <input type="checkbox"
+                                                   checked={!!m.cascadeByValue}
+                                                   onChange={e => updateRow(idx, { cascadeByValue: e.target.checked })}
+                                                   style={{ margin: 0 }} />
+                                            Değer bazlı
+                                          </label>
+                                          {/* Footgun uyarısı — kaynak alan Id-kalıbındaysa "Değer bazlı" sessiz no-op olur */}
+                                          {sourceIsIdLikeForCascade && (
+                                            <div style={{
+                                              display: 'flex', alignItems: 'flex-start', gap: 3,
+                                              fontSize: 9.5, lineHeight: 1.3, color: 'var(--iw-amber-color)',
+                                              padding: '1px 2px',
+                                            }}
+                                            title="Bu alan bir ID taşıyor — 'Değer bazlı' açık olursa bağımlılık çalışmaz. ID alanlarında kapalı bırakın.">
+                                              <span style={{ flexShrink: 0 }}>⚠</span>
+                                              <span>Bu alan bir ID taşıyor — "Değer bazlı" açık olursa bağımlılık çalışmaz. ID alanlarında kapalı bırakın.</span>
+                                            </div>
+                                          )}
+                                        </>
                                       )}
                                     </div>
                                   ) : (

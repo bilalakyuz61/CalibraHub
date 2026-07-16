@@ -1159,12 +1159,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         int? LocId, int OrderId, string OrderNo);
     private sealed record FifoAlloc(FifoOpenLine Line, decimal AllocBase);
     private sealed record FifoPlanItem(int ItemId, int? UnitId, decimal FallbackPrice, string? Name,
-        List<FifoAlloc> Allocs, decimal Unlinked);
+        List<FifoAlloc> Allocs, decimal Unlinked,
+        string? LotCode, IReadOnlyList<string> ClientSerials, bool AutoGen);
 
     public async Task<MobileDeliveryResult> SaveDeliveryFifoAsync(
         bool isPurchase, int contactId, string? note,
         IReadOnlyList<MobileDeliveryLineInput> lines,
-        bool fifoEnabled, bool forbidUnlinked, int? createdById, CancellationToken ct)
+        bool fifoEnabled, bool forbidUnlinked, bool serialOverrideEnabled, int? createdById, CancellationToken ct)
     {
         var companyId     = _connectionFactory.ResolveCurrentCompanyId();
         var targetType    = isPurchase ? "alis_irsaliyesi" : "satis_irsaliyesi";
@@ -1185,6 +1186,15 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 UnitId        = g.First().UnitId,
                 FallbackPrice = g.First().FallbackUnitPrice,
                 Name          = g.Select(x => x.MaterialName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)),
+                // V1: item bazında tek lot (ilk dolu LotCode) + serilerin birleşimi (aynı malzeme
+                // birden çok satırda gelirse tek kalemde toplanır — serial listeleri de union'lanır).
+                LotCode       = g.Select(x => x.LotCode).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)),
+                Serials       = g.SelectMany(x => x.Serials ?? Enumerable.Empty<string>())
+                                 .Where(s => !string.IsNullOrWhiteSpace(s))
+                                 .Select(s => s.Trim())
+                                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                                 .ToList(),
+                AutoGen       = g.Any(x => x.AutoGenerateSerials),
             })
             .ToList();
         if (agg.Count == 0)
@@ -1247,7 +1257,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     }
                 }
                 var unlinked = remaining > 0.00005m ? Math.Round(remaining, 4) : 0m;
-                plan.Add(new FifoPlanItem(a.ItemId, a.UnitId, a.FallbackPrice, a.Name, allocs, unlinked));
+                plan.Add(new FifoPlanItem(a.ItemId, a.UnitId, a.FallbackPrice, a.Name, allocs, unlinked,
+                    a.LotCode, a.Serials, a.AutoGen));
             }
 
             // 2) Bağlantısız-yasak kontrolü — hiçbir şey yazmadan önce (fail-safe). İhlalde TÜM
@@ -1306,11 +1317,31 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             //    sipariş satırı DeliveredQuantity artışı; her bağlantısız kalan → kaynaksız satır.
             var lineNo = 1;
             var decreases = new HashSet<(int ItemId, int LocId)>();
+            var lotDecreases = new HashSet<(int ItemId, int LotId, int LocId)>();   // satış lot bakiye guard'ı
             decimal subTotal = 0m;
             var resultLines = new List<MobileDeliveryLineResult>();
             foreach (var p in plan)
             {
                 var linkSummary = new List<MobileDeliveryLineLink>();
+
+                // 4.0) Takip tipi DB'den çözülür — GetItemsByIdsAsync projeksiyonu TrackingType/AutoSerial
+                //      doldurmaz (controller katmanı takip tipini bilmez); web ambar akışı da (Resolve*ForLine)
+                //      TrackingType'ı Items'tan doğrudan okur, mobil delivery de aynı kaynaktan çözer.
+                var (tracking, autoSerialCard, itemCode) = await GetItemTrackingAsync(conn, tx, p.ItemId, ct);
+                var isLotItem    = string.Equals(tracking, "Lot",    StringComparison.OrdinalIgnoreCase);
+                var isSerialItem = string.Equals(tracking, "Serial", StringComparison.OrdinalIgnoreCase);
+
+                // 4.0b) Lot çözümleme (V1: item bazında tek lot). Web ambarıyla aynı guard
+                //       (ResolveLotForLineAsync): alışta (giriş) yoksa oluşturulur, satışta (çıkış) mevcut
+                //       lot şarttır; lot-takipli olup LotCode boşsa hata. Lot-takipsizse (null,null) → LotId yazılmaz.
+                int? lotId = null; string? lotNo = null;
+                if (isLotItem)
+                    (lotId, lotNo) = await ResolveLotForLineAsync(
+                        conn, tx, p.ItemId, itemCode, p.LotCode, movementType, createdById, ct);
+
+                // Bu malzemenin yazılan tüm irsaliye satırları (sıralı: önce bağlanan FIFO tahsisleri, sonra
+                // bağlantısız) — seri dağıtımı bu sıraya göre yapılır (rezerve seriler bağlı satırlara düşer).
+                var itemLines = new List<(int LineId, decimal BaseQty, int LocId)>();
 
                 // 4a) Bağlanan (sipariş) satırları — ConvertOrderToDeliveryAsync ile aynı formüller
                 //     (birim çevrim faktörü, orantılı LineTotal, kapanışta DeliveredQuantity=BaseQuantity).
@@ -1330,17 +1361,20 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                             $"Sipariş kaleminde (#{ol.OrderNo}) depo tanımlı değil; irsaliye için kalem veya belge deposu gerekli.");
                     subTotal += lineTotal;
 
+                    int lineId;
                     await using (var li = conn.CreateCommand())
                     {
                         li.Transaction = tx;
                         // Satış=çıkış → FromLocationId; alış=giriş → LocationId. MovementType yönü belirler.
+                        // LotId/LotNo lot-takipli kalemde denormalize yazılır (web ambar satırıyla aynı).
                         li.CommandText = $"""
                             INSERT INTO {T("DocumentLine")}
                                 ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
+                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[LotId],[LotNo],[Notes])
                             VALUES
                                 (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
-                                 @CombId,@FromLoc,@ToLoc,@Mt,@SourceLineId,@Notes);
+                                 @CombId,@FromLoc,@ToLoc,@Mt,@SourceLineId,@LotId,@LotNo,@Notes);
+                            SELECT CAST(SCOPE_IDENTITY() AS INT);
                             """;
                         li.Parameters.AddWithValue("@DocId", docId);
                         li.Parameters.AddWithValue("@LineNo", lineNo++);
@@ -1356,8 +1390,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         li.Parameters.AddWithValue("@ToLoc",   isPurchase ? ol.LocId.Value : (object)DBNull.Value);
                         li.Parameters.AddWithValue("@Mt", movementType);
                         li.Parameters.AddWithValue("@SourceLineId", ol.Id);
+                        li.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                        li.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
                         li.Parameters.AddWithValue("@Notes", $"Sipariş #{ol.OrderNo} → irsaliye (mobil)");
-                        await li.ExecuteNonQueryAsync(ct);
+                        lineId = Convert.ToInt32(await li.ExecuteScalarAsync(ct));
                     }
                     await using (var upd = conn.CreateCommand())
                     {
@@ -1369,7 +1405,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         if (!closes) upd.Parameters.AddWithValue("@Add", deliverBase);
                         await upd.ExecuteNonQueryAsync(ct);
                     }
-                    if (!isPurchase) decreases.Add((p.ItemId, ol.LocId.Value));
+                    if (!isPurchase)
+                    {
+                        decreases.Add((p.ItemId, ol.LocId.Value));
+                        if (lotId.HasValue) lotDecreases.Add((p.ItemId, lotId.Value, ol.LocId.Value));
+                    }
+                    itemLines.Add((lineId, deliverBase, ol.LocId.Value));
                     linkSummary.Add(new MobileDeliveryLineLink(ol.OrderNo, deliverBase));
                 }
 
@@ -1392,16 +1433,18 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     var price = p.FallbackPrice;
                     var lineTotal = Math.Round(p.Unlinked * price, 4);
                     subTotal += lineTotal;
+                    int lineId;
                     await using (var li = conn.CreateCommand())
                     {
                         li.Transaction = tx;
                         li.CommandText = $"""
                             INSERT INTO {T("DocumentLine")}
                                 ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
+                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[LotId],[LotNo],[Notes])
                             VALUES
                                 (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,0,@LineTotal,
-                                 NULL,@FromLoc,@ToLoc,@Mt,NULL,@Notes);
+                                 NULL,@FromLoc,@ToLoc,@Mt,NULL,@LotId,@LotNo,@Notes);
+                            SELECT CAST(SCOPE_IDENTITY() AS INT);
                             """;
                         li.Parameters.AddWithValue("@DocId", docId);
                         li.Parameters.AddWithValue("@LineNo", lineNo++);
@@ -1414,13 +1457,34 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         li.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : defLoc.Value);
                         li.Parameters.AddWithValue("@ToLoc",   isPurchase ? defLoc.Value : (object)DBNull.Value);
                         li.Parameters.AddWithValue("@Mt", movementType);
+                        li.Parameters.AddWithValue("@LotId", (object?)lotId ?? DBNull.Value);
+                        li.Parameters.AddWithValue("@LotNo", (object?)lotNo ?? DBNull.Value);
                         li.Parameters.AddWithValue("@Notes", "Sipariş bağlantısız (mobil)");
-                        await li.ExecuteNonQueryAsync(ct);
+                        lineId = Convert.ToInt32(await li.ExecuteScalarAsync(ct));
                     }
-                    if (!isPurchase) decreases.Add((p.ItemId, defLoc.Value));
+                    if (!isPurchase)
+                    {
+                        decreases.Add((p.ItemId, defLoc.Value));
+                        if (lotId.HasValue) lotDecreases.Add((p.ItemId, lotId.Value, defLoc.Value));
+                    }
+                    itemLines.Add((lineId, p.Unlinked, defLoc.Value));
                 }
 
-                resultLines.Add(new MobileDeliveryLineResult(p.ItemId, linkSummary, p.Unlinked));
+                // 4c) Seri çözümleme — seri-takipli malzemede web ambar akışı guard'larıyla (adet=seri
+                //     sayısı, tam sayı, durum geçişleri) BİREBİR. Alış(giriş): seriler girilir/AutoSerial
+                //     üretir. Satış(çıkış): 3-öncelik zinciri (rezerve → override → FIFO otomatik).
+                IReadOnlyList<string>? usedSerials = null;
+                if (isSerialItem)
+                {
+                    var linkedBase = p.Allocs.Sum(a => Math.Min(a.AllocBase, a.Line.BaseQuantity - a.Line.DeliveredQuantity));
+                    var orderIds   = p.Allocs.Select(a => a.Line.OrderId).Distinct().ToList();
+                    usedSerials = await ResolveDeliverySerialsAsync(
+                        conn, tx, isPurchase, p.ItemId, itemCode, autoSerialCard, itemLines,
+                        linkedBase, orderIds, p.ClientSerials, p.AutoGen, serialOverrideEnabled,
+                        lotId, docDate, createdById, ct);
+                }
+
+                resultLines.Add(new MobileDeliveryLineResult(p.ItemId, linkSummary, p.Unlinked, usedSerials, lotNo));
             }
 
             // 5) Başlık tutarları — kalem toplamlarından. Mobil V1: başlık iskonto/vergi taşımaz
@@ -1436,8 +1500,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
             // 6) Eksi bakiye kontrolü — yalnız satış (çıkış). Giriş bakiyeyi artırır.
             if (!isPurchase)
+            {
                 foreach (var (it, loc) in decreases)
                     await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, it, loc, docDate, ct);
+                // Lot bakiyesi: azaltılan her lot kaynak lokasyonda eksiye düşemez (web ambar paritesi).
+                foreach (var (it, lot, loc) in lotDecreases)
+                    await EnsureLotBalanceAsync(conn, tx, companyId, it, lot, loc, ct);
+            }
 
             await tx.CommitAsync(ct);
             return new MobileDeliveryResult(docId, docNo, distinctOrderIds, resultLines);

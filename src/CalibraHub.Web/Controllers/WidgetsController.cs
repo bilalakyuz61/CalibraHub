@@ -127,6 +127,26 @@ public sealed class WidgetsController : ControllerBase
                 if (formMeta is not null)
                     formDto = await formMeta.GetFormAsync(formCode, default);
 
+                // Tracker kolonlari (IntegrationSentAt vb.) IntegrationRunner'in yazdigi "kanonik"
+                // RecordId ile anahtarlanir: Forms.BaseRecordKey "Id" degilse (orn. Document
+                // formlarinda "DocumentNumber") IntegrationRunner.RunInternalAsync sample.RecordId'yi
+                // (yani "TKL202600000013" gibi is anahtarini) MarkSentAsync/MarkFailedAsync'e verir —
+                // bu metoda gelen ham recordId ("13") degil. Guard'in dogru satiri bulmasi icin ayni
+                // cozumleme burada bir kez (formCode basina) tekrarlanir; formMeta yoksa/hata olursa
+                // ham recordId'ye duser. IntegrationOnSaveDispatcher ile ayni desen — bkz. o dosyadaki
+                // "statusRecordId" cozumlemesi.
+                var statusRecordId = recordId;
+                if (tracker is not null && formMeta is not null)
+                {
+                    try
+                    {
+                        var sample = await formMeta.GetSampleRecordAsync(formCode, recordId, default);
+                        if (sample?.RecordId is { Length: > 0 } resolvedId)
+                            statusRecordId = resolvedId;
+                    }
+                    catch { /* guard ham recordId ile devam eder */ }
+                }
+
                 // Belgenin onceden gonderilip gonderilmedigini bir kere sorgula (cache)
                 DateTime? alreadySentAt = null;
                 if (tracker is not null
@@ -135,7 +155,7 @@ public sealed class WidgetsController : ControllerBase
                     && !string.IsNullOrWhiteSpace(formDto.BaseRecordKey))
                 {
                     alreadySentAt = await tracker.GetSentAtAsync(
-                        formDto.BaseTable!, formDto.BaseRecordKey!, recordId, default);
+                        formDto.BaseTable!, formDto.BaseRecordKey!, statusRecordId, default);
                 }
 
                 foreach (var integ in integrations)

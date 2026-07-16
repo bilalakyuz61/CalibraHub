@@ -65,11 +65,21 @@ public interface IStockDocRepository
     /// bir malzemede bağlantısız miktar kalırsa hiçbir şey yazılmadan InvalidOperationException fırlatılır.
     /// Satış (çıkış, MovementType=1) NegativeBalanceGuard uygular; alış (giriş, MovementType=2) uygulamaz.
     /// Numara ResolveDocNoByCode ile üretilir. Miktarlar ana birimdedir (BaseQuantity).
+    ///
+    /// LOT + SERİ (2026-07-16): Lot/seri-takipli malzeme artık delivery yolunda REDDEDİLMEZ; web ambar
+    /// akışıyla (SaveDirectDocAsync) BİREBİR aynı guard'lar uygulanır (TrackingType DB'den çözülür).
+    ///   • ALIŞ (giriş): lot yoksa oluşturulur; seriler girilir ya da AutoSerial kartında
+    ///     <see cref="MobileDeliveryLineInput.AutoGenerateSerials"/> ile üretilir (ResolveSerialsForLine giriş semantiği).
+    ///   • SATIŞ (çıkış): lot mevcut olmalı (+ lot bakiye guard'ı); seri öncelik zinciri —
+    ///     (1) bağlanan sipariş satırına REZERVE seri varsa o kullanılır; (2)
+    ///     <paramref name="serialOverrideEnabled"/> AÇIKKEN istemci serileri rezerveyi override eder,
+    ///     KAPALIYKEN farklı seri gönderilirse tüm kayıt reddedilir; (3) rezerve yok + istemci seçmezse
+    ///     FIFO otomatik (en eski müsait InStock seriler). Seri adedi = teslim adedi (tam sayı) zorunlu.
     /// </summary>
     Task<MobileDeliveryResult> SaveDeliveryFifoAsync(
         bool isPurchase, int contactId, string? note,
         IReadOnlyList<MobileDeliveryLineInput> lines,
-        bool fifoEnabled, bool forbidUnlinked, int? createdById, CancellationToken ct);
+        bool fifoEnabled, bool forbidUnlinked, bool serialOverrideEnabled, int? createdById, CancellationToken ct);
 
     /// <summary>
     /// Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) — tek transaction'da: iş emrinin

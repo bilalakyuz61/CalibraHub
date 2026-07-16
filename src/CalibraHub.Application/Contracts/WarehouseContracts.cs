@@ -122,16 +122,24 @@ public sealed record WorkOrderConsumptionRequest(
 
 /// <summary>Bir malzeme için teslim edilecek miktar. FallbackUnitPrice yalnızca bağlantısız
 /// (siparişe düşmeyen) kalan için kullanılır — ResolveLinePrices ile çözülür (yoksa 0).
-/// Bağlanan satır fiyatı SİPARİŞ satırından gelir. MaterialName reddedilen/hata mesajları içindir.</summary>
+/// Bağlanan satır fiyatı SİPARİŞ satırından gelir. MaterialName reddedilen/hata mesajları içindir.
+/// LOT + SERİ (2026-07-16, mobil V1): <see cref="Serials"/> = istemcinin seçtiği/okuttuğu seri no'lar
+/// (satış çıkışında rezerve override / seçim; alış girişinde girilen seriler); <see cref="LotCode"/> =
+/// tek lot/satır (V1); <see cref="AutoGenerateSerials"/> = yalnız ALIŞ girişi + AutoSerial kartında
+/// sunucunun seri üretmesini ister. Takipsiz malzemede hepsi yok sayılır (repo TrackingType'ı DB'den çözer).</summary>
 public sealed record MobileDeliveryLineInput(
-    int ItemId, decimal Quantity, int? UnitId, decimal FallbackUnitPrice, string? MaterialName);
+    int ItemId, decimal Quantity, int? UnitId, decimal FallbackUnitPrice, string? MaterialName,
+    IReadOnlyList<string>? Serials = null, string? LotCode = null, bool AutoGenerateSerials = false);
 
 /// <summary>Bir malzemenin tek bir açık siparişe tahsis edilen (ana birim) miktarı — response özeti.</summary>
 public sealed record MobileDeliveryLineLink(string OrderNumber, decimal Quantity);
 
-/// <summary>Bir malzemenin bağlama sonucu: hangi siparişlere ne kadar bağlandı + bağlanamayan kalan.</summary>
+/// <summary>Bir malzemenin bağlama sonucu: hangi siparişlere ne kadar bağlandı + bağlanamayan kalan.
+/// <see cref="Serials"/> = FİİLEN kullanılan seriler (rezerve/override/FIFO çözümü sonrası — istemci
+/// buradan gerçek sonucu görür); <see cref="LotCode"/> = uygulanan lot (yoksa null).</summary>
 public sealed record MobileDeliveryLineResult(
-    int ItemId, IReadOnlyList<MobileDeliveryLineLink> Linked, decimal UnlinkedQuantity);
+    int ItemId, IReadOnlyList<MobileDeliveryLineLink> Linked, decimal UnlinkedQuantity,
+    IReadOnlyList<string>? Serials = null, string? LotCode = null);
 
 /// <summary>FIFO teslimat sonucu: irsaliye belgesi + kalem bazlı bağlama özeti + (varsa) kaynak
 /// sipariş id'leri (controller DocumentSource soyağacı kenarlarını bunlarla yazar).</summary>

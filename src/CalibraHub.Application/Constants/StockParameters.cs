@@ -74,6 +74,17 @@ public static class StockParameters
     public const string SalesDeliveryRequireOrderKey = "SALES_DELIVERY_REQUIRE_ORDER";
 
     /// <summary>
+    /// Satış irsaliyesinde sipariş serisi değiştirilebilir (Bool, default TRUE=açık). Seri-takipli
+    /// malzemenin satış teslimatında (çıkış): bağlanan sipariş satırına seri REZERVE edilmişse
+    /// öncelik o serilerdir. Bu parametre AÇIKKEN istemcinin gönderdiği seriler rezerveleri
+    /// override edebilir (operatör sahada farklı fiziksel seriyi sevk edebilir). KAPALIYKEN
+    /// istemci rezerve serilerden farklı seri gönderirse teslimat reddedilir (net hata) — sipariş
+    /// serisi bağlayıcıdır. Her iki durumda da rezerve yoksa + istemci seçmezse FIFO otomatik (en
+    /// eski müsait seriler) uygulanır. Yalnız satış çıkışında anlamlıdır; alış girişinde etkisizdir.
+    /// </summary>
+    public const string SalesDeliverySerialOverrideKey = "SALES_DELIVERY_SERIAL_OVERRIDE";
+
+    /// <summary>
     /// Stok hareketi (DocumentLine.MovementType) üretebilen belge türleri —
     /// parametre ekranındaki switch listesi. Code = DocumentType.Code.
     /// </summary>

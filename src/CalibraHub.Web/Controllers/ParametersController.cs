@@ -131,6 +131,10 @@ public sealed class ParametersController : Controller
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.PurchaseDeliveryRequireOrderKey)?.ParamValue == "true";
         ViewData["SalesDeliveryRequireOrder"] = stockParams.FirstOrDefault(p =>
             p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesDeliveryRequireOrderKey)?.ParamValue == "true";
+        // Satış irsaliyesinde sipariş serisi değiştirilebilir — default AÇIK (unset → true),
+        // teslimat endpoint'iyle birebir aynı okuma-zamanı varsayılanı (MobileWarehouseApiController.Delivery).
+        ViewData["SalesDeliverySerialOverride"] = stockParams.FirstOrDefault(p =>
+            p.ParamKey == CalibraHub.Application.Constants.StockParameters.SalesDeliverySerialOverrideKey)?.ParamValue != "false";
 
         // İzlenebilirlik tab: seri no benzersizlik kapsamı ("Item"/"Global"). Tanımsız → "Item".
         ViewData["TraceSerialScope"] =
@@ -354,6 +358,10 @@ public sealed class ParametersController : Controller
                 await _companyParameters.SetAsync(new SetCompanyParameterRequest(
                     form, CalibraHub.Application.Constants.StockParameters.SalesDeliveryRequireOrderKey,
                     sReq ? "true" : "false", CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+            if (input.SalesDeliverySerialOverride is bool sSerOv)
+                await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                    form, CalibraHub.Application.Constants.StockParameters.SalesDeliverySerialOverrideKey,
+                    sSerOv ? "true" : "false", CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
 
             return Json(new { ok = true });
         }
@@ -411,7 +419,10 @@ public sealed class ParametersController : Controller
         bool? PurchaseDeliveryFifoBind = null,
         bool? SalesDeliveryFifoBind = null,
         bool? PurchaseDeliveryRequireOrder = null,
-        bool? SalesDeliveryRequireOrder = null);
+        bool? SalesDeliveryRequireOrder = null,
+        // Satış irsaliyesinde sipariş serisi değiştirilebilir (default açık). Nullable: gönderilmezse
+        // okuma-zamanı varsayılanı (açık) korunur (mevcut ekran geriye-uyumlu).
+        bool? SalesDeliverySerialOverride = null);
     public sealed record StockEffectInput(string Code, bool Enabled);
     public sealed record StockEffectState(string Code, string Label, string Description, bool Enabled);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);
