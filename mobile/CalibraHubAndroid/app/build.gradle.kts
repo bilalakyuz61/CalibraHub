@@ -19,7 +19,7 @@ android {
 
         // BuildConfig'e enjekte edilen base URL — flavor / build type'a göre değişir.
         // Emulator için 10.0.2.2 host alias'ı; LAN cihazı için override gerekir.
-        buildConfigField("String", "DEFAULT_BASE_URL", "\"http://10.0.2.2:61001/\"")
+        buildConfigField("String", "DEFAULT_BASE_URL", "\"http://192.169.254.93:61001/\"")
     }
 
     buildTypes {
