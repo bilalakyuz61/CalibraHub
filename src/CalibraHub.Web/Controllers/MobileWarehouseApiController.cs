@@ -59,6 +59,15 @@ namespace CalibraHub.Web.Controllers;
 /// Yanit govdesi (2026-07-16, ONEMLI FARK): Transfer/InventoryCount yazma hatalari GERCEK
 /// HTTP 400/404 + bare {error} doner (StockIn/StockOut'un "200 {ok:false,error}" deseninden
 /// FARKLI — lider talimati, KESIN KONTRAT). StockIn/StockOut deseni degistirilmedi.
+///
+/// Ek saha / extraFields (2026-07-17): stock-in/stock-out/transfer/inventory-count/delivery
+/// body'lerine opsiyonel "extraFields": { "<widgetCode>": "<string deger>" } eklenebilir.
+/// Şema tarafı MobileWidgetApiController (GET /api/mobile/widgets/schema?formCode=) — o
+/// dosyanın XML yorumunda 6 form kodu + V1 desteklenen tipler tarif edilir. Değer yazımı
+/// belge BAŞARIYLA kaydedildikten SONRA, AYRI bir SQL transaction'da IWidgetService.SaveRecordAsync
+/// ile yapılır (bkz. SaveExtraFieldsAsync) — web'in _DynamicWidgetHost iki-fazlı akışıyla aynı,
+/// hiçbir zaman belge kaydıyla atomic değildir; widget-save hatası belge kaydını GERİ ALMAZ,
+/// yalnızca response'a "extraFieldsError" (string|null) olarak eklenir.
 /// </summary>
 [ApiController]
 [Route("api/mobile/warehouse")]
@@ -80,6 +89,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
     private readonly IInventoryCountRepository _inventoryCountRepo;
     private readonly IDocumentSourceRepository _docSourceRepo;
     private readonly IIntegrationOnSaveDispatcher _onSaveDispatcher;
+    private readonly IWidgetService _widgetService;
     private readonly string _schema;
 
     public MobileWarehouseApiController(
@@ -96,6 +106,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
         IInventoryCountRepository inventoryCountRepo,
         IDocumentSourceRepository docSourceRepo,
         IIntegrationOnSaveDispatcher onSaveDispatcher,
+        IWidgetService widgetService,
         CalibraDatabaseOptions dbOptions)
     {
         _logisticsService   = logisticsService;
@@ -111,6 +122,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
         _inventoryCountRepo = inventoryCountRepo;
         _docSourceRepo      = docSourceRepo;
         _onSaveDispatcher   = onSaveDispatcher;
+        _widgetService      = widgetService;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -187,6 +199,59 @@ public sealed class MobileWarehouseApiController : ControllerBase
             message = "Bu işlemi yapmak için yetkiniz yok.",
             error   = $"Yetki yok: {string.Join('|', formCodes)}:{string.Join('|', actionCodes)}",
         }) { StatusCode = StatusCodes.Status403Forbidden };
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Ek saha (WidgetMas/EAV) — mobil belge POST'larının opsiyonel extraFields'ı
+    // ──────────────────────────────────────────────────────────────────────
+    // Şema okuma tarafı MobileWidgetApiController (GET /api/mobile/widgets/schema) — bu
+    // metod onun YAZMA karşılığı, o dosyanın XML yorumunda tarif edilen 6 form kodundan
+    // biriyle çağrılır (stok/transfer/sayım için kendi FormCode'u = izin FormCode'uyla
+    // AYNI; irsaliyede DİKKAT: izin FormCode'u "SALES_DELIVERY"/"PURCHASE_DELIVERY" iken
+    // widget FormCode'u "SALES_DELIVERY_EDIT"/"PURCHASE_DELIVERY_EDIT" — çağıran doğru
+    // sabiti geçmeli, bkz. Delivery() action'ındaki widgetFormCode değişkeni).
+
+    /// <summary>
+    /// Ek saha (WidgetMas/EAV) değerlerini web'in AYNI kapısından (IWidgetService.SaveRecordAsync)
+    /// persist eder — web _DynamicWidgetHost.cshtml'in iki-fazlı akışının (1: belge kaydet,
+    /// 2: widget host save) mobil karşılığı. Belge BAŞARIYLA kaydedilip Id alındıktan SONRA
+    /// çağrılır; AYRI bir SQL transaction'da çalışır (SqlWidgetRepository.UpsertValuesAsync
+    /// kendi tx'ini açar) — bu yüzden BAŞARISIZ OLSA BİLE belge kaydını GERİ ALMAZ (web'de de
+    /// aynı: belge save ve widget save iki ayrı HTTP/DB işlemidir, hiçbir zaman atomic değildir).
+    ///
+    /// extraFields boş/null ise HİÇBİR ŞEY YAPMAZ (mevcut davranış bozulmaz) — deneme bile
+    /// yapılmaz. Dönüş: null = başarılı ya da deneme yapılmadı; dolu string = hata mesajı.
+    /// Hata, çağıranın response'una `extraFieldsError` alanı olarak eklenir — belge zaten
+    /// kaydedildiği için mobil istemci bunu isterse gösterir, akışı kesmez (CLAUDE.md audit
+    /// felsefesiyle aynı: yardımcı yazım asla ana iş akışını bozamaz).
+    /// </summary>
+    private async Task<string?> SaveExtraFieldsAsync(
+        string widgetFormCode, int recordId, IReadOnlyDictionary<string, string>? extraFields, CancellationToken ct)
+    {
+        if (extraFields == null || extraFields.Count == 0) return null;
+        try
+        {
+            var schema = await _widgetService.GetFormSchemaByCodeAsync(widgetFormCode, ct);
+            if (schema == null) return $"Ek saha tanımı bulunamadı: {widgetFormCode}";
+
+            var values = extraFields.ToDictionary(
+                kv => kv.Key, kv => (object?)kv.Value, StringComparer.OrdinalIgnoreCase);
+
+            await _widgetService.SaveRecordAsync(
+                schema.FormId, recordId.ToString(), new SaveRecordRequest(values, null), ct);
+            return null;
+        }
+        catch (ArgumentException ex)
+        {
+            // Widget validasyon hatası (zorunlu alan boş, tip/aralık/uzunluk uyumsuz) — web
+            // SaveRecordByCode'un fırlattığı AYNI exception tipi (WidgetService.SerializeAndValidate/
+            // EnforceRequired). Mesaj kullanıcı diline uygun (Türkçe), doğrudan gösterilebilir.
+            return ex.Message;
+        }
+        catch (Exception)
+        {
+            return "Ek saha değerleri kaydedilirken bir hata oluştu.";
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -512,8 +577,12 @@ public sealed class MobileWarehouseApiController : ControllerBase
     /// <summary>Mobil kalem — itemId, /warehouse/stock yanitindaki itemId'den gelir (kod cozumu orada yapildi).</summary>
     public sealed record MobileStockDocLineRequest(int ItemId, decimal Quantity);
 
-    /// <summary>Mobil giris/cikis istegi — tek lokasyon + kalemler (+ opsiyonel not).</summary>
-    public sealed record MobileStockDocRequest(int LocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note);
+    /// <summary>Mobil giris/cikis istegi — tek lokasyon + kalemler (+ opsiyonel not).
+    /// ExtraFields (2026-07-17): opsiyonel ek saha (WidgetMas/EAV) header degerleri,
+    /// { widgetCode: string deger } — bkz. SaveExtraFieldsAsync.</summary>
+    public sealed record MobileStockDocRequest(
+        int LocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note,
+        IReadOnlyDictionary<string, string>? ExtraFields = null);
 
     /// <summary>Yazma aksiyon seti — web SaveDocJson ile birebir ayni (CREATE veya kendi/tum kayit duzenleme).</summary>
     private static readonly string[] WriteActions = { "CREATE", "EDIT_OWN", "EDIT_ALL" };
@@ -612,7 +681,11 @@ public sealed class MobileWarehouseApiController : ControllerBase
             var (userId, _, _) = GetCurrentUser();
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, userId > 0 ? userId : null, ct);
             await LogStockDocInsertAsync(docType, request, id, docNo, ct);
-            return Ok(new { ok = true, docId = id, docNumber = docNo });
+            // Ek saha (opsiyonel extraFields) — belge KAYDEDILDIKTEN SONRA, ayrı transaction
+            // (bkz. SaveExtraFieldsAsync yorumu). formCode STOCK_IN/STOCK_OUT için izin ve
+            // widget FormCode'u AYNI değer (irsaliyeden farklı olarak _EDIT suffix'i yok).
+            var extraFieldsError = await SaveExtraFieldsAsync(formCode, id, body.ExtraFields, ct);
+            return Ok(new { ok = true, docId = id, docNumber = docNo, extraFieldsError });
         }
         catch (NegativeBalanceException nbex)
         {
@@ -656,9 +729,11 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // otomatik calisir (repo tarafinda, SaveDirectDocAsync) — burada ekstra kod gerekmez.
 
     /// <summary>Mobil transfer istegi — tek kaynak + tek hedef lokasyon (web'in kalem-bazli
-    /// coklu lokasyon esnekligi mobil V1'de sadelestirildi: tum kalemler ayni yonde tasinir).</summary>
+    /// coklu lokasyon esnekligi mobil V1'de sadelestirildi: tum kalemler ayni yonde tasinir).
+    /// ExtraFields (2026-07-17): opsiyonel ek saha header degerleri — bkz. SaveExtraFieldsAsync.</summary>
     public sealed record MobileTransferRequest(
-        int FromLocationId, int ToLocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note);
+        int FromLocationId, int ToLocationId, IReadOnlyList<MobileStockDocLineRequest>? Lines, string? Note,
+        IReadOnlyDictionary<string, string>? ExtraFields = null);
 
     /// <summary>Depo transferi (TRANSFER) — kalemler kaynaktan (-) dusup hedefe (+) yazilir; eksi bakiye guard'i kaynakta calisir.</summary>
     [HttpPost("transfer")]
@@ -717,7 +792,9 @@ public sealed class MobileWarehouseApiController : ControllerBase
             var (userId, _, _) = GetCurrentUser();
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, userId > 0 ? userId : null, ct);
             await LogStockDocInsertAsync("TRANSFER", request, id, docNo, ct);
-            return Ok(new { ok = true, documentNumber = docNo });
+            // Ek saha (opsiyonel extraFields) — belge KAYDEDILDIKTEN SONRA, ayrı transaction.
+            var extraFieldsError = await SaveExtraFieldsAsync(FormCodes.Transfer, id, body.ExtraFields, ct);
+            return Ok(new { ok = true, documentNumber = docNo, extraFieldsError });
         }
         catch (NegativeBalanceException nbex)
         {
@@ -765,9 +842,11 @@ public sealed class MobileWarehouseApiController : ControllerBase
     /// <summary>Mobil sayim kalemi — itemId + sayilan miktar (0 gecerli: "hic yok" sayimi).</summary>
     public sealed record MobileInventoryCountLineRequest(int ItemId, decimal CountedQuantity);
 
-    /// <summary>Mobil sayim istegi — tek lokasyon + kalemler (+ opsiyonel not).</summary>
+    /// <summary>Mobil sayim istegi — tek lokasyon + kalemler (+ opsiyonel not).
+    /// ExtraFields (2026-07-17): opsiyonel ek saha header degerleri — bkz. SaveExtraFieldsAsync.</summary>
     public sealed record MobileInventoryCountRequest(
-        int LocationId, IReadOnlyList<MobileInventoryCountLineRequest>? Lines, string? Note);
+        int LocationId, IReadOnlyList<MobileInventoryCountLineRequest>? Lines, string? Note,
+        IReadOnlyDictionary<string, string>? ExtraFields = null);
 
     /// <summary>Sayim belgesi (INVENTORY_COUNT) — daima TASLAK kaydedilir, stok bakiyesini etkilemez (yukaridaki yorum).</summary>
     [HttpPost("inventory-count")]
@@ -822,9 +901,11 @@ public sealed class MobileWarehouseApiController : ControllerBase
             var (userId, _, _) = GetCurrentUser();
             var (id, docNo) = await _stockDocRepo.SaveAsync(request, userId > 0 ? userId : null, ct);
             await LogStockDocInsertAsync("INVENTORY_COUNT", request, id, docNo, ct);
+            // Ek saha (opsiyonel extraFields) — belge KAYDEDILDIKTEN SONRA, ayrı transaction.
+            var extraFieldsError = await SaveExtraFieldsAsync(FormCodes.InventoryCount, id, body.ExtraFields, ct);
             // Web SaveInventoryJson paritesi: kayit HER ZAMAN taslak kalir (yukaridaki yorum) → applied daima false.
             // id EKLENDI (additive) — mobil "Yansit" (/inventory-count/{id}/apply) belgeyi bununla hedefler.
-            return Ok(new { ok = true, id, documentNumber = docNo, applied = false });
+            return Ok(new { ok = true, id, documentNumber = docNo, applied = false, extraFieldsError });
         }
         catch (InvalidOperationException ioex)
         {
@@ -1057,9 +1138,11 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // ExternalRefNumber = Tedarikçi İrsaliye No (alış mal kabulünde tedarikçinin kendi irsaliye no'su) —
     // Document.ExternalRefNumber'a persist edilir. PreferredOrderId = FAZ C /open-orders akışından
     // hedeflenen sipariş (bkz. yukarıdaki not) — opsiyonel, verilmezse davranış öncekiyle birebir aynı.
+    // ExtraFields (2026-07-17): opsiyonel ek saha (WidgetMas/EAV) header değerleri — bkz. SaveExtraFieldsAsync.
     public sealed record MobileDeliveryBody(
         string? DocType, int ContactId, string? Note, IReadOnlyList<MobileDeliveryBodyLine>? Lines,
-        string? ExternalRefNumber = null, int? PreferredOrderId = null);
+        string? ExternalRefNumber = null, int? PreferredOrderId = null,
+        IReadOnlyDictionary<string, string>? ExtraFields = null);
 
     /// <summary>Irsaliye (satış teslimat / alış mal kabul) — FIFO ile açık siparişlere bağlar.</summary>
     [HttpPost("delivery")]
@@ -1166,20 +1249,29 @@ public sealed class MobileWarehouseApiController : ControllerBase
             // (f) OnSave entegrasyon dispatch — SalesController.SaveDocument paritesi. Repo doğrudan
             //     çağrıldığından OnSave otomatik tetiklenmez; burada BİLİNÇLİ tetiklenir.
             var entity = isPurchase ? "alis_irsaliyesi" : "satis_irsaliyesi";
+            // fc.Header = ek saha (widget) FormCode'u — DİKKAT: yukarıdaki izin kontrolünde kullanılan
+            // "formCode" (FormCodes.SalesDelivery/PurchaseDelivery, "_EDIT" suffix'siz "Parent"/liste
+            // kodu) İLE AYNI DEĞİL. DocumentTypeFormMap.Resolve ile web'in Sales/DocumentEdit.cshtml'in
+            // (Model.HeaderFormCode) kullandığı AYNI kod (SALES_DELIVERY_EDIT / PURCHASE_DELIVERY_EDIT)
+            // çözülür — MobileWidgetApiController'ın GET schema endpoint'iyle birebir aynı kod olmalı.
+            var fc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(entity);
             if (result.Id > 0)
             {
-                var fc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(entity);
                 _onSaveDispatcher.FireOnSave(new[] { fc.HeaderNew, fc.Header }, result.Id.ToString(), User?.Identity?.Name);
             }
 
             // Audit — entity kodu DocumentType.Code (web DeliverSalesOrderJson ile aynı /AuditLog kanalı).
             await LogDeliveryInsertAsync(entity, result, ct);
 
+            // Ek saha (opsiyonel extraFields) — belge KAYDEDILDIKTEN SONRA, ayrı transaction.
+            var extraFieldsError = await SaveExtraFieldsAsync(fc.Header, result.Id, body.ExtraFields, ct);
+
             // (g) Bağlama özeti response.
             return Ok(new
             {
                 ok = true,
                 documentNumber = result.DocNo,
+                extraFieldsError,
                 lines = result.Lines.Select(l => new
                 {
                     itemId           = l.ItemId,
