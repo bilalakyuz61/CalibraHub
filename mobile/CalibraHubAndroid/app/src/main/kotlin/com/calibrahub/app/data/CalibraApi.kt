@@ -18,6 +18,12 @@ import retrofit2.http.Query
  */
 interface CalibraApi {
 
+    // Sunucu doğrulama (anonim) — LoginScreen "Doğrula" akışı SessionManager.ping() üzerinden
+    // henüz KAYDEDİLMEMİŞ bir base URL ile çağırır (bkz. SessionManager.ping KDoc); bu interface
+    // yalnızca imza/DTO sözleşmesini taşır.
+    @GET("api/mobile/ping")
+    suspend fun ping(): Response<PingResponse>
+
     @GET("api/mobile/companies")
     suspend fun companies(): Response<List<CompanyDto>>
 
@@ -63,6 +69,12 @@ interface CalibraApi {
 // ───────────────────────────────────────────────────────────────────────
 // DTO'lar — backend MobileApiController dönüş şekilleriyle eşleşir
 // ───────────────────────────────────────────────────────────────────────
+
+// GET /api/mobile/ping yanıtı — MobileApiController.Ping() ile birebir: { ok, product, version }.
+// Tüm alanlar nullable/default'lu tanımlandı (Moshi Kotlin adapter'ı eksik alanda non-null
+// alanlarda hata fırlatır); backend her zaman doldurup döner ama savunmacı kalınır.
+@JsonClass(generateAdapter = true)
+data class PingResponse(val ok: Boolean = false, val product: String? = null, val version: String? = null)
 
 @JsonClass(generateAdapter = true)
 data class CompanyDto(val id: Int, val name: String)

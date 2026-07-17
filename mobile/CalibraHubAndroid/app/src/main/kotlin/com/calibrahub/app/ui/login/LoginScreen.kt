@@ -11,13 +11,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -37,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.calibrahub.app.R
 import com.calibrahub.app.app
 import com.calibrahub.app.data.CompanyDto
+import com.calibrahub.app.data.SessionManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -56,6 +61,14 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     var showPwd  by remember { mutableStateOf(false) }
     var loading  by remember { mutableStateOf(false) }
     var showServerSettings by remember { mutableStateOf(false) }
+
+    // Sunucu doğrulama ("Doğrula") akışının görsel durumu — login kilit-kadranından
+    // (dialState/LockDialState, aşağıda) TAMAMEN bağımsız; kadrana hiç dokunmaz.
+    var pingState by remember { mutableStateOf<ServerPingState>(ServerPingState.Idle) }
+    // OutlinedTextField'ın gerçek bir blur (focus kaybı) mi yoksa ilk composition mu yaşadığını
+    // ayırt etmek için — onFocusChanged ilk mount'ta da isFocused=false ile bir kez tetiklenir;
+    // bunu "kullanıcı alandan ayrıldı" sanıp gereksiz otomatik ping atmayalım.
+    var baseUrlFieldWasFocused by remember { mutableStateOf(false) }
 
     // Parola doğrulandıktan sonra dönen erişilebilir şirket listesi.
     // Boş = kimlik bilgisi adımı gösterilir; dolu = şirket seçim adımı gösterilir.
@@ -153,6 +166,25 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                         scope.launch {
                             loading = true
                             dialState = LockDialState.Loading
+
+                            // Erken teşhis: sunucu bu oturumda henüz doğrulanmadıysa (kullanıcı
+                            // "Doğrula"yı hiç kullanmadı ya da son sonuç Unreachable/Idle) login'i
+                            // hiç denemeden persisted base URL'e (currentBaseUrl — repo.login*
+                            // zaten bunu kullanacak) hızlı bir ping at. Ulaşılamıyorsa generic
+                            // "kimlik geçersiz" yerine net sunucu hatası erken gösterilir; kilit-
+                            // kadranı akışı aynen kalır (Failed durumuna aynı şekilde düşer).
+                            if (pingState !is ServerPingState.Verified) {
+                                val effectiveUrl = session.currentBaseUrl()
+                                val quickCheck = checkServer(session, effectiveUrl)
+                                pingState = quickCheck
+                                if (quickCheck is ServerPingState.Unreachable) {
+                                    loading = false
+                                    dialState = LockDialState.Failed
+                                    snackbarHostState.showSnackbar("Sunucuya ulaşılamadı. Sunucu ayarlarını kontrol edin.")
+                                    return@launch
+                                }
+                            }
+
                             repo.loginCompanies(email.trim(), password).fold(
                                 onSuccess = { list ->
                                     when {
@@ -233,26 +265,143 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = baseUrl,
-                    onValueChange = { baseUrl = it },
+                    onValueChange = {
+                        baseUrl = it
+                        // Adres değişti — önceki doğrulama sonucu artık geçersiz.
+                        pingState = ServerPingState.Idle
+                    },
                     label = { Text("Backend URL") },
                     supportingText = {
                         Text("Emulator için: http://10.0.2.2:61001/")
                     },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            session.setBaseUrl(baseUrl.trim())
-                            snackbarHostState.showSnackbar("Sunucu adresi kaydedildi.")
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focus ->
+                            // Yalnız GERÇEK bir blur'da (önce focus'luydu, şimdi değil) otomatik
+                            // doğrula — ilk composition'da da isFocused=false gelir, o an atlanır.
+                            if (baseUrlFieldWasFocused && !focus.isFocused && baseUrl.isNotBlank()) {
+                                pingState = ServerPingState.Checking
+                                scope.launch { pingState = checkServer(session, baseUrl) }
+                            }
+                            baseUrlFieldWasFocused = focus.isFocused
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Kaydet") }
+                )
+
+                ServerPingStatusRow(state = pingState)
+
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            pingState = ServerPingState.Checking
+                            scope.launch { pingState = checkServer(session, baseUrl) }
+                        },
+                        enabled = baseUrl.isNotBlank() && pingState != ServerPingState.Checking,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Doğrula") }
+
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                session.setBaseUrl(baseUrl.trim())
+                                snackbarHostState.showSnackbar("Sunucu adresi kaydedildi.")
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Kaydet") }
+                }
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sunucu doğrulama ("Doğrula") — LoginScreen'deki Backend URL alanına ait küçük bir
+// alt-sistem. Login kilit-kadranından (LockDialState/CalibrationLockDial, aşağıda)
+// TAMAMEN bağımsızdır — kadran koduna dokunmaz. GET /api/mobile/ping (anonim) çağırır.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sunucu doğrulama durumu. [Verified] YALNIZ `ok == true && product == "CalibraHub"` olduğunda
+ * set edilir; sunucu 200 dönüp başka bir ürün/gövde döndürürse [NotCalibraHub] — bu durum login
+ * denemesini ENGELLEMEZ (yalnız uyarı gösterir), oysa [Unreachable] "Giriş yap" akışını erken
+ * keser (bkz. LoginScreen Button onClick).
+ */
+private sealed class ServerPingState {
+    object Idle : ServerPingState()
+    object Checking : ServerPingState()
+    data class Verified(val version: String) : ServerPingState()
+    object NotCalibraHub : ServerPingState()
+    object Unreachable : ServerPingState()
+}
+
+/**
+ * "Doğrula" akışının ortak çekirdeği — otomatik (URL alanı blur), manuel (buton) ve "Giriş yap"
+ * öncesi erken-teşhis tetikleyicilerinin üçü de bu fonksiyonu çağırır. [SessionManager.ping]
+ * henüz kaydedilmemiş adresi bağımsız/kısa-timeout'lu (5 sn) bir Retrofit çağrısıyla dener.
+ */
+private suspend fun checkServer(session: SessionManager, rawUrl: String): ServerPingState {
+    if (rawUrl.isBlank()) return ServerPingState.Idle
+    return session.ping(rawUrl).fold(
+        onSuccess = { resp ->
+            if (resp.ok && resp.product == "CalibraHub") ServerPingState.Verified(resp.version ?: "?")
+            else ServerPingState.NotCalibraHub
+        },
+        onFailure = { ServerPingState.Unreachable }
+    )
+}
+
+// "Doğrulandı" yeşili / "uyarı" ambar tonu — CalibrationLockDial'daki successGreen'e (aşağıda,
+// dial koduna dokunulmadığı için oradan import edilemez) benzer marka tutarlı SABİT hex'ler;
+// dinamik renk (Android 12+ Material You) burada da BİLEREK kullanılmaz (aynı gerekçe: dial
+// KDoc'una bkz. — durum rengi wallpaper'a göre değişmemeli).
+private val PingVerifiedGreen = Color(0xFF2FBF71)
+private val PingWarningAmber = Color(0xFFF59E0B)
+
+/** Backend URL alanının altındaki doğrulama durum satırı — Idle'da hiçbir şey çizmez. */
+@Composable
+private fun ServerPingStatusRow(state: ServerPingState) {
+    if (state == ServerPingState.Idle) return
+
+    val color = when (state) {
+        is ServerPingState.Verified   -> PingVerifiedGreen
+        ServerPingState.NotCalibraHub -> PingWarningAmber
+        ServerPingState.Unreachable   -> MaterialTheme.colorScheme.error
+        else                           -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val text = when (state) {
+        ServerPingState.Checking      -> "Sunucu kontrol ediliyor…"
+        is ServerPingState.Verified   -> "CalibraHub sunucusu doğrulandı (v${state.version})"
+        ServerPingState.NotCalibraHub -> "Bu adres bir CalibraHub sunucusu değil"
+        ServerPingState.Unreachable   -> "Sunucuya ulaşılamadı"
+        ServerPingState.Idle          -> ""
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+    ) {
+        if (state == ServerPingState.Checking) {
+            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = color)
+        } else {
+            val icon = when (state) {
+                is ServerPingState.Verified   -> Icons.Default.CheckCircle
+                ServerPingState.NotCalibraHub -> Icons.Default.WarningAmber
+                ServerPingState.Unreachable   -> Icons.Default.CloudOff
+                else -> null
+            }
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(text = text, style = MaterialTheme.typography.bodySmall, color = color)
     }
 }
 

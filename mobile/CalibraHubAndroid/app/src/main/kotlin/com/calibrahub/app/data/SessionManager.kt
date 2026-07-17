@@ -74,6 +74,49 @@ class SessionManager(private val context: Context) {
      */
     suspend fun <T> buildApi(service: Class<T>): T = buildRetrofit().create(service)
 
+    /**
+     * Sunucu doğrulama (LoginScreen "Doğrula" akışı) — kullanıcının o an yazdığı, henüz
+     * [setBaseUrl] ile KAYDEDİLMEMİŞ [rawBaseUrl] değeriyle bağımsız/tek-seferlik bir Retrofit
+     * çağrısı yapar. [buildApi]/[buildRetrofit] bilerek KULLANILMAZ — onlar [currentBaseUrl]
+     * (persisted) okur; burada kullanıcının henüz kaydetmediği aday adres denenir. Kısa timeout
+     * (5 sn): yanlış/ulaşılamaz bir adres login denenmeden önce erken ve net teşhis edilsin diye.
+     * Cookie jar BİLEREK takılmaz (ping anonim, oturumla ilgisi yok).
+     *
+     * Result.success → sunucu 2xx döndü ve gövde parse edildi (`ok`/`product`/`version` — 200
+     * dönüp product "CalibraHub" olmaması da BAŞARI sayılır, "beklenmeyen sunucu" yorumu
+     * çağıran tarafta yapılır). Result.failure → bağlantı hatası, timeout ya da HTTP hata kodu
+     * (sunucuya hiç ulaşılamadı ya da geçersiz adres).
+     */
+    suspend fun ping(rawBaseUrl: String): Result<PingResponse> = runCatching {
+        val trimmed = rawBaseUrl.trim()
+        require(trimmed.isNotEmpty()) { "Sunucu adresi boş" }
+        val normalized = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
+
+        val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+        val mobileHeader = Interceptor { chain ->
+            val req = chain.request().newBuilder()
+                .header("X-Requested-With", "CalibraHubAndroid")
+                .header("Accept", "application/json")
+                .build()
+            chain.proceed(req)
+        }
+        val client = OkHttpClient.Builder()
+            .addInterceptor(mobileHeader)
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
+            .build()
+        val retrofit = Retrofit.Builder()
+            .baseUrl(normalized)
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+        val resp = retrofit.create(CalibraApi::class.java).ping()
+        if (!resp.isSuccessful) error("HTTP ${resp.code()}")
+        resp.body() ?: error("Boş yanıt")
+    }
+
     private suspend fun buildRetrofit(): Retrofit {
         val baseUrl = currentBaseUrl()
         val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
