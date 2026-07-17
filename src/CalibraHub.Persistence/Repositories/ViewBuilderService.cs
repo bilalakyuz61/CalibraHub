@@ -58,10 +58,10 @@ public sealed class ViewBuilderService : IViewBuilderService
     public async Task<IReadOnlyList<ViewSchemaTableDto>> GetSchemaObjectsAsync(CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
-        return await GetSchemaObjectsAsync(connection, ct);
+        return await GetSchemaObjectsInternalAsync(connection, ct);
     }
 
-    private static async Task<IReadOnlyList<ViewSchemaTableDto>> GetSchemaObjectsAsync(SqlConnection connection, CancellationToken ct)
+    private static async Task<IReadOnlyList<ViewSchemaTableDto>> GetSchemaObjectsInternalAsync(SqlConnection connection, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
@@ -324,13 +324,20 @@ public sealed class ViewBuilderService : IViewBuilderService
     public async Task<string?> ValidateRawSqlAsync(string? viewName, string sql, CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
+        return await ValidateRawSqlOnConnectionAsync(connection, viewName, sql, ct);
+    }
+
+    /// <summary>ValidateRawSqlAsync'in aynı (zaten açık) bağlantı üzerinde çalışan hali — Preview
+    /// gibi çağıranların kendi başına ikinci bir bağlantı açmasını önler.</summary>
+    private async Task<string?> ValidateRawSqlOnConnectionAsync(SqlConnection connection, string? viewName, string sql, CancellationToken ct)
+    {
         var normalized = NormalizeSqlBody(sql);
 
         var (ok, errors) = await ValidateSqlBodyAsync(connection, normalized, ct);
         if (!ok) return string.Join(" ", errors);
 
         var probeName = IsValidIdentifier(viewName) ? viewName! : $"__vb_probe_{Guid.NewGuid():N}";
-        var (compileOk, compileError) = await TestCompileAsync(connection, probeName, normalized, ct);
+        var (compileOk, compileError) = await TestCompileAsync(connection, _schema, probeName, normalized, ct);
         return compileOk ? null : compileError;
     }
 
@@ -347,7 +354,7 @@ public sealed class ViewBuilderService : IViewBuilderService
             return new ViewPreviewResult(false, resolveErrors, null, Array.Empty<ViewColumnMetaDto>(),
                 Array.Empty<IReadOnlyDictionary<string, object?>>(), null, null, null, false);
 
-        var validationError = await ValidateRawSqlAsync(request.ViewName, sqlBody, ct);
+        var validationError = await ValidateRawSqlOnConnectionAsync(connection, request.ViewName, sqlBody, ct);
         if (validationError is not null)
             return new ViewPreviewResult(false, new[] { validationError }, sqlBody, Array.Empty<ViewColumnMetaDto>(),
                 Array.Empty<IReadOnlyDictionary<string, object?>>(), null, null, null, false);
@@ -440,16 +447,16 @@ public sealed class ViewBuilderService : IViewBuilderService
         string? definitionJson, string sqlBody, ViewDefinition? existing, string? username, CancellationToken ct)
     {
         var (validOk, validErrors) = await ValidateSqlBodyAsync(connection, sqlBody, ct);
-        if (!validOk) return new ViewApplyResult(false, validErrors, existing?.Id, null, false, null);
+        if (!validOk) return new ViewApplyResult(false, validErrors, existing?.Id, sqlBody, false, null);
 
         if (kind == ViewDefinitionKind.SystemExtend)
         {
-            var (nbOk, missing) = await CheckNonBreakingAsync(connection, viewName, sqlBody, ct);
+            var (nbOk, missing) = await CheckNonBreakingAsync(connection, _schema, viewName, sqlBody, ct);
             if (!nbOk)
             {
                 var msg = "Bu değişiklik mevcut sütunları kaldırıyor/yeniden adlandırıyor: " + string.Join(", ", missing) +
                            ". Sistem view genişletmeleri yalnızca eklemeli (additive) olabilir.";
-                return new ViewApplyResult(false, new[] { msg }, existing?.Id, null, false, null);
+                return new ViewApplyResult(false, new[] { msg }, existing?.Id, sqlBody, false, null);
             }
         }
 
@@ -481,7 +488,7 @@ public sealed class ViewBuilderService : IViewBuilderService
         catch (Exception ex)
         {
             tx.Rollback();
-            return new ViewApplyResult(false, new[] { "Uygulama sırasında hata: " + ex.Message }, existing?.Id, null, warn, factor);
+            return new ViewApplyResult(false, new[] { "Uygulama sırasında hata: " + ex.Message }, existing?.Id, sqlBody, warn, factor);
         }
 
         return new ViewApplyResult(true, Array.Empty<string>(), viewDefinitionId, sqlBody, warn, factor);
@@ -618,14 +625,14 @@ public sealed class ViewBuilderService : IViewBuilderService
 
     /// <summary>Gerçek derlenebilirlik testi: transaction içinde CREATE OR ALTER VIEW dener, HER ZAMAN
     /// ROLLBACK eder (başarılı olsa bile) — şemaya kalıcı hiçbir iz bırakmaz.</summary>
-    private static async Task<(bool Ok, string? Error)> TestCompileAsync(SqlConnection connection, string probeViewName, string sqlBody, CancellationToken ct)
+    private static async Task<(bool Ok, string? Error)> TestCompileAsync(SqlConnection connection, string schema, string probeViewName, string sqlBody, CancellationToken ct)
     {
         var tx = (SqlTransaction)connection.BeginTransaction();
         try
         {
             var cmd = connection.CreateCommand();
             cmd.Transaction = tx;
-            cmd.CommandText = $"CREATE OR ALTER VIEW [dbo].[{probeViewName}] AS{Environment.NewLine}{sqlBody}";
+            cmd.CommandText = $"CREATE OR ALTER VIEW [{schema}].[{probeViewName}] AS{Environment.NewLine}{sqlBody}";
             await cmd.ExecuteNonQueryAsync(ct);
             return (true, null);
         }
@@ -647,11 +654,11 @@ public sealed class ViewBuilderService : IViewBuilderService
     /// <summary>System view genişletmede additive garantisi: mevcut view'ın (DB'deki hali) tüm
     /// kolonları, yeni gövdenin çıktısında isim bazlı olarak hâlâ mevcut olmalı.</summary>
     private static async Task<(bool Ok, List<string> Missing)> CheckNonBreakingAsync(
-        SqlConnection connection, string viewName, string newSqlBody, CancellationToken ct)
+        SqlConnection connection, string schema, string viewName, string newSqlBody, CancellationToken ct)
     {
         var existsCmd = connection.CreateCommand();
         existsCmd.CommandText = "SELECT OBJECT_ID(@full, N'V');";
-        existsCmd.Parameters.Add(new SqlParameter("@full", $"[dbo].[{viewName}]"));
+        existsCmd.Parameters.Add(new SqlParameter("@full", $"[{schema}].[{viewName}]"));
         var objId = await existsCmd.ExecuteScalarAsync(ct);
         if (objId is null or DBNull) return (true, new List<string>()); // korunacak bir şey yok
 
@@ -659,7 +666,7 @@ public sealed class ViewBuilderService : IViewBuilderService
         IReadOnlyList<ViewColumnMetaDto> newColumns;
         try
         {
-            oldColumns = await DescribeColumnsAsync(connection, $"SELECT * FROM [dbo].[{viewName}]", ct);
+            oldColumns = await DescribeColumnsAsync(connection, $"SELECT * FROM [{schema}].[{viewName}]", ct);
             newColumns = await DescribeColumnsAsync(connection, newSqlBody, ct);
         }
         catch (SqlException)

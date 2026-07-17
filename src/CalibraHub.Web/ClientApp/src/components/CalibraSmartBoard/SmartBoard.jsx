@@ -623,7 +623,7 @@ export default function SmartBoard(props) {
           ) : (
             <button
               onClick={handleLoadMore}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] text-slate-600 dark:text-white/60 transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-600 dark:text-white/60 transition-all"
             >
               <ChevronDown size={14} />
               <span>Daha Fazla Yukle ({(totalCount - entities.length).toLocaleString('tr-TR')} kalan)</span>
@@ -677,7 +677,7 @@ export default function SmartBoard(props) {
                 value={search}
                 onChange={function (e) { setSearch(e.target.value) }}
                 placeholder={searchPlaceholder}
-                className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/60 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] text-sm text-slate-700 dark:text-white/70 placeholder:text-slate-400 dark:placeholder:text-white/40 focus:outline-none focus:border-indigo-400/50 dark:focus:border-white/15 transition-colors"
+                className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/60 dark:bg-white/[0.04] border-[1px] border-slate-200 dark:border-white/[0.06] text-sm text-slate-700 dark:text-white/70 placeholder:text-slate-400 dark:placeholder:text-white/40 focus:outline-none focus:border-indigo-400/50 dark:focus:border-white/15 transition-colors"
               />
               {isPaginated && loading && search && (
                 <Loader2 size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-indigo-400 animate-spin" />
@@ -692,7 +692,7 @@ export default function SmartBoard(props) {
         <button
           onClick={handleManualRefresh}
           disabled={refreshing}
-          className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
+          className={'p-2.5 rounded-xl border-[1px] transition-all group flex-shrink-0 ' +
             (refreshing
               ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-400/30 cursor-wait'
               : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06]')
@@ -708,7 +708,7 @@ export default function SmartBoard(props) {
         {/* Filter button — hayalet mod (low saturation, dot indicator aktifte) */}
         <button
           onClick={function () { setFilterOpen(true) }}
-          className={'relative p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
+          className={'relative p-2.5 rounded-xl border-[1px] transition-all group flex-shrink-0 ' +
             (filters.length > 0
               ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-400/30'
               : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06]')
@@ -721,7 +721,7 @@ export default function SmartBoard(props) {
           } />
           {filters.length > 0 && (
             <span
-              className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold bg-indigo-500 text-white flex items-center justify-center"
+              className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold bg-indigo-500 text-white/100 flex items-center justify-center"
               style={{ boxShadow: '0 0 0 2px rgba(15,23,42,0.6)' }}
             >
               {filters.length}
@@ -735,7 +735,7 @@ export default function SmartBoard(props) {
         <button
           onClick={function () { if (!exporting) setShowExportConfirm(true) }}
           disabled={exporting}
-          className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
+          className={'p-2.5 rounded-xl border-[1px] transition-all group flex-shrink-0 ' +
             (exporting
               ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-400/30 cursor-wait'
               : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06]')
@@ -753,7 +753,7 @@ export default function SmartBoard(props) {
             Regresyonsuz: viewMode!=='table' oldugunda bu dal hicbir zaman calismaz. */}
         <button
           onClick={function () { if (isTableMode) setColumnSettingsOpen(true); else setConfigOpen(true) }}
-          className="p-2.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] transition-all group flex-shrink-0"
+          className="p-2.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-[1px] border-slate-200 dark:border-white/[0.06] transition-all group flex-shrink-0"
           title={isTableMode ? 'Sütun Ayarları' : 'Widget Ayarlari'}
         >
           <Settings2 size={15} className="text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors" />
@@ -772,9 +772,9 @@ export default function SmartBoard(props) {
                   onClick={function () { handleActionClick(action) }}
                   title={isPrimary ? action.label + ' (Alt+N / Insert)' : action.label}
                   aria-label={action.label}
-                  className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
+                  className={'p-2.5 rounded-xl border-[1px] transition-all group flex-shrink-0 ' +
                     (isPrimary
-                      ? 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 border-indigo-500 dark:border-indigo-400/20 text-white dark:text-indigo-300 shadow-sm'
+                      ? 'bg-indigo-500 hover:bg-indigo-600 dark:bg-indigo-500/20 dark:hover:bg-indigo-500/30 border-indigo-500 dark:border-indigo-400/20 text-white/100 dark:text-indigo-300 shadow-sm'
                       : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/40 hover:text-indigo-600 dark:hover:text-indigo-400/80')
                   }
                 >

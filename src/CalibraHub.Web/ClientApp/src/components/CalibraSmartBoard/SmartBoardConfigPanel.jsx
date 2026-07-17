@@ -54,7 +54,7 @@ function ActiveRow(props) {
       style={style}
       {...sortable.attributes}
       className={'flex items-center gap-2 px-3 py-2.5 rounded-xl ' +
-        'border transition-all duration-[140ms] ' +
+        'border-[1px] transition-all duration-[140ms] ' +
         (sortable.isDragging
           ? 'border-indigo-400/50 bg-[#16223c] dark:bg-[#16223c]'
           : 'border-transparent bg-slate-100 dark:bg-white/[0.03] hover:bg-slate-200/60 dark:hover:bg-white/[0.06] hover:border-slate-200 dark:hover:border-white/[0.06]')
@@ -105,7 +105,7 @@ function PoolRow(props) {
   var palette = resolveColor(widget.color, widget.dataType)
 
   return (
-    <div className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.05] border border-transparent hover:border-slate-200 dark:hover:border-white/[0.06] transition-all group">
+    <div className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.05] border-[1px] border-transparent hover:border-slate-200 dark:hover:border-white/[0.06] transition-all group">
       <button
         type="button"
         onClick={function() { onAdd(widget.id) }}
@@ -313,7 +313,7 @@ export default function SmartBoardConfigPanel(props) {
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border-[1px] border-indigo-400/20 flex items-center justify-center">
                     <Settings2 size={15} className="text-indigo-400" />
                   </div>
                   <div>
@@ -335,7 +335,7 @@ export default function SmartBoardConfigPanel(props) {
                     value={searchQuery}
                     onChange={function(e) { setSearchQuery(e.target.value) }}
                     placeholder="Widget ara…"
-                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.07] text-white/70 placeholder-white/20 text-xs focus:outline-none focus:border-indigo-400/40 focus:bg-white/[0.06] transition-all"
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.04] border-[1px] border-white/[0.07] text-white/70 placeholder-white/20 text-xs focus:outline-none focus:border-indigo-400/40 focus:bg-white/[0.06] transition-all"
                   />
                   {searchQuery && (
                     <button
@@ -428,7 +428,7 @@ export default function SmartBoardConfigPanel(props) {
               <div className="px-5 py-4 border-t border-white/[0.06] flex items-center gap-2 flex-shrink-0">
                 <button
                   onClick={handleReset}
-                  className="px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.06] text-xs font-medium text-white/40 hover:text-white/60 transition-all flex items-center gap-1.5"
+                  className="px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border-[1px] border-white/[0.06] text-xs font-medium text-white/40 hover:text-white/60 transition-all flex items-center gap-1.5"
                   title="Varsayilana sifirla"
                 >
                   <RotateCcw size={13} />
@@ -437,14 +437,14 @@ export default function SmartBoardConfigPanel(props) {
                 <div className="flex-1" />
                 <button
                   onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-sm font-medium text-white/50 hover:text-white/70 transition-all"
+                  className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border-[1px] border-white/[0.06] text-sm font-medium text-white/50 hover:text-white/70 transition-all"
                 >
                   Iptal
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/35 border border-indigo-400/25 hover:border-indigo-400/35 text-sm font-semibold text-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                  className="px-4 py-2.5 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/35 border-[1px] border-indigo-400/25 hover:border-indigo-400/35 text-sm font-semibold text-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50"
                 >
                   <Check size={15} />
                   {saving ? 'Kaydediliyor...' : 'Kaydet'}

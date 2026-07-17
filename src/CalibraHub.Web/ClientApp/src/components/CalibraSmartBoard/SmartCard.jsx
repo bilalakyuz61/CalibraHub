@@ -752,7 +752,7 @@ export default function SmartCard(props) {
               <img
                 src={imageUrl}
                 alt={title}
-                className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 flex-shrink-0"
+                className="w-11 h-11 rounded-xl object-cover border-[1px] border-slate-200 dark:border-white/10 flex-shrink-0"
               />
             )}
 
@@ -1037,7 +1037,7 @@ export default function SmartCard(props) {
           onClick={function() { setModalOpen(false) }}
         >
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden mx-4"
+            className="bg-white/100 dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden mx-4"
             onClick={function(e) { e.stopPropagation() }}
           >
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-white/[0.08]">
