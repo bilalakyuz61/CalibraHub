@@ -833,6 +833,10 @@ END;";
             await EnsureReportEngineTablesAsync(connection, cancellationToken);
             await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
             await EnsureViewMetaTableAsync(connection, cancellationToken);
+            // 2026-07-17 — Sayfa-içi Yorum sistemi (PageComment ailesi). Bağımsız feature,
+            // başka tabloya FK yok (yalnız aile-içi self-FK). View override machinery'sinden
+            // ÖNCE, standalone feature tablolarıyla birlikte zincirin kuyruğunda.
+            await EnsurePageCommentTablesAsync(connection, cancellationToken);
             // 2026-07-17 — SQL View Yönetimi (kontrollü istisna). Kullanıcı tanımlı view
             // override/custom tablolarını kur. Zincirin SONUNDA olmalı: hemen aşağıdaki
             // ApplyActiveViewOverridesAsync bu tablodan okur (sıralama garantisi).
@@ -907,6 +911,122 @@ END;";
                 """;
             await cmd.ExecuteNonQueryAsync(ct);
         }
+    }
+
+    /// <summary>
+    /// Sayfa-içi Yorum sistemi (PageComment ailesi, 2026-07-17). Kullanıcıların herhangi
+    /// bir ekran üzerinde bıraktığı geliştirme/geri-bildirim yorumları + durum geçmişi +
+    /// yapıştırılan görseller + olay günlüğü. Dört tablo:
+    ///  • PageComment          : asıl yorum. PK = NVARCHAR(100) (istemci-üretimli GUID —
+    ///                           optimistik UI için BİLİNÇLİ NVARCHAR PK istisnası, spec gereği).
+    ///                           Seq INT IDENTITY (kısa "#42" referansı) UNIQUE.
+    ///  • PageCommentRevision  : append-only durum geçmişi, FK + CASCADE (yorum silinince temizlenir).
+    ///  • PageCommentImage     : yapıştırılan görseller (VARBINARY(MAX)), FK + CASCADE.
+    ///  • PageCommentActivity  : bağımsız olay günlüğü (FK yok — ekran bazlı serbest kayıt).
+    /// Per-company DB → CompanyId kolonu YOK. Audit dörtlüsü CLAUDE.md standardı
+    /// (Created/Updated DATETIME + CreatedBy/UpdatedBy NVARCHAR(120)); revision/image/activity
+    /// append-only olduğundan yalnız Created + üretici alanları taşır. Idempotent: OBJECT_ID
+    /// guard. Child tablolar FK sırası için parent (PageComment) OBJECT_ID kontrolünü de içerir.
+    /// Mevcut [Note] ailesiyle çakışma YOK (ayrı isim uzayı).
+    /// </summary>
+    private async Task EnsurePageCommentTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[PageComment]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[PageComment]
+                (
+                    [Id]              NVARCHAR(100) NOT NULL CONSTRAINT [PK_PageComment] PRIMARY KEY,
+                    [Seq]             INT           IDENTITY(1,1) NOT NULL,
+                    [ScreenKey]       NVARCHAR(500) NOT NULL,
+                    [PageTitle]       NVARCHAR(200) NULL,
+                    [FormCode]        NVARCHAR(50)  NULL,
+                    [Text]            NVARCHAR(MAX) NOT NULL,
+                    [Author]          NVARCHAR(120) NULL,
+                    [Status]          NVARCHAR(20)  NOT NULL CONSTRAINT [DF_PageComment_Status] DEFAULT 'approved',
+                    [AppliedVersion]  NVARCHAR(40)  NULL,
+                    [ResolvedBy]      NVARCHAR(120) NULL,
+                    [ResolvedAt]      NVARCHAR(50)  NULL,
+                    [DevNote]         NVARCHAR(MAX) NULL,
+                    [ClientCreatedAt] NVARCHAR(50)  NULL,
+                    [CreatedBy]       NVARCHAR(120) NULL,
+                    [Created]         DATETIME      NOT NULL CONSTRAINT [DF_PageComment_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]       NVARCHAR(120) NULL,
+                    [Updated]         DATETIME      NULL
+                );
+
+                -- Kısa referans "#42" — Seq benzersizliği garanti altına alınır.
+                CREATE UNIQUE NONCLUSTERED INDEX [UX_PageComment_Seq]
+                    ON [{s}].[PageComment] ([Seq]);
+                -- Sayfa bazlı listeleme (ScreenKey filtresi + Seq sırası).
+                CREATE INDEX [IX_PageComment_ScreenKey]
+                    ON [{s}].[PageComment] ([ScreenKey], [Seq]);
+                -- Durum bazlı filtreleme (dashboard: approved/applied/abandoned/revised).
+                CREATE INDEX [IX_PageComment_Status]
+                    ON [{s}].[PageComment] ([Status], [Seq]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[PageCommentRevision]', N'U') IS NULL
+               AND OBJECT_ID(N'[{s}].[PageComment]', N'U') IS NOT NULL
+            BEGIN
+                CREATE TABLE [{s}].[PageCommentRevision]
+                (
+                    [Id]              INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_PageCommentRevision] PRIMARY KEY,
+                    [CommentId]       NVARCHAR(100) NOT NULL,
+                    [Status]          NVARCHAR(20)  NOT NULL,
+                    [Version]         NVARCHAR(40)  NULL,
+                    [Note]            NVARCHAR(MAX) NULL,
+                    [UserName]        NVARCHAR(120) NULL,
+                    [ClientCreatedAt] NVARCHAR(50)  NULL,
+                    [Created]         DATETIME      NOT NULL CONSTRAINT [DF_PageCommentRevision_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_PageCommentRevision_PageComment]
+                        FOREIGN KEY ([CommentId]) REFERENCES [{s}].[PageComment]([Id]) ON DELETE CASCADE
+                );
+
+                -- Yorum bazlı geçmiş (CommentId + Id sırası, append-only).
+                CREATE INDEX [IX_PageCommentRevision_Comment]
+                    ON [{s}].[PageCommentRevision] ([CommentId], [Id]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[PageCommentImage]', N'U') IS NULL
+               AND OBJECT_ID(N'[{s}].[PageComment]', N'U') IS NOT NULL
+            BEGIN
+                CREATE TABLE [{s}].[PageCommentImage]
+                (
+                    [Id]              NVARCHAR(100)  NOT NULL CONSTRAINT [PK_PageCommentImage] PRIMARY KEY,
+                    [CommentId]       NVARCHAR(100)  NOT NULL,
+                    [Mime]            NVARCHAR(100)  NOT NULL,
+                    [Name]            NVARCHAR(255)  NULL,
+                    [Bytes]           VARBINARY(MAX) NOT NULL,
+                    [ClientCreatedAt] NVARCHAR(50)   NULL,
+                    [Created]         DATETIME       NOT NULL CONSTRAINT [DF_PageCommentImage_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_PageCommentImage_PageComment]
+                        FOREIGN KEY ([CommentId]) REFERENCES [{s}].[PageComment]([Id]) ON DELETE CASCADE
+                );
+
+                -- Yoruma bağlı görseller (CommentId + Id sırası).
+                CREATE INDEX [IX_PageCommentImage_Comment]
+                    ON [{s}].[PageCommentImage] ([CommentId], [Id]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[PageCommentActivity]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[PageCommentActivity]
+                (
+                    [Id]              INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_PageCommentActivity] PRIMARY KEY,
+                    [Action]          NVARCHAR(100) NOT NULL,
+                    [ScreenKey]       NVARCHAR(500) NULL,
+                    [Detail]          NVARCHAR(MAX) NULL,
+                    [ClientCreatedAt] NVARCHAR(50)  NULL,
+                    [Created]         DATETIME      NOT NULL CONSTRAINT [DF_PageCommentActivity_Created] DEFAULT SYSUTCDATETIME()
+                );
+            END;
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
