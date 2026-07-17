@@ -7,7 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,17 +22,20 @@ import androidx.compose.ui.unit.dp
 import com.calibrahub.app.app
 import com.calibrahub.app.data.ConversationDto
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
+/**
+ * 2026-07-17 drawer migration: kök modül ekranı olduğu için TopAppBar'da hamburger (sol drawer'ı
+ * açar, Çıkış artık [com.calibrahub.app.ui.nav.AppDrawerContent]'te merkezi) — önceki sağ üst
+ * Logout ikonu kaldırıldı, tek bir çıkış noktası kalsın diye.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListScreen(
     onOpenChat: (phone: String) -> Unit,
-    onLogout: () -> Unit
+    onOpenDrawer: () -> Unit
 ) {
     val context = LocalContext.current
     val repo    = context.app.repository
-    val scope   = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var conversations by remember { mutableStateOf<List<ConversationDto>>(emptyList()) }
@@ -67,13 +70,10 @@ fun ChatListScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Sohbetler") },
-                actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            repo.logout()
-                            onLogout()
-                        }
-                    }) { Icon(Icons.Default.Logout, contentDescription = "Çıkış") }
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menü")
+                    }
                 }
             )
         }

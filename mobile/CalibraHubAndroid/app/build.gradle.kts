@@ -18,8 +18,9 @@ android {
         vectorDrawables.useSupportLibrary = true
 
         // BuildConfig'e enjekte edilen base URL — flavor / build type'a göre değişir.
-        // Emulator için 10.0.2.2 host alias'ı; LAN cihazı için override gerekir.
-        buildConfigField("String", "DEFAULT_BASE_URL", "\"http://192.169.254.93:61001/\"")
+        // Fiziksel cihaz + `adb reverse tcp:61001 tcp:61001` tüneli için 127.0.0.1 hedefi;
+        // gerçek LAN/uzak sunucu için login ekranından override edilir (DataStore'a yazılır).
+        buildConfigField("String", "DEFAULT_BASE_URL", "\"http://127.0.0.1:61001/\"")
     }
 
     buildTypes {

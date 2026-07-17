@@ -29,21 +29,34 @@ class WarehouseRepository(private val session: SessionManager) {
         resp.body() ?: emptyList()
     }
 
-    /** Depo giriş belgesi (STOCK_IN) — kalemler hedef lokasyona (+) yazılır. */
-    suspend fun stockIn(locationId: Int, lines: List<StockDocLineRequest>, note: String?): Result<StockDocResult> =
+    /** Depo giriş belgesi (STOCK_IN) — kalemler hedef lokasyona (+) yazılır.
+     * [extraFields] (2026-07-17 EK) — dinamik ek saha (WidgetMas) değerleri, bkz.
+     * ui/widgets/DynamicFields.kt. ADDITIVE: null/boş → hiçbir şey yazılmaz. */
+    suspend fun stockIn(
+        locationId: Int,
+        lines: List<StockDocLineRequest>,
+        note: String?,
+        extraFields: Map<String, String>? = null
+    ): Result<StockDocResult> =
         runCatchingApi {
             unwrapStockDoc(
                 session.buildApi(WarehouseApi::class.java)
-                    .stockIn(StockDocRequest(locationId = locationId, lines = lines, note = note))
+                    .stockIn(StockDocRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields))
             )
         }
 
-    /** Depo çıkış belgesi (STOCK_OUT) — kaynak lokasyondan (-) düşülür; eksi bakiye guard'ı sunucuda çalışır. */
-    suspend fun stockOut(locationId: Int, lines: List<StockDocLineRequest>, note: String?): Result<StockDocResult> =
+    /** Depo çıkış belgesi (STOCK_OUT) — kaynak lokasyondan (-) düşülür; eksi bakiye guard'ı sunucuda çalışır.
+     * [extraFields] — bkz. [stockIn] üstü KDoc (aynı sözleşme). */
+    suspend fun stockOut(
+        locationId: Int,
+        lines: List<StockDocLineRequest>,
+        note: String?,
+        extraFields: Map<String, String>? = null
+    ): Result<StockDocResult> =
         runCatchingApi {
             unwrapStockDoc(
                 session.buildApi(WarehouseApi::class.java)
-                    .stockOut(StockDocRequest(locationId = locationId, lines = lines, note = note))
+                    .stockOut(StockDocRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields))
             )
         }
 
@@ -58,15 +71,22 @@ class WarehouseRepository(private val session: SessionManager) {
         fromLocationId: Int,
         toLocationId: Int,
         lines: List<StockDocLineRequest>,
-        note: String?
+        note: String?,
+        extraFields: Map<String, String>? = null
     ): Result<TransferResult> = runCatchingApi {
         val resp = session.buildApi(WarehouseApi::class.java).transfer(
-            TransferRequest(fromLocationId = fromLocationId, toLocationId = toLocationId, lines = lines, note = note)
+            TransferRequest(
+                fromLocationId = fromLocationId,
+                toLocationId = toLocationId,
+                lines = lines,
+                note = note,
+                extraFields = extraFields
+            )
         )
         if (!resp.isSuccessful) error(parseApiError(resp) ?: "HTTP ${resp.code()}")
         val body = resp.body() ?: error("Boş yanıt")
         if (!body.ok) error(body.error ?: "İşlem başarısız")
-        TransferResult(documentNumber = body.documentNumber ?: "")
+        TransferResult(documentNumber = body.documentNumber ?: "", extraFieldsError = body.extraFieldsError)
     }
 
     /**
@@ -78,15 +98,21 @@ class WarehouseRepository(private val session: SessionManager) {
     suspend fun inventoryCount(
         locationId: Int,
         lines: List<InventoryCountLineRequest>,
-        note: String?
+        note: String?,
+        extraFields: Map<String, String>? = null
     ): Result<InventoryCountResult> = runCatchingApi {
         val resp = session.buildApi(WarehouseApi::class.java).inventoryCount(
-            InventoryCountRequest(locationId = locationId, lines = lines, note = note)
+            InventoryCountRequest(locationId = locationId, lines = lines, note = note, extraFields = extraFields)
         )
         if (!resp.isSuccessful) error(parseApiError(resp) ?: "HTTP ${resp.code()}")
         val body = resp.body() ?: error("Boş yanıt")
         if (!body.ok) error(body.error ?: "İşlem başarısız")
-        InventoryCountResult(documentNumber = body.documentNumber ?: "", applied = body.applied, id = body.id)
+        InventoryCountResult(
+            documentNumber = body.documentNumber ?: "",
+            applied = body.applied,
+            id = body.id,
+            extraFieldsError = body.extraFieldsError
+        )
     }
 
     /**
@@ -128,7 +154,8 @@ class WarehouseRepository(private val session: SessionManager) {
         lines: List<DeliveryLineRequest>,
         note: String?,
         externalRefNumber: String? = null,
-        preferredOrderId: Int? = null
+        preferredOrderId: Int? = null,
+        extraFields: Map<String, String>? = null
     ): Result<DeliveryResult> = runCatchingApi {
         val resp = session.buildApi(WarehouseApi::class.java).delivery(
             DeliveryRequest(
@@ -137,13 +164,14 @@ class WarehouseRepository(private val session: SessionManager) {
                 lines = lines,
                 note = note,
                 externalRefNumber = externalRefNumber,
-                preferredOrderId = preferredOrderId
+                preferredOrderId = preferredOrderId,
+                extraFields = extraFields
             )
         )
         if (!resp.isSuccessful) error(parseApiError(resp) ?: "HTTP ${resp.code()}")
         val body = resp.body() ?: error("Boş yanıt")
         if (!body.ok) error(body.error ?: "İşlem başarısız")
-        DeliveryResult(documentNumber = body.documentNumber ?: "", lines = body.lines)
+        DeliveryResult(documentNumber = body.documentNumber ?: "", lines = body.lines, extraFieldsError = body.extraFieldsError)
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -203,6 +231,27 @@ class WarehouseRepository(private val session: SessionManager) {
         resp.body() ?: emptyList()
     }
 
+    // ──────────────────────────────────────────────────────────────────────
+    // Dinamik ek saha şeması (WidgetMas/EAV, 2026-07-17 koordinatör KİLİTLİ kontrat) —
+    // bkz. ui/widgets/DynamicFields.kt (DynamicFieldsSection composable'ı).
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * formCode'a tanımlı dinamik ek saha şemasını getirir. `Result.success(emptyList())` İKİ
+     * durumu KASITLI olarak AYNI şekilde ele alır: (1) sunucu 200 [] döndü — form için hiç
+     * alan tanımlanmamış, sözleşmede NORMAL; (2) 400/403/404 veya ağ hatası — SESSİZCE boş
+     * listeye düşürülür (aşağıda `onFailure` dalı). Gerekçe: ek saha bölümü V1'de
+     * opsiyonel/best-effort bir katman — asıl belge kaydetme akışını (StockDoc/Transfer/
+     * Count/Delivery) ASLA bloklamamalı veya kullanıcıya bu belgeyle ilgisi olmayan bir
+     * yetki/konfigürasyon hatası göstermemeli. Ayırt edici bir hata mesajı gerekirse (ör.
+     * "yetkiniz yok" ile "tanımlı değil" farklı gösterilecekse) bu fonksiyon Result.failure
+     * döndürecek şekilde genişletilebilir — V1 kapsamında bilinçli olarak basit tutuldu.
+     */
+    suspend fun getWidgetSchema(formCode: String): Result<List<WidgetFieldDto>> = runCatchingApi {
+        val resp = session.buildApi(WarehouseApi::class.java).getWidgetSchema(formCode)
+        if (resp.isSuccessful) resp.body() ?: emptyList() else emptyList()
+    }
+
     /**
      * stock-in/stock-out sözleşmesi hatayı üç kanaldan taşır; hepsi Result.failure(mesaj)
      * olarak normalize edilir, UI fold ile tek yoldan gösterir:
@@ -214,7 +263,7 @@ class WarehouseRepository(private val session: SessionManager) {
         if (!resp.isSuccessful) error(parseApiError(resp) ?: "HTTP ${resp.code()}")
         val body = resp.body() ?: error("Boş yanıt")
         if (!body.ok) error(body.error ?: body.message ?: "İşlem başarısız")
-        return StockDocResult(docId = body.docId ?: 0, docNumber = body.docNumber ?: "")
+        return StockDocResult(docId = body.docId ?: 0, docNumber = body.docNumber ?: "", extraFieldsError = body.extraFieldsError)
     }
 
     /**
@@ -238,20 +287,37 @@ class WarehouseRepository(private val session: SessionManager) {
     private inline fun <T> runCatchingApi(block: () -> T): Result<T> = runCatching(block)
 }
 
-/** Başarılı stok belgesi yazımının sonucu — UI onay diyaloğunda docNumber gösterilir. */
-data class StockDocResult(val docId: Int, val docNumber: String)
+/** Başarılı stok belgesi yazımının sonucu — UI onay diyaloğunda docNumber gösterilir.
+ * [extraFieldsError] (2026-07-17 EK) — dolu ise belge YİNE DE başarılı sayılır (NON-ATOMIC);
+ * UI onay diyaloğu içinde non-blocking uyarı satırı olarak gösterir (bkz. StockDocScreen). */
+data class StockDocResult(val docId: Int, val docNumber: String, val extraFieldsError: String? = null)
 
-/** Başarılı transfer belgesi yazımının sonucu — UI'da documentNumber'lı snackbar gösterilir. */
-data class TransferResult(val documentNumber: String)
+/** Başarılı transfer belgesi yazımının sonucu — UI'da documentNumber'lı snackbar gösterilir.
+ * [extraFieldsError] — bkz. [StockDocResult] üstü KDoc (aynı NON-ATOMIC gerekçe); TransferScreen
+ * dolu geldiğinde ARDINDAN ikinci (kuyruklu) bir snackbar gösterir. */
+data class TransferResult(val documentNumber: String, val extraFieldsError: String? = null)
 
 /**
  * Başarılı sayım belgesi yazımının sonucu — applied bayrağına göre UI farklı snackbar mesajı
  * seçer. `id`: applied=false ise Sayım Yansıt dialoğunun "Yansıt" aksiyonunda kullanılır.
+ * [extraFieldsError] — bkz. [StockDocResult] üstü KDoc; İLK sayım kaydına ait (Sayım Yansıt/
+ * apply çağrısıyla ilgisi yok), applied true/false her iki dalda da dolabilir.
  */
-data class InventoryCountResult(val documentNumber: String, val applied: Boolean, val id: Int)
+data class InventoryCountResult(
+    val documentNumber: String,
+    val applied: Boolean,
+    val id: Int,
+    val extraFieldsError: String? = null
+)
 
 /** Başarılı Sayım Yansıt (apply) sonucu — UI "Yansıtıldı (N satır yazıldı)" snackbar'ında gösterir. */
 data class InventoryCountApplyResult(val writtenCount: Int)
 
-/** Başarılı irsaliye kaydının sonucu — documentNumber + satır bazlı sipariş bağlama dökümü. */
-data class DeliveryResult(val documentNumber: String, val lines: List<DeliveryLineResultDto>)
+/** Başarılı irsaliye kaydının sonucu — documentNumber + satır bazlı sipariş bağlama dökümü.
+ * [extraFieldsError] — bkz. [StockDocResult] üstü KDoc (aynı NON-ATOMIC gerekçe); DeliveryScreen
+ * başarı diyaloğu içinde non-blocking uyarı satırı olarak gösterir. */
+data class DeliveryResult(
+    val documentNumber: String,
+    val lines: List<DeliveryLineResultDto>,
+    val extraFieldsError: String? = null
+)

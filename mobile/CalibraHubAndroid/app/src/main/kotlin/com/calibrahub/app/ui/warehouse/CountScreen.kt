@@ -64,7 +64,15 @@ import com.calibrahub.app.app
 import com.calibrahub.app.data.InventoryCountLineRequest
 import com.calibrahub.app.data.StockQueryDto
 import com.calibrahub.app.data.WarehouseLocationDto
+import com.calibrahub.app.data.WidgetFieldDto
+import com.calibrahub.app.ui.widgets.DynamicFieldsSection
+import com.calibrahub.app.ui.widgets.dynamicFieldsPayload
+import com.calibrahub.app.ui.widgets.validateDynamicFields
 import kotlinx.coroutines.launch
+
+/** Dinamik ek saha şeması için GET /api/mobile/widgets/schema?formCode= sorgusunda kullanılan
+ * SABİT kod (koordinatör KİLİTLİ kontrat, 2026-07-17 EK) — CountScreen'in tek modu var. */
+private const val COUNT_WIDGET_FORM_CODE = "INVENTORY_COUNT"
 
 /**
  * Satır listesinin UI modeli — sayılan miktar + SİSTEM bakiyesi (item.balances'tan resolve
@@ -82,8 +90,10 @@ private data class CountLineUi(
     val countedQuantity: Double
 )
 
-/** Taslak (applied=false) kaydedilmiş sayım belgesinin Sayım Yansıt dialoğu için tuttuğu kimlik. */
-private data class DraftCountResult(val id: Int, val documentNumber: String)
+/** Taslak (applied=false) kaydedilmiş sayım belgesinin Sayım Yansıt dialoğu için tuttuğu kimlik.
+ * [extraFieldsError] (2026-07-17 EK) — İLK sayım kaydı sırasında ek saha yazımı başarısız
+ * olduysa (NON-ATOMIC), bu dialog içinde non-blocking uyarı olarak taşınır. */
+private data class DraftCountResult(val id: Int, val documentNumber: String, val extraFieldsError: String? = null)
 
 /**
  * Depo Sayım ekranı (Increment 2b + Sayım Yansıt) — tek lokasyon için fiziksel sayım belgesi.
@@ -153,6 +163,20 @@ fun CountScreen(onBack: () -> Unit) {
     var applying by remember { mutableStateOf(false) }
     var applyError by remember { mutableStateOf<String?>(null) }
 
+    // ── Dinamik ek sahalar (WidgetMas, 2026-07-17 EK) — bkz. ui/widgets/DynamicFields.kt.
+    // formCode SABİT olduğundan Unit-keyed tek seferlik yükleme; hata/403/404 durumları
+    // repository'de SESSİZCE boş listeye düşer (bölüm hiç görünmez).
+    var widgetSchema by remember { mutableStateOf<List<WidgetFieldDto>>(emptyList()) }
+    var widgetValues by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var widgetValidationFailed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        repo.getWidgetSchema(COUNT_WIDGET_FORM_CODE).fold(
+            onSuccess = { widgetSchema = it },
+            onFailure = { widgetSchema = emptyList() }
+        )
+    }
+
     // Sayımda 0 GEÇERLİ ("raf boş") — StockDocScreen'in "qty > 0" kısıtından farklı, >= 0 kabul.
     // Miktar TR klavyede virgülle de girilebilir — nokta ile normalize edilip parse edilir.
     val qtyValue = qtyText.trim().replace(',', '.').toDoubleOrNull()
@@ -189,18 +213,26 @@ fun CountScreen(onBack: () -> Unit) {
         qtyText = ""
         resolved = null
         resolveError = null
+        widgetValues = emptyMap()
+        widgetValidationFailed = false
     }
 
     fun save() {
         val loc = selectedLocation ?: return
         if (lines.isEmpty() || saving) return
+        if (!validateDynamicFields(widgetSchema, widgetValues)) {
+            widgetValidationFailed = true
+            scope.launch { snackbarHostState.showSnackbar("Ek sahalarda zorunlu alanlar var. Lütfen doldurun.") }
+            return
+        }
         scope.launch {
             saving = true
             val reqLines = lines.map {
                 InventoryCountLineRequest(itemId = it.itemId, countedQuantity = it.countedQuantity)
             }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
-            val result = repo.inventoryCount(loc.id, reqLines, noteOrNull)
+            val extraFields = dynamicFieldsPayload(widgetValues)
+            val result = repo.inventoryCount(loc.id, reqLines, noteOrNull, extraFields)
             // showSnackbar bir dismiss'e kadar suspend olur — doğrudan burada çağrılırsa
             // "saving = false" snackbar kaybolana dek gecikir. Ayrı scope.launch (fire-and-forget)
             // ile WorkOrderDetailScreen'deki aynı desen kullanılır.
@@ -209,11 +241,22 @@ fun CountScreen(onBack: () -> Unit) {
                     resetForm()
                     if (res.applied) {
                         // Sunucu doğrudan uyguladı — "yansıtılsın mı" sormanın anlamı yok,
-                        // mevcut davranış (snackbar) korunur.
-                        scope.launch { snackbarHostState.showSnackbar("Sayım kaydedildi ve uygulandı (${res.documentNumber})") }
+                        // mevcut davranış (snackbar) korunur. extraFieldsError NON-BLOCKING
+                        // ikinci (kuyruklu) snackbar (bkz. InventoryCountResult üstü KDoc).
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Sayım kaydedildi ve uygulandı (${res.documentNumber})")
+                            if (res.extraFieldsError != null) {
+                                snackbarHostState.showSnackbar("Ek sahalar kaydedilemedi: ${res.extraFieldsError}")
+                            }
+                        }
                     } else {
                         // Taslak kaldı — Sayım Yansıt dialoğu açılır (bkz. dosya üstü KDoc).
-                        draftResult = DraftCountResult(id = res.id, documentNumber = res.documentNumber)
+                        // extraFieldsError dialog İÇİNDE non-blocking uyarı olarak taşınır.
+                        draftResult = DraftCountResult(
+                            id = res.id,
+                            documentNumber = res.documentNumber,
+                            extraFieldsError = res.extraFieldsError
+                        )
                     }
                 },
                 onFailure = { failure ->
@@ -433,6 +476,28 @@ fun CountScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // ── 4b) Ek Sahalar (WidgetMas, 2026-07-17 EK) ───────────────────
+            // Form için tanımlı alan yoksa (widgetSchema boş) Card hiç render edilmez.
+            if (widgetSchema.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text(
+                            text = "Ek Sahalar",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        DynamicFieldsSection(
+                            schema = widgetSchema,
+                            values = widgetValues,
+                            onChange = { key, value -> widgetValues = widgetValues + (key to value) },
+                            enabled = !saving,
+                            showRequiredErrors = widgetValidationFailed
+                        )
+                    }
+                }
+            }
+
             // ── 5) Kaydet ───────────────────────────────────────────────────
             Button(
                 onClick = { save() },
@@ -526,6 +591,16 @@ fun CountScreen(onBack: () -> Unit) {
             text = {
                 Column {
                     Text("Sayım taslak kaydedildi (${draft.documentNumber}). Stoğa yansıtılsın mı?")
+                    // extraFieldsError NON-BLOCKING uyarı — sayım kaydı YİNE DE taslak olarak
+                    // başarıyla oluşturuldu (bkz. InventoryCountResult üstü KDoc).
+                    if (draft.extraFieldsError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Ek sahalar kaydedilemedi: ${draft.extraFieldsError}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                     if (applyError != null) {
                         Spacer(Modifier.height(8.dp))
                         Text(

@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,10 @@ import com.calibrahub.app.data.DeliveryLineRequest
 import com.calibrahub.app.data.DeliveryLineResultDto
 import com.calibrahub.app.data.DeliveryResult
 import com.calibrahub.app.data.StockQueryDto
+import com.calibrahub.app.data.WidgetFieldDto
+import com.calibrahub.app.ui.widgets.DynamicFieldsSection
+import com.calibrahub.app.ui.widgets.dynamicFieldsPayload
+import com.calibrahub.app.ui.widgets.validateDynamicFields
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -66,11 +71,18 @@ import kotlin.math.roundToInt
  * İrsaliye ekranının belge yönü — Alış (tedarikçiden gelen) / Satış (müşteriye giden).
  * [apiValue] sunucuya AYNEN gönderilen `docType` string'i (koordinatör sözleşmesi KİLİTLİ,
  * enum-benzeri: "purchase" | "sales" — web tarafındaki aynı sözleşmeyle senkron tutulmalı).
- * [screenTitle]/[successTitle] yalnız ekran metnidir, sunucuya gitmez.
+ * [screenTitle]/[successTitle] yalnız ekran metnidir, sunucuya gitmez. [widgetFormCode]
+ * (2026-07-17 EK) — dinamik ek saha şeması için GET /api/mobile/widgets/schema?formCode=
+ * sorgusunda kullanılan SABİT kod (koordinatör KİLİTLİ kontrat).
  */
-enum class DeliveryDocType(val apiValue: String, val screenTitle: String, val successTitle: String) {
-    PURCHASE("purchase", "Alış İrsaliyesi", "Alış İrsaliyesi Oluşturuldu"),
-    SALES("sales", "Satış İrsaliyesi", "Satış İrsaliyesi Oluşturuldu")
+enum class DeliveryDocType(
+    val apiValue: String,
+    val screenTitle: String,
+    val successTitle: String,
+    val widgetFormCode: String
+) {
+    PURCHASE("purchase", "Alış İrsaliyesi", "Alış İrsaliyesi Oluşturuldu", "PURCHASE_DELIVERY_EDIT"),
+    SALES("sales", "Satış İrsaliyesi", "Satış İrsaliyesi Oluşturuldu", "SALES_DELIVERY_EDIT")
 }
 
 /**
@@ -162,6 +174,20 @@ fun DeliveryScreen(docType: DeliveryDocType, onBack: () -> Unit) {
     // ekran başlığının altındaki kalıcı çipte gösterilir (bkz. Column içindeki InfoBadge çağrısı).
     var lastDocumentNumber by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // ── Dinamik ek sahalar (WidgetMas, 2026-07-17 EK) — bkz. ui/widgets/DynamicFields.kt.
+    // formCode docType'a göre değişir (PURCHASE_DELIVERY_EDIT/SALES_DELIVERY_EDIT) — LaunchedEffect
+    // docType'a keyed; hata/403/404 durumları repository'de SESSİZCE boş listeye düşer.
+    var widgetSchema by remember { mutableStateOf<List<WidgetFieldDto>>(emptyList()) }
+    var widgetValues by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var widgetValidationFailed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(docType) {
+        repo.getWidgetSchema(docType.widgetFormCode).fold(
+            onSuccess = { widgetSchema = it },
+            onFailure = { widgetSchema = emptyList() }
+        )
+    }
+
     // Miktar TR klavyede virgülle de girilebilir — nokta ile normalize edilip parse edilir.
     val qtyValue = qtyText.trim().replace(',', '.').toDoubleOrNull()
     val qtyValid = qtyValue != null && qtyValue > 0.0
@@ -223,12 +249,19 @@ fun DeliveryScreen(docType: DeliveryDocType, onBack: () -> Unit) {
         pendingSerials = emptyList()
         pendingAutoSerial = true
         pendingLot = ""
+        widgetValues = emptyMap()
+        widgetValidationFailed = false
         // resolvedContact/contactQuery/lastDocumentNumber BİLİNÇLİ KORUNUR — bkz. dosya üstü KDoc.
     }
 
     fun save() {
         val contact = resolvedContact ?: return
         if (lines.isEmpty() || saving) return
+        if (!validateDynamicFields(widgetSchema, widgetValues)) {
+            widgetValidationFailed = true
+            saveError = "Ek sahalarda zorunlu alanlar var. Lütfen doldurun."
+            return
+        }
         scope.launch {
             saving = true
             saveError = null
@@ -248,7 +281,8 @@ fun DeliveryScreen(docType: DeliveryDocType, onBack: () -> Unit) {
             // "Tedarikçi İrsaliye No" alanı); SATIŞ'ta her zaman null gönderilir.
             val refOrNull = if (docType == DeliveryDocType.PURCHASE)
                 externalRefNumber.trim().takeIf { it.isNotBlank() } else null
-            repo.delivery(docType.apiValue, contact.id, reqLines, noteOrNull, refOrNull).fold(
+            val extraFields = dynamicFieldsPayload(widgetValues)
+            repo.delivery(docType.apiValue, contact.id, reqLines, noteOrNull, refOrNull, extraFields = extraFields).fold(
                 onSuccess = {
                     successResult = it
                     lastDocumentNumber = it.documentNumber
@@ -511,6 +545,28 @@ fun DeliveryScreen(docType: DeliveryDocType, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // ── 4b) Ek Sahalar (WidgetMas, 2026-07-17 EK) ───────────────────
+            // Form için tanımlı alan yoksa (widgetSchema boş) Card hiç render edilmez.
+            if (widgetSchema.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text(
+                            text = "Ek Sahalar",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        DynamicFieldsSection(
+                            schema = widgetSchema,
+                            values = widgetValues,
+                            onChange = { key, value -> widgetValues = widgetValues + (key to value) },
+                            enabled = !saving,
+                            showRequiredErrors = widgetValidationFailed
+                        )
+                    }
+                }
+            }
+
             // ── 5) Hata + kaydet ───────────────────────────────────────────
             // {error} sunucudan geldiği gibi gösterilir — "bağlantısız yasak" reddi dahil
             // diğer iş kuralı redleriyle AYNI kanal (bkz. dosya üstü KDoc).
@@ -612,6 +668,25 @@ fun DeliveryScreen(docType: DeliveryDocType, onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold
                     )
+                    // extraFieldsError NON-BLOCKING uyarı — belge YİNE DE başarılı sayılır
+                    // (bkz. DeliveryResult üstü KDoc, WarehouseRepository.kt).
+                    if (res.extraFieldsError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Ek sahalar kaydedilemedi: ${res.extraFieldsError}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(10.dp))
                     if (res.lines.isEmpty()) {
                         Text(
@@ -621,7 +696,7 @@ fun DeliveryScreen(docType: DeliveryDocType, onBack: () -> Unit) {
                         )
                     } else {
                         // lines (dış state) BİLİNÇLİ olarak henüz sıfırlanmadı — StockDocScreen'in
-                        // successDocNumber dialoğu açıkken lines'ı korumasıyla aynı desen; itemId
+                        // successResult dialoğu açıkken lines'ı korumasıyla aynı desen; itemId
                         // eşlemesi burada ad/kod/birim göstermek için kullanılır.
                         res.lines.forEach { lineResult ->
                             val lineUi = lines.firstOrNull { it.itemId == lineResult.itemId }

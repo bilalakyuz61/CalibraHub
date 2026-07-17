@@ -59,12 +59,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.calibrahub.app.app
 import com.calibrahub.app.data.StockDocLineRequest
+import com.calibrahub.app.data.StockDocResult
 import com.calibrahub.app.data.StockQueryDto
 import com.calibrahub.app.data.WarehouseLocationDto
+import com.calibrahub.app.data.WidgetFieldDto
+import com.calibrahub.app.ui.widgets.DynamicFieldsSection
+import com.calibrahub.app.ui.widgets.dynamicFieldsPayload
+import com.calibrahub.app.ui.widgets.validateDynamicFields
 import kotlinx.coroutines.launch
 
-/** Ekranın çalıştığı belge yönü — Giriş (STOCK_IN) / Çıkış (STOCK_OUT). */
-enum class StockDocMode { IN, OUT }
+/** Ekranın çalıştığı belge yönü — Giriş (STOCK_IN) / Çıkış (STOCK_OUT). [widgetFormCode]
+ * (2026-07-17 EK) — dinamik ek saha şeması için GET /api/mobile/widgets/schema?formCode=
+ * sorgusunda kullanılan SABİT kod (koordinatör KİLİTLİ kontrat). */
+enum class StockDocMode(val widgetFormCode: String) {
+    IN("STOCK_IN"),
+    OUT("STOCK_OUT")
+}
 
 /**
  * Satır listesinin UI modeli. Sunucuya yalnız itemId + quantity gider
@@ -131,7 +141,21 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
-    var successDocNumber by remember { mutableStateOf<String?>(null) }
+    var successResult by remember { mutableStateOf<StockDocResult?>(null) }
+
+    // ── Dinamik ek sahalar (WidgetMas, 2026-07-17 EK) — bkz. ui/widgets/DynamicFields.kt.
+    // Şema mod başına SABİT (STOCK_IN/STOCK_OUT) olduğundan Unit-keyed tek seferlik yükleme
+    // yeterli; hata/403/404 durumları repository'de SESSİZCE boş listeye düşer (bölüm hiç görünmez).
+    var widgetSchema by remember { mutableStateOf<List<WidgetFieldDto>>(emptyList()) }
+    var widgetValues by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var widgetValidationFailed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(mode) {
+        repo.getWidgetSchema(mode.widgetFormCode).fold(
+            onSuccess = { widgetSchema = it },
+            onFailure = { widgetSchema = emptyList() }
+        )
+    }
 
     // Miktar TR klavyede virgülle de girilebilir — nokta ile normalize edilip parse edilir.
     val qtyValue = qtyText.trim().replace(',', '.').toDoubleOrNull()
@@ -159,15 +183,21 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
     fun save() {
         val loc = selectedLocation ?: return
         if (lines.isEmpty() || saving) return
+        if (!validateDynamicFields(widgetSchema, widgetValues)) {
+            widgetValidationFailed = true
+            saveError = "Ek sahalarda zorunlu alanlar var. Lütfen doldurun."
+            return
+        }
         scope.launch {
             saving = true
             saveError = null
             val reqLines = lines.map { StockDocLineRequest(itemId = it.itemId, quantity = it.quantity) }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
-            val result = if (isStockIn) repo.stockIn(loc.id, reqLines, noteOrNull)
-                         else repo.stockOut(loc.id, reqLines, noteOrNull)
+            val extraFields = dynamicFieldsPayload(widgetValues)
+            val result = if (isStockIn) repo.stockIn(loc.id, reqLines, noteOrNull, extraFields)
+                         else repo.stockOut(loc.id, reqLines, noteOrNull, extraFields)
             result.fold(
-                onSuccess = { successDocNumber = it.docNumber },
+                onSuccess = { successResult = it },
                 onFailure = { saveError = it.message ?: "Kaydetme başarısız" }
             )
             saving = false
@@ -182,6 +212,8 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
         resolved = null
         resolveError = null
         saveError = null
+        widgetValues = emptyMap()
+        widgetValidationFailed = false
     }
 
     Scaffold(
@@ -364,6 +396,28 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // ── 4b) Ek Sahalar (WidgetMas, 2026-07-17 EK) ───────────────────
+            // Form için tanımlı alan yoksa (widgetSchema boş) Card hiç render edilmez.
+            if (widgetSchema.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text(
+                            text = "Ek Sahalar",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        DynamicFieldsSection(
+                            schema = widgetSchema,
+                            values = widgetValues,
+                            onChange = { key, value -> widgetValues = widgetValues + (key to value) },
+                            enabled = !saving,
+                            showRequiredErrors = widgetValidationFailed
+                        )
+                    }
+                }
+            }
+
             // ── 5) Hata + kaydet ───────────────────────────────────────────
             if (saveError != null) {
                 Card(
@@ -469,10 +523,11 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
     }
 
     // ── Başarı diyaloğu — docNumber onayı ──────────────────────────────────
-    if (successDocNumber != null) {
+    if (successResult != null) {
+        val res = successResult!!
         AlertDialog(
             onDismissRequest = {
-                successDocNumber = null
+                successResult = null
                 onBack()
             },
             icon = {
@@ -483,16 +538,39 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                 )
             },
             title = { Text(if (isStockIn) "Giriş Belgesi Oluşturuldu" else "Çıkış Belgesi Oluşturuldu") },
-            text = { Text("Belge No: ${successDocNumber!!}") },
+            text = {
+                Column {
+                    Text("Belge No: ${res.docNumber}")
+                    // extraFieldsError NON-BLOCKING uyarı — belge YİNE DE başarılı sayılır
+                    // (bkz. StockDocResult üstü KDoc, WarehouseRepository.kt).
+                    if (res.extraFieldsError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Ek sahalar kaydedilemedi: ${res.extraFieldsError}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    successDocNumber = null
+                    successResult = null
                     resetForNewDoc()   // lokasyon korunur — art arda belge girişi için
                 }) { Text("Yeni Belge") }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    successDocNumber = null
+                    successResult = null
                     onBack()
                 }) { Text("Kapat") }
             }

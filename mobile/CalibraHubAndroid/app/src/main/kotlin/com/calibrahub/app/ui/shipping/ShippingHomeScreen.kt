@@ -1,4 +1,4 @@
-package com.calibrahub.app.ui.production
+package com.calibrahub.app.ui.shipping
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,21 +32,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Üretim modülü ana ekranı — operasyon listesi (WarehouseHomeScreen ile aynı kart deseni).
- * Increment 2: İş Emirleri aktif (liste → detay → operatör Sicil No/PIN + başlat/tamamla,
- * bkz. WorkOrderListScreen/WorkOrderDetailScreen). Kamera/NFC operatör kimliği V1 kapsamı
- * DIŞINDA — yalnızca Sicil No + PIN (koordinatör sözleşmesi, 2026-07-16).
+ * Sevkiyat modülü ana ekranı (2026-07-17 drawer migration, FAZ D — YENİ modül, koordinatör
+ * spesifikasyonu). Tek odak: "Açık Satış Siparişleri → Teslim Et" — [com.calibrahub.app.ui.sales.SalesHomeScreen]'deki
+ * "Açık Satış Siparişleri" kartıyla AYNI route'a ("warehouse_open_orders/sales") gider, yani AYNI
+ * [com.calibrahub.app.ui.warehouse.OpenOrderListScreen] ekranını açar. Bilinçli kısmi örtüşme —
+ * sevkiyat personeli Satış modülüne girmeden doğrudan teslimat akışına ulaşsın diye ayrı bir
+ * drawer girişi olarak eklendi (koordinatör: "basit tut", ayrı bir ekran YAZILMADI).
  *
- * 2026-07-17 drawer migration: kök modül ekranı olduğu için TopAppBar'da geri ok yerine
- * hamburger (sol drawer'ı açar) — bkz. [com.calibrahub.app.ui.nav.AppDrawerContent].
+ * Kök modül ekranı olduğu için TopAppBar'da geri ok yerine hamburger (sol drawer'ı açar).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProductionHomeScreen(onOpenWorkOrders: () -> Unit, onOpenDrawer: () -> Unit) {
+fun ShippingHomeScreen(
+    onOpenOpenOrdersSales: () -> Unit,
+    onOpenDrawer: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Üretim") },
+                title = { Text("Sevkiyat") },
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer) {
                         Icon(Icons.Default.Menu, contentDescription = "Menü")
@@ -62,17 +66,21 @@ fun ProductionHomeScreen(onOpenWorkOrders: () -> Unit, onOpenDrawer: () -> Unit)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ProductionMenuCard(
-                title = "İş Emirleri",
-                subtitle = "Operasyon başlat/tamamla, üretim akış kaydı",
-                onClick = onOpenWorkOrders
+            ShippingOperationCard(
+                title = "Açık Satış Siparişleri",
+                subtitle = "Teslim edilmemiş sipariş kalemlerini seç ve teslim et",
+                onClick = onOpenOpenOrdersSales
             )
         }
     }
 }
 
 @Composable
-private fun ProductionMenuCard(title: String, subtitle: String, onClick: () -> Unit) {
+private fun ShippingOperationCard(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -91,11 +99,7 @@ private fun ProductionMenuCard(title: String, subtitle: String, onClick: () -> U
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Default.Assignment,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                Icon(Icons.Default.LocalShipping, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {

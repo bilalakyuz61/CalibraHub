@@ -15,16 +15,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
-import androidx.compose.material.icons.filled.PendingActions
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,11 +40,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Depo modülü ana ekranı — operasyon listesi.
- * 2026-07-17 FAZ C: Açık Siparişler (Satış+Alış, 2 kart — DeliveryDocType parametreli TEK
- * OpenOrderListScreen'e navigate eder, Alış/Satış İrsaliyesi'nin AYNI iki-kart-tek-ekran deseni)
- * + Taslak Sayımlar eklendi (10/10 depo kartı). Kart sayısı arttığı için Column artık
- * kaydırılabilir ([verticalScroll]) — önceki 7 kartlık sürümde taşma riski yoktu, şimdi var.
+ * Depo modülü ana ekranı — SAF depo operasyonları (2026-07-17 drawer migration, FAZ D).
+ * Alış İrsaliyesi/Satış İrsaliyesi/Açık Satış Siparişleri/Açık Alış Siparişleri kartları
+ * [com.calibrahub.app.ui.purchase.PurchaseHomeScreen] ve [com.calibrahub.app.ui.sales.SalesHomeScreen]'e
+ * TAŞINDI (route hedefleri aynen korundu, DeliveryScreen/OpenOrderListScreen değişmedi). Geriye
+ * kalan 6 kart: Stok Sorgu, Giriş, Çıkış, Transfer, Sayım, Taslak Sayımlar.
+ *
+ * Kök modül ekranı olduğu için TopAppBar'da geri ok yerine hamburger (sol drawer'ı açar) —
+ * bkz. [com.calibrahub.app.ui.nav.AppDrawerContent].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,22 +55,18 @@ fun WarehouseHomeScreen(
     onOpenStockQuery: () -> Unit,
     onOpenStockIn: () -> Unit,
     onOpenStockOut: () -> Unit,
-    onOpenDeliveryPurchase: () -> Unit,
-    onOpenDeliverySales: () -> Unit,
     onOpenTransfer: () -> Unit,
     onOpenCount: () -> Unit,
-    onOpenOpenOrdersSales: () -> Unit,
-    onOpenOpenOrdersPurchase: () -> Unit,
     onOpenDraftCounts: () -> Unit,
-    onBack: () -> Unit
+    onOpenDrawer: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Depo") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menü")
                     }
                 }
             )
@@ -105,34 +100,6 @@ fun WarehouseHomeScreen(
                 icon = Icons.Default.Outbox,
                 enabled = true,
                 onClick = onOpenStockOut
-            )
-            WarehouseOperationCard(
-                title = "Alış İrsaliyesi",
-                subtitle = "Tedarikçiden gelen malzeme irsaliyesi",
-                icon = Icons.Default.LocalShipping,
-                enabled = true,
-                onClick = onOpenDeliveryPurchase
-            )
-            WarehouseOperationCard(
-                title = "Satış İrsaliyesi",
-                subtitle = "Müşteriye giden malzeme irsaliyesi",
-                icon = Icons.Default.ReceiptLong,
-                enabled = true,
-                onClick = onOpenDeliverySales
-            )
-            WarehouseOperationCard(
-                title = "Açık Satış Siparişleri",
-                subtitle = "Teslim edilmemiş sipariş kalemlerini teslim et",
-                icon = Icons.Default.PendingActions,
-                enabled = true,
-                onClick = onOpenOpenOrdersSales
-            )
-            WarehouseOperationCard(
-                title = "Açık Alış Siparişleri",
-                subtitle = "Mal kabul bekleyen sipariş kalemlerini teslim al",
-                icon = Icons.AutoMirrored.Filled.Assignment,
-                enabled = true,
-                onClick = onOpenOpenOrdersPurchase
             )
             WarehouseOperationCard(
                 title = "Transfer",

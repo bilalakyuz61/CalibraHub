@@ -62,10 +62,18 @@ import com.calibrahub.app.app
 import com.calibrahub.app.data.StockDocLineRequest
 import com.calibrahub.app.data.StockQueryDto
 import com.calibrahub.app.data.WarehouseLocationDto
+import com.calibrahub.app.data.WidgetFieldDto
+import com.calibrahub.app.ui.widgets.DynamicFieldsSection
+import com.calibrahub.app.ui.widgets.dynamicFieldsPayload
+import com.calibrahub.app.ui.widgets.validateDynamicFields
 import kotlinx.coroutines.launch
 
 /** Lokasyon seçim diyaloğunun hangi alanı hedeflediğini ayırt eder (aynı dialog, iki hedef). */
 private enum class TransferLocationTarget { FROM, TO }
+
+/** Dinamik ek saha şeması için GET /api/mobile/widgets/schema?formCode= sorgusunda kullanılan
+ * SABİT kod (koordinatör KİLİTLİ kontrat, 2026-07-17 EK) — TransferScreen'in tek modu var. */
+private const val TRANSFER_WIDGET_FORM_CODE = "TRANSFER"
 
 /**
  * Satır listesinin UI modeli — StockDocScreen'in DocLineUi'ıyla aynı alan seti. Sunucuya
@@ -139,6 +147,20 @@ fun TransferScreen(onBack: () -> Unit) {
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
 
+    // ── Dinamik ek sahalar (WidgetMas, 2026-07-17 EK) — bkz. ui/widgets/DynamicFields.kt.
+    // formCode SABİT olduğundan Unit-keyed tek seferlik yükleme; hata/403/404 durumları
+    // repository'de SESSİZCE boş listeye düşer (bölüm hiç görünmez).
+    var widgetSchema by remember { mutableStateOf<List<WidgetFieldDto>>(emptyList()) }
+    var widgetValues by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var widgetValidationFailed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        repo.getWidgetSchema(TRANSFER_WIDGET_FORM_CODE).fold(
+            onSuccess = { widgetSchema = it },
+            onFailure = { widgetSchema = emptyList() }
+        )
+    }
+
     // Miktar TR klavyede virgülle de girilebilir — nokta ile normalize edilip parse edilir.
     val qtyValue = qtyText.trim().replace(',', '.').toDoubleOrNull()
     val qtyValid = qtyValue != null && qtyValue > 0.0
@@ -168,17 +190,25 @@ fun TransferScreen(onBack: () -> Unit) {
         qtyText = ""
         resolved = null
         resolveError = null
+        widgetValues = emptyMap()
+        widgetValidationFailed = false
     }
 
     fun save() {
         val from = fromLocation ?: return
         val to = toLocation ?: return
         if (from.id == to.id || lines.isEmpty() || saving) return
+        if (!validateDynamicFields(widgetSchema, widgetValues)) {
+            widgetValidationFailed = true
+            scope.launch { snackbarHostState.showSnackbar("Ek sahalarda zorunlu alanlar var. Lütfen doldurun.") }
+            return
+        }
         scope.launch {
             saving = true
             val reqLines = lines.map { StockDocLineRequest(itemId = it.itemId, quantity = it.quantity) }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
-            val result = repo.transfer(from.id, to.id, reqLines, noteOrNull)
+            val extraFields = dynamicFieldsPayload(widgetValues)
+            val result = repo.transfer(from.id, to.id, reqLines, noteOrNull, extraFields)
             // showSnackbar bir dismiss'e kadar suspend olur — doğrudan burada çağrılırsa
             // "saving = false" snackbar kaybolana dek gecikir (buton yükleniyor görünür kalır).
             // Ayrı scope.launch (fire-and-forget) ile WorkOrderDetailScreen'deki aynı desen
@@ -186,7 +216,14 @@ fun TransferScreen(onBack: () -> Unit) {
             result.fold(
                 onSuccess = { res ->
                     resetForm()
-                    scope.launch { snackbarHostState.showSnackbar("Transfer belgesi oluşturuldu (${res.documentNumber})") }
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Transfer belgesi oluşturuldu (${res.documentNumber})")
+                        // extraFieldsError NON-BLOCKING ikinci (kuyruklu) snackbar — belge YİNE DE
+                        // başarılı sayılır (bkz. TransferResult üstü KDoc, WarehouseRepository.kt).
+                        if (res.extraFieldsError != null) {
+                            snackbarHostState.showSnackbar("Ek sahalar kaydedilemedi: ${res.extraFieldsError}")
+                        }
+                    }
                 },
                 onFailure = { failure ->
                     scope.launch { snackbarHostState.showSnackbar(failure.message ?: "Kaydetme başarısız") }
@@ -392,6 +429,28 @@ fun TransferScreen(onBack: () -> Unit) {
                 maxLines = 4,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // ── 4b) Ek Sahalar (WidgetMas, 2026-07-17 EK) ───────────────────
+            // Form için tanımlı alan yoksa (widgetSchema boş) Card hiç render edilmez.
+            if (widgetSchema.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text(
+                            text = "Ek Sahalar",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        DynamicFieldsSection(
+                            schema = widgetSchema,
+                            values = widgetValues,
+                            onChange = { key, value -> widgetValues = widgetValues + (key to value) },
+                            enabled = !saving,
+                            showRequiredErrors = widgetValidationFailed
+                        )
+                    }
+                }
+            }
 
             // ── 5) Kaydet ───────────────────────────────────────────────────
             Button(

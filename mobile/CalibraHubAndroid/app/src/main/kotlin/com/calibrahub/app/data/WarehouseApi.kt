@@ -128,6 +128,22 @@ interface WarehouseApi {
     // MEVCUT applyInventoryCount(id) endpoint'ini (Increment 2b) aynen kullanır.
     @GET("api/mobile/warehouse/inventory-counts")
     suspend fun inventoryCounts(@Query("take") take: Int = 50): Response<List<DraftInventoryCountDto>>
+
+    // ──────────────────────────────────────────────────────────────────
+    // Dinamik ek saha şeması (WidgetMas/EAV) — 2026-07-17, koordinatör KİLİTLİ kontrat.
+    // Depo belgeleri (Giriş/Çıkış/Transfer/Sayım) + İrsaliye (Satış/Alış) ÜST-BİLGİ ek
+    // sahaları (bkz. ui/widgets/DynamicFields.kt). Bu uç NOT: "warehouse" alt-yolunda
+    // değil (/api/mobile/widgets/schema) — yine de bu interface'e eklendi çünkü tüketen
+    // TÜM ekranlar (StockDocScreen/TransferScreen/CountScreen/DeliveryScreen) zaten
+    // context.app.warehouseRepository kullanıyor; ayrı bir repository/wiring gerekmedi.
+    // formCode ekran başına SABİT: STOCK_IN | STOCK_OUT | TRANSFER | INVENTORY_COUNT |
+    // SALES_DELIVERY_EDIT | PURCHASE_DELIVERY_EDIT. 200 [] → alan yok, NORMAL (hata değil).
+    // 400 (desteklenmeyen/eksik formCode) | 403 (yetki yok) | 404 (form kayıtlı değil) —
+    // WarehouseRepository.getWidgetSchema() bu üçünü ve ağ hatasını SESSİZCE boş listeye
+    // düşürür (bkz. o fonksiyonun KDoc'u); bu opsiyonel/best-effort bölüm ana belge
+    // kaydetme akışını asla bloklamaz.
+    @GET("api/mobile/widgets/schema")
+    suspend fun getWidgetSchema(@Query("formCode") formCode: String): Response<List<WidgetFieldDto>>
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -185,34 +201,46 @@ data class StockDocLineRequest(val itemId: Int, val quantity: Double)
 /**
  * stock-in/stock-out istek gövdesi. quantity ANA BİRİMDE ve > 0 (stok sorgu bakiyeleriyle
  * aynı birim); aynı itemId birden fazla satırda gelebilir (backend kabul eder).
+ *
+ * [extraFields] (2026-07-17 EK, koordinatör KİLİTLİ kontrat) — dinamik ek saha (WidgetMas)
+ * değerleri, key=widget alan anahtarı / value=STRING (tip ne olursa olsun — bool "true"/
+ * "false", date "yyyy-MM-dd" ISO, number ondalık string). ADDITIVE: null/boş bırakılırsa
+ * hiçbir şey yazılmaz, eski davranış birebir korunur. bkz. ui/widgets/DynamicFields.kt.
  */
 @JsonClass(generateAdapter = true)
 data class StockDocRequest(
     val locationId: Int,
     val lines: List<StockDocLineRequest>,
-    val note: String? = null
+    val note: String? = null,
+    val extraFields: Map<String, String>? = null
 )
 
+/** [extraFieldsError] (2026-07-17 EK) — widget yazımı başarısız olduysa kullanıcı-dostu mesaj;
+ * NON-ATOMIC, belge kaydını GERİ ALMAZ (ok=true kalır). null → widget yazımı da başarılı
+ * (veya extraFields hiç gönderilmedi). Ekran bunu NON-BLOCKING uyarı olarak gösterir. */
 @JsonClass(generateAdapter = true)
 data class StockDocResponse(
     val ok: Boolean,
     val docId: Int? = null,
     val docNumber: String? = null,
     val error: String? = null,   // 200 iş kuralı reddi + 403'te teknik detay
-    val message: String? = null  // yalnız 403 gövdesinde (kullanıcı-dostu yetki mesajı)
+    val message: String? = null, // yalnız 403 gövdesinde (kullanıcı-dostu yetki mesajı)
+    val extraFieldsError: String? = null
 )
 
 /**
  * Transfer istek gövdesi (Increment 2b) — kaynak/hedef lokasyon + kalemler + opsiyonel not.
  * Kalem şekli stock-in/out ile PAYLAŞILAN [StockDocLineRequest] ({itemId, quantity}) —
  * koordinatör sözleşmesi iki uçta da aynı satır şeklini kullanır.
+ * [extraFields] — bkz. StockDocRequest üstü KDoc (aynı sözleşme, aynı gerekçe, ADDITIVE).
  */
 @JsonClass(generateAdapter = true)
 data class TransferRequest(
     val fromLocationId: Int,
     val toLocationId: Int,
     val lines: List<StockDocLineRequest>,
-    val note: String? = null
+    val note: String? = null,
+    val extraFields: Map<String, String>? = null
 )
 
 /**
@@ -222,24 +250,28 @@ data class TransferRequest(
  * DEĞİL. `error` alanı sözleşmede yalnız 400/404 gövdesinde tanımlı olsa da savunma amaçlı
  * eklendi — WarehouseRepository yine de asıl hata metnini errorBody'den (parseApiError) okur;
  * bu alan yalnızca sunucu 200 ile birlikte ok:false dönerse yedek kanal olarak kullanılır.
+ * [extraFieldsError] — bkz. StockDocResponse üstü KDoc (aynı sözleşme, NON-ATOMIC).
  */
 @JsonClass(generateAdapter = true)
 data class TransferResponse(
     val ok: Boolean,
     val documentNumber: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val extraFieldsError: String? = null
 )
 
 /** Sayım kalemi — itemId + SAYILAN miktar (countedQuantity, 0 geçerli: "raf boş" sayımı). */
 @JsonClass(generateAdapter = true)
 data class InventoryCountLineRequest(val itemId: Int, val countedQuantity: Double)
 
-/** Sayım istek gövdesi (Increment 2b) — tek lokasyon + sayılan kalemler + opsiyonel not. */
+/** Sayım istek gövdesi (Increment 2b) — tek lokasyon + sayılan kalemler + opsiyonel not.
+ * [extraFields] — bkz. StockDocRequest üstü KDoc (aynı sözleşme, aynı gerekçe, ADDITIVE). */
 @JsonClass(generateAdapter = true)
 data class InventoryCountRequest(
     val locationId: Int,
     val lines: List<InventoryCountLineRequest>,
-    val note: String? = null
+    val note: String? = null,
+    val extraFields: Map<String, String>? = null
 )
 
 /**
@@ -251,6 +283,8 @@ data class InventoryCountRequest(
  * ile aynı gerekçeyle (yedek kanal) eklendi. `id` (2026-07-16 sözleşme genişletmesi, koordinatör):
  * taslak sayım belge Id'si — Sayım Yansıt akışında POST inventory-count/{id}/apply çağrısına
  * gider; applied=true ise anlamsızdır (belge zaten uygulanmış), yalnız applied=false dalında kullanılır.
+ * [extraFieldsError] — bkz. StockDocResponse üstü KDoc (aynı sözleşme, NON-ATOMIC). İLK sayım
+ * kaydında (applied true/false farketmez) dolabilir; Sayım Yansıt (apply) çağrısıyla ilgisi YOK.
  */
 @JsonClass(generateAdapter = true)
 data class InventoryCountResponse(
@@ -258,7 +292,8 @@ data class InventoryCountResponse(
     val documentNumber: String? = null,
     val applied: Boolean = false,
     val error: String? = null,
-    val id: Int = 0
+    val id: Int = 0,
+    val extraFieldsError: String? = null
 )
 
 /** Sayım Yansıt (apply) yanıtı — sözleşme KİLİTLİ: {ok:true, writtenCount} | 400 {error}. */
@@ -311,6 +346,10 @@ data class DeliveryLineRequest(
  * [preferredOrderId] (2026-07-17 EK, FAZ C) — Açık Siparişler → Teslim Et akışında
  * OpenOrderDetailScreen'in "Teslim Et" çağrısında sipariş Id'si taşınır; sunucu satırları bu
  * siparişe ÖNCELİKLİ bağlar (normal DeliveryScreen akışında her zaman null — FIFO serbest bağlama).
+ * [extraFields] (2026-07-17 EK) — bkz. StockDocRequest üstü KDoc (aynı sözleşme, ADDITIVE).
+ * DeliveryScreen'in ÜST-BİLGİ ek sahaları; OpenOrderDetailScreen'in "Teslim Et" çağrısı bu
+ * alanı KULLANMAZ (her zaman null — o ekran dinamik ek saha bölümünü mount etmez, V1 kapsamı
+ * yalnızca DeliveryScreen).
  */
 @JsonClass(generateAdapter = true)
 data class DeliveryRequest(
@@ -319,7 +358,8 @@ data class DeliveryRequest(
     val lines: List<DeliveryLineRequest>,
     val note: String? = null,
     val externalRefNumber: String? = null,
-    val preferredOrderId: Int? = null
+    val preferredOrderId: Int? = null,
+    val extraFields: Map<String, String>? = null
 )
 
 /** Bir irsaliye kaleminin bağlandığı açık sipariş satırı — sipariş no + o siparişe bağlanan miktar. */
@@ -355,14 +395,16 @@ data class DeliveryLineResultDto(
  * "sipariş serisi değiştirilemez" gibi seri/lot iş kuralı redleri de AYNI kanaldan gelir —
  * mesaj olduğu gibi gösterilir). `ok`/`error` alanları yine de savunma amaçlı tutulur
  * (TransferResponse/InventoryCountResponse ile aynı gerekçe) — WarehouseRepository asıl hata
- * metnini errorBody'den okur.
+ * metnini errorBody'den okur. [extraFieldsError] — bkz. StockDocResponse üstü KDoc (aynı
+ * sözleşme, NON-ATOMIC).
  */
 @JsonClass(generateAdapter = true)
 data class DeliveryResponse(
     val ok: Boolean,
     val documentNumber: String? = null,
     val lines: List<DeliveryLineResultDto> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    val extraFieldsError: String? = null
 )
 
 // ───────────────────────────────────────────────────────────────────────
@@ -443,4 +485,38 @@ data class DraftInventoryCountDto(
     val locationName: String,
     val date: String,
     val lineCount: Int
+)
+
+// ───────────────────────────────────────────────────────────────────────
+// Dinamik ek saha şeması DTO'ları (WidgetMas/EAV) — 2026-07-17, koordinatör KİLİTLİ kontrat.
+// GET /api/mobile/widgets/schema?formCode= yanıtı. Tüketici: ui/widgets/DynamicFields.kt
+// (DynamicFieldsSection composable'ı). Alan adları sunucu JSON'ıyla BİREBİR eşleşir.
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Dinamik alan şema satırı. [type] BİLİNÇLİ olarak String tutulur (Kotlin enum'a Moshi ile
+ * çevrilmez) — sözleşmede DAİMA 6 token'dan biri olsa da ("text"|"number"|"date"|"select"|
+ * "bool"|"textarea"), bilinmeyen bir değer enum adapter'ında adapter oluşturma/parse anında
+ * exception fırlatıp TÜM listeyi patlatırdı; String ile DynamicFieldsSection bilinmeyen tipi
+ * güvenli metin alanına düşürür (bkz. o dosyanın "else" dalı). [options] yalnız
+ * type=="select" iken dolu, aksi halde null (sözleşme) — ama defansif olarak nullable
+ * bırakıldı. Tüm non-null alanlar sözleşmeyle garanti edilse de Moshi'nin eksik-alan
+ * exception'ına karşı savunma amaçlı default verildi.
+ */
+@JsonClass(generateAdapter = true)
+data class WidgetFieldDto(
+    val key: String = "",
+    val label: String = "",
+    val type: String = "text",
+    val required: Boolean = false,
+    val options: List<WidgetOptionDto>? = null,
+    val order: Int = 0
+)
+
+/** select tipi alanın seçeneği — [value] sunucuya gönderilen/saklanan değer (ID-benzeri),
+ * [label] kullanıcıya gösterilen metin (CLAUDE.md ID-tabanlı eşleştirme kuralıyla tutarlı). */
+@JsonClass(generateAdapter = true)
+data class WidgetOptionDto(
+    val value: String = "",
+    val label: String = ""
 )
