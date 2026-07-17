@@ -41,6 +41,14 @@
     var isSystemAdmin = CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(
         User.FindFirstValue(ClaimTypes.Role), out var _layoutRole)
         && _layoutRole == CalibraHub.Domain.Enums.UserRole.SystemAdmin;
+    // Sayfa-içi Yorum sistemi (floating widget, /PageComments) — admin-only:
+    // DepartmentManager|SystemAdmin. CLAUDE.md politikasıyla tutarlı (Sistem Ayarları
+    // dışındaki ekranlar admin'e direkt açık) — SetupDefinitions dev-bucket'ına girmez.
+    var canManagePageComments = isAuthenticated
+        && CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(
+            User.FindFirstValue(ClaimTypes.Role), out var _pcRole)
+        && (_pcRole == CalibraHub.Domain.Enums.UserRole.SystemAdmin
+            || _pcRole == CalibraHub.Domain.Enums.UserRole.DepartmentManager);
     var shouldUseReactShell = isAuthenticated && !isWorkspaceFrame && controllerName != "account";
     var shellAntiforgeryToken = shouldUseReactShell
         ? (Antiforgery.GetAndStoreTokens(Context).RequestToken ?? string.Empty)
@@ -321,6 +329,7 @@
 <body class="@bodyClass"
       data-user-key="@profileUserKey"
       data-user-id="@profileUserId"
+      data-user-name="@profileName"
       data-page-url="@currentUrl"
       data-page-title="@pageTitle"
       data-home-url="@homeUrl"
@@ -789,6 +798,22 @@ else
      role="status"
      aria-live="polite"
      aria-relevant="additions text"></div>
+
+@if (canManagePageComments && !isWorkspaceFrame)
+{
+    @* Sayfa-içi Yorum sistemi — floating ✏️ buton + panel (admin-only: DepartmentManager|
+       SystemAdmin, sunucu-taraflı rol kontrolü — sıradan kullanıcıda hiç render edilmez).
+       isWorkspaceFrame DIŞINDA mount edilir: gerçek sayfa içeriği React Shell mimarisinde
+       workspace-tab iframe'leri içinde render edilir (bkz. Shell.jsx yorumu — "Body alanı
+       iframe tab'lardır"); bu buton TEK SEFER dış (top-level) pencerede mount edilip
+       position:fixed ile tüm sekmelerin üzerinde sabit kalır — AiFloatingButton'ın
+       kullandığı "global, iframe'lerin dışında" desenin vanilla-JS eşdeğeri. isWorkspaceFrame
+       branch'inde AYRICA mount edilseydi, aktif sekmede iki buton üst üste binerdi. *@
+    <link rel="stylesheet" href="~/css/page-comments.css" asp-append-version="true" />
+    <div id="pcWidgetRoot" data-user-name="@profileName"></div>
+    <script src="~/js/page-comments-common.js" asp-append-version="true"></script>
+    <script src="~/js/page-comments-widget.js" asp-append-version="true"></script>
+}
 
 <div class="modal fade material-delete-modal"
      id="globalDeleteConfirmModal"
