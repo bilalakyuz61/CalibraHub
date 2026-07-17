@@ -74,7 +74,7 @@ body.app-theme-dark .pc-panel {
     box-shadow: 0 22px 60px rgba(0,0,0,.55);
 }
 .pc-panel[hidden] { display: none; }
-@@keyframes pcPopIn {
+@keyframes pcPopIn {
     from { opacity: 0; transform: translateY(10px) scale(.97); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
 }
