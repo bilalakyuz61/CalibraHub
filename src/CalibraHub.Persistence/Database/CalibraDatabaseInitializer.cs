@@ -7676,6 +7676,14 @@ END;";
                 CREATE INDEX [ix_document_integration_status]
                     ON [{s}].[Document]([IntegrationStatus]) INCLUDE ([IntegrationSentAt]);
 
+            -- 2026-07-16: Dış referans no — Alış İrsaliyesi'nde tedarikçinin matbu (kendi) irsaliye
+            -- numarası; bizim [DocumentNumber]'dan ayrı tutulur (tedarikçinin belgesindeki no).
+            -- NVARCHAR(50) NULL, opsiyonel — yalnız görüntüleme/referans amaçlı, arama alanı DEĞİL
+            -- → index YOK. Items.Barcode ile aynı idempotent ALTER-ensure deseni: CREATE TABLE'a
+            -- EKLENMEZ; sonradan-eklenen Document kolonlarının (DeliveryDate/IntegrationSentAt) akışı.
+            IF COL_LENGTH(N'[{s}].[Document]', N'ExternalRefNumber') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [ExternalRefNumber] NVARCHAR(50) NULL;
+
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NULL
             BEGIN
                 -- Satir tablosu — material/unit/combination/location display degerleri
