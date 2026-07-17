@@ -22,6 +22,7 @@ namespace CalibraHub.Web.Controllers;
 /// dogrulanir. Bu, AVD emulator ve fiziksel cihaz dev cycle'ini kolaylastirir.
 ///
 /// Endpoint'ler:
+///   GET  /api/mobile/ping                     — sunucu dogrulama (anonim; urun adi + surum)
 ///   POST /api/mobile/login-companies          — email+parola dogrulanmis sirket listesi (login oncesi)
 ///   POST /api/mobile/login                    — cookie set + display name
 ///   POST /api/mobile/logout                   — cookie clear
@@ -55,6 +56,23 @@ public sealed class MobileApiController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────
     // Auth
     // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sunucu doğrulama — mobil istemci login'den ÖNCE "bu adres gerçekten bir
+    /// CalibraHub sunucusu mu?" kontrolü yapar (base-URL yazım hatası / yanlış
+    /// sunucu erken yakalanır). [AllowAnonymous] gerekçesi: kimlik gerektiren
+    /// hiçbir veri dönmez — yalnız statik ürün adı + assembly sürümü; kurulum
+    /// koruması gerektiren bir yüzey değildir (bkz. CLAUDE.md AllowAnonymous kuralı).
+    /// </summary>
+    [HttpGet("ping")]
+    [AllowAnonymous]
+    public IActionResult Ping()
+        => Ok(new
+        {
+            ok = true,
+            product = "CalibraHub",
+            version = typeof(MobileApiController).Assembly.GetName().Version?.ToString(3) ?? "?",
+        });
 
     [HttpPost("login")]
     [AllowAnonymous]
