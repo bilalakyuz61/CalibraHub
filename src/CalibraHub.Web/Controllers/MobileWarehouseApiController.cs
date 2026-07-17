@@ -209,7 +209,7 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // biriyle çağrılır (stok/transfer/sayım için kendi FormCode'u = izin FormCode'uyla
     // AYNI; irsaliyede DİKKAT: izin FormCode'u "SALES_DELIVERY"/"PURCHASE_DELIVERY" iken
     // widget FormCode'u "SALES_DELIVERY_EDIT"/"PURCHASE_DELIVERY_EDIT" — çağıran doğru
-    // sabiti geçmeli, bkz. Delivery() action'ındaki widgetFormCode değişkeni).
+    // sabiti geçmeli, bkz. Delivery() action'ındaki fc.Header kullanımı).
 
     /// <summary>
     /// Ek saha (WidgetMas/EAV) değerlerini web'in AYNI kapısından (IWidgetService.SaveRecordAsync)
