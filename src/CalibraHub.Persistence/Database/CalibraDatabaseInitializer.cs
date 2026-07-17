@@ -71,6 +71,16 @@ public sealed class CalibraDatabaseInitializer
 
         await CreateReportDocumentProcAsync(connection, systemDatabaseName, cancellationToken);
         await RebuildReportDocumentViewAsync(connection, cancellationToken);
+
+        // 2026-07-17 — SQL View Yönetimi clobber savunması (İKİNCİ / kazandıran geçiş).
+        // Flat view'lar + vw_ReportDocument burada, per-company startup zincirinin EN SONUNDA
+        // (InitializeForConnectionAsync → EnsureFullSchemaAsync'ten SONRA) yeniden üretilir;
+        // EnsureFullSchemaAsync sonundaki birincil override pass'i bunları koddaki baseline ile
+        // ezmiş olur. Bu son re-apply, kullanıcının BU view'lara koyduğu override'ın da restart'ı
+        // atlatmasını (kazanmasını) sağlar. ViewDefinition tablosu bu çağrıdan önce
+        // EnsureFullSchemaAsync ile kurulmuştur; yoksa pass no-op. Per-view try/catch → startup
+        // asla çökmez.
+        await ApplyActiveViewOverridesAsync(connection, cancellationToken);
     }
 
     /// <summary>
@@ -823,6 +833,18 @@ END;";
             await EnsureReportEngineTablesAsync(connection, cancellationToken);
             await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
             await EnsureViewMetaTableAsync(connection, cancellationToken);
+            // 2026-07-17 — SQL View Yönetimi (kontrollü istisna). Kullanıcı tanımlı view
+            // override/custom tablolarını kur. Zincirin SONUNDA olmalı: hemen aşağıdaki
+            // ApplyActiveViewOverridesAsync bu tablodan okur (sıralama garantisi).
+            await EnsureViewDefinitionTablesAsync(connection, cancellationToken);
+            // Startup override pass (clobber savunması) — BİRİNCİL geçiş. Kod baseline'ı
+            // yukarıdaki tüm program view'larını ensure ettikten SONRA aktif kullanıcı
+            // override'larını uygular (kullanıcı sürümü kazanır). NOT: flat view'lar +
+            // vw_ReportDocument, EnsureFullSchemaAsync'ten SONRA EnsureReportDocumentViewAsync
+            // içinde GEÇ yeniden üretilir → onlara ait override'lar o metodun sonundaki
+            // ikinci re-apply ile kesinleşir. Bu geçiş system DB (EnsureReportDocumentViewAsync
+            // çağrılmayan yol) ve diğer tüm view'lar için garantidir.
+            await ApplyActiveViewOverridesAsync(connection, cancellationToken);
         }
         catch (SqlException sqlEx)
         {
@@ -884,6 +906,143 @@ END;";
                     VALUES (S.[ViewName], 1, S.[Tags]);
                 """;
             await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// SQL View Yönetimi (kontrollü istisna, 2026-07-17) — kullanıcı tanımlı view
+    /// override/custom tanımlarını tutan iki tablo:
+    ///  • ViewDefinition         : aktif view başına tek override (filtered UNIQUE),
+    ///                             GeneratedSql = uygulanan SELECT gövdesi.
+    ///  • ViewDefinitionRevision : her apply/save öncesi snapshot (geri-al), FK + CASCADE.
+    /// Per-company DB → CompanyId kolonu YOK. Audit dörtlüsü CLAUDE.md standardı
+    /// (CreatedBy/UpdatedBy NVARCHAR(120)). Idempotent: OBJECT_ID guard.
+    /// EnsureFullSchemaAsync'in SONUNDA çağrılır — ApplyActiveViewOverridesAsync bu
+    /// tablodan okuduğu için tablo o override pass'ten ÖNCE var olmalıdır.
+    /// </summary>
+    private async Task EnsureViewDefinitionTablesAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[ViewDefinition]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ViewDefinition]
+                (
+                    [Id]             INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ViewDefinition] PRIMARY KEY,
+                    [ViewName]       NVARCHAR(200) NOT NULL,
+                    [Kind]           NVARCHAR(20)  NOT NULL,
+                    [DefinitionJson] NVARCHAR(MAX) NULL,
+                    [GeneratedSql]   NVARCHAR(MAX) NOT NULL,
+                    [IsRawMode]      BIT           NOT NULL CONSTRAINT [DF_ViewDefinition_IsRawMode] DEFAULT 0,
+                    [IsActive]       BIT           NOT NULL CONSTRAINT [DF_ViewDefinition_IsActive]  DEFAULT 1,
+                    [CreatedBy]      NVARCHAR(120) NULL,
+                    [Created]        DATETIME      NOT NULL CONSTRAINT [DF_ViewDefinition_Created]   DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]      NVARCHAR(120) NULL,
+                    [Updated]        DATETIME      NULL
+                );
+
+                -- Aktif view başına tek override (soft-delete güvenli filtered UNIQUE).
+                CREATE UNIQUE NONCLUSTERED INDEX [UX_ViewDefinition_ViewName]
+                    ON [{s}].[ViewDefinition] ([ViewName]) WHERE [IsActive] = 1;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[ViewDefinitionRevision]', N'U') IS NULL
+               AND OBJECT_ID(N'[{s}].[ViewDefinition]', N'U') IS NOT NULL
+            BEGIN
+                CREATE TABLE [{s}].[ViewDefinitionRevision]
+                (
+                    [Id]               INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ViewDefinitionRevision] PRIMARY KEY,
+                    [ViewDefinitionId] INT           NOT NULL,
+                    [DefinitionJson]   NVARCHAR(MAX) NULL,
+                    [GeneratedSql]     NVARCHAR(MAX) NOT NULL,
+                    [IsRawMode]        BIT           NOT NULL CONSTRAINT [DF_ViewDefinitionRevision_IsRawMode] DEFAULT 0,
+                    [CreatedBy]        NVARCHAR(120) NULL,
+                    [Created]          DATETIME      NOT NULL CONSTRAINT [DF_ViewDefinitionRevision_Created] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_ViewDefinitionRevision_ViewDefinition]
+                        FOREIGN KEY ([ViewDefinitionId]) REFERENCES [{s}].[ViewDefinition]([Id]) ON DELETE CASCADE
+                );
+
+                -- Revizyon geçmişi ViewDefinitionId (+ Created DESC) ile sorgulanır.
+                CREATE INDEX [IX_ViewDefinitionRevision_ViewDefinition]
+                    ON [{s}].[ViewDefinitionRevision] ([ViewDefinitionId]);
+            END;
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// STARTUP OVERRIDE PASS — SQL View Yönetimi clobber savunması (2026-07-17).
+    /// Kod baseline'ı program view'larını ensure ettikten SONRA çalışır: ViewDefinition
+    /// tablosundaki aktif kullanıcı override'larını CREATE OR ALTER VIEW ile uygular →
+    /// kullanıcı düzenlemesi restart'ı atlatır (kod DEĞİL kullanıcı sürümü kazanır).
+    ///
+    /// Sağlamlık kuralları (kontrat):
+    ///  • Tablo yoksa/boşsa → no-op (OBJECT_ID guard + boş sonuç).
+    ///  • Per-view try/catch: bozuk bir override (SQL hatası) LOGLANIR + o view ATLANIR;
+    ///    startup ASLA çökmez.
+    ///  • Her açılışta idempotent (CREATE OR ALTER).
+    /// İki yerden çağrılır: (1) EnsureFullSchemaAsync sonu — kanonik birincil geçiş
+    /// (report-data / guide / asset / fulfillment / custom view'lar + system DB);
+    /// (2) EnsureReportDocumentViewAsync sonu — o metotta GEÇ yeniden üretilen
+    /// flat view'lar + vw_ReportDocument için ikinci (kazandıran) re-apply.
+    /// </summary>
+    private async Task ApplyActiveViewOverridesAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+
+        // Aktif override'ları oku. Tablo henüz yoksa (sıralama/edge-case) sessizce çık.
+        var overrides = new List<(string ViewName, string GeneratedSql)>();
+        try
+        {
+            await using var read = connection.CreateCommand();
+            read.CommandText = $"""
+                IF OBJECT_ID(N'[{s}].[ViewDefinition]', N'U') IS NOT NULL
+                    SELECT [ViewName], [GeneratedSql]
+                    FROM [{s}].[ViewDefinition]
+                    WHERE [IsActive] = 1
+                      AND [GeneratedSql] IS NOT NULL
+                      AND LEN(LTRIM(RTRIM([GeneratedSql]))) > 0;
+                """;
+            await using var reader = await read.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                var viewName = reader.IsDBNull(0) ? null : reader.GetString(0);
+                var body = reader.IsDBNull(1) ? null : reader.GetString(1);
+                if (!string.IsNullOrWhiteSpace(viewName) && !string.IsNullOrWhiteSpace(body))
+                    overrides.Add((viewName!, body!));
+            }
+        }
+        catch (Exception ex)
+        {
+            // Tablo yok / okuma hatası → override katmanı devre dışı, program baseline'ı ile devam.
+            Console.Error.WriteLine($"[ViewOverride] ViewDefinition okunamadi, override pass atlandi: {ex.Message}");
+            return;
+        }
+
+        foreach (var (viewName, body) in overrides)
+        {
+            try
+            {
+                // CREATE OR ALTER VIEW, batch'in ilk ifadesi olmak zorunda → sp_executesql ayrı
+                // batch olarak yürütür. Gövde NVARCHAR(MAX) parametre: büyük/tırnaklı kullanıcı
+                // SQL'i güvenle geçer (manuel '' escape yok). View adı bracket-escape (identifier
+                // enjeksiyon guard'ı) + sadece kendi ViewDefinition tablomuzdan gelir.
+                var viewNameEsc = viewName.Replace("]", "]]");
+                var stmt = $"CREATE OR ALTER VIEW [{s}].[{viewNameEsc}] AS\n{body}";
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "EXEC sp_executesql @stmt;";
+                cmd.CommandTimeout = 60;
+                cmd.Parameters.Add(new SqlParameter("@stmt", System.Data.SqlDbType.NVarChar, -1) { Value = stmt });
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                // Bozuk override — LOGLA + ATLA. Startup ASLA çökmez.
+                Console.Error.WriteLine($"[ViewOverride] '{viewName}' override uygulanamadi (atlandi): {ex.Message}");
+            }
         }
     }
 
