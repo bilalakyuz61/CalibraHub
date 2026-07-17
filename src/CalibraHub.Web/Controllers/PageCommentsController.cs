@@ -66,7 +66,7 @@ public sealed class PageCommentsController : ControllerBase
         {
             grouped[group.Key] = new { comments = group.Select(ToCommentJson).ToList() };
         }
-        return Json(grouped);
+        return Ok(grouped);
     }
 
     /// <summary>POST /api/page-comments/comment — yeni yorum ekler.</summary>
@@ -79,7 +79,7 @@ public sealed class PageCommentsController : ControllerBase
         var dto = await _service.CreateAsync(input, ResolveCurrentUserName(), ct);
         if (dto is null) return BadRequest(new { ok = false, error = "Geçersiz istek (key/id/text zorunlu)." });
 
-        return Json(new { ok = true, comment = ToCommentJson(dto) });
+        return Ok(new { ok = true, comment = ToCommentJson(dto) });
     }
 
     /// <summary>POST /api/page-comments/comment/status — durum değişikliği + revizyon kaydı.</summary>
@@ -92,7 +92,7 @@ public sealed class PageCommentsController : ControllerBase
         var dto = await _service.ChangeStatusAsync(input, ResolveCurrentUserName(), "comment.status", null, ct);
         if (dto is null) return NotFound(new { ok = false, error = "Yorum bulunamadı." });
 
-        return Json(new { ok = true, comment = ToCommentJson(dto) });
+        return Ok(new { ok = true, comment = ToCommentJson(dto) });
     }
 
     /// <summary>POST /api/page-comments/comment/edit — yorum metnini günceller.</summary>
@@ -105,7 +105,7 @@ public sealed class PageCommentsController : ControllerBase
         var dto = await _service.EditTextAsync(input, ResolveCurrentUserName(), ct);
         if (dto is null) return NotFound(new { ok = false, error = "Yorum bulunamadı." });
 
-        return Json(new { ok = true, comment = ToCommentJson(dto) });
+        return Ok(new { ok = true, comment = ToCommentJson(dto) });
     }
 
     /// <summary>POST /api/page-comments/comment/delete — yorumu siler (CASCADE: revizyon + görsel).</summary>
@@ -117,7 +117,7 @@ public sealed class PageCommentsController : ControllerBase
             return BadRequest(new { ok = false, error = "İstek gövdesi boş." });
 
         var deleted = await _service.DeleteAsync(input.Id, ct);
-        return Json(new { ok = deleted });
+        return Ok(new { ok = deleted });
     }
 
     /// <summary>POST /api/page-comments/comment/image — base64 görsel ekler (ör. ekran görüntüsü).</summary>
@@ -132,7 +132,7 @@ public sealed class PageCommentsController : ControllerBase
         if (image is null)
             return BadRequest(new { ok = false, error = "Görsel eklenemedi (yorum bulunamadı veya veri geçersiz)." });
 
-        return Json(new { ok = true, image = new { id = image.Id, mime = image.Mime, name = image.Name } });
+        return Ok(new { ok = true, image = new { id = image.Id, mime = image.Mime, name = image.Name } });
     }
 
     /// <summary>GET /api/page-comments/comment/image/{id} — ikili görsel indirme.</summary>
@@ -155,7 +155,7 @@ public sealed class PageCommentsController : ControllerBase
             return BadRequest(new { ok = false, error = "İstek gövdesi boş." });
 
         var deleted = await _service.DeleteImageAsync(input.Id, ct);
-        return Json(new { ok = deleted });
+        return Ok(new { ok = deleted });
     }
 
     /// <summary>GET /api/page-comments/activity — son N olay (Created DESC, varsayılan 300).</summary>
@@ -165,7 +165,7 @@ public sealed class PageCommentsController : ControllerBase
         if (!IsAdminOrSystemAdmin()) return Forbid();
 
         var items = await _service.GetActivityAsync(take, ct);
-        return Json(items.Select(a => new
+        return Ok(items.Select(a => new
         {
             id = a.Id,
             action = a.Action,
@@ -196,7 +196,7 @@ public sealed class PageCommentsController : ControllerBase
         HttpContext.Items["__override_company_id"] = resolvedCompanyId;
 
         var items = await _service.GetApprovedQueueAsync(ct);
-        return Json(items.Select(c => new
+        return Ok(items.Select(c => new
         {
             id = c.Id,
             seq = c.Seq,
@@ -239,7 +239,7 @@ public sealed class PageCommentsController : ControllerBase
         var dto = await _service.ChangeStatusAsync(input, actingUser, "comment.agent_apply", actor, ct);
         if (dto is null) return NotFound(new { ok = false, error = "Yorum bulunamadı." });
 
-        return Json(new { ok = true, comment = ToCommentJson(dto) });
+        return Ok(new { ok = true, comment = ToCommentJson(dto) });
     }
 
     // ── Yardımcılar ──────────────────────────────────────────────────────
