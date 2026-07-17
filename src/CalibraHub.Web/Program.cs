@@ -795,6 +795,31 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SameSite     = SameSiteMode.Strict;
         // Development HTTP → SameAsRequest; production HTTPS termination → Secure gönderilir
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+
+        // /api/* istekleri kimlik hatasında login sayfasına 302 ATMAZ; gerçek 401/403 döner.
+        // Aksi halde mobil istemci HTML login sayfasını parse etmeye çalışır ve "oturum bitti"
+        // sinyalini hiç göremez (mobil otomatik giriş 401'e bakar). Web MVC yolları eskisi gibi
+        // login'e yönlenmeye devam eder.
+        options.Events.OnRedirectToLogin = ctx =>
+        {
+            if (ctx.Request.Path.StartsWithSegments("/api"))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            }
+            ctx.Response.Redirect(ctx.RedirectUri);
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = ctx =>
+        {
+            if (ctx.Request.Path.StartsWithSegments("/api"))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            }
+            ctx.Response.Redirect(ctx.RedirectUri);
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddAuthorization(options =>
