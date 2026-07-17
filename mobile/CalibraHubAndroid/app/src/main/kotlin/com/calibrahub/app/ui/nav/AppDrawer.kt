@@ -1,5 +1,11 @@
 package com.calibrahub.app.ui.nav
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,15 +15,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.MoveToInbox
+import androidx.compose.material.icons.filled.Outbox
+import androidx.compose.material.icons.filled.PendingActions
 import androidx.compose.material.icons.filled.PrecisionManufacturing
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warehouse
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,68 +45,183 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.calibrahub.app.BuildConfig
 import com.calibrahub.app.R
 
 /**
- * Sol navigasyon menüsü (drawer) kök route sabitleri — [com.calibrahub.app.MainActivity]'deki
- * NavHost route string'leriyle BİREBİR aynı olmak ZORUNDA (tek kaynak burada TUTULMUYOR;
- * MainActivity'nin composable(...) blokları bu sabitlerle inşa edilir — [drawerDestinations] ile
- * NavHost route tanımları senkron kalmalı, biri değişirse diğeri de güncellenmeli).
- * Alt ekran route'ları (warehouse_stock_query, production_work_orders, chat/{phone} vb.) buraya
- * DAHİL DEĞİL — yalnız drawer'da doğrudan listelenen 7 kök modül ekranı.
+ * Sol navigasyon menüsü (drawer) route sabitleri — [com.calibrahub.app.MainActivity]'deki NavHost
+ * route string'leriyle BİREBİR aynı olmak ZORUNDA (tek kaynak burada TUTULMUYOR; MainActivity'nin
+ * composable(...) blokları bu sabitlerle inşa edilir — [drawerEntries] ile NavHost route
+ * tanımları senkron kalmalı, biri değişirse diğeri de güncellenmeli).
+ *
+ * 2026-07-17 akordeon migration: eski *_HOME "kart menüsü" route'ları (warehouse_home,
+ * production_home, purchase_home, sales_home, shipping_home) KALDIRILDI — o ekranlar (
+ * WarehouseHomeScreen, ProductionHomeScreen, PurchaseHomeScreen, SalesHomeScreen,
+ * ShippingHomeScreen) SİLİNDİ. Drawer artık modül başlıklarını akordeon gibi açıp kapatıyor;
+ * yapraklar (aşağıdaki sabitler) doğrudan gerçek form/ekran route'larına işaret eder.
  */
 object AppRoutes {
-    const val HOME            = "home"
-    const val WAREHOUSE_HOME  = "warehouse_home"
-    const val PRODUCTION_HOME = "production_home"
-    const val PURCHASE_HOME   = "purchase_home"
-    const val SALES_HOME      = "sales_home"
-    const val SHIPPING_HOME   = "shipping_home"
-    const val CHATS           = "chats"
+    const val HOME  = "home"
+    const val CHATS = "chats"
+
+    const val WAREHOUSE_STOCK_QUERY  = "warehouse_stock_query"
+    const val WAREHOUSE_STOCK_IN     = "warehouse_stock_in"
+    const val WAREHOUSE_STOCK_OUT    = "warehouse_stock_out"
+    const val WAREHOUSE_TRANSFER     = "warehouse_transfer"
+    const val WAREHOUSE_COUNT        = "warehouse_count"
+    const val WAREHOUSE_DRAFT_COUNTS = "warehouse_draft_counts"
+
+    const val PRODUCTION_WORK_ORDERS = "production_work_orders"
+
+    const val PURCHASE_DELIVERY    = "warehouse_delivery/purchase"
+    const val PURCHASE_OPEN_ORDERS = "warehouse_open_orders/purchase"
+
+    const val SALES_DELIVERY    = "warehouse_delivery/sales"
+    const val SALES_OPEN_ORDERS = "warehouse_open_orders/sales"
+
+    // Sevkiyat'ın tek yaprağı Satış'ın "Açık Satış Siparişleri" ile AYNI route'a gider — bilinçli
+    // kısmi örtüşme (koordinatör spesifikasyonu, 2026-07-17): sevkiyat personeli Satış modülüne
+    // girmeden doğrudan aynı teslimat akışına (OpenOrderListScreen) ulaşsın diye.
+    const val SHIPPING_OPEN_ORDERS = SALES_OPEN_ORDERS
 }
 
-/** Drawer'da listelenen tek bir kök modül girişi. */
-data class DrawerDestination(
+/** Drawer'da doğrudan navigate edilebilir tek bir yaprak hedef. */
+data class DrawerLeaf(
     val route: String,
     val label: String,
     val icon: ImageVector
 )
 
-/** Sıra = drawer'da üstten alta görünüm sırası (koordinatör spesifikasyonu, 2026-07-17). */
-val drawerDestinations: List<DrawerDestination> = listOf(
-    DrawerDestination(AppRoutes.HOME,            "Ana Sayfa",  Icons.Default.Home),
-    DrawerDestination(AppRoutes.WAREHOUSE_HOME,  "Depo",       Icons.Default.Warehouse),
-    DrawerDestination(AppRoutes.PRODUCTION_HOME, "Üretim",     Icons.Default.PrecisionManufacturing),
-    DrawerDestination(AppRoutes.PURCHASE_HOME,   "Satın Alma", Icons.Default.ShoppingCart),
-    DrawerDestination(AppRoutes.SALES_HOME,      "Satış",      Icons.Default.Sell),
-    DrawerDestination(AppRoutes.SHIPPING_HOME,   "Sevkiyat",   Icons.Default.LocalShipping),
-    DrawerDestination(AppRoutes.CHATS,           "Sohbetler",  Icons.Default.Chat),
+/**
+ * Drawer'da akordeon gibi açılıp kapanan bir modül başlığı. KENDİSİ navigate ETMEZ — tıklanınca
+ * yalnız kendi aç/kapa state'ini toggle eder (bkz. [DrawerGroupSection]); gerçek navigasyon
+ * yalnız [leaves] içindeki bir [DrawerLeaf]'e basıldığında olur.
+ */
+data class DrawerGroup(
+    val key: String,
+    val label: String,
+    val icon: ImageVector,
+    val leaves: List<DrawerLeaf>
 )
+
+/** Drawer'ın üst seviye girişi — ya doğrudan bir [DrawerLeaf] (Ana Sayfa, Sohbetler) ya da
+ * akordeon [DrawerGroup] (Depo, Üretim, Satın Alma, Satış, Sevkiyat). */
+sealed class DrawerEntry {
+    data class Single(val leaf: DrawerLeaf) : DrawerEntry()
+    data class Expandable(val group: DrawerGroup) : DrawerEntry()
+}
+
+/**
+ * Drawer içeriği — 2026-07-17 akordeon migration (koordinatör spesifikasyonu). Sıra = drawer'da
+ * üstten alta görünüm sırası: Ana Sayfa (yaprak) → Depo/Üretim/Satın Alma/Satış/Sevkiyat
+ * (akordeon grupları) → Sohbetler (yaprak).
+ */
+val drawerEntries: List<DrawerEntry> = listOf(
+    DrawerEntry.Single(DrawerLeaf(AppRoutes.HOME, "Ana Sayfa", Icons.Default.Home)),
+    DrawerEntry.Expandable(
+        DrawerGroup(
+            key = "depo",
+            label = "Depo",
+            icon = Icons.Default.Warehouse,
+            leaves = listOf(
+                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_QUERY, "Stok Sorgu", Icons.Default.Inventory2),
+                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_IN, "Giriş", Icons.Default.MoveToInbox),
+                DrawerLeaf(AppRoutes.WAREHOUSE_STOCK_OUT, "Çıkış", Icons.Default.Outbox),
+                DrawerLeaf(AppRoutes.WAREHOUSE_TRANSFER, "Transfer", Icons.Default.SwapHoriz),
+                DrawerLeaf(AppRoutes.WAREHOUSE_COUNT, "Sayım", Icons.Default.Checklist),
+                DrawerLeaf(AppRoutes.WAREHOUSE_DRAFT_COUNTS, "Taslak Sayımlar", Icons.AutoMirrored.Filled.FactCheck),
+            )
+        )
+    ),
+    DrawerEntry.Expandable(
+        DrawerGroup(
+            key = "uretim",
+            label = "Üretim",
+            icon = Icons.Default.PrecisionManufacturing,
+            leaves = listOf(
+                DrawerLeaf(AppRoutes.PRODUCTION_WORK_ORDERS, "İş Emirleri", Icons.AutoMirrored.Filled.Assignment),
+            )
+        )
+    ),
+    DrawerEntry.Expandable(
+        DrawerGroup(
+            key = "satinalma",
+            label = "Satın Alma",
+            icon = Icons.Default.ShoppingCart,
+            leaves = listOf(
+                DrawerLeaf(AppRoutes.PURCHASE_DELIVERY, "Alış İrsaliyesi", Icons.Default.LocalShipping),
+                DrawerLeaf(AppRoutes.PURCHASE_OPEN_ORDERS, "Açık Alış Siparişleri", Icons.AutoMirrored.Filled.Assignment),
+            )
+        )
+    ),
+    DrawerEntry.Expandable(
+        DrawerGroup(
+            key = "satis",
+            label = "Satış",
+            icon = Icons.Default.Sell,
+            leaves = listOf(
+                DrawerLeaf(AppRoutes.SALES_DELIVERY, "Satış İrsaliyesi", Icons.Default.ReceiptLong),
+                DrawerLeaf(AppRoutes.SALES_OPEN_ORDERS, "Açık Satış Siparişleri", Icons.Default.PendingActions),
+            )
+        )
+    ),
+    DrawerEntry.Expandable(
+        DrawerGroup(
+            key = "sevkiyat",
+            label = "Sevkiyat",
+            icon = Icons.Default.LocalShipping,
+            leaves = listOf(
+                DrawerLeaf(AppRoutes.SHIPPING_OPEN_ORDERS, "Açık Satış Siparişleri (Teslim)", Icons.Default.PendingActions),
+            )
+        )
+    ),
+    DrawerEntry.Single(DrawerLeaf(AppRoutes.CHATS, "Sohbetler", Icons.Default.Chat)),
+)
+
+/**
+ * Drawer'dan DOĞRUDAN erişilebilen tüm route'lar (Single yaprakları + Expandable gruplarının TÜM
+ * yaprakları) — [com.calibrahub.app.MainActivity]'nin edge-swipe gesture'ı ve popUpTo/
+ * launchSingleTop "flat" navigasyon deseni için "top-level route" tanımı BURADAN türetilir (tek
+ * kaynak — [drawerEntries] değişirse otomatik senkron kalır, ayrı bir liste elle bakımlanmaz).
+ */
+val drawerTopLevelRoutes: Set<String> = drawerEntries.flatMap { entry ->
+    when (entry) {
+        is DrawerEntry.Single -> listOf(entry.leaf.route)
+        is DrawerEntry.Expandable -> entry.group.leaves.map { it.route }
+    }
+}.toSet()
 
 /**
  * Sol navigasyon menüsünün içeriği — [androidx.compose.material3.ModalNavigationDrawer]'ın
  * drawerContent'i (bkz. MainActivity.AppNav; TEK instance tüm NavHost'u sarar, her ekran kendi
  * drawer'ını kurmaz). Saf state-hoisting composable: drawerState/navController'a dokunmaz, yalnız
- * [onNavigate]/[onLogout] callback'lerini çağırır — drawer'ı kapatmak/navigate etmek çağıran
- * tarafın (AppNav) sorumluluğundadır.
+ * [onNavigate] (bir [DrawerLeaf]'e basılınca) / [onLogout] callback'lerini çağırır — drawer'ı
+ * kapatmak/navigate etmek çağıran tarafın (AppNav) sorumluluğundadır. Akordeon aç/kapa state'i
+ * ([DrawerGroupSection] içinde) BU composable'ın kendi sorumluluğudur, dışarı sızmaz.
  *
- * Düzen: üstte logo + "CalibraHub" + kullanıcı adı, ortada 7 kök modül ([currentRoute] ile
- * eşleşen seçili gösterilir), altta ayraçla Çıkış — aradaki weight(1f) spacer Çıkış'ı drawer'ın
- * en altına iter.
+ * Düzen: üstte logo + "CalibraHub" + kullanıcı adı + şirket adı, ortada kaydırılabilir modül
+ * listesi (Ana Sayfa yaprağı + 5 akordeon grubu + Sohbetler yaprağı — [currentRoute] ile eşleşen
+ * yaprak vurgulanır), altta sürüm bilgisi + ayraçla Çıkış.
  */
 @Composable
 fun AppDrawerContent(
     currentRoute: String?,
     displayName: String?,
+    companyName: String? = null,
     onNavigate: (String) -> Unit,
     onLogout: () -> Unit
 ) {
@@ -123,24 +256,57 @@ fun AppDrawerContent(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                if (!companyName.isNullOrBlank()) {
+                    Text(
+                        text = companyName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
 
-        drawerDestinations.forEach { dest ->
-            NavigationDrawerItem(
-                label = { Text(dest.label) },
-                selected = currentRoute == dest.route,
-                icon = { Icon(dest.icon, contentDescription = null) },
-                onClick = { onNavigate(dest.route) },
-                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-            )
+        // Kaydırılabilir orta bölge: header sabit üstte, Sürüm+Çıkış sabit altta kalır (bkz.
+        // aşağıdaki HorizontalDivider sonrası blok) — akordeon TÜMÜYLE açıldığında (~19 satır)
+        // küçük ekranlarda taşmasın diye. weight(1f) kalan tüm alanı doldurur.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
+            drawerEntries.forEach { entry ->
+                when (entry) {
+                    is DrawerEntry.Single -> {
+                        NavigationDrawerItem(
+                            label = { Text(entry.leaf.label) },
+                            selected = currentRoute == entry.leaf.route,
+                            icon = { Icon(entry.leaf.icon, contentDescription = null) },
+                            onClick = { onNavigate(entry.leaf.route) },
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        )
+                    }
+                    is DrawerEntry.Expandable -> {
+                        DrawerGroupSection(
+                            group = entry.group,
+                            currentRoute = currentRoute,
+                            onNavigate = onNavigate
+                        )
+                    }
+                }
+            }
         }
 
-        Spacer(Modifier.weight(1f))
-
         HorizontalDivider()
+        Text(
+            text = "Sürüm ${BuildConfig.VERSION_NAME}" + if (BuildConfig.DEBUG) " (debug)" else "",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
         NavigationDrawerItem(
             label = { Text("Çıkış") },
             selected = false,
@@ -149,5 +315,60 @@ fun AppDrawerContent(
             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
         )
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/**
+ * Tek bir akordeon grubu — başlık satırı ([NavigationDrawerItem], trailing'de dönen chevron ile)
+ * tıklanınca yalnız kendi [expanded] state'ini toggle eder (navigate ETMEZ). [currentRoute] bu
+ * grubun bir yaprağındaysa ([containsCurrent]) grup HER ZAMAN açık gösterilir — küçük UX kararı:
+ * şu an içinde bulunulan ekranın grubu kullanıcı elle kapatamaz (nereye "kaybolduğu" kafa
+ * karıştırmasın diye). [expanded] yalnız DİĞER durumda (grup aktif DEĞİLKEN) kullanıcı toggle'ını
+ * sürer; [rememberSaveable] ile grup başına ayrıştırılmış `key` sayesinde config change/process
+ * restore'da hayatta kalır.
+ */
+@Composable
+private fun DrawerGroupSection(
+    group: DrawerGroup,
+    currentRoute: String?,
+    onNavigate: (String) -> Unit
+) {
+    var expanded by rememberSaveable(key = "drawerGroupExpanded_${group.key}") { mutableStateOf(false) }
+    val containsCurrent = group.leaves.any { it.route == currentRoute }
+    val isOpen = expanded || containsCurrent
+
+    val chevronRotation by animateFloatAsState(targetValue = if (isOpen) 90f else 0f)
+
+    NavigationDrawerItem(
+        label = { Text(group.label) },
+        selected = false,
+        icon = { Icon(group.icon, contentDescription = null) },
+        badge = {
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = if (isOpen) "Daralt" else "Genişlet",
+                modifier = Modifier.rotate(chevronRotation)
+            )
+        },
+        onClick = { expanded = !expanded },
+        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+    )
+
+    AnimatedVisibility(
+        visible = isOpen,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut()
+    ) {
+        Column(modifier = Modifier.padding(start = 16.dp)) {
+            group.leaves.forEach { leaf ->
+                NavigationDrawerItem(
+                    label = { Text(leaf.label) },
+                    selected = currentRoute == leaf.route,
+                    icon = { Icon(leaf.icon, contentDescription = null) },
+                    onClick = { onNavigate(leaf.route) },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+            }
+        }
     }
 }

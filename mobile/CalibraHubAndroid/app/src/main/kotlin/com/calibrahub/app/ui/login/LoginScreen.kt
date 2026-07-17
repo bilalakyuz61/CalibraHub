@@ -62,6 +62,12 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     var loading  by remember { mutableStateOf(false) }
     var showServerSettings by remember { mutableStateOf(false) }
 
+    // "Beni hatırla" (2026-07-17) — varsayılan AÇIK (bkz. LaunchedEffect(Unit) altta, DataStore'da
+    // kayıtlı son tercih varsa onunla ezilir). AÇIKKEN: login başarılı olursa oturum çerezi +
+    // e-posta/displayName/companyId/companyName DataStore'a kalıcı yazılır (bkz. doLogin) ve
+    // uygulama bir sonraki açılışta otomatik giriş dener. KAPALIYSA hiçbiri persist edilmez.
+    var rememberMe by remember { mutableStateOf(true) }
+
     // Sunucu doğrulama ("Doğrula") akışının görsel durumu — login kilit-kadranından
     // (dialState/LockDialState, aşağıda) TAMAMEN bağımsız; kadrana hiç dokunmaz.
     var pingState by remember { mutableStateOf<ServerPingState>(ServerPingState.Idle) }
@@ -79,21 +85,38 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     // sunucu login onayıyla (loginCompanies >= 1 şirket veya doLogin başarısı) tetiklenir.
     var dialState by remember { mutableStateOf(LockDialState.Idle) }
 
-    // Mevcut base URL (sunucu ayarları paneli için)
+    // Mevcut base URL + hatırlanan e-posta/"beni hatırla" tercihi (sunucu ayarları paneli +
+    // 2026-07-17 otomatik giriş özelliği için).
     LaunchedEffect(Unit) {
         baseUrl = session.currentBaseUrl()
+        rememberMe = session.isRememberMeEnabled()
+        session.rememberedEmail()?.let { email = it }
     }
 
     // Seçilen şirketle asıl login çağrısı — hem "tek şirket → otomatik gir" hem de
     // "şirket seçici → tıkla → gir" akışlarından paylaşılır. Result.fold inline olduğu için
     // (kotlin.Result.fold inline'dır) suspend çağrılar burada askıya alma zincirini bozmaz.
-    suspend fun doLogin(companyId: Int) {
+    // [company] (companyId DEĞİL) alınır — companyName'e "beni hatırla" AÇIKKEN persist edilecek
+    // bundle için ihtiyaç var (bkz. session.persistSessionDisplay).
+    suspend fun doLogin(company: CompanyDto) {
         loading = true
         // Çok-şirket akışında kadran loginCompanies onayıyla zaten çözülmüş olabilir;
         // o durumda Loading'e geri düşürmeyiz (çözülmüş kilit tekrar karışmasın).
         if (dialState != LockDialState.Solved) dialState = LockDialState.Loading
-        repo.login(email.trim(), password, companyId).fold(
-            onSuccess = {
+        // "Beni hatırla" tercihi + cookie jar'ın DataStore yazımı LOGIN İSTEĞİNDEN ÖNCE
+        // senkronlanmalı — Set-Cookie yanıtı PersistentCookieJar.saveFromResponse içinde SENKRON
+        // işlenir (bkz. SessionManager.setRememberMe KDoc).
+        session.setRememberMe(rememberMe)
+        repo.login(email.trim(), password, company.id).fold(
+            onSuccess = { displayName ->
+                if (rememberMe) {
+                    session.persistSessionDisplay(
+                        email = email.trim(),
+                        displayName = displayName,
+                        companyId = company.id,
+                        companyName = company.name
+                    )
+                }
                 // Bulmaca sunucu onayıyla çözüldü: katmanlar kilitlenir + yeşil kutlama.
                 // Kısa kutlamadan sonra mevcut navigasyon aynen devam eder (onLoggedIn).
                 if (dialState != LockDialState.Solved) {
@@ -159,7 +182,26 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(4.dp))
+
+                // "Beni hatırla" (checkbox DEĞİL, Switch — CLAUDE.md switchkey kuralı).
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Beni hatırla",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = rememberMe,
+                        onCheckedChange = { rememberMe = it },
+                        enabled = !loading
+                    )
+                }
+                Spacer(Modifier.height(20.dp))
 
                 Button(
                     onClick = {
@@ -193,7 +235,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                             dialState = LockDialState.Failed
                                             snackbarHostState.showSnackbar("Kimlik geçersiz veya erişilebilir şirket yok")
                                         }
-                                        list.size == 1 -> doLogin(list.first().id)
+                                        list.size == 1 -> doLogin(list.first())
                                         else -> {
                                             loading = false
                                             // Parola sunucuda doğrulandı → bulmaca çözüldü;
@@ -228,7 +270,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
 
                 companyChoices.forEach { company ->
                     OutlinedButton(
-                        onClick = { scope.launch { doLogin(company.id) } },
+                        onClick = { scope.launch { doLogin(company) } },
                         enabled = !loading,
                         modifier = Modifier.fillMaxWidth()
                     ) {

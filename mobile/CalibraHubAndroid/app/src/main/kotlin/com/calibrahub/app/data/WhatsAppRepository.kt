@@ -45,6 +45,22 @@ class WhatsAppRepository(private val session: SessionManager) {
         if (resp.isSuccessful && resp.body()?.ok == true) resp.body()?.userName else null
     }
 
+    /**
+     * "Beni hatırla" otomatik giriş probe'u — GET /api/mobile/session (bkz. MainActivity.AppNav
+     * açılış akışı). 401 kontrat gereği "kimlik yok/expired" anlamına gelir; bu bir HATA DEĞİL,
+     * normal bir durumdur → Result.success(null) (çağıran taraf login'e düşer + kalıcı çerezi
+     * temizler). Network/diğer HTTP hataları Result.failure (çağıran taraf yine login'e düşer
+     * ama kalıcı çerezi SİLMEZ — geçici bağlantı sorunu olabilir, bkz. AppNav yorumu).
+     */
+    suspend fun fetchSession(): Result<SessionDto?> = runCatchingApi {
+        val resp = session.buildApi().session()
+        when {
+            resp.code() == 401 -> null
+            resp.isSuccessful && resp.body()?.ok == true -> resp.body()
+            else -> error("HTTP ${resp.code()}")
+        }
+    }
+
     suspend fun logout(): Result<Unit> = runCatchingApi {
         runCatching { session.buildApi().logout() }
         session.clearSession()

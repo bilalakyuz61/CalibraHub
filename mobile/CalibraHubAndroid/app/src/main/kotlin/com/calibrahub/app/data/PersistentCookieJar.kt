@@ -17,10 +17,31 @@ import java.util.concurrent.ConcurrentHashMap
  * + CalibraSession otomatik saklanır. App restart sonrası login state korunur.
  *
  * Thread-safe: ConcurrentHashMap + synchronized DataStore write.
+ *
+ * "Beni hatırla" (2026-07-17): DataStore'a YAZMA, [persistenceEnabled] AÇIKKEN olur — bu flag
+ * [SessionManager] tarafından (init'te + [SessionManager.setRememberMe] her çağrıldığında)
+ * senkronlanır. KAPALIYSA [memCache] yine güncellenir (mevcut app run'ı için oturum çalışmaya
+ * devam eder) ama [persist] HİÇ çağrılmaz — süreç öldüğünde/uygulama yeniden başladığında cookie
+ * kaybolur (parola gibi, oturum çerezi de "beni hatırla" olmadan hayatta kalmaz).
  */
 class PersistentCookieJar(private val context: Context) : CookieJar {
 
     private val memCache = ConcurrentHashMap<String, MutableList<Cookie>>()
+
+    @Volatile private var persistenceEnabled: Boolean = false
+
+    /** [SessionManager] tarafından çağrılır — DataStore'a yazımı aç/kapat. */
+    fun setPersistenceEnabled(enabled: Boolean) {
+        persistenceEnabled = enabled
+    }
+
+    /**
+     * [memCache] boş değilse true — DataStore'dan kalıcı bir oturum çerezinin (önceki bir
+     * "beni hatırla AÇIK" oturumundan) yüklenmiş olduğunu gösterir. Senkron/ucuz: [memCache]
+     * zaten constructor'da (aşağıdaki [init]) DataStore'dan yüklendi. MainActivity'nin açılış
+     * probe kararı ("otomatik giriş denensin mi") için kullanılır.
+     */
+    fun hasStoredCookies(): Boolean = memCache.values.any { it.isNotEmpty() }
 
     init {
         // İlk init'te DataStore'dan oku
@@ -43,7 +64,7 @@ class PersistentCookieJar(private val context: Context) : CookieJar {
         // Expire olmuş cookie'leri at
         val now = System.currentTimeMillis()
         list.removeAll { it.expiresAt < now }
-        persist()
+        if (persistenceEnabled) persist()
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {

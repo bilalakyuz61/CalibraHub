@@ -1,15 +1,22 @@
 package com.calibrahub.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.calibrahub.app.BuildConfig
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -24,6 +31,8 @@ import java.util.concurrent.TimeUnit
  *  - Base URL persistence (kullanıcı LAN IP gireceği zaman değiştirebilir)
  *  - Cached display name (login sonrası gösterim)
  *  - Retrofit + OkHttp factory (cookie jar + interceptor'larla)
+ *  - "Beni hatırla" tercihi + kalıcı oturum çerezinin DataStore yazımını gate'lemesi (2026-07-17)
+ *  - Global 401 yakalama → [sessionExpiredEvents]
  *
  * Application-scoped: CalibraApp.kt içinden init edilir.
  */
@@ -31,14 +40,42 @@ class SessionManager(private val context: Context) {
 
     val cookieJar = PersistentCookieJar(context)
 
+    init {
+        // Cookie jar'ın DataStore'a yazıp yazmayacağını (persistenceEnabled) uygulama açılışında
+        // son kaydedilen "beni hatırla" tercihiyle senkronlar — [PersistentCookieJar.init] ile
+        // AYNI desen (senkron, tek seferlik runBlocking; SessionManager application-scoped tek
+        // instance olduğu için maliyeti düşük). Tercih hiç kaydedilmemişse (ilk kurulum) varsayılan
+        // AÇIK — henüz hiç cookie yok, bu yüzden pratikte fark etmez.
+        val remembered = runBlocking {
+            context.sessionStore.data.map { it[REMEMBER_ME_KEY] ?: true }.first()
+        }
+        cookieJar.setPersistenceEnabled(remembered)
+    }
+
     private val baseUrlFlow: Flow<String> = context.sessionStore.data
         .map { it[BASE_URL_KEY] ?: BuildConfig.DEFAULT_BASE_URL }
 
     private val displayNameFlow: Flow<String?> = context.sessionStore.data
         .map { it[DISPLAY_NAME_KEY] }
 
+    private val rememberMeFlow: Flow<Boolean> = context.sessionStore.data
+        .map { it[REMEMBER_ME_KEY] ?: true }   // varsayılan AÇIK (LoginScreen switch varsayılanıyla aynı)
+
+    private val rememberedEmailFlow: Flow<String?> = context.sessionStore.data
+        .map { it[REMEMBERED_EMAIL_KEY] }
+
+    private val companyNameFlow: Flow<String?> = context.sessionStore.data
+        .map { it[COMPANY_NAME_KEY] }
+
+    private val companyIdFlow: Flow<Int?> = context.sessionStore.data
+        .map { it[COMPANY_ID_KEY] }
+
     suspend fun currentBaseUrl(): String = baseUrlFlow.first()
     suspend fun currentDisplayName(): String? = displayNameFlow.first()
+    suspend fun isRememberMeEnabled(): Boolean = rememberMeFlow.first()
+    suspend fun rememberedEmail(): String? = rememberedEmailFlow.first()
+    suspend fun currentCompanyName(): String? = companyNameFlow.first()
+    suspend fun currentCompanyId(): Int? = companyIdFlow.first()
 
     suspend fun setBaseUrl(url: String) {
         val normalized = if (url.endsWith("/")) url else "$url/"
@@ -52,10 +89,64 @@ class SessionManager(private val context: Context) {
         }
     }
 
+    /**
+     * "Beni hatırla" tercihini kaydeder + cookie jar'ın DataStore yazımını (persistenceEnabled)
+     * HEMEN senkronlar. LoginScreen'in login isteğinden ÖNCE çağırması ZORUNLU — login yanıtının
+     * Set-Cookie'si [PersistentCookieJar.saveFromResponse] içinde SENKRON işlendiği için bu
+     * flag'in istek anında zaten doğru değerde olması gerekir (bkz. LoginScreen.doLogin).
+     */
+    suspend fun setRememberMe(enabled: Boolean) {
+        context.sessionStore.edit { it[REMEMBER_ME_KEY] = enabled }
+        cookieJar.setPersistenceEnabled(enabled)
+    }
+
+    /**
+     * Oturum görüntü alanlarını (hatırlanan e-posta + displayName + companyId/companyName)
+     * DataStore'a yazar. İki çağrı noktası: (1) [com.calibrahub.app.ui.login.LoginScreen]
+     * başarılı login sonrası "beni hatırla" AÇIKSA, (2) MainActivity açılış probe'u
+     * (GET /api/mobile/session) 200 döndüğünde. Oturum çerezinin kendisi bu fonksiyonun İŞİ
+     * DEĞİL — o zaten [PersistentCookieJar] tarafından persistenceEnabled=true iken otomatik
+     * yazılır. email/displayName/companyName boş/null gelirse o alana DOKUNULMAZ (savunmacı —
+     * kontrat her zaman doldursa da).
+     */
+    suspend fun persistSessionDisplay(email: String?, displayName: String?, companyId: Int, companyName: String?) {
+        context.sessionStore.edit { prefs ->
+            if (!email.isNullOrBlank()) prefs[REMEMBERED_EMAIL_KEY] = email
+            if (!displayName.isNullOrBlank()) prefs[DISPLAY_NAME_KEY] = displayName
+            prefs[COMPANY_ID_KEY] = companyId
+            if (!companyName.isNullOrBlank()) prefs[COMPANY_NAME_KEY] = companyName
+        }
+    }
+
+    /**
+     * Logout VEYA 401-tetiklemeli oturum sonlandırma — kalıcı oturum çerezi + oturum-bazlı
+     * alanlar (displayName/companyId/companyName) temizlenir. [REMEMBERED_EMAIL_KEY] ve
+     * [REMEMBER_ME_KEY] BİLEREK silinmez: bir sonraki LoginScreen açılışında e-posta alanı yine
+     * otomatik dolsun + kullanıcının "beni hatırla" tercihi hatırlansın diye (kullanıcı kararı,
+     * 2026-07-17).
+     */
     suspend fun clearSession() {
         cookieJar.clear()
-        context.sessionStore.edit { it.remove(DISPLAY_NAME_KEY) }
+        context.sessionStore.edit {
+            it.remove(DISPLAY_NAME_KEY)
+            it.remove(COMPANY_ID_KEY)
+            it.remove(COMPANY_NAME_KEY)
+        }
     }
+
+    private val _sessionExpiredEvents = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+
+    /**
+     * Herhangi bir authed `/api/mobile/` altındaki çağrı 401 dönerse (bkz. [buildRetrofit] içindeki
+     * authExpiryInterceptor) bir event basılır. [com.calibrahub.app.MainActivity]'nin AppNav'ı
+     * bunu dinleyip login ekranına yönlendirir — KRİTİK: bu akışı dinlemeye yalnız NavHost en az
+     * bir kez composed olduktan SONRA başlanmalı (bkz. MainActivity yorumu) — erken bir emisyon
+     * navController.graph henüz set edilmemişken navigate() çağrısını çökertir.
+     */
+    val sessionExpiredEvents: SharedFlow<Unit> = _sessionExpiredEvents.asSharedFlow()
 
     /**
      * Yeni bir Retrofit instance üretir. Pahalı değil ama her API çağrısı için
@@ -136,9 +227,39 @@ class SessionManager(private val context: Context) {
             chain.proceed(req)
         }
 
+        // Global 401 yakalama (2026-07-17) — /api/mobile/ altındaki HERHANGİ bir authed çağrı
+        // (WhatsApp/Warehouse/Production repository'lerinin tümü [buildApi]/[buildRetrofit]
+        // üzerinden BURAYA akar) 401 dönerse: kalıcı oturum çerezi + oturum-bazlı alanlar
+        // temizlenir ve [sessionExpiredEvents]'e bir event basılır (AppNav dinleyip login'e
+        // yönlendirir). OkHttp interceptor'ları arka plan thread'inde çalışır (UI thread'i
+        // bloklanmaz) ama suspend context DEĞİLDİR — [clearSession] (suspend) burada runBlocking
+        // ile SARILMAZ, çünkü o zaten [PersistentCookieJar.clear]'ın KENDİ runBlocking'ini iç içe
+        // (nested) çağırmış olurdu. Bunun yerine SIRALI (nested değil) iki adım: önce senkron
+        // [PersistentCookieJar.clear] çağrılır, SONRA ayrı/düz bir runBlocking ile sessionStore
+        // alanları temizlenir — [clearSession] ile AYNI netice, iç içe runBlocking riski olmadan.
+        // /api/mobile/login, /api/mobile/login-companies, /api/mobile/ping gibi [AllowAnonymous]
+        // endpoint'ler kimlik hatasını HTTP 401 ile DEĞİL (200 + ok:false gövdesiyle) döndürür —
+        // bu interceptor onlarla ÇAKIŞMAZ (bkz. WhatsAppRepository.login/loginCompanies).
+        val authExpiryInterceptor = Interceptor { chain ->
+            val response = chain.proceed(chain.request())
+            if (response.code == 401) {
+                cookieJar.clear()
+                runBlocking {
+                    context.sessionStore.edit {
+                        it.remove(DISPLAY_NAME_KEY)
+                        it.remove(COMPANY_ID_KEY)
+                        it.remove(COMPANY_NAME_KEY)
+                    }
+                }
+                _sessionExpiredEvents.tryEmit(Unit)
+            }
+            response
+        }
+
         val client = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .addInterceptor(mobileHeader)
+            .addInterceptor(authExpiryInterceptor)
             .addInterceptor(logger)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -153,8 +274,12 @@ class SessionManager(private val context: Context) {
     }
 
     companion object {
-        private val BASE_URL_KEY     = stringPreferencesKey("base_url")
-        private val DISPLAY_NAME_KEY = stringPreferencesKey("display_name")
+        private val BASE_URL_KEY         = stringPreferencesKey("base_url")
+        private val DISPLAY_NAME_KEY     = stringPreferencesKey("display_name")
+        private val REMEMBER_ME_KEY      = booleanPreferencesKey("remember_me")
+        private val REMEMBERED_EMAIL_KEY = stringPreferencesKey("remembered_email")
+        private val COMPANY_ID_KEY       = intPreferencesKey("company_id")
+        private val COMPANY_NAME_KEY     = stringPreferencesKey("company_name")
     }
 }
 

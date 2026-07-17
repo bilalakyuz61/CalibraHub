@@ -42,6 +42,13 @@ interface CalibraApi {
     @GET("api/mobile/whoami")
     suspend fun whoAmI(): Response<WhoAmIResponse>
 
+    // "Beni hatırla" otomatik giriş probe'u (2026-07-17, session-backend kontratı KİLİTLİ —
+    // paralel ajan tarafından kuruldu). 200 → oturum geçerli, gövde userId/displayName/email/
+    // companyId/companyName ile dolu. 401 → kimlik yok/expired; kontrat gövde ÜRETMEZ, yalnızca
+    // status koduna bakılır (bkz. WhatsAppRepository.fetchSession — resp.code() kontrolü).
+    @GET("api/mobile/session")
+    suspend fun session(): Response<SessionDto>
+
     @GET("api/mobile/whatsapp/conversations")
     suspend fun conversations(@Query("limit") limit: Int = 200): Response<List<ConversationDto>>
 
@@ -90,6 +97,21 @@ data class LoginResponse(val ok: Boolean, val displayName: String? = null, val e
 
 @JsonClass(generateAdapter = true)
 data class WhoAmIResponse(val ok: Boolean, val userName: String? = null)
+
+// GET /api/mobile/session 200 yanıtı — session-backend kontratı (2026-07-17): { ok, userId,
+// displayName, email, companyId, companyName }. PingResponse'taki gibi savunmacı nullable/
+// default alanlar — backend kontrat gereği hepsini doldurur ama Moshi'nin eksik-alan
+// JsonDataException riskine karşı tümü opsiyonel tanımlandı. 401 durumunda bu tip HİÇ parse
+// edilmez (bkz. WhatsAppRepository.fetchSession).
+@JsonClass(generateAdapter = true)
+data class SessionDto(
+    val ok: Boolean = false,
+    val userId: Int = 0,
+    val displayName: String? = null,
+    val email: String? = null,
+    val companyId: Int = 0,
+    val companyName: String? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class ConversationDto(
