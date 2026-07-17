@@ -44,7 +44,9 @@ import com.calibrahub.app.data.CompanyDto
 import com.calibrahub.app.data.SessionManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -518,6 +520,106 @@ private fun needleSolvedTarget(passwordLength: Int, r: Int): Float {
     return (current / 360f).roundToInt() * 360f
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────────
+// İç kadranlar (2026-07-17 görsel zenginleştirme eki) — 2 eş-merkezli İÇ KADRAN, büyük
+// iğnelerden TAMAMEN bağımsız, salt dekoratif rastgele-dönüş katmanı (web'deki caldInner1/
+// caldInner2 + spinInnerRandom ile birebir aynı tasarım, bkz. `Views/Account/Login.cshtml`).
+// Kendi Animatable state/motoruna sahiptir (bkz. CalibrationLockDial içindeki innerAngles);
+// needleSteps/typingTarget/round-robin mantığına hiç dokunmaz, hiç okumaz.
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * İç kadranların sabit tanımı. [radiusDp]/[tickLengthDp]/[markRadiusDp] web'deki r=60/8-çentik
+ * (cyan) ve r=34/6-çentik (violet) karşılıklarının [DialTrackRadiusDp] (Android track yarıçapı,
+ * web'in r=88'ine karşılık gelir) ORANIYLA türetilir — web ile birebir aynı görsel oranı korur.
+ * Renkler n2 (cyan) / n3 (violet) iğne renkleriyle AYNI marka hex'i (fixed — needle renk
+ * kararıyla aynı gerekçe: light/dark'ta aynı canlı vurgu), yalnız çentik için düşük/işaret
+ * noktası için yüksek alfa (web'deki --cald-inner1/2 ve *-mark alfa değerleriyle birebir aynı:
+ * sırasıyla .42/.95 ve .40/.95). [spinDurationMs] web'in INNER_SPIN_MS'iyle (340/260) aynıdır.
+ */
+private data class InnerDialSpec(
+    val radiusDp: Float,
+    val tickCount: Int,
+    val tickLengthDp: Float,
+    val tickStrokeDp: Float,
+    val tickColor: Color,
+    val markColor: Color,
+    val markRadiusDp: Float,
+    val spinDurationMs: Int,
+)
+
+private val InnerDialSpecs = listOf(
+    // İç kadran 1 (dış, web r=60) — 8 çentik, cyan ton (n2 rengiyle aynı hex).
+    InnerDialSpec(
+        radiusDp = DialTrackRadiusDp * 60f / 88f,
+        tickCount = 8,
+        tickLengthDp = DialTrackRadiusDp * 7f / 88f,
+        tickStrokeDp = 1.15f,
+        tickColor = NeedleColorCyan.copy(alpha = 0.42f),
+        markColor = NeedleColorCyan.copy(alpha = 0.95f),
+        markRadiusDp = DialTrackRadiusDp * 2.2f / 88f,
+        spinDurationMs = 340,
+    ),
+    // İç kadran 2 (iç, web r=34) — 6 çentik, violet ton (n3 rengiyle aynı hex).
+    InnerDialSpec(
+        radiusDp = DialTrackRadiusDp * 34f / 88f,
+        tickCount = 6,
+        tickLengthDp = DialTrackRadiusDp * 5f / 88f,
+        tickStrokeDp = 1.05f,
+        tickColor = NeedleColorViolet.copy(alpha = 0.40f),
+        markColor = NeedleColorViolet.copy(alpha = 0.95f),
+        markRadiusDp = DialTrackRadiusDp * 1.8f / 88f,
+        spinDurationMs = 260,
+    ),
+)
+
+private const val InnerSpinMinDeg = 14f   // web INNER_SPIN_MIN — rastgele dönüş min açısı (derece)
+private const val InnerSpinMaxDeg = 52f   // web INNER_SPIN_MAX — rastgele dönüş maks açısı (derece)
+
+/**
+ * Web'in JS `easeOutCubic`/`easeOutBack` fonksiyonlarıyla (bkz. Login.cshtml script'i)
+ * BİREBİR aynı matematiksel formülü yeniden üretir. Compose'un hazır [FastOutSlowInEasing] vb.
+ * eğrileri FARKLI bezier eğrileri olduğundan burada kullanılmaz — web ile "birebir eşle"
+ * gereksinimi için web'in kendi formülü aynen (satır satır) taşınır.
+ */
+private val EaseOutCubic = Easing { fraction ->
+    val inv = 1f - fraction
+    1f - inv * inv * inv
+}
+private val EaseOutBackCustom = Easing { fraction ->
+    val c1 = 1.70158f
+    val c3 = c1 + 1f
+    val t = fraction - 1f
+    1f + c3 * t * t * t + c1 * t * t
+}
+
+// ── Büyük iğnelerin tuş-başı "dura-dura" (detent/stepped) hareketi ─────────────────────────
+// Web'deki animateNeedleStepped (bkz. Login.cshtml script'i) ile birebir aynı algoritma:
+// [start,target] aralığı NeedleStepCount (4) eşit mini-adıma bölünür; her mini-adım kendi
+// payının NeedleStepMoveFraction'ını (%60) easeOutCubic ile HAREKET, kalanını (%40) DURAKLAMA
+// (detent hissi) olarak geçirir — son adımdan sonra duraklama YOK. Toplam süre:
+// 4×(80×.6) + 3×(80×.4) = 192+96 = 288ms (web ile birebir aynı). delta≈0 olan (bu tuşta sırası
+// gelmeyen) iğneler anında snapTo ile çıkar — gereksiz animasyon çalışmaz.
+private const val NeedleStepCount = 4
+private const val NeedleStepMs = 80
+private const val NeedleStepMoveFraction = 0.6f
+
+private suspend fun Animatable<Float, AnimationVector1D>.animateNeedleStepped(target: Float) {
+    val start = value
+    val delta = target - start
+    if (abs(delta) < 0.001f) {
+        snapTo(target)
+        return
+    }
+    val moveMs = (NeedleStepMs * NeedleStepMoveFraction).roundToInt()
+    val pauseMs = NeedleStepMs - moveMs
+    for (step in 1..NeedleStepCount) {
+        val boundary = if (step >= NeedleStepCount) target else start + delta * step / NeedleStepCount
+        animateTo(boundary, tween(durationMillis = moveMs, easing = EaseOutCubic))
+        if (step < NeedleStepCount) delay(pauseMs.toLong())
+    }
+}
+
 /**
  * Login formunun üstünde ortalı marka bloğu: 3 iğneli (yelkovan) kalibrasyon kadranı + logo +
  * alt başlık. Stateless — kadranın tepki verdiği durum (parola uzunluğu, kadran durumu)
@@ -563,19 +665,29 @@ private fun CalibraLoginBadge(
 }
 
 /**
- * 3 iğneli (yelkovan) analog kalibrasyon kadranı. Merkezden (hub) çıkan 3 ibre — n1 (indigo,
- * en uzun+kalın = ana/şifre iğnesi), n2 (cyan, orta), n3 (violet, en kısa+ince) — 12 çentikli
- * (30°'lik) dairesel kadranda döner. Web login ekranındaki `cald-*` SVG kadranıyla (bkz.
+ * 3 iğneli (yelkovan) analog kalibrasyon kadranı + 2 eş-merkezli İÇ KADRAN. Merkezden (hub)
+ * çıkan 3 ibre — n1 (indigo, en uzun+kalın = ana/şifre iğnesi), n2 (cyan, orta), n3 (violet, en
+ * kısa+ince) — 12 çentikli (30°'lik) dairesel kadranda döner. İki iç kadran (İç-1: 8 çentik/
+ * cyan, İç-2: 6 çentik/violet — bkz. [InnerDialSpecs]) büyük iğnelerden TAMAMEN bağımsız kendi
+ * rastgele-dönüş motoruna sahiptir. Web login ekranındaki `cald-*` SVG kadranıyla (bkz.
  * `Views/Account/Login.cshtml`, `window.CalibraLoginDial`) BİREBİR aynı kanonik tasarım ve
  * davranış; yalnız çizim teknolojisi farklıdır (SVG rotate() transform ↔ Compose Canvas
  * rotate()/translate() DrawScope — trigonometri gerekmez). İğne renkleri sabit marka
- * hex'lerinden gelir; track/tick/hub gibi nötr öğeler Material3 tema token'larından gelir.
+ * hex'lerinden gelir; iç kadran çentik/işaret renkleri de AYNI n2/n3 hex'i (sabit) kullanır —
+ * track/tick/hub gibi nötr öğeler Material3 tema token'larından gelir.
  *
  * Durum davranışları:
  * - Idle: 3 iğne SABİTTİR (animasyon yok), dinlenme çentiklerinde (1/5/9 → 120° ayrık) durur.
  * - Typing: her şifre karakteri SADECE BİR iğneyi bir çentik döndürür (round-robin, tuş
  *   sırasına göre); TÜM iğneler DEĞİL, SÜREKLİ DEĞİL — diğer iki iğne o tuş vuruşunda
- *   KIPIRDAMAZ (bkz. [needleSteps] dokümantasyonu). Silme aynı adımları geri sarar.
+ *   KIPIRDAMAZ (bkz. [needleSteps] dokümantasyonu). Hareketin kendisi artık tek parça glide
+ *   değil, "dura-dura" (detent/stepped, bkz. [animateNeedleStepped]) — 4 mini-adım, her biri
+ *   hızlı hareket + kısa duraklama, toplam ~288ms. Silme aynı adımları geri sarar.
+ * - İç kadranlar: HER parola değişiminde (yazma VEYA silme — [passwordLength] her değiştiğinde,
+ *   ilk composition hariç) her iki iç kadran BAĞIMSIZ rastgele yön (CW/CCW) + rastgele küçük
+ *   açı (14°-52°) ile easeOutBack dönüşle döner. needleSteps/round-robin mantığına dokunmaz;
+ *   Loading/Solved/Failed durumlarından ETKİLENMEZ (ayrı `LaunchedEffect(passwordLength)`,
+ *   büyük iğnelerin `LaunchedEffect(state, passwordLength)`'inden bağımsız).
  * - Loading: her iğne KISA BİR KEZLİK "ölçüm" sekmesi yapar (küçük kick + aynı konuma yaylı
  *   geri dönüş), sonra DURUR — client parola doğrulamaz, yalnız "işleniyor" hissi verir.
  *   Sürekli dönen iğne YOKTUR; bunun yerine merkez parıltı yumuşak nefes alır (measuringPulse).
@@ -593,6 +705,10 @@ private fun CalibrationLockDial(
 ) {
     // ── İğne açıları (derece, unwrap — hiç mod alınmaz) — her iğne kendi Animatable'ı ile döner
     val needleAngles = remember { DialNeedles.map { Animatable(it.restSlot * DialSlotDeg) } }
+
+    // ── İç kadran açıları — büyük iğnelerden AYRI state/motor (unwrap, hiç mod alınmaz); web'in
+    //    innerDeg=[0,0] başlangıcıyla aynı: 0f = "henüz hiç spin olmamış" konumu.
+    val innerAngles = remember { InnerDialSpecs.map { Animatable(0f) } }
 
     LaunchedEffect(state, passwordLength) {
         when (state) {
@@ -634,17 +750,47 @@ private fun CalibrationLockDial(
                 }
             }
             else -> {
-                // Idle/Typing: yazım hedefine yumuşak spring. SADECE sırası gelen iğnenin
-                // hedefi bu tuş vuruşunda değişir; diğer ikisi aynı hedefe no-op'a yakın kalıp
-                // görsel olarak kıpırdamaz (bkz. needleSteps dokümantasyonu).
+                // Idle/Typing: yazım hedefine "dura-dura" (detent/stepped) hareketle gider —
+                // web'in animateNeedleStepped'iyle birebir aynı algoritma (bkz.
+                // [animateNeedleStepped] uzantı fonksiyonu, NeedleStepCount/Ms/MoveFraction).
+                // SADECE sırası gelen iğnenin hedefi bu tuş vuruşunda değişir; diğer ikisi aynı
+                // hedefe delta≈0 olduğundan anında snapTo ile no-op'a düşer, görsel olarak
+                // KIPIRDAMAZ (bkz. needleSteps dokümantasyonu).
                 DialNeedles.indices.forEach { r ->
                     launch {
-                        needleAngles[r].animateTo(
-                            targetValue = needleTypingTarget(passwordLength, r),
-                            animationSpec = spring(dampingRatio = 0.72f, stiffness = 340f)
-                        )
+                        needleAngles[r].animateNeedleStepped(needleTypingTarget(passwordLength, r))
                     }
                 }
+            }
+        }
+    }
+
+    // ── İç kadranlar — büyük iğnelerden TAMAMEN bağımsız, salt dekoratif rastgele-dönüş
+    //    motoru (bkz. InnerDialSpecs / innerAngles). Web'in yalnız pwEl 'input' event'inde
+    //    spinInnerRandom() çağırmasıyla birebir aynı tetikleme granülaritesi: yalnız GERÇEK
+    //    parola değişiminde (yazma VEYA silme) döner. needleSteps/typingTarget/round-robin/
+    //    state (Loading/Solved/Failed) mantığına HİÇ dokunmaz, hiç okumaz — anahtar SADECE
+    //    passwordLength'tir (web'in `mode==='measuring'||mode==='solved'` erken-çıkışına
+    //    eşdeğer bir koruma burada gerekmez: parola alanı zaten `enabled=!loading` ile o
+    //    durumlarda devre dışı bırakılır, bkz. LoginScreen).
+    var innerSpinArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(passwordLength) {
+        // İlk composition'da (henüz hiçbir tuşa basılmamışken) spin OLMAZ — web'de bu durum
+        // zaten oluşmaz (JS 'input' event'i yalnız gerçek kullanıcı etkileşiminde ateşlenir);
+        // Compose'ta LaunchedEffect ilk mount'ta da bir kez çalıştığından bu guard onu simüle
+        // eder.
+        if (!innerSpinArmed) {
+            innerSpinArmed = true
+            return@LaunchedEffect
+        }
+        InnerDialSpecs.forEachIndexed { idx, spec ->
+            launch {
+                val direction = if (Random.nextBoolean()) 1f else -1f
+                val amount = InnerSpinMinDeg + Random.nextFloat() * (InnerSpinMaxDeg - InnerSpinMinDeg)
+                innerAngles[idx].animateTo(
+                    targetValue = innerAngles[idx].value + direction * amount,
+                    animationSpec = tween(durationMillis = spec.spinDurationMs, easing = EaseOutBackCustom)
+                )
             }
         }
     }
@@ -761,6 +907,45 @@ private fun CalibrationLockDial(
                         end = mid + Offset(0f, -outerR),
                         strokeWidth = if (isMajor) 2.2.dp.toPx() else 1.4.dp.toPx(),
                         cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            // 2b) İç kadranlar (2 adet, eş-merkezli) — büyük iğnelerden bağımsız, salt
+            //     dekoratif rastgele-dönüş katmanı (bkz. InnerDialSpecs / innerAngles). Her
+            //     kadran: ince sabit halka (trackColor, web'in .cald-inner-track'ine karşılık
+            //     gelir) + kendi açısınca (innerAngles[idx]) dönen çentik grubu + tepe işaret
+            //     noktası (web'deki caldInner1/caldInner2 <g> transform'una karşılık gelir).
+            //     Her çentik/işaret TEK SEVİYE rotate() ile (spin açısı + kendi yerel açısı
+            //     toplamı) çizilir — iç içe transform'a gerek yok, needle çizimiyle aynı idiom.
+            //     Solved/Failed renk lerp'i (p/q) UYGULANMAZ — web'de de bu katman solve/fail
+            //     durumundan etkilenmez (yalnız .cald-needle/.cald-tail retint olur).
+            InnerDialSpecs.forEachIndexed { idx, spec ->
+                val radiusPx = spec.radiusDp.dp.toPx()
+                drawCircle(
+                    color = trackColor.copy(alpha = 0.33f),
+                    radius = radiusPx,
+                    center = mid,
+                    style = Stroke(width = 0.9.dp.toPx())
+                )
+                val spin = innerAngles[idx].value
+                for (i in 0 until spec.tickCount) {
+                    val tickDeg = i * (360f / spec.tickCount)
+                    rotate(degrees = spin + tickDeg, pivot = mid) {
+                        drawLine(
+                            color = spec.tickColor,
+                            start = mid + Offset(0f, -radiusPx),
+                            end = mid + Offset(0f, -(radiusPx - spec.tickLengthDp.dp.toPx())),
+                            strokeWidth = spec.tickStrokeDp.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+                rotate(degrees = spin, pivot = mid) {
+                    drawCircle(
+                        color = spec.markColor,
+                        radius = spec.markRadiusDp.dp.toPx(),
+                        center = mid + Offset(0f, -radiusPx)
                     )
                 }
             }
