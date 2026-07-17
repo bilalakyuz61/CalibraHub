@@ -26,7 +26,8 @@ namespace CalibraHub.Web.Controllers;
 ///   POST /api/mobile/login-companies          — email+parola dogrulanmis sirket listesi (login oncesi)
 ///   POST /api/mobile/login                    — cookie set + display name
 ///   POST /api/mobile/logout                   — cookie clear
-///   GET  /api/mobile/whoami                   — oturum dogrulama
+///   GET  /api/mobile/whoami                   — oturum dogrulama (legacy, ok:false govde)
+///   GET  /api/mobile/session                  — otomatik giris whoami (gercek 401 + kullanici/sirket restore)
 ///   GET  /api/mobile/whatsapp/conversations   — sohbet listesi (sidebar)
 ///   GET  /api/mobile/whatsapp/messages        — bir sohbetin mesajlari
 ///   POST /api/mobile/whatsapp/send            — metin gonder
@@ -223,6 +224,47 @@ public sealed class MobileApiController : ControllerBase
         {
             ok = authenticated,
             userName = authenticated ? User.Identity?.Name : null
+        });
+    }
+
+    /// <summary>
+    /// Mobil "otomatik giriş" (beni hatırla) whoami — uygulama açılışta kalıcı oturum
+    /// çerezinin (Login yukarıda: IsPersistent + 30 gün) hâlâ geçerli olup olmadığını
+    /// doğrular ve drawer başlığı için kullanıcı/şirket bilgisini restore eder.
+    ///
+    /// displayName / email / companyName BİREBİR Login'in (bu sınıf, ve web tarafında
+    /// aynı desenle AccountController.Login) HttpContext.SignInAsync'e yazdığı claim'lerden
+    /// okunur (ClaimTypes.Name / ClaimTypes.Email / "company_name") — ayrı bir DB sorgusu
+    /// YOK. Böylece login sonrası mobilde gösterilen ad ile bu endpoint'ten dönen ad her
+    /// zaman aynı kaynaktan gelir, asenkron sapma riski yoktur.
+    ///
+    /// [AllowAnonymous] + elle 401 tercihi (attribute [Authorize] yerine): bu projede
+    /// AddCookie() için Events.OnRedirectToLogin override edilmemiş (bkz. Program.cs) —
+    /// framework varsayılanı, kimliksiz istekte challenge tetiklenince "/Account/Login"a
+    /// 302 REDIRECT üretir; mobil client için "302 + HTML login sayfası" ile gerçek 401
+    /// ayırt edilmesi güvenilir değildir. Burada action'ı [AllowAnonymous] ile challenge
+    /// pipeline'ının dışında tutup elle User.Identity.IsAuthenticated kontrolü + doğrudan
+    /// Unauthorized() dönmek, framework detayından bağımsız garanti bir HTTP 401 sağlar
+    /// (mobil sözleşmesi: HTTP 401 durum kodu, {ok:false} gövdesi DEĞİL).
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("session")]
+    public IActionResult Session()
+    {
+        if (User.Identity?.IsAuthenticated != true)
+            return Unauthorized();
+
+        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : 0;
+        var companyId = int.TryParse(User.FindFirstValue("company_id"), out var cid) ? cid : 0;
+
+        return Ok(new
+        {
+            ok = true,
+            userId,
+            displayName = User.FindFirstValue(ClaimTypes.Name) ?? string.Empty,
+            email = User.FindFirstValue(ClaimTypes.Email) ?? string.Empty,
+            companyId,
+            companyName = User.FindFirstValue("company_name") ?? string.Empty,
         });
     }
 

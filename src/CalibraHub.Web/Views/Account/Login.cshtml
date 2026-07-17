@@ -150,7 +150,17 @@
            sayfa sonundaki script yorumu). Çözülme YALNIZ sunucu login onayında
            (server-truth) tetiklenir — client parola doğrulamaz. Glass-stage mimarisi +
            is-solved/is-fail durum CSS'i v2'den bilinçli olarak korundu; mobil (Compose
-           Canvas) ile birebir aynı kanonik tasarım/renk paleti. */
+           Canvas) ile birebir aynı kanonik tasarım/renk paleti.
+
+           Görsel zenginleştirme eki (2026-07-17, kullanıcı "çok sade" geri bildirimi —
+           SOLVE MANTIĞI DEĞİŞMEDİ, yalnız çizim/animasyon): (a) ana kadranın içine 2
+           eş-merkezli İÇ KADRAN eklendi — r=60/8-çentik cyan + r=34/6-çentik violet,
+           salt dekoratif katman (bkz. .cald-inner-* kuralları + script buildInnerTicks/
+           spinInnerRandom). (b) büyük iğnelerin tuş-başı 30°'lik hareketi artık tek parça
+           glide değil, N=4 mini-adımlı "dura-dura" (detent/stepped) hareket — bkz. script
+           animateNeedleStepped. (c) iç kadranlar her tuş vuruşunda büyük iğnelerin
+           hedefli/round-robin hareketinden BAĞIMSIZ, rastgele yön+açı ile döner — bkz.
+           script spinInnerRandom. */
         .cald-wrap {
             width: 148px; margin: 2px auto 20px; position: relative;
             color-scheme: light;
@@ -162,6 +172,10 @@
             --cald-n3: #8b5cf6;   /* violet — üçüncül iğne */
             --cald-tick: rgba(100,116,139,.45);
             --cald-tick-major: rgba(71,85,105,.65);
+            --cald-inner1: rgba(6,182,212,.42);        /* iç kadran 1 (r=60) çentik rengi — cyan ton */
+            --cald-inner1-mark: rgba(6,182,212,.95);   /* iç kadran 1 işaret noktası */
+            --cald-inner2: rgba(139,92,246,.40);       /* iç kadran 2 (r=34) çentik rengi — violet ton */
+            --cald-inner2-mark: rgba(139,92,246,.95);  /* iç kadran 2 işaret noktası */
             --cald-hub: #6366f1;
             --cald-success: #059669;
             --cald-danger: #e11d48;
@@ -177,6 +191,10 @@
             --cald-n3: #a78bfa;
             --cald-tick: rgba(148,163,184,.4);
             --cald-tick-major: rgba(203,213,225,.55);
+            --cald-inner1: rgba(34,211,238,.42);
+            --cald-inner1-mark: rgba(34,211,238,.95);
+            --cald-inner2: rgba(167,139,250,.40);
+            --cald-inner2-mark: rgba(167,139,250,.95);
             --cald-hub: #818cf8;
             --cald-success: #34d399;
             --cald-danger: #fb7185;
@@ -237,6 +255,17 @@
            kadranın kuzey/doğu/güney/batısı) belirgin (maj) çizilir. */
         .cald-tick { stroke: var(--cald-tick); stroke-width: 1.4; }
         .cald-tick.maj { stroke: var(--cald-tick-major); stroke-width: 2.2; }
+        /* İç kadranlar (2 adet, iç içe: r=60 cyan + r=34 violet) — büyük iğnelerden
+           bağımsız, her tuş vuruşunda rastgele yön/açıyla dönen dekoratif katman (bkz.
+           script spinInnerRandom). Sınır halkası ince/sabit görünür; asıl "dönüyor"
+           hissini rotasyona giren çentik grubu + işaret noktası verir. */
+        .cald-inner-track { fill: none; stroke: var(--cald-ring); stroke-width: 1; opacity: .65; }
+        .cald-inner-grp { transition: none; }
+        .cald-inner-tick { stroke-linecap: round; stroke-width: 1.15; }
+        .cald-inner-tick.i1 { stroke: var(--cald-inner1); }
+        .cald-inner-tick.i2 { stroke: var(--cald-inner2); stroke-width: 1.05; }
+        .cald-inner-mark-1 { fill: var(--cald-inner1-mark); filter: drop-shadow(0 0 2px var(--cald-inner1-mark)); }
+        .cald-inner-mark-2 { fill: var(--cald-inner2-mark); filter: drop-shadow(0 0 1.6px var(--cald-inner2-mark)); }
         /* 3 iğne — hub'dan (merkez) çıkar, farklı uzunluk/kalınlık/renkte (saat ibresi
            hiyerarşisi: n1 en uzun+kalın=ana/şifre iğnesi, n3 en kısa+ince). Açı doğrudan
            <g> sarmalayıcısının SVG rotate() transform'uyla sürülür (bkz. script placeNeedle). */
@@ -350,6 +379,19 @@
                     <svg class="cald-svg" viewBox="0 0 200 200">
                         <circle class="cald-track" cx="100" cy="100" r="88" />
                         <g class="cald-ticks" id="caldTicks"></g>
+                        @* İç kadran 1 (dış, r=60) — 8 çentik; büyük iğnelerden bağımsız, tuş
+                           başına rastgele döner (bkz. script spinInnerRandom). *@
+                        <circle class="cald-inner-track" cx="100" cy="100" r="60" />
+                        <g class="cald-inner-grp" id="caldInner1">
+                            <g id="caldInner1Ticks"></g>
+                            <circle class="cald-inner-mark cald-inner-mark-1" cx="100" cy="40" r="2.2" />
+                        </g>
+                        @* İç kadran 2 (iç, r=34) — 6 çentik; aynı şekilde bağımsız/rastgele. *@
+                        <circle class="cald-inner-track" cx="100" cy="100" r="34" />
+                        <g class="cald-inner-grp" id="caldInner2">
+                            <g id="caldInner2Ticks"></g>
+                            <circle class="cald-inner-mark cald-inner-mark-2" cx="100" cy="66" r="1.8" />
+                        </g>
                         <g class="cald-needle-grp" id="caldNeedle3">
                             <line class="cald-needle n3" x1="100" y1="100" x2="100" y2="62" />
                         </g>
@@ -612,18 +654,35 @@
        şikayeti alınmıştı — bu ASLA tekrarlanmayacak: needleSteps(len, r) yalnızca [r]
        iğnesinin SIRASI geldiğinde (len'in üçe bölümünde kendi kalanına denk geldiğinde)
        artar, diğer iki iğnenin hedefi DEĞİŞMEZ — dolayısıyla toTyping() her tuşta 3
-       iğne için de animateNeedle çağırsa da, hedefi değişmeyen 2 iğne görsel olarak
-       KIPIRDAMAZ (aynı hedefe animasyon no-op'tur). Silme aynı adımları geri sarar
-       (adım sayısı parola uzunluğundan türetilir, tuş yönünden bağımsızdır).
+       iğne için de animateNeedleStepped çağırsa da, hedefi değişmeyen 2 iğne görsel
+       olarak KIPIRDAMAZ (aynı hedefe animasyon no-op'tur, delta≈0 erken çıkış). Silme
+       aynı adımları geri sarar (adım sayısı parola uzunluğundan türetilir, tuş
+       yönünden bağımsızdır).
 
        Çözülme YALNIZ sunucu login onayıyla (window.CalibraLoginDial.success) tetiklenir
        — client parola doğrulamaz. Solved'de her iğne kendi en yakın 360° katına "klik"
-       diye oturur (mod 360 ≡ 0 olduğundan üçü de aynı mutlak açıda/yukarıda çakışır). */
+       diye oturur (mod 360 ≡ 0 olduğundan üçü de aynı mutlak açıda/yukarıda çakışır).
+
+       Görsel zenginleştirme eki (2026-07-17 — SOLVE MANTIĞI DEĞİŞMEDİ, round-robin/
+       server-truth kuralı yukarıdaki paragraflar AYNEN geçerli, yalnız çizim/animasyon):
+       (a) toTyping() artık animateNeedle yerine animateNeedleStepped kullanır — hedef
+       açıya tek parça glide değil, N=4 mini-adımlı "dura-dura" (detent) hareketle gider
+       (her mini-adım: hızlı hareket + kısa duraklama, bkz. NEEDLE_STEP_* sabitleri).
+       Toplam süre eskisinden (220ms) biraz daha yavaş (~288ms: 4 hareket + aradaki 3
+       duraklama) ama yine hızlı/akıcı — sürünme yok.
+       (b) Ana kadranın içine 2 eş-merkezli İÇ KADRAN eklendi (caldInner1/caldInner2,
+       r=60 cyan + r=34 violet, çentikli halka + dönen işaret noktası, bkz. buildInnerTicks).
+       (c) İç kadranlar spinInnerRandom() ile her tuş vuruşunda (pwEl 'input') büyük
+       iğnelerin hedefli hareketinden BAĞIMSIZ, rastgele yön (cw/ccw) + rastgele küçük
+       açı (14°-52°) ile serbestçe döner — needleSteps/typingTarget/round-robin
+       mantığına dokunulmadı. */
     (function () {
         var dial = document.getElementById('caldDial');
         if (!dial) return;
         var statusEl = document.getElementById('caldStatus');
         var ticksG   = document.getElementById('caldTicks');
+        var innerTicksG1 = document.getElementById('caldInner1Ticks');   // iç kadran 1 (r=60) çentik konteyneri
+        var innerTicksG2 = document.getElementById('caldInner2Ticks');   // iç kadran 2 (r=34) çentik konteyneri
         var NS = 'http://www.w3.org/2000/svg';
         var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -657,6 +716,28 @@
             ticksG.appendChild(ln);
         }
 
+        // ── İç kadranlar — çentik üretimi (dış tick döngüsüyle aynı trigonometri, tek
+        //    fark: major/minor ayrımı yok, tek tip çentik). Halkanın kendisi <g> içine
+        //    KONMAZ (dairesel simetrik, rotasyona gerek yok) — yalnız çentikler + işaret
+        //    noktası ilgili caldInnerN <g>'sinin içine konur ki spinInnerRandom() onları
+        //    birlikte döndürebilsin. ──
+        function buildInnerTicks(container, count, r, len, cls) {
+            for (var i = 0; i < count; i++) {
+                var tDeg = i * (360 / count);
+                var tRad = (tDeg - 90) * Math.PI / 180;
+                var ro = r, ri = r - len;
+                var ln = document.createElementNS(NS, 'line');
+                ln.setAttribute('x1', (100 + ro * Math.cos(tRad)).toFixed(2));
+                ln.setAttribute('y1', (100 + ro * Math.sin(tRad)).toFixed(2));
+                ln.setAttribute('x2', (100 + ri * Math.cos(tRad)).toFixed(2));
+                ln.setAttribute('y2', (100 + ri * Math.sin(tRad)).toFixed(2));
+                ln.setAttribute('class', cls);
+                container.appendChild(ln);
+            }
+        }
+        buildInnerTicks(innerTicksG1, 8, 60, 7, 'cald-inner-tick i1');
+        buildInnerTicks(innerTicksG2, 6, 34, 5, 'cald-inner-tick i2');
+
         // İğne açısı doğrudan SVG rotate(deg, 100, 100) transform'u — 0°=yukarı (12 yönü),
         // saat yönünde artar. Trigonometri gerekmez (harf-yerleşimi versiyonunun aksine).
         function placeNeedle(r, deg) {
@@ -682,6 +763,83 @@
             ndlRaf[r] = requestAnimationFrame(step);
         }
 
+        // ── Büyük iğnelerin tuş-başı hareketi — "dura-dura" (detent/stepped) ──
+        // toTyping() bunu çağırır (animateNeedle DEĞİL): 30°'lik hedef adımı tek parça
+        // glide yerine N=4 mini-adıma böler, her mini-adımda hızlı hareket + kısa
+        // duraklama (mekanik kadran/kasa kilidi hissi). Toplam süre = 4 hareket + aradaki
+        // 3 duraklama (son adımdan sonra bekleme YOK — hedefe varır varmaz biter):
+        // 4×(80×.6) + 3×(80×.4) = 192+96 = 288ms — eskisinden (220ms) biraz daha yavaş,
+        // yine de akıcı/hızlı (sürünme yok). delta≈0 olan (bu tuşta sırası gelmeyen)
+        // iğneler için anında çıkar — gereksiz rAF döngüsü çalışmaz.
+        var NEEDLE_STEP_COUNT     = 4;      // 30°'lik adım kaç mini-adıma bölünüyor
+        var NEEDLE_STEP_MS        = 80;     // mini-adım başına toplam süre (hareket+duraklama)
+        var NEEDLE_STEP_MOVE_FRAC = 0.6;    // mini-adım süresinin hareket kısmı (kalanı duraklama)
+        function animateNeedleStepped(r, target) {
+            cancelNeedle(r);
+            var start = ndlDeg[r], delta = target - start;
+            if (reduce || Math.abs(delta) < 0.001) { ndlDeg[r] = target; placeNeedle(r, target); return; }
+            var moveMs  = NEEDLE_STEP_MS * NEEDLE_STEP_MOVE_FRAC;
+            var pauseMs = NEEDLE_STEP_MS - moveMs;
+            function stepBoundary(i) { return i >= NEEDLE_STEP_COUNT ? target : start + delta * i / NEEDLE_STEP_COUNT; }
+            var step = 0, phase = 'move', phaseStart = null;
+            var phaseFrom = start, phaseTo = stepBoundary(1);
+            function frame(ts) {
+                if (phaseStart === null) phaseStart = ts;
+                var elapsed = ts - phaseStart;
+                if (phase === 'move') {
+                    var t = Math.min(1, elapsed / moveMs);
+                    var v = phaseFrom + (phaseTo - phaseFrom) * easeOutCubic(t);
+                    ndlDeg[r] = v; placeNeedle(r, v);
+                    if (t >= 1) {
+                        ndlDeg[r] = phaseTo; placeNeedle(r, phaseTo);
+                        step++;
+                        if (step >= NEEDLE_STEP_COUNT) { ndlRaf[r] = null; return; }
+                        phase = 'pause'; phaseStart = null;
+                    }
+                } else if (elapsed >= pauseMs) {
+                    phase = 'move'; phaseStart = null;
+                    phaseFrom = phaseTo; phaseTo = stepBoundary(step + 1);
+                }
+                ndlRaf[r] = requestAnimationFrame(frame);
+            }
+            ndlRaf[r] = requestAnimationFrame(frame);
+        }
+
+        // ── İç kadranlar — büyük iğnelerden bağımsız, salt dekoratif rotasyon katmanı.
+        //    Needle motoruyla birebir aynı desende (start→target rAF interpolasyonu),
+        //    ayrı state dizileriyle çalışır — needle mantığına hiç dokunmaz. ──
+        var innerGroups = [document.getElementById('caldInner1'), document.getElementById('caldInner2')];
+        var innerDeg    = [0, 0];
+        var innerRaf    = [null, null];
+        var INNER_SPIN_MIN = 14, INNER_SPIN_MAX = 52;   // derece — "rastgele küçük açı"
+        var INNER_SPIN_MS  = [340, 260];                // idx0 (r=60) biraz daha ağır, idx1 (r=34) daha çevik
+        function placeInner(idx, deg) { innerGroups[idx].setAttribute('transform', 'rotate(' + deg.toFixed(2) + ' 100 100)'); }
+        function cancelInner(idx) { if (innerRaf[idx]) { cancelAnimationFrame(innerRaf[idx]); innerRaf[idx] = null; } }
+        function animateInner(idx, target, durationMs) {
+            cancelInner(idx);
+            if (reduce) { innerDeg[idx] = target; placeInner(idx, target); return; }
+            var start = innerDeg[idx], delta = target - start, t0 = null;
+            function step(ts) {
+                if (t0 === null) t0 = ts;
+                var t = Math.min(1, (ts - t0) / durationMs);
+                innerDeg[idx] = start + delta * easeOutBack(t);
+                placeInner(idx, innerDeg[idx]);
+                if (t < 1) { innerRaf[idx] = requestAnimationFrame(step); }
+                else { innerDeg[idx] = target; placeInner(idx, target); innerRaf[idx] = null; }
+            }
+            innerRaf[idx] = requestAnimationFrame(step);
+        }
+        // Her tuş vuruşunda çağrılır (bkz. pwEl 'input'): 2 iç kadranın HER BİRİ kendi
+        // mevcut açısından, rastgele yön (cw/ccw) + rastgele küçük açıyla yeni bir hedefe
+        // döner — büyük iğnelerin round-robin/hedefli mantığıyla HİÇBİR bağı yok.
+        function spinInnerRandom() {
+            for (var idx = 0; idx < 2; idx++) {
+                var dir    = Math.random() < 0.5 ? -1 : 1;
+                var amount = INNER_SPIN_MIN + Math.random() * (INNER_SPIN_MAX - INNER_SPIN_MIN);
+                animateInner(idx, innerDeg[idx] + dir * amount, INNER_SPIN_MS[idx]);
+            }
+        }
+
         // n. tuş vuruşu iğneleri döngüsel gezer (1.→n1, 2.→n2, 3.→n3, 4.→n1…): [r]
         // iğnesinin parola [len] uzunluğundayken almış olduğu toplam adım sayısı.
         // Uzunluktan türetildiği için silme otomatik olarak aynı adımları geri sarar.
@@ -704,7 +862,7 @@
             if (cls) dial.classList.add(cls);
         }
         function toTyping(len) {
-            for (var r = 0; r < 3; r++) animateNeedle(r, typingTarget(len, r), 220, easeOutCubic);
+            for (var r = 0; r < 3; r++) animateNeedleStepped(r, typingTarget(len, r));
         }
 
         // ── Şifre alanı: her karakter SADECE bir iğneyi bir çentik döndürür (round-robin),
@@ -717,6 +875,7 @@
                 setMode(len > 0 ? 'typing' : 'idle');
                 setStatus(len > 0 ? 'Şifre giriliyor…' : 'Giriş yapmaya hazır');
                 toTyping(len);
+                spinInnerRandom();   // iç kadranlar — büyük iğnelerden bağımsız rastgele dönüş
             });
         }
 
@@ -777,6 +936,7 @@
 
         // ── İlk render ──
         NEEDLES.forEach(function (n, r) { placeNeedle(r, ndlDeg[r]); });
+        innerGroups.forEach(function (g, idx) { placeInner(idx, innerDeg[idx]); });
 
         // Tam-sayfa POST fallback'i (fetch/network istisnası) sunucu tarafında ModelState
         // hatasıyla yeniden render edildiyse kadran ilk açılışta hizasız/kırmızı başlar.
