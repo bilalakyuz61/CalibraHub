@@ -18,7 +18,7 @@
                      || (controller == "production" && action is "workorders" or "workorderedit");
     var productionWorkOrdersActive = controller == "production" && action is "workorders" or "workorderedit";
     var adminParametersActive = controller == "admin" && action == "parameters";
-    var settingsOpen = controller == "admin" || controller == "setup" || controller == "gate";
+    var settingsOpen = controller == "admin" || controller == "setup" || controller == "gate" || controller == "viewbuilderpage";
     var setupDefinitionsActive = controller == "setupuser";
     var viewSettingsActive = controller == "admin" && action == "viewsettings";
     var isSystemAdmin = string.Equals(
@@ -1155,6 +1155,22 @@
 
                 @if (isSystemAdmin)
                 {
+                    <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-view-builder">
+                        <a class="side-subitem @(controller == "viewbuilderpage" ? "active" : string.Empty)"
+                           href="/ViewBuilder" title="SQL View Yönetimi">
+                            <span class="menu-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                    <polyline points="2 17 12 22 22 17"/>
+                                    <polyline points="2 12 12 17 22 12"/>
+                                </svg>
+                            </span>
+                            <span class="menu-text">SQL View Yönetimi</span>
+                        </a>
+                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="SQL View Yönetimi favorilere ekle">
+                            <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                        </button>
+                    </div>
                     <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-system-admin">
                         <a class="side-subitem @(controller == "gate" || controller == "setup" ? "active" : string.Empty)"
                            href="/Gate" title="Sistem Yönetimi">

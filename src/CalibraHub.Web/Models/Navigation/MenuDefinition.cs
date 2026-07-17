@@ -81,6 +81,9 @@ public static class MenuDefinition
             settingsChildren.Add(
                 new("settings.healthcheck", isEn ? "System Health Check" : "Sistem Sağlık Kontrolü", "Activity", "/Admin/HealthCheck", null));
             settingsChildren.Add(
+                new("settings.viewbuilder", isEn ? "SQL View Management" : "SQL View Yönetimi",       "Layers", "/ViewBuilder", null,
+                    MatchPath: "/ViewBuilder"));
+            settingsChildren.Add(
                 new("settings.gateadmin",   isEn ? "System Management"   : "Sistem Yönetimi",         "ShieldCheck", "/Gate", null,
                     MatchPath: "/Gate"));
         }

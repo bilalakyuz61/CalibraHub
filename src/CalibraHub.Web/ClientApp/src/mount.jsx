@@ -49,6 +49,8 @@ import './components/ReportDesigner/ReportDesigner.css'
 import AuditMonitor from './components/AuditLog/AuditMonitor'
 import AuditTrailPanel from './components/AuditLog/AuditTrailPanel'
 import './components/AuditLog/auditLog.css'
+import ViewBuilder from './components/ViewBuilder/ViewBuilder'
+import './components/ViewBuilder/ViewBuilder.css'
 import OperationGrid from './components/OperationGrid/OperationGrid'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
@@ -1883,3 +1885,27 @@ function mountAuditTrail(element, config) {
   return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountAuditTrail = mountAuditTrail
+
+/**
+ * ViewBuilder mount — SQL View Yönetimi ekranı (/ViewBuilder, SystemAdmin-only).
+ * CLAUDE.md "SQL View Yönetimi — Kontrollü İstisna" (2026-07-17, Faz 2).
+ * @param {HTMLElement} element
+ * @param {{ apiBase?: string }} config
+ */
+function mountViewBuilder(element, config) {
+  config = config || {}
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ViewBuilder, { config: { apiBase: config.apiBase || '/api/view-builder' } })
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountViewBuilder = mountViewBuilder
