@@ -4078,6 +4078,12 @@ body.app-theme-dark .cst-root {
    hedefi). Govde/satirlar Tailwind dark: varyanti ile tema-farkinda
    (SmartBoard.jsx'in dual-theme buton deseniyle ayni); burada sadece
    native form kontrolleri (arama/rename input'lari) icin color-scheme
-   sinyali tanimlanir — CLAUDE.md "color-scheme zorunlulugu". ══════════ */
+   sinyali tanimlanir — CLAUDE.md "color-scheme zorunlulugu".
+   NOT (2026-07-17 bug fix): segment butonlarinin/inputlarin bare "border"
+   ve "bg-white" Tailwind class'lari yerine "border-[1px]"/"bg-white/100"
+   kullandigini gorursen — bilinclidir. bootstrap.min.css ayni isimli
+   utility'leri !important ile tanimliyor, dark: override'i sessizce
+   eziyordu (koyu temada beyaz kutu bug'i). Detay: dosyanin en ustundeki
+   yorum bloguna bak. ══════════ */
 .scs-panel { color-scheme: light; }
 body.app-theme-dark .scs-panel { color-scheme: dark; }
