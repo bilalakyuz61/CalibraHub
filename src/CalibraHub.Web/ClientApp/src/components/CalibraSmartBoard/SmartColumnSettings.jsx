@@ -25,6 +25,17 @@
  *   3. Kaydet → columnConfigService.saveBoardColumnConfig(boardKey, {visibleIds,
  *      order, columns}) — localStorage'a hemen, backend'e best-effort.
  */
+/* NOT (tema bug fix, bkz. CLAUDE.md "CSS ve Tema Kuralleri"): asagida bircok
+ * className'de bare "border" ve "bg-white" yerine "border-[1px]" / "bg-white/100"
+ * kullanilir. Sebep: bootstrap.min.css .bg-white / .border / .text-white
+ * class'larini "!important" ile tanimliyor (global olarak _Layout.cshtml'de
+ * yukleniyor). Tailwind'in ayni isimli utility'si (dark: varyanti dahil) normal
+ * (important'siz) oldugu icin Bootstrap'in kurali her zaman kazaniyor — sonuc:
+ * segment butonlari/inputlar KOYU TEMADA HER ZAMAN BEYAZ render ediliyordu
+ * (dark: override'i sessizce eziliyordu). Cozum: value/arbitrary suffix'li
+ * (bg-white/100, border-[1px]) esdeger ama Bootstrap'la CARPISMAYAN class adi
+ * uretmek — gorsel sonuc birebir ayni, sadece isim collision'i ortadan kalkiyor.
+ * Bu dosyada YENI bare "border"/"bg-white" EKLEME — ayni tuzaga dusersin. */
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -110,7 +121,7 @@ function ColumnRow(props) {
       ref={sortable.setNodeRef}
       style={style}
       {...sortable.attributes}
-      className={'rounded-xl border transition-all duration-[140ms] overflow-hidden ' +
+      className={'rounded-xl border-[1px] transition-all duration-[140ms] overflow-hidden ' +
         (sortable.isDragging
           ? 'border-indigo-400/50 bg-[#16223c] dark:bg-[#16223c]'
           : pinned
@@ -203,7 +214,7 @@ function ColumnRow(props) {
               value={format.label || ''}
               placeholder={column.label}
               onChange={function (e) { props.onSetLabel(e.target.value) }}
-              className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] text-xs text-slate-700 dark:text-white/70 placeholder-slate-400 dark:placeholder-white/25 focus:outline-none focus:border-indigo-400/50 dark:focus:border-indigo-400/40"
+              className="flex-1 min-w-0 px-2 py-1 rounded-lg bg-white/100 dark:bg-white/[0.04] border-[1px] border-slate-200 dark:border-white/[0.08] text-xs text-slate-700 dark:text-white/70 placeholder-slate-400 dark:placeholder-white/25 focus:outline-none focus:border-indigo-400/50 dark:focus:border-indigo-400/40"
             />
           </div>
 
@@ -219,7 +230,7 @@ function ColumnRow(props) {
                     key={opt.value}
                     type="button"
                     onClick={function () { props.onSetAlign(opt.value) }}
-                    className={'p-1.5 rounded-lg border transition-colors ' +
+                    className={'p-1.5 rounded-lg border-[1px] transition-colors ' +
                       (active
                         ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-600 dark:text-indigo-300'
                         : 'bg-white dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60')
