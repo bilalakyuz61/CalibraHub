@@ -347,6 +347,13 @@ builder.Services.AddScoped<IContactPersonTitleRepository, SqlContactPersonTitleR
 builder.Services.AddScoped<IMailSendBatchRepository, SqlMailSendBatchRepository>();
 builder.Services.AddScoped<IDbSchemaRepository, SqlDbSchemaRepository>();
 builder.Services.AddScoped<IDbSchemaService, DbSchemaService>();
+// SQL View Yönetimi (CLAUDE.md "SQL View Yönetimi — Kontrollü İstisna", 2026-07-17, Faz 1).
+// ViewBuilderService, ApprovalSqlQueryService ile aynı gerekçeyle Persistence katmanında
+// (ScriptDom + SqlServerConnectionFactory ihtiyacı Application referans vermez).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IViewDefinitionRepository,
+                           CalibraHub.Persistence.Repositories.SqlViewDefinitionRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IViewBuilderService,
+                           CalibraHub.Persistence.Repositories.ViewBuilderService>();
 builder.Services.AddScoped<ICardGroupRepository, SqlCardGroupRepository>();
 builder.Services.AddScoped<ICollaborationLockRepository, SqlCollaborationLockRepository>();
 builder.Services.AddScoped<IDesignTemplateRepository, SqlDesignTemplateRepository>();
