@@ -75,11 +75,22 @@ public interface IStockDocRepository
     ///     <paramref name="serialOverrideEnabled"/> AÇIKKEN istemci serileri rezerveyi override eder,
     ///     KAPALIYKEN farklı seri gönderilirse tüm kayıt reddedilir; (3) rezerve yok + istemci seçmezse
     ///     FIFO otomatik (en eski müsait InStock seriler). Seri adedi = teslim adedi (tam sayı) zorunlu.
+    ///
+    /// FAZ C (2026-07-17):
+    ///   • <paramref name="preferredOrderId"/> — verilmişse her malzeme için FIFO taraması bu siparişin
+    ///     açık satırlarını ÖNCE tüketir (sort öncelik), artan miktar normal FIFO'ya (tüm açık siparişler,
+    ///     tarih artan) düşer. <paramref name="fifoEnabled"/>=false + preferredOrderId verilmişse yalnız bu
+    ///     siparişin açık satırları taranır (tüm carinin siparişleri DEĞİL) — artan miktar bağlantısız kalır.
+    ///     Cari/belge-türü uyuşmuyorsa (sorgu onu bulamaz) sessizce etkisizdir, normal davranışa düşülür.
+    ///   • <paramref name="externalRefNumber"/> — Tedarikçi İrsaliye No, Document.ExternalRefNumber'a
+    ///     olduğu gibi yazılır (trim/cap zaten controller'da yapılır, repo aynen INSERT eder).
     /// </summary>
     Task<MobileDeliveryResult> SaveDeliveryFifoAsync(
         bool isPurchase, int contactId, string? note,
         IReadOnlyList<MobileDeliveryLineInput> lines,
-        bool fifoEnabled, bool forbidUnlinked, bool serialOverrideEnabled, int? createdById, CancellationToken ct);
+        bool fifoEnabled, bool forbidUnlinked, bool serialOverrideEnabled,
+        int? preferredOrderId, string? externalRefNumber,
+        int? createdById, CancellationToken ct);
 
     /// <summary>
     /// Üretim sarfı (iş emri bileşen sarfı, 2026-07-10) — tek transaction'da: iş emrinin

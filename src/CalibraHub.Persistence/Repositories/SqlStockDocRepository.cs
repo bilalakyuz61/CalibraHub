@@ -1165,7 +1165,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     public async Task<MobileDeliveryResult> SaveDeliveryFifoAsync(
         bool isPurchase, int contactId, string? note,
         IReadOnlyList<MobileDeliveryLineInput> lines,
-        bool fifoEnabled, bool forbidUnlinked, bool serialOverrideEnabled, int? createdById, CancellationToken ct)
+        bool fifoEnabled, bool forbidUnlinked, bool serialOverrideEnabled,
+        int? preferredOrderId, string? externalRefNumber,
+        int? createdById, CancellationToken ct)
     {
         var companyId     = _connectionFactory.ResolveCurrentCompanyId();
         var targetType    = isPurchase ? "alis_irsaliyesi" : "satis_irsaliyesi";
@@ -1212,12 +1214,20 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             {
                 var remaining = a.Quantity;
                 var allocs = new List<FifoAlloc>();
-                if (fifoEnabled)
+                // FAZ C (2026-07-17): preferredOrderId verilmişse fifoEnabled=false iken de sorgu çalışır
+                // (queryOnlyPreferred=true → yalnız bu siparişe daralt); fifoEnabled=true iken tüm açık
+                // siparişler taranır ama preferred sipariş sort'ta ÖNCE gelir (CASE WHEN önceliği).
+                var queryOnlyPreferred = preferredOrderId.HasValue && !fifoEnabled;
+                if (fifoEnabled || preferredOrderId.HasValue)
                 {
                     var openLines = new List<FifoOpenLine>();
                     await using (var sel = conn.CreateCommand())
                     {
                         sel.Transaction = tx;
+                        var preferredFilter = queryOnlyPreferred ? " AND doc.[Id] = @PreferredOrderId" : "";
+                        var preferredOrderBy = preferredOrderId.HasValue
+                            ? "CASE WHEN doc.[Id] = @PreferredOrderId THEN 0 ELSE 1 END, "
+                            : "";
                         sel.CommandText = $"""
                             SELECT dl.[Id], dl.[BaseQuantity], dl.[DeliveredQuantity], dl.[Quantity],
                                    dl.[UnitId], dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal], dl.[CombinationId],
@@ -1229,13 +1239,15 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                             WHERE doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
                               AND doc.[ContactId] = @ContactId AND dt.[Code] = @OrderType
                               AND dl.[ItemId] = @ItemId AND dl.[MovementType] IS NULL
-                              AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
-                            ORDER BY doc.[DocumentDate], doc.[DocumentNumber], dl.[LineNo], dl.[Id];
+                              AND dl.[BaseQuantity] > dl.[DeliveredQuantity]{preferredFilter}
+                            ORDER BY {preferredOrderBy}doc.[DocumentDate], doc.[DocumentNumber], dl.[LineNo], dl.[Id];
                             """;
                         sel.Parameters.AddWithValue("@Cid", companyId);
                         sel.Parameters.AddWithValue("@ContactId", contactId);
                         sel.Parameters.AddWithValue("@OrderType", orderType);
                         sel.Parameters.AddWithValue("@ItemId", a.ItemId);
+                        if (preferredOrderId.HasValue)
+                            sel.Parameters.AddWithValue("@PreferredOrderId", preferredOrderId.Value);
                         await using var r = await sel.ExecuteReaderAsync(ct);
                         while (await r.ReadAsync(ct))
                             openLines.Add(new FifoOpenLine(
@@ -1289,16 +1301,17 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.Transaction = tx;
                 // ContactName Document'ta KOLON DEĞİL (ContactId JOIN'iyle çözülür) — yazılmaz.
                 // CurrencyId mobil V1'de şirket varsayılanı (1) — SaveQuoteAsync fallback'iyle aynı.
+                // ExternalRefNumber (2026-07-17) — Tedarikçi İrsaliye No; trim/cap controller'da yapılır.
                 ins.CommandText = $"""
                     INSERT INTO {T("Document")}
                         ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
                          [ContactId],[CurrencyId],
                          [SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
-                         [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
+                         [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId],[ExternalRefNumber])
                     SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, NULL,
                            @ContactId, 1,
                            0, 0, 0, 0, 0, 0,
-                           @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @ParentId
+                           @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @ParentId, @ExtRef
                     FROM {T("DocumentType")} dt WHERE dt.[Code] = @TargetType;
                     SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
@@ -1310,6 +1323,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.Parameters.AddWithValue("@CreatedById", (object?)createdById ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@ParentId", (object?)parentId ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@TargetType", targetType);
+                ins.Parameters.AddWithValue("@ExtRef", (object?)externalRefNumber ?? DBNull.Value);
                 docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
 

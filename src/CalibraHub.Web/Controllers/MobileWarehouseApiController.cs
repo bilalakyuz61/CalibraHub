@@ -35,6 +35,10 @@ namespace CalibraHub.Web.Controllers;
 ///   POST /api/mobile/warehouse/stock-out        — depo cikis belgesi (Increment 2)
 ///   POST /api/mobile/warehouse/transfer         — depo transferi, tek kaynak+tek hedef (Increment 2)
 ///   POST /api/mobile/warehouse/inventory-count  — sayim belgesi, HER ZAMAN taslak (Increment 2)
+///   POST /api/mobile/warehouse/delivery         — irsaliye (FIFO siparis baglama + lot/seri) (2026-07-16/17)
+///   GET  /api/mobile/warehouse/open-orders(/{id})     — acik siparis liste/detay (FAZ C, 2026-07-17)
+///   GET  /api/mobile/warehouse/inventory-counts       — taslak sayim listesi (FAZ C, 2026-07-17)
+///   GET  /api/mobile/warehouse/items/{id}/serials|lots — seri/lot secici besleme (2026-07-16)
 ///
 /// Yetki (2026-07-16): [Authorize] tek basina yeterli DEGIL — her endpoint merkezi
 /// IPermissionService.CheckAnyAsync'ten gecer (bkz. RequirePermissionAsync). Okuma
@@ -1007,7 +1011,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // Sozlesme (mobil istemci birebir tuketir — Kotlin delivery-mobile ile PAYLASILAN):
     //   body: {
     //     docType:"purchase"|"sales", contactId:int, note?:string,
-    //     externalRefNumber?:string,          // Tedarikçi İrsaliye No — KABUL EDİLİR, şu an KALICI DEĞİL (kolon yok; bkz. rapor)
+    //     externalRefNumber?:string,          // Tedarikçi İrsaliye No — Document.ExternalRefNumber'a PERSIST edilir (2026-07-17)
+    //     preferredOrderId?:int,               // FIFO tahsisinde bu sipariş ÖNCE tüketilir (bkz. aşağıdaki not)
     //     lines:[{
     //       itemId:int, quantity:number,
     //       serials?:string[],                // satış: rezerve override/seçim · alış: girilen seriler
@@ -1029,6 +1034,13 @@ public sealed class MobileWarehouseApiController : ControllerBase
     // OVERRIDE açıksa istemci serileri rezervi override eder (kapalıyken farklı seri → 400); (3) rezerve yok +
     // istemci boş → FIFO otomatik (en eski müsait). Alış: seriler girilir ya da autoGenerateSerials ile üretilir.
     //
+    // preferredOrderId (2026-07-17, FAZ C — /open-orders ile birlikte): kullanıcı belirli bir açık
+    // siparişi hedeflerse bu sipariş her malzeme için FIFO taramasında ÖNCE tüketilir, artan miktar
+    // normal FIFO'ya (tüm açık siparişler, tarih artan) düşer. FIFO_BIND parametre KAPALIYKEN yalnız
+    // preferred siparişe bağlanır — artan miktar bağlantısız kalır (bağlantısız-yasak parametresi yine
+    // geçerli). preferredOrderId cari/belge-türü uyuşmazsa (yanlış cari/tip) sessizce etkisizdir —
+    // sorgu onu zaten bulamaz, normal davranışa (FIFO ya da tümü-bağlantısız) düşülür.
+    //
     // Miktarlar ANA BIRIMDE (stock-in/out ile ayni konvansiyon). FIFO tahsisi + stok etkisi +
     // SourceLineId + DeliveredQuantity repo transaction'inda (SaveDeliveryFifoAsync — web
     // ConvertOrderToDeliveryAsync ikizi, AYNI bag alanlari). Fiyat: bağlanan satır sipariş
@@ -1042,10 +1054,12 @@ public sealed class MobileWarehouseApiController : ControllerBase
         int ItemId, decimal Quantity,
         IReadOnlyList<string>? Serials = null, string? LotCode = null, bool AutoGenerateSerials = false);
 
-    // ExternalRefNumber = Tedarikçi İrsaliye No (alış mal kabulünde tedarikçinin kendi irsaliye no'su).
+    // ExternalRefNumber = Tedarikçi İrsaliye No (alış mal kabulünde tedarikçinin kendi irsaliye no'su) —
+    // Document.ExternalRefNumber'a persist edilir. PreferredOrderId = FAZ C /open-orders akışından
+    // hedeflenen sipariş (bkz. yukarıdaki not) — opsiyonel, verilmezse davranış öncekiyle birebir aynı.
     public sealed record MobileDeliveryBody(
         string? DocType, int ContactId, string? Note, IReadOnlyList<MobileDeliveryBodyLine>? Lines,
-        string? ExternalRefNumber = null);
+        string? ExternalRefNumber = null, int? PreferredOrderId = null);
 
     /// <summary>Irsaliye (satış teslimat / alış mal kabul) — FIFO ile açık siparişlere bağlar.</summary>
     [HttpPost("delivery")]
@@ -1097,11 +1111,14 @@ public sealed class MobileWarehouseApiController : ControllerBase
         var serialOverrideEnabled = await _companyParams.GetBoolAsync(
             StockParameters.FormCode, StockParameters.SalesDeliverySerialOverrideKey, ct) ?? true;
 
-        // Tedarikçi İrsaliye No (ExternalRefNumber): Document tablosunda bunu tutacak ADANMIŞ bir kolon
-        // YOK (RefNo bile gerçek kolon değil — Notes'a katlanır). Kolon EKLEME kararı/DDL db-uzman
-        // sahası olduğundan alan KABUL edilir ama şu an KALICI DEĞİL (sessizce yok sayılır; 400 verilmez).
-        // Sözleşme stabil kalır → Kotlin istemci alanı gönderebilir. Kolon eklenince burada persist edilecek.
-        _ = body.ExternalRefNumber;
+        // Tedarikçi İrsaliye No (ExternalRefNumber, 2026-07-17): db-uzman Document.ExternalRefNumber
+        // NVARCHAR(50) NULL kolonunu ekledi (CalibraDatabaseInitializer, idempotent ensure) — artık
+        // gerçekten persist edilir. Trim + boş→null + 50 karakter cap (kolon boyutu).
+        var externalRefNumber = string.IsNullOrWhiteSpace(body.ExternalRefNumber)
+            ? null
+            : body.ExternalRefNumber.Trim();
+        if (externalRefNumber is { Length: > 50 })
+            externalRefNumber = externalRefNumber[..50];
 
         // Bağlantısız satır fiyatı: standart fiyat çözücü (cari listesi → Genel Liste). Bağlanan
         // satırda repo sipariş fiyatını kullanır. CurrencyId mobil V1'de şirket varsayılanı (1).
@@ -1130,7 +1147,8 @@ public sealed class MobileWarehouseApiController : ControllerBase
             //     guard'ı tek transaction'da (SaveDeliveryFifoAsync, ConvertOrderToDeliveryAsync ikizi).
             var result = await _stockDocRepo.SaveDeliveryFifoAsync(
                 isPurchase, body.ContactId, body.Note, repoLines, fifoEnabled, forbidUnlinked,
-                serialOverrideEnabled, userId > 0 ? userId : null, ct);
+                serialOverrideEnabled, body.PreferredOrderId, externalRefNumber,
+                userId > 0 ? userId : null, ct);
 
             // Belge soyağacı — irsaliye ← sipariş(ler). Web DeliverSalesOrderJson paritesi; çok
             // siparişli FIFO'da her kaynak sipariş için ayrı kenar (İlişkili Belgeler paneli).
@@ -1330,6 +1348,228 @@ public sealed class MobileWarehouseApiController : ControllerBase
                 expiry   = r.IsDBNull(1) ? (DateTime?)null : r.GetDateTime(1),
                 quantity = r.GetDecimal(2),
             });
+        return Ok(result);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // GET open-orders  &  GET open-orders/{id}  (FAZ C, 2026-07-17 — açık sipariş hedefleme)
+    // ──────────────────────────────────────────────────────────────────────
+    // Sozlesme (mobil istemci birebir tuketir):
+    //   GET open-orders?docType=sales|purchase&q=&take=50
+    //     → [{ id:int, number:string, contactId:int, contactName:string, date:string,
+    //          openLineCount:int, totalOpenQuantity:number }]
+    //     — en az 1 açık satırı (BaseQuantity>DeliveredQuantity, ticari satır=MovementType IS NULL) olan
+    //       satış/alış siparişleri; q = numara/cari LIKE; sıralama tarih ASC (FIFO görünümü); take cap 100.
+    //   GET open-orders/{id}
+    //     → { id, number, contactId, contactName, date,
+    //         lines:[{ orderLineId:int, itemId:int, itemCode:string, itemName:string, unit:string,
+    //                  orderedQuantity:number, deliveredQuantity:number, openQuantity:number,
+    //                  trackingType:"None"|"Lot"|"Serial", autoSerial:bool }] } — yalnız açık satırlar.
+    //     404 { error:string } — sipariş yok/pasif/yanlış tür.
+    //   400 { error:string } (yalnız liste — docType eksik/geçersiz)   403 { ok:false, message, error }
+    // Yetki: irsaliye VIEW (DeliveryFormCodes) — Delivery'nin akışına hazırlık (POST delivery body'sine
+    // opsiyonel preferredOrderId olarak buradan seçilen sipariş id'si geçirilir, bkz. Delivery yorumu).
+    // Miktarlar GÖSTERİM BİRİMİNDE (GetOrderOpenLinesAsync'in web kısmi-teslimat modalıyla aynı formülü:
+    // factor=BaseQuantity/Quantity, openDisplay/delivDisplay yuvarlanır) — delivery'nin quantity'si
+    // (ANA BİRİM) ile KARIŞTIRILMAMALI; bu iki endpoint yalnız gösterim/seçim amaçlıdır.
+
+    /// <summary>Açık (en az 1 teslim edilmemiş kalemi olan) satış/alış siparişleri — FIFO görünümü (tarih ASC).</summary>
+    [HttpGet("open-orders")]
+    public async Task<IActionResult> OpenOrders(
+        [FromQuery] string? docType, [FromQuery] string? q, [FromQuery] int? take, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(DeliveryFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+
+        var isPurchase = string.Equals(docType, "purchase", StringComparison.OrdinalIgnoreCase);
+        var isSales    = string.Equals(docType, "sales",    StringComparison.OrdinalIgnoreCase);
+        if (!isPurchase && !isSales)
+            return BadRequest(new { error = "Geçersiz belge türü. docType 'sales' veya 'purchase' olmalı." });
+        var orderType = isPurchase ? "alis_siparisi" : "satis_siparisi";
+
+        var pageSize = take.GetValueOrDefault(50);
+        if (pageSize <= 0) pageSize = 50;
+        if (pageSize > 100) pageSize = 100;
+        var query = (q ?? string.Empty).Trim();
+
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP (@Take) doc.[Id], doc.[DocumentNumber], doc.[ContactId], c.[AccountTitle], doc.[DocumentDate],
+                   COUNT(dl.[Id]) AS OpenLineCount,
+                   SUM(dl.[BaseQuantity] - dl.[DeliveredQuantity]) AS TotalOpenQty
+            FROM [{_schema}].[Document] doc
+            INNER JOIN [{_schema}].[DocumentType] dt ON dt.[Id] = doc.[DocumentTypeId]
+            INNER JOIN [{_schema}].[DocumentLine] dl ON dl.[DocumentId] = doc.[Id]
+                AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
+                AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
+            LEFT JOIN [{_schema}].[Contact] c ON c.[Id] = doc.[ContactId]
+            WHERE doc.[CompanyId] = @CompanyId AND doc.[IsActive] = 1 AND dt.[Code] = @OrderType
+              AND (@Q = N'' OR doc.[DocumentNumber] LIKE @QLike OR c.[AccountTitle] LIKE @QLike)
+            GROUP BY doc.[Id], doc.[DocumentNumber], doc.[ContactId], c.[AccountTitle], doc.[DocumentDate]
+            ORDER BY doc.[DocumentDate] ASC, doc.[DocumentNumber] ASC;
+            """;
+        cmd.Parameters.AddWithValue("@Take", pageSize);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@OrderType", orderType);
+        cmd.Parameters.AddWithValue("@Q", query);
+        cmd.Parameters.AddWithValue("@QLike", "%" + query + "%");
+
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            result.Add(new
+            {
+                id                = r.GetInt32(0),
+                number            = r.GetString(1),
+                contactId         = r.IsDBNull(2) ? 0 : r.GetInt32(2),
+                contactName       = r.IsDBNull(3) ? "" : r.GetString(3),
+                date              = r.GetDateTime(4),
+                openLineCount     = r.GetInt32(5),
+                totalOpenQuantity = r.GetDecimal(6),
+            });
+        return Ok(result);
+    }
+
+    /// <summary>Bir açık siparişin detayı — yalnız açık (teslim edilmemiş) kalemler, seri/lot UI gating alanlarıyla.</summary>
+    [HttpGet("open-orders/{id:int}")]
+    public async Task<IActionResult> OpenOrderDetail(int id, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(DeliveryFormCodes, ViewActions, ct) is { } denied)
+            return denied;
+        if (id <= 0) return NotFound(new { error = "Sipariş bulunamadı." });
+
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        string number; int contactIdVal; string? contactName; DateTime date;
+        await using (var h = conn.CreateCommand())
+        {
+            h.CommandText = $"""
+                SELECT doc.[DocumentNumber], doc.[ContactId], c.[AccountTitle], doc.[DocumentDate]
+                FROM [{_schema}].[Document] doc
+                INNER JOIN [{_schema}].[DocumentType] dt ON dt.[Id] = doc.[DocumentTypeId]
+                LEFT JOIN [{_schema}].[Contact] c ON c.[Id] = doc.[ContactId]
+                WHERE doc.[Id] = @Id AND doc.[CompanyId] = @CompanyId AND doc.[IsActive] = 1
+                  AND dt.[Code] IN (N'satis_siparisi', N'alis_siparisi');
+                """;
+            h.Parameters.AddWithValue("@Id", id);
+            h.Parameters.AddWithValue("@CompanyId", companyId);
+            await using var hr = await h.ExecuteReaderAsync(ct);
+            if (!await hr.ReadAsync(ct))
+                return NotFound(new { error = "Sipariş bulunamadı." });
+            number      = hr.GetString(0);
+            contactIdVal = hr.IsDBNull(1) ? 0 : hr.GetInt32(1);
+            contactName = hr.IsDBNull(2) ? null : hr.GetString(2);
+            date        = hr.GetDateTime(3);
+        }
+
+        // Açık satır formülü GetOrderOpenLinesAsync (web kısmi-teslimat modalı) ile BİREBİR aynı:
+        // factor = BaseQuantity/Quantity, openDisplay = openBase/factor, delivDisplay = qty - openDisplay.
+        var lines = new List<object>();
+        await using (var l = conn.CreateCommand())
+        {
+            l.CommandText = $"""
+                SELECT dl.[Id], dl.[ItemId], i.[Code], i.[Name], u.[Name],
+                       dl.[Quantity], dl.[BaseQuantity], dl.[DeliveredQuantity],
+                       ISNULL(i.[TrackingType], N'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial
+                FROM [{_schema}].[DocumentLine] dl
+                LEFT JOIN [{_schema}].[Items] i ON i.[Id] = dl.[ItemId]
+                LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = dl.[UnitId]
+                WHERE dl.[DocumentId] = @Id AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
+                  AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
+                ORDER BY dl.[LineNo];
+                """;
+            l.Parameters.AddWithValue("@Id", id);
+            await using var lr = await l.ExecuteReaderAsync(ct);
+            while (await lr.ReadAsync(ct))
+            {
+                var qty     = lr.GetDecimal(5);
+                var baseQty = lr.GetDecimal(6);
+                var deliv   = lr.GetDecimal(7);
+                var factor       = qty != 0m ? baseQty / qty : 1m;
+                var openBase     = baseQty - deliv;
+                var openDisplay  = Math.Round(factor != 0m ? openBase / factor : openBase, 4);
+                var delivDisplay = Math.Round(qty - openDisplay, 4);
+                if (delivDisplay < 0m) delivDisplay = 0m;
+                var trackRaw = lr.GetString(8);
+                var tracking = string.Equals(trackRaw, "Lot", StringComparison.OrdinalIgnoreCase) ? "Lot"
+                             : string.Equals(trackRaw, "Serial", StringComparison.OrdinalIgnoreCase) ? "Serial"
+                             : "None";
+                lines.Add(new
+                {
+                    orderLineId       = lr.GetInt32(0),
+                    itemId            = lr.GetInt32(1),
+                    itemCode          = lr.IsDBNull(2) ? null : lr.GetString(2),
+                    itemName          = lr.IsDBNull(3) ? null : lr.GetString(3),
+                    unit              = lr.IsDBNull(4) ? null : lr.GetString(4),
+                    orderedQuantity   = qty,
+                    deliveredQuantity = delivDisplay,
+                    openQuantity      = openDisplay,
+                    trackingType      = tracking,
+                    autoSerial        = lr.GetBoolean(9),
+                });
+            }
+        }
+
+        return Ok(new { id, number, contactId = contactIdVal, contactName = contactName ?? "", date, lines });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // GET inventory-counts (FAZ C, 2026-07-17 — taslak sayım listesi)
+    // ──────────────────────────────────────────────────────────────────────
+    // Sozlesme (mobil istemci birebir tuketir):
+    //   GET inventory-counts?take=50
+    //     → [{ id:int, documentNumber:string, locationName:string, date:string, lineCount:int }]
+    //     — YALNIZ taslak (InventoryCount.Status=0) sayımlar, tarih DESC.
+    //   403 { ok:false, message, error }  — yetki yok
+    // Yetki: InventoryCount VIEW (StockQueryFormCodes alt kümesi yerine tek form kodu — POST
+    // inventory-count/{id}/apply'nin WriteActions kapısıyla aynı FormCode, farklı aksiyon seti).
+    // Not: mevcut POST /inventory-count (tekil) ve POST /inventory-count/{id}/apply endpoint'leriyle
+    // route çakışması yok (farklı HTTP metodu + farklı path segmenti "inventory-counts" çoğul).
+
+    /// <summary>Taslak (uygulanmamış) sayım fişleri — Yansıt öncesi mobil listeleme, tarih DESC.</summary>
+    [HttpGet("inventory-counts")]
+    public async Task<IActionResult> InventoryCounts([FromQuery] int? take, CancellationToken ct)
+    {
+        if (await RequirePermissionAsync(new[] { FormCodes.InventoryCount }, ViewActions, ct) is { } denied)
+            return denied;
+
+        var pageSize = take.GetValueOrDefault(50);
+        if (pageSize <= 0) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP (@Take) d.[Id], d.[DocumentNumber], loc.[LocationName], loc.[LocationCode], d.[DocumentDate],
+                   (SELECT COUNT(*) FROM [{_schema}].[InventoryCountLine] l WHERE l.[InventoryCountId] = ic.[Id]) AS LineCount
+            FROM [{_schema}].[InventoryCount] ic
+            INNER JOIN [{_schema}].[Document] d ON d.[Id] = ic.[DocumentId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = ic.[LocationId]
+            WHERE d.[CompanyId] = @CompanyId AND d.[IsActive] = 1 AND ic.[Status] = 0
+            ORDER BY d.[DocumentDate] DESC, d.[Id] DESC;
+            """;
+        cmd.Parameters.AddWithValue("@Take", pageSize);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var locName = r.IsDBNull(2) ? null : r.GetString(2);
+            var locCode = r.IsDBNull(3) ? null : r.GetString(3);
+            result.Add(new
+            {
+                id             = r.GetInt32(0),
+                documentNumber = r.GetString(1),
+                locationName   = locName ?? locCode ?? "",
+                date           = r.GetDateTime(4),
+                lineCount      = r.GetInt32(5),
+            });
+        }
         return Ok(result);
     }
 
