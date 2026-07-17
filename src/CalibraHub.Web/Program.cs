@@ -354,6 +354,14 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IView
                            CalibraHub.Persistence.Repositories.SqlViewDefinitionRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IViewBuilderService,
                            CalibraHub.Persistence.Repositories.ViewBuilderService>();
+// Sayfa-içi Yorum sistemi (2026-07-17) — repo + servis + Katman-4 options (concrete, "PageComments" config'ten).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPageCommentRepository,
+                           CalibraHub.Persistence.Repositories.SqlPageCommentRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IPageCommentService,
+                           CalibraHub.Application.Services.PageCommentService>();
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("PageComments").Get<CalibraHub.Application.Configuration.PageCommentsOptions>()
+    ?? new CalibraHub.Application.Configuration.PageCommentsOptions());
 builder.Services.AddScoped<ICardGroupRepository, SqlCardGroupRepository>();
 builder.Services.AddScoped<ICollaborationLockRepository, SqlCollaborationLockRepository>();
 builder.Services.AddScoped<IDesignTemplateRepository, SqlDesignTemplateRepository>();
