@@ -11,13 +11,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
+import androidx.compose.material.icons.filled.PendingActions
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -38,8 +45,10 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Depo modülü ana ekranı — operasyon listesi.
- * Increment 2a: Stok Sorgu + Giriş + Çıkış aktif; Transfer/Sayım "yakında"
- * (disabled tile, Increment 2b'de dolacak — bkz. coordinator notu).
+ * 2026-07-17 FAZ C: Açık Siparişler (Satış+Alış, 2 kart — DeliveryDocType parametreli TEK
+ * OpenOrderListScreen'e navigate eder, Alış/Satış İrsaliyesi'nin AYNI iki-kart-tek-ekran deseni)
+ * + Taslak Sayımlar eklendi (10/10 depo kartı). Kart sayısı arttığı için Column artık
+ * kaydırılabilir ([verticalScroll]) — önceki 7 kartlık sürümde taşma riski yoktu, şimdi var.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +56,13 @@ fun WarehouseHomeScreen(
     onOpenStockQuery: () -> Unit,
     onOpenStockIn: () -> Unit,
     onOpenStockOut: () -> Unit,
+    onOpenDeliveryPurchase: () -> Unit,
+    onOpenDeliverySales: () -> Unit,
+    onOpenTransfer: () -> Unit,
+    onOpenCount: () -> Unit,
+    onOpenOpenOrdersSales: () -> Unit,
+    onOpenOpenOrdersPurchase: () -> Unit,
+    onOpenDraftCounts: () -> Unit,
     onBack: () -> Unit
 ) {
     Scaffold(
@@ -55,7 +71,7 @@ fun WarehouseHomeScreen(
                 title = { Text("Depo") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
                     }
                 }
             )
@@ -65,6 +81,7 @@ fun WarehouseHomeScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -90,18 +107,53 @@ fun WarehouseHomeScreen(
                 onClick = onOpenStockOut
             )
             WarehouseOperationCard(
+                title = "Alış İrsaliyesi",
+                subtitle = "Tedarikçiden gelen malzeme irsaliyesi",
+                icon = Icons.Default.LocalShipping,
+                enabled = true,
+                onClick = onOpenDeliveryPurchase
+            )
+            WarehouseOperationCard(
+                title = "Satış İrsaliyesi",
+                subtitle = "Müşteriye giden malzeme irsaliyesi",
+                icon = Icons.Default.ReceiptLong,
+                enabled = true,
+                onClick = onOpenDeliverySales
+            )
+            WarehouseOperationCard(
+                title = "Açık Satış Siparişleri",
+                subtitle = "Teslim edilmemiş sipariş kalemlerini teslim et",
+                icon = Icons.Default.PendingActions,
+                enabled = true,
+                onClick = onOpenOpenOrdersSales
+            )
+            WarehouseOperationCard(
+                title = "Açık Alış Siparişleri",
+                subtitle = "Mal kabul bekleyen sipariş kalemlerini teslim al",
+                icon = Icons.AutoMirrored.Filled.Assignment,
+                enabled = true,
+                onClick = onOpenOpenOrdersPurchase
+            )
+            WarehouseOperationCard(
                 title = "Transfer",
-                subtitle = "Yakında",
+                subtitle = "Lokasyonlar arası malzeme transferi",
                 icon = Icons.Default.SwapHoriz,
-                enabled = false,
-                onClick = {}
+                enabled = true,
+                onClick = onOpenTransfer
             )
             WarehouseOperationCard(
                 title = "Sayım",
-                subtitle = "Yakında",
+                subtitle = "Fiziksel sayım ile bakiye karşılaştırma",
                 icon = Icons.Default.Checklist,
-                enabled = false,
-                onClick = {}
+                enabled = true,
+                onClick = onOpenCount
+            )
+            WarehouseOperationCard(
+                title = "Taslak Sayımlar",
+                subtitle = "Yansıtılmamış sayım belgelerini stoğa işle",
+                icon = Icons.AutoMirrored.Filled.FactCheck,
+                enabled = true,
+                onClick = onOpenDraftCounts
             )
         }
     }

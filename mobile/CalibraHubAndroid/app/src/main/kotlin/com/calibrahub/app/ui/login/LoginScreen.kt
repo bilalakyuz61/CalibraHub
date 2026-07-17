@@ -24,31 +24,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.calibrahub.app.R
 import com.calibrahub.app.app
 import com.calibrahub.app.data.CompanyDto
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -272,91 +263,78 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
 private enum class LockDialState { Idle, Typing, Loading, Solved, Failed }
 
 /**
- * CALIBRAHUB'ın kilit kadranında dönen TEK kelimesi. Decoy/dolgu harf YOK — üç katman da
- * BİREBİR bu 10 harfi, çemberin tamamı boyunca sırayla taşır. Katmanlar hizalandığında
- * (ofsetleri eşit ya da 10'un aynı katı) üçü üst üste tam çakışır ve tek net "CALIBRAHUB"
- * okunur; hizasızken her katman farklı açıda durduğundan aynı slotta üç farklı harf üst
- * üste biner (hayalet/üçlenmiş görünüm).
+ * CALIBRAHUB'ın kimlik kalibrasyon kadranındaki 3 iğne (yelkovan) rengi — merkezden (hub)
+ * çıkan, farklı uzunluk/kalınlıkta 3 ibre. Web login ekranındaki `cald-*` SVG kadranıyla
+ * (bkz. `Views/Account/Login.cshtml`, `window.CalibraLoginDial`) BİREBİR aynı kanonik marka
+ * paleti — SABİT hex'tir (tema token'ından DEĞİL), light/dark her ikisinde de aynı canlı vurgu.
  */
-private const val LockDialWord = "CALIBRAHUB"
+private val NeedleColorIndigo = Color(0xFF6366F1)  // n1 — ana (şifre) iğnesi, en uzun+kalın
+private val NeedleColorCyan   = Color(0xFF06B6D4)  // n2 — ikincil iğne
+private val NeedleColorViolet = Color(0xFF8B5CF6)  // n3 — üçüncül iğne, en kısa+ince
+
+private const val DialSlotCount = 12  // kadran çentik sayısı (web ile aynı: 12 çentik)
+private const val DialSlotDeg   = 30f // çentik başına açı = 360/12 (sabit değer, const-ifade riski yok)
 
 /**
- * Bir kilit katmanının sabit tanımı. Üç katman AYNI yarıçapta + AYNI 10 harfi taşır — İÇ İÇE
- * (konsantrik) DEĞİL, ÜST ÜSTE (superimposed) çizilirler; yalnız kendi taban faz ofseti
- * ([baseScramble]) ve dönüş yönüyle ([direction]) birbirinden ayrışırlar. [alpha] düşük
- * tutulur ki üç katman üst üste bindiğinde alttaki/üstteki görünsün (yarı saydam çakışma).
- *
- * [baseScramble] katmanlar arası BİLEREK tam sayı farkı OLMAYAN (kesirli) değerlerdedir:
- * yazma adımları hep tam sayı slot olduğundan iki katman arasındaki faz farkı yazarken asla
- * tam sayıya (dolayısıyla hizaya) yuvarlanamaz — "doğru parolayı yazarak çözme" ihtimali
- * yapısal olarak kapalıdır. Çözülme YALNIZ sunucu onayında, katmanlar ortak hedefe (10'un
- * katı) animasyonla oturtularak gerçekleşir.
+ * Bir iğnenin sabit tanımı: dinlenme (idle) çentiği + yazarken ilerleme yönü ([direction] —
+ * YALNIZ kozmetik, hangi yöne "ilerlediğini" belirler, sonucu etkilemez) + görsel özellikler
+ * (renk/uzunluk/kalınlık — saat ibresi hiyerarşisi: n1 en uzun+kalın, n3 en kısa+ince).
+ * 3 iğne birbirinden TAM 120° ayrık çentiklerde (1/5/9 → 30°/150°/270°) dinlenir.
  */
-private data class LockLayerSpec(
-    val baseScramble: Float,  // taban faz ofseti (slot; katmanlar arası kesirli fark zorunlu)
-    val direction: Int,       // yazarken dönüş yönü: +1 saat yönü, -1 tersi
-    val alpha: Float,         // katman saydamlığı — üst üste binme bu sayede görünür olur
+private data class NeedleSpec(
+    val restSlot: Int,
+    val direction: Int,
+    val color: Color,
+    val lengthDp: Float,
+    val strokeDp: Float,
 )
 
-/**
- * 3 katman — hepsi [LockDialWord]'ün aynı 10 harfini, aynı yarıçap bandında taşır. Taban
- * fazları TAM ÜÇTE-BİR TUR ayrık (0 / +10/3 / -10/3 slot ≈ 0° / +120° / -120°) → boşta üç
- * kopya çemberin üç ayrı üçte-birine SERPİŞTİRİLİR: her 36°'lik harf diliminde üç katman
- * birbirinden 12° arayla üç ayrı alt-konumda oturur, dolayısıyla aynı harf üç kez neredeyse
- * üst üste yığılmaz — marker çevresinde üç FARKLI harf (üç farklı katmandan) iç içe görünür ve
- * üç ayrı katman olduğu açıkça ayırt edilir (eski ~13°'lik toplam span'de üçü tek harf gibi
- * kümeleniyordu, "3 katman" hissi kayboluyordu). Alpha değerleri kademeli (derinlik hissi)
- * katman ayrımını pekiştirir; üçü hizalandığında (yalnız sunucu onayıyla) toplam kaplama
- * ~%93'e çıkar ve tek net kelime gibi görünür.
- *
- * NOT — simetri tuzağı: +10/3 ve -10/3 BİLEREK üçte-bir (yarım DEĞİL) seçildi. Yarım-slot
- * simetride (ör. +3.5 / -3.5) iki katmanın farkı (3.5 - (-3.5) = 7.0) TAM SAYIYA düşer ve bu
- * ikili kendi arasında yazarak hizalanabilir hale gelirdi; üçte-bir simetride fark her zaman
- * 2/3 slot (kesirli) kalır — "yazarak çözülemez" garantisi ikili bazında da yapısal olarak
- * korunur (bkz. [LockLayerSpec] dokümantasyonu).
- */
-private val LockDialLayers = listOf(
-    LockLayerSpec(baseScramble = 0.00f,                        direction = +1, alpha = 0.55f),
-    LockLayerSpec(baseScramble = LockDialWord.length / 3f,     direction = -1, alpha = 0.60f),
-    LockLayerSpec(baseScramble = -(LockDialWord.length / 3f),  direction = +1, alpha = 0.65f),
+private val DialNeedles = listOf(
+    NeedleSpec(restSlot = 1, direction = +1, color = NeedleColorIndigo, lengthDp = 58f, strokeDp = 3.4f),
+    NeedleSpec(restSlot = 5, direction = -1, color = NeedleColorCyan,   lengthDp = 46f, strokeDp = 2.6f),
+    NeedleSpec(restSlot = 9, direction = +1, color = NeedleColorViolet, lengthDp = 35f, strokeDp = 2.1f),
 )
 
-private const val LockDialRadiusDp = 74f   // üç katmanın da PAYLAŞTIĞI ortak yarıçap
-private const val LockDialFontSp   = 17f   // ortak harf punto boyutu
+private const val DialTrackRadiusDp = 74f   // kadran çentik halkasının yarıçapı
 
 /**
- * n. tuş vuruşu katmanları döngüsel gezer (1→katman0, 2→katman1, 3→katman2, 4→katman0…):
- * [layer] katmanının parola [passwordLength] uzunluğundayken almış olduğu toplam adım sayısı.
+ * n. tuş vuruşu iğneleri döngüsel gezer (round-robin: 1.tuş→n1, 2.tuş→n2, 3.tuş→n3, 4.tuş→n1…):
+ * [r] iğnesinin parola [passwordLength] uzunluğundayken almış olduğu toplam adım sayısı.
  * Uzunluktan türetildiği için silme işlemi otomatik olarak aynı adımları geri sarar.
- */
-private fun layerSteps(passwordLength: Int, layer: Int): Int =
-    if (passwordLength <= layer) 0 else (passwordLength - layer + 2) / 3
-
-/** Yazma/karışma hedef ofseti (slot) — taban faz + yönlü adımlar. */
-private fun layerTypingTarget(passwordLength: Int, layer: Int): Float {
-    val spec = LockDialLayers[layer]
-    return spec.baseScramble + spec.direction * layerSteps(passwordLength, layer)
-}
-
-/**
- * Çözülmüş hedef ofset: mevcut karışık konuma EN YAKIN tam-tur (10 slot) katı. Her katman
- * KENDİ en yakın 10-katına oturur; 10 slot = 360° olduğundan hangi katına oturduklarından
- * bağımsız olarak üçünün GÖRSEL rotasyonu birebir çakışır (mod 360 eşit) — yani üç katman
- * "kayıt olur" (register) ve tek kelime gibi görünür.
- */
-private fun layerSolvedTarget(passwordLength: Int, layer: Int): Float {
-    val slots = LockDialWord.length
-    return ((layerTypingTarget(passwordLength, layer) / slots).roundToInt() * slots).toFloat()
-}
-
-/**
- * Login formunun üstünde ortalı marka bloğu: harf-bulmacalı kilit kadranı + logo + alt başlık.
- * Stateless — kadranın tepki verdiği durum (parola uzunluğu, bulmaca durumu) parametreyle
- * yukarıdan gelir (state hoisting), kendi state'i yoktur.
  *
- * @param passwordLength Parola alanındaki karakter sayısı; her karakter bir katmanı bir
- *                       adım döndürür (katman seçimi tuş sırasına göre döngüseldir).
- * @param dialState      Bulmaca durumu — Solved yalnız sunucu login onayında gelir.
+ * [KRİTİK — 2026-07-16 kullanıcı geri bildirimi]: önceki sürümde "tüm iğneler sürekli hareket
+ * ediyor" şikayeti alınmıştı — bu ASLA tekrarlanmayacak. Bu fonksiyon yalnızca [r] iğnesinin
+ * SIRASI geldiğinde artar; diğer iki iğnenin hedefi bu tuş vuruşunda DEĞİŞMEZ — dolayısıyla o
+ * iki iğne için sonraki animateTo çağrısı aynı hedefe no-op'a yakın kalır ve görsel olarak
+ * KIPIRDAMAZ. Web'deki needleSteps(len, r) ile birebir aynı sonucu üretir (bkz. Login.cshtml).
+ */
+private fun needleSteps(passwordLength: Int, r: Int): Int =
+    if (passwordLength <= r) 0 else (passwordLength - r + 2) / 3
+
+/** Yazma/karışma hedef açısı (derece) — dinlenme açısı + yönlü adım sayısı * çentik açısı. */
+private fun needleTypingTarget(passwordLength: Int, r: Int): Float {
+    val spec = DialNeedles[r]
+    return spec.restSlot * DialSlotDeg + spec.direction * DialSlotDeg * needleSteps(passwordLength, r)
+}
+
+/**
+ * Çözülmüş hedef açı: iğnenin mevcut (unwrap edilmiş, hiç mod alınmamış) açısına EN YAKIN
+ * 360°'nin katı. Üç iğne de kendi en yakın katına oturduğunda mod-360 hepsi 0°'de (yukarı/12
+ * yönü) çakışır — "kilit açıldı" hizası. Web'deki `Math.round(ndlDeg[r] / 360) * 360` ile aynı.
+ */
+private fun needleSolvedTarget(passwordLength: Int, r: Int): Float {
+    val current = needleTypingTarget(passwordLength, r)
+    return (current / 360f).roundToInt() * 360f
+}
+
+/**
+ * Login formunun üstünde ortalı marka bloğu: 3 iğneli (yelkovan) kalibrasyon kadranı + logo +
+ * alt başlık. Stateless — kadranın tepki verdiği durum (parola uzunluğu, kadran durumu)
+ * parametreyle yukarıdan gelir (state hoisting), kendi state'i yoktur.
+ *
+ * @param passwordLength Parola alanındaki karakter sayısı; her karakter bir iğneyi bir çentik
+ *                       döndürür (iğne seçimi tuş sırasına göre round-robin döngüseldir).
+ * @param dialState      Kadranın görsel durumu — Solved yalnız sunucu login onayında gelir.
  */
 @Composable
 private fun CalibraLoginBadge(
@@ -394,28 +372,27 @@ private fun CalibraLoginBadge(
 }
 
 /**
- * 3 katmanlı harf-bulmacalı kilit kadranı. Katmanlar İÇ İÇE (konsantrik) DEĞİL — logo
- * çevresinde AYNI yarıçap bandında ÜST ÜSTE binmiş 3 yarı saydam kopya olarak döner; her
- * kopya CALIBRAHUB'ın aynı 10 harfini taşır (decoy YOK). Katmanlar hizalandığında üçü tam
- * çakışıp (register) tek net "CALIBRAHUB" okunur; hizasızken aynı slotta üç farklı katmandan
- * üç farklı harf üst üste biner (hayalet/üçlenmiş görünüm) ve kelime okunmaz. Renkler
- * Material3 tema token'larından gelir; "çözüldü" yeşili tek yerel sabittir (M3 şemasında
- * success tokeni yok).
+ * 3 iğneli (yelkovan) analog kalibrasyon kadranı. Merkezden (hub) çıkan 3 ibre — n1 (indigo,
+ * en uzun+kalın = ana/şifre iğnesi), n2 (cyan, orta), n3 (violet, en kısa+ince) — 12 çentikli
+ * (30°'lik) dairesel kadranda döner. Web login ekranındaki `cald-*` SVG kadranıyla (bkz.
+ * `Views/Account/Login.cshtml`, `window.CalibraLoginDial`) BİREBİR aynı kanonik tasarım ve
+ * davranış; yalnız çizim teknolojisi farklıdır (SVG rotate() transform ↔ Compose Canvas
+ * rotate()/translate() DrawScope — trigonometri gerekmez). İğne renkleri sabit marka
+ * hex'lerinden gelir; track/tick/hub gibi nötr öğeler Material3 tema token'larından gelir.
  *
  * Durum davranışları:
- * - Idle: kadran tamamen sabittir (sürekli animasyon yok); katmanlar taban faz farklarıyla
- *   (üçte-bir tur ayrık) hizasız durur — üç kopya çember boyunca serpiştirilmiş konumlanır,
- *   aynı harf üç kez üst üste yığılmaz, üç katman net ayırt edilir; kelime yine de oluşmaz.
- * - Typing: her karakter bir katmanı bir slot döndürür (tuş sırası katmanları döngüsel
- *   gezer), silme geri sarar; spring geçişi mekanik "dişli" hissi verir. Taban fazlar
- *   kesirli olduğundan yazarken katmanlar arası fark asla tam sayıya düşmez — CALIBRAHUB
- *   yazarak OLUŞMAZ, örtüşme yalnızca kayar/daha da karışır.
- * - Loading: katmanlar düşük genlikli "ayar arıyor" salınımı yapar (kalibrasyon hissi).
- * - Solved (YALNIZ sunucu login onayı): katmanlar sırayla en yakın ortak hizaya "klik" diye
- *   oturur (register), üç kopya tam üst üste çakışır, harfler yeşile döner, kadran yeşil
- *   parıltıyla yanar — bulmaca çözüldü.
- * - Failed: hizalanma OLMAZ; katmanlar hizasız (üçlenmiş karışık) kalır, kadran kısa
- *   sarsılma (shake) + kırmızı flaş verir. Yeni yazımda tekrar Typing'e dönülür.
+ * - Idle: 3 iğne SABİTTİR (animasyon yok), dinlenme çentiklerinde (1/5/9 → 120° ayrık) durur.
+ * - Typing: her şifre karakteri SADECE BİR iğneyi bir çentik döndürür (round-robin, tuş
+ *   sırasına göre); TÜM iğneler DEĞİL, SÜREKLİ DEĞİL — diğer iki iğne o tuş vuruşunda
+ *   KIPIRDAMAZ (bkz. [needleSteps] dokümantasyonu). Silme aynı adımları geri sarar.
+ * - Loading: her iğne KISA BİR KEZLİK "ölçüm" sekmesi yapar (küçük kick + aynı konuma yaylı
+ *   geri dönüş), sonra DURUR — client parola doğrulamaz, yalnız "işleniyor" hissi verir.
+ *   Sürekli dönen iğne YOKTUR; bunun yerine merkez parıltı yumuşak nefes alır (measuringPulse).
+ * - Solved (YALNIZ sunucu login onayı): iğneler SIRAYLA kendi en yakın 360° katına "klik"
+ *   diye oturur (register) — üçü de mod-360 aynı açıda (yukarı/12 yönü) çakışır, yeşile döner,
+ *   kadran yeşil parıltıyla yanar.
+ * - Failed: hizalanma OLMAZ; her iğne kısa bir sekme (kick) yapıp kendi hizasız konumuna geri
+ *   oturur, kadran kısa bir yatay sarsılma (shake) + kırmızı flaş verir.
  */
 @Composable
 private fun CalibrationLockDial(
@@ -423,33 +400,57 @@ private fun CalibrationLockDial(
     state: LockDialState,
     modifier: Modifier = Modifier
 ) {
-    // ── Katman ofsetleri (slot birimi) — her katman kendi Animatable'ı ile döner ────────
-    val layerOffsets = remember { LockDialLayers.map { Animatable(it.baseScramble) } }
+    // ── İğne açıları (derece, unwrap — hiç mod alınmaz) — her iğne kendi Animatable'ı ile döner
+    val needleAngles = remember { DialNeedles.map { Animatable(it.restSlot * DialSlotDeg) } }
 
     LaunchedEffect(state, passwordLength) {
         when (state) {
             LockDialState.Solved -> {
-                // Kombinasyon kilidi çözülüşü: katmanlar SIRAYLA ortak hizaya "kayıt olur"
-                // (register) — her biri kendi en yakın 10-katına oturur, mod-360 aynı
-                // rotasyonda çakışırlar.
-                LockDialLayers.indices.forEach { li ->
+                // Kilit açılışı: iğneler SIRAYLA en yakın ortak faza "klik" diye oturur.
+                DialNeedles.indices.forEach { r ->
                     launch {
-                        delay(li * 170L)
-                        layerOffsets[li].animateTo(
-                            targetValue = layerSolvedTarget(passwordLength, li),
-                            animationSpec = spring(dampingRatio = 0.58f, stiffness = 700f)
+                        delay(r * 150L)
+                        needleAngles[r].animateTo(
+                            targetValue = needleSolvedTarget(passwordLength, r),
+                            animationSpec = spring(dampingRatio = 0.55f, stiffness = 260f)
                         )
+                    }
+                }
+            }
+            LockDialState.Failed -> {
+                // Reddetme sekmesi: kısa kick + AYNI (hizasız) konuma yaylı geri dönüş —
+                // hizalanma OLMAZ, sadece "reddedildi" tepkisi.
+                DialNeedles.indices.forEach { r ->
+                    launch {
+                        val settled = needleAngles[r].value
+                        val kick = (if (r % 2 == 0) -1f else 1f) * (9f + r * 3f)
+                        needleAngles[r].animateTo(settled + kick, tween(90, easing = FastOutSlowInEasing))
+                        needleAngles[r].animateTo(settled, spring(dampingRatio = 0.45f, stiffness = 220f))
+                    }
+                }
+            }
+            LockDialState.Loading -> {
+                // Kısa bir kezlik "ölçüm" sekmesi — küçük kick + AYNI konuma yaylı geri dönüş;
+                // client parola doğrulamaz, yalnız "işleniyor" hissi verir. Sekme bitince
+                // iğneler DURUR (sürekli dönen iğne yok — merkez parıltı nefesi ayrıca sürer).
+                DialNeedles.indices.forEach { r ->
+                    launch {
+                        val settled = needleAngles[r].value
+                        val kick = (if (r % 2 == 0) 1f else -1f) * (14f + r * 4f)
+                        needleAngles[r].animateTo(settled + kick, tween(200, easing = FastOutSlowInEasing))
+                        needleAngles[r].animateTo(settled, spring(dampingRatio = 0.5f, stiffness = 260f))
                     }
                 }
             }
             else -> {
-                // Idle/Typing/Loading/Failed: karışık (yazım) hedefine dön. Efekt her tuşta
-                // yeniden başlar; süren animasyon iptal olup mevcut konumdan retarget eder.
-                LockDialLayers.indices.forEach { li ->
+                // Idle/Typing: yazım hedefine yumuşak spring. SADECE sırası gelen iğnenin
+                // hedefi bu tuş vuruşunda değişir; diğer ikisi aynı hedefe no-op'a yakın kalıp
+                // görsel olarak kıpırdamaz (bkz. needleSteps dokümantasyonu).
+                DialNeedles.indices.forEach { r ->
                     launch {
-                        layerOffsets[li].animateTo(
-                            targetValue = layerTypingTarget(passwordLength, li),
-                            animationSpec = spring(dampingRatio = 0.72f, stiffness = 300f)
+                        needleAngles[r].animateTo(
+                            targetValue = needleTypingTarget(passwordLength, r),
+                            animationSpec = spring(dampingRatio = 0.72f, stiffness = 340f)
                         )
                     }
                 }
@@ -457,32 +458,33 @@ private fun CalibrationLockDial(
         }
     }
 
-    // ── Yükleme salınımı — yalnız Loading'de döner, çıkışta sıfıra iner ─────────────────
-    val wobble = remember { Animatable(0f) }
+    // ── Yükleme nefesi — merkez parıltının yumuşak nabzı, YALNIZ Loading'de sürer (iğneleri
+    //    OYNATMAZ, yalnız glow alpha'sını modüle eder) ─────────────────────────────────────
+    val measuringPulse = remember { Animatable(0f) }
     LaunchedEffect(state) {
         if (state == LockDialState.Loading) {
-            wobble.snapTo(0f)
-            wobble.animateTo(
+            measuringPulse.snapTo(0f)
+            measuringPulse.animateTo(
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+                    animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
                     repeatMode = RepeatMode.Reverse
                 )
             )
         } else {
-            wobble.animateTo(0f, tween(durationMillis = 200))
+            measuringPulse.animateTo(0f, tween(durationMillis = 200))
         }
     }
 
-    // ── Çözülme yeşili / hata kırmızısı / sarsılma geçişleri ────────────────────────────
+    // ── Çözülme yeşili / hata kırmızısı / yatay sarsılma geçişleri ──────────────────────────
     val solveGlow = remember { Animatable(0f) }   // 0..1 → yeşil vurgu ağırlığı
     val failFlash = remember { Animatable(0f) }   // 0..1 → kırmızı flaş ağırlığı
-    val shakeDeg  = remember { Animatable(0f) }   // derece → tüm katmanlara eklenen sarsılma
+    val shakeX    = remember { Animatable(0f) }   // dp → tüm kadrana uygulanan yatay sarsılma
     LaunchedEffect(state) {
         when (state) {
             LockDialState.Solved -> {
                 failFlash.snapTo(0f)
-                // Katman klikleri başladıktan hemen sonra yeşil dalga yükselir.
+                // İğne klikleri başladıktan hemen sonra yeşil dalga yükselir.
                 solveGlow.animateTo(1f, tween(durationMillis = 700, delayMillis = 300))
             }
             LockDialState.Failed -> {
@@ -491,17 +493,17 @@ private fun CalibrationLockDial(
                     failFlash.animateTo(1f, tween(durationMillis = 90))
                     failFlash.animateTo(0f, tween(durationMillis = 650))
                 }
-                // Kilit "reddetti" sarsılması: sönümlenen açısal jiggle.
-                shakeDeg.animateTo(
+                // Kilit "reddetti" sarsılması — web'in caldShake CSS keyframes'iyle aynı
+                // zamanlama/genlik (0/-7/6/-4/3/0, 500ms), yatay öteleme (translate) olarak.
+                shakeX.animateTo(
                     targetValue = 0f,
                     animationSpec = keyframes {
                         durationMillis = 500
                         0f at 0
-                        5.5f at 70
-                        -4.5f at 160
-                        3.2f at 260
-                        -2f at 350
-                        1f at 430
+                        -7f at 100
+                        6f at 200
+                        -4f at 300
+                        3f at 400
                         0f at 500
                     }
                 )
@@ -509,114 +511,124 @@ private fun CalibrationLockDial(
             else -> {
                 solveGlow.animateTo(0f, tween(durationMillis = 250))
                 failFlash.snapTo(0f)
-                shakeDeg.snapTo(0f)
+                shakeX.snapTo(0f)
             }
         }
     }
 
-    // ── Harf ölçüm altyapısı — CALIBRAHUB'ın harfleri bir kez ölçülür; üç katman da AYNI
-    //    layout'u paylaşır (aynı yarıçap + aynı punto olduğundan katman başına ayrı ölçüm
-    //    gerekmez) ─────────────────────────────────────────────────────────────────────
-    val textMeasurer = rememberTextMeasurer(cacheSize = 16)
-    val layerStyle = remember { TextStyle(fontSize = LockDialFontSp.sp, fontWeight = FontWeight.Bold) }
-    val letterLayouts = remember(textMeasurer) {
-        val map = mutableMapOf<Char, TextLayoutResult>()
-        LockDialWord.forEach { ch ->
-            map.getOrPut(ch) { textMeasurer.measure(AnnotatedString(ch.toString()), layerStyle) }
-        }
-        map
-    }
-
-    val letterColor  = MaterialTheme.colorScheme.onSurfaceVariant
     val trackColor   = MaterialTheme.colorScheme.outline
+    val tickColor    = MaterialTheme.colorScheme.onSurfaceVariant
     val accentColor  = MaterialTheme.colorScheme.primary
     val errorColor   = MaterialTheme.colorScheme.error
     val successGreen = Color(0xFF2FBF71) // "bulmaca çözüldü" yeşili — light/dark'ta okunur
 
     Canvas(modifier = modifier) {
-        val mid      = Offset(size.width / 2f, size.height / 2f)
-        val p        = solveGlow.value
-        val q        = failFlash.value
-        val w        = wobble.value
-        val shake    = shakeDeg.value
-        val radiusPx = LockDialRadiusDp.dp.toPx()
+        val mid     = Offset(size.width / 2f, size.height / 2f)
+        val p       = solveGlow.value
+        val q       = failFlash.value
+        val pulse   = measuringPulse.value
+        val shakePx = shakeX.value.dp.toPx()
+        val trackR  = DialTrackRadiusDp.dp.toPx()
 
-        // 0) Merkez parıltı: nötr accent → çözülünce yeşil, hatada kısa kırmızı ton.
-        val glowCol = lerp(lerp(accentColor, successGreen, p), errorColor, q * 0.7f)
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    glowCol.copy(alpha = 0.10f + 0.16f * p + 0.05f * w + 0.10f * q),
-                    Color.Transparent
-                ),
-                center = mid,
-                radius = size.minDimension / 2f
-            ),
-            radius = size.minDimension / 2f,
-            center = mid
-        )
-
-        // 1) Paylaşılan yarıçap bandı — üç katmanın ORTAK yörüngesini gösteren geniş, soluk
-        //    tek track (iç içe bezel halkaları DEĞİL: üç katman bu TEK bandın üzerinde üst
-        //    üste döner).
-        val bandCol = lerp(lerp(trackColor, successGreen, p * 0.8f), errorColor, q * 0.5f)
-        drawCircle(
-            color = bandCol.copy(alpha = 0.15f),
-            radius = radiusPx,
-            center = mid,
-            style = Stroke(width = 26.dp.toPx())
-        )
-
-        // 2) Çözüldüğünde bandın tamamı yumuşak yeşil hale ile parlar (artık kelime tek bir
-        //    okuma yayı değil, çemberin tamamını kaplıyor).
-        if (p > 0.01f) {
+        translate(left = shakePx) {
+            // 0) Merkez parıltı: nötr accent → çözülünce yeşil, hatada kısa kırmızı ton;
+            //    Loading'de yumuşak nefes alır (pulse).
+            val glowCol = lerp(lerp(accentColor, successGreen, p), errorColor, q * 0.7f)
             drawCircle(
-                color = successGreen.copy(alpha = 0.16f * p),
-                radius = radiusPx,
-                center = mid,
-                style = Stroke(width = 34.dp.toPx())
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        glowCol.copy(alpha = 0.10f + 0.16f * p + 0.06f * pulse + 0.10f * q),
+                        Color.Transparent
+                    ),
+                    center = mid,
+                    radius = size.minDimension / 2f
+                ),
+                radius = size.minDimension / 2f,
+                center = mid
             )
-        }
 
-        // 3) 3 harf katmanı ÜST ÜSTE (superimposed) — her katman CALIBRAHUB'ın 10 harfini
-        //    TAM ÇEMBER boyunca çizer, hepsi AYNI radiusPx'te. Sarsılma (shake) tüm katman
-        //    açılarına eklenir. Hizasızken katmanlar farklı fazda olduğundan aynı slotta üç
-        //    farklı harf üst üste biner (hayalet); çözülünce (p→1) hepsi ortak faza oturmuş
-        //    olur (layerSolvedTarget) ve alpha 1'e yaklaşıp yeşile döner → tek net kelime.
-        LockDialLayers.forEachIndexed { li, spec ->
-            val stepDeg     = 360f / LockDialWord.length
-            val wobbleSlots = w * 0.14f * spec.direction * (1f - li * 0.15f)
-            val offset      = layerOffsets[li].value + wobbleSlots
-            val layerAlpha  = lerp(spec.alpha, 1f, p)
+            // 1) İnce kadran çemberi — üç iğnenin ORTAK yörüngesini gösteren tek track.
+            val bandCol = lerp(lerp(trackColor, successGreen, p * 0.8f), errorColor, q * 0.5f)
+            drawCircle(
+                color = bandCol.copy(alpha = 0.5f),
+                radius = trackR,
+                center = mid,
+                style = Stroke(width = 1.4.dp.toPx())
+            )
 
-            LockDialWord.forEachIndexed { j, ch ->
-                val deg = -90f + shake + (j + offset) * stepDeg
-                val rad = deg * (PI / 180.0)
-                val letterCenter = mid + Offset(cos(rad).toFloat(), sin(rad).toFloat()) * radiusPx
-                val layout = letterLayouts.getValue(ch)
-                val baseCol = lerp(letterColor, successGreen, p).copy(alpha = layerAlpha)
-                val finalCol = lerp(baseCol, errorColor, q * 0.65f)
-                rotate(degrees = deg + 90f, pivot = letterCenter) {
-                    drawText(
-                        textLayoutResult = layout,
-                        color = finalCol,
-                        topLeft = letterCenter - Offset(layout.size.width / 2f, layout.size.height / 2f)
+            // 2) 12 çentik — her 3.'sü (0°/90°/180°/270°) belirgin (major); rotate() ile
+            //    yerleştirilir, trigonometri gerekmez.
+            for (i in 0 until DialSlotCount) {
+                val isMajor   = i % 3 == 0
+                val outerR    = trackR + 2.dp.toPx()
+                val innerR    = outerR - (if (isMajor) 11.dp.toPx() else 6.dp.toPx())
+                val tickAlpha = if (isMajor) 0.65f else 0.32f
+                rotate(degrees = i * DialSlotDeg, pivot = mid) {
+                    drawLine(
+                        color = tickColor.copy(alpha = tickAlpha),
+                        start = mid + Offset(0f, -innerR),
+                        end = mid + Offset(0f, -outerR),
+                        strokeWidth = if (isMajor) 2.2.dp.toPx() else 1.4.dp.toPx(),
+                        cap = StrokeCap.Round
                     )
                 }
             }
-        }
 
-        // 4) Okuma işareti — üstte sabit indeks çentiği; çözülünce "C" bu işaretin altında
-        //    durur. Stator'a aittir: sarsılmadan etkilenmez, kadranın nereden okunduğunu
-        //    gösterir.
-        val markerCol = lerp(lerp(accentColor, successGreen, p), errorColor, q * 0.6f)
-        val up = Offset(0f, -1f)
-        drawLine(
-            color = markerCol.copy(alpha = 0.85f),
-            start = mid + up * 90f.dp.toPx(),
-            end = mid + up * 95f.dp.toPx(),
-            strokeWidth = 2.5f.dp.toPx(),
-            cap = StrokeCap.Round
-        )
+            // 3) Çözüldüğünde track'in tamamı yumuşak yeşil hale ile parlar.
+            if (p > 0.01f) {
+                drawCircle(
+                    color = successGreen.copy(alpha = 0.16f * p),
+                    radius = trackR,
+                    center = mid,
+                    style = Stroke(width = 10.dp.toPx())
+                )
+            }
+
+            // 4) 3 iğne — merkezden (hub) çıkar, kendi rengi/uzunluğu/kalınlığıyla döner.
+            //    SVG'deki gibi düz-yukarı çizilip rotate() ile döndürülür; trigonometri
+            //    gerekmez (harf-yerleşimi versiyonunun aksine).
+            DialNeedles.forEachIndexed { r, spec ->
+                val angle     = needleAngles[r].value
+                val needleCol = lerp(lerp(spec.color, successGreen, p), errorColor, q * 0.75f)
+                val lengthPx  = spec.lengthDp.dp.toPx()
+                val strokePx  = spec.strokeDp.dp.toPx()
+                rotate(degrees = angle, pivot = mid) {
+                    drawLine(
+                        color = needleCol,
+                        start = mid,
+                        end = mid + Offset(0f, -lengthPx),
+                        strokeWidth = strokePx,
+                        cap = StrokeCap.Round
+                    )
+                    // n1 (ana/şifre iğnesi) küçük bir kuyruk taşır — gerçek saat ibresi hissi.
+                    if (r == 0) {
+                        drawLine(
+                            color = needleCol,
+                            start = mid,
+                            end = mid + Offset(0f, 7.dp.toPx()),
+                            strokeWidth = strokePx,
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+            }
+
+            // 5) Hub — iğnelerin buluştuğu merkez nokta (logo rozetinin altında kalır, yalnız
+            //    kenarları sızabilir; yine de tema/renk tutarlılığı için çizilir).
+            val hubCol = lerp(lerp(accentColor, successGreen, p), errorColor, q * 0.6f)
+            drawCircle(color = hubCol, radius = 4.dp.toPx(), center = mid)
+
+            // 6) Okuma işareti — üstte sabit çentik; çözülünce üç iğne bu işaretin altında
+            //    (yukarı/12 yönü) hizalanır.
+            val markerCol = lerp(lerp(accentColor, successGreen, p), errorColor, q * 0.6f)
+            val up = Offset(0f, -1f)
+            drawLine(
+                color = markerCol.copy(alpha = 0.85f),
+                start = mid + up * 90f.dp.toPx(),
+                end = mid + up * 95f.dp.toPx(),
+                strokeWidth = 2.5f.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
     }
 }

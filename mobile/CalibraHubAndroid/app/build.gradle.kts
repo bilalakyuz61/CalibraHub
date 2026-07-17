@@ -105,6 +105,9 @@ dependencies {
     // ── Image loading (Coil) ──────────────────────────────────────────────
     implementation("io.coil-kt:coil-compose:2.5.0")
 
+    // ── Barkod tarama (ZXing embedded — MaterialPickerField kamera taraması) ──
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+
     // ── Coroutines ────────────────────────────────────────────────────────
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 

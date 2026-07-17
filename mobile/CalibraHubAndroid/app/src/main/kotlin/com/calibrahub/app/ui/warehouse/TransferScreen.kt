@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.LocationOn
@@ -39,6 +38,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -63,14 +64,15 @@ import com.calibrahub.app.data.StockQueryDto
 import com.calibrahub.app.data.WarehouseLocationDto
 import kotlinx.coroutines.launch
 
-/** Ekranın çalıştığı belge yönü — Giriş (STOCK_IN) / Çıkış (STOCK_OUT). */
-enum class StockDocMode { IN, OUT }
+/** Lokasyon seçim diyaloğunun hangi alanı hedeflediğini ayırt eder (aynı dialog, iki hedef). */
+private enum class TransferLocationTarget { FROM, TO }
 
 /**
- * Satır listesinin UI modeli. Sunucuya yalnız itemId + quantity gider
- * (StockDocLineRequest); kod/ad/birim satır kartında gösterim içindir.
+ * Satır listesinin UI modeli — StockDocScreen'in DocLineUi'ıyla aynı alan seti. Sunucuya
+ * yalnız itemId + quantity gider ([StockDocLineRequest] — transfer/stock-in/out arasında
+ * PAYLAŞILAN aynı kalem şekli, koordinatör sözleşmesi); kod/ad/birim yalnız kart gösterimi içindir.
  */
-private data class DocLineUi(
+private data class TransferLineUi(
     val itemId: Int,
     val itemCode: String,
     val itemName: String,
@@ -79,34 +81,43 @@ private data class DocLineUi(
 )
 
 /**
- * Depo Giriş / Çıkış belge oluşturma ekranı (Increment 2a + rehber) — iki mod tek composable.
+ * Depo Transfer ekranı (Increment 2b) — bir lokasyondan diğerine kalem taşıma belgesi.
  *
- * Akış: lokasyon seç → paylaşılan [MaterialPickerField] ile malzeme ara/seç (kod veya ad,
- * rehber) → miktar gir → satıra ekle → (opsiyonel not) → Kaydet = POST stock-in|stock-out.
- * Başarıda docNumber onay diyaloğunda gösterilir; "Yeni Belge" formu temizleyip lokasyonu
- * korur, "Kapat" geri döner. ok:false hataları (yetersiz stok, lot/seri/varyant reddi) ve
- * 403 yetki mesajı repository'de tek Result kanalına normalize edilir, aynen gösterilir.
+ * Akış: Kaynak + Hedef lokasyon seç (aynı seçim diyaloğu iki hedefe hizmet eder, bkz.
+ * [TransferLocationTarget]) → [MaterialPickerField] ile malzeme ara/seç (kod/ad/barkod,
+ * StockDocScreen ile paylaşılan bileşen) → miktar gir → satıra ekle → (opsiyonel not) →
+ * Kaydet = POST transfer. Kaynak==Hedef istemci tarafında engellenir (Kaydet devre dışı kalır +
+ * uyarı metni gösterilir); sunucu asıl karar mercii olarak kalır — NegativeBalanceGuard/lot-seri
+ * reddi gibi hatalar {error} gövdesiyle gelir, snackbar'da aynen gösterilir.
  *
- * Malzeme çözüm deseni StockQueryScreen ile aynı ([MaterialPickerField] paylaşılır); kod
- * alanı her değiştiğinde çözülmüş malzeme sıfırlanır — bayat malzemeyle yanlış satır eklenemez.
+ * StockDocScreen'den kasıtlı fark: başarı burada AlertDialog değil, "documentNumber'lı snackbar +
+ * form temizleme" ile bildirilir (koordinatör sözleşmesi) — lokasyonlar korunur (art arda
+ * transfer girişi için), yalnız kalemler/not/malzeme arama alanı sıfırlanır.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
+fun TransferScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val repo = context.app.warehouseRepository
     val scope = rememberCoroutineScope()
-
-    val isStockIn = mode == StockDocMode.IN
-    val screenTitle = if (isStockIn) "Depo Giriş" else "Depo Çıkış"
-    val locationLabel = if (isStockIn) "Hedef Lokasyon" else "Kaynak Lokasyon"
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // ── Lokasyonlar (açılışta bir kez; hata halinde retry ile yeniden) ──────
     var locations by remember { mutableStateOf<List<WarehouseLocationDto>?>(null) }
     var locationsError by remember { mutableStateOf<String?>(null) }
     var locationsAttempt by remember { mutableStateOf(0) }
-    var selectedLocation by remember { mutableStateOf<WarehouseLocationDto?>(null) }
-    var showLocationPicker by remember { mutableStateOf(false) }
+
+    // Seçili lokasyon ID'leri rememberSaveable — process-death'e karşı ek sağlamlık (StockDocScreen'in
+    // "code" alanı için uyguladığı gerekçeyle aynı: kamera barkod taramasından dönüşte MainActivity
+    // configChanges ile korunuyor olsa da). Nesnenin kendisi değil ID saklanır; DTO her recomposition'da
+    // locations listesinden id ile bulunur (aşağıdaki fromLocation/toLocation).
+    var fromLocationId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var toLocationId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var pickerTarget by remember { mutableStateOf<TransferLocationTarget?>(null) }
+
+    val fromLocation = locations?.firstOrNull { it.id == fromLocationId }
+    val toLocation = locations?.firstOrNull { it.id == toLocationId }
+    val sameLocation = fromLocationId != null && fromLocationId == toLocationId
 
     LaunchedEffect(locationsAttempt) {
         locations = null
@@ -118,20 +129,15 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
     }
 
     // ── Kalem ekleme formu (rehber ile ara/seç → miktar) ────────────────────
-    // code: rememberSaveable — kamera taramasından dönüşte yaşanan rotasyonda MainActivity
-    // artık configChanges ile yeniden yaratılmıyor, ama process-death'e karşı ek sağlamlık
-    // için MaterialPickerField'ın query'sini tutan bu alan Bundle'a da yazılır (2026-07-16).
     var code by rememberSaveable { mutableStateOf("") }
     var resolved by remember { mutableStateOf<StockQueryDto?>(null) }
     var resolveError by remember { mutableStateOf<String?>(null) }
-    var qtyText by remember { mutableStateOf("") }
+    var qtyText by rememberSaveable { mutableStateOf("") }
 
     // ── Belge durumu ────────────────────────────────────────────────────────
-    var lines by remember { mutableStateOf(listOf<DocLineUi>()) }
+    var lines by remember { mutableStateOf(listOf<TransferLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
-    var saveError by remember { mutableStateOf<String?>(null) }
-    var successDocNumber by remember { mutableStateOf<String?>(null) }
 
     // Miktar TR klavyede virgülle de girilebilir — nokta ile normalize edilip parse edilir.
     val qtyValue = qtyText.trim().replace(',', '.').toDoubleOrNull()
@@ -141,53 +147,60 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
         val item = resolved ?: return
         val qty = qtyValue
         if (qty == null || qty <= 0.0 || saving) return
-        lines = lines + DocLineUi(
+        lines = lines + TransferLineUi(
             itemId = item.itemId,
             itemCode = item.itemCode,
             itemName = item.itemName,
             unit = item.unit,
             quantity = qty
         )
-        // Form sıradaki kalem için sıfırlanır; önceki kaydetme hatası da bayatladı.
+        // Form sıradaki kalem için sıfırlanır; önceki çözüm bayatladı.
         code = ""
         qtyText = ""
         resolved = null
         resolveError = null
-        saveError = null
     }
 
-    fun save() {
-        val loc = selectedLocation ?: return
-        if (lines.isEmpty() || saving) return
-        scope.launch {
-            saving = true
-            saveError = null
-            val reqLines = lines.map { StockDocLineRequest(itemId = it.itemId, quantity = it.quantity) }
-            val noteOrNull = note.trim().takeIf { it.isNotBlank() }
-            val result = if (isStockIn) repo.stockIn(loc.id, reqLines, noteOrNull)
-                         else repo.stockOut(loc.id, reqLines, noteOrNull)
-            result.fold(
-                onSuccess = { successDocNumber = it.docNumber },
-                onFailure = { saveError = it.message ?: "Kaydetme başarısız" }
-            )
-            saving = false
-        }
-    }
-
-    fun resetForNewDoc() {
+    fun resetForm() {
         lines = emptyList()
         note = ""
         code = ""
         qtyText = ""
         resolved = null
         resolveError = null
-        saveError = null
+    }
+
+    fun save() {
+        val from = fromLocation ?: return
+        val to = toLocation ?: return
+        if (from.id == to.id || lines.isEmpty() || saving) return
+        scope.launch {
+            saving = true
+            val reqLines = lines.map { StockDocLineRequest(itemId = it.itemId, quantity = it.quantity) }
+            val noteOrNull = note.trim().takeIf { it.isNotBlank() }
+            val result = repo.transfer(from.id, to.id, reqLines, noteOrNull)
+            // showSnackbar bir dismiss'e kadar suspend olur — doğrudan burada çağrılırsa
+            // "saving = false" snackbar kaybolana dek gecikir (buton yükleniyor görünür kalır).
+            // Ayrı scope.launch (fire-and-forget) ile WorkOrderDetailScreen'deki aynı desen
+            // kullanılır: snackbar arka planda gösterilir, buton hemen serbest kalır.
+            result.fold(
+                onSuccess = { res ->
+                    resetForm()
+                    scope.launch { snackbarHostState.showSnackbar("Transfer belgesi oluşturuldu (${res.documentNumber})") }
+                },
+                onFailure = { failure ->
+                    scope.launch { snackbarHostState.showSnackbar(failure.message ?: "Kaydetme başarısız") }
+                }
+            )
+            saving = false
+        }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(screenTitle) },
+                title = { Text("Transfer") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
@@ -204,7 +217,7 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // ── 1) Lokasyon ────────────────────────────────────────────────
+            // ── 1) Lokasyonlar ─────────────────────────────────────────────
             when {
                 locationsError != null -> LocationsErrorCard(
                     message = locationsError!!,
@@ -219,12 +232,27 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error
                 )
-                else -> LocationSelectorCard(
-                    label = locationLabel,
-                    selected = selectedLocation,
-                    enabled = !saving,
-                    onClick = { showLocationPicker = true }
-                )
+                else -> {
+                    TransferLocationCard(
+                        label = "Kaynak Lokasyon",
+                        selected = fromLocation,
+                        enabled = !saving,
+                        onClick = { pickerTarget = TransferLocationTarget.FROM }
+                    )
+                    TransferLocationCard(
+                        label = "Hedef Lokasyon",
+                        selected = toLocation,
+                        enabled = !saving,
+                        onClick = { pickerTarget = TransferLocationTarget.TO }
+                    )
+                    if (sameLocation) {
+                        Text(
+                            text = "Kaynak ve hedef lokasyon aynı olamaz.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
 
             // ── 2) Kalem ekleme ────────────────────────────────────────────
@@ -282,15 +310,16 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        // Seçili lokasyondaki mevcut bakiye — çıkışta 0 ise uyarı tonunda
-                        // (sunucudaki eksi bakiye guard'ına takılmadan önce erken sinyal).
-                        val loc = selectedLocation
-                        if (loc != null) {
-                            val bal = item.balances.firstOrNull { it.locationId == loc.id }?.quantity ?: 0.0
-                            val warn = !isStockIn && bal <= 0.0
+                        // Seçili KAYNAK lokasyondaki mevcut bakiye — transfer kaynaktan düşer,
+                        // StockDocScreen'in çıkış modundaki uyarı mantığıyla aynı (bal<=0 → error tonu).
+                        // Salt gösterim; sunucudaki NegativeBalanceGuard son sözü söyler.
+                        val from = fromLocation
+                        if (from != null) {
+                            val bal = item.balances.firstOrNull { it.locationId == from.id }?.quantity ?: 0.0
+                            val warn = bal <= 0.0
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "${loc.name} bakiyesi: " + formatQty(bal) +
+                                text = "${from.name} bakiyesi: " + formatQty(bal) +
                                     (item.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (warn) MaterialTheme.colorScheme.error
@@ -343,9 +372,9 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                 )
             } else {
                 // Belge kalem sayısı mobilde küçük kalır; ekran zaten scroll'lu Column
-                // olduğundan LazyColumn yerine düz forEach kullanıldı (StockQueryScreen notu).
+                // olduğundan LazyColumn yerine düz forEach kullanıldı (StockDocScreen ile aynı gerekçe).
                 lines.forEachIndexed { index, line ->
-                    DocLineRow(
+                    TransferLineRow(
                         line = line,
                         enabled = !saving,
                         onDelete = { lines = lines.filterIndexed { i, _ -> i != index } }
@@ -364,37 +393,11 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // ── 5) Hata + kaydet ───────────────────────────────────────────
-            if (saveError != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.ErrorOutline,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = saveError!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
+            // ── 5) Kaydet ───────────────────────────────────────────────────
             Button(
                 onClick = { save() },
-                enabled = selectedLocation != null && lines.isNotEmpty() && !saving,
+                enabled = fromLocation != null && toLocation != null && !sameLocation &&
+                    lines.isNotEmpty() && !saving,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (saving) CircularProgressIndicator(
@@ -408,12 +411,16 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
         }
     }
 
-    // ── Lokasyon seçim diyaloğu ─────────────────────────────────────────────
-    if (showLocationPicker) {
+    // ── Lokasyon seçim diyaloğu — kaynak/hedef PAYLAŞILAN tek dialog ────────
+    if (pickerTarget != null) {
+        val target = pickerTarget!!
         val list = locations.orEmpty()
+        val currentSelectedId = if (target == TransferLocationTarget.FROM) fromLocationId else toLocationId
         AlertDialog(
-            onDismissRequest = { showLocationPicker = false },
-            title = { Text("Lokasyon Seçin") },
+            onDismissRequest = { pickerTarget = null },
+            title = {
+                Text(if (target == TransferLocationTarget.FROM) "Kaynak Lokasyon Seçin" else "Hedef Lokasyon Seçin")
+            },
             text = {
                 Column(
                     modifier = Modifier
@@ -422,13 +429,14 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                         .verticalScroll(rememberScrollState())
                 ) {
                     list.forEach { loc ->
-                        val isSelected = loc.id == selectedLocation?.id
+                        val isSelected = loc.id == currentSelectedId
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    selectedLocation = loc
-                                    showLocationPicker = false
+                                    if (target == TransferLocationTarget.FROM) fromLocationId = loc.id
+                                    else toLocationId = loc.id
+                                    pickerTarget = null
                                 }
                                 .padding(vertical = 12.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -463,46 +471,17 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { showLocationPicker = false }) { Text("Vazgeç") }
-            }
-        )
-    }
-
-    // ── Başarı diyaloğu — docNumber onayı ──────────────────────────────────
-    if (successDocNumber != null) {
-        AlertDialog(
-            onDismissRequest = {
-                successDocNumber = null
-                onBack()
-            },
-            icon = {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = { Text(if (isStockIn) "Giriş Belgesi Oluşturuldu" else "Çıkış Belgesi Oluşturuldu") },
-            text = { Text("Belge No: ${successDocNumber!!}") },
-            confirmButton = {
-                TextButton(onClick = {
-                    successDocNumber = null
-                    resetForNewDoc()   // lokasyon korunur — art arda belge girişi için
-                }) { Text("Yeni Belge") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    successDocNumber = null
-                    onBack()
-                }) { Text("Kapat") }
+                TextButton(onClick = { pickerTarget = null }) { Text("Vazgeç") }
             }
         )
     }
 }
 
-/** Lokasyon seçici kartı — tıklanınca seçim diyaloğu açılır (stateless). */
+/** Lokasyon seçici kartı — tıklanınca seçim diyaloğu açılır (stateless). StockDocScreen'in
+ * LocationSelectorCard'ıyla aynı görünüm; iki ayrı dosyada private top-level fonksiyon
+ * olduğundan isim çakışması yoktur (Kotlin'de dosya-özel görünürlük). */
 @Composable
-private fun LocationSelectorCard(
+private fun TransferLocationCard(
     label: String,
     selected: WarehouseLocationDto?,
     enabled: Boolean,
@@ -578,9 +557,9 @@ private fun LocationsErrorCard(message: String, onRetry: () -> Unit) {
     }
 }
 
-/** Eklenmiş belge kalemi satırı — ad/kod + miktar + sil (stateless). */
+/** Eklenmiş transfer kalemi satırı — ad/kod + miktar + sil (stateless). */
 @Composable
-private fun DocLineRow(line: DocLineUi, enabled: Boolean, onDelete: () -> Unit) {
+private fun TransferLineRow(line: TransferLineUi, enabled: Boolean, onDelete: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -613,6 +592,6 @@ private fun DocLineRow(line: DocLineUi, enabled: Boolean, onDelete: () -> Unit) 
     }
 }
 
-/** Tam sayıları ".00" olmadan, ondalıklıları 2 haneye yuvarlayarak gösterir (StockQueryScreen ile aynı V1 format). */
+/** Tam sayıları ".00" olmadan, ondalıklıları 2 haneye yuvarlayarak gösterir (StockDocScreen ile aynı V1 format). */
 private fun formatQty(q: Double): String =
     if (q == q.toLong().toDouble()) q.toLong().toString() else "%.2f".format(q)

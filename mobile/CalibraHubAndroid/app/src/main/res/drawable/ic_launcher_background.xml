@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon arka plan katmanı — düz koyu indigo dikey degrade (üstten alta #4F46E5 → #4338CA).
+  Marka paleti CalibraHub login ekranındaki kalibrasyon kadranı ile birebir aynı aile (bkz.
+  ui/login/LoginScreen.kt NeedleColorIndigo #6366F1 / Views/Account/Login.cshtml cald-n1 değişkeni);
+  arka plan biraz daha koyu tutuldu ki üstteki beyaz kadran/iğne (ic_launcher_foreground) kontrastla
+  öne çıksın. Gürültü/doku yok — sade, tek düzlemli degrade.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="108"
+                android:startColor="#4F46E5"
+                android:endColor="#4338CA" />
+        </aapt:attr>
+    </path>
+</vector>

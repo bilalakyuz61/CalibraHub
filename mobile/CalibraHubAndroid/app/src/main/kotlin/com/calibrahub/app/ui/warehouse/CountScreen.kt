@@ -22,7 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.LocationOn
@@ -39,6 +39,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -52,61 +54,79 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.calibrahub.app.app
-import com.calibrahub.app.data.StockDocLineRequest
+import com.calibrahub.app.data.InventoryCountLineRequest
 import com.calibrahub.app.data.StockQueryDto
 import com.calibrahub.app.data.WarehouseLocationDto
 import kotlinx.coroutines.launch
 
-/** Ekranın çalıştığı belge yönü — Giriş (STOCK_IN) / Çıkış (STOCK_OUT). */
-enum class StockDocMode { IN, OUT }
-
 /**
- * Satır listesinin UI modeli. Sunucuya yalnız itemId + quantity gider
- * (StockDocLineRequest); kod/ad/birim satır kartında gösterim içindir.
+ * Satır listesinin UI modeli — sayılan miktar + SİSTEM bakiyesi (item.balances'tan resolve
+ * anında donmuş anlık değer, salt gösterim) + fark (countedQuantity - systemQuantity, client-side
+ * hesap). Sunucuya yalnız itemId + countedQuantity gider ([InventoryCountLineRequest]); sistem
+ * bakiyesi/fark yalnız ekranda gösterim içindir — sunucu kendi karşılaştırmasını yapar (`applied`
+ * yanıt alanı belgenin doğrudan uygulanıp uygulanmadığını taşır, bkz. dosya üstü KDoc).
  */
-private data class DocLineUi(
+private data class CountLineUi(
     val itemId: Int,
     val itemCode: String,
     val itemName: String,
     val unit: String?,
-    val quantity: Double
+    val systemQuantity: Double,
+    val countedQuantity: Double
 )
 
+/** Taslak (applied=false) kaydedilmiş sayım belgesinin Sayım Yansıt dialoğu için tuttuğu kimlik. */
+private data class DraftCountResult(val id: Int, val documentNumber: String)
+
 /**
- * Depo Giriş / Çıkış belge oluşturma ekranı (Increment 2a + rehber) — iki mod tek composable.
+ * Depo Sayım ekranı (Increment 2b + Sayım Yansıt) — tek lokasyon için fiziksel sayım belgesi.
  *
- * Akış: lokasyon seç → paylaşılan [MaterialPickerField] ile malzeme ara/seç (kod veya ad,
- * rehber) → miktar gir → satıra ekle → (opsiyonel not) → Kaydet = POST stock-in|stock-out.
- * Başarıda docNumber onay diyaloğunda gösterilir; "Yeni Belge" formu temizleyip lokasyonu
- * korur, "Kapat" geri döner. ok:false hataları (yetersiz stok, lot/seri/varyant reddi) ve
- * 403 yetki mesajı repository'de tek Result kanalına normalize edilir, aynen gösterilir.
+ * Akış: Lokasyon seç → [MaterialPickerField] ile malzeme ara/seç → SAYILAN miktarı gir (0
+ * GEÇERLİ — "raf boş" sayımı; StockDocScreen'in "qty > 0" kısıtından FARKLI, burada >= 0
+ * kabul edilir) → satıra ekle (satırda sistem bakiyesi + sayılan + fark client-side gösterilir,
+ * sunucu son sözü söyler) → opsiyonel not → Kaydet = POST inventory-count. Yanıttaki `applied`
+ * alanına göre iki farklı davranış (koordinatör sözleşmesi): true → belge doğrudan uygulandı,
+ * mevcut "kaydedildi ve uygulandı" snackbar'ı gösterilir; false → taslak kaldı, "Sayım Yansıt"
+ * dialoğu açılır ([DraftCountResult], 2026-07-16 sözleşme genişletmesi — yanıtta artık `id` var).
  *
- * Malzeme çözüm deseni StockQueryScreen ile aynı ([MaterialPickerField] paylaşılır); kod
- * alanı her değiştiğinde çözülmüş malzeme sıfırlanır — bayat malzemeyle yanlış satır eklenemez.
+ * Sayım Yansıt: dialogda [Sonra] taslağı olduğu gibi bırakır (mevcut davranış — web'den
+ * yansıtılabilir), [Yansıt] POST inventory-count/{id}/apply çağırır; başarıda "Yansıtıldı (N
+ * satır yazıldı)" snackbar'ı ile dialog kapanır. Hata (ör. idempotent reddi — belge zaten
+ * yansıtılmış) dialog İÇİNDE satır olarak gösterilir ve dialog AÇIK kalır (WorkOrderDetailScreen'in
+ * CompleteOperationDialog hata deseniyle aynı gerekçe: kullanıcı mesajı okuyup tekrar deneyebilsin
+ * veya "Sonra" ile vazgeçebilsin — id kaybolmasın diye snackbar'a düşürülüp dialog kapatılmadı).
+ *
+ * Başarıda form HER İKİ dalda da (applied true/false) hemen temizlenir, lokasyon korunur (art
+ * arda sayım girişi için — StockDocScreen'in "Yeni Belge" idiomuyla aynı gerekçe); Sayım Yansıt
+ * dialoğu bu temizlemeden BAĞIMSIZ ayrı bir state'tir.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
+fun CountScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val repo = context.app.warehouseRepository
     val scope = rememberCoroutineScope()
-
-    val isStockIn = mode == StockDocMode.IN
-    val screenTitle = if (isStockIn) "Depo Giriş" else "Depo Çıkış"
-    val locationLabel = if (isStockIn) "Hedef Lokasyon" else "Kaynak Lokasyon"
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // ── Lokasyonlar (açılışta bir kez; hata halinde retry ile yeniden) ──────
     var locations by remember { mutableStateOf<List<WarehouseLocationDto>?>(null) }
     var locationsError by remember { mutableStateOf<String?>(null) }
     var locationsAttempt by remember { mutableStateOf(0) }
-    var selectedLocation by remember { mutableStateOf<WarehouseLocationDto?>(null) }
+
+    // Seçili lokasyon ID rememberSaveable — process-death'e karşı ek sağlamlık (StockDocScreen'in
+    // "code" alanı için uyguladığı gerekçeyle aynı). Nesnenin kendisi değil ID saklanır; DTO her
+    // recomposition'da locations listesinden id ile bulunur.
+    var locationId by rememberSaveable { mutableStateOf<Int?>(null) }
     var showLocationPicker by remember { mutableStateOf(false) }
+
+    val selectedLocation = locations?.firstOrNull { it.id == locationId }
 
     LaunchedEffect(locationsAttempt) {
         locations = null
@@ -117,43 +137,58 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
         )
     }
 
-    // ── Kalem ekleme formu (rehber ile ara/seç → miktar) ────────────────────
-    // code: rememberSaveable — kamera taramasından dönüşte yaşanan rotasyonda MainActivity
-    // artık configChanges ile yeniden yaratılmıyor, ama process-death'e karşı ek sağlamlık
-    // için MaterialPickerField'ın query'sini tutan bu alan Bundle'a da yazılır (2026-07-16).
+    // ── Kalem ekleme formu (rehber ile ara/seç → sayılan miktar) ────────────
     var code by rememberSaveable { mutableStateOf("") }
     var resolved by remember { mutableStateOf<StockQueryDto?>(null) }
     var resolveError by remember { mutableStateOf<String?>(null) }
-    var qtyText by remember { mutableStateOf("") }
+    var qtyText by rememberSaveable { mutableStateOf("") }
 
     // ── Belge durumu ────────────────────────────────────────────────────────
-    var lines by remember { mutableStateOf(listOf<DocLineUi>()) }
+    var lines by remember { mutableStateOf(listOf<CountLineUi>()) }
     var note by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
-    var saveError by remember { mutableStateOf<String?>(null) }
-    var successDocNumber by remember { mutableStateOf<String?>(null) }
 
+    // ── Sayım Yansıt (2026-07-16) — applied=false dalında dialog state'i ────
+    var draftResult by remember { mutableStateOf<DraftCountResult?>(null) }
+    var applying by remember { mutableStateOf(false) }
+    var applyError by remember { mutableStateOf<String?>(null) }
+
+    // Sayımda 0 GEÇERLİ ("raf boş") — StockDocScreen'in "qty > 0" kısıtından farklı, >= 0 kabul.
     // Miktar TR klavyede virgülle de girilebilir — nokta ile normalize edilip parse edilir.
     val qtyValue = qtyText.trim().replace(',', '.').toDoubleOrNull()
-    val qtyValid = qtyValue != null && qtyValue > 0.0
+    val qtyValid = qtyValue != null && qtyValue >= 0.0
+
+    fun systemQtyFor(dto: StockQueryDto): Double {
+        val loc = selectedLocation ?: return 0.0
+        return dto.balances.firstOrNull { it.locationId == loc.id }?.quantity ?: 0.0
+    }
 
     fun addLine() {
         val item = resolved ?: return
         val qty = qtyValue
-        if (qty == null || qty <= 0.0 || saving) return
-        lines = lines + DocLineUi(
+        if (qty == null || qty < 0.0 || saving) return
+        lines = lines + CountLineUi(
             itemId = item.itemId,
             itemCode = item.itemCode,
             itemName = item.itemName,
             unit = item.unit,
-            quantity = qty
+            systemQuantity = systemQtyFor(item),
+            countedQuantity = qty
         )
-        // Form sıradaki kalem için sıfırlanır; önceki kaydetme hatası da bayatladı.
+        // Form sıradaki kalem için sıfırlanır; önceki çözüm bayatladı.
         code = ""
         qtyText = ""
         resolved = null
         resolveError = null
-        saveError = null
+    }
+
+    fun resetForm() {
+        lines = emptyList()
+        note = ""
+        code = ""
+        qtyText = ""
+        resolved = null
+        resolveError = null
     }
 
     fun save() {
@@ -161,33 +196,66 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
         if (lines.isEmpty() || saving) return
         scope.launch {
             saving = true
-            saveError = null
-            val reqLines = lines.map { StockDocLineRequest(itemId = it.itemId, quantity = it.quantity) }
+            val reqLines = lines.map {
+                InventoryCountLineRequest(itemId = it.itemId, countedQuantity = it.countedQuantity)
+            }
             val noteOrNull = note.trim().takeIf { it.isNotBlank() }
-            val result = if (isStockIn) repo.stockIn(loc.id, reqLines, noteOrNull)
-                         else repo.stockOut(loc.id, reqLines, noteOrNull)
+            val result = repo.inventoryCount(loc.id, reqLines, noteOrNull)
+            // showSnackbar bir dismiss'e kadar suspend olur — doğrudan burada çağrılırsa
+            // "saving = false" snackbar kaybolana dek gecikir. Ayrı scope.launch (fire-and-forget)
+            // ile WorkOrderDetailScreen'deki aynı desen kullanılır.
             result.fold(
-                onSuccess = { successDocNumber = it.docNumber },
-                onFailure = { saveError = it.message ?: "Kaydetme başarısız" }
+                onSuccess = { res ->
+                    resetForm()
+                    if (res.applied) {
+                        // Sunucu doğrudan uyguladı — "yansıtılsın mı" sormanın anlamı yok,
+                        // mevcut davranış (snackbar) korunur.
+                        scope.launch { snackbarHostState.showSnackbar("Sayım kaydedildi ve uygulandı (${res.documentNumber})") }
+                    } else {
+                        // Taslak kaldı — Sayım Yansıt dialoğu açılır (bkz. dosya üstü KDoc).
+                        draftResult = DraftCountResult(id = res.id, documentNumber = res.documentNumber)
+                    }
+                },
+                onFailure = { failure ->
+                    scope.launch { snackbarHostState.showSnackbar(failure.message ?: "Kaydetme başarısız") }
+                }
             )
             saving = false
         }
     }
 
-    fun resetForNewDoc() {
-        lines = emptyList()
-        note = ""
-        code = ""
-        qtyText = ""
-        resolved = null
-        resolveError = null
-        saveError = null
+    fun dismissDraftDialog() {
+        draftResult = null
+        applyError = null
+    }
+
+    /**
+     * Sayım Yansıt onayı — POST inventory-count/{id}/apply. Sunucu tarafında idempotent DEĞİL
+     * (ikinci kez çağrılırsa 400 {error} ile reddedilir); hata dialog İÇİNDE gösterilir ve
+     * dialog AÇIK kalır (bkz. dosya üstü KDoc — snackbar'a düşürülmez, id kaybolmasın diye).
+     */
+    fun applyDraft() {
+        val draft = draftResult ?: return
+        if (applying) return
+        scope.launch {
+            applying = true
+            applyError = null
+            repo.applyInventoryCount(draft.id).fold(
+                onSuccess = { res ->
+                    draftResult = null
+                    scope.launch { snackbarHostState.showSnackbar("Yansıtıldı (${res.writtenCount} satır yazıldı)") }
+                },
+                onFailure = { failure -> applyError = failure.message ?: "Yansıtma başarısız" }
+            )
+            applying = false
+        }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(screenTitle) },
+                title = { Text("Sayım") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
@@ -220,7 +288,7 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.error
                 )
                 else -> LocationSelectorCard(
-                    label = locationLabel,
+                    label = "Sayım Lokasyonu",
                     selected = selectedLocation,
                     enabled = !saving,
                     onClick = { showLocationPicker = true }
@@ -282,19 +350,14 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        // Seçili lokasyondaki mevcut bakiye — çıkışta 0 ise uyarı tonunda
-                        // (sunucudaki eksi bakiye guard'ına takılmadan önce erken sinyal).
-                        val loc = selectedLocation
-                        if (loc != null) {
-                            val bal = item.balances.firstOrNull { it.locationId == loc.id }?.quantity ?: 0.0
-                            val warn = !isStockIn && bal <= 0.0
+                        if (selectedLocation != null) {
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "${loc.name} bakiyesi: " + formatQty(bal) +
+                                text = "${selectedLocation.name} sistem bakiyesi: " +
+                                    formatQty(systemQtyFor(item)) +
                                     (item.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (warn) MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -304,7 +367,7 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                                 value = qtyText,
                                 onValueChange = { qtyText = it },
                                 label = {
-                                    Text("Miktar" +
+                                    Text("Sayılan Miktar" +
                                         (item.unit?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""))
                                 },
                                 singleLine = true,
@@ -325,6 +388,12 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                                 Icon(Icons.Default.Add, contentDescription = "Satıra ekle")
                             }
                         }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "0 girilirse \"raf boş\" olarak sayılır.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -343,9 +412,9 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                 )
             } else {
                 // Belge kalem sayısı mobilde küçük kalır; ekran zaten scroll'lu Column
-                // olduğundan LazyColumn yerine düz forEach kullanıldı (StockQueryScreen notu).
+                // olduğundan LazyColumn yerine düz forEach kullanıldı (StockDocScreen ile aynı gerekçe).
                 lines.forEachIndexed { index, line ->
-                    DocLineRow(
+                    CountLineRow(
                         line = line,
                         enabled = !saving,
                         onDelete = { lines = lines.filterIndexed { i, _ -> i != index } }
@@ -364,34 +433,7 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // ── 5) Hata + kaydet ───────────────────────────────────────────
-            if (saveError != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.ErrorOutline,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = saveError!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
+            // ── 5) Kaydet ───────────────────────────────────────────────────
             Button(
                 onClick = { save() },
                 enabled = selectedLocation != null && lines.isNotEmpty() && !saving,
@@ -422,12 +464,12 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
                         .verticalScroll(rememberScrollState())
                 ) {
                     list.forEach { loc ->
-                        val isSelected = loc.id == selectedLocation?.id
+                        val isSelected = loc.id == locationId
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    selectedLocation = loc
+                                    locationId = loc.id
                                     showLocationPicker = false
                                 }
                                 .padding(vertical = 12.dp, horizontal = 4.dp),
@@ -468,39 +510,48 @@ fun StockDocScreen(mode: StockDocMode, onBack: () -> Unit) {
         )
     }
 
-    // ── Başarı diyaloğu — docNumber onayı ──────────────────────────────────
-    if (successDocNumber != null) {
+    // ── Sayım Yansıt diyaloğu — applied=false dalında save() sonrası açılır ─────────────────
+    if (draftResult != null) {
+        val draft = draftResult!!
         AlertDialog(
-            onDismissRequest = {
-                successDocNumber = null
-                onBack()
-            },
+            onDismissRequest = { if (!applying) dismissDraftDialog() },
             icon = {
                 Icon(
-                    Icons.Default.CheckCircle,
+                    Icons.Default.Checklist,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
             },
-            title = { Text(if (isStockIn) "Giriş Belgesi Oluşturuldu" else "Çıkış Belgesi Oluşturuldu") },
-            text = { Text("Belge No: ${successDocNumber!!}") },
+            title = { Text("Sayım Taslak Kaydedildi") },
+            text = {
+                Column {
+                    Text("Sayım taslak kaydedildi (${draft.documentNumber}). Stoğa yansıtılsın mı?")
+                    if (applyError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = applyError!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    successDocNumber = null
-                    resetForNewDoc()   // lokasyon korunur — art arda belge girişi için
-                }) { Text("Yeni Belge") }
+                TextButton(onClick = { applyDraft() }, enabled = !applying) {
+                    if (applying) CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    else Text("Yansıt")
+                }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    successDocNumber = null
-                    onBack()
-                }) { Text("Kapat") }
+                TextButton(onClick = { dismissDraftDialog() }, enabled = !applying) { Text("Sonra") }
             }
         )
     }
 }
 
-/** Lokasyon seçici kartı — tıklanınca seçim diyaloğu açılır (stateless). */
+/** Lokasyon seçici kartı — tıklanınca seçim diyaloğu açılır (stateless). StockDocScreen'in
+ * LocationSelectorCard'ıyla aynı görünüm; ayrı dosyada private top-level fonksiyon olduğundan
+ * isim çakışması yoktur (Kotlin'de dosya-özel görünürlük). */
 @Composable
 private fun LocationSelectorCard(
     label: String,
@@ -578,41 +629,75 @@ private fun LocationsErrorCard(message: String, onRetry: () -> Unit) {
     }
 }
 
-/** Eklenmiş belge kalemi satırı — ad/kod + miktar + sil (stateless). */
+/**
+ * Eklenmiş sayım kalemi satırı — ad/kod + sil + alt satırda Sistem/Sayılan/Fark üçlüsü
+ * (client-side, salt gösterim). Fark rengi: fazla → primary, eksik → error, eşit → nötr.
+ */
 @Composable
-private fun DocLineRow(line: DocLineUi, enabled: Boolean, onDelete: () -> Unit) {
+private fun CountLineRow(line: CountLineUi, enabled: Boolean, onDelete: () -> Unit) {
+    val diff = line.countedQuantity - line.systemQuantity
+    val diffColor = when {
+        diff > 0.0 -> MaterialTheme.colorScheme.primary
+        diff < 0.0 -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val diffText = (if (diff > 0.0) "+" else "") + formatQty(diff)
+
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 10.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(line.itemName, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = line.itemCode,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(line.itemName, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = line.itemCode,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDelete, enabled = enabled) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Satırı sil",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
-            Text(
-                text = formatQty(line.quantity) +
-                    (line.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            IconButton(onClick = onDelete, enabled = enabled) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Satırı sil",
-                    tint = MaterialTheme.colorScheme.error
-                )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val neutralColor = MaterialTheme.colorScheme.onSurface
+                CountLineStat(label = "Sistem", value = formatQty(line.systemQuantity), unit = line.unit, valueColor = neutralColor)
+                CountLineStat(label = "Sayılan", value = formatQty(line.countedQuantity), unit = line.unit, valueColor = neutralColor)
+                CountLineStat(label = "Fark", value = diffText, unit = line.unit, valueColor = diffColor)
             }
         }
     }
 }
 
-/** Tam sayıları ".00" olmadan, ondalıklıları 2 haneye yuvarlayarak gösterir (StockQueryScreen ile aynı V1 format). */
+/** Sayım satırındaki tek bir istatistik hücresi (etiket üstte küçük, değer altta vurgulu). */
+@Composable
+private fun CountLineStat(label: String, value: String, unit: String?, valueColor: Color) {
+    Column(horizontalAlignment = Alignment.Start) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value + (unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = valueColor
+        )
+    }
+}
+
+/** Tam sayıları ".00" olmadan, ondalıklıları 2 haneye yuvarlayarak gösterir (StockDocScreen ile aynı V1 format). */
 private fun formatQty(q: Double): String =
     if (q == q.toLong().toDouble()) q.toLong().toString() else "%.2f".format(q)

@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import com.calibrahub.app.data.ProductionRepository
 import com.calibrahub.app.data.SessionManager
 import com.calibrahub.app.data.WarehouseRepository
 import com.calibrahub.app.data.WhatsAppRepository
@@ -18,6 +19,7 @@ class CalibraApp : Application() {
     val session: SessionManager by lazy { SessionManager(this) }
     val repository: WhatsAppRepository by lazy { WhatsAppRepository(session) }
     val warehouseRepository: WarehouseRepository by lazy { WarehouseRepository(session) }
+    val productionRepository: ProductionRepository by lazy { ProductionRepository(session) }
 
     override fun onCreate() {
         super.onCreate()

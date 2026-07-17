@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#25D366</color>
-    <color name="ic_launcher_foreground">#FFFFFF</color>
+    <!-- ic_launcher_background / ic_launcher_foreground kaldırıldı (2026-07-16): eski şablon
+         launcher ikonu (WhatsApp yeşili #25D366 + chat balonu) marka simgesiyle (kalibrasyon
+         kadranı) değiştirildi. Yeni adaptive icon katmanları vector drawable (res/drawable/
+         ic_launcher_background.xml, ic_launcher_foreground.xml, ic_launcher_monochrome.xml). -->
 </resources>

@@ -20,10 +20,19 @@ import com.calibrahub.app.ui.chat.ChatListScreen
 import com.calibrahub.app.ui.home.HomeScreen
 import com.calibrahub.app.ui.login.LoginScreen
 import com.calibrahub.app.ui.production.ProductionHomeScreen
+import com.calibrahub.app.ui.production.WorkOrderDetailScreen
+import com.calibrahub.app.ui.production.WorkOrderListScreen
 import com.calibrahub.app.ui.theme.CalibraTheme
+import com.calibrahub.app.ui.warehouse.CountScreen
+import com.calibrahub.app.ui.warehouse.DeliveryDocType
+import com.calibrahub.app.ui.warehouse.DeliveryScreen
+import com.calibrahub.app.ui.warehouse.DraftCountsScreen
+import com.calibrahub.app.ui.warehouse.OpenOrderDetailScreen
+import com.calibrahub.app.ui.warehouse.OpenOrderListScreen
 import com.calibrahub.app.ui.warehouse.StockDocMode
 import com.calibrahub.app.ui.warehouse.StockDocScreen
 import com.calibrahub.app.ui.warehouse.StockQueryScreen
+import com.calibrahub.app.ui.warehouse.TransferScreen
 import com.calibrahub.app.ui.warehouse.WarehouseHomeScreen
 
 class MainActivity : ComponentActivity() {
@@ -103,6 +112,13 @@ private fun AppNav() {
                 onOpenStockQuery = { navController.navigate("warehouse_stock_query") },
                 onOpenStockIn    = { navController.navigate("warehouse_stock_in") },
                 onOpenStockOut   = { navController.navigate("warehouse_stock_out") },
+                onOpenDeliveryPurchase = { navController.navigate("warehouse_delivery/purchase") },
+                onOpenDeliverySales    = { navController.navigate("warehouse_delivery/sales") },
+                onOpenTransfer   = { navController.navigate("warehouse_transfer") },
+                onOpenCount      = { navController.navigate("warehouse_count") },
+                onOpenOpenOrdersSales    = { navController.navigate("warehouse_open_orders/sales") },
+                onOpenOpenOrdersPurchase = { navController.navigate("warehouse_open_orders/purchase") },
+                onOpenDraftCounts        = { navController.navigate("warehouse_draft_counts") },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -115,8 +131,63 @@ private fun AppNav() {
         composable("warehouse_stock_out") {
             StockDocScreen(mode = StockDocMode.OUT, onBack = { navController.popBackStack() })
         }
+        // docType path segmenti "purchase"|"sales" — DeliveryScreen'in tek composable'ına
+        // WarehouseHomeScreen'deki iki ayrı karttan navigate edilir (StockDocMode'un aynı deseni).
+        composable("warehouse_delivery/{docType}") { entry ->
+            val docTypeArg = entry.arguments?.getString("docType")
+            val docType = if (docTypeArg == "sales") DeliveryDocType.SALES else DeliveryDocType.PURCHASE
+            DeliveryScreen(docType = docType, onBack = { navController.popBackStack() })
+        }
+        composable("warehouse_transfer") {
+            TransferScreen(onBack = { navController.popBackStack() })
+        }
+        composable("warehouse_count") {
+            CountScreen(onBack = { navController.popBackStack() })
+        }
+        // FAZ C(a) — Açık Siparişler (2026-07-17). docType path segmenti "purchase"|"sales" AYNI
+        // DeliveryScreen deseni; detay route'u docType'ı da taşır (OpenOrderDetailDto sözleşmesinde
+        // docType YOK, bkz. OpenOrderDetailScreen üstü KDoc).
+        composable("warehouse_open_orders/{docType}") { entry ->
+            val docTypeArg = entry.arguments?.getString("docType")
+            val docType = if (docTypeArg == "sales") DeliveryDocType.SALES else DeliveryDocType.PURCHASE
+            OpenOrderListScreen(
+                docType = docType,
+                onOpenDetail = { id -> navController.navigate("warehouse_open_order_detail/${docType.apiValue}/$id") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("warehouse_open_order_detail/{docType}/{id}") { entry ->
+            val docTypeArg = entry.arguments?.getString("docType")
+            val docType = if (docTypeArg == "sales") DeliveryDocType.SALES else DeliveryDocType.PURCHASE
+            val id = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+            OpenOrderDetailScreen(
+                orderId = id,
+                docType = docType,
+                onBack = { navController.popBackStack() }
+            )
+        }
+        // FAZ C(b) — Taslak Sayımlar (2026-07-17).
+        composable("warehouse_draft_counts") {
+            DraftCountsScreen(onBack = { navController.popBackStack() })
+        }
         composable("production_home") {
-            ProductionHomeScreen(onBack = { navController.popBackStack() })
+            ProductionHomeScreen(
+                onOpenWorkOrders = { navController.navigate("production_work_orders") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("production_work_orders") {
+            WorkOrderListScreen(
+                onOpenDetail = { id -> navController.navigate("production_work_order_detail/$id") },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("production_work_order_detail/{id}") { entry ->
+            val id = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+            WorkOrderDetailScreen(
+                workOrderId = id,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

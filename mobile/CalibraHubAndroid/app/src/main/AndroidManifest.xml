@@ -8,6 +8,10 @@
     <!-- WorkManager arka plan + bildirim için (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Barkod tarama (ZXing CaptureActivity kamerayı kullanır; embedded kütüphane kendi
+         manifest'inde de deklare eder ama açık deklarasyon burada da şart) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!-- WhatsApp Business app intent kuyruğu (Android 11+ paket görünürlüğü) -->
     <queries>
         <package android:name="com.whatsapp" />
@@ -37,12 +41,23 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.CalibraHub">
+            android:theme="@style/Theme.CalibraHub"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Barkod tarama — ZXing'in yatay-kilitli varsayılan CaptureActivity'sinin yerine
+             geçer (fullSensor: dikey + yatay serbest). Tema/windowSoftInputMode kütüphanenin
+             kendi CaptureActivity deklarasyonuyla aynı tutuldu. bkz. FlexibleCaptureActivity.kt,
+             MaterialPickerField.barcodeScanOptions(). -->
+        <activity
+            android:name=".FlexibleCaptureActivity"
+            android:screenOrientation="fullSensor"
+            android:theme="@style/zxing_CaptureTheme"
+            android:windowSoftInputMode="stateAlwaysHidden" />
 
     </application>
 

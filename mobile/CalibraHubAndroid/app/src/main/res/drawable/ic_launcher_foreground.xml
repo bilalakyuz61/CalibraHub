@@ -1,17 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive icon foreground — basit chat balonu sembolü (vektör). 108x108dp foreground spec. -->
+<!--
+  Adaptive icon ön plan katmanı — kalibrasyon kadranı: dairesel gösterge halkası + 12 çentik (4 ana
+  çentik 12/3/6/9 yönünde belirgin, 8 ara çentik ince) + 3 İĞNE (yelkovan) + merkez hub.
+  CalibraHub'ın login ekranındaki kalibrasyon kadranı ile aynı marka dili ve aynı 3-iğne kompozisyonu
+  (bkz. ui/login/LoginScreen.kt CalibrationLockDial/DialNeedles, Views/Account/Login.cshtml .cald-*
+  SVG) — [2026-07-16 revizyon] ilk sürümdeki TEK iğne, kullanıcı talebiyle login/web ile aynı 3
+  iğneli kompozisyona çevrildi: n1 en uzun+kalın (ana), n2 orta, n3 en kısa+ince; uzunluk oranları
+  login kadranındaki ile aynı (lengthDp/DialTrackRadiusDp ≈ %77/%59/%43). İndigo arka planda
+  kaybolmaması için n1 burada login'deki gibi indigo DEĞİL, BEYAZ (+ ince cyan çekirdek çizgisi);
+  n2 cyan, n3 violet — web/login ile aynı renk ailesi. Üç iğne 120° ayrık dinlenme açılarında (saat
+  10/2/6 yönleri) — üst üste binmez, küçük ikon boyutunda üçü de ayrı ayrı seçilir.
+
+  Tüm geometri merkez (54,54) etrafında adaptive icon safe-zone'u (108dp viewport'un ortasındaki
+  ~66dp çaplı daire, yarıçap ~33dp) içinde kalacak şekilde ölçülendirildi — en dış uç (ana çentik
+  ucu) yarıçap 32, en uzun iğne (n1) ucu yarıçap 18.5 — maskeleme (dairesel/squircle/yuvarlak-kare)
+  kenarları kırpsa bile kritik çizim kaybolmaz.
+
+  Çentikler ve iğneler, Compose'daki CalibrationLockDial ile aynı teknikle konumlandırılır: her öğe
+  12 yönden birinde SABİT olarak yukarı (12 hizası) çizilir, sonra <group rotation> ile saat
+  yönünde döndürülür — trigonometri gerekmez (rotation derece = Compose rotate() ile birebir aynı
+  saat yönü kuralı).
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- 0) Gösterge halkası — üç iğnenin/çentiklerin ortak yörüngesi -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,30 m-22,0 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0
-                          M44,46 l-8,8 l0,-12 z" />
+        android:pathData="M54,54 m-24,0 a24,24 0 1,0 48,0 a24,24 0 1,0 -48,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeAlpha="0.85"
+        android:fillColor="#00000000" />
+
+    <!-- 1) 12 çentik — her 3.'sü (12/3/6/9) ana çentik: daha uzun + kalın + tam opak.
+         Ara çentikler ince + %70 opaklık (hiyerarşi, kalabalık görünmesin). -->
+    <group android:name="tick_0" android:pivotX="54" android:pivotY="54" android:rotation="0">
+        <path android:pathData="M54,22 L54,29" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_1" android:pivotX="54" android:pivotY="54" android:rotation="30">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_2" android:pivotX="54" android:pivotY="54" android:rotation="60">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_3" android:pivotX="54" android:pivotY="54" android:rotation="90">
+        <path android:pathData="M54,22 L54,29" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_4" android:pivotX="54" android:pivotY="54" android:rotation="120">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_5" android:pivotX="54" android:pivotY="54" android:rotation="150">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_6" android:pivotX="54" android:pivotY="54" android:rotation="180">
+        <path android:pathData="M54,22 L54,29" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_7" android:pivotX="54" android:pivotY="54" android:rotation="210">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_8" android:pivotX="54" android:pivotY="54" android:rotation="240">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_9" android:pivotX="54" android:pivotY="54" android:rotation="270">
+        <path android:pathData="M54,22 L54,29" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_10" android:pivotX="54" android:pivotY="54" android:rotation="300">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+    <group android:name="tick_11" android:pivotX="54" android:pivotY="54" android:rotation="330">
+        <path android:pathData="M54,26 L54,29" android:strokeColor="#B3FFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" />
+    </group>
+
+    <!-- 2) 3 iğne (yelkovan) — merkezden (hub) çıkar, her biri kendi rengi/uzunluğu/kalınlığıyla
+         döner; birbirinden TAM 120° ayrık dinlenme açılarında (üst üste binmesinler). -->
+
+    <!-- n1 — en uzun+kalın (ana iğne), saat 10 yönü (300°): beyaz gövde + ince cyan çekirdek
+         çizgisi + kısa karşı kuyruk (gerçek saat ibresi hissi — yalnız n1'de, login'de de yalnız
+         r=0'da kuyruk var). -->
+    <group android:name="needle_n1" android:pivotX="54" android:pivotY="54" android:rotation="300">
+        <path android:pathData="M54,35.5 L54,59.5" android:strokeColor="#FFFFFFFF" android:strokeWidth="6.2" android:strokeLineCap="round" />
+        <path android:pathData="M54,38 L54,57" android:strokeColor="#06B6D4" android:strokeWidth="2" android:strokeLineCap="round" />
+    </group>
+
+    <!-- n2 — orta uzunluk/kalınlık, saat 2 yönü (60°), cyan (#06B6D4) — NeedleColorCyan ile aynı. -->
+    <group android:name="needle_n2" android:pivotX="54" android:pivotY="54" android:rotation="60">
+        <path android:pathData="M54,40 L54,54" android:strokeColor="#06B6D4" android:strokeWidth="4.4" android:strokeLineCap="round" />
+    </group>
+
+    <!-- n3 — en kısa+ince, saat 6 yönü (180°), violet (#8B5CF6) — NeedleColorViolet ile aynı. -->
+    <group android:name="needle_n3" android:pivotX="54" android:pivotY="54" android:rotation="180">
+        <path android:pathData="M54,43.5 L54,54" android:strokeColor="#8B5CF6" android:strokeWidth="3" android:strokeLineCap="round" />
+    </group>
+
+    <!-- 3) Merkez hub — iğnelerin döndüğü nokta; iki tonlu (beyaz gövde + cyan çekirdek noktası),
+         3 iğnenin üstünde en üst katman. -->
     <path
-        android:fillColor="#FFFFFF"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="1"
-        android:pathData="M48,46 l12,0 M48,52 l8,0" />
+        android:pathData="M54,54 m-6.5,0 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0"
+        android:fillColor="#FFFFFFFF" />
+    <path
+        android:pathData="M54,54 m-2.6,0 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0"
+        android:fillColor="#06B6D4" />
 </vector>
