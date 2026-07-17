@@ -3985,6 +3985,29 @@ body.app-theme-dark .cst-root {
 .cst-th__icon { flex-shrink: 0; opacity: 0.75; }
 .cst-th__label { overflow: hidden; text-overflow: ellipsis; }
 
+/* Sutun basligi metin kaydirma — "Başlığı Kaydır" switch'i (SmartColumnSettings.jsx
+   headerWrap alani) ACIK oldugunda uygulanir. Bu class YOKKEN yukaridaki .cst-th
+   tek-satir/ellipsis davranisi degismeden kalir (regresyonsuz). VARKEN normal
+   beyaz-bosluk sarma + kirilamayan uzun bir token'i (bosluksuz uzun kelime) bile
+   sutun genisligine (table-layout:fixed) zorla sigdirir — aksi halde tek bir uzun
+   kelime sutunu tasirabilirdi. Yalnizca BASLIK sarilir; hucre degerleri
+   (.cst-value__text, SmartTableRow.jsx) HER ZAMAN tek-satir kalir — ayri, kasitli
+   bir mekanizma (bkz. SmartTableRow.jsx dosya ustu notu). */
+.cst-th--wrap,
+.cst-th--wrap .cst-th__label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
+}
+.cst-th--wrap .cst-th__inner {
+  align-items: flex-start;
+}
+.cst-th--wrap .cst-th__icon {
+  margin-top: 1px;
+}
+
 /* Satirlar */
 .cst-row { transition: background-color 0.15s ease; }
 .cst-row:hover > .cst-td { background-color: var(--cst-row-hover); }

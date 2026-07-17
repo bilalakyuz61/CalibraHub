@@ -16,7 +16,7 @@
  * Widget sutun genisligi resolveChipWidth ile (kart modundaki chip genisligiyle
  * ayni tablo) — boylece basliklar hucrelerle hizali kalir. `columnConfig` prop'u
  * (SmartColumnSettings.jsx'in ürettiği { <id>: {align,width,pin,fontSize,
- * fontWeight,label} } haritası) verilmişse per-sutun override uygulanır —
+ * fontWeight,label,headerWrap} } haritası) verilmişse per-sutun override uygulanır —
  * yoksa (kart modu board'ları bu prop'u hiç göndermez) davranış AYNEN eskisi
  * gibi kalır (regresyonsuz).
  *
@@ -181,6 +181,7 @@ function computeColumns(masterWidgets, visibleIds, order, widgetMeta, columnConf
       pinned: c.pin === true,
       fontSize: (typeof c.fontSize === 'number' && c.fontSize > 0) ? c.fontSize : null,
       fontWeight: (typeof c.fontWeight === 'number' && c.fontWeight > 0) ? c.fontWeight : null,
+      headerWrap: c.headerWrap === true,
     })
   })
 
@@ -241,7 +242,7 @@ export default function SmartTable(props) {
                 return (
                   <th
                     key={c.id}
-                    className={'cst-th' + (c.pinned ? ' cst-th--pinned' : '')}
+                    className={'cst-th' + (c.pinned ? ' cst-th--pinned' : '') + (c.headerWrap ? ' cst-th--wrap' : '')}
                     title={c.label}
                     style={thStyle}
                   >

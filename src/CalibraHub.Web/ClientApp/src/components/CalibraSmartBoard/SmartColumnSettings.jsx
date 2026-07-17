@@ -73,22 +73,50 @@ var ALIGN_OPTIONS = [
   { value: 'center', label: 'Ortala', icon: AlignCenter },
   { value: 'right', label: 'Sağa Hizala', icon: AlignRight },
 ]
-var FONT_SIZE_OPTIONS = [
-  { value: 0, label: 'Otomatik' },
-  { value: 11, label: 'Küçük' },
-  { value: 13, label: 'Normal' },
-  { value: 15, label: 'Büyük' },
-]
-var FONT_WEIGHT_OPTIONS = [
-  { value: 0, label: 'Otomatik' },
-  { value: 400, label: 'İnce' },
-  { value: 500, label: 'Orta' },
-  { value: 600, label: 'Yarı Kalın' },
-  { value: 700, label: 'Kalın' },
-]
 var WIDTH_STEP = 20
 var WIDTH_MIN = 90
 var WIDTH_MAX = 480
+
+// Boyut (font-size) / Kalınlık (font-weight) — Genişlik ile AYNI stepper deseni
+// (sayısal değer + -/+ + Otomatik toggle), eski segment butonları (Küçük/Orta/
+// Büyük, İnce/Orta/Yarı Kalın/Kalın) yerine. Adım/aralık: Boyut 1px [10-24],
+// Kalınlık 100 [100-900] (CSS font-weight yalnızca 100'ün katlarını tanır,
+// bkz. CLAUDE.md "font-weight geçerli değerleri"). *_NATURAL — Otomatik'ten
+// ilk +/- basışında başlanacak "doğal" değer (Genişlik'teki resolveChipWidth
+// ile aynı rol); stepleme bu değere geri dönerse override kaldırılır (tekrar
+// Otomatik) — bkz. handleFontSizeStep/handleFontWeightStep, handleWidthStep
+// ile birebir aynı mantık.
+var FONT_SIZE_STEP = 1
+var FONT_SIZE_MIN = 10
+var FONT_SIZE_MAX = 24
+var FONT_SIZE_NATURAL = 13
+var FONT_WEIGHT_STEP = 100
+var FONT_WEIGHT_MIN = 100
+var FONT_WEIGHT_MAX = 900
+var FONT_WEIGHT_NATURAL = 600
+
+/**
+ * Boyut/Kalınlık değerlerini güvenli aralığa sokar — eski/bozuk veri (string
+ * enum, aralık-dışı sayı, NaN) hiçbir zaman crash/NaN render ETMEZ, sessizce
+ * "Otomatik"a (0) düşer. Geçerli ama aralık-dışı sayı sınıra kırpılır; Kalınlık
+ * ayrıca en yakın 100'e yuvarlanır. Mevcut kayıtlı sayısal değerler (eski
+ * segment seçeneklerinin değerleri: Boyut 11/13/15, Kalınlık 400/500/600/700)
+ * zaten yeni aralıkların içinde olduğu için olduğu gibi (dönüşümsüz) taşınır.
+ */
+function clampFontSize(v) {
+  if (typeof v !== 'number' || !isFinite(v) || v <= 0) return 0
+  var n = Math.round(v)
+  if (n < FONT_SIZE_MIN) return FONT_SIZE_MIN
+  if (n > FONT_SIZE_MAX) return FONT_SIZE_MAX
+  return n
+}
+function clampFontWeight(v) {
+  if (typeof v !== 'number' || !isFinite(v) || v <= 0) return 0
+  var n = Math.round(v / 100) * 100
+  if (n < FONT_WEIGHT_MIN) return FONT_WEIGHT_MIN
+  if (n > FONT_WEIGHT_MAX) return FONT_WEIGHT_MAX
+  return n
+}
 
 /* ── Aktif sutun satiri — kompakt baslik + acilir detay paneli ────────── */
 function ColumnRow(props) {
@@ -97,6 +125,13 @@ function ColumnRow(props) {
   var pinned = !!format.pin
   var expanded = props.expanded
   var naturalWidth = props.naturalWidth
+  var headerWrap = !!format.headerWrap
+  // clampFontSize/clampFontWeight — legacy/bozuk veriyi guvenle "Otomatik"a
+  // (0) dusurur, gecerli sayiyi araliga kirpar (bkz. tanim ustundeki yorum).
+  var fontSizeValue = clampFontSize(format.fontSize)
+  var fontSizeOverridden = fontSizeValue > 0
+  var fontWeightValue = clampFontWeight(format.fontWeight)
+  var fontWeightOverridden = fontWeightValue > 0
 
   var Icon = resolveIcon(column.icon, null, column.dataType)
   var palette = resolveColor(column.color, column.dataType)
@@ -218,6 +253,37 @@ function ColumnRow(props) {
             />
           </div>
 
+          {/* Başlığı Kaydır — uzun widget başlıkları çok satıra sarılsın mı
+              (switch, checkbox değil — bkz. CLAUDE.md "Boolean alanlar için
+              switchkey"). Yalnızca BAŞLIK sarılır; hücre değerleri her zaman
+              tek satır kalır (bkz. SmartTable.jsx / index.css .cst-th--wrap). */}
+          <div className="flex items-center gap-2">
+            <span className="w-16 text-[10px] font-semibold text-slate-400 dark:text-white/35 flex-shrink-0">Başlığı Kaydır</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={headerWrap}
+                onClick={props.onToggleHeaderWrap}
+                className={'relative inline-flex items-center flex-shrink-0 w-[30px] h-[16px] rounded-full border-[1px] transition-colors duration-150 ' +
+                  (headerWrap
+                    ? 'bg-indigo-500/80 border-indigo-400/50'
+                    : 'bg-slate-300 dark:bg-white/10 border-slate-300 dark:border-white/10')
+                }
+                title={headerWrap ? 'Başlığı kaydırmayı kapat' : 'Uzun başlığı çok satıra sar'}
+              >
+                <span
+                  className={'inline-block w-[12px] h-[12px] rounded-full bg-white/100 shadow-sm transition-transform duration-150 ' +
+                    (headerWrap ? 'translate-x-[15px]' : 'translate-x-[2px]')
+                  }
+                />
+              </button>
+              <span className="text-[10.5px] text-slate-400 dark:text-white/40">
+                {headerWrap ? 'Açık' : 'Kapalı'}
+              </span>
+            </div>
+          </div>
+
           {/* Hizalama */}
           <div className="flex items-center gap-2">
             <span className="w-16 text-[10px] font-semibold text-slate-400 dark:text-white/35 flex-shrink-0">Hizalama</span>
@@ -282,52 +348,86 @@ function ColumnRow(props) {
             </div>
           </div>
 
-          {/* Boyut */}
+          {/* Boyut — Genişlik ile aynı stepper deseni (sayısal px + -/+ + Otomatik) */}
           <div className="flex items-center gap-2">
             <span className="w-16 text-[10px] font-semibold text-slate-400 dark:text-white/35 flex-shrink-0">Boyut</span>
-            <div className="flex items-center gap-1 flex-wrap">
-              {FONT_SIZE_OPTIONS.map(function (opt) {
-                var active = (format.fontSize || 0) === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={function () { props.onSetFontSize(opt.value) }}
-                    className={'px-2 py-1 rounded-lg border-[1px] text-[10.5px] font-medium transition-colors ' +
-                      (active
-                        ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-600 dark:text-indigo-300'
-                        : 'bg-white/100 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60')
-                    }
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={function () { props.onFontSizeStep(-1) }}
+                className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/100 dark:bg-white/[0.03] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors flex-shrink-0"
+                title="Küçült"
+              >
+                <Minus size={11} />
+              </button>
+              <span
+                className="text-[11px] text-slate-500 dark:text-white/45 min-w-[58px] text-center flex-shrink-0"
+                style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}
+              >
+                {fontSizeOverridden ? (fontSizeValue + 'px') : 'Otomatik'}
+              </span>
+              <button
+                type="button"
+                onClick={function () { props.onFontSizeStep(1) }}
+                className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/100 dark:bg-white/[0.03] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors flex-shrink-0"
+                title="Büyüt"
+              >
+                <Plus size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={props.onFontSizeReset}
+                className={'px-2 py-1 rounded-lg border-[1px] text-[10.5px] font-medium transition-colors ml-1 flex-shrink-0 ' +
+                  (!fontSizeOverridden
+                    ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-600 dark:text-indigo-300'
+                    : 'bg-white/100 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60')
+                }
+                title="Otomatik boyut (miras)"
+              >
+                Otomatik
+              </button>
             </div>
           </div>
 
-          {/* Kalınlık */}
+          {/* Kalınlık — Genişlik ile aynı stepper deseni (adım 100; CSS
+              font-weight yalnızca 100'ün katlarını tanır) */}
           <div className="flex items-center gap-2">
             <span className="w-16 text-[10px] font-semibold text-slate-400 dark:text-white/35 flex-shrink-0">Kalınlık</span>
-            <div className="flex items-center gap-1 flex-wrap">
-              {FONT_WEIGHT_OPTIONS.map(function (opt) {
-                var active = (format.fontWeight || 0) === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={function () { props.onSetFontWeight(opt.value) }}
-                    className={'px-2 py-1 rounded-lg border-[1px] text-[10.5px] transition-colors ' +
-                      (active
-                        ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-600 dark:text-indigo-300'
-                        : 'bg-white/100 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60')
-                    }
-                    style={{ fontWeight: opt.value || 400 }}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={function () { props.onFontWeightStep(-1) }}
+                className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/100 dark:bg-white/[0.03] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors flex-shrink-0"
+                title="İncelt"
+              >
+                <Minus size={11} />
+              </button>
+              <span
+                className="text-[11px] text-slate-500 dark:text-white/45 min-w-[58px] text-center flex-shrink-0"
+                style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontWeight: fontWeightOverridden ? fontWeightValue : undefined }}
+              >
+                {fontWeightOverridden ? fontWeightValue : 'Otomatik'}
+              </span>
+              <button
+                type="button"
+                onClick={function () { props.onFontWeightStep(1) }}
+                className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/100 dark:bg-white/[0.03] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors flex-shrink-0"
+                title="Kalınlaştır"
+              >
+                <Plus size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={props.onFontWeightReset}
+                className={'px-2 py-1 rounded-lg border-[1px] text-[10.5px] font-medium transition-colors ml-1 flex-shrink-0 ' +
+                  (!fontWeightOverridden
+                    ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-600 dark:text-indigo-300'
+                    : 'bg-white/100 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60')
+                }
+                title="Otomatik kalınlık (miras)"
+              >
+                Otomatik
+              </button>
             </div>
           </div>
         </div>
@@ -523,11 +623,29 @@ export default function SmartColumnSettings(props) {
   function handleSetLabel(id, label) {
     patchColumn(id, { label: label })
   }
-  function handleSetFontSize(id, size) {
-    patchColumn(id, { fontSize: size || undefined })
+  function handleToggleHeaderWrap(id) {
+    var isWrapped = !!(columns[id] && columns[id].headerWrap)
+    patchColumn(id, { headerWrap: isWrapped ? undefined : true })
   }
-  function handleSetFontWeight(id, weight) {
-    patchColumn(id, { fontWeight: weight || undefined })
+  // Genislik'teki handleWidthStep/handleWidthReset ile BIREBIR ayni desen:
+  // Otomatik'ten ilk +/- basisi *_NATURAL degerinden baslar; stepleme geri
+  // NATURAL'a donerse override kaldirilir (tekrar Otomatik). Legacy/bozuk
+  // deger clampFontSize/clampFontWeight ile guvenle Otomatik'e duser.
+  function handleFontSizeStep(id, dir) {
+    var cur = clampFontSize(columns[id] && columns[id].fontSize) || FONT_SIZE_NATURAL
+    var next = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, cur + dir * FONT_SIZE_STEP))
+    patchColumn(id, { fontSize: next === FONT_SIZE_NATURAL ? undefined : next })
+  }
+  function handleFontSizeReset(id) {
+    patchColumn(id, { fontSize: undefined })
+  }
+  function handleFontWeightStep(id, dir) {
+    var cur = clampFontWeight(columns[id] && columns[id].fontWeight) || FONT_WEIGHT_NATURAL
+    var next = Math.max(FONT_WEIGHT_MIN, Math.min(FONT_WEIGHT_MAX, cur + dir * FONT_WEIGHT_STEP))
+    patchColumn(id, { fontWeight: next === FONT_WEIGHT_NATURAL ? undefined : next })
+  }
+  function handleFontWeightReset(id) {
+    patchColumn(id, { fontWeight: undefined })
   }
   function handleWidthStep(id, widget, dir) {
     var natural = resolveChipWidth(widget.dataType, widget.type)
@@ -702,8 +820,11 @@ export default function SmartColumnSettings(props) {
                                     onRemove={function () { handleRemove(w.id) }}
                                     onSetAlign={function (a) { handleSetAlign(w.id, a) }}
                                     onSetLabel={function (l) { handleSetLabel(w.id, l) }}
-                                    onSetFontSize={function (s) { handleSetFontSize(w.id, s) }}
-                                    onSetFontWeight={function (fw) { handleSetFontWeight(w.id, fw) }}
+                                    onToggleHeaderWrap={function () { handleToggleHeaderWrap(w.id) }}
+                                    onFontSizeStep={function (dir) { handleFontSizeStep(w.id, dir) }}
+                                    onFontSizeReset={function () { handleFontSizeReset(w.id) }}
+                                    onFontWeightStep={function (dir) { handleFontWeightStep(w.id, dir) }}
+                                    onFontWeightReset={function () { handleFontWeightReset(w.id) }}
                                     onWidthStep={function (dir) { handleWidthStep(w.id, w, dir) }}
                                     onWidthReset={function () { handleWidthReset(w.id) }}
                                   />

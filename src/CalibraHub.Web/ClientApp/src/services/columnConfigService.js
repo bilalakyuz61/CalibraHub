@@ -26,7 +26,7 @@
  *     visibleIds: ['unit', 'type', ...],
  *     order:      ['type', 'unit', ...],
  *     columns: {
- *       '<id>': { align, width, pin, fontSize, fontWeight, label }
+ *       '<id>': { align, width, pin, fontSize, fontWeight, label, headerWrap }
  *     }
  *   }
  */
@@ -71,6 +71,7 @@ export function normalizeColumnConfig(raw) {
     if (c.align === 'center' || c.align === 'right') entry.align = c.align
     if (typeof c.width === 'number' && isFinite(c.width) && c.width > 0) entry.width = Math.round(c.width)
     if (c.pin === true) entry.pin = true
+    if (c.headerWrap === true) entry.headerWrap = true
     if (typeof c.fontSize === 'number' && isFinite(c.fontSize) && c.fontSize > 0) entry.fontSize = Math.round(c.fontSize)
     if (typeof c.fontWeight === 'number' && isFinite(c.fontWeight) && c.fontWeight > 0) entry.fontWeight = Math.round(c.fontWeight)
     if (typeof c.label === 'string' && c.label.trim()) entry.label = c.label.trim()
