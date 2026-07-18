@@ -61,7 +61,8 @@ import { loadBoardColumnConfig, saveBoardColumnConfig } from '../../services/col
 var DATA_TYPE_TR = {
   text: 'Metin', numeric: 'Sayı', percent: 'Yüzde', date: 'Tarih', phone: 'Telefon',
   switch: 'Anahtar', bool: 'Anahtar', boolean: 'Anahtar', attachment: 'Ek',
-  lookup: 'Rehber', link: 'Bağlantı', select: 'Liste', textarea: 'Uzun Metin',
+  lookup: 'Rehber', link: 'Bağlantı', select: 'Liste', options: 'Liste', combo: 'Liste',
+  multiselect: 'Çoklu Liste', 'multi-select': 'Çoklu Liste', textarea: 'Uzun Metin',
 }
 function typeLabelTr(dt) {
   if (!dt) return ''
