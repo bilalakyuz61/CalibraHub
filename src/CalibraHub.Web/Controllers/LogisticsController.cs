@@ -1144,6 +1144,7 @@ public sealed class LogisticsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> ConfigureMaterialCard(
         int stockCardId,
         bool isConfigurable,
@@ -1627,6 +1628,7 @@ public sealed class LogisticsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ProductCombinations)]
     public async Task<IActionResult> SaveProductCombinations(
         [FromForm] string stockCode,
         string[]? selectedCombinations,
@@ -2521,6 +2523,8 @@ public sealed class LogisticsController : Controller
     // NOT: SaveMaterialCardJson + DeleteMaterialCardJson MaterialController'a tasindi (rapor §2.3 split).
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> SaveMaterialCardGridColumns([FromBody] string[] columns, CancellationToken ct)
     {
         var userId = GetUserId();
@@ -2551,6 +2555,7 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> SaveItemUnits([FromBody] SaveItemUnitsInput input, CancellationToken ct)
     {
         if (input.ItemId <= 0)

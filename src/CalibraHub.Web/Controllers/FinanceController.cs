@@ -465,6 +465,7 @@ public sealed class FinanceController : Controller
     /// SmartCard-uyumlu delete endpoint'i — query string ile id bekler.
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.Contacts)]
     public async Task<IActionResult> DeleteContactJson(int id, CancellationToken ct)
     {
         try

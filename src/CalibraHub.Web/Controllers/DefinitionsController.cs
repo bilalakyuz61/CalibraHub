@@ -257,6 +257,7 @@ public sealed class DefinitionsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> SaveCardGroupMappings([FromBody] SaveCardGroupMappingsRequest req, CancellationToken ct)
     {
         if (req.EntityType is not (1 or 2) || string.IsNullOrWhiteSpace(req.EntityId))

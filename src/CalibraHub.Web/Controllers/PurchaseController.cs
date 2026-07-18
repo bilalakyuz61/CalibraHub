@@ -997,6 +997,7 @@ public sealed class PurchaseController : Controller
     /// </summary>
     [HttpPost("/Purchase/CreateTransfer")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.Transfer)]
     public async Task<IActionResult> CreateTransfer([FromBody] CreateTransferRequest req, CancellationToken ct)
     {
         try
@@ -1108,6 +1109,7 @@ public sealed class PurchaseController : Controller
     /// </summary>
     [HttpPost("/Purchase/CreateStockIssue")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockOut)]
     public async Task<IActionResult> CreateStockIssue([FromBody] CreateStockIssueRequest req, CancellationToken ct)
     {
         try
@@ -1240,6 +1242,7 @@ public sealed class PurchaseController : Controller
     /// </summary>
     [HttpPost("/Purchase/FulfillFromStock")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseFulfillment)]
     public async Task<IActionResult> FulfillFromStock([FromBody] FulfillFromStockRequest req, CancellationToken ct)
     {
         if (req?.LineIds == null || req.LineIds.Count == 0)
@@ -1546,6 +1549,7 @@ public sealed class PurchaseController : Controller
     /// </summary>
     [HttpPost("/Purchase/CreatePurchaseOrderFromIhtiyac")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseOrder)]
     public async Task<IActionResult> CreatePurchaseOrderFromIhtiyac(
         [FromBody] CreatePurchaseOrderFromIhtiyacRequest req, CancellationToken ct)
     {
@@ -1659,6 +1663,7 @@ public sealed class PurchaseController : Controller
     /// </summary>
     [HttpPost("/Purchase/CloseRequests")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseRequest)]
     public async Task<IActionResult> CloseRequests([FromBody] CloseRequestsModel req, CancellationToken ct)
     {
         if (req?.RequestIds == null || req.RequestIds.Count == 0)
@@ -1801,6 +1806,7 @@ public sealed class PurchaseController : Controller
     /// </summary>
     [HttpPost("/Purchase/CreatePurchaseDemand")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseDemand)]
     public async Task<IActionResult> CreatePurchaseDemand(
         [FromBody] CreatePurchaseDemandRequest req, CancellationToken ct)
     {
@@ -2047,6 +2053,8 @@ public sealed class PurchaseController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseFulfillment)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> SaveFlatColConfig([FromBody] Fc3SaveColConfigRequest request, CancellationToken ct)
     {
         var uid = CurrentUserId();

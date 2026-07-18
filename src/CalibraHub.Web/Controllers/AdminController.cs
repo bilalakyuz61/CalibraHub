@@ -117,6 +117,8 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.CompanySettings)]
+    [PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> SaveAppearancePreferences(
         AppearanceSettingsViewModel model,
         CancellationToken cancellationToken)
@@ -173,6 +175,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.CompanySettings)]
     public async Task<IActionResult> SaveFormLabels(
         AppearanceSettingsViewModel model,
         CancellationToken cancellationToken)
@@ -820,6 +823,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> TestConnection(
         IntegratorSettingsInput input,
         int? page,
@@ -905,6 +909,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> PullIntegratorData(
         int? page,
         int? pageSize,
@@ -933,6 +938,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> SaveSmtpProfile(
         [Bind(Prefix = "SmtpInput")] SmtpProfileInput smtpInput,
         int? page,
@@ -1001,6 +1007,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> TestSmtpConnection(
         [Bind(Prefix = "SmtpInput")] SmtpProfileInput smtpInput,
         int? page,
@@ -1082,6 +1089,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> TestErpConnection(
         [Bind(Prefix = "ErpInput")] ErpConnectionInput erpInput,
         int? page,
@@ -1279,6 +1287,7 @@ public sealed class AdminController : Controller
         return View();
     }
 
+    [PermissionScope(FormCodes.PermissionMgmt)]
     public async Task<IActionResult> Departments(
         int? page,
         int? pageSize,
@@ -1388,6 +1397,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.PermissionMgmt)]
     public async Task<IActionResult> Departments(
         DepartmentCreateInput input,
         int? page,
@@ -1420,6 +1430,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet]
+    [PermissionScope(FormCodes.PermissionMgmt)]
     public async Task<IActionResult> Users(
         int? page,
         int? pageSize,
@@ -1440,6 +1451,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.PermissionMgmt)]
     public async Task<IActionResult> Users(
         UserCreateInput input,
         int? page,
