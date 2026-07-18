@@ -4,10 +4,15 @@ namespace CalibraHub.Web.Authorization;
 /// 2026-06-07 — Controller veya action'a izin kontrolü kapsamı tanımlar. PermissionEnforcementFilter
 /// bu attribute'u bulunca otomatik HTTP method → action code map yapar:
 ///
-///   GET                 → VIEW
-///   POST + Save*/Update*/Create* → CREATE | EDIT_OWN | EDIT_ALL (herhangi biri yeterli)
+///   GET                          → VIEW | VIEW_OWN
 ///   POST + Delete*/Remove*       → DELETE_OWN | DELETE_ALL
-///   POST (diğer)        → kontrol yapılmaz (özel iş aksiyonu, BUTTON:* ile ayrıca tanımla)
+///   POST + salt-okunur (Preview*/Resolve*/Test*/Get*/Report*/*Excel) → VIEW | VIEW_OWN
+///   POST (DİĞER HEPSİ)           → CREATE | EDIT_OWN | EDIT_ALL   ← fail-closed (2026-07-18)
+///   PUT/PATCH                    → EDIT_OWN | EDIT_ALL
+///   DELETE                       → DELETE_OWN | DELETE_ALL
+///
+/// Ada göre tahmin kırılgandır: doğru kodu farklı olan action'ı
+/// <see cref="PermissionActionAttribute"/> ile AÇIKÇA işaretle (tahmin devre dışı kalır).
 ///
 /// **Kullanım:**
 /// <code>

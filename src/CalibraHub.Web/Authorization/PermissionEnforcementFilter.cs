@@ -18,13 +18,29 @@ namespace CalibraHub.Web.Authorization;
 /// 1. [AllowAnonymous] varsa → atla.
 /// 2. PermissionScope attribute (action öncelikli, sonra controller) bul. Yoksa → atla.
 /// 3. SystemAdmin → izin ver.
-/// 4. HTTP method + action name → adayActionCodes listesi:
-///       GET                                     → [VIEW]
-///       POST + Save/Update/Create/Edit          → [CREATE, EDIT_OWN, EDIT_ALL]
-///       POST/DELETE + Delete/Remove             → [DELETE_OWN, DELETE_ALL]
-///       Diğer                                   → atla (özel BUTTON:* aksiyonları için manuel)
-/// 5. CheckAnyAsync ile en az birinin izinli olup olmadığını kontrol et.
-/// 6. İzinsiz → 403 (JSON request ise JSON, değilse ForbidResult).
+/// 4. [PermissionAction] AÇIK kod verilmişse onu kullan (isim tahminini atla).
+/// 5. Aksi halde HTTP method + action name → adayActionCodes listesi:
+///       GET                                     → [VIEW, VIEW_OWN]
+///       POST + Delete/Remove                    → [DELETE_OWN, DELETE_ALL]
+///       POST + operasyonel sinyal (whitelist)   → kontrol yok
+///       POST + salt-okunur (preview/export/test) → [VIEW, VIEW_OWN]
+///       POST (DİĞER HEPSİ)                      → [CREATE, EDIT_OWN, EDIT_ALL]  ← FAIL-CLOSED
+///       PUT/PATCH                               → [EDIT_OWN, EDIT_ALL]
+///       DELETE                                  → [DELETE_OWN, DELETE_ALL]
+/// 6. CheckAnyAsync ile en az birinin izinli olup olmadığını kontrol et.
+/// 7. İzinsiz → 403 (JSON request ise JSON, değilse ForbidResult).
+///
+/// **2026-07-18 — FAIL-OPEN açığı kapatıldı (KRİTİK):** Önceki sürümde adı bilinen kalıba
+/// (save/update/create/edit/delete...) uymayan POST'lar `Array.Empty&lt;string&gt;()` dönüp izin
+/// kontrolünden SESSİZCE geçiyordu. 433 POST action'ın 172'si bu durumdaydı; aralarında
+/// ChangeStatus, Convert*/Deliver*/Receive*, Revise, ApproveStep/RejectStep, StockIn/StockOut/
+/// Transfer, ApplyInventoryCount, ShopFloor*, DeactivateUser/Company gibi stok-, onay- ve
+/// üretim-etkili gerçek mutasyonlar vardı. Artık varsayılan **mutasyon kabul edilir** ve
+/// CREATE/EDIT aranır. Ada göre tahmin kırılgan olduğundan, farklı kod gereken action
+/// <see cref="PermissionActionAttribute"/> ile AÇIKÇA işaretlenmelidir.
+///
+/// **Etki notu:** SystemAdmin (adım 3) ve DepartmentManager (PermissionService.CheckAsync
+/// içindeki bilinçli bypass) etkilenmez — kısıt yalnızca normal rollerde devreye girer.
 ///
 /// **EDIT_OWN / DELETE_OWN için sahip kontrolü:** Filter sadece "izin var/yok" cevabı verir.
 /// Controller body içinde record.CreatedById == currentUserId doğrulaması yapılmalı (EDIT_OWN
@@ -76,9 +92,16 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
         var deptStr = user.FindFirstValue("department_id");
         int? departmentId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
 
-        // 6) HTTP method + action name → adayActionCodes
-        var actionCodes = ResolveActionCodes(context);
-        if (actionCodes.Length == 0) return; // Convention dışı, izin kontrolü yok
+        // 6) AÇIK [PermissionAction] varsa isim tahminini atla; yoksa method+ad kalıbı.
+        var explicitAction = context.ActionDescriptor.EndpointMetadata
+            .OfType<PermissionActionAttribute>().FirstOrDefault();
+        var actionCodes = explicitAction is not null
+            ? explicitAction.ActionCodes
+            : ResolveActionCodes(context);
+
+        // Boş liste = bilinçli muafiyet (operasyonel sinyal veya [PermissionAction] ile
+        // açıkça muaf tutulmuş). Ada uymayan POST'lar artık BURAYA DÜŞMEZ — fail-closed.
+        if (actionCodes.Length == 0) return;
 
         // 7) Check
         var ct = context.HttpContext.RequestAborted;
@@ -107,12 +130,35 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
             "GET"  => new[] { "VIEW", "VIEW_OWN" },
             "POST" when IsDeleteAction(lower)       => new[] { "DELETE_OWN", "DELETE_ALL" },
             "POST" when IsOperationalAction(lower)  => Array.Empty<string>(), // okundu/typing/sync — VIEW yeterli
-            "POST" when IsWriteAction(lower)        => new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" },
+            "POST" when IsReadOnlyPostAction(lower) => new[] { "VIEW", "VIEW_OWN" },
+            // FAIL-CLOSED (2026-07-18): adı bilinen kalıba uymayan POST artık ATLANMAZ,
+            // mutasyon kabul edilip CREATE/EDIT aranır. Save/Update/Create/Edit/Insert/
+            // Upsert/Send/Forward bu dalın zaten kapsamındadır (ayrı IsWriteAction dalına
+            // gerek kalmadı). Farklı kod gereken action → [PermissionAction] ile açıkça yaz.
+            "POST"                                  => new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" },
             "PUT"  or "PATCH"                       => new[] { "EDIT_OWN", "EDIT_ALL" },
             "DELETE"                                => new[] { "DELETE_OWN", "DELETE_ALL" },
             _ => Array.Empty<string>(),
         };
     }
+
+    /// <summary>
+    /// Veri YAZMAYAN POST'lar: önizleme, dışa aktarım/yazdırma, çözümleme/hesaplama, bağlantı
+    /// testi. Bunlar için CREATE/EDIT istemek salt-izleyen kullanıcıyı gereksiz kilitlerdi →
+    /// VIEW yeterli. Liste bilinçli olarak DAR tutulur: emin olunmayan her action fail-closed
+    /// tarafında (CREATE/EDIT) kalır.
+    /// </summary>
+    private static bool IsReadOnlyPostAction(string actionLower) =>
+        actionLower.StartsWith("preview")  ||   // Preview, PreviewUrl
+        actionLower.StartsWith("resolve")  ||   // ResolveItemCodes/LinePrices/BodySchema — sorgu
+        actionLower.StartsWith("validate") ||   // doğrulama, kayıt yok
+        actionLower.StartsWith("test")     ||   // bağlantı/erişim testleri — iş verisi yazmaz
+        actionLower.StartsWith("get")      ||   // POST Get* = büyük gövdeli sorgu
+        actionLower.StartsWith("report")   ||   // ReportExcel — dışa aktarım
+        actionLower.Contains("excel")      ||   // SmartBoardExcel
+        actionLower == "renderpdf"         ||
+        actionLower == "readheaders"       ||
+        actionLower == "queryinline";
 
     /// <summary>
     /// Başka formların dropdown/guide olarak tükettiği salt-okunur GET endpoint'leri.
@@ -126,16 +172,9 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
         actionLower.EndsWith("options")      ||   // *Options → select option listesi
         actionLower.EndsWith("typeahead");         // *Typeahead
 
-    private static bool IsWriteAction(string actionLower) =>
-        actionLower.Contains("save")    ||
-        actionLower.Contains("update")  ||
-        actionLower.Contains("create")  ||
-        actionLower.Contains("edit")    ||
-        actionLower.Contains("insert")  ||
-        actionLower.Contains("upsert")  ||
-        actionLower.Contains("send")    ||   // mesaj/bildirim gönderme (WhatsApp, mail vs.)
-        actionLower.Contains("forward") ||   // mesaj iletme
-        actionLower.StartsWith("post");
+    // NOT: Eski IsWriteAction (save/update/create/edit/insert/upsert/send/forward/post*)
+    // kaldırıldı — fail-closed varsayılan zaten aynı kodları (CREATE/EDIT_OWN/EDIT_ALL)
+    // döndürdüğü için ayrı bir dal olarak gereksizdi.
 
     private static bool IsDeleteAction(string actionLower) =>
         actionLower.Contains("delete") ||
@@ -146,13 +185,17 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
     /// Operasyonel POST action'lar: sohbet sinyalleri, okundu işaretleme, sync.
     /// VIEW yetkisi yeterli; CREATE/DELETE izni aranmaz.
     /// </summary>
+    /// StartsWith kullanilir ki "*Json" son ekli varyantlar (MarkAllReadJson gibi) da
+    /// kapsansin — 2026-07-18 fail-closed gecisinde bunlar yanlislikla CREATE/EDIT
+    /// istemeye baslamisti (okundu isaretleme bir mutasyon degil, okuma sinyalidir).
     private static bool IsOperationalAction(string actionLower) =>
-        actionLower == "markread"        ||
-        actionLower == "markunread"      ||
-        actionLower == "sendtyping"      ||
-        actionLower == "sendreadreceipt" ||
-        actionLower == "syncgroups"      ||
-        actionLower == "synccontacts";
+        actionLower.StartsWith("markread")        ||
+        actionLower.StartsWith("markunread")      ||
+        actionLower.StartsWith("markallread")     ||
+        actionLower.StartsWith("sendtyping")      ||
+        actionLower.StartsWith("sendreadreceipt") ||
+        actionLower.StartsWith("syncgroups")      ||
+        actionLower.StartsWith("synccontacts");
 
     private static IActionResult MakeForbidResult(
         AuthorizationFilterContext context, string formCode, string[] actionCodes)
