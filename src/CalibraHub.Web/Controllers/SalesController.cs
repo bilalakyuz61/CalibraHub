@@ -927,7 +927,7 @@ public sealed class SalesController : Controller
             ViewData["RequesterLocked"]        = !canOnBehalf;
             ViewData["CurrentUserPersonnelId"] = effectivePersonnelId;
 
-            // Hedef Depo dropdown � Location listesi.
+            // Hedef Depo dropdown → Location listesi.
             var locs = await _logisticsService.GetLocationsAsync(ct);
             var locParentIds = locs.Where(l => l.ParentId.HasValue).Select(l => l.ParentId!.Value).ToHashSet();
             ViewData["LocationList"] = locs

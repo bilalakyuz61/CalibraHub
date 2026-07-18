@@ -876,7 +876,7 @@ public sealed class ProductionController : Controller
                 widgets.Add(new
                 {
                     id = "w_item", type = "data", dataType = "text",
-                    label = "Mamul", value = "�?ablon", detail = "Item bağı yok",
+                    label = "Mamul", value = "Şablon", detail = "Item bağı yok",
                     color = "slate"
                 });
             }

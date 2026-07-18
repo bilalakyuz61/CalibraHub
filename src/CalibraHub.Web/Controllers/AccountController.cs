@@ -106,7 +106,7 @@ public sealed class AccountController : Controller
         return Json(payload);
     }
 
-    // ── �?ifremi Unuttum ──────────────────────────────────────────────────────
+    // ── Şifremi Unuttum ──────────────────────────────────────────────────────
 
     [AllowAnonymous]
     [HttpGet]
@@ -145,14 +145,14 @@ public sealed class AccountController : Controller
 
             var body = $"""
                 <html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:480px;margin:auto;padding:32px">
-                <h2 style="color:#6366f1">�?ifre Sıfırlama</h2>
+                <h2 style="color:#6366f1">Şifre Sıfırlama</h2>
                 <p>Merhaba <strong>{user.FullName}</strong>,</p>
-                <p>�?ifrenizi sıfırlamak için aşağıdaki butona tıklayın.
+                <p>Şifrenizi sıfırlamak için aşağıdaki butona tıklayın.
                    Bu link <strong>1 saat</strong> süreyle geçerlidir.</p>
                 <p style="margin:28px 0">
                   <a href="{resetLink}"
                      style="background:#6366f1;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600">
-                    �?ifremi Sıfırla
+                    Şifremi Sıfırla
                   </a>
                 </p>
                 <p style="color:#64748b;font-size:13px">
@@ -166,7 +166,7 @@ public sealed class AccountController : Controller
             await _emailSender.SendAsync(
                 user.CompanyId,
                 new[] { user.Email },
-                "�?ifre Sıfırlama Talebi",
+                "Şifre Sıfırlama Talebi",
                 body,
                 attachments: null,
                 cancellationToken,
@@ -838,7 +838,7 @@ public sealed class AccountController : Controller
 
     /// <summary>
     /// Kaydedilmiş bağlantı dizesini okur, input'ta dolu olan alanları üzerine yazar.
-    /// �?ifre alanı boş bırakıldığında mevcut şifre korunur.
+    /// Şifre alanı boş bırakıldığında mevcut şifre korunur.
     /// </summary>
     private string MergeWithSaved(DbSettingsInput input)
     {

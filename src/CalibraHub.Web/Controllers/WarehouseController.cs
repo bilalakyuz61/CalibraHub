@@ -685,7 +685,7 @@ public sealed class WarehouseController : Controller
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // AMBAR GİRİ�? / ÇIKI�?
+    // AMBAR GİRİŞ / ÇIKIŞ
     // ═══════════════════════════════════════════════════════════════════════
 
     // Legacy birleşik "Ambar Giriş / Çıkış" ekranı KALDIRILDI (2026-07-09): her ekran kendi

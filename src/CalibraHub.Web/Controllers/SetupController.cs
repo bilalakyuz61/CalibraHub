@@ -304,7 +304,7 @@ public sealed class SetupController : Controller
         return RedirectToAction(nameof(Definitions), new { activeTab = "users" });
     }
 
-    // ── �?irket Tanımları ─────────────────────────────────────────────────────
+    // ── Şirket Tanımları ─────────────────────────────────────────────────────
 
     [HttpGet]
     public async Task<IActionResult> Companies(int? id, int? page, int? pageSize, CancellationToken cancellationToken)
@@ -382,7 +382,7 @@ public sealed class SetupController : Controller
         {
             string? password = request.SqlPassword;
 
-            // �?ifre gönderilmemişse mevcut bağlantı dizesinden al
+            // Şifre gönderilmemişse mevcut bağlantı dizesinden al
             if (string.IsNullOrWhiteSpace(password) && request.Id.HasValue)
             {
                 var existing = await _companyDefinitionRepository.GetByIdAsync(request.Id.Value, cancellationToken);
@@ -575,7 +575,7 @@ public sealed class SetupController : Controller
         };
 
     /// <summary>
-    /// �?irket bazlı rol: CompanyRoles listesinde companyId varsa onu, yoksa globalRole'ü döner.
+    /// Şirket bazlı rol: CompanyRoles listesinde companyId varsa onu, yoksa globalRole'ü döner.
     /// </summary>
     private static (UserRole role, IReadOnlyCollection<CalibraHub.Domain.Enums.UserPermission> perms)
         GetRoleForCompany(SetupUserInput input, int companyId, UserRole globalRole)
@@ -765,15 +765,15 @@ public sealed class SetupController : Controller
 
         var config = CalibraHub.Application.SmartBoard.SmartBoard.For(companies)
             .WithBoardKey("setup-companies")
-            .WithTitle("�?irket Tanımları", subtitle: $"{companies.Count} şirket")
+            .WithTitle("Şirket Tanımları", subtitle: $"{companies.Count} şirket")
             .WithIcon("Building2", "indigo")
             .WithRefreshUrl("/Setup/CompanyBoardConfig")
-            .WithSearchPlaceholder("�?irket adı…")
+            .WithSearchPlaceholder("Şirket adı…")
             .WithEmptyText("Henüz şirket tanımlanmamış")
-            .AddHeaderAction("new", "Yeni �?irket", "Plus", "#open-new-company-modal")
+            .AddHeaderAction("new", "Yeni Şirket", "Plus", "#open-new-company-modal")
             .MapEntities(c =>
             {
-                // �?irket bazlı DB özelliği kaldırıldı — kartta SQL bağlantı widget'ı gösterilmez.
+                // Şirket bazlı DB özelliği kaldırıldı — kartta SQL bağlantı widget'ı gösterilmez.
                 var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
                     .For(c.Id.ToString(), c.Name)
                     .WithStatusBadge(c.IsActive ? "Aktif" : "Pasif", c.IsActive ? "emerald" : "slate");
@@ -819,7 +819,7 @@ public sealed class SetupController : Controller
 
         var config = CalibraHub.Application.SmartBoard.SmartBoard.For(grouped)
             .WithBoardKey("setup-user-mapping")
-            .WithTitle("Kullanıcı-�?irket Eşleme", subtitle: $"{grouped.Count} kullanıcı")
+            .WithTitle("Kullanıcı-Şirket Eşleme", subtitle: $"{grouped.Count} kullanıcı")
             .WithIcon("UserCog", "violet")
             .WithRefreshUrl("/Setup/UserMappingBoardConfig")
             .WithSearchPlaceholder("Ad, e-posta…")
@@ -831,12 +831,12 @@ public sealed class SetupController : Controller
                     .For(item.Primary.Id.ToString(), item.Primary.FullName, subtitle: item.Primary.Email)
                     .WithDescription(item.Assignments.Count > 0
                         ? string.Join(" · ", item.Assignments.Select(a => $"{a.CompanyName} ({a.Role})"))
-                        : "�?irket atanmamış")
+                        : "Şirket atanmamış")
                     .WithStatusBadge(item.Primary.IsActive ? "Aktif" : "Pasif",
                         item.Primary.IsActive ? "emerald" : "slate");
 
                 for (int i = 0; i < item.Assignments.Count; i++)
-                    eb.AddTextWidget($"w_co_{i}", item.Assignments[i].CompanyName ?? "�?irket",
+                    eb.AddTextWidget($"w_co_{i}", item.Assignments[i].CompanyName ?? "Şirket",
                         item.Assignments[i].Role,
                         color: palette[i % palette.Length]);
 
@@ -892,7 +892,7 @@ public sealed class SetupController : Controller
                 SqlServer   = server,
                 SqlDatabase = database,
                 SqlUsername = username,
-                // �?ifre asla client'a gönderilmez — sadece var/yok bilgisi
+                // Şifre asla client'a gönderilmez — sadece var/yok bilgisi
                 HasPassword = !string.IsNullOrEmpty(password)
             };
         }).ToArray();
@@ -929,7 +929,7 @@ public sealed class SetupController : Controller
                 taxNumber = $"TBD-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}";
             }
 
-            // �?ifre alanı boş gelirse mevcut bağlantı dizesini koru
+            // Şifre alanı boş gelirse mevcut bağlantı dizesini koru
             string? connectionString;
             if (string.IsNullOrWhiteSpace(input.SqlServer))
             {
@@ -937,7 +937,7 @@ public sealed class SetupController : Controller
             }
             else if (string.IsNullOrWhiteSpace(input.SqlPassword) && existingConnectionString != null)
             {
-                // �?ifre değiştirilmedi — mevcut bağlantı dizesini koru, sadece sunucu/db/kullanıcı güncelle
+                // Şifre değiştirilmedi — mevcut bağlantı dizesini koru, sadece sunucu/db/kullanıcı güncelle
                 var (_, _, _, existingPwd) = ParseConnectionString(existingConnectionString);
                 connectionString = BuildConnectionString(input.SqlServer, input.SqlDatabase, input.SqlUsername, existingPwd);
             }
@@ -1060,7 +1060,7 @@ public sealed class SetupController : Controller
     {
         var snapshot = await _adminReadService.GetSnapshotAsync(ct);
 
-        // �?irket listesi
+        // Şirket listesi
         const int defaultPageSize = 10;
         var cPageSize = companyPageSize is > 0 ? companyPageSize.Value : defaultPageSize;
         var cTotal = snapshot.Companies.Count;

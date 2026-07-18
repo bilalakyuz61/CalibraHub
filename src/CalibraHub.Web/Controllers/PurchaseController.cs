@@ -1232,7 +1232,7 @@ public sealed class PurchaseController : Controller
     /// Seçili ihtiyaç kalemlerini FIFO stok dağıtımıyla otomatik olarak depoden karşılar.
     /// POST /Purchase/FulfillFromStock
     /// Mantık:
-    ///   1. �?irket parametresinden karşılama deposu/modunu oku.
+    ///   1. Şirket parametresinden karşılama deposu/modunu oku.
     ///   2. Seçili satırların kalan miktarlarını çek.
     ///   3. Belge tarihine göre FIFO sırala (eski talep önce karşılanır).
     ///   4. Her kalem için uygun depolardan stok al, bakiyeyi düş.
@@ -1257,7 +1257,7 @@ public sealed class PurchaseController : Controller
                                      .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
                                      .Select(int.Parse).ToList();
             if (configuredLocIds.Count == 0)
-                return Json(new { ok = false, error = "Karşılama deposu tanımlanmamış. �?irket Ayarları → Satın Alma bölümünden depo seçin." });
+                return Json(new { ok = false, error = "Karşılama deposu tanımlanmamış. Şirket Ayarları → Satın Alma bölümünden depo seçin." });
         }
 
         var s         = _schema.Replace("]", "]]");

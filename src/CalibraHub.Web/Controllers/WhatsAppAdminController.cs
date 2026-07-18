@@ -96,7 +96,7 @@ public sealed class WhatsAppAdminController : Controller
         [FromServices] IWhatsAppService whatsAppService,
         string toPhone, string message, CancellationToken ct)
     {
-        // 2026-05-23 fix: �?irket Ayarları "Test Mesajı Gönder" butonu kullanıcının elle
+        // 2026-05-23 fix: Şirket Ayarları "Test Mesajı Gönder" butonu kullanıcının elle
         // tetiklediği manuel bir çağrı — insan-benzeri 3-15sn rastgele gecikme uygulanmasın
         // (interactive=true). Aksi halde admin test ederken sebepsiz bekletme yaşar.
         var result = await whatsAppService.SendTextMessageAsync(toPhone ?? "", message ?? "", ct, interactive: true);

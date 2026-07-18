@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
-/// 2026-05-23 — �?irket Ayarları "Yapay Zeka" sekmesinin admin CRUD endpoint'leri.
+/// 2026-05-23 — Şirket Ayarları "Yapay Zeka" sekmesinin admin CRUD endpoint'leri.
 ///   GET    /Admin/AiProviders            → liste
 ///   POST   /Admin/AiProviders/save       → create/update
 ///   POST   /Admin/AiProviders/delete/{id}→ silme
@@ -51,7 +51,7 @@ public sealed class AiAdminController : Controller
     // 2026-05-23 NOT: IsAdmin() rol kontrolü kaldırıldı. Sebep: CalibraHub'da admin
     // rol claim'i tutarsız (User.IsInRole("Admin") false dönüyordu) → Forbid() HTML
     // login page döndürüyor → frontend JSON parse hatası ("Unexpected token '<'").
-    // Class-level [Authorize] kontrolü zaten yetkisiz erişimi engelliyor. �?irket
+    // Class-level [Authorize] kontrolü zaten yetkisiz erişimi engelliyor. Şirket
     // Ayarları sayfası (bu endpoint'in tek caller'ı) zaten yalnız admin'e açık —
     // ek kontrole gerek yok.
     [HttpPost("/Admin/AiProviders/save")]
