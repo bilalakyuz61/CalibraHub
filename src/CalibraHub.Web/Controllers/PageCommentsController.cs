@@ -193,7 +193,7 @@ public sealed class PageCommentsController : ControllerBase
         if (!TryGateAgentAccess(out var deny)) return deny!;
         if (!TryResolveAgentCompany(companyId, out var resolvedCompanyId, out var companyError)) return companyError!;
 
-        HttpContext.Items["__override_company_id"] = resolvedCompanyId;
+        if (resolvedCompanyId != 0) HttpContext.Items["__override_company_id"] = resolvedCompanyId;
 
         var items = await _service.GetApprovedQueueAsync(ct);
         return Ok(items.Select(c => new
@@ -224,7 +224,7 @@ public sealed class PageCommentsController : ControllerBase
         if (input is null) return BadRequest(new { ok = false, error = "İstek gövdesi boş." });
         if (!TryResolveAgentCompany(companyId, out var resolvedCompanyId, out var companyError)) return companyError!;
 
-        HttpContext.Items["__override_company_id"] = resolvedCompanyId;
+        if (resolvedCompanyId != 0) HttpContext.Items["__override_company_id"] = resolvedCompanyId;
 
         var actingUser = string.IsNullOrWhiteSpace(input.User) ? "agent" : input.User.Trim();
         // HttpAuditContextProvider anonim istekte CompanyId=0 döner (yalnızca authenticated cookie
@@ -305,6 +305,13 @@ public sealed class PageCommentsController : ControllerBase
 
         if (companyId.HasValue)
         {
+            // 0 = sistem/ana DB (SystemAdmin yorumları buraya yazılır — company_id claim
+            // per-company'ye çözülmediğinde _systemConnectionString kullanılır). Override konmaz.
+            if (companyId.Value == 0)
+            {
+                resolvedCompanyId = 0;
+                return true;
+            }
             if (!_companyRegistry.TryGet(companyId.Value, out _))
             {
                 resolvedCompanyId = 0;
@@ -326,7 +333,7 @@ public sealed class PageCommentsController : ControllerBase
         error = BadRequest(new
         {
             ok = false,
-            error = "Birden fazla şirket kayıtlı — companyId query parametresi zorunlu.",
+            error = "Birden fazla şirket kayıtlı — companyId query parametresi zorunlu (0 = sistem/ana DB, SystemAdmin yorumları oraya düşer).",
             companies = ids,
         });
         return false;
