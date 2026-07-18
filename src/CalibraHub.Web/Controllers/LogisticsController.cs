@@ -154,7 +154,7 @@ public sealed class LogisticsController : Controller
             masterWidgets.Add(MakeWidget("w_ad", "Stok Adı", "text", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_aktif",       "Durum",              "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_kombinasyon", "Kombinasyon Takibi", "boolean", STD_GROUP, STD_LBL));
-        masterWidgets.Add(MakeWidget("w_vergi",       "KDV Orani",          "percent", STD_GROUP, STD_LBL));
+        masterWidgets.Add(MakeWidget("w_vergi",       "KDV Oranı",          "percent", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_olusturma",   "Oluşturma Tarihi",   "date",    STD_GROUP, STD_LBL));
 
         // Olcu Birimi — Standart Alanlar grubunda
@@ -459,7 +459,7 @@ public sealed class LogisticsController : Controller
                 alwaysVisible = true,
             });
             cardWidgets.Add(new {
-                id = "w_vergi", type = "data", dataType = "percent", label = "KDV Orani",
+                id = "w_vergi", type = "data", dataType = "percent", label = "KDV Oranı",
                 value = card.TaxRate.ToString("0.##", trCulture),
                 detail = "%",
                 color = "indigo",
@@ -1189,7 +1189,7 @@ public sealed class LogisticsController : Controller
     // --------------------------------------------------------------------
     // "Tanimli Kombinasyonlar" liste ekrani — Lojistik > Özellik ve Kombinasyon alti.
     // Tüm aktif kombinasyonlarin kart listesi (kombinasyon kodu + parent stok +
-    // Özellik/deger chip'leri). Karti tiklayinca parent stogun kombinasyon tab'ina
+    // özellik/deger chip'leri). Karti tiklayinca parent stogun kombinasyon tab'ina
     // navigate eder (matchPath ile MaterialCard tab'i reuse).
     // --------------------------------------------------------------------
     [HttpGet]
@@ -1216,7 +1216,7 @@ public sealed class LogisticsController : Controller
         {
             CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_status",        "Durum",   "boolean"),
             CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_item",          "Mamul",   "text"),
-            CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_feature_count", "�zellik", "numeric"),
+            CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_feature_count", "Özellik", "numeric"),
         };
 
         var entities = new List<object>();
@@ -1240,14 +1240,14 @@ public sealed class LogisticsController : Controller
                 },
                 new {
                     id = "w_feature_count", type = "data", dataType = "numeric",
-                    label = "�zellik",
+                    label = "Özellik",
                     value = c.FeatureValues.Count.ToString(),
                     detail = "adet",
                     color = "indigo"
                 },
             };
 
-            // Her �zellik/deger ciftini ayri widget olarak ekle
+            // Her özellik/deger ciftini ayri widget olarak ekle
             int idx = 1;
             foreach (var fv in c.FeatureValues)
             {
@@ -1268,20 +1268,20 @@ public sealed class LogisticsController : Controller
             {
                 id            = c.ConfigId,
                 title         = c.Code,
-                subtitle      = c.ItemCode is null ? null : $"{c.ItemCode} � {c.ItemName}",
+                subtitle      = c.ItemCode is null ? null : $"{c.ItemCode} · {c.ItemName}",
                 description   = c.Name,
                 imageUrl      = (string?)null,
                 statusBadge   = (object?)null,
                 widgets,
                 primaryAction = new
                 {
-                    label      = "Stok Kartinda A�",
+                    label      = "Stok Kartinda Aç",
                     icon       = "ExternalLink",
                     color      = "amber",
-                    // Kombinasyon parent stok kartinin kombinasyon tab'ina y�nlenir.
+                    // Kombinasyon parent stok kartinin kombinasyon tab'ina yönlenir.
                     url        = c.ItemId.HasValue ? $"/Logistics/MaterialCardEdit?id={c.ItemId.Value}#combinations" : "#",
                     hideButton = true,
-                    // YENI SEKMEDE a� � "Tanimli Kombinasyonlar" listesi a�ik kalir,
+                    // YENI SEKMEDE aç — "Tanimli Kombinasyonlar" listesi açik kalir,
                     // mevcut Malzeme Kartlari tab'i varsa onu reuse eder (matchPath).
                     openInTab  = new { title = "Malzeme Kartlari", matchPath = "/Logistics/MaterialCard" },
                 },
@@ -1304,8 +1304,8 @@ public sealed class LogisticsController : Controller
             icon              = "Grid3X3",
             iconColor         = "violet",
             refreshUrl        = "/Logistics/CombinationsBoardConfig",
-            searchPlaceholder = "Kombinasyon kodu, mamul veya deger ara�",
-            emptyText         = "Hen�z tanimli kombinasyon yok",
+            searchPlaceholder = "Kombinasyon kodu, mamul veya deger ara…",
+            emptyText         = "Henüz tanimli kombinasyon yok",
             actions           = Array.Empty<object>(),
             masterWidgets,
             entities,
@@ -1360,7 +1360,7 @@ public sealed class LogisticsController : Controller
 
             var widgets = new List<object>();
 
-            // �"��"� Sistem widget'lari �"��"�
+            // ── Sistem widget'lari ──
             widgets.Add(new
             {
                 id = "sys_datatype",
@@ -1455,7 +1455,7 @@ public sealed class LogisticsController : Controller
             });
         }
 
-        // �"��"� Master widget sablonu (⚙ SmartBoardConfigPanel icin) �"��"�
+        // ── Master widget sablonu (⚙ SmartBoardConfigPanel icin) ──
         // Sistem widget'lari sabit; PRODUCT_CONFIG form kodundaki admin widget'lar ekleniyor.
         var pcSchema = await _widgetService.GetFormSchemaByCodeAsync("PRODUCT_CONFIG", ct);
         var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(pcSchema);
@@ -1526,7 +1526,7 @@ public sealed class LogisticsController : Controller
 
     // NOT: ProductFeatureEdit, GetProductFeature, SaveProductFeatureJson, DeleteProductFeatureJson,
     // SaveProductValueJson, DeleteProductValueJson, UpdateProductValueJson, SaveProductFeatureStocksJson
-    // ProductFeatureController'a tasindi (rapor �2.3 split). DTO record'lar oraya tasindi.
+    // ProductFeatureController'a tasindi (rapor §2.3 split). DTO record'lar oraya tasindi.
 
     // NOT: Legacy form-post cluster (SaveProductFeature, SaveProductValue, SaveProductConfig, UpdateProductFeature, DeleteProductFeature, SaveProductFeatureStocks, DeleteProductValue, DeleteProductConfig) kaldirildi - UI artik *Json variantlarini cagiriyor (rapor 2.3 split + temizlik).
 
@@ -2427,7 +2427,7 @@ public sealed class LogisticsController : Controller
             .Replace("stok", "malzeme");
     }
 
-    // �"��"� Grid kolon yonetimi �"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"�
+    // ── Grid kolon yonetimi ─────────────────────────────────────────────────────────────────────
 
     private static readonly GridColumnDefinition[] MaterialCardGridColumns =
     [
@@ -2455,7 +2455,7 @@ public sealed class LogisticsController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
-    // �"��"� AJAX JSON Endpoint'leri (MaterialCards) �"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"��"�
+    // ── AJAX JSON Endpoint'leri (MaterialCards) ────────────────────────────
 
     [HttpGet]
     public async Task<IActionResult> GetMaterialCards(
@@ -2514,11 +2514,11 @@ public sealed class LogisticsController : Controller
         });
     }
 
-    // NOT: GetMaterialCard MaterialController'a tasindi (rapor �2.3 split).
+    // NOT: GetMaterialCard MaterialController'a tasindi (rapor §2.3 split).
 
-    // NOT: UpdateFeatureVisibilityJson + UpdateValueAciklamaJson ProductFeatureController'a tasindi (rapor �2.3 split).
+    // NOT: UpdateFeatureVisibilityJson + UpdateValueAciklamaJson ProductFeatureController'a tasindi (rapor §2.3 split).
 
-    // NOT: SaveMaterialCardJson + DeleteMaterialCardJson MaterialController'a tasindi (rapor �2.3 split).
+    // NOT: SaveMaterialCardJson + DeleteMaterialCardJson MaterialController'a tasindi (rapor §2.3 split).
 
     [HttpPost]
     public async Task<IActionResult> SaveMaterialCardGridColumns([FromBody] string[] columns, CancellationToken ct)
@@ -2529,7 +2529,7 @@ public sealed class LogisticsController : Controller
         return Ok(new { success = true });
     }
 
-    // -- �l�� Birimi D�n�s�mleri (Stok Karti bazli) --
+    // -- Ölçü Birimi Dönüsümleri (Stok Karti bazli) --
 
     [HttpGet]
     public async Task<IActionResult> GetItemUnits(int itemId, CancellationToken ct)
@@ -2538,9 +2538,9 @@ public sealed class LogisticsController : Controller
         var units = await _logisticsConfigurationService.GetUnitsAsync(ct);
         return Json(new
         {
-            // Master birim Items.UnitId'de � bu liste sadece alternat birimler (lineNo>=1).
+            // Master birim Items.UnitId'de — bu liste sadece alternat birimler (lineNo>=1).
             conversions = items.Where(x => x.LineNo >= 1).Select(x => new { x.LineNo, x.UnitId, x.Multiplier }),
-            // Tum birimler donulur � inactive olanlar frontend'de strikethrough/disabled gosterilir
+            // Tum birimler donulur — inactive olanlar frontend'de strikethrough/disabled gosterilir
             // ki mevcut secimini koruyup pasif olanlar kullaniciya belli olsun.
             availableUnits = units
                 .OrderBy(u => u.IsActive ? 0 : 1)
@@ -2561,7 +2561,7 @@ public sealed class LogisticsController : Controller
             .Select(x => new Application.Contracts.SaveItemUnitItem(x.UnitId, x.Multiplier))
             .ToList();
 
-        // Tekrar eden birim kontrol�
+        // Tekrar eden birim kontrolü
         var ids = items.Select(x => x.UnitId).ToList();
         if (ids.Distinct().Count() != ids.Count)
             return Json(new { success = false, message = "Ayni olcu birimi birden fazla tanimlanamaz." });
