@@ -1,8 +1,10 @@
 package com.calibrahub.app
 
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -24,11 +28,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.calibrahub.app.data.ThemeMode
 import com.calibrahub.app.ui.chat.ChatDetailScreen
 import com.calibrahub.app.ui.chat.ChatListScreen
 import com.calibrahub.app.ui.home.HomeScreen
@@ -38,6 +45,7 @@ import com.calibrahub.app.ui.nav.AppRoutes
 import com.calibrahub.app.ui.nav.drawerTopLevelRoutes
 import com.calibrahub.app.ui.production.WorkOrderDetailScreen
 import com.calibrahub.app.ui.production.WorkOrderListScreen
+import com.calibrahub.app.ui.settings.SettingsScreen
 import com.calibrahub.app.ui.theme.CalibraTheme
 import com.calibrahub.app.ui.warehouse.CountScreen
 import com.calibrahub.app.ui.warehouse.DeliveryDocType
@@ -56,11 +64,47 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            CalibraTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    AppNav()
-                }
-            }
+            CalibraRoot()
+        }
+    }
+}
+
+/**
+ * Uygulama kökü — tema tercihini (Sistem/Açık/Koyu, 2026-07-19) [SessionManager.themeMode]
+ * Flow'undan `collectAsState` ile CANLI okur ve [CalibraTheme]'e besler. Kullanıcı
+ * [com.calibrahub.app.ui.settings.SettingsScreen]'de tercihi değiştirdiği anda BU composable
+ * yeniden çalışır — Activity restart YOK, MaterialTheme'in colorScheme'i üzerinden TÜM alt ağaç
+ * (AppNav → her ekran) anında yeniden renklenir (bkz. SessionManager.themeMode KDoc).
+ *
+ * Ayrıca durum çubuğu/gezinme çubuğu (status/navigation bar) ikon kontrastını senkron tutar —
+ * bu native Android chrome'dur, Compose'un MaterialTheme'inin KAPSAMI DIŞINDADIR. XML temasındaki
+ * sabit `windowLightStatusBar=true` (bkz. res/values/themes.xml) yalnız ilk-çizim varsayılanıdır;
+ * kullanıcı içeriği koyulaştırdığında (cihaz sistemi açık kalsa bile) durum çubuğu ikonları da
+ * senkron koyulaşmazsa koyu ikonlar koyu TopAppBar üzerinde görünmez kalırdı.
+ */
+@Composable
+private fun CalibraRoot() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val themeMode by ctx.app.session.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+    val useDarkTheme = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT  -> false
+        ThemeMode.DARK   -> true
+    }
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !useDarkTheme
+            controller.isAppearanceLightNavigationBars = !useDarkTheme
+        }
+    }
+
+    CalibraTheme(darkTheme = useDarkTheme) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            AppNav()
         }
     }
 }
@@ -220,6 +264,16 @@ private fun AppNav() {
                 displayName = displayName,
                 companyName = companyName,
                 onNavigate = navigateToTopLevel,
+                onOpenSettings = {
+                    // Ayarlar flat top-level "sekme" seti (topLevelRoutes) DIŞINDA — normal push
+                    // navigasyonu (bkz. AppRoutes.SETTINGS KDoc'u): geri tuşu açıldığı ekrana
+                    // döner, popUpTo(HOME) flat-reset uygulanmaz. launchSingleTop: drawer'dan
+                    // art arda hızlı dokunmada yığın üstünde ikinci bir Settings örneği açılmaz.
+                    scope.launch { drawerState.close() }
+                    if (currentRoute != AppRoutes.SETTINGS) {
+                        navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true }
+                    }
+                },
                 onLogout = {
                     // Ayrı coroutine: repo.logout() ağ çağrısı yavaş/askıda kalsa bile drawer
                     // hemen kapanır (kullanıcı "donmuş" hissetmesin).
@@ -245,8 +299,15 @@ private fun AppNav() {
             composable(AppRoutes.HOME) {
                 HomeScreen(
                     displayName = displayName,
-                    onOpenDrawer = { scope.launch { drawerState.open() } }
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true } }
                 )
+            }
+            // Ayarlar (2026-07-19) — drawer'ın "Ayarlar" girişinden VE HomeScreen üst çubuğundaki
+            // dişli ikonundan erişilir; bkz. AppRoutes.SETTINGS KDoc'u (flat/top-level SET DIŞINDA,
+            // normal push+popBackStack).
+            composable(AppRoutes.SETTINGS) {
+                SettingsScreen(onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.CHATS) {
                 ChatListScreen(

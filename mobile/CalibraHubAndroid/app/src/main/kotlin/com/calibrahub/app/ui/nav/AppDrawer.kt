@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.PendingActions
 import androidx.compose.material.icons.filled.PrecisionManufacturing
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warehouse
@@ -97,6 +98,13 @@ object AppRoutes {
     // kısmi örtüşme (koordinatör spesifikasyonu, 2026-07-17): sevkiyat personeli Satış modülüne
     // girmeden doğrudan aynı teslimat akışına (OpenOrderListScreen) ulaşsın diye.
     const val SHIPPING_OPEN_ORDERS = SALES_OPEN_ORDERS
+
+    // Ayarlar (2026-07-19) — drawerEntries'in DIŞINDA tutulur (bkz. AppDrawerContent alt kısmı):
+    // feature-modül "sekme" listesine karışmaz, Çıkış'a yakın ayrı bir "utility" girişidir. Bu
+    // yüzden drawerTopLevelRoutes'a (flat/tab navigasyon + edge-swipe seti) DAHİL DEĞİLDİR — normal
+    // "push" navigasyonuyla açılır (MainActivity: navController.navigate(SETTINGS)), geri tuşu
+    // açıldığı ekrana döner (diğer top-level yapraklar gibi popUpTo(HOME) flat-reset YAPMAZ).
+    const val SETTINGS = "settings"
 }
 
 /** Drawer'da doğrudan navigate edilebilir tek bir yaprak hedef. */
@@ -215,7 +223,9 @@ val drawerTopLevelRoutes: Set<String> = drawerEntries.flatMap { entry ->
  *
  * Düzen: üstte logo + "CalibraHub" + kullanıcı adı + şirket adı, ortada kaydırılabilir modül
  * listesi (Ana Sayfa yaprağı + 5 akordeon grubu + Sohbetler yaprağı — [currentRoute] ile eşleşen
- * yaprak vurgulanır), altta sürüm bilgisi + ayraçla Çıkış.
+ * yaprak vurgulanır), altta ayraç + Ayarlar + sürüm bilgisi + Çıkış (2026-07-19: "Ayarlar" burada
+ * — feature-modül listesine değil, [onLogout] gibi ayrı bir "utility" eylemine karışır; bkz.
+ * [onOpenSettings] ve [AppRoutes.SETTINGS] KDoc'u).
  */
 @Composable
 fun AppDrawerContent(
@@ -223,6 +233,7 @@ fun AppDrawerContent(
     displayName: String?,
     companyName: String? = null,
     onNavigate: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     onLogout: () -> Unit
 ) {
     ModalDrawerSheet {
@@ -301,6 +312,13 @@ fun AppDrawerContent(
         }
 
         HorizontalDivider()
+        NavigationDrawerItem(
+            label = { Text("Ayarlar") },
+            selected = currentRoute == AppRoutes.SETTINGS,
+            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+            onClick = onOpenSettings,
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+        )
         Text(
             text = "Sürüm ${BuildConfig.VERSION_NAME}" + if (BuildConfig.DEBUG) " (debug)" else "",
             style = MaterialTheme.typography.labelSmall,

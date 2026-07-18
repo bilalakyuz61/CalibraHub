@@ -2,11 +2,8 @@ package com.calibrahub.app.ui.login
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,7 +17,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -30,15 +26,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.calibrahub.app.R
 import com.calibrahub.app.app
 import com.calibrahub.app.data.CompanyDto
 import com.calibrahub.app.data.SessionManager
@@ -635,26 +628,20 @@ private fun CalibraLoginBadge(
     dialState: LockDialState
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier.size(200.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            CalibrationLockDial(
-                passwordLength = passwordLength,
-                state = dialState,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            Image(
-                painter = painterResource(id = R.drawable.calibrahub_logo),
-                contentDescription = "CalibraHub logosu",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(92.dp)
-                    .clip(CircleShape)
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), CircleShape)
-            )
-        }
+        // Kadran TEK BASINA — uzerinde logo YOK (2026-07-19 kullanici karari, web ile parite).
+        // Onceden merkeze 92dp'lik logo diski bindiriliyordu (Image, dial'dan SONRA cizildigi
+        // icin ustte kaliyordu). Logonun yaricapi 46dp; ic kadranlar r=28.6 ve r=50.5, igneler
+        // 35/46/58dp uzunlugunda oldugundan logo ic kadranlarin ikisini de ve iki ignenin
+        // tamamini ortuyor, ucuncusunun yalnizca ~12dp ucunu birakiyordu → kalibrasyon
+        // animasyonu (tik-tik adimlama + ic kadran random donusu) fiilen GORUNMUYORDU.
+        // Web'de kadranin uzerinde/icinde logo yoktur; marka gorseli ayri "login-hero"
+        // panelindedir (bkz. Views/Account/Login.cshtml) — mobilde o panel olmadigi icin
+        // kadran tek basina birakildi, kimlik alttaki "Mobil Companion" yazisiyla tasinir.
+        CalibrationLockDial(
+            passwordLength = passwordLength,
+            state = dialState,
+            modifier = Modifier.size(200.dp)
+        )
         Spacer(Modifier.height(20.dp))
         Text(
             text = "Mobil Companion",

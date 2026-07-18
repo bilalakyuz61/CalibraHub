@@ -25,6 +25,23 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
 /**
+ * Kullanıcının koyu/açık tema tercihi (2026-07-19). [SYSTEM] (varsayılan) cihaz ayarını izler —
+ * bkz. [androidx.compose.foundation.isSystemInDarkTheme]; [LIGHT]/[DARK] cihaz ayarından bağımsız
+ * sabit tema zorlar. [storageKey] DataStore'a yazılan ham string'tir — [DeliveryDocType.apiValue]
+ * (bkz. `ui/warehouse/DeliveryScreen.kt`) ile AYNI "enum + sabit string key" deseni.
+ */
+enum class ThemeMode(val storageKey: String) {
+    SYSTEM("system"),
+    LIGHT("light"),
+    DARK("dark");
+
+    companion object {
+        /** DataStore'dan okunan ham string'i [ThemeMode]'a çevirir; tanınmayan/eksik değer → [SYSTEM]. */
+        fun fromStorageKey(key: String?): ThemeMode = values().firstOrNull { it.storageKey == key } ?: SYSTEM
+    }
+}
+
+/**
  * Singleton-ish session yöneticisi.
  *
  * Görevleri:
@@ -33,6 +50,7 @@ import java.util.concurrent.TimeUnit
  *  - Retrofit + OkHttp factory (cookie jar + interceptor'larla)
  *  - "Beni hatırla" tercihi + kalıcı oturum çerezinin DataStore yazımını gate'lemesi (2026-07-17)
  *  - Global 401 yakalama → [sessionExpiredEvents]
+ *  - Tema tercihi ([ThemeMode]) persistence — bkz. [themeMode] / [setThemeMode] (2026-07-19)
  *
  * Application-scoped: CalibraApp.kt içinden init edilir.
  */
@@ -70,6 +88,19 @@ class SessionManager(private val context: Context) {
     private val companyIdFlow: Flow<Int?> = context.sessionStore.data
         .map { it[COMPANY_ID_KEY] }
 
+    /**
+     * Tema tercihi — CANLI [Flow] olarak dışa açılır; diğer alanlardaki private-flow +
+     * `suspend fun current...()` tek-seferlik okuma deseninin AKSİNE. Sebep: tema tercihi
+     * [com.calibrahub.app.MainActivity]'nin en üst composable'ında `collectAsState` ile SÜREKLİ
+     * dinlenir — kullanıcı [com.calibrahub.app.ui.settings.SettingsScreen]'de tercihi değiştirdiği
+     * anda TÜM uygulama (MaterialTheme'in colorScheme'i üzerinden) Activity restart OLMADAN
+     * yeniden renklenir. Diğer alanlar (displayName, companyName vb.) yalnız belirli tetikleyici
+     * noktalarda (ekran girişi, login sonrası) bir kez okunduğu için suspend getter yeterliydi;
+     * tema tercihinde bu YETERSİZ kalır.
+     */
+    val themeMode: Flow<ThemeMode> = context.sessionStore.data
+        .map { ThemeMode.fromStorageKey(it[THEME_MODE_KEY]) }
+
     suspend fun currentBaseUrl(): String = baseUrlFlow.first()
     suspend fun currentDisplayName(): String? = displayNameFlow.first()
     suspend fun isRememberMeEnabled(): Boolean = rememberMeFlow.first()
@@ -87,6 +118,11 @@ class SessionManager(private val context: Context) {
             if (name == null) it.remove(DISPLAY_NAME_KEY)
             else it[DISPLAY_NAME_KEY] = name
         }
+    }
+
+    /** Tema tercihini kaydeder — [themeMode] Flow'u DataStore üzerinden otomatik yeni değeri yayınlar. */
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.sessionStore.edit { it[THEME_MODE_KEY] = mode.storageKey }
     }
 
     /**
@@ -280,6 +316,7 @@ class SessionManager(private val context: Context) {
         private val REMEMBERED_EMAIL_KEY = stringPreferencesKey("remembered_email")
         private val COMPANY_ID_KEY       = intPreferencesKey("company_id")
         private val COMPANY_NAME_KEY     = stringPreferencesKey("company_name")
+        private val THEME_MODE_KEY       = stringPreferencesKey("theme_mode")
     }
 }
 

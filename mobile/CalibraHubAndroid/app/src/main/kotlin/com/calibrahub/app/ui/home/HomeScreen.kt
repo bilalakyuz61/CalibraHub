@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,12 +27,18 @@ import androidx.compose.ui.unit.dp
  * Küçük karar: "hızlı erişim" kartları BİLEREK eklenmedi — modül listesi artık tek yerde
  * (drawer'da) yaşıyor, burada ikinci bir kopyası bakım yükü + iki yer arasında tutarsızlık riski
  * doğururdu. Gerekirse ileride buraya widget/özet eklenebilir.
+ *
+ * 2026-07-19: sağ üst köşeye Ayarlar dişli ikonu eklendi ([onOpenSettings]) — kullanıcının en
+ * kolay bulacağı, en görünür giriş noktası (Ana Sayfa, login sonrası ilk ekran). Aynı hedefe
+ * ayrıca [com.calibrahub.app.ui.nav.AppDrawerContent]'teki "Ayarlar" girişinden de ulaşılır
+ * (tüm üst-seviye ekranlardan erişim için, drawer TEK paylaşılan örnek olduğundan).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     displayName: String?,
-    onOpenDrawer: () -> Unit
+    onOpenDrawer: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -40,6 +47,11 @@ fun HomeScreen(
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer) {
                         Icon(Icons.Default.Menu, contentDescription = "Menü")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Ayarlar")
                     }
                 }
             )
