@@ -3964,7 +3964,10 @@ body.app-theme-dark .cst-root {
      backdrop-filter kaldirildi. */
   background-color: var(--cst-header-bg);
   color: var(--cst-header-text);
-  font-size: 11px;
+  /* --cst-head-fs — SmartColumnSettings "Genel" bölümü (Başlık Font Boyutu,
+     kullanıcı bazında, SÜTUN BAZINDA DEĞİL); yoksa mevcut 11px fallback
+     (bkz. SmartTable.jsx rootStyle + CLAUDE.md "CSS ve Tema Kuralları"). */
+  font-size: var(--cst-head-fs, 11px);
   font-weight: 700;
   text-align: left;
   padding: 8px 12px;
@@ -4027,9 +4030,15 @@ body.app-theme-dark .cst-root {
 
 .cst-td {
   /* Kompakt/tek-satır tablo — kimlik hücresinin (kod üstte + ad altta) kalkmasıyla
-     TÜM hücreler artık tek satır; dar padding bunu pekiştirir. */
-  padding: 6px 12px;
-  font-size: 12.5px;
+     TÜM hücreler artık tek satır; dar padding bunu pekiştirir.
+     --cst-row-pad (dikey padding) / --cst-body-fs (font boyutu) —
+     SmartColumnSettings "Genel" bölümü (Satır Aralığı / Veri Font Boyutu,
+     kullanıcı bazında, SÜTUN BAZINDA DEĞİL); yoksa mevcut 6px/12.5px
+     fallback. Yatay padding (12px) SABİT kalır — sütun genişliği hesabı
+     (resolveChipWidth) buna göre ayarlanmış, "satır aralığı" yalnızca
+     DİKEY boşluğu ifade eder. */
+  padding: var(--cst-row-pad, 6px) 12px;
+  font-size: var(--cst-body-fs, 12.5px);
   color: var(--cst-identity-code);
   vertical-align: middle;
   overflow: hidden;
@@ -4073,7 +4082,12 @@ body.app-theme-dark .cst-root {
    hucrede TEKRAR EDILMEZ. */
 .cst-value { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .cst-value__text {
-  font-size: 12.5px;
+  /* --cst-body-fs — .cst-td ile AYNI değişken/fallback (yukarısı); burada
+     AYRICA tanımlı çünkü bu span kendi font-size'ini taşır (miras değil) —
+     sütun bazlı fontSize override'ı (SmartTableRow.jsx fontStyleFor) bu
+     span'a DOĞRUDAN inline stil yazar ve her zaman kazanır (bilinçli, bkz.
+     SmartTable.jsx dosya üstü yorumu). */
+  font-size: var(--cst-body-fs, 12.5px);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;

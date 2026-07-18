@@ -588,6 +588,7 @@ export default function SmartColumnSettings(props) {
   var [visibleIds, setVisibleIds] = useState([])
   var [order, setOrder] = useState([])
   var [columns, setColumns] = useState({})
+  var [tableFormat, setTableFormat] = useState({})
   var [loadingCfg, setLoadingCfg] = useState(false)
   var [saving, setSaving] = useState(false)
   var [searchQuery, setSearchQuery] = useState('')
@@ -618,6 +619,10 @@ export default function SmartColumnSettings(props) {
         setVisibleIds(cleanVisible)
         setOrder(cleanOrder)
         setColumns(cleanColumns)
+        // table — SUTUN BAZLI DEGIL, tablo geneli (bkz. dosya ustu "Genel"
+        // bolumu notu); normalizeColumnConfig her zaman {} veya dolu obje
+        // dondurur (asla null/undefined), ekstra guvenlik icin || {} yine de.
+        setTableFormat(saved.table || {})
       } else {
         // Ilk acilis / hic kayit yok — tum master sutunlar gorunur; Stok Kodu/
         // Stok Adi (varsa) basa alinir — SmartTable'in "config yokken" varsayilan
@@ -626,6 +631,7 @@ export default function SmartColumnSettings(props) {
         setVisibleIds(defaultOrder.slice())
         setOrder(defaultOrder.slice())
         setColumns({})
+        setTableFormat({})
       }
     }).finally(function () {
       if (!cancelled) setLoadingCfg(false)
@@ -760,6 +766,49 @@ export default function SmartColumnSettings(props) {
   function handleWidthReset(id) {
     patchColumn(id, { width: undefined })
   }
+
+  // ── "Genel" bolumu (tablo geneli, SUTUN BAZINDA DEGIL) — Baslik/Veri font
+  //    boyutu + Satir Araligi. patchTable, patchColumn ile AYNI "falsy/
+  //    varsayilan degerler key'i siler" ilkesini kullanir (config sadece
+  //    OVERRIDE'lari tasir); step/reset handler'lari yukaridaki
+  //    handleFontSizeStep/handleWidthStep ile BIREBIR ayni desen. ──
+  var headerFontSizeValue = clampTableFontSize(tableFormat.headerFontSize)
+  var headerFontSizeOverridden = headerFontSizeValue > 0
+  var bodyFontSizeValue = clampTableFontSize(tableFormat.bodyFontSize)
+  var bodyFontSizeOverridden = bodyFontSizeValue > 0
+  var rowSpacingValue = clampRowSpacing(tableFormat.rowSpacing)
+  var rowSpacingOverridden = rowSpacingValue > 0
+
+  function patchTable(patch) {
+    setTableFormat(function (prev) {
+      var next = Object.assign({}, prev)
+      Object.keys(patch).forEach(function (k) {
+        var v = patch[k]
+        if (v === undefined || v === null || v === '' || v === 0 || v === false) delete next[k]
+        else next[k] = v
+      })
+      return next
+    })
+  }
+  function handleHeaderFontSizeStep(dir) {
+    var cur = clampTableFontSize(tableFormat.headerFontSize) || FONT_SIZE_NATURAL
+    var next = Math.max(TABLE_FONT_MIN, Math.min(TABLE_FONT_MAX, cur + dir * TABLE_FONT_STEP))
+    patchTable({ headerFontSize: next === FONT_SIZE_NATURAL ? undefined : next })
+  }
+  function handleHeaderFontSizeReset() { patchTable({ headerFontSize: undefined }) }
+  function handleBodyFontSizeStep(dir) {
+    var cur = clampTableFontSize(tableFormat.bodyFontSize) || FONT_SIZE_NATURAL
+    var next = Math.max(TABLE_FONT_MIN, Math.min(TABLE_FONT_MAX, cur + dir * TABLE_FONT_STEP))
+    patchTable({ bodyFontSize: next === FONT_SIZE_NATURAL ? undefined : next })
+  }
+  function handleBodyFontSizeReset() { patchTable({ bodyFontSize: undefined }) }
+  function handleRowSpacingStep(dir) {
+    var cur = clampRowSpacing(tableFormat.rowSpacing) || TABLE_ROW_PAD_NATURAL
+    var next = Math.max(TABLE_ROW_PAD_MIN, Math.min(TABLE_ROW_PAD_MAX, cur + dir * TABLE_ROW_PAD_STEP))
+    patchTable({ rowSpacing: next === TABLE_ROW_PAD_NATURAL ? undefined : next })
+  }
+  function handleRowSpacingReset() { patchTable({ rowSpacing: undefined }) }
+
   function toggleExpand(id) {
     setExpandedIds(function (prev) {
       var next = new Set(prev)
@@ -771,7 +820,7 @@ export default function SmartColumnSettings(props) {
   function handleSave() {
     setSaving(true)
     try {
-      var payload = { visibleIds: visibleIds, order: order, columns: columns }
+      var payload = { visibleIds: visibleIds, order: order, columns: columns, table: tableFormat }
       var normalized = saveBoardColumnConfig(boardKey, payload)
       if (onSaved) onSaved(normalized)
       if (onClose) onClose()
@@ -786,18 +835,19 @@ export default function SmartColumnSettings(props) {
 
   async function handleReset() {
     var ok = window.CalibraAlert && window.CalibraAlert.confirm
-      ? await window.CalibraAlert.confirm('Tüm sütun ayarları sıfırlanacak (tüm sütunlar görünür + varsayılan sıra/biçim). Devam edilsin mi?',
+      ? await window.CalibraAlert.confirm('Tüm sütun ayarları sıfırlanacak (tüm sütunlar görünür + varsayılan sıra/biçim/genel görünüm). Devam edilsin mi?',
           { title: 'Sütun Ayarlarını Sıfırla', okText: 'Evet, Sıfırla', cancelText: 'Vazgeç', danger: true })
-      : window.confirm('Tüm sütun ayarları sıfırlanacak (tüm sütunlar görünür + varsayılan sıra/biçim). Devam edilsin mi?')
+      : window.confirm('Tüm sütun ayarları sıfırlanacak (tüm sütunlar görünür + varsayılan sıra/biçim/genel görünüm). Devam edilsin mi?')
     if (!ok) return
     var allIds = localMasterWidgets.map(function (w) { return w.id })
     var defaultOrder = leadsFirstIds(allIds)
-    var defaultConfig = { visibleIds: defaultOrder.slice(), order: defaultOrder.slice(), columns: {} }
+    var defaultConfig = { visibleIds: defaultOrder.slice(), order: defaultOrder.slice(), columns: {}, table: {} }
     try {
       var normalized = saveBoardColumnConfig(boardKey, defaultConfig)
       setVisibleIds(normalized.visibleIds)
       setOrder(normalized.order)
       setColumns(normalized.columns)
+      setTableFormat(normalized.table || {})
       if (onSaved) onSaved(normalized)
     } catch (e) {
       var em2 = 'Sıfırlanamadı: ' + e.message
@@ -881,6 +931,58 @@ export default function SmartColumnSettings(props) {
                   </div>
                 ) : (
                   <>
+                    {/* Genel — TABLO GENELİNE uygulanan 3 ayar (kullanıcı bazında,
+                        sütun bazında DEĞİL): Başlık/Veri font boyutu + Satır Aralığı.
+                        columnConfigService kanonik şekline "table" alanı olarak
+                        kaydedilir (bkz. normalizeColumnConfig). Sütun bazlı override
+                        (aşağıdaki ColumnRow → Boyut) inline stil olarak hücreye
+                        uygulanır ve bu genel ayarı EZER — bilinçli (CSS değişkeni <
+                        inline stil), bkz. SmartTable.jsx / index.css .cst-value__text
+                        yorumu. */}
+                    <div className="px-5 pt-3 pb-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-white/40 tracking-wider">
+                          Genel
+                        </span>
+                      </div>
+                      <div className="rounded-xl border-[1px] border-transparent bg-slate-100 dark:bg-white/[0.03] px-3 py-2.5 space-y-2.5">
+                        <GeneralFormatRow
+                          label="Başlık Font Boyutu"
+                          overridden={headerFontSizeOverridden}
+                          displayValue={headerFontSizeValue + 'px'}
+                          onStep={handleHeaderFontSizeStep}
+                          onReset={handleHeaderFontSizeReset}
+                          downTitle="Küçült"
+                          upTitle="Büyüt"
+                          resetTitle="Otomatik boyut (miras)"
+                        />
+                        <GeneralFormatRow
+                          label="Veri Font Boyutu"
+                          overridden={bodyFontSizeOverridden}
+                          displayValue={bodyFontSizeValue + 'px'}
+                          onStep={handleBodyFontSizeStep}
+                          onReset={handleBodyFontSizeReset}
+                          downTitle="Küçült"
+                          upTitle="Büyüt"
+                          resetTitle="Otomatik boyut (miras)"
+                        />
+                        <GeneralFormatRow
+                          label="Satır Aralığı"
+                          overridden={rowSpacingOverridden}
+                          displayValue={rowSpacingValue + 'px'}
+                          onStep={handleRowSpacingStep}
+                          onReset={handleRowSpacingReset}
+                          downTitle="Daralt"
+                          upTitle="Genişlet"
+                          resetTitle="Otomatik aralık (miras)"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Divider (Genel / Aktif Sütunlar) */}
+                    <div className="mx-5 mb-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
+
                     {/* Aktif sutunlar */}
                     <div className="px-5 pt-3 pb-2">
                       <div className="flex items-center gap-2 mb-2">

@@ -633,6 +633,12 @@ export default function SmartBoard(props) {
     : (userConfig && Array.isArray(userConfig.order) ? userConfig.order : null)
   var tableColumnFormats = (isTableMode && tableColumnConfig && tableColumnConfig.columns && typeof tableColumnConfig.columns === 'object')
     ? tableColumnConfig.columns : null
+  // tableGeneralFormat — SUTUN BAZLI DEGIL, tablo geneli 3 ayar (Baslik/Veri
+  // font boyutu + Satir Araligi, kullanici bazinda). SmartColumnSettings.jsx
+  // "Genel" bolumunun urettigi { headerFontSize, bodyFontSize, rowSpacing }
+  // — SmartTable.jsx bunu CSS degiskeni olarak (.cst-root'a) uygular.
+  var tableGeneralFormat = (isTableMode && tableColumnConfig && tableColumnConfig.table && typeof tableColumnConfig.table === 'object')
+    ? tableColumnConfig.table : null
 
   // ── Tablo modu kimlik sentezi (bkz. dosya ustu helper'lar) ──
   // Board kendi w_ad/w_kod widget'ini tanimlamadiysa (Malzeme Kartlari tanimlar
@@ -930,6 +936,7 @@ export default function SmartBoard(props) {
               visibleIds={visibleIds}
               order={order}
               columnConfig={tableColumnFormats}
+              tableFormat={tableGeneralFormat}
               onRefresh={refreshUrl ? refreshBoard : undefined}
               recentIds={recentIds}
               isDark={isDark}

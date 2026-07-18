@@ -20,6 +20,15 @@
  * yoksa (kart modu board'ları bu prop'u hiç göndermez) davranış AYNEN eskisi
  * gibi kalır (regresyonsuz).
  *
+ * `tableFormat` prop'u (SmartColumnSettings.jsx "Genel" bölümünün ürettiği
+ * { headerFontSize, bodyFontSize, rowSpacing } — SÜTUN BAZLI DEĞİL, TABLO
+ * GENELİNE uygulanır) verilmişse `.cst-root`'a CSS değişkeni (`--cst-head-fs`,
+ * `--cst-body-fs`, `--cst-row-pad`) olarak yazılır; index.css bunları MEVCUT
+ * değerleri fallback vererek tüketir (`var(--cst-body-fs, 12.5px)` gibi).
+ * Per-sütun `columnConfig` override'ı (yukarısı) hücreye/başlığa DOĞRUDAN
+ * inline stil olarak yazıldığı için bu genel ayarı her zaman EZER — bilinçli
+ * ("genel = varsayılan, sütun = istisna"), bkz. SmartTableRow.jsx fontStyleFor.
+ *
  * Sabit sol blok — sadece Islemler, sticky-left (0'da). Pin'li veri sutunlari
  * bu sutundan hemen sonra baslar. Opaklik/z-index: bkz. index.css
  * ".cst-td--menu/--pinned" — sticky hucreler TAM OPAK arka plan
@@ -203,6 +212,13 @@ export default function SmartTable(props) {
   var visibleIds = Array.isArray(props.visibleIds) ? props.visibleIds : null
   var order = Array.isArray(props.order) ? props.order : null
   var columnConfig = (props.columnConfig && typeof props.columnConfig === 'object') ? props.columnConfig : null
+  // tableFormat — SUTUN BAZLI DEGIL, TABLO GENELİNE uygulanan 3 ayar (Baslik/
+  // Veri font boyutu + Satir Araligi, kullanici bazinda; bkz. SmartColumnSettings
+  // "Genel" bolumu + columnConfigService normalizeColumnConfig `table` alani).
+  // columnConfig (per-sutun) ile AYNI "trust upstream normalize" seviyesinde
+  // dogrulanir (>0 sayi mi) — asagida CSS degiskeni olarak .cst-root'a yazilir;
+  // index.css bunlari var(--cst-*, <mevcut-deger>) fallback ile tuketir.
+  var tableFormat = (props.tableFormat && typeof props.tableFormat === 'object') ? props.tableFormat : null
   var onRefresh = typeof props.onRefresh === 'function' ? props.onRefresh : null
   var recentIds = props.recentIds instanceof Set ? props.recentIds : new Set()
   var isDark = !!props.isDark
@@ -219,8 +235,21 @@ export default function SmartTable(props) {
     return sum
   }, [columns])
 
+  // rootStyle — sadece kullanici override etmisse CSS degiskeni yazilir;
+  // yoksa key hic eklenmez ve index.css'teki var(--cst-*, <fallback>) devreye
+  // girer (Otomatik). Sutun bazli fontSize/fontWeight (TableValueCell/bu
+  // dosyadaki th render'i, ikisi de inline style) BUNDAN DAHA SPESIFIK oldugu
+  // icin her zaman kazanir — genel ayar "varsayilan", sutun ayari "istisna"
+  // (bilincli, bozma).
+  var rootStyle = {}
+  if (tableFormat) {
+    if (typeof tableFormat.headerFontSize === 'number' && tableFormat.headerFontSize > 0) rootStyle['--cst-head-fs'] = tableFormat.headerFontSize + 'px'
+    if (typeof tableFormat.bodyFontSize === 'number' && tableFormat.bodyFontSize > 0) rootStyle['--cst-body-fs'] = tableFormat.bodyFontSize + 'px'
+    if (typeof tableFormat.rowSpacing === 'number' && tableFormat.rowSpacing > 0) rootStyle['--cst-row-pad'] = tableFormat.rowSpacing + 'px'
+  }
+
   return (
-    <div className="cst-root">
+    <div className="cst-root" style={rootStyle}>
       <div className="cst-wrap">
         <table className="cst-table" style={{ width: totalWidth }}>
           <colgroup>
