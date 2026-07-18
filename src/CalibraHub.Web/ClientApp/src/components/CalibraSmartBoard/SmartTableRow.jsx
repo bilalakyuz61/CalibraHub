@@ -48,7 +48,7 @@
  * sticky hucrelerin altindan "seffaf" gorunerek uzerine biniyormus gibi
  * gorunur. Bkz. index.css.
  */
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
 import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
@@ -74,6 +74,87 @@ function fontStyleFor(column) {
   var style = {}
   if (column && column.fontSize) style.fontSize = column.fontSize + 'px'
   if (column && column.fontWeight) style.fontWeight = column.fontWeight
+  return style
+}
+
+/* ── "Islemler" kebab dropdown — konumlandirma + acilis animasyonu ──────
+   Modul seviyesinde saf fonksiyonlar (bilesen closure'una ihtiyac yok).
+   Bkz. SmartTableRow bileseni icindeki useLayoutEffect: mount→olc→yerlestir→
+   rAF ile reveal deseni kullanir (once gizli/gercek-boyutlu render, sonra
+   flip/clamp uygulanmis nihai konum, en son fade+scale gecisi tetiklenir). */
+var PREFERS_REDUCED_MOTION = (function () {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) } catch (e) { return false }
+})()
+
+/**
+ * Buton + olculmus menu dikdortgenlerinden flip/clamp uygulanmis nihai
+ * konumu hesaplar. Varsayilan: butonun altinda, sag kenari butonun sag
+ * kenariyla hizali. Viewport altta yer yoksa yukari acilir (ters); solda
+ * tasma olacaksa sol kenara sabitlenir — hicbir zaman viewport disina
+ * tasmaz ("satirdan/viewport'tan taşmasın" kurali).
+ */
+function computeMenuPlacement(btnRect, menuRect) {
+  var vw = window.innerWidth
+  var vh = window.innerHeight
+  var margin = 8
+  var gap = 6
+
+  var horizontal = 'right'
+  var rightVal = Math.max(margin, vw - btnRect.right)
+  if (vw - rightVal - menuRect.width < margin) horizontal = 'left'
+
+  var vertical = 'below'
+  var fitsBelow = (btnRect.bottom + gap + menuRect.height) <= (vh - margin)
+  var fitsAbove = (btnRect.top - gap - menuRect.height) >= margin
+  if (!fitsBelow && fitsAbove) vertical = 'above'
+
+  var pos = { vertical: vertical, horizontal: horizontal }
+  if (vertical === 'below') pos.top = btnRect.bottom + gap
+  else pos.bottom = Math.max(margin, vh - btnRect.top + gap)
+
+  if (horizontal === 'right') pos.right = rightVal
+  else pos.left = Math.max(margin, Math.min(btnRect.left, vw - margin - menuRect.width))
+
+  return pos
+}
+
+/**
+ * menuPos null iken (henuz olculmedi) tamamen gorunmez ama gercek boyutlu bir
+ * "olcum gecisi" doner (visibility:hidden — display:none'in aksine
+ * getBoundingClientRect gercek boyutu verir). menuPos hazir olunca floating
+ * panel stili + fade/scale gecis durumunu (menuVisible) uygular.
+ */
+function buildMenuFloatingStyle(menuPos, menuVisible, isDark) {
+  if (!menuPos) return { position: 'fixed', top: 0, left: 0, visibility: 'hidden', pointerEvents: 'none' }
+
+  var originY = menuPos.vertical === 'above' ? 'bottom' : 'top'
+  var originX = menuPos.horizontal === 'left' ? 'left' : 'right'
+  var slideY = menuPos.vertical === 'above' ? 6 : -6
+
+  var style = {
+    position: 'fixed',
+    zIndex: 10010,
+    minWidth: 190,
+    maxWidth: 260,
+    padding: 5,
+    borderRadius: 12,
+    background: isDark ? 'rgba(30,41,59,0.92)' : 'rgba(255,255,255,0.92)',
+    border: isDark ? '1px solid rgba(255,255,255,0.14)' : '1px solid rgba(15,23,42,0.09)',
+    boxShadow: isDark
+      ? '0 4px 10px rgba(0,0,0,0.35), 0 20px 44px -10px rgba(0,0,0,0.65)'
+      : '0 4px 10px rgba(15,23,42,0.06), 0 16px 36px -8px rgba(15,23,42,0.22)',
+    backdropFilter: 'blur(18px)',
+    WebkitBackdropFilter: 'blur(18px)',
+    transformOrigin: originY + ' ' + originX,
+    opacity: menuVisible ? 1 : 0,
+    transform: menuVisible ? 'scale(1) translateY(0)' : ('scale(0.95) translateY(' + slideY + 'px)'),
+    transition: PREFERS_REDUCED_MOTION ? 'none' : 'opacity 140ms ease-out, transform 140ms ease-out',
+    pointerEvents: menuVisible ? 'auto' : 'none',
+  }
+  if (menuPos.top != null) style.top = menuPos.top
+  else style.bottom = menuPos.bottom
+  if (menuPos.left != null) style.left = menuPos.left
+  else style.right = menuPos.right
   return style
 }
 
@@ -315,8 +396,14 @@ export default function SmartTableRow(props) {
   var [busy, setBusy] = useState(false)
 
   // ── "Islemler" dropdown menusu ──
+  // menuPos: null iken portal "olcum gecisi" (visibility:hidden) render eder;
+  // asagidaki useLayoutEffect gercek menu boyutunu olcup flip/clamp uygulanmis
+  // nihai konumu yazar, ardindan menuVisible bir rAF sonra true olup fade+scale
+  // gecisini tetikler (mount→olc→yerlestir→reveal deseni, bkz. dosya ustu
+  // computeMenuPlacement/buildMenuFloatingStyle).
   var [menuOpen, setMenuOpen] = useState(false)
   var [menuPos, setMenuPos] = useState(null)
+  var [menuVisible, setMenuVisible] = useState(false)
   var menuBtnRef = useRef(null)
   var menuRef = useRef(null)
 
@@ -348,6 +435,26 @@ export default function SmartTableRow(props) {
       document.removeEventListener('mousedown', onDocDown)
       document.removeEventListener('keydown', onKey)
     }
+  }, [menuOpen])
+
+  // Mount→olc→yerlestir→reveal: menu acildiginda once gizli (ama gercek
+  // boyutlu) render edilir, burada gercek genislik/yukseklik butonun
+  // dikdortgeniyle birlikte olculup flip/clamp uygulanmis nihai konum
+  // yazilir (senkron, boyanmadan once — useLayoutEffect). Ardindan bir sonraki
+  // animasyon karesinde menuVisible true olur ve CSS transition (opacity+
+  // transform) devreye girer — boylece "ANINDA sert belirme" yerine kisa bir
+  // fade+scale gecisi olusur, kullanici hicbir zaman yanlis/olculmemis konumu
+  // gormez (visibility:hidden asamasi boyanmaz).
+  useLayoutEffect(function () {
+    if (!menuOpen) return undefined
+    var btn = menuBtnRef.current
+    var menuEl = menuRef.current
+    if (!btn || !menuEl) return undefined
+    var btnRect = btn.getBoundingClientRect()
+    var menuRect = menuEl.getBoundingClientRect()
+    setMenuPos(computeMenuPlacement(btnRect, menuRect))
+    var raf = requestAnimationFrame(function () { setMenuVisible(true) })
+    return function () { cancelAnimationFrame(raf) }
   }, [menuOpen])
 
   function dispatchActionUrl(action) {
@@ -502,11 +609,11 @@ export default function SmartTableRow(props) {
     if (e) e.stopPropagation()
     if (busy) return
     if (menuOpen) { setMenuOpen(false); return }
-    var el = menuBtnRef.current
-    if (el) {
-      var rect = el.getBoundingClientRect()
-      setMenuPos({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) })
-    }
+    // Nihai konum useLayoutEffect'te gercek menu boyutu olculerek hesaplanir
+    // (flip/clamp dahil) — burada sadece "olcum gecisi"ni baslatiyoruz, bkz.
+    // buildMenuFloatingStyle/computeMenuPlacement (dosya ustu).
+    setMenuPos(null)
+    setMenuVisible(false)
     setMenuOpen(true)
   }
 
@@ -561,18 +668,15 @@ export default function SmartTableRow(props) {
       {/* "Islemler" dropdown — cross-document portal oldugu icin (getTopBody
           iframe→top pencereye tasabilir, ayri stylesheet) INLINE stil, ama
           isDark'a gore tema-farkinda. Duzenle + extraActions + (varsa) ayrac
-          + Sil (danger). */}
-      {menuOpen && menuPos && createPortal(
+          + Sil (danger). Acilis: mount→olc→yerlestir→reveal (bkz. dosya ustu
+          useLayoutEffect) — fade+hafif scale/slide, ~140ms, transform-origin
+          acilan koseye gore (flip'e duyarli); prefers-reduced-motion'da
+          gecis kapanir (PREFERS_REDUCED_MOTION). */}
+      {menuOpen && createPortal(
         <div
           ref={menuRef}
           onClick={function (e) { e.stopPropagation() }}
-          style={{
-            position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 10010,
-            minWidth: 190, maxWidth: 260, padding: 6, borderRadius: 12,
-            background: isDark ? '#1e293b' : '#ffffff',
-            border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #e2e8f0',
-            boxShadow: isDark ? '0 12px 32px rgba(0,0,0,0.5)' : '0 12px 32px rgba(15,23,42,0.18)',
-          }}
+          style={buildMenuFloatingStyle(menuPos, menuVisible, isDark)}
         >
           {menuActions.length === 0 && !secondaryAction ? (
             <div style={{ padding: '10px 12px', fontSize: 12, color: isDark ? 'rgba(255,255,255,0.35)' : '#94a3b8' }}>
@@ -588,15 +692,16 @@ export default function SmartTableRow(props) {
                     type="button"
                     onClick={function (e) { e.stopPropagation(); setMenuOpen(false); dispatchMenuAction(action) }}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                      padding: '8px 10px', borderRadius: 8, border: 'none', background: 'transparent',
-                      cursor: 'pointer', fontSize: 12.5, fontWeight: 600, textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+                      padding: '6px 8px', borderRadius: 7, border: 'none', background: 'transparent',
+                      cursor: 'pointer', fontSize: 13, fontWeight: 500, lineHeight: 1.3, textAlign: 'left',
                       color: isDark ? 'rgba(255,255,255,0.82)' : '#334155',
+                      transition: 'background-color 0.1s ease',
                     }}
                     onMouseEnter={function (e) { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}
                     onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
                   >
-                    <ActionIcon size={14} />
+                    <ActionIcon size={13} style={{ flexShrink: 0 }} />
                     {action.label}
                   </button>
                 )
@@ -604,21 +709,22 @@ export default function SmartTableRow(props) {
 
               {secondaryAction && (
                 <>
-                  <div style={{ height: 1, margin: '4px 6px', background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
+                  <div style={{ height: 1, margin: '3px 5px', background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0' }} />
                   <button
                     type="button"
                     onClick={handleMenuDelete}
                     disabled={busy}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                      padding: '8px 10px', borderRadius: 8, border: 'none', background: 'transparent',
-                      cursor: busy ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 600, textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+                      padding: '6px 8px', borderRadius: 7, border: 'none', background: 'transparent',
+                      cursor: busy ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 500, lineHeight: 1.3, textAlign: 'left',
                       color: '#ef4444', opacity: busy ? 0.5 : 1,
+                      transition: 'background-color 0.1s ease',
                     }}
                     onMouseEnter={function (e) { if (!busy) e.currentTarget.style.background = isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)' }}
                     onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={13} style={{ flexShrink: 0 }} />
                     {secondaryAction.label || 'Sil'}
                   </button>
                 </>

@@ -40,6 +40,44 @@ function loadInitialFilters(boardKey) {
   } catch (e) { return [] }
 }
 
+// ── Tablo modu kimlik sentezi ─────────────────────────────────────────────
+// Kart-liste board'lari kimligini (isim/kod) entity.title / entity.subtitle ile
+// tasir; SmartTable ise SADECE widget sutunlarini render eder (entity.title/
+// subtitle OKUMAZ — bkz. SmartTableRow dosya ustu). Malzeme Kartlari bunu
+// w_kod/w_ad widget'lari ekleyerek cozmustu (LogisticsController); diger 51
+// kart-liste board'i cozmedi → tabloya cevrilince isim sutunu kaybolurdu. Bu
+// yuzden tablo modunda, board kendi w_ad/w_kod'unu TANIMLAMAMISSA, entity.title
+// → "Ad" ve (varsa ve isimden farkliysa) entity.subtitle → "Kod" sanal
+// widget'lari sentezlenir. id'ler w_ad/w_kod YENIDEN kullanildigi icin
+// leadsFirst (basa alma), isCodeStyle (monospace) ve sutun ayarlari otomatik
+// dogru calisir — SmartTable/SmartTableRow'a hicbir ozel-durum eklemeden.
+var IDENTITY_NAME_ID = 'w_ad'
+var IDENTITY_CODE_ID = 'w_kod'
+
+function hasLeadIdentity(masterWidgets) {
+  for (var i = 0; i < masterWidgets.length; i++) {
+    var w = masterWidgets[i]
+    if (w && (w.id === IDENTITY_NAME_ID || w.id === IDENTITY_CODE_ID)) return true
+  }
+  return false
+}
+
+function synthesizeMasterIdentity(masterWidgets, wantName, wantCode) {
+  var lead = []
+  if (wantName) lead.push({ id: IDENTITY_NAME_ID, type: 'data', dataType: 'text', label: 'Ad' })
+  if (wantCode) lead.push({ id: IDENTITY_CODE_ID, type: 'data', dataType: 'text', label: 'Kod' })
+  return lead.concat(masterWidgets)
+}
+
+function synthesizeEntityIdentity(entity, wantName, wantCode) {
+  var extra = []
+  if (wantName) extra.push({ id: IDENTITY_NAME_ID, type: 'data', dataType: 'text', label: 'Ad', value: (entity && entity.title != null) ? entity.title : '' })
+  if (wantCode) extra.push({ id: IDENTITY_CODE_ID, type: 'data', dataType: 'text', label: 'Kod', value: (entity && entity.subtitle != null) ? entity.subtitle : '' })
+  if (extra.length === 0) return entity
+  var widgets = (entity && Array.isArray(entity.widgets)) ? entity.widgets : []
+  return Object.assign({}, entity, { widgets: extra.concat(widgets) })
+}
+
 export default function SmartBoard(props) {
   var boardKey = props.boardKey || 'default-board'
   var title = props.title || ''
@@ -50,9 +88,14 @@ export default function SmartBoard(props) {
   var emptyText = props.emptyText || 'Kayit bulunamadi'
   var searchable = props.searchable !== false
   var searchPlaceholder = props.searchPlaceholder || 'Ara...'
-  // viewMode: "table" → SmartTable (satir bazli). Varsayilan/diger her deger → kart listesi
-  // (regresyonsuz: mevcut board'lar bu prop'u hic gondermez, davranis aynen kalir).
-  var viewMode = props.viewMode === 'table' ? 'table' : 'card'
+  // viewMode: VARSAYILAN "table" (2026-07-18 "kesin tablo" karari) — tum kart-
+  // liste board'lari satir bazli SmartTable ile render edilir (kurumsal tek-tip
+  // gorunum). Bir board tabloya uygun degilse (ozel/gomulu ekran) config'inde
+  // AÇIKÇA viewMode:'card' vererek opt-out eder. Kimligi widget olmayan (isim/
+  // kod'u entity.title/subtitle'da tutan) board'lar icin kimlik sutunu asagida
+  // sentezlenir (tableMasterWidgets/tableEntities), boylece tabloya cevrilince
+  // isim sutunu kaybolmaz.
+  var viewMode = props.viewMode === 'card' ? 'card' : 'table'
 
   // In-place refresh
   var refreshUrl = props.refreshUrl || null
@@ -591,6 +634,30 @@ export default function SmartBoard(props) {
   var tableColumnFormats = (isTableMode && tableColumnConfig && tableColumnConfig.columns && typeof tableColumnConfig.columns === 'object')
     ? tableColumnConfig.columns : null
 
+  // ── Tablo modu kimlik sentezi (bkz. dosya ustu helper'lar) ──
+  // Board kendi w_ad/w_kod widget'ini tanimlamadiysa (Malzeme Kartlari tanimlar
+  // → dokunulmaz), entity.title/subtitle'dan "Ad"/"Kod" sanal sutunlari uretilir.
+  // wantName/wantCode tespiti TAM listeden (entities) yapilir — arama/filtre
+  // sonucu (filteredEntities) daralinca sutunun kaybolmamasi icin.
+  var tableIdentity = useMemo(function () {
+    if (!isTableMode) return null
+    if (hasLeadIdentity(masterWidgets)) return null
+    var wantName = entities.some(function (e) { return e && e.title != null && e.title !== '' })
+    var wantCode = entities.some(function (e) { return e && e.subtitle != null && e.subtitle !== '' && e.subtitle !== e.title })
+    if (!wantName && !wantCode) return null
+    return { wantName: wantName, wantCode: wantCode }
+  }, [isTableMode, masterWidgets, entities])
+
+  var tableMasterWidgets = useMemo(function () {
+    if (!tableIdentity) return masterWidgets
+    return synthesizeMasterIdentity(masterWidgets, tableIdentity.wantName, tableIdentity.wantCode)
+  }, [masterWidgets, tableIdentity])
+
+  var tableEntities = useMemo(function () {
+    if (!tableIdentity) return filteredEntities
+    return filteredEntities.map(function (e) { return synthesizeEntityIdentity(e, tableIdentity.wantName, tableIdentity.wantCode) })
+  }, [filteredEntities, tableIdentity])
+
   var meshStyle = isDark
     ? {
         backgroundColor: '#0a0d17',
@@ -858,8 +925,8 @@ export default function SmartBoard(props) {
         ) : viewMode === 'table' ? (
           <div className="flex flex-col gap-3 min-w-0">
             <SmartTable
-              entities={filteredEntities}
-              masterWidgets={masterWidgets}
+              entities={tableEntities}
+              masterWidgets={tableMasterWidgets}
               visibleIds={visibleIds}
               order={order}
               columnConfig={tableColumnFormats}
@@ -906,7 +973,7 @@ export default function SmartBoard(props) {
           isOpen={columnSettingsOpen}
           onClose={function () { setColumnSettingsOpen(false) }}
           boardKey={boardKey}
-          masterWidgets={masterWidgets}
+          masterWidgets={tableMasterWidgets}
           onSaved={function (cfg) { setTableColumnConfig(cfg) }}
         />
       )}

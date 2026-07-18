@@ -264,14 +264,36 @@ body.app-theme-dark .vb-root {
 /* ── Section cards (base object / joins / columns) ─────────────────── */
 .vb-section {
   background: var(--vb-surface); border: 1px solid var(--vb-border); border-radius: 10px;
-  padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--vb-shadow);
+  padding: 14px 16px; margin-bottom: 8px; box-shadow: var(--vb-shadow);
 }
-.vb-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.vb-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .vb-section-title {
   font-size: 12.5px; font-weight: 700; color: var(--vb-text);
   display: flex; align-items: center; gap: 6px;
 }
 .vb-section-help { font-size: 11px; color: var(--vb-muted); margin-left: auto; }
+.vb-section-caption { font-size: 11px; color: var(--vb-muted); margin: 0 0 12px; line-height: 1.5; }
+
+/* Adım numarası rozeti — akışı (Temel Tablo → Join'ler → Kolonlar) görsel olarak numaralandırır */
+.vb-step-num {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--vb-indigo-soft); color: var(--vb-indigo);
+  font-size: 10px; font-weight: 800;
+}
+.vb-step-connector {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--vb-muted-2); opacity: 0.8; margin: -2px 0 6px;
+}
+
+/* Temel tablo seçilmeden önce Join'ler / Kolonlar bölümlerinin sade "kilitli" hali —
+   ilk kullanımda tüm formu birden göstermek yerine akışı adım adım açar (sadeleştirme). */
+.vb-section-locked {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 12px; border-radius: 8px;
+  border: 1px dashed var(--vb-border); background: var(--vb-surface-2);
+  color: var(--vb-muted); font-size: 12px;
+}
 
 .vb-field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
 .vb-field { display: flex; flex-direction: column; gap: 4px; min-width: 140px; flex: 1 1 160px; }
@@ -292,6 +314,83 @@ body.app-theme-dark .vb-root {
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
 
+/* ── TableSearchSelect (tablo/view arama combobox) ───────────────────── */
+.vb-tsel { position: relative; width: 100%; }
+.vb-tsel-control {
+  display: flex; align-items: center; gap: 6px; cursor: text;
+  padding: 7px 9px; border-radius: 7px;
+  border: 1px solid var(--vb-border); background: var(--vb-input-bg); color: var(--vb-text);
+}
+.vb-tsel-control:focus-within { border-color: var(--vb-indigo); box-shadow: 0 0 0 3px var(--vb-indigo-soft); }
+.vb-tsel-disabled .vb-tsel-control { opacity: 0.6; cursor: not-allowed; }
+.vb-tsel-icon { color: var(--vb-muted-2); flex-shrink: 0; }
+.vb-tsel-input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  padding: 0; color: var(--vb-text); font-size: 12px; font-family: inherit;
+}
+.vb-tsel-input::placeholder { color: var(--vb-muted-2); }
+.vb-tsel-input:disabled { cursor: not-allowed; }
+.vb-tsel-clear {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 16px; height: 16px; border-radius: 50%; border: none; padding: 0;
+  background: var(--vb-surface-2); color: var(--vb-muted); cursor: pointer;
+}
+.vb-tsel-clear:hover { background: var(--vb-rose-soft); color: var(--vb-rose); }
+.vb-tsel-chevron { color: var(--vb-muted-2); flex-shrink: 0; }
+
+/* Menü document.body'e portallanır (.vb-root'un DOM alt ağacı DIŞINDA — bkz.
+   IntegrationWizard.css .eup-menu yorumu, aynı kısıt/çözüm) — --vb-* değişkenlerini
+   miras alamaz, bu yüzden kendi üzerinde aynı değerleri yeniden tanımlar
+   (tek dark selector: body.app-theme-dark). */
+.vb-tsel-menu {
+  color-scheme: light;
+  --vb-surface: #ffffff;
+  --vb-surface-2: #f1f5f9;
+  --vb-border: #e2e8f0;
+  --vb-text: #0f172a;
+  --vb-muted: #64748b;
+  --vb-indigo: #4f46e5;
+  --vb-indigo-soft: #eef2ff;
+  --vb-blue: #2563eb;
+  --vb-blue-soft: #eff6ff;
+  --vb-row-hover: #f8fafc;
+
+  background: var(--vb-surface); border: 1px solid var(--vb-border); border-radius: 9px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  padding: 4px; overflow-y: auto;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+body.app-theme-dark .vb-tsel-menu {
+  color-scheme: dark;
+  --vb-surface: #101a2b;
+  --vb-surface-2: #16213a;
+  --vb-border: #232f47;
+  --vb-text: #e2e8f0;
+  --vb-muted: #94a3b8;
+  --vb-indigo: #818cf8;
+  --vb-indigo-soft: rgba(99, 102, 241, 0.14);
+  --vb-blue: #60a5fa;
+  --vb-blue-soft: rgba(59, 130, 246, 0.12);
+  --vb-row-hover: rgba(148, 163, 184, 0.06);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+.vb-tsel-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 9px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--vb-text);
+}
+.vb-tsel-option:hover, .vb-tsel-option.active { background: var(--vb-row-hover); }
+.vb-tsel-option.selected { background: var(--vb-indigo-soft); color: var(--vb-indigo); font-weight: 600; }
+.vb-tsel-option-name {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vb-tsel-kind-badge {
+  flex-shrink: 0; font-size: 9.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--vb-surface-2); color: var(--vb-muted);
+}
+.vb-tsel-kind-badge.view { background: var(--vb-blue-soft); color: var(--vb-blue); }
+.vb-tsel-empty { padding: 12px 10px; text-align: center; color: var(--vb-muted); font-size: 12px; }
+
 /* ── Joins ──────────────────────────────────────────────────────────── */
 .vb-join-card {
   border: 1px solid var(--vb-border); border-radius: 9px; padding: 12px; margin-bottom: 10px;
@@ -300,7 +399,7 @@ body.app-theme-dark .vb-root {
 .vb-join-card:last-child { margin-bottom: 0; }
 .vb-join-head { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
 .vb-on-list { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--vb-border); }
-.vb-on-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.vb-on-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .vb-on-row:last-child { margin-bottom: 0; }
 .vb-on-eq { padding-bottom: 8px; color: var(--vb-muted); font-weight: 700; }
 .vb-on-warning {
@@ -308,6 +407,33 @@ body.app-theme-dark .vb-root {
   color: var(--vb-amber); font-size: 11px; font-weight: 600;
 }
 .vb-unknown-alias { color: var(--vb-rose); }
+
+/* ON koşulu — "Sol"/"Sağ" grupları + ortada operatör. Önceden 4 ayrı
+   label+select çifti (Sol Alias/Sol Kolon/Sağ Alias/Sağ Kolon) tek satırda
+   dağınık duruyordu; artık alias.kolon şeklinde tek kutuda gruplanıyor. */
+.vb-on-side {
+  display: flex; align-items: center; gap: 4px; flex: 1 1 190px; min-width: 170px;
+  background: var(--vb-surface); border: 1px solid var(--vb-border); border-radius: 7px;
+  padding: 5px 8px;
+}
+.vb-on-side-label {
+  font-size: 10px; font-weight: 700; color: var(--vb-muted); flex-shrink: 0;
+  padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--vb-border-soft);
+}
+.vb-on-dot { color: var(--vb-muted-2); font-weight: 700; flex-shrink: 0; }
+.vb-select-xs {
+  border: none; background: transparent; padding: 2px 1px; font-size: 11.5px;
+  color: var(--vb-text); min-width: 0; flex: 1 1 auto; border-radius: 4px; font-family: inherit;
+}
+.vb-select-xs:disabled { opacity: 0.6; cursor: not-allowed; }
+.vb-select-xs:focus { outline: none; box-shadow: 0 0 0 2px var(--vb-indigo-soft); }
+.vb-on-op {
+  flex: 0 0 54px; text-align: center; font-weight: 700; padding: 6px 2px;
+  border-radius: 7px; border: 1px solid var(--vb-border); background: var(--vb-surface-2);
+  color: var(--vb-indigo); font-family: inherit;
+}
+.vb-on-op:disabled { opacity: 0.6; cursor: not-allowed; }
+.vb-remove-btn-sm { width: 26px; height: 26px; }
 
 /* ── Columns ────────────────────────────────────────────────────────── */
 .vb-column-row {
