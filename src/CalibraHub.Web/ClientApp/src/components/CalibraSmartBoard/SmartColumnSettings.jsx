@@ -53,6 +53,24 @@ import { resolveIcon, resolveColor, resolveChipWidth, TABLE_LEAD_WIDGET_IDS } fr
 import { loadBoardColumnConfig, saveBoardColumnConfig } from '../../services/columnConfigService'
 
 /**
+ * Veri tipi (dataType) → Türkçe etiket. Rozet İngilizce 'text'/'percent' yerine
+ * "Metin"/"Yüzde" gösterir. Bilinmeyen tip → Title Case fallback.
+ * NOT: rozet artık `uppercase` CSS'i KULLANMAZ — CSS text-transform:uppercase
+ * Türkçe "i"yi "İ" yerine "I" yapar (locale bilmez), karakter bozar.
+ */
+var DATA_TYPE_TR = {
+  text: 'Metin', numeric: 'Sayı', percent: 'Yüzde', date: 'Tarih', phone: 'Telefon',
+  switch: 'Anahtar', bool: 'Anahtar', boolean: 'Anahtar', attachment: 'Ek',
+  lookup: 'Rehber', link: 'Bağlantı', select: 'Liste', textarea: 'Uzun Metin',
+}
+function typeLabelTr(dt) {
+  if (!dt) return ''
+  var key = String(dt).toLowerCase()
+  if (DATA_TYPE_TR[key]) return DATA_TYPE_TR[key]
+  return String(dt).charAt(0).toUpperCase() + String(dt).slice(1).toLowerCase()
+}
+
+/**
  * candidates/allIds listesini TABLE_LEAD_WIDGET_IDS (Stok Kodu, Stok Adi)
  * sirasina gore basa alir (varsa) — SmartTable.jsx'teki leadsFirst() ile
  * AYNI mantik; "config hic yokken" ve "Sifirla" akislarinda panelin
@@ -195,8 +213,8 @@ function ColumnRow(props) {
           <span className="flex flex-col min-w-0 flex-1">
             <span className="text-xs text-slate-700 dark:text-white/70 font-medium truncate">{displayLabel}</span>
             {column.dataType && (
-              <span className="text-[9px] text-slate-400 dark:text-white/45 uppercase tracking-wider">
-                {column.dataType}
+              <span className="text-[9px] text-slate-400 dark:text-white/45 tracking-wider">
+                {typeLabelTr(column.dataType)}
               </span>
             )}
           </span>
@@ -462,8 +480,8 @@ function PoolRow(props) {
             {column.label}
           </span>
           {column.dataType && (
-            <span className="text-[10px] text-slate-400 dark:text-white/45 uppercase tracking-wider">
-              {column.dataType}
+            <span className="text-[10px] text-slate-400 dark:text-white/45 tracking-wider">
+              {typeLabelTr(column.dataType)}
             </span>
           )}
         </div>
@@ -781,7 +799,7 @@ export default function SmartColumnSettings(props) {
                     <div className="px-5 pt-3 pb-2">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span className="text-[11px] font-bold text-slate-500 dark:text-white/40 uppercase tracking-wider">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-white/40 tracking-wider">
                           Aktif Sütunlar ({activeColumns.length}{q ? ' / ' + filteredActive.length + ' eşleşme' : ''})
                         </span>
                       </div>
@@ -843,7 +861,7 @@ export default function SmartColumnSettings(props) {
                     <div className="px-5 pb-4">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                        <span className="text-[11px] font-bold text-slate-500 dark:text-white/40 uppercase tracking-wider">
+                        <span className="text-[11px] font-bold text-slate-500 dark:text-white/40 tracking-wider">
                           Sütun Havuzu ({poolColumns.length}{q ? ' / ' + filteredPool.length + ' eşleşme' : ''})
                         </span>
                       </div>
