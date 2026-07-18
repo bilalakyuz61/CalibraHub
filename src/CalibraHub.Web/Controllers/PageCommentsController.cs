@@ -146,6 +146,26 @@ public sealed class PageCommentsController : ControllerBase
         return File(result.Value.Bytes, result.Value.Mime);
     }
 
+    /// <summary>
+    /// GET /api/page-comments/agent-image/{id} — Katman-4 otonom döngünün ekli görsel okuma yüzeyi.
+    /// GetImage ile aynı, ama cookie/rol yerine agent gate (env + loopback + X-Agent-Key) + companyId
+    /// per-company override (SystemAdmin görselleri companyId=0 sistem DB'sinde). Döngü, resim ekli
+    /// istekleri (ör. "resimdeki gibi yap") işleyebilmek için ekli ekran görüntülerini buradan çeker.
+    /// </summary>
+    [AllowAnonymous]
+    [IgnoreAntiforgeryToken]
+    [HttpGet("agent-image/{id}")]
+    public async Task<IActionResult> AgentImage(string id, [FromQuery] int? companyId, CancellationToken ct)
+    {
+        if (!TryGateAgentAccess(out var deny)) return deny!;
+        if (!TryResolveAgentCompany(companyId, out var resolvedCompanyId, out var companyError)) return companyError!;
+        if (resolvedCompanyId != 0) HttpContext.Items["__override_company_id"] = resolvedCompanyId;
+
+        var result = await _service.GetImageBinaryAsync(id, ct);
+        if (result is null) return NotFound();
+        return File(result.Value.Bytes, result.Value.Mime);
+    }
+
     /// <summary>POST /api/page-comments/comment/image/delete — görseli siler.</summary>
     [HttpPost("comment/image/delete")]
     public async Task<IActionResult> DeleteImage([FromBody] DeletePageCommentImageInput input, CancellationToken ct)
