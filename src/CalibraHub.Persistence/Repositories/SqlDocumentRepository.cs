@@ -700,6 +700,21 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     }
 
     /// <summary>
+    /// 2026-07-18 — Satirin bagli oldugu belge Id'si (satir yoksa null).
+    /// Yetkilendirme icin: satir-bazli endpoint'te izin, satirin ait oldugu BELGENIN
+    /// tipinden cozulur (istemci beyanindan degil). Bkz. SalesController.ReviseLine.
+    /// </summary>
+    public async Task<int?> GetDocumentIdByLineAsync(int lineId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT [DocumentId] FROM {_lineTable} WHERE [Id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", lineId));
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null || result is DBNull ? null : Convert.ToInt32(result);
+    }
+
+    /// <summary>
     /// Satir revizyonu — atomic SQL batch:
     ///   1) Eski satirin notlari @Description ile UPDATE edilir (revize gerekcesi).
     ///   2) Yeni satir INSERT edilir: eski satirin kolonlari aynen kopyalanir,

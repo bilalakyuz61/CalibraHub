@@ -107,6 +107,41 @@ public sealed class SalesController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
+    /// <summary>Yazma (olusturma/duzenleme) icin yeterli sayilan izin kodlari.</summary>
+    private static readonly string[] WriteActionCodes = { "CREATE", "EDIT_OWN", "EDIT_ALL" };
+
+    /// <summary>
+    /// 2026-07-18 — Verilen form kodunda gecerli kullanicinin izinlerinden herhangi biri var mi.
+    /// PermissionEnforcementFilter bu controller'in cogu action'ini GORMEZ (sinif duzeyinde
+    /// [PermissionScope] yok, yalnizca 3 liste action'inda var) — bu yuzden mutasyon
+    /// endpoint'lerinde izin ELLE kontrol edilir.
+    /// </summary>
+    private async Task<bool> HasFormPermissionAsync(string formCode, string[] actionCodes, CancellationToken ct)
+    {
+        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
+        int? dept = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+        return await _permService.CheckAnyAsync(GetUserId(), role, dept, formCode, actionCodes, ct);
+    }
+
+    /// <summary>
+    /// 2026-07-18 — Belge Id'sinden tipi **DB'den** cozup ilgili parent form kodunda izin arar.
+    /// Istemci beyani HICBIR ZAMAN kullanilmaz: kullanici yetkili oldugu tipi beyan edip Id ile
+    /// baska tipteki belgeyi hedefleyerek per-tip yetkiyi bypass edebiliyordu.
+    /// **Tip NULL (legacy tipsiz belge) ise kontrol ATLANMAZ** — DocumentTypeFormMap.Resolve(null)
+    /// ile cozumlenen forma gore istenir. (Mevcut DeleteDocument/DeleteDocumentJson bloklari
+    /// `if (DocumentTypeId.HasValue)` sarti tasidigi icin tipsiz belgede kontrolu tamamen
+    /// atliyordu — ayni hatayi tekrarlamamak icin burada kosulsuz kontrol edilir.)
+    /// </summary>
+    private async Task<bool> HasDocumentPermissionAsync(int documentId, string[] actionCodes, CancellationToken ct)
+    {
+        var doc = await _quoteService.GetQuoteByIdAsync(documentId, ct);
+        string? typeCode = null;
+        if (doc?.DocumentTypeId is int typeId)
+            typeCode = (await _documentTypeRepo.GetByIdAsync(typeId, ct))?.Code;
+        var formCode = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(typeCode).Parent;
+        return await HasFormPermissionAsync(formCode, actionCodes, ct);
+    }
+
     private int? CurrentUserId()
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -590,6 +625,12 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> CreateOrdersFromQuotes(
         [FromBody] CreateOrdersFromQuotesRequest req, CancellationToken ct)
     {
+        // Yetki (2026-07-18): donusum HEDEF belgeyi yaratir → hedef formda (SALES_ORDER)
+        // CREATE/EDIT aranir. Onceden kontrol yoktu: SALES_ORDER grant'i olmayan kullanici
+        // teklif→siparis donusumuyle siparis olusturabiliyordu.
+        if (!await HasFormPermissionAsync(FormCodes.SalesOrder, WriteActionCodes, ct))
+            return Json(new { success = false, error = "Sipariş oluşturmak için yetkiniz bulunmuyor." });
+
         var result = await _quoteService.CreateOrdersFromQuotesAsync(req, CurrentUserId(), ct);
         if (!result.Success)
             return Json(new { success = false, error = result.Error });
@@ -621,6 +662,14 @@ public sealed class SalesController : Controller
             case "alis_teklifi":      target = "alis_siparisi"; reqApproved = true;  reqContact = true;  targetLabel = "Satın Alma Siparişi"; editType = "purchase_order"; break;
             default: return Json(new { success = false, message = "Bu belge türü dönüştürülemez." });
         }
+
+        // Yetki (2026-07-18): izin HEDEF belge tipine gore aranir (donusum hedefi yaratir).
+        // Kaynak tipi zaten DB'den cozuldu (yukarida `src`), hedef ondan turetiliyor —
+        // istemci hedef tipi beyan edemez, dolayisiyla tip-beyani bypass'i mumkun degil.
+        if (!await HasFormPermissionAsync(
+                CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(target).Parent, WriteActionCodes, ct))
+            return Json(new { success = false, message = $"{targetLabel} oluşturmak için yetkiniz bulunmuyor." });
+
         var res = await _quoteService.ConvertDocumentsAsync(
             new[] { sourceId }, src, target, reqApproved, reqContact, DateTime.Today, CurrentUserId(), ct);
         if (!res.Success) return Json(new { success = false, message = res.Error });
@@ -639,6 +688,15 @@ public sealed class SalesController : Controller
     {
         if (req == null || req.QuoteId <= 0)
             return Json(new { success = false, error = "Teklif id gecersiz." });
+
+        // Yetki (2026-07-18): siparis olusturma + (istenirse) is emri acma AYRI yetkilerdir.
+        // Onceden ikisi de kontrolsuzdu; CreateWorkOrders=true ile WORK_ORDER grant'i olmayan
+        // kullanici is emri actirabiliyordu.
+        if (!await HasFormPermissionAsync(FormCodes.SalesOrder, WriteActionCodes, ct))
+            return Json(new { success = false, error = "Sipariş oluşturmak için yetkiniz bulunmuyor." });
+        if (req.CreateWorkOrders
+            && !await HasFormPermissionAsync(FormCodes.WorkOrderEdit, WriteActionCodes, ct))
+            return Json(new { success = false, error = "İş emri oluşturmak için yetkiniz bulunmuyor." });
 
         var orderResult = await _quoteService.CreateOrdersFromQuotesAsync(
             new CreateOrdersFromQuotesRequest(new[] { req.QuoteId }, req.OrderDate),
@@ -1744,6 +1802,13 @@ public sealed class SalesController : Controller
     [HttpPost]
     public async Task<IActionResult> ChangeQuoteStatus([FromBody] ChangeStatusBody body, CancellationToken ct)
     {
+        // Yetki (2026-07-18): durum degistirme bir MUTASYONDUR ve stok etkisi vardir —
+        // Cancelled/Rejected asagida seri rezervasyonlarini serbest birakir. Belge tipi
+        // DB'den cozulur; onceden bu endpoint'te hicbir izin kontrolu yoktu (her tipte
+        // belgenin durumunu giris yapmis herkes degistirebiliyordu).
+        if (!await HasDocumentPermissionAsync(body.Id, WriteActionCodes, ct))
+            return Json(new { success = false, message = "Bu belgenin durumunu değiştirmek için yetkiniz bulunmuyor." });
+
         var (success, error) = await _quoteService.ChangeStatusAsync(body.Id, body.Status, ct);
         if (!success) return Json(new { success = false, message = error });
         // İptal/Red durumunda rezerve seriler serbest bırakılır (idempotent).
@@ -1771,18 +1836,36 @@ public sealed class SalesController : Controller
         if (body == null || body.ParentLineId <= 0)
             return Json(new { success = false, message = "Gecersiz parametre." });
 
+        // Yetki (2026-07-18): satir-bazli endpoint — izin, satirin ait oldugu BELGENIN
+        // tipinden cozulur. Istemci belge/tip beyan etmez; satir Id'sinden DB'ye gidilir,
+        // dolayisiyla tip-beyani bypass'i mumkun degil. Onceden hicbir kontrol yoktu:
+        // giris yapmis herkes HER belgenin kalemini revize edebiliyordu.
+        var _rDocId = await _quoteService.GetDocumentIdByLineAsync(body.ParentLineId, ct);
+        if (_rDocId is null)
+            return Json(new { success = false, message = "Revize edilecek satir bulunamadi." });
+        var _rDoc = await _quoteService.GetQuoteByIdAsync(_rDocId.Value, ct);
+        string? _rTypeCode = null;
+        if (_rDoc?.DocumentTypeId is int _rTid)
+            _rTypeCode = (await _documentTypeRepo.GetByIdAsync(_rTid, ct))?.Code;
+        var _rForms = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_rTypeCode);
+        if (!await HasFormPermissionAsync(_rForms.Parent, WriteActionCodes, ct))
+            return Json(new { success = false, message = "Bu belgeyi revize etmek için yetkiniz bulunmuyor." });
+
         try
         {
             var newLineId = await _quoteService.ReviseLineAsync(body.ParentLineId, body.Description, ct);
             if (newLineId == null || newLineId <= 0)
                 return Json(new { success = false, message = "Revize edilecek satir bulunamadi." });
 
-            // Widget degerlerini (SALES_QUOTE_LINES form) eski satirdan yeniye kopyala.
+            // Widget degerlerini eski satirdan yeniye kopyala.
             // IWidgetRepository.CopyValuesAsync — atomic INSERT ... SELECT ile top-level
             // degerleri kopyalar. Form bulunamazsa veya eski satirda widget yoksa no-op.
+            // 2026-07-18: form kodu artik BELGE TIPINDEN cozuluyor (_rForms.Lines) —
+            // onceden "SALES_QUOTE_LINES" hardcode'du, dolayisiyla satin alma/irsaliye
+            // gibi diger tiplerde YANLIS formdan kopyalamaya calisiliyordu (sessiz no-op).
             try
             {
-                var schema = await _widgetService.GetFormSchemaByCodeAsync("SALES_QUOTE_LINES", ct);
+                var schema = await _widgetService.GetFormSchemaByCodeAsync(_rForms.Lines, ct);
                 if (schema != null)
                 {
                     await _widgetRepo.CopyValuesAsync(

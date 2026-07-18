@@ -913,6 +913,13 @@ public sealed class DocumentService : IDocumentService
         => _repo.ReviseLineAsync(parentLineId, description, ct);
 
     /// <summary>
+    /// Satirin bagli oldugu belge Id'si — repository'ye delege eder. Yetkilendirme
+    /// amacli (satir-bazli endpoint'te izin BELGE tipinden cozulur).
+    /// </summary>
+    public Task<int?> GetDocumentIdByLineAsync(int lineId, CancellationToken ct)
+        => _repo.GetDocumentIdByLineAsync(lineId, ct);
+
+    /// <summary>
     /// Tekliflerden cari bazli siparis(ler) uretir.
     ///   1) Tum kaynak teklifleri yukle + dogrula (Approved + henuz consume edilmemis)
     ///   2) ContactId bazinda grupla — her grup icin tek bir Document (type=satis_siparisi) olustur

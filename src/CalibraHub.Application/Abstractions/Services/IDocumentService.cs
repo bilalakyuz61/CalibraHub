@@ -72,4 +72,10 @@ public interface IDocumentService
     /// tarafinda WidgetService ile yapilir (schema dinamik).
     /// </summary>
     Task<int?> ReviseLineAsync(int parentLineId, string? description, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-18 — Satirin bagli oldugu belge Id'si (satir yoksa null). Satir-bazli
+    /// endpoint'lerin yetkiyi BELGE tipinden cozebilmesi icin eklendi.
+    /// </summary>
+    Task<int?> GetDocumentIdByLineAsync(int lineId, CancellationToken ct);
 }

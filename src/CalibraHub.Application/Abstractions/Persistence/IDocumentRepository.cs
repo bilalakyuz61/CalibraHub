@@ -81,6 +81,13 @@ public interface IDocumentRepository
     Task<int?> ReviseLineAsync(int parentLineId, string? description, CancellationToken ct);
 
     /// <summary>
+    /// 2026-07-18 — Bir satirin bagli oldugu belge Id'sini doner (satir yoksa null).
+    /// Yetkilendirme icin eklendi: satir-bazli endpoint'lerde (ReviseLine) izin, satirin
+    /// ait oldugu BELGENIN tipinden cozulmelidir; tip istemci beyanindan alinamaz.
+    /// </summary>
+    Task<int?> GetDocumentIdByLineAsync(int lineId, CancellationToken ct);
+
+    /// <summary>
     /// Append-only: DocumentLine'a TEK yeni stok hareketi satırı ekler (LineNo = mevcut
     /// max+1, UPDLOCK+HOLDLOCK ile concurrent-safe). SaveLinesAsync'in upsert-all/replace
     /// davranışından FARKLIDIR — mevcut satırları etkilemez, sadece INSERT yapar. WorkOrder
