@@ -137,6 +137,91 @@ function clampFontWeight(v) {
   return n
 }
 
+/**
+ * "Genel" bölümü (panelin üstünde, Aktif Sütunlar'dan ÖNCE) — SÜTUN BAZINDA
+ * DEĞİL, TABLO GENELİNE uygulanan 3 ayar (kullanıcı bazında kalıcı): Başlık
+ * Font Boyutu, Veri Font Boyutu, Satır Aralığı. Aynı stepper deseni (sayısal
+ * px + -/+ + Otomatik), ama ColumnRow'daki Boyut/Kalınlık'tan AYRI aralık
+ * kullanır — font 9-24px, satır aralığı (dikey padding) 2-20px. Font
+ * alanları FONT_SIZE_NATURAL'ı (13, yukarısı) paylaşır — ColumnRow'daki
+ * per-sütun Boyut ile AYNI "tek anchor" tasarımı (gerçek CSS varsayılanı
+ * başlıkta 11px / veride 12.5px farklı olduğu için zaten tek ortak anchor
+ * tercih edilmiş); satır aralığının anchor'ı ise index.css `.cst-td` dikey
+ * padding'inin GERÇEK değeri (6px, tam sayı olduğu için Math.round güvenli).
+ */
+var TABLE_FONT_MIN = 9
+var TABLE_FONT_MAX = 24
+var TABLE_FONT_STEP = 1
+var TABLE_ROW_PAD_MIN = 2
+var TABLE_ROW_PAD_MAX = 20
+var TABLE_ROW_PAD_STEP = 1
+var TABLE_ROW_PAD_NATURAL = 6
+
+function clampTableFontSize(v) {
+  if (typeof v !== 'number' || !isFinite(v) || v <= 0) return 0
+  var n = Math.round(v)
+  if (n < TABLE_FONT_MIN) return TABLE_FONT_MIN
+  if (n > TABLE_FONT_MAX) return TABLE_FONT_MAX
+  return n
+}
+function clampRowSpacing(v) {
+  if (typeof v !== 'number' || !isFinite(v) || v <= 0) return 0
+  var n = Math.round(v)
+  if (n < TABLE_ROW_PAD_MIN) return TABLE_ROW_PAD_MIN
+  if (n > TABLE_ROW_PAD_MAX) return TABLE_ROW_PAD_MAX
+  return n
+}
+
+/* ── "Genel" satırı — ColumnRow içindeki Boyut/Kalınlık stepper'ıyla AYNI
+   görsel dil (bkz. o blok), parametrize edilmiş tek noktadan tekrar
+   kullanım için. Etiket sütunu (w-24) ColumnRow'daki w-16'dan daha geniş —
+   "Başlık Font Boyutu" gibi üç kelimelik etiketler tek kelimelik Boyut/
+   Kalınlık'tan uzun (bilinçli görsel fark, işlevsel etkisi yok). ── */
+function GeneralFormatRow(props) {
+  var overridden = !!props.overridden
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-24 text-[10px] font-semibold text-slate-400 dark:text-white/35 flex-shrink-0">{props.label}</span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={function () { props.onStep(-1) }}
+          className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/100 dark:bg-white/[0.03] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors flex-shrink-0"
+          title={props.downTitle}
+        >
+          <Minus size={11} />
+        </button>
+        <span
+          className="text-[11px] text-slate-500 dark:text-white/45 min-w-[58px] text-center flex-shrink-0"
+          style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}
+        >
+          {overridden ? props.displayValue : 'Otomatik'}
+        </span>
+        <button
+          type="button"
+          onClick={function () { props.onStep(1) }}
+          className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/100 dark:bg-white/[0.03] border-[1px] border-slate-200 dark:border-white/[0.06] text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors flex-shrink-0"
+          title={props.upTitle}
+        >
+          <Plus size={11} />
+        </button>
+        <button
+          type="button"
+          onClick={props.onReset}
+          className={'px-2 py-1 rounded-lg border-[1px] text-[10.5px] font-medium transition-colors ml-1 flex-shrink-0 ' +
+            (!overridden
+              ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-600 dark:text-indigo-300'
+              : 'bg-white/100 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-white/40 hover:text-slate-600 dark:hover:text-white/60')
+          }
+          title={props.resetTitle}
+        >
+          Otomatik
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Aktif sutun satiri — kompakt baslik + acilir detay paneli ────────── */
 function ColumnRow(props) {
   var column = props.column

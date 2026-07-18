@@ -21,13 +21,19 @@
  *          GET'te veya sonraki save'de kendini duzeltir).
  *
  * Config yapisi (SmartColumnSettings.jsx sema — geriye donuk uyumlu: eski
- * {visibleIds, order, colors} sekli de sorunsuz okunur, "columns" yoksa {} varsayilir):
+ * {visibleIds, order, colors} sekli de sorunsuz okunur, "columns"/"table" yoksa
+ * {} varsayilir):
  *   {
  *     visibleIds: ['unit', 'type', ...],
  *     order:      ['type', 'unit', ...],
  *     columns: {
  *       '<id>': { align, width, pin, fontSize, fontWeight, label, headerWrap }
- *     }
+ *     },
+ *     table: { headerFontSize, bodyFontSize, rowSpacing }   // SUTUN BAZLI
+ *       // DEGIL — TABLO GENELİNE uygulanan 3 ayar (kullanici bazinda kalici),
+ *       // SmartColumnSettings.jsx "Genel" bolumunun urettigi. Deger yoksa/
+ *       // gecersizse Otomatik (index.css'teki var(--cst-*, <fallback>)
+ *       // devreye girer, bkz. SmartTable.jsx).
  *   }
  */
 
@@ -53,7 +59,7 @@ function readCsrfToken() {
  * crash etmez, eksik/bozuk alanlar guvenli varsayilana duser.
  */
 export function normalizeColumnConfig(raw) {
-  if (!raw || typeof raw !== 'object') return { visibleIds: [], order: [], columns: {} }
+  if (!raw || typeof raw !== 'object') return { visibleIds: [], order: [], columns: {}, table: {} }
 
   var visibleIds = Array.isArray(raw.visibleIds)
     ? raw.visibleIds.filter(function (x) { return typeof x === 'string' })
@@ -78,7 +84,29 @@ export function normalizeColumnConfig(raw) {
     if (Object.keys(entry).length > 0) columns[id] = entry
   })
 
-  return { visibleIds: visibleIds, order: order, columns: columns }
+  // table — SUTUN BAZLI DEGIL, TABLO GENELİNE uygulanan 3 ayar (kullanici
+  // bazinda kalici): baslik/veri font boyutu + satir araligi. columns[id]
+  // icindeki fontSize/fontWeight/width ile AYNI dogrulama seviyesi (sayi +
+  // isFinite + >0, Math.round) — MIN/MAX araligi (9-24px font, 2-20px satir
+  // araligi) UI katmaninda uygulanir (SmartColumnSettings.jsx
+  // TABLE_FONT_MIN/MAX, TABLE_ROW_PAD_MIN/MAX); burada sadece "gecerli
+  // pozitif sayi mi" kontrolu var — width/fontSize/fontWeight'in bugune
+  // kadarki davranisiyla tutarli (regresyonsuz). Gecersiz/eksik alan hic
+  // yazilmaz (= Otomatik, index.css'teki var(--cst-*, <fallback>) devreye
+  // girer).
+  var rawTable = (raw.table && typeof raw.table === 'object' && !Array.isArray(raw.table)) ? raw.table : {}
+  var table = {}
+  if (typeof rawTable.headerFontSize === 'number' && isFinite(rawTable.headerFontSize) && rawTable.headerFontSize > 0) {
+    table.headerFontSize = Math.round(rawTable.headerFontSize)
+  }
+  if (typeof rawTable.bodyFontSize === 'number' && isFinite(rawTable.bodyFontSize) && rawTable.bodyFontSize > 0) {
+    table.bodyFontSize = Math.round(rawTable.bodyFontSize)
+  }
+  if (typeof rawTable.rowSpacing === 'number' && isFinite(rawTable.rowSpacing) && rawTable.rowSpacing > 0) {
+    table.rowSpacing = Math.round(rawTable.rowSpacing)
+  }
+
+  return { visibleIds: visibleIds, order: order, columns: columns, table: table }
 }
 
 function readLocal(boardKey) {
