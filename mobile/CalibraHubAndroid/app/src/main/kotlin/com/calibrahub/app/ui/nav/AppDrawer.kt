@@ -243,6 +243,26 @@ val pinnableDrawerLeaves: List<DrawerLeaf> = drawerEntries.flatMap { entry ->
 }
 
 /**
+ * 2026-07-19 — Yaprak route'u → ÜST GRUP etiketi ("Çıkış" → "Depo") eşlemesi.
+ * Ana ekran kısayol kutucukları yalnız yaprak adını gösterdiğinde belirsiz kalıyordu
+ * ("Çıkış" hangi modülün çıkışı?); kutucukta bu etiket üstte küçük punto ile yazılır.
+ *
+ * [DrawerLeaf] modeline grup alanı EKLENMEDİ, çünkü [pinnableDrawerLeaves] tipini
+ * değiştirmek [AppDrawerContent]'teki mevcut kullanımlara dalga yaratırdı; bunun yerine
+ * AYNI tek kaynaktan ([drawerEntries]) türetilen ek bir arama tablosu tutulur — drawer
+ * yapısı değişirse bu da otomatik senkron kalır.
+ *
+ * Akordeon grubu ALTINDA olmayan yapraklar (ör. "Sohbetler" — [DrawerEntry.Single])
+ * bu haritada YER ALMAZ; kutucukta üst satır hiç çizilmez (boş satır bırakılmaz).
+ */
+val leafGroupLabels: Map<String, String> = drawerEntries.flatMap { entry ->
+    when (entry) {
+        is DrawerEntry.Single -> emptyList()
+        is DrawerEntry.Expandable -> entry.group.leaves.map { it.route to entry.group.label }
+    }
+}.toMap()
+
+/**
  * Sol navigasyon menüsünün içeriği — [androidx.compose.material3.ModalNavigationDrawer]'ın
  * drawerContent'i (bkz. MainActivity.AppNav; TEK instance tüm NavHost'u sarar, her ekran kendi
  * drawer'ını kurmaz). Navigasyon açısından saf state-hoisting composable: drawerState/

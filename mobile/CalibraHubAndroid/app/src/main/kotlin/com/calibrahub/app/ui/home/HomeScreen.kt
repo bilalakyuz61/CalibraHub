@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.calibrahub.app.app
 import com.calibrahub.app.ui.nav.DrawerLeaf
+import com.calibrahub.app.ui.nav.leafGroupLabels
 import com.calibrahub.app.ui.nav.pinnableDrawerLeaves
 
 /**
@@ -131,7 +132,11 @@ fun HomeScreen(
                         .padding(top = 8.dp)
                 ) {
                     items(pinnedLeaves, key = { it.route }) { leaf ->
-                        ModuleShortcutTile(leaf = leaf, onClick = { onNavigate(leaf.route) })
+                        ModuleShortcutTile(
+                            leaf = leaf,
+                            groupLabel = leafGroupLabels[leaf.route],
+                            onClick = { onNavigate(leaf.route) }
+                        )
                     }
                 }
             }
@@ -147,7 +152,7 @@ fun HomeScreen(
  * hafif vurgulanır.
  */
 @Composable
-private fun ModuleShortcutTile(leaf: DrawerLeaf, onClick: () -> Unit) {
+private fun ModuleShortcutTile(leaf: DrawerLeaf, groupLabel: String?, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.aspectRatio(1f)
@@ -163,9 +168,22 @@ private fun ModuleShortcutTile(leaf: DrawerLeaf, onClick: () -> Unit) {
                 imageVector = leaf.icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(26.dp)
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
+            // Üst grup etiketi ("Depo") — yaprak adının ÜSTÜNDE, küçük ve soluk: kutucuk
+            // "Depo / Çıkış" diye okunur. Akordeon altında olmayan yapraklarda (ör. Sohbetler)
+            // haritada karşılık yoktur → satır hiç çizilmez, boş yer bırakılmaz.
+            if (groupLabel != null) {
+                Text(
+                    text = groupLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Text(
                 text = leaf.label,
                 style = MaterialTheme.typography.labelMedium,
