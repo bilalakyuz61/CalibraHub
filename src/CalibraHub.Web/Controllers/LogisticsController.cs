@@ -151,11 +151,11 @@ public sealed class LogisticsController : Controller
         if (!handledColumns.Contains("Code"))
             masterWidgets.Add(MakeWidget("w_kod", "Stok Kodu", "text", STD_GROUP, STD_LBL));
         if (!handledColumns.Contains("Name"))
-            masterWidgets.Add(MakeWidget("w_ad", "Stok Adi", "text", STD_GROUP, STD_LBL));
+            masterWidgets.Add(MakeWidget("w_ad", "Stok Adı", "text", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_aktif",       "Durum",              "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_kombinasyon", "Kombinasyon Takibi", "boolean", STD_GROUP, STD_LBL));
         masterWidgets.Add(MakeWidget("w_vergi",       "KDV Orani",          "percent", STD_GROUP, STD_LBL));
-        masterWidgets.Add(MakeWidget("w_olusturma",   "Olusturma Tarihi",   "date",    STD_GROUP, STD_LBL));
+        masterWidgets.Add(MakeWidget("w_olusturma",   "Oluşturma Tarihi",   "date",    STD_GROUP, STD_LBL));
 
         // Olcu Birimi � Standart Alanlar grubunda
         var unitOptions = allUnits.Select(u => (object)new Dictionary<string, object?>
@@ -163,7 +163,7 @@ public sealed class LogisticsController : Controller
             ["value"] = u.Code,
             ["label"] = string.IsNullOrWhiteSpace(u.Name) ? u.Code : $"{u.Code} � {u.Name}",
         }).ToList();
-        masterWidgets.Add(MakeWidget("w_unit", "�l�� Birimi", "options", STD_GROUP, STD_LBL, unitOptions));
+        masterWidgets.Add(MakeWidget("w_unit", "Ölçü Birimi", "options", STD_GROUP, STD_LBL, unitOptions));
 
         // 5 Grup slot'u � "Gruplamalar" grubunda collapsible
         for (int cat = 1; cat <= 5; cat++)

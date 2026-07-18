@@ -3996,8 +3996,12 @@ body.app-theme-dark .cst-root {
 .cst-th--wrap,
 .cst-th--wrap .cst-th__label {
   white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* Kelime sınırından (boşluk) böl — kelime ortasından DEĞİL. overflow-wrap:anywhere
+     "Oluşturma"yı "Olusturm|a" gibi ortadan bölüyordu; break-word yalnız bir kelime
+     tek başına sütuna sığmazsa son çare böler, önce boşluklardan sarar. */
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
   overflow: visible;
   text-overflow: clip;
 }
