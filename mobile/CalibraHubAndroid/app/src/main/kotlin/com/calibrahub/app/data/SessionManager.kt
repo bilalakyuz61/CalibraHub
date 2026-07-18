@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.calibrahub.app.BuildConfig
 import com.squareup.moshi.Moshi
@@ -51,6 +52,8 @@ enum class ThemeMode(val storageKey: String) {
  *  - "Beni hatırla" tercihi + kalıcı oturum çerezinin DataStore yazımını gate'lemesi (2026-07-17)
  *  - Global 401 yakalama → [sessionExpiredEvents]
  *  - Tema tercihi ([ThemeMode]) persistence — bkz. [themeMode] / [setThemeMode] (2026-07-19)
+ *  - Ana ekrana sabitlenmiş (pinned) modül kısayollarının route küme persistence'ı — bkz.
+ *    [pinnedRoutes] / [togglePinnedRoute] (2026-07-19)
  *
  * Application-scoped: CalibraApp.kt içinden init edilir.
  */
@@ -101,6 +104,23 @@ class SessionManager(private val context: Context) {
     val themeMode: Flow<ThemeMode> = context.sessionStore.data
         .map { ThemeMode.fromStorageKey(it[THEME_MODE_KEY]) }
 
+    /**
+     * Ana ekrana sabitlenmiş (pinned) modül kısayollarının route anahtar KÜMESİ (2026-07-19) —
+     * [themeMode] ile AYNI desen: CANLI [Flow] olarak dışa açılır, "tek seferlik suspend getter"
+     * yerine bilerek seçildi çünkü İKİ bağımsız composable aynı anda dinler —
+     * [com.calibrahub.app.ui.nav.AppDrawerContent] (pin ikonunun dolu/soluk durumu + toggle) ve
+     * [com.calibrahub.app.ui.home.HomeScreen] (kısayol ızgarası) — biri değiştirdiğinde diğeri
+     * Activity restart OLMADAN anında günceller.
+     *
+     * Sıra BURADA TUTULMAZ ([Set] doğası gereği sırasız) — ekrandaki gösterim sırası her zaman
+     * [com.calibrahub.app.ui.nav.drawerEntries]'in doğal (drawer'daki) sırasından türetilir (bkz.
+     * [com.calibrahub.app.ui.nav.pinnableDrawerLeaves]), sabitleme sırası ÖNEMLİ DEĞİL. Tanınmayan/
+     * silinmiş bir route (ileride bir ekran kaldırılırsa) okuma tarafında
+     * ([pinnableDrawerLeaves] ile kesişim alınarak) sessizce elenir — asla çökme.
+     */
+    val pinnedRoutes: Flow<Set<String>> = context.sessionStore.data
+        .map { it[PINNED_ROUTES_KEY] ?: emptySet() }
+
     suspend fun currentBaseUrl(): String = baseUrlFlow.first()
     suspend fun currentDisplayName(): String? = displayNameFlow.first()
     suspend fun isRememberMeEnabled(): Boolean = rememberMeFlow.first()
@@ -123,6 +143,18 @@ class SessionManager(private val context: Context) {
     /** Tema tercihini kaydeder — [themeMode] Flow'u DataStore üzerinden otomatik yeni değeri yayınlar. */
     suspend fun setThemeMode(mode: ThemeMode) {
         context.sessionStore.edit { it[THEME_MODE_KEY] = mode.storageKey }
+    }
+
+    /**
+     * [route]'un ana ekran sabitleme durumunu tersine çevirir (sabitliyse kaldırır, değilse
+     * ekler) — tek atomik DataStore [edit] işlemi (mevcut kümeyi okuyup fark alır);
+     * [pinnedRoutes] Flow'u otomatik yeni değeri yayınlar.
+     */
+    suspend fun togglePinnedRoute(route: String) {
+        context.sessionStore.edit { prefs ->
+            val current = prefs[PINNED_ROUTES_KEY] ?: emptySet()
+            prefs[PINNED_ROUTES_KEY] = if (route in current) current - route else current + route
+        }
     }
 
     /**
@@ -317,6 +349,7 @@ class SessionManager(private val context: Context) {
         private val COMPANY_ID_KEY       = intPreferencesKey("company_id")
         private val COMPANY_NAME_KEY     = stringPreferencesKey("company_name")
         private val THEME_MODE_KEY       = stringPreferencesKey("theme_mode")
+        private val PINNED_ROUTES_KEY    = stringSetPreferencesKey("pinned_routes")
     }
 }
 

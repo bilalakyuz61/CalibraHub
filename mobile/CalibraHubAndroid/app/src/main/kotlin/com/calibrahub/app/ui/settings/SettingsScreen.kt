@@ -41,8 +41,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Ayarlar ekranı (2026-07-19) — şu an tek bölüm: "Görünüm" (tema tercihi Sistem/Açık/Koyu).
- * Drawer'daki "Ayarlar" girişinden ve [com.calibrahub.app.ui.home.HomeScreen] üst çubuğundaki
- * dişli ikonundan erişilir (bkz. MainActivity NavHost — route
+ * [com.calibrahub.app.ui.home.HomeScreen] üst çubuğundaki dişli ikonundan erişilir — TEK giriş
+ * noktası (2026-07-19 tekilleştirme: önceden drawer'da da ayrı bir "Ayarlar" girişi vardı, iki
+ * farklı giriş noktası kafa karıştırdığı için KALDIRILDI; bkz. MainActivity NavHost — route
  * [com.calibrahub.app.ui.nav.AppRoutes.SETTINGS]).
  *
  * Yapı BİLEREK bölümlenebilir ([SettingsSection]) — ileride Dil/Profil bölümleri eklenecekse

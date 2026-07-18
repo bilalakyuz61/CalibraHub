@@ -32,22 +32,26 @@ import androidx.compose.material.icons.filled.MoveToInbox
 import androidx.compose.material.icons.filled.Outbox
 import androidx.compose.material.icons.filled.PendingActions
 import androidx.compose.material.icons.filled.PrecisionManufacturing
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Sell
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warehouse
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,12 +60,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.calibrahub.app.BuildConfig
 import com.calibrahub.app.R
+import com.calibrahub.app.app
+import kotlinx.coroutines.launch
 
 /**
  * Sol navigasyon menüsü (drawer) route sabitleri — [com.calibrahub.app.MainActivity]'deki NavHost
@@ -99,11 +106,13 @@ object AppRoutes {
     // girmeden doğrudan aynı teslimat akışına (OpenOrderListScreen) ulaşsın diye.
     const val SHIPPING_OPEN_ORDERS = SALES_OPEN_ORDERS
 
-    // Ayarlar (2026-07-19) — drawerEntries'in DIŞINDA tutulur (bkz. AppDrawerContent alt kısmı):
-    // feature-modül "sekme" listesine karışmaz, Çıkış'a yakın ayrı bir "utility" girişidir. Bu
-    // yüzden drawerTopLevelRoutes'a (flat/tab navigasyon + edge-swipe seti) DAHİL DEĞİLDİR — normal
-    // "push" navigasyonuyla açılır (MainActivity: navController.navigate(SETTINGS)), geri tuşu
-    // açıldığı ekrana döner (diğer top-level yapraklar gibi popUpTo(HOME) flat-reset YAPMAZ).
+    // Ayarlar (2026-07-19, tekilleştirme) — drawerEntries'in DIŞINDA tutulur; TEK giriş
+    // noktası [com.calibrahub.app.ui.home.HomeScreen]'in üst çubuğundaki dişli ikonudur. Başlangıçta
+    // drawer'da da (Çıkış'a yakın) ayrı bir "Ayarlar" girişi vardı — iki farklı giriş noktası kafa
+    // karıştırdığı için KALDIRILDI (kullanıcı kararı: "sağ üst köşedeki kalabilir"). Bu yüzden
+    // drawerTopLevelRoutes'a (flat/tab navigasyon + edge-swipe seti) DAHİL DEĞİLDİR — normal "push"
+    // navigasyonuyla açılır (MainActivity: navController.navigate(SETTINGS)), geri tuşu açıldığı
+    // ekrana döner (diğer top-level yapraklar gibi popUpTo(HOME) flat-reset YAPMAZ).
     const val SETTINGS = "settings"
 }
 
@@ -214,18 +223,46 @@ val drawerTopLevelRoutes: Set<String> = drawerEntries.flatMap { entry ->
 }.toSet()
 
 /**
+ * [drawerEntries]'ten türetilen, ana ekrana SABİTLENEBİLİR (pinnable) tüm yaprakların DÜZ (flat)
+ * listesi (2026-07-19) — Ana Sayfa (zaten o an gösterildiği ekran olduğu için sabitlenemez) HARİÇ
+ * tüm Single + Expandable-grup yaprakları. Akordeon grup BAŞLIKLARI (Depo/Üretim/Satın Alma/Satış/
+ * Sevkiyat) bir route'a gitmediği için burada YER ALMAZ — yalnız GERÇEK navigasyon yapan yapraklar.
+ *
+ * Sıra = [drawerEntries]'teki doğal görünüm sırası — [com.calibrahub.app.ui.home.HomeScreen] ızgara
+ * sıralamasını sabitleme sırasına DEĞİL bu doğal sıraya göre yapar (bkz. HomeScreen KDoc'u).
+ *
+ * Tek kaynak: route+etiket+ikon tanımı yalnız [drawerEntries]'te yaşar; ne [AppDrawerContent] ne de
+ * [com.calibrahub.app.ui.home.HomeScreen] kendi kopyasını TUTMAZ — ikisi de BU listeyi
+ * [com.calibrahub.app.data.SessionManager.pinnedRoutes] ile kesiştirerek besler.
+ */
+val pinnableDrawerLeaves: List<DrawerLeaf> = drawerEntries.flatMap { entry ->
+    when (entry) {
+        is DrawerEntry.Single -> if (entry.leaf.route == AppRoutes.HOME) emptyList() else listOf(entry.leaf)
+        is DrawerEntry.Expandable -> entry.group.leaves
+    }
+}
+
+/**
  * Sol navigasyon menüsünün içeriği — [androidx.compose.material3.ModalNavigationDrawer]'ın
  * drawerContent'i (bkz. MainActivity.AppNav; TEK instance tüm NavHost'u sarar, her ekran kendi
- * drawer'ını kurmaz). Saf state-hoisting composable: drawerState/navController'a dokunmaz, yalnız
- * [onNavigate] (bir [DrawerLeaf]'e basılınca) / [onLogout] callback'lerini çağırır — drawer'ı
- * kapatmak/navigate etmek çağıran tarafın (AppNav) sorumluluğundadır. Akordeon aç/kapa state'i
- * ([DrawerGroupSection] içinde) BU composable'ın kendi sorumluluğudur, dışarı sızmaz.
+ * drawer'ını kurmaz). Navigasyon açısından saf state-hoisting composable: drawerState/
+ * navController'a dokunmaz, yalnız [onNavigate] (bir [DrawerLeaf]'e basılınca) / [onLogout]
+ * callback'lerini çağırır — drawer'ı kapatmak/navigate etmek çağıran tarafın (AppNav)
+ * sorumluluğundadır. Akordeon aç/kapa state'i ([DrawerGroupSection] içinde) BU composable'ın kendi
+ * sorumluluğudur, dışarı sızmaz.
  *
  * Düzen: üstte logo + "CalibraHub" + kullanıcı adı + şirket adı, ortada kaydırılabilir modül
  * listesi (Ana Sayfa yaprağı + 5 akordeon grubu + Sohbetler yaprağı — [currentRoute] ile eşleşen
- * yaprak vurgulanır), altta ayraç + Ayarlar + sürüm bilgisi + Çıkış (2026-07-19: "Ayarlar" burada
- * — feature-modül listesine değil, [onLogout] gibi ayrı bir "utility" eylemine karışır; bkz.
- * [onOpenSettings] ve [AppRoutes.SETTINGS] KDoc'u).
+ * yaprak vurgulanır), altta ayraç + sürüm bilgisi + Çıkış. 2026-07-19 tekilleştirme: "Ayarlar"
+ * girişi buradan KALDIRILDI — tek giriş noktası artık [com.calibrahub.app.ui.home.HomeScreen]'in
+ * üst çubuğundaki dişli ikonu (bkz. [AppRoutes.SETTINGS] KDoc'u).
+ *
+ * Ana ekran kısayol sabitleme (2026-07-19): her sabitlenebilir yaprağın ([pinnableDrawerLeaves])
+ * sağında bir pin ([PinToggleButton]) gösterilir — [com.calibrahub.app.data.SessionManager.
+ * pinnedRoutes] Flow'u BURADA (tema tercihiyle AYNI desen — bkz. SessionManager.themeMode KDoc'u)
+ * doğrudan [LocalContext] üzerinden okunur/yazılır, dışarıdan parametre olarak HOISTLENMEZ; pine
+ * dokunmak yalnız o route'un sabitleme durumunu toggle eder, [onNavigate]'i TETİKLEMEZ (ayrı bir
+ * [IconButton], satırın kendi tıklama alanından bağımsız — nested clickable, iç olan tüketir).
  */
 @Composable
 fun AppDrawerContent(
@@ -233,9 +270,14 @@ fun AppDrawerContent(
     displayName: String?,
     companyName: String? = null,
     onNavigate: (String) -> Unit,
-    onOpenSettings: () -> Unit,
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
+    val session = context.app.session
+    val scope = rememberCoroutineScope()
+    val pinnedRoutes by session.pinnedRoutes.collectAsState(initial = emptySet<String>())
+    val onTogglePin: (String) -> Unit = { route -> scope.launch { session.togglePinnedRoute(route) } }
+
     ModalDrawerSheet {
         Row(
             modifier = Modifier
@@ -292,10 +334,22 @@ fun AppDrawerContent(
             drawerEntries.forEach { entry ->
                 when (entry) {
                     is DrawerEntry.Single -> {
+                        // Ana Sayfa hariç (zaten o an gösterilen ekran) tüm Single yapraklar
+                        // sabitlenebilir — bkz. pinnableDrawerLeaves KDoc'u.
+                        val pinnable = entry.leaf.route != AppRoutes.HOME
+                        val pinBadge: (@Composable () -> Unit)? = if (!pinnable) null else {
+                            {
+                                PinToggleButton(
+                                    pinned = entry.leaf.route in pinnedRoutes,
+                                    onClick = { onTogglePin(entry.leaf.route) }
+                                )
+                            }
+                        }
                         NavigationDrawerItem(
                             label = { Text(entry.leaf.label) },
                             selected = currentRoute == entry.leaf.route,
                             icon = { Icon(entry.leaf.icon, contentDescription = null) },
+                            badge = pinBadge,
                             onClick = { onNavigate(entry.leaf.route) },
                             modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                         )
@@ -304,7 +358,9 @@ fun AppDrawerContent(
                         DrawerGroupSection(
                             group = entry.group,
                             currentRoute = currentRoute,
-                            onNavigate = onNavigate
+                            pinnedRoutes = pinnedRoutes,
+                            onNavigate = onNavigate,
+                            onTogglePin = onTogglePin
                         )
                     }
                 }
@@ -312,13 +368,6 @@ fun AppDrawerContent(
         }
 
         HorizontalDivider()
-        NavigationDrawerItem(
-            label = { Text("Ayarlar") },
-            selected = currentRoute == AppRoutes.SETTINGS,
-            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-            onClick = onOpenSettings,
-            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-        )
         Text(
             text = "Sürüm ${BuildConfig.VERSION_NAME}" + if (BuildConfig.DEBUG) " (debug)" else "",
             style = MaterialTheme.typography.labelSmall,
@@ -344,12 +393,18 @@ fun AppDrawerContent(
  * karıştırmasın diye). [expanded] yalnız DİĞER durumda (grup aktif DEĞİLKEN) kullanıcı toggle'ını
  * sürer; [rememberSaveable] ile grup başına ayrıştırılmış `key` sayesinde config change/process
  * restore'da hayatta kalır.
+ *
+ * Grubun kendisi (başlık satırı) sabitlenemez — bir route'a gitmez (bkz. [pinnableDrawerLeaves]
+ * KDoc'u); yalnız İÇİNDEKİ yapraklar [PinToggleButton] gösterir ([pinnedRoutes]/[onTogglePin]
+ * [AppDrawerContent]'ten hoistlenir, burada Flow'a doğrudan erişilmez).
  */
 @Composable
 private fun DrawerGroupSection(
     group: DrawerGroup,
     currentRoute: String?,
-    onNavigate: (String) -> Unit
+    pinnedRoutes: Set<String>,
+    onNavigate: (String) -> Unit,
+    onTogglePin: (String) -> Unit
 ) {
     var expanded by rememberSaveable(key = "drawerGroupExpanded_${group.key}") { mutableStateOf(false) }
     val containsCurrent = group.leaves.any { it.route == currentRoute }
@@ -383,10 +438,34 @@ private fun DrawerGroupSection(
                     label = { Text(leaf.label) },
                     selected = currentRoute == leaf.route,
                     icon = { Icon(leaf.icon, contentDescription = null) },
+                    badge = {
+                        PinToggleButton(
+                            pinned = leaf.route in pinnedRoutes,
+                            onClick = { onTogglePin(leaf.route) }
+                        )
+                    },
                     onClick = { onNavigate(leaf.route) },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
             }
         }
+    }
+}
+
+/**
+ * Bir [DrawerLeaf]'in sağındaki küçük sabitleme (pin) düğmesi (2026-07-19) — [pinned] ise
+ * dolu ikon + vurgulu (`primary`) renk, değilse anahat (outlined) ikon + soluk
+ * (`onSurfaceVariant`) renk. Kendi [IconButton]'ı olduğu için tıklaması SATIRIN
+ * [NavigationDrawerItem.onClick]'ini TETİKLEMEZ (nested clickable — iç olan dokunuşu tüketir),
+ * drawer açık kalır ve kullanıcı art arda birden çok modül sabitleyebilir.
+ */
+@Composable
+private fun PinToggleButton(pinned: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = if (pinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+            contentDescription = if (pinned) "Ana ekrandan kaldır" else "Ana ekrana sabitle",
+            tint = if (pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

@@ -20,7 +20,16 @@ android {
         // BuildConfig'e enjekte edilen base URL — flavor / build type'a göre değişir.
         // Fiziksel cihaz + `adb reverse tcp:61001 tcp:61001` tüneli için 127.0.0.1 hedefi;
         // gerçek LAN/uzak sunucu için login ekranından override edilir (DataStore'a yazılır).
-        buildConfigField("String", "DEFAULT_BASE_URL", "\"http://127.0.0.1:61001/\"")
+        // 2026-07-19: 127.0.0.1 -> host LAN IP. 127.0.0.1 yalnizca `adb reverse tcp:61001`
+        // tuneli ayaktayken calisir; tunel cihaz yeniden baglandiginda/adb'de birden fazla
+        // cihaz kaydi olustugunda SESSIZCE bayatliyor (soket accept ediyor ama veri gecmiyor
+        // -> uygulamada 30sn SocketTimeout). Bu oturumda 3 kez yasandi. Sunucu zaten
+        // 0.0.0.0:61001 dinliyor ve guvenlik duvarinda "CalibraHub Web" Allow kurali var,
+        // 192.168.2.61 de network_security_config cleartext listesinde -> telefon dogrudan
+        // LAN uzerinden baglanir, adb'ye HIC bagimli degil (telefon tarayicisiyla dogrulandi).
+        // NOT: kullanicinin DataStore'da kayitli URL'i bu varsayilani EZER; degistirmek icin
+        // uygulama icindeki "Sunucu ayarlari > Backend URL" alanindan guncellenmeli.
+        buildConfigField("String", "DEFAULT_BASE_URL", "\"http://192.168.2.61:61001/\"")
     }
 
     buildTypes {

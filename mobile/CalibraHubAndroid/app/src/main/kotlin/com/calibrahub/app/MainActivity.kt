@@ -264,16 +264,6 @@ private fun AppNav() {
                 displayName = displayName,
                 companyName = companyName,
                 onNavigate = navigateToTopLevel,
-                onOpenSettings = {
-                    // Ayarlar flat top-level "sekme" seti (topLevelRoutes) DIŞINDA — normal push
-                    // navigasyonu (bkz. AppRoutes.SETTINGS KDoc'u): geri tuşu açıldığı ekrana
-                    // döner, popUpTo(HOME) flat-reset uygulanmaz. launchSingleTop: drawer'dan
-                    // art arda hızlı dokunmada yığın üstünde ikinci bir Settings örneği açılmaz.
-                    scope.launch { drawerState.close() }
-                    if (currentRoute != AppRoutes.SETTINGS) {
-                        navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true }
-                    }
-                },
                 onLogout = {
                     // Ayrı coroutine: repo.logout() ağ çağrısı yavaş/askıda kalsa bile drawer
                     // hemen kapanır (kullanıcı "donmuş" hissetmesin).
@@ -300,12 +290,13 @@ private fun AppNav() {
                 HomeScreen(
                     displayName = displayName,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
-                    onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true } }
+                    onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true } },
+                    onNavigate = navigateToTopLevel
                 )
             }
-            // Ayarlar (2026-07-19) — drawer'ın "Ayarlar" girişinden VE HomeScreen üst çubuğundaki
-            // dişli ikonundan erişilir; bkz. AppRoutes.SETTINGS KDoc'u (flat/top-level SET DIŞINDA,
-            // normal push+popBackStack).
+            // Ayarlar (2026-07-19, tekilleştirme) — TEK giriş noktası HomeScreen üst çubuğundaki
+            // dişli ikonu (drawer'daki eski "Ayarlar" girişi kaldırıldı, bkz. AppRoutes.SETTINGS
+            // KDoc'u); flat/top-level SET DIŞINDA, normal push+popBackStack.
             composable(AppRoutes.SETTINGS) {
                 SettingsScreen(onBack = { navController.popBackStack() })
             }
