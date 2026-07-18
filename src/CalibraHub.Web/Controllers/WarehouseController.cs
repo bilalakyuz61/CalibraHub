@@ -879,6 +879,7 @@ public sealed class WarehouseController : Controller
     /// body.Lines dolu ise kısmi teslimat (kalem başı miktar); boş/null ise tüm açık miktar teslim edilir.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesDelivery)]
     public async Task<IActionResult> DeliverSalesOrderJson([FromBody] DeliverOrderRequest body, CancellationToken ct)
     {
         var orderId = body?.OrderId ?? 0;
@@ -916,6 +917,7 @@ public sealed class WarehouseController : Controller
     /// body.Lines dolu ise kısmi mal kabul (kalem başı miktar); boş/null ise tüm açık miktar kabul edilir.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseDelivery)]
     public async Task<IActionResult> ReceivePurchaseOrderJson([FromBody] DeliverOrderRequest body, CancellationToken ct)
     {
         var orderId = body?.OrderId ?? 0;

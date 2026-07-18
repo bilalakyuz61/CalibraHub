@@ -377,6 +377,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> Create([FromBody] CreateWorkOrderRequest req, CancellationToken ct)
     {
         try
@@ -392,6 +393,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateWorkOrderRequest req, CancellationToken ct)
     {
         try
@@ -407,6 +409,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> ChangeStatus(int id, [FromBody] ChangeWorkOrderStatusRequest req, CancellationToken ct)
     {
         try
@@ -422,6 +425,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> Revise(int id, CancellationToken ct)
     {
         try
@@ -437,6 +441,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> CreateFromSalesLine([FromBody] CreateWorkOrderFromSalesLineRequest req, CancellationToken ct)
     {
         try
@@ -600,6 +605,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.OperationEdit)]
     public async Task<IActionResult> SaveOperation([FromBody] SaveOperationRequest req, CancellationToken ct)
     {
         try
@@ -615,6 +621,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.OperationEdit)]
     public async Task<IActionResult> DeleteOperation(int id, CancellationToken ct)
     {
         try
@@ -811,6 +818,7 @@ public sealed class ProductionController : Controller
     }
 
     [HttpPost("/Production/RoutingToggle")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.RoutingEdit)]
     public async Task<IActionResult> RoutingToggle([FromQuery] int id, [FromQuery] bool enabled, CancellationToken ct)
     {
         var dto = await _routings.GetAsync(id, ct);
@@ -986,6 +994,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.RoutingEdit)]
     public async Task<IActionResult> SaveRouting([FromBody] SaveRoutingRequest req, CancellationToken ct)
     {
         try
@@ -1001,6 +1010,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.RoutingEdit)]
     public async Task<IActionResult> DeleteRouting(int id, CancellationToken ct)
     {
         try
@@ -1023,6 +1033,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost("/Production/AddRoutingItemMap")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.RoutingEdit)]
     public async Task<IActionResult> AddRoutingItemMap(
         [FromQuery] int routingId, [FromQuery] int itemId, [FromQuery] int? configId, CancellationToken ct)
     {
@@ -1041,6 +1052,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost("/Production/DeleteRoutingItemMap")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.RoutingEdit)]
     public async Task<IActionResult> DeleteRoutingItemMap([FromQuery] int id, CancellationToken ct)
     {
         if (id <= 0) return Json(new { ok = false, error = "Geçersiz ID" });
@@ -1065,6 +1077,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.OperationEdit)]
     public async Task<IActionResult> SaveOperationMachineTime([FromBody] SaveOperationMachineTimeRequest req, CancellationToken ct)
     {
         try
@@ -1080,6 +1093,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.OperationEdit)]
     public async Task<IActionResult> DeleteOperationMachineTime(int id, CancellationToken ct)
     {
         try
@@ -1222,6 +1236,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PersonnelEdit)]
     public async Task<IActionResult> SavePersonnel([FromBody] SavePersonnelRequest req, CancellationToken ct)
     {
         try
@@ -1237,6 +1252,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PersonnelEdit)]
     public async Task<IActionResult> DeletePersonnel(int id, CancellationToken ct)
     {
         try
@@ -1273,6 +1289,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> SaveWorkOrderOperation([FromBody] SaveWorkOrderOperationRequest req, CancellationToken ct)
     {
         try
@@ -1288,6 +1305,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> DeleteWorkOrderOperation(int id, CancellationToken ct)
     {
         try
@@ -1305,6 +1323,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> ExplodeFromRouting([FromBody] ExplodeFromRoutingRequest req, CancellationToken ct)
     {
         try
@@ -1325,6 +1344,7 @@ public sealed class ProductionController : Controller
     // GET  /Production/WorkOrderComponents?workOrderId=        → patlatılmış bileşen listesi
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> ExplodeBom(int workOrderId, CancellationToken ct)
     {
         try
@@ -1424,6 +1444,8 @@ public sealed class ProductionController : Controller
 
     [HttpPost("Production/ShopFloor/Start")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShopFloor)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> ShopFloorStart([FromBody] ShopFloorStartRequest req, CancellationToken ct)
     {
         try
@@ -1439,6 +1461,8 @@ public sealed class ProductionController : Controller
 
     [HttpPost("Production/ShopFloor/PartialComplete")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShopFloor)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> ShopFloorPartialComplete([FromBody] ShopFloorPartialRequest req, CancellationToken ct)
     {
         try
@@ -1458,6 +1482,8 @@ public sealed class ProductionController : Controller
     /// </summary>
     [HttpPost("Production/ShopFloor/IssueComponent")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShopFloor)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> ShopFloorIssueComponent([FromBody] ShopFloorIssueComponentRequest req, CancellationToken ct)
     {
         try
@@ -1485,6 +1511,8 @@ public sealed class ProductionController : Controller
 
     [HttpPost("Production/ShopFloor/Complete")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShopFloor)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> ShopFloorComplete([FromBody] ShopFloorCompleteRequest req, CancellationToken ct)
     {
         try
@@ -1515,6 +1543,8 @@ public sealed class ProductionController : Controller
     /// <summary>Yeni aktivite başlatır (eski aktif aktivite otomatik kapatılır).</summary>
     [HttpPost("Production/ShopFloor/StartActivity")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShopFloor)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> ShopFloorStartActivity(
         [FromBody] ShopFloorStartActivityRequest req, CancellationToken ct)
     {
@@ -1539,6 +1569,8 @@ public sealed class ProductionController : Controller
     /// <summary>Aktif aktiviteyi yeni aktivite başlatmadan kapatır.</summary>
     [HttpPost("Production/ShopFloor/EndActivity")]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShopFloor)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> ShopFloorEndActivity(
         [FromBody] ShopFloorEndActivityRequest req, CancellationToken ct)
     {
@@ -1601,6 +1633,8 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShopFloor)]
+    [CalibraHub.Web.Authorization.PermissionAction("VIEW", "VIEW_OWN")]
     public async Task<IActionResult> AuthOperator([FromBody] AuthOperatorRequest req, CancellationToken ct)
     {
         if (req is null)
@@ -1775,6 +1809,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ActivityReasonEdit)]
     public async Task<IActionResult> SaveActivityReason([FromBody] SaveActivityReasonRequest req, CancellationToken ct)
     {
         try
@@ -1787,6 +1822,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ActivityReasonEdit)]
     public async Task<IActionResult> DeleteActivityReason(int id, CancellationToken ct)
     {
         try
@@ -1937,6 +1973,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShiftEdit)]
     public async Task<IActionResult> SaveShift([FromBody] SaveShiftRequest req, CancellationToken ct)
     {
         try
@@ -1949,6 +1986,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShiftEdit)]
     public async Task<IActionResult> DeleteShift(int id, CancellationToken ct)
     {
         try
@@ -1981,6 +2019,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShiftEdit)]
     public async Task<IActionResult> SaveShiftAssignment(
         [FromBody] SaveShiftAssignmentRequest req, CancellationToken ct)
     {
@@ -1994,6 +2033,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShiftEdit)]
     public async Task<IActionResult> DeleteShiftAssignment(int id, CancellationToken ct)
     {
         try
