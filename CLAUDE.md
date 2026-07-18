@@ -46,6 +46,23 @@ Metadata-driven engine motoru (`engine.Entity` + `engine.Field` + dynamic DDL) v
 - **YAPMA:** `engine.Entity` benzeri "dynamic DDL" sistemleri, runtime-defined motor yapıları, `DynamicDdlService` ALTER TABLE servisleri. Eğer ihtiyaç doğarsa, **önce CLAUDE.md güncelleyip ardından mimar tartışması yap** — direkt kodlama yasak.
 - **Yeniden değerlendirme şartı:** 12+ ay canlıda çalıştıktan sonra eğer 5+ farklı müşteri "kendi form/motor tasarlamak" talebinde bulunursa, engine vizyonu yeniden gündeme alınabilir. O zamana kadar konu kapalı.
 
+### SQL View Yönetimi — Kontrollü İstisna (2026-07-17, kullanıcı kararı)
+
+Kullanıcı, program view'larını program içinden yönetmek istedi: mevcut view'a join (inner/left/right) + hesaplanan alan ekleme + sıfırdan yeni özel view. Bu, yukarıdaki "ENGINE / dynamic DDL YAPMA" kararına **bilinçli ve DAR bir istisnadır** çünkü: (1) view'lar salt-okunur projeksiyondur (ALTER TABLE / entity DDL DEĞİL; şema/veri değişmez), (2) araç kontrollüdür (yapısal metadata kurucu + doğrulama; serbest runtime-entity motoru değil), (3) **SystemAdmin-only** (tehlikeli dev aracı bucket'ı; admin/DepartmentManager'a AÇILMAZ).
+
+**Tasarım (kilitli — kullanıcı seçimi):**
+- **Kapsam:** hem mevcut program view'larını GENİŞLET hem yeni özel view kur ("Mevcut + yeni").
+- **UI modeli:** Hibrit — yapısal görsel kurucu (join tipi + tablo/ON dropdown + hesaplanan alan ifade editörü) + "gelişmiş SQL" kaçış kapısı (üretilen SQL'i gör/elle düzenle; raw yol seçilince o kazanır).
+- **Clobber savunması (KRİTİK):** program view'ları `CalibraDatabaseInitializer`'da kod-tanımlı + her açılışta ensure edilir → naif "SQL düzenle-kaydet" restart'ta geri yazılır. Çözüm: kullanıcı tanımı `ViewDefinition` tablosunda tutulur; **açılış ensure'ün SONUNDA aktif override'lar uygulanır** (kod baseline'ı kurar, kullanıcı sürümü kazanır). Override apply'ı per-view try/catch — bozuk override startup'ı ASLA çökertmez (logla+atla).
+- **Kartezyen kontrolü:** her join'de ON zorunlu (cross join yok); apply öncesi satır sayısı (join öncesi/sonrası) + örnek + çarpım uyarısı/bloğu.
+- **Kırma koruması:** system-view genişletmede ALTER öncesi yeni view'ın uygulamanın beklediği tüm kolonları hâlâ verdiği doğrulanır (additive; mevcut kolon silinmez/yeniden adlandırılmaz) — `sys.dm_exec_describe_first_result_set` kolon listesi.
+- **Güvenlik:** identifier'lar sys.tables/sys.columns'a karşı doğrulanır (injection); raw SQL yolu SELECT-only + rollback-test. Versiyon/geri-al (`ViewDefinitionRevision` snapshot). Per-company DB.
+- **Tablolar (DB naming convention):** `ViewDefinition` (ViewName, Kind['SystemExtend'|'Custom'], DefinitionJson, GeneratedSql, IsRawMode, IsActive + audit dörtlüsü; UNIQUE(ViewName) WHERE IsActive=1) + `ViewDefinitionRevision` (snapshot + FK). INT IDENTITY PK, PascalCase.
+
+**Fazlar:** (1) backend temel — 2 tablo + startup override pass + `ViewBuilderService` (metadata→DDL + raw SQL doğrulama + kartezyen önizleme + describe-columns) + apply/revision + mevcut view listeleme/tanım okuma (system view'ı `OBJECT_DEFINITION`'dan seed). (2) React UI (görsel join/kolon kurucu + gelişmiş SQL tab + önizleme + kaydet/geri-al + menü + yetki). (3) cila — hesaplanan-alan ifade allowlist, non-breaking guard, çok-şirket yayma, WHERE/GROUP.
+
+**YAPMA:** bu istisnayı ALTER TABLE / entity DDL'e genişletmek; editörü SystemAdmin dışına açmak; override katmanını atlayıp view'ı doğrudan clobber'a bırakmak; raw SQL yolunu doğrulamasız (SELECT-only + identifier + rollback-test olmadan) apply etmek.
+
 ## Güvenlik Kararları — KALIN UYULMASI GEREKEN
 
 ### Genel yetkilendirme katmanı
