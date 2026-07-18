@@ -1,0 +1,29 @@
+#!/bin/sh
+# CalibraHub mojibake guard (2026-07-18)
+# Staged kaynak dosyalarda U+FFFD (byte EF BF BD, gorunumu '?') varsa commit'i ENGELLER.
+# Kok neden: bir dosya UTF-8 disi codepage (Windows-1254/Latin-1) ile kaydedilince Turkce
+# karakterler '?' (replacement char) olur ve commit'lenir (bkz. LogisticsController "Olcu Birimi"
+# -> "?l?? Birimi" olayi). Bu guard yeni mojibake'nin repoya girmesini onler.
+# Atlama (istisna, dikkatli kullan): git commit --no-verify
+
+pat=$(printf '\357\277\275')   # EF BF BD
+bad=""
+for f in $(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cs|cshtml|razor|jsx|js|ts|tsx|css|kt|kts)$'); do
+  [ -f "$f" ] || continue
+  if LC_ALL=C grep -q "$pat" "$f" 2>/dev/null; then
+    n=$(LC_ALL=C grep -o "$pat" "$f" 2>/dev/null | wc -l | tr -d ' ')
+    bad="$bad  $f  ($n adet)
+"
+  fi
+done
+
+if [ -n "$bad" ]; then
+  printf '%s\n' "----------------------------------------------------------------" >&2
+  printf '%s\n' " HATA: Turkce karakter mojibake (U+FFFD) tespit edildi -> commit ENGELLENDI" >&2
+  printf '%s\n' "----------------------------------------------------------------" >&2
+  printf '%s' "$bad" >&2
+  printf '%s\n' " Bozuk '?' karakterleri dogru Turkce haliyle degistirip UTF-8 kaydedin." >&2
+  printf '%s\n' " Detay: memory feedback_turkish_encoding" >&2
+  exit 1
+fi
+exit 0

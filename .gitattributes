@@ -1,0 +1,24 @@
+# CalibraHub — satır sonu + encoding normalizasyonu (2026-07-18).
+# Kaynak dosyalar UTF-8; git working-tree'de UTF-8 tutar (Türkçe karakter mojibake önleme).
+* text=auto
+
+*.cs      text working-tree-encoding=UTF-8 eol=crlf
+*.cshtml  text working-tree-encoding=UTF-8 eol=crlf
+*.razor   text working-tree-encoding=UTF-8 eol=crlf
+*.jsx     text working-tree-encoding=UTF-8 eol=lf
+*.js      text working-tree-encoding=UTF-8 eol=lf
+*.ts      text working-tree-encoding=UTF-8 eol=lf
+*.tsx     text working-tree-encoding=UTF-8 eol=lf
+*.css     text working-tree-encoding=UTF-8 eol=lf
+*.json    text working-tree-encoding=UTF-8
+*.kt      text working-tree-encoding=UTF-8 eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.apk binary

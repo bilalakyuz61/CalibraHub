@@ -1,0 +1,17 @@
+root = true
+
+# CalibraHub - kaynak dosya encoding standardi (2026-07-18).
+# Turkce karakter mojibake'sinin kok nedeni: editor dosyayi UTF-8 disi bir codepage
+# (Windows-1254 / Latin-1) ile kaydedince Turkce karakterler bozulur (replacement char'a doner)
+# ve commit'lenir. Asagisi editorleri UTF-8'e zorlar.
+# Ek savunma: .githooks/pre-commit, U+FFFD iceren commit'i bloklar. Detay: memory feedback_turkish_encoding.
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[*.{cs,cshtml,jsx,js,ts,tsx,css,json,kt,kts,razor}]
+charset = utf-8
+indent_style = space
