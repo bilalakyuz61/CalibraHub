@@ -3724,6 +3724,26 @@ END;";
                 ADD [DatabaseName] NVARCHAR(128) NULL;
             END;
 
+            -- FAZ 2 (2026-07-19): [ConnectionString] kolonu KALDIRILIR.
+            -- Sunucu + kimlik bilgisi artik YALNIZCA appsettings'teki (DPAPI sifreli) master
+            -- baglanti dizesinden gelir; sirkete ozel tek bilgi [DatabaseName]. Boylece
+            -- Company tablosunda DUZ METIN SQL PAROLASI tutulmasi tamamen ortadan kalkar.
+            -- Onkosul dogrulandi: baglanti dizesi olan her sirketin DatabaseName'i backfill
+            -- ile dolduruldu; dizesi olmayan sirketler (or. ana sirket) zaten sistem DB'sine
+            -- dusuyordu ve o davranis degismedi (SqlServerConnectionFactory fallback).
+            -- Iki isimlendirme de temizlenir (eski snake_case migration mirasi).
+            IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'ConnectionString') IS NOT NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Company] DROP COLUMN [ConnectionString];
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'connection_string') IS NOT NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Company] DROP COLUMN [connection_string];
+            END;
+
             IF OBJECT_ID(N'[{schemaForSql}].[User]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[User]', N'company_id') IS NULL
             BEGIN

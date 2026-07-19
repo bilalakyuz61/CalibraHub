@@ -29,7 +29,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.CommandText = $"""
             SELECT [Id], [Name], [Title], [Address], [City], [District], [PostalCode],
                    [TaxOffice], [TaxNumber],
-                   [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString],
+                   [IsEDocumentApprovalEnabled], [IsActive],
                    [PublicUrl], [DatabaseName]
             FROM {_tableName}
             ORDER BY [Name];
@@ -51,7 +51,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.CommandText = $"""
             SELECT [Id], [Name], [Title], [Address], [City], [District], [PostalCode],
                    [TaxOffice], [TaxNumber],
-                   [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString],
+                   [IsEDocumentApprovalEnabled], [IsActive],
                    [PublicUrl], [DatabaseName]
             FROM {_tableName}
             WHERE [Id] = @Id;
@@ -74,14 +74,14 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             INSERT INTO {_tableName}
                 ([Name], [Title], [Address], [City], [District], [PostalCode],
                  [TaxOffice], [TaxNumber],
-                 [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString], [PublicUrl],
+                 [IsEDocumentApprovalEnabled], [IsActive], [PublicUrl],
                  [DatabaseName],
                  [Created], [Updated])
             OUTPUT INSERTED.[Id]
             VALUES
                 (@Name, @Title, @Address, @City, @District, @PostalCode,
                  @TaxOffice, @TaxNumber,
-                 @IsEDocumentApprovalEnabled, @IsActive, @ConnectionString, @PublicBaseUrl,
+                 @IsEDocumentApprovalEnabled, @IsActive, @PublicBaseUrl,
                  @DatabaseName,
                  @CreatedAt, @UpdatedAt);
             """;
@@ -109,7 +109,6 @@ public sealed class SqlCompanyRepository : ICompanyRepository
                 [TaxNumber] = @TaxNumber,
                 [IsEDocumentApprovalEnabled] = @IsEDocumentApprovalEnabled,
                 [IsActive] = @IsActive,
-                [ConnectionString] = @ConnectionString,
                 [PublicUrl] = @PublicBaseUrl,
                 [DatabaseName] = @DatabaseName,
                 [Updated] = @UpdatedAt
@@ -153,7 +152,6 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.Parameters.Add(new SqlParameter("@TaxNumber", company.TaxNumber));
         command.Parameters.Add(new SqlParameter("@IsEDocumentApprovalEnabled", company.IsEDocumentApprovalEnabled));
         command.Parameters.Add(new SqlParameter("@IsActive", company.IsActive));
-        command.Parameters.Add(new SqlParameter("@ConnectionString", (object?)company.DatabaseConnectionString ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@PublicBaseUrl", (object?)company.PublicBaseUrl ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@DatabaseName", (object?)company.DatabaseName ?? DBNull.Value));
     }
@@ -181,7 +179,10 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             TaxOffice = r.GetString(r.GetOrdinal("TaxOffice")),
             TaxNumber = r.GetString(r.GetOrdinal("TaxNumber")),
             IsEDocumentApprovalEnabled = r.GetBoolean(r.GetOrdinal("IsEDocumentApprovalEnabled")),
-            DatabaseConnectionString = r.IsDBNull(r.GetOrdinal("ConnectionString")) ? null : r.GetString(r.GetOrdinal("ConnectionString")),
+            // [ConnectionString] kolonu 2026-07-19'da KALDIRILDI (Faz 2) — sunucu+kimlik
+            // bilgisi yalnizca master baglanti dizesinden gelir, sirkete ozel tek bilgi
+            // [DatabaseName]. Entity'deki DatabaseConnectionString artik hic doldurulmaz
+            // (null kalir); Program.cs'teki resolver bu durumda sistem DB'sine duser.
             PublicBaseUrl = r.IsDBNull(r.GetOrdinal("PublicUrl")) ? null : r.GetString(r.GetOrdinal("PublicUrl")),
             DatabaseName = r.IsDBNull(r.GetOrdinal("DatabaseName")) ? null : r.GetString(r.GetOrdinal("DatabaseName"))
         };
