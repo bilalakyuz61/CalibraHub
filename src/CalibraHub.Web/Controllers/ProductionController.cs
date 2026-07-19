@@ -5,6 +5,7 @@ using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Production;
@@ -49,6 +50,7 @@ public sealed class ProductionController : Controller
     private readonly ICompanyParameterService _companyParameters;
     private readonly CalibraHub.Application.Services.ShopFloorLockoutTracker _shopFloorLockout;
     private readonly CalibraHub.Persistence.Database.SqlServerConnectionFactory _connectionFactory;
+    private readonly IPermissionService _permService;
 
     public ProductionController(
         IWorkOrderService service,
@@ -66,7 +68,8 @@ public sealed class ProductionController : Controller
         IPersonnelRepository personnelRepo,
         ICompanyParameterService companyParameters,
         CalibraHub.Application.Services.ShopFloorLockoutTracker shopFloorLockout,
-        CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory)
+        CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
+        IPermissionService permService)
     {
         _service = service;
         _operations = operations;
@@ -84,6 +87,26 @@ public sealed class ProductionController : Controller
         _companyParameters = companyParameters;
         _shopFloorLockout = shopFloorLockout;
         _connectionFactory = connectionFactory;
+        _permService = permService;
+    }
+
+    /// <summary>
+    /// SmartBoard kart "İşlemler" menüsündeki "İşlem Logu" aksiyonu AUDIT_LOG:VIEW|VIEW_OWN
+    /// yetkisi olmayan kullanıcıya hiç gösterilmez. Board başına TEK sorgu.
+    /// </summary>
+    private async Task<bool> CanViewAuditLogAsync(CancellationToken ct)
+    {
+        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
+        int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+        return await _permService.CheckAnyAsync(CurrentUserId() ?? 0, role, deptId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
+    }
+
+    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.</summary>
+    private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
+    {
+        var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
+            + (string.IsNullOrWhiteSpace(formCode) ? "" : $"&formCode={Uri.EscapeDataString(formCode)}");
+        return new { label = "İşlem Logu", icon = "ScrollText", color = "slate", url };
     }
 
     private int ResolveCurrentCompanyIdSafe()
@@ -136,6 +159,7 @@ public sealed class ProductionController : Controller
                 .ToArray();
         }
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
+        var canViewAuditLog = await CanViewAuditLogAsync(ct);
 
         // Master widget şablonu — admin SmartBoardConfigPanel için
         var schema = await _widgetService.GetFormSchemaByCodeAsync("WORK_ORDER_EDIT", ct);
@@ -249,6 +273,9 @@ public sealed class ProductionController : Controller
                     apiBody = new { workOrderId = o.Id, newStatus = (int)WorkOrderStatus.Cancelled },
                     confirm = $"Bu iş emrini iptal etmek istediğinize emin misiniz? ({o.OrderNumber})",
                 },
+                extraActions = canViewAuditLog
+                    ? new object[] { BuildAuditLogAction("WorkOrder", o.Id, "WORK_ORDER_EDIT") }
+                    : Array.Empty<object>(),
             });
         }
 
