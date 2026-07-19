@@ -99,9 +99,16 @@ function computeMenuPlacement(btnRect, menuRect) {
   var margin = 8
   var gap = 6
 
-  var horizontal = 'right'
+  // 2026-07-19 — VARSAYILAN: butonun SAĞ-ALT köşesinden açılır (menünün sol kenarı butonun
+  // sağ kenarına yaslanır, sağa+aşağı doğru büyür). Önceki sürüm menüyü butonun SAĞ kenarına
+  // hizalayıp SOLA doğru açıyordu; "İşlemler" sütunu tablonun en solunda olduğu için menü
+  // ekranın soluna kaçıp butonla ilgisiz görünüyordu (kullanıcı bildirimi).
+  // 4px üst üste binme kasıtlı: menünün hangi butona ait olduğu görsel olarak bağlansın.
+  var anchorLeft = btnRect.right - 4
+  var horizontal = 'left'
   var rightVal = Math.max(margin, vw - btnRect.right)
-  if (vw - rightVal - menuRect.width < margin) horizontal = 'left'
+  // Sağa sığmıyorsa eski davranışa dön (butonun sağ kenarına hizala, sola doğru aç).
+  if (anchorLeft + menuRect.width > vw - margin) horizontal = 'right'
 
   var vertical = 'below'
   var fitsBelow = (btnRect.bottom + gap + menuRect.height) <= (vh - margin)
@@ -113,7 +120,8 @@ function computeMenuPlacement(btnRect, menuRect) {
   else pos.bottom = Math.max(margin, vh - btnRect.top + gap)
 
   if (horizontal === 'right') pos.right = rightVal
-  else pos.left = Math.max(margin, Math.min(btnRect.left, vw - margin - menuRect.width))
+  // anchorLeft = butonun sağ kenarı (4px bindirmeli). Taşmaya karşı yine de kırpılır.
+  else pos.left = Math.max(margin, Math.min(anchorLeft, vw - margin - menuRect.width))
 
   return pos
 }
