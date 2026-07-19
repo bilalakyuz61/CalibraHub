@@ -406,10 +406,20 @@ public sealed class DocumentService : IDocumentService
         // Kombinasyon zorunlu kontrolü — mesajda satır numarası (opak ItemId değil).
         // TrackCombinations bayrağı payload'dan gelir; frontend bunu stok kartı (master)
         // değerinden doldurur (bkz. DocumentEdit save map, 2026-07-08 hizalama).
+        //
+        // Miktar sıfır/negatif satır engeli (2026-07-19) — proje genelinde yerleşik kural
+        // (bkz. CalibroDocumentTools, BomImportHandler, InventoryCountImportHandler,
+        // WorkOrderService — hepsi "miktar > 0" uygular). Burada eksikti: istemci ekranı
+        // miktarı boş bırakırsa satır Quantity=0 ile sessizce kaydoluyordu. SaveDocumentRequestValidator
+        // (FluentValidation) aynı kuralı taşır ama otomatik doğrulama yalnız [ApiController]
+        // action'larında devreye girer (bkz. Program.cs yorumu) — Sales/PurchaseController klasik
+        // MVC controller'dır, o katman bu isteği hiç görmez. Asıl garanti bu yüzden serviste.
         var lineList = request.Lines.ToList();
         for (var i = 0; i < lineList.Count; i++)
         {
             var ln = lineList[i];
+            if (ln.Quantity <= 0)
+                return (false, $"{i + 1}. kalemde miktar sıfırdan büyük olmalı.", null, false);
             if (ln.TrackCombinations && (!ln.CombinationId.HasValue || ln.CombinationId.Value <= 0))
             {
                 return (false, $"{i + 1}. kalemde kombinasyon takibi açık; kombinasyon seçilmelidir.", null, false);

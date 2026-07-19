@@ -284,6 +284,32 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         var typeCode = TypeCodeFor(request.DocType);
         var movementType = MovementTypeFor(request.DocType);
+
+        // Miktar sıfır/negatif satır engeli (2026-07-19) — Giriş/Çıkış/Transfer (bu metot) için
+        // "miktar > 0" projede yerleşik kural (bkz. CalibroDocumentTools, BomImportHandler,
+        // WorkOrderService). Öncesinde Qty<=0 satır aşağıdaki döngüde sessizce atlanıyordu
+        // (continue) — belge daha az satırla commit oluyor, kullanıcı hiç uyarı görmüyordu.
+        // Artık transaction açılmadan ÖNCE tüm satırlar kontrol edilir; ilk hatalı satırda
+        // InvalidOperationException fırlatılır (bu repodaki lot/seri zorunluluğu hatalarıyla
+        // aynı sözleşme) — çağıran controller'lar (WarehouseController, MobileWarehouseApiController)
+        // bu tipi zaten yakalayıp mesajı aynen kullanıcıya gösteriyor.
+        // NOT — INVENTORY_COUNT bu metoda hiç girmez (SaveAsync ayrıştırır, bkz. yukarısı):
+        // sayımda CountedQty=0 bilinçli olarak geçerlidir ("saydım, yok" — SaveInventoryCountAsync,
+        // yalnızca negatif atlanır), o yol burada DEĞİŞTİRİLMEDİ.
+        var incomingLines = (request.Lines ?? []).ToList();
+        for (var i = 0; i < incomingLines.Count; i++)
+        {
+            var ln = incomingLines[i];
+            if (ln.Qty <= 0)
+            {
+                var label = !string.IsNullOrWhiteSpace(ln.MaterialCode) && !string.IsNullOrWhiteSpace(ln.MaterialName)
+                    ? $"{ln.MaterialCode} — {ln.MaterialName}"
+                    : (ln.MaterialCode ?? ln.MaterialName);
+                var lineDesc = label is null ? $"{i + 1}. kalem" : $"{i + 1}. kalem ({label})";
+                throw new InvalidOperationException($"{lineDesc}: miktar sıfırdan büyük olmalı.");
+            }
+        }
+
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
@@ -393,7 +419,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if ((!itemId.HasValue || itemId.Value <= 0) && !string.IsNullOrWhiteSpace(line.MaterialCode))
                     itemId = await ResolveItemIdByCodeAsync(conn, tx, line.MaterialCode!, ct);
                 if (!itemId.HasValue || itemId.Value <= 0) continue;
-                if (line.Qty <= 0) continue;
+                // Qty<=0 satırlar metot başında (transaction açılmadan önce) reddedildi —
+                // buraya yalnızca Qty>0 satırlar ulaşır.
 
                 // Lot çözümleme — lot-takipli stokta (TrackingType='Lot') zorunlu:
                 // girişte yoksa oluşturulur, çıkış/transferde mevcut lot şarttır.

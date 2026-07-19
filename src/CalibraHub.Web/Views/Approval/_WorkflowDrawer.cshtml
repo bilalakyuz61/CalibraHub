@@ -1,0 +1,640 @@
+@* Onay süreci sağ çekmecesi. DocumentEdit.cshtml İşlemler menüsünden açılır.
+   Kullanım: <partial name="~/Views/Approval/_WorkflowDrawer.cshtml" model="@Model.DocumentId.Value" />
+   Tek kullanıcı: Views/Sales/DocumentEdit.cshtml (satış + satın alma, hepsi bu view'ı paylaşır).
+   Backend kontrat DEĞİŞMEDİ — /ApprovalFlow/GetInstanceByDocument, StartByDocument, ApproveStep,
+   RejectStep, CancelApproval (CSRF token, request/response şekli aynı).
+   2026-07-19: Eski sekme-içi panel (_WorkflowPanel.cshtml) buraya taşındı. stepRecords akış
+   başlarken TÜM adımları (henüz gelmemiş olanlar dahil) Pending olarak içerir — isCurrent olan
+   "şu an", ondan sonrakiler dikey zaman akışında soluk/kesik-çizgili "gelecek" adım olarak
+   render edilir. *@
+@model int
+
+<div id="wfd-backdrop-@Model" class="wfd-backdrop" onclick="wfdBackdropClick()"></div>
+<div id="wfd-drawer-@Model" class="wfd-drawer" data-document-id="@Model" data-nodirty>
+    <div class="wfd-hd">
+        <div class="wfd-hd-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v3a9 9 0 0 0 9 9"/>
+            </svg>
+        </div>
+        <div class="wfd-hd-tx">
+            <strong>Onay Süreci</strong>
+            <span id="wfd-status-badge-@Model" class="wfd-status-badge" style="display:none;"></span>
+        </div>
+        <button type="button" class="wfd-close" onclick="wfdClose()" title="Kapat (Esc)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="wfd-body" id="wfd-body-@Model">
+        <div class="wfd-loading">Yükleniyor…</div>
+    </div>
+</div>
+
+<style>
+    /* ── Onay Süreci çekmecesi — Views/Purchase/FulfillmentCenter.cshtml (.fc3-drawer)
+       deseni izlenir: backdrop + position:fixed panel + transform:translateX. ── */
+    .wfd-backdrop {
+        position: fixed; inset: 0; z-index: 9980;
+        background: rgba(15, 23, 42, 0.32);
+        opacity: 0; pointer-events: none;
+        transition: opacity 160ms;
+    }
+    .wfd-backdrop.open { opacity: 1; pointer-events: auto; }
+    body.app-theme-dark .wfd-backdrop.open { background: rgba(0, 0, 0, 0.55); }
+
+    .wfd-drawer {
+        position: fixed; top: 0; right: 0; bottom: 0; z-index: 9981;
+        width: min(400px, 100vw);
+        display: flex; flex-direction: column; overflow: hidden;
+        color-scheme: light;
+        --wfd-bg: #ffffff;
+        --wfd-surface-2: #f8fafc;
+        --wfd-border: #e2e8f0;
+        --wfd-text: #0f172a;
+        --wfd-text-muted: #64748b;
+        --wfd-text-dim: #94a3b8;
+        background: var(--wfd-bg);
+        border-left: 1px solid var(--wfd-border);
+        transform: translateX(100%);
+        transition: transform 280ms cubic-bezier(.23,1,.32,1), box-shadow 280ms;
+    }
+    .wfd-drawer.open { transform: translateX(0); box-shadow: -24px 0 64px rgba(15,23,42,.18); }
+    body.app-theme-dark .wfd-drawer {
+        color-scheme: dark;
+        --wfd-bg: rgba(13,18,34,.97);
+        --wfd-surface-2: rgba(255,255,255,.03);
+        --wfd-border: rgba(255,255,255,.08);
+        --wfd-text: #e2e8f0;
+        --wfd-text-muted: #94a3b8;
+        --wfd-text-dim: #475569;
+        backdrop-filter: blur(24px) saturate(140%);
+        -webkit-backdrop-filter: blur(24px) saturate(140%);
+    }
+    body.app-theme-dark .wfd-drawer.open { box-shadow: -24px 0 64px rgba(0,0,0,.45); }
+
+    .wfd-hd {
+        display: flex; align-items: center; gap: 10px;
+        padding: 14px 16px; border-bottom: 1px solid var(--wfd-border); flex-shrink: 0;
+    }
+    .wfd-hd-icon {
+        width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.28); color: #4f46e5;
+    }
+    body.app-theme-dark .wfd-hd-icon { background: rgba(99,102,241,.16); border-color: rgba(99,102,241,.3); color: #a5b4fc; }
+    .wfd-hd-tx { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .wfd-hd-tx strong { font-size: .9rem; font-weight: 700; color: var(--wfd-text); }
+    .wfd-close {
+        padding: 6px; border-radius: 8px; background: none;
+        border: 1px solid var(--wfd-border); color: var(--wfd-text-muted);
+        cursor: pointer; transition: all .12s; flex-shrink: 0;
+        display: flex; align-items: center;
+    }
+    .wfd-close:hover { background: var(--wfd-surface-2); color: var(--wfd-text); }
+
+    .wfd-status-badge {
+        display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px;
+        font-size: .7rem; font-weight: 700;
+    }
+    .wfd-status-badge--pending   { background: rgba(59,130,246,.12);  color: #2563eb; }
+    .wfd-status-badge--approved  { background: rgba(16,185,129,.12); color: #047857; }
+    .wfd-status-badge--rejected  { background: rgba(239,68,68,.1);   color: #b91c1c; }
+    .wfd-status-badge--cancelled { background: rgba(100,116,139,.12); color: #475569; }
+    .wfd-status-badge--none      { background: rgba(100,116,139,.1);  color: #64748b; }
+    body.app-theme-dark .wfd-status-badge--pending   { background: rgba(59,130,246,.18);  color: #93c5fd; }
+    body.app-theme-dark .wfd-status-badge--approved  { background: rgba(16,185,129,.18);  color: #6ee7b7; }
+    body.app-theme-dark .wfd-status-badge--rejected  { background: rgba(239,68,68,.18);   color: #fca5a5; }
+    body.app-theme-dark .wfd-status-badge--cancelled { background: rgba(100,116,139,.2); color: #94a3b8; }
+    body.app-theme-dark .wfd-status-badge--none      { background: rgba(100,116,139,.16); color: #64748b; }
+
+    .wfd-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .wfd-body::-webkit-scrollbar { width: 5px; }
+    .wfd-body::-webkit-scrollbar-thumb { background: var(--wfd-border); border-radius: 3px; }
+    .wfd-loading { padding: 40px 10px; text-align: center; color: var(--wfd-text-dim); font-size: .82rem; }
+
+    /* Özet */
+    .wfd-summary { padding: 10px 12px; background: var(--wfd-surface-2); border: 1px solid var(--wfd-border); border-radius: 10px; }
+    .wfd-summary-flow { font-size: .84rem; font-weight: 700; color: var(--wfd-text); }
+    .wfd-summary-dim { font-weight: 500; color: var(--wfd-text-muted); }
+    .wfd-summary-started { margin-top: 4px; font-size: .76rem; color: var(--wfd-text-muted); }
+    .wfd-summary-started strong { color: var(--wfd-text); font-weight: 600; }
+
+    /* ── Dikey adım zaman akışı ── */
+    .wfd-timeline { display: flex; flex-direction: column; }
+    .wfd-step { display: flex; gap: 12px; }
+    .wfd-step-rail { display: flex; flex-direction: column; align-items: center; width: 26px; flex-shrink: 0; }
+    .wfd-step-dot {
+        width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box;
+        display: flex; align-items: center; justify-content: center;
+        font-size: .68rem; font-weight: 700;
+    }
+    .wfd-step-line { width: 0; flex: 1; min-height: 18px; margin: 2px 0; border-left: 2px solid var(--wfd-border); }
+    .wfd-step-line--done   { border-left-color: #10b981; }
+    .wfd-step-line--dashed { border-left-style: dashed; }
+    .wfd-step-content { flex: 1; min-width: 0; padding-bottom: 20px; }
+    .wfd-step:last-child .wfd-step-content { padding-bottom: 2px; }
+
+    .wfd-step-hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .wfd-step-name { font-size: .83rem; font-weight: 600; color: var(--wfd-text); }
+    .wfd-step-meta { margin-top: 3px; font-size: .74rem; color: var(--wfd-text-muted); }
+    .wfd-step-due { margin-top: 3px; font-size: .72rem; color: var(--wfd-text-dim); }
+    .wfd-step-due--overdue { color: #dc2626; font-weight: 600; }
+    body.app-theme-dark .wfd-step-due--overdue { color: #f87171; }
+    .wfd-step-note {
+        margin-top: 6px; padding: 7px 10px; border-radius: 8px; font-size: .76rem;
+        font-style: italic; color: var(--wfd-text-muted); background: var(--wfd-surface-2);
+        border: 1px solid var(--wfd-border);
+    }
+    .wfd-step-note--reject { color: #b91c1c; background: rgba(239,68,68,.07); border-color: rgba(239,68,68,.2); }
+    body.app-theme-dark .wfd-step-note--reject { color: #fca5a5; background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.22); }
+
+    /* Durum bazlı dot renkleri — sabit doygun renkler, her iki temada da okunur
+       (bkz. .sqe-status-dot--* aynı sayfada, dark override'sız aynı prensip). */
+    .wfd-step--approved .wfd-step-dot { background: #10b981; color: #fff; }
+    .wfd-step--rejected .wfd-step-dot { background: #ef4444; color: #fff; }
+    .wfd-step--current  .wfd-step-dot { background: #6366f1; color: #fff; box-shadow: 0 0 0 4px rgba(99,102,241,.18); animation: wfdPulse 2.2s ease-in-out infinite; }
+    .wfd-step--skipped  .wfd-step-dot { background: var(--wfd-surface-2); border: 1px solid var(--wfd-border); color: var(--wfd-text-dim); }
+    .wfd-step--future   .wfd-step-dot { background: transparent; border: 1.5px dashed var(--wfd-border); color: var(--wfd-text-dim); }
+    @@keyframes wfdPulse {
+        0%, 100% { box-shadow: 0 0 0 4px rgba(99,102,241,.18); }
+        50%      { box-shadow: 0 0 0 7px rgba(99,102,241,.08); }
+    }
+    .wfd-step--skipped .wfd-step-content { opacity: .55; }
+    .wfd-step--future  .wfd-step-name    { color: var(--wfd-text-muted); font-weight: 500; }
+
+    .wfd-tag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: .65rem; font-weight: 700; }
+    .wfd-tag--current { background: rgba(99,102,241,.14); color: #4f46e5; }
+    body.app-theme-dark .wfd-tag--current { background: rgba(99,102,241,.22); color: #a5b4fc; }
+    .wfd-tag--skipped { background: var(--wfd-surface-2); color: var(--wfd-text-dim); border: 1px solid var(--wfd-border); }
+
+    .wfd-step-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .wfd-abtn {
+        display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 7px;
+        font-size: .78rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all .13s;
+    }
+    .wfd-abtn--approve { background: #10b981; color: #fff; }
+    .wfd-abtn--approve:hover { background: #059669; }
+    .wfd-abtn--reject { background: transparent; border-color: rgba(239,68,68,.4); color: #dc2626; }
+    .wfd-abtn--reject:hover { background: rgba(239,68,68,.08); }
+    body.app-theme-dark .wfd-abtn--reject { color: #fca5a5; border-color: rgba(239,68,68,.35); }
+    body.app-theme-dark .wfd-abtn--reject:hover { background: rgba(239,68,68,.14); }
+
+    /* Boş durum (akış hiç başlamamış) */
+    .wfd-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 40px 12px; color: var(--wfd-text-dim); }
+    .wfd-empty svg { opacity: .35; }
+    .wfd-empty p { font-size: .82rem; color: var(--wfd-text-muted); max-width: 240px; }
+    .wfd-btn {
+        display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px;
+        font-size: .8rem; font-weight: 600; cursor: pointer; border: none; transition: all .13s; color: #fff;
+    }
+    .wfd-btn--primary { background: linear-gradient(135deg,#6366f1,#4f46e5); }
+    .wfd-btn--primary:hover { opacity: .9; }
+
+    /* Alt kısım — İptal + çalışma günlüğü */
+    .wfd-footer { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--wfd-border); padding-top: 14px; }
+    .wfd-btn--danger-ghost {
+        align-self: flex-start; background: transparent; border: 1px solid rgba(239,68,68,.35); color: #dc2626;
+        padding: 7px 14px; border-radius: 8px; font-size: .78rem; font-weight: 600; cursor: pointer; transition: all .13s;
+    }
+    .wfd-btn--danger-ghost:hover { background: rgba(239,68,68,.08); }
+    body.app-theme-dark .wfd-btn--danger-ghost { color: #fca5a5; border-color: rgba(239,68,68,.32); }
+    body.app-theme-dark .wfd-btn--danger-ghost:hover { background: rgba(239,68,68,.14); }
+
+    .wfd-log-details summary {
+        cursor: pointer; font-size: .74rem; font-weight: 700; color: var(--wfd-text-muted);
+        list-style: none; display: flex; align-items: center; gap: 6px; padding: 4px 0; user-select: none;
+    }
+    .wfd-log-details summary::-webkit-details-marker { display: none; }
+    .wfd-log-details summary::before { content: '▸'; font-size: .68rem; display: inline-block; transition: transform .15s; }
+    .wfd-log-details[open] summary::before { transform: rotate(90deg); }
+    .wfd-rl-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+    .wfd-rl-entry { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; }
+    .wfd-rl-dot {
+        width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+        font-size: .58rem; flex-shrink: 0; margin-top: 1px;
+    }
+    .wfd-rl-dot--success { background: rgba(16,185,129,.12); color: #10b981; }
+    .wfd-rl-dot--danger  { background: rgba(239,68,68,.12);  color: #ef4444; }
+    .wfd-rl-dot--info    { background: rgba(59,130,246,.12); color: #3b82f6; }
+    .wfd-rl-dot--indigo  { background: rgba(99,102,241,.12); color: #6366f1; }
+    .wfd-rl-dot--amber   { background: rgba(245,158,11,.12); color: #f59e0b; }
+    .wfd-rl-dot--neutral { background: rgba(100,116,139,.12); color: #64748b; }
+    .wfd-rl-body { flex: 1; min-width: 0; }
+    .wfd-rl-ev   { font-size: .76rem; font-weight: 600; color: var(--wfd-text); }
+    .wfd-rl-nm   { font-size: .76rem; color: var(--wfd-text-muted); }
+    .wfd-rl-dt   { font-size: .72rem; color: var(--wfd-text-muted); margin-top: 1px; }
+    .wfd-rl-meta { font-size: .68rem; color: var(--wfd-text-dim); margin-top: 1px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+    /* ── Onayla/Reddet/İptal custom modal — mevcut wf-mc/wf-mo deseni AYNEN korunur.
+       z-index çekmecenin (9981) üstünde olmalı — çekmece içinden açılıyor. ── */
+    .wf-modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center; z-index: 9990;
+    }
+    .wf-modal-card {
+        background: var(--app-surface, #fff); border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 14px; padding: 28px 24px; max-width: 420px; width: 90%;
+        box-shadow: 0 20px 60px rgba(0,0,0,.3);
+        display: flex; flex-direction: column; gap: 12px;
+    }
+    .wf-modal-ico { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; margin: 0 auto; }
+    .wf-modal-ico--success { background: rgba(16,185,129,.12); color: #10b981; }
+    .wf-modal-ico--danger  { background: rgba(239,68,68,.12);  color: #ef4444; }
+    .wf-modal-ico--warning { background: rgba(245,158,11,.12); color: #f59e0b; }
+    .wf-modal-ttl { font-size: .95rem; font-weight: 700; color: var(--app-text, #0f172a); text-align: center; }
+    .wf-modal-msg { font-size: .84rem; color: var(--app-text-muted, #64748b); text-align: center; }
+    .wf-modal-textarea { resize: vertical; min-height: 80px; }
+    .wf-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+    body.app-theme-dark .wf-modal-card { background: var(--app-surface, #0d1323); border-color: var(--app-border, rgba(255,255,255,.08)); }
+    body.app-theme-dark .wf-modal-ttl { color: var(--app-text, #e2e8f0); }
+    body.app-theme-dark .wf-modal-msg { color: var(--app-text-muted, #94a3b8); }
+</style>
+
+<script>
+(function () {
+    var docId = @Model;
+    var wfdData = null;
+    var wfdInstanceId = null;
+    var wfdPrevOverflow = '';
+
+    function token() {
+        return document.querySelector('[name=__RequestVerificationToken]')?.value || '';
+    }
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function notifyError(msg) {
+        if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(msg);
+        else alert(msg);
+    }
+
+    /* ── Ortalanmış custom modal (prompt/confirm yerine) — Onayla/Reddet/İptal notu
+       toplamak için kullanılır. Sınıf adları (wf-mc/wf-mo) bilerek korunuyor. ── */
+    function showWfModal(opts) {
+        return new Promise(function (resolve) {
+            var bd = document.createElement('div');
+            bd.className = 'wf-modal-backdrop';
+            var hasInput = opts.placeholder !== undefined;
+            bd.innerHTML =
+                '<div class="wf-modal-card">' +
+                  '<div class="wf-modal-ico ' + (opts.icoClass || 'wf-modal-ico--success') + '">' + (opts.icon || '') + '</div>' +
+                  '<div class="wf-modal-ttl">' + (opts.title || '') + '</div>' +
+                  (opts.message ? '<div class="wf-modal-msg">' + opts.message + '</div>' : '') +
+                  (hasInput ? '<textarea class="form-control wf-modal-textarea" placeholder="' + (opts.placeholder || '') + '" rows="3"></textarea>' : '') +
+                  '<div class="wf-modal-actions">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary wf-mc">Vazgeç</button>' +
+                    '<button type="button" class="btn btn-sm ' + (opts.okClass || 'btn-primary') + ' wf-mo">' + (opts.okLabel || 'Tamam') + '</button>' +
+                  '</div>' +
+                '</div>';
+            document.body.appendChild(bd);
+
+            var ta    = bd.querySelector('.wf-modal-textarea');
+            var okBtn = bd.querySelector('.wf-mo');
+            var cxBtn = bd.querySelector('.wf-mc');
+
+            if (ta) { setTimeout(function () { ta.focus(); }, 30); }
+            else     { setTimeout(function () { okBtn.focus(); }, 30); }
+
+            function done(ok) {
+                document.body.removeChild(bd);
+                document.removeEventListener('keydown', onKey);
+                resolve({ ok: ok, value: ta ? ta.value.trim() : null });
+            }
+            function tryOk() {
+                if (opts.required && ta && !ta.value.trim()) {
+                    ta.classList.add('is-invalid');
+                    ta.focus();
+                    return;
+                }
+                done(true);
+            }
+            function onKey(e) {
+                if (e.key === 'Escape') { done(false); return; }
+                if (e.key === 'Enter' && !hasInput) { e.preventDefault(); tryOk(); }
+            }
+            okBtn.addEventListener('click', tryOk);
+            cxBtn.addEventListener('click', function () { done(false); });
+            bd.addEventListener('click', function (e) { if (e.target === bd) done(false); });
+            document.addEventListener('keydown', onKey);
+        });
+    }
+
+    /* ── Çalışma günlüğü (runLogs) — render yardımcıları, eski panelle aynı mantık ── */
+    function wfdRlDotClass(ev) {
+        if (ev === 'FlowStarted' || ev === 'StepApproved' || ev === 'FlowEnd') return 'wfd-rl-dot--success';
+        if (ev === 'StepRejected' || ev === 'FlowCancelled' || ev === 'IntegrationHalt' || ev === 'IntegrationFail') return 'wfd-rl-dot--danger';
+        if (ev === 'Notification') return 'wfd-rl-dot--info';
+        if (ev === 'Decision')     return 'wfd-rl-dot--indigo';
+        if (ev === 'StepActivated') return 'wfd-rl-dot--amber';
+        if (ev === 'Integration')  return 'wfd-rl-dot--indigo';
+        return 'wfd-rl-dot--neutral';
+    }
+    function wfdRlIcon(ev) {
+        if (ev === 'FlowStarted')  return '▶';
+        if (ev === 'StepApproved') return '✓';
+        if (ev === 'StepRejected') return '✗';
+        if (ev === 'FlowEnd')      return '⊙';
+        if (ev === 'FlowCancelled') return '⊗';
+        if (ev === 'Notification') return '✉';
+        if (ev === 'Decision')     return '⑂';
+        if (ev === 'StepActivated') return '⧖';
+        if (ev === 'Integration' || ev === 'IntegrationHalt' || ev === 'IntegrationFail') return '⇄';
+        if (ev === 'SetVariable')  return '≔';
+        if (ev === 'Parallel')     return '⫶';
+        return '·';
+    }
+    function wfdRlEventLabel(ev) {
+        var map = {
+            'FlowStarted':    'Akış Başlatıldı',
+            'FlowEnd':        'Akış Tamamlandı',
+            'FlowCancelled':  'Akış İptal Edildi',
+            'StepActivated':  'Adım Aktif',
+            'StepApproved':   'Onaylandı',
+            'StepRejected':   'Reddedildi',
+            'Decision':       'Karar',
+            'Notification':   'Bildirim',
+            'Integration':    'Entegrasyon',
+            'IntegrationHalt':'Entegrasyon Durdu',
+            'IntegrationFail':'Entegrasyon Hatası',
+            'SetVariable':    'Değişken Ata',
+            'Parallel':       'Paralel Dal',
+        };
+        return map[ev] || ev;
+    }
+
+    /* ── Durum rozeti ── */
+    function statusMeta(status) {
+        if (status === 'Pending')   return { label: 'Bekliyor',   cls: 'wfd-status-badge--pending' };
+        if (status === 'Approved')  return { label: 'Onaylandı',  cls: 'wfd-status-badge--approved' };
+        if (status === 'Rejected')  return { label: 'Reddedildi', cls: 'wfd-status-badge--rejected' };
+        if (status === 'Cancelled') return { label: 'İptal',      cls: 'wfd-status-badge--cancelled' };
+        return { label: status || '', cls: 'wfd-status-badge--none' };
+    }
+
+    /* ── Tek bir adımın dot + içerik render'ı ── */
+    function renderStepDot(step) {
+        if (step.status === 'Approved') {
+            return '<div class="wfd-step-dot"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>';
+        }
+        if (step.status === 'Rejected') {
+            return '<div class="wfd-step-dot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>';
+        }
+        if (step.status === 'Skipped') {
+            return '<div class="wfd-step-dot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>';
+        }
+        if (step.isCurrent) {
+            return '<div class="wfd-step-dot"></div>';
+        }
+        return '<div class="wfd-step-dot">' + escHtml(step.stepRank != null ? step.stepRank : '') + '</div>';
+    }
+
+    function renderStep(step, isLast) {
+        var cls = 'wfd-step ';
+        if (step.status === 'Approved') cls += 'wfd-step--approved';
+        else if (step.status === 'Rejected') cls += 'wfd-step--rejected';
+        else if (step.status === 'Skipped') cls += 'wfd-step--skipped';
+        else if (step.isCurrent) cls += 'wfd-step--current';
+        else cls += 'wfd-step--future';
+
+        var lineCls = 'wfd-step-line' + (step.status === 'Approved' ? ' wfd-step-line--done' : ' wfd-step-line--dashed');
+        var railHtml = renderStepDot(step) + (isLast ? '' : '<div class="' + lineCls + '"></div>');
+
+        var head = '<div class="wfd-step-hd"><span class="wfd-step-name">' + escHtml(step.stepName || '') + '</span>';
+        if (step.isCurrent && step.status === 'Pending') head += '<span class="wfd-tag wfd-tag--current">Şu an</span>';
+        if (step.status === 'Skipped') head += '<span class="wfd-tag wfd-tag--skipped">Atlandı</span>';
+        head += '</div>';
+
+        var body = '';
+        if (step.status === 'Approved') {
+            var metaA = [step.approverName, step.actionDate].filter(Boolean).join(' · ');
+            if (metaA) body += '<div class="wfd-step-meta">' + escHtml(metaA) + '</div>';
+            if (step.note) body += '<div class="wfd-step-note">"' + escHtml(step.note) + '"</div>';
+        } else if (step.status === 'Rejected') {
+            var metaR = [step.approverName, step.actionDate].filter(Boolean).join(' · ');
+            if (metaR) body += '<div class="wfd-step-meta">' + escHtml(metaR) + '</div>';
+            var rejectNote = step.note || (wfdData && wfdData.rejectNote) || '';
+            if (rejectNote) body += '<div class="wfd-step-note wfd-step-note--reject">"' + escHtml(rejectNote) + '"</div>';
+        } else if (step.isCurrent) {
+            if (step.intendedApproverLabel) body += '<div class="wfd-step-meta">' + escHtml(step.intendedApproverLabel) + '</div>';
+            if (step.dueDate) {
+                body += '<div class="wfd-step-due' + (step.isOverdue ? ' wfd-step-due--overdue' : '') + '">Son tarih: ' + escHtml(step.dueDate) + '</div>';
+            }
+            if (wfdData && wfdData.canApprove) {
+                body += '<div class="wfd-step-actions">' +
+                    '<button type="button" class="wfd-abtn wfd-abtn--approve" onclick="window.CalibraApprovalDrawer.approve()">Onayla</button>' +
+                    '<button type="button" class="wfd-abtn wfd-abtn--reject" onclick="window.CalibraApprovalDrawer.reject()">Reddet</button>' +
+                '</div>';
+            }
+        } else if (step.status !== 'Skipped') {
+            // Gelecek adım (Pending, henüz sırası gelmemiş)
+            var metaF = step.intendedApproverLabel ? (step.intendedApproverLabel + ' · sırada') : 'sırada';
+            body += '<div class="wfd-step-meta">' + escHtml(metaF) + '</div>';
+        }
+
+        return '<div class="' + cls + '">' +
+            '<div class="wfd-step-rail">' + railHtml + '</div>' +
+            '<div class="wfd-step-content">' + head + body + '</div>' +
+        '</div>';
+    }
+
+    function renderBody(data) {
+        if (!data || !data.found) {
+            return '<div class="wfd-empty">' +
+                '<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v3a9 9 0 0 0 9 9"/>' +
+                '</svg>' +
+                '<p>Bu belge için henüz bir onay süreci başlatılmadı.</p>' +
+                '<button type="button" class="wfd-btn wfd-btn--primary" onclick="window.CalibraApprovalDrawer.start()">Onaya Gönder</button>' +
+            '</div>';
+        }
+
+        var steps = (data.stepRecords || []).slice().sort(function (a, b) { return (a.stepOrder || 0) - (b.stepOrder || 0); });
+        var timelineHtml = steps.map(function (s, i) { return renderStep(s, i === steps.length - 1); }).join('');
+
+        var summaryHtml = '<div class="wfd-summary">' +
+            '<div class="wfd-summary-flow">' + escHtml(data.flowName || 'Onay Akışı') +
+                '<span class="wfd-summary-dim"> · ' + (data.totalSteps || steps.length || 0) + ' adım</span></div>' +
+            '<div class="wfd-summary-started">Başlatan <strong>' + escHtml(data.startedBy || '—') + '</strong>' +
+                (data.startedAt ? ' · ' + escHtml(data.startedAt) : '') + '</div>' +
+        '</div>';
+
+        var footerParts = [];
+        if (data.canCancel) {
+            footerParts.push('<button type="button" class="wfd-btn--danger-ghost" onclick="window.CalibraApprovalDrawer.cancel()">Onay Akışını İptal Et</button>');
+        }
+        if (data.runLogs && data.runLogs.length > 0) {
+            var logItems = data.runLogs.map(function (log) {
+                var meta = log.created || '';
+                if (log.durationMs != null && log.durationMs > 5) meta += (meta ? ' · ' : '') + log.durationMs + 'ms';
+                return '<div class="wfd-rl-entry">' +
+                    '<span class="wfd-rl-dot ' + wfdRlDotClass(log.event) + '">' + wfdRlIcon(log.event) + '</span>' +
+                    '<div class="wfd-rl-body">' +
+                        '<span class="wfd-rl-ev">' + escHtml(wfdRlEventLabel(log.event)) + '</span>' +
+                        (log.nodeName ? '<span class="wfd-rl-nm"> · ' + escHtml(log.nodeName) + '</span>' : '') +
+                        (log.detail   ? '<div class="wfd-rl-dt">' + escHtml(log.detail) + '</div>' : '') +
+                        (meta         ? '<div class="wfd-rl-meta">' + escHtml(meta) + '</div>' : '') +
+                    '</div>' +
+                '</div>';
+            }).join('');
+            footerParts.push('<details class="wfd-log-details"><summary>Çalışma Günlüğü</summary><div class="wfd-rl-list">' + logItems + '</div></details>');
+        }
+        var footerHtml = footerParts.length ? '<div class="wfd-footer">' + footerParts.join('') + '</div>' : '';
+
+        return summaryHtml + '<div class="wfd-timeline">' + timelineHtml + '</div>' + footerHtml;
+    }
+
+    function renderAll(data) {
+        wfdData = data;
+        wfdInstanceId = (data && data.found) ? data.instanceId : null;
+
+        var badgeEl   = document.getElementById('wfd-status-badge-' + docId);
+        var bodyEl    = document.getElementById('wfd-body-' + docId);
+        var menuBadge = document.getElementById('sqApprovalBadge');
+
+        if (badgeEl) {
+            if (data && data.found) {
+                var meta = statusMeta(data.status);
+                badgeEl.textContent = meta.label;
+                badgeEl.className = 'wfd-status-badge ' + meta.cls;
+                badgeEl.style.display = '';
+            } else {
+                badgeEl.style.display = 'none';
+            }
+        }
+        if (bodyEl) bodyEl.innerHTML = renderBody(data);
+
+        if (menuBadge) {
+            if (data && data.found && data.totalSteps) {
+                menuBadge.textContent = (data.currentStep != null ? data.currentStep : '?') + '/' + data.totalSteps;
+                menuBadge.style.display = '';
+            } else {
+                menuBadge.style.display = 'none';
+            }
+        }
+    }
+
+    function wfdFetch() {
+        return fetch('/ApprovalFlow/GetInstanceByDocument?documentId=' + docId, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { renderAll(data); return data; })
+            .catch(function () { /* sessiz — ag hatasi UI'i bozmasin, bir sonraki acilista tekrar denenir */ });
+    }
+
+    /* ── Çekmece aç/kapa ── */
+    function wfdIsOpen() {
+        var d = document.getElementById('wfd-drawer-' + docId);
+        return !!(d && d.classList.contains('open'));
+    }
+    function wfdOpen() {
+        var bd = document.getElementById('wfd-backdrop-' + docId);
+        var dr = document.getElementById('wfd-drawer-' + docId);
+        if (!bd || !dr) return;
+        bd.classList.add('open');
+        dr.classList.add('open');
+        wfdPrevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        // Onceden yuklenmis veri varsa aninda gorunur; arka planda tazele (baska
+        // kullanici bu arada onaylamis/reddetmis olabilir).
+        wfdFetch();
+    }
+    function wfdClose() {
+        var bd = document.getElementById('wfd-backdrop-' + docId);
+        var dr = document.getElementById('wfd-drawer-' + docId);
+        if (bd) bd.classList.remove('open');
+        if (dr) dr.classList.remove('open');
+        document.body.style.overflow = wfdPrevOverflow || '';
+    }
+    window.wfdClose = wfdClose;
+    window.wfdBackdropClick = function () { wfdClose(); };
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (!wfdIsOpen()) return;
+        // Onayla/Reddet/Iptal modali cekmecenin ustunde aciksa Esc once onu kapatsin.
+        if (document.querySelector('.wf-modal-backdrop')) return;
+        wfdClose();
+    });
+
+    /* ── Aksiyonlar — endpoint/CSRF/gövde şekli eski panelle birebir aynı ── */
+    function wfdApprove() {
+        if (!wfdInstanceId) return;
+        showWfModal({
+            icoClass: 'wf-modal-ico--success', icon: '✓',
+            title: 'Onayla',
+            message: 'Onay notu ekleyebilirsiniz (opsiyonel).',
+            placeholder: 'Onay notu…',
+            required: false, okLabel: 'Onayla', okClass: 'btn-success',
+        }).then(function (r) {
+            if (!r.ok) return;
+            fetch('/ApprovalFlow/ApproveStep', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({ InstanceId: wfdInstanceId, ApproverId: '', ApproverName: '', Note: r.value }),
+            }).then(function (res) { return res.json(); })
+              .then(function (res) { if (res.ok) wfdFetch(); else notifyError('Hata: ' + (res.error || '')); });
+        });
+    }
+
+    function wfdReject() {
+        if (!wfdInstanceId) return;
+        showWfModal({
+            icoClass: 'wf-modal-ico--danger', icon: '✕',
+            title: 'Reddet',
+            message: 'Red nedeni giriniz.',
+            placeholder: 'Red nedeni…',
+            required: true, okLabel: 'Reddet', okClass: 'btn-danger',
+        }).then(function (r) {
+            if (!r.ok) return;
+            fetch('/ApprovalFlow/RejectStep', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({ InstanceId: wfdInstanceId, ApproverId: '', ApproverName: '', Note: r.value || '' }),
+            }).then(function (res) { return res.json(); })
+              .then(function (res) { if (res.ok) wfdFetch(); else notifyError('Hata: ' + (res.error || '')); });
+        });
+    }
+
+    function wfdCancel() {
+        if (!wfdInstanceId) return;
+        showWfModal({
+            icoClass: 'wf-modal-ico--warning', icon: '⚠',
+            title: 'Onay Akışını İptal Et',
+            message: 'Bu işlem geri alınamaz. Onay akışını iptal etmek istediğinizden emin misiniz?',
+            required: false, okLabel: 'İptal Et', okClass: 'btn-danger',
+        }).then(function (r) {
+            if (!r.ok) return;
+            fetch('/ApprovalFlow/CancelApproval?instanceId=' + wfdInstanceId, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': token() },
+            }).then(function (res) { return res.json(); })
+              .then(function (res) { if (res.ok) wfdFetch(); else notifyError('Hata: ' + (res.error || '')); });
+        });
+    }
+
+    function wfdStart() {
+        fetch('/ApprovalFlow/StartByDocument?documentId=' + docId, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'RequestVerificationToken': token() },
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (res.ok) { wfdFetch(); }
+              else { notifyError(res.error || 'Onaya gönderilemedi.'); }
+          })
+          .catch(function (e) { notifyError('Onaya gönderme hatası: ' + e); });
+    }
+
+    /* ── Public API — DocumentEdit.cshtml (sqActionOpenApproval) bunu çağırır ── */
+    window.CalibraApprovalDrawer = {
+        open: wfdOpen,
+        close: wfdClose,
+        approve: wfdApprove,
+        reject: wfdReject,
+        cancel: wfdCancel,
+        start: wfdStart,
+    };
+
+    // Sayfa yüklenince tek seferlik veri çekimi — hem menü rozetini hem çekmece
+    // içeriğini önceden doldurur (çekmece kapalıyken de DOM'da hazır bekler).
+    wfdFetch();
+})();
+</script>

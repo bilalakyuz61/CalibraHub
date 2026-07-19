@@ -1450,6 +1450,16 @@
     .sqe-status-dot--rejected  { background: #f87171; }
     .sqe-status-dot--cancelled { background: #fb923c; }
 
+    /* Islemler > Onay Sureci rozeti — currentStep/totalSteps (ör. 2/4) */
+    .sqe-approval-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 30px; padding: 2px 7px; border-radius: 999px;
+        font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+        background: rgba(99,102,241,0.16); color: #a5b4fc;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    body.app-theme-light .sqe-approval-badge { background: rgba(99,102,241,0.10); color: #4338ca; }
+
     /* ── Sol tab + sag icerik body ── */
     .sqe-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
     .sqe-tab-nav {
@@ -2275,6 +2285,18 @@
             </svg>
             <span>Tüm Ürünlerin Maliyeti</span>
         </button>
+        @if (Model.DocumentId.HasValue)
+        {
+            <!-- Onay Süreci — sağ çekmeceyi açar (bkz. _WorkflowDrawer.cshtml). Rozet
+                 sayfa yüklenirken tek seferlik GetInstanceByDocument'ten dolduruluyor. -->
+            <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionOpenApproval(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 9v3a9 9 0 0 0 9 9"/>
+                </svg>
+                <span style="flex:1;">Onay Süreci</span>
+                <span id="sqApprovalBadge" class="sqe-approval-badge" style="display:none;"></span>
+            </button>
+        }
         <!-- Durum Degistir — tek item, hover/click ile yan acilan sub-popup -->
         <button type="button" role="menuitem"
                 class="sqe-actions-item sqe-actions-item--has-sub"
@@ -2353,7 +2375,6 @@
             <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="attachments" onclick="sqSwitchTab('attachments')">Ekli Dosyalar</button>
             @if (Model.DocumentId.HasValue)
             {
-                <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="workflow" onclick="sqSwitchTab('workflow')">Onay Akışı</button>
                 <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="lineage" onclick="sqSwitchTab('lineage')">İlişkili Belgeler</button>
             }
         </nav>
@@ -2620,9 +2641,6 @@
 
         @if (Model.DocumentId.HasValue)
         {
-            <div class="sqe-tab-pane" data-sqe-pane="workflow">
-                <partial name="~/Views/Approval/_WorkflowPanel.cshtml" model="@Model.DocumentId.Value" />
-            </div>
             <div class="sqe-tab-pane" data-sqe-pane="lineage">
                 <div id="sqLineageHost" data-doc-id="@Model.DocumentId.Value">
                     <div class="dlg-empty">Yükleniyor…</div>
@@ -2633,6 +2651,13 @@
         </div><!-- /sqe-tab-content -->
     </div><!-- /sqe-body -->
 </section>
+
+@* Onay Süreci sağ çekmecesi — İşlemler menüsünden açılır (bkz. sqActionOpenApproval).
+   2026-07-19: eski "Onay Akışı" sekmesi kaldırıldı, yerine bu çekmece geldi. *@
+@if (Model.DocumentId.HasValue)
+{
+    <partial name="~/Views/Approval/_WorkflowDrawer.cshtml" model="@Model.DocumentId.Value" />
+}
 
 @Html.AntiForgeryToken()
 
@@ -5219,6 +5244,17 @@
         try {
             window.dispatchEvent(new CustomEvent('quote:open-cost-summary', { detail: { lines: lines, validOn: validOn } }));
         } catch (_) {}
+    };
+
+    // ── Islemler: Onay Sureci — sag cekmeceyi ac (_WorkflowDrawer.cshtml, tek
+    //    kullaniciya sahip partial kendi acma/kapama/veri API'sini window.CalibraApprovalDrawer
+    //    uzerinden sunar). 2026-07-19: eski "Onay Akışı" sekmesinin yerini aldi.
+    window.sqActionOpenApproval = function (ev) {
+        if (ev) ev.stopPropagation();
+        sqCloseActionsMenu();
+        if (window.CalibraApprovalDrawer && typeof window.CalibraApprovalDrawer.open === 'function') {
+            window.CalibraApprovalDrawer.open();
+        }
     };
 
     window.sqDelete = async function () {
