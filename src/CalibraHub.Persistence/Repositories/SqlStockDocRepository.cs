@@ -1910,8 +1910,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // defterindeki katkısını AYNI transaction'da geri al. Aksi halde ihtiyaç satırı
             // karşılanmış görünmeye devam eder ve kaynak belge bir daha ASLA silinemez
             // ("karşılanmış kalem içerdiği için silinemez" guard'ı) — fiş silinmiş olsa bile.
-            // stockDocument: true → yalnız StockDoc tarafı tipleri; Document.Id ile karışmaz.
-            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, stockDocument: true, null, ct);
+            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct);
 
             await tx.CommitAsync(ct);
         }

@@ -5,13 +5,16 @@ namespace CalibraHub.Application.Contracts;
 /// DocumentLineFulfillment.FulfillmentType (TINYINT) kolonunda saklanır → mevcut sayısal
 /// değerler DEĞİŞTİRİLEMEZ, yalnızca yeni değer eklenebilir.
 ///
-/// KRİTİK — RefDocId iki AYRI tablodan gelir:
-///   • Stok tarafı  (Transfer, StockIssue)               → RefDocId = StockDoc.Id
-///   • Satın alma tarafı (Quote, Order, Demand)          → RefDocId = Document.Id
-/// İki tabloda aynı Id değeri BAŞKA belgelere aittir (StockDoc #3 ≠ Document #3). Bu yüzden
-/// deftere yapılan her sorgu — özellikle ters çevirme — HER ZAMAN tip ailesiyle birlikte
-/// filtrelenir. Tip filtresi unutulursa bir belgeyi silmek başka bir belgenin karşılamasını
-/// geri alır.
+/// Türün İKİ ayrı işlevi var, karıştırma:
+///   1) <b>Kova eşlemesi</b> — toplam hangi kolona yazılacak (FulfilledFromStock vs
+///      FulfilledByPurchase). <see cref="FulfillmentSourceKinds"/> bunu tanımlar.
+///   2) <b>İzlenebilirlik</b> — karşılamanın hangi iş akışından geldiği.
+///
+/// Tür, belgenin hangi TABLOda durduğunu göstermez: 2026-07-02'de stock_doc/stock_doc_line
+/// emekliye ayrıldı, transfer ve ambar çıkış fişleri de dbo.Document tablosunda tutuluyor.
+/// Yani RefDocId tek bir IDENTITY Id uzayındadır ve her değer tek bir belgeye aittir.
+/// Bu yüzden TERS ÇEVİRME türe göre filtrelenMEZ — yalnız RefDocId ile yapılır (gerekçe:
+/// Persistence/Repositories/FulfillmentLedger.ReverseByDocumentAsync).
 /// </summary>
 public enum FulfillmentSourceKind : byte
 {
@@ -29,6 +32,18 @@ public enum FulfillmentSourceKind : byte
 
     /// <summary>Satın alma talebi (Document) — FulfilledByPurchase kovası.</summary>
     PurchaseDemand = 5,
+
+    /// <summary>
+    /// Defter öncesi (2026-07-19 öncesi) oluşmuş stok karşılamasının temel çizgisi.
+    /// RefDocId NULL'dır → hiçbir ters çevirmeye takılmaz, kalıcı taban değeridir.
+    /// Gerekçe: toplamlar defterden türetildiği için, defterde kaydı olmayan eski karşılama
+    /// 0 katkı sayılırdı; aynı satıra yeni bir karşılama geldiğinde recalc her iki kovayı da
+    /// ezip eski miktarı SESSİZCE silerdi.
+    /// </summary>
+    LegacyStock = 6,
+
+    /// <summary>Defter öncesi oluşmuş satın alma karşılamasının temel çizgisi. Bkz. <see cref="LegacyStock"/>.</summary>
+    LegacyPurchase = 7,
 }
 
 /// <summary>
@@ -37,27 +52,26 @@ public enum FulfillmentSourceKind : byte
 /// </summary>
 public static class FulfillmentSourceKinds
 {
-    /// <summary>RefDocId → StockDoc.Id; toplamı FulfilledFromStock kovasına yazılır.</summary>
+    /// <summary>Toplamı DocumentLine.FulfilledFromStock kovasına yazılan türler.</summary>
     public static readonly IReadOnlyList<byte> StockSide = new byte[]
     {
         (byte)FulfillmentSourceKind.Transfer,
         (byte)FulfillmentSourceKind.StockIssue,
+        (byte)FulfillmentSourceKind.LegacyStock,
     };
 
-    /// <summary>RefDocId → Document.Id; toplamı FulfilledByPurchase kovasına yazılır.</summary>
+    /// <summary>Toplamı DocumentLine.FulfilledByPurchase kovasına yazılan türler.</summary>
     public static readonly IReadOnlyList<byte> PurchaseSide = new byte[]
     {
         (byte)FulfillmentSourceKind.PurchaseQuote,
         (byte)FulfillmentSourceKind.PurchaseOrder,
         (byte)FulfillmentSourceKind.PurchaseDemand,
+        (byte)FulfillmentSourceKind.LegacyPurchase,
     };
 
-    /// <summary>Bu tür stok tarafı mı (RefDocId bir StockDoc.Id mi)?</summary>
+    /// <summary>Bu tür stok kovasına mı yazılır?</summary>
     public static bool IsStockSide(FulfillmentSourceKind kind) =>
         kind is FulfillmentSourceKind.Transfer or FulfillmentSourceKind.StockIssue;
-
-    /// <summary>Silinen belgenin tarafına göre ters çevrilecek tür listesi.</summary>
-    public static IReadOnlyList<byte> For(bool stockDocument) => stockDocument ? StockSide : PurchaseSide;
 }
 
 /// <summary>

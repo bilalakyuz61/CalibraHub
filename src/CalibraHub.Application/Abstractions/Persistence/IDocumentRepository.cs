@@ -82,21 +82,12 @@ public interface IDocumentRepository
     /// <returns>Toplamları güncellenen ihtiyaç satırı sayısı.</returns>
     Task<int> AddFulfillmentEntriesAsync(IReadOnlyCollection<FulfillmentEntry> entries, int? userId, CancellationToken ct);
 
-    /// <summary>
-    /// 2026-07-19 — Bir KARŞILAYAN belge silindiğinde defterdeki katkısını pasifleştirir
-    /// (IsActive = 0) ve etkilenen İhtiyaç Kaydı satırlarının toplamlarını yeniden hesaplar.
-    ///
-    /// KRİTİK: <paramref name="stockDocument"/> zorunludur çünkü RefDocId iki ayrı tablodan
-    /// gelir — StockDoc.Id ve Document.Id aynı sayı olabilir. Taraf filtresi olmadan bir
-    /// belgeyi silmek başka bir belgenin karşılamasını geri alır.
-    ///
-    /// Kapatılmış (FulfillmentStatus = 3) satırlar kapalı KALIR: kapatma kullanıcının ayrı
-    /// bir kararıdır, karşılamanın geri alınması onu geçersiz kılmaz.
-    /// </summary>
-    /// <param name="refDocId">Silinen karşılama belgesinin Id'si.</param>
-    /// <param name="stockDocument">true → StockDoc (transfer/ambar çıkış); false → Document (teklif/sipariş/talep).</param>
-    /// <returns>Toplamları geri alınan ihtiyaç satırı sayısı (defterde kayıt yoksa 0).</returns>
-    Task<int> ReverseFulfillmentByDocumentAsync(int refDocId, bool stockDocument, int? userId, CancellationToken ct);
+    // NOT: ters çevirmenin (karşılama belgesi silinince katkıyı geri alma) burada bir
+    // sözleşmesi YOKTUR — bilinçli. İşlem, silme ile AYNI transaction'da yapılmak zorunda
+    // olduğu için doğrudan repo DeleteAsync'lerinin içinde, paylaşılan
+    // Persistence/Repositories/FulfillmentLedger.ReverseByDocumentAsync ile çalışır.
+    // Ayrı bir repo metodu olsaydı kendi bağlantısını açar ve "belge silindi ama karşılama
+    // geri alınmadı" yarım durumuna kapı aralardı.
 
     /// <summary>
     /// 2026-07-19 — İhtiyaç Kaydı satırının KALAN miktarını kapatır: FulfillmentStatus = 3

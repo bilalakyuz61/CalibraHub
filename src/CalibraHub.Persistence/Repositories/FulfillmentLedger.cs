@@ -8,9 +8,11 @@ namespace CalibraHub.Persistence.Repositories;
 ///
 /// Neden ayrı bir yardımcı: defteri İKİ repo değiştirir — <see cref="SqlDocumentRepository"/>
 /// (satın alma teklif/sipariş/talep) ve <see cref="SqlStockDocRepository"/> (transfer/ambar
-/// çıkış). İkisi de silme sırasında ters çevirmeyi KENDİ transaction'ı içinde yapmak zorunda:
-/// "belge silindi ama karşılama geri alınmadı" yarım durumu tam olarak düzeltmeye çalıştığımız
-/// hatanın kendisidir. <c>NegativeBalanceGuard</c> ile aynı desen (conn + tx + schema).
+/// çıkış). İkisi de AYNI fiziksel dbo.Document tablosuna yazar (2026-07-02 konsolidasyonu),
+/// ama ayrı silme kapılarından geçer. İkisi de ters çevirmeyi KENDİ transaction'ı içinde
+/// yapmak zorunda: "belge silindi ama karşılama geri alınmadı" yarım durumu tam olarak
+/// düzeltmeye çalıştığımız hatanın kendisidir.
+/// <c>NegativeBalanceGuard</c> ile aynı desen (conn + tx + schema).
 ///
 /// Toplamlar (DocumentLine.FulfilledFromStock / FulfilledByPurchase) TÜRETİLMİŞ değerdir:
 /// defterdeki aktif satırların toplamı. Doğruluk kaynağı defterdir; kolonlar okuma kolaylığı
@@ -73,7 +75,8 @@ internal static class FulfillmentLedger
                    [FulfilledByPurchase] = ISNULL(agg.ByPurchase, 0),
                    [FulfillmentStatus]   = CASE
                        {closedGuard}
-                       WHEN (ISNULL(agg.FromStock, 0) + ISNULL(agg.ByPurchase, 0)) >= dl.[Quantity] THEN 2
+                       WHEN dl.[Quantity] > 0
+                            AND (ISNULL(agg.FromStock, 0) + ISNULL(agg.ByPurchase, 0)) >= dl.[Quantity] THEN 2
                        WHEN (ISNULL(agg.FromStock, 0) + ISNULL(agg.ByPurchase, 0)) > 0              THEN 1
                        ELSE 0
                    END
@@ -87,9 +90,16 @@ internal static class FulfillmentLedger
     /// Bir karşılama belgesinin defterdeki katkısını pasifleştirir ve etkilenen ihtiyaç
     /// satırlarının toplamlarını yeniden hesaplar — ÇAĞIRANIN transaction'ı içinde.
     ///
-    /// KRİTİK: <paramref name="stockDocument"/> zorunludur. RefDocId iki AYRI tablodan gelir
-    /// (StockDoc.Id ve Document.Id) ve aynı sayı olabilir; taraf filtresi olmadan bir belgeyi
-    /// silmek alakasız başka bir belgenin karşılamasını geri alır.
+    /// Ters çevirme YALNIZCA <paramref name="refDocId"/> ile yapılır, karşılama türüne göre
+    /// filtrelenmez. Gerekçe: 2026-07-02'de stock_doc/stock_doc_line emekliye ayrıldı; transfer
+    /// ve ambar çıkış fişleri de artık dbo.Document tablosunda tutuluyor (bkz.
+    /// SqlStockDocRepository sınıf başlığı). Tek IDENTITY Id uzayı olduğu için bir belge Id'si
+    /// tek bir belgeye aittir — çakışma yoktur.
+    ///
+    /// Tür filtresi eklemek AKTİF ZARARLI olurdu: filtre "hangi tablo"yu değil "hangi silme
+    /// kapısından geçildiği"ni bölerdi. Kapı ile karşılama türü eşleşmezse (örn. bir depo fişi
+    /// Id'si Sales silme endpoint'ine düşerse) ters çevirme SESSİZCE atlanır ve ihtiyaç satırı
+    /// sonsuza dek karşılanmış kalırdı — tam olarak bu defterin düzelttiği hata.
     /// </summary>
     /// <returns>Toplamları geri alınan ihtiyaç satırı sayısı (defterde kayıt yoksa 0).</returns>
     public static async Task<int> ReverseByDocumentAsync(
@@ -97,7 +107,6 @@ internal static class FulfillmentLedger
         SqlTransaction tx,
         string schema,
         int refDocId,
-        bool stockDocument,
         int? userId,
         CancellationToken ct)
     {
@@ -105,7 +114,6 @@ internal static class FulfillmentLedger
 
         var ledgerTable = $"[{schema}].[DocumentLineFulfillment]";
         var lineTable   = $"[{schema}].[DocumentLine]";
-        var types       = string.Join(", ", FulfillmentSourceKinds.For(stockDocument));
 
         // 1) Etkilenen ihtiyaç satırlarını pasifleştirmeden ÖNCE tespit et (sonra bulunamazlar)
         var lineIds = new List<int>();
@@ -116,8 +124,7 @@ internal static class FulfillmentLedger
                 SELECT DISTINCT [RequestLineId]
                   FROM {ledgerTable}
                  WHERE [IsActive] = 1
-                   AND [RefDocId] = @RefDocId
-                   AND [FulfillmentType] IN ({types});
+                   AND [RefDocId] = @RefDocId;
                 """;
             find.Parameters.Add(new SqlParameter("@RefDocId", refDocId));
             await using var r = await find.ExecuteReaderAsync(ct);
@@ -136,8 +143,7 @@ internal static class FulfillmentLedger
                        [UpdatedById] = @User,
                        [Updated]     = SYSUTCDATETIME()
                  WHERE [IsActive] = 1
-                   AND [RefDocId] = @RefDocId
-                   AND [FulfillmentType] IN ({types});
+                   AND [RefDocId] = @RefDocId;
                 """;
             deactivate.Parameters.Add(new SqlParameter("@RefDocId", refDocId));
             deactivate.Parameters.Add(new SqlParameter("@User", (object?)userId ?? DBNull.Value));

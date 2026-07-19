@@ -695,13 +695,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
-            // Bu belge bir İhtiyaç Kaydı'nı karşılıyorduysa (satın alma teklif/sipariş/talep),
-            // defterdeki katkısını AYNI transaction'da geri al. Ayrı çağrı olarak yapılsaydı
-            // "belge silindi, karşılama geri alınmadı" yarım durumu oluşabilirdi — ki bu tam
-            // olarak düzeltmeye çalıştığımız hatanın kendisi (ihtiyaç satırı sonsuza dek
-            // karşılanmış görünür ve kaynak belge bir daha silinemez).
-            // stockDocument: false → yalnız Document tarafı tipleri; StockDoc.Id ile karışmaz.
-            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, stockDocument: false, null, ct);
+            // Bu belge bir İhtiyaç Kaydı'nı karşılıyorduysa, defterdeki katkısını AYNI
+            // transaction'da geri al. Ayrı çağrı olarak yapılsaydı "belge silindi, karşılama
+            // geri alınmadı" yarım durumu oluşabilirdi — ki bu tam olarak düzeltmeye
+            // çalıştığımız hatanın kendisi (ihtiyaç satırı sonsuza dek karşılanmış görünür ve
+            // kaynak belge bir daha silinemez).
+            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct);
 
             await tx.CommitAsync(ct);
         }
@@ -1100,23 +1099,6 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         }
     }
 
-    public async Task<int> ReverseFulfillmentByDocumentAsync(int refDocId, bool stockDocument, int? userId, CancellationToken ct)
-    {
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var tx   = (SqlTransaction)await conn.BeginTransactionAsync(ct);
-        try
-        {
-            var n = await FulfillmentLedger.ReverseByDocumentAsync(
-                conn, tx, _schema, refDocId, stockDocument, userId, ct);
-            await tx.CommitAsync(ct);
-            return n;
-        }
-        catch
-        {
-            try { await tx.RollbackAsync(ct); } catch { /* bağlantı düşmüşse yut */ }
-            throw;
-        }
-    }
 
     /// <summary>
     /// Satirlarin KALAN miktarini kapatir (FulfillmentStatus = 3). Karsilanan miktarlar korunur.

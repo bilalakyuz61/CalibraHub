@@ -1890,12 +1890,22 @@ public sealed class PurchaseController : Controller
 
             await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
             await using var cmdFetch = conn.CreateCommand();
+            // GEÇERLİLİK FİLTRESİ (zorunlu): lineIds doğrudan istemciden gelir. Belge tipi
+            // kısıtlanmazsa kullanıcı buraya bir satış siparişinin satır Id'sini gönderip o
+            // satırın FulfilledByPurchase'ını artırabilir — ve o belge "karşılanmış kalem
+            // içeriyor" guard'ı yüzünden bir daha silinemez hale gelir. Yani düzeltilen
+            // "sonsuza dek kilitli belge" hatası başka bir kapıdan üretilebilirdi.
+            // Yalnız İhtiyaç Kaydı (alis_talebi) satırları karşılanabilir.
             cmdFetch.CommandText = $"""
                 SELECT dl.[Id], dl.[DocumentId], dl.[ItemId], dl.[UnitId], dl.[Quantity],
                        ISNULL(dl.[FulfilledByPurchase],0), ISNULL(dl.[FulfilledFromStock],0),
                        dl.[CombinationId], dl.[Notes]
                 FROM [{s}].[DocumentLine] dl
-                WHERE dl.[Id] IN ({paramList});
+                INNER JOIN [{s}].[Document] d      ON d.[Id]  = dl.[DocumentId]
+                INNER JOIN [{s}].[DocumentType] dt ON dt.[Id] = d.[DocumentTypeId]
+                WHERE dl.[Id] IN ({paramList})
+                  AND d.[IsActive] = 1
+                  AND dt.[Code] = 'alis_talebi';
                 """;
             for (var i = 0; i < lineIds.Count; i++)
                 cmdFetch.Parameters.Add(new SqlParameter($"@lid{i}", lineIds[i]));

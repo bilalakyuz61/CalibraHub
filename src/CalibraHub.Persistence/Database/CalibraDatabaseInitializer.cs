@@ -8278,9 +8278,9 @@ END;";
                     -- 4=StockIssue (StockDoc), 5=PurchaseDemand (Document)
                     -- Bkz. Application/Contracts/FulfillmentLedgerContracts.cs (tek dogruluk kaynagi).
                     [FulfillmentType]  TINYINT       NOT NULL,
-                    -- Karsilayan BELGE Id'si. DIKKAT: tip ailesine gore AYRI tablodan gelir —
-                    -- tip 1 ve 4 icin StockDoc.Id, tip 2/3/5 icin Document.Id. Ayni sayi iki
-                    -- tabloda farkli belgedir; sorgular her zaman [FulfillmentType] ile filtrelenir.
+                    -- Karsilayan BELGE Id'si -> her zaman dbo.Document(Id). Transfer/ambar cikis
+                    -- fisleri de 2026-07-02 konsolidasyonundan beri ayni tabloda; tek Id uzayi.
+                    -- Ters cevirme yalniz bu kolonla eslesir, tipe gore filtrelenmez.
                     [RefDocId]         INT           NULL,
                     -- Karsilayan SATIR Id'si — biliniyorsa. Belge kaydedildigi anda satir Id'leri
                     -- cogunlukla elde olmadigi icin NULL olabilir; ters cevirme RefDocId uzerinden yapilir.
@@ -8325,6 +8325,44 @@ END;";
                 IF NOT EXISTS (SELECT 1 FROM sys.indexes
                                 WHERE object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]') AND name = N'IX_DLF_RefDoc')
                     CREATE INDEX [IX_DLF_RefDoc] ON [{s}].[DocumentLineFulfillment]([FulfillmentType], [RefDocId]) WHERE [IsActive] = 1;
+
+                -- Cift-sayma korumasi: ayni belge ayni ihtiyac satirini ayni turden iki kez
+                -- karsilayamaz. Cift tiklama / istemci retry ikinci INSERT'i yaparsa toplam
+                -- iki katina cikardi ve defter kalici yanlis kayit birakirdi.
+                -- Filtered unique (soft-delete safe): ters cevrilmis (IsActive=0) satirlar
+                -- kisitin disinda kalir, boylece silip yeniden karsilama serbesttir.
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                                WHERE object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]') AND name = N'UX_DLF_Line_Type_Doc')
+                    CREATE UNIQUE INDEX [UX_DLF_Line_Type_Doc] ON [{s}].[DocumentLineFulfillment]
+                        ([RequestLineId], [FulfillmentType], [RefDocId]) WHERE [IsActive] = 1 AND [RefDocId] IS NOT NULL;
+
+                -- ── LEGACY BACKFILL (tek seferlik, idempotent) ──────────────────────────
+                -- Defter devreye alinmadan once olusmus karsilamalarin defterde kaydi yok.
+                -- Toplamlar artik DEFTERDEN turetildigi icin, boyle bir satira YENI bir
+                -- karsilama geldiginde recalc her iki kovayi da yeniden yazar ve eski miktar
+                -- SESSIZCE silinir (orn. 5 stok + yeni 5 satinalma -> 10/10 yerine 5/10).
+                -- Cozum: eski miktari RefDocId NULL "temel cizgi" satiri olarak deftere yaz.
+                -- RefDocId NULL oldugu icin ters cevirme ([RefDocId] = @RefDocId) bunlara
+                -- ASLA dokunmaz — kalici taban degeri olarak kalirlar.
+                -- Tur 6 = LegacyStock, 7 = LegacyPurchase (bkz. FulfillmentLedgerContracts.cs).
+                INSERT INTO [{s}].[DocumentLineFulfillment]
+                    ([RequestLineId], [FulfillmentType], [RefDocId], [Quantity], [Notes], [IsActive], [Created])
+                SELECT dl.[Id], 6, NULL, dl.[FulfilledFromStock],
+                       N'Defter oncesi karsilama (otomatik temel cizgi)', 1, SYSUTCDATETIME()
+                  FROM [{s}].[DocumentLine] dl
+                 WHERE ISNULL(dl.[FulfilledFromStock], 0) > 0
+                   AND NOT EXISTS (SELECT 1 FROM [{s}].[DocumentLineFulfillment] f
+                                    WHERE f.[RequestLineId] = dl.[Id] AND f.[IsActive] = 1);
+
+                INSERT INTO [{s}].[DocumentLineFulfillment]
+                    ([RequestLineId], [FulfillmentType], [RefDocId], [Quantity], [Notes], [IsActive], [Created])
+                SELECT dl.[Id], 7, NULL, dl.[FulfilledByPurchase],
+                       N'Defter oncesi karsilama (otomatik temel cizgi)', 1, SYSUTCDATETIME()
+                  FROM [{s}].[DocumentLine] dl
+                 WHERE ISNULL(dl.[FulfilledByPurchase], 0) > 0
+                   AND NOT EXISTS (SELECT 1 FROM [{s}].[DocumentLineFulfillment] f
+                                    WHERE f.[RequestLineId] = dl.[Id] AND f.[IsActive] = 1
+                                      AND f.[FulfillmentType] <> 6);
             END
 
             -- Migration: [CreatedBy]/[UpdatedBy] NVARCHAR -> [CreatedById]/[UpdatedById] INT
