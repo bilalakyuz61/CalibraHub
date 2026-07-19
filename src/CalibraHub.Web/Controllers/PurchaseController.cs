@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
-using CalibraHub.Application.Security;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models;
@@ -40,7 +39,6 @@ public sealed class PurchaseController : Controller
     private readonly ICompanyParameterService _companyParams;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IUserSettingRepository _userSettingRepo;
-    private readonly IPermissionService _permService;
     private readonly string _schema;
     private const string FlatColCfgKey = "ui.fc3.col-cfg-flat";
 
@@ -55,7 +53,6 @@ public sealed class PurchaseController : Controller
         ICompanyParameterService companyParams,
         SqlServerConnectionFactory connectionFactory,
         IUserSettingRepository userSettingRepo,
-        IPermissionService permService,
         CalibraDatabaseOptions dbOptions)
     {
         _documentService   = documentService;
@@ -68,24 +65,15 @@ public sealed class PurchaseController : Controller
         _companyParams     = companyParams;
         _connectionFactory = connectionFactory;
         _userSettingRepo   = userSettingRepo;
-        _permService       = permService;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     private int? CurrentUserId() => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
-    /// <summary>
-    /// SmartBoard kart "İşlemler" menüsündeki "İşlem Logu" aksiyonu AUDIT_LOG:VIEW|VIEW_OWN
-    /// yetkisi olmayan kullanıcıya hiç gösterilmez. Board başına TEK sorgu.
-    /// </summary>
-    private async Task<bool> CanViewAuditLogAsync(CancellationToken ct)
-    {
-        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
-        int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
-        return await _permService.CheckAnyAsync(CurrentUserId() ?? 0, role, deptId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
-    }
-
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.</summary>
+    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
+    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
+    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
+    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
     private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
     {
         var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
@@ -342,8 +330,6 @@ public sealed class PurchaseController : Controller
         var purchaseReqApprovalEnabled = !string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase)
             || await _companyParams.GetStringAsync(
                    ApprovalParameters.FormCode, ApprovalParameters.EnabledKey("PurchaseRequest"), ct) != "false";
-        // "İşlem Logu" kart aksiyonu — AUDIT_LOG yetkisi board başına tek kez kontrol edilir.
-        var canViewAuditLog = await CanViewAuditLogAsync(ct);
         var auditFormCode = DocumentTypeFormMap.Resolve(typeCode).Header;
 
         var entities = new List<object>();
@@ -438,8 +424,7 @@ public sealed class PurchaseController : Controller
                     disabled       = !isDraft,
                 });
             }
-            if (canViewAuditLog)
-                extraActionsList.Add(BuildAuditLogAction(typeCode, doc.Id, auditFormCode));
+            extraActionsList.Add(BuildAuditLogAction(typeCode, doc.Id, auditFormCode));
             var extraActions = extraActionsList.ToArray();
 
             entities.Add(new

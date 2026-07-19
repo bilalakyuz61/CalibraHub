@@ -148,7 +148,10 @@ public sealed class SalesController : Controller
         return int.TryParse(raw, out var id) ? id : null;
     }
 
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.</summary>
+    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
+    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
+    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
+    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
     private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
     {
         var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
@@ -195,7 +198,6 @@ public sealed class SalesController : Controller
         // da dusuyordu (bug raporu 2026-05-20). GetByTypeAsync ile dogru filtrelenir.
         var quotes = await _quoteService.GetByTypeAsync("satis_teklifi", search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
-        var canViewAuditLog = await HasFormPermissionAsync(FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
         var quoteAuditFormCode = DocumentTypeFormMap.Resolve("satis_teklifi").Header;
 
         // 2026-05-24: SmartBoardFilterHelpers ile standardize.
@@ -374,9 +376,8 @@ public sealed class SalesController : Controller
                         submitLabel = "Gonder",
                         successMessage = "Mail kuyruga alindi",
                     },
-                }.Concat(canViewAuditLog
-                    ? new object[] { BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode) }
-                    : Array.Empty<object>()).ToArray(),
+                    BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode),
+                },
             });
         }
 
@@ -426,7 +427,6 @@ public sealed class SalesController : Controller
     {
         var orders = await _quoteService.GetByTypeAsync("satis_siparisi", search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
-        var canViewAuditLog = await HasFormPermissionAsync(FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
         var orderAuditFormCode = DocumentTypeFormMap.Resolve("satis_siparisi").Header;
 
         // 2026-05-24: SmartBoardFilterHelpers — admin form widgets + sistem alanlar collapsible
@@ -485,9 +485,7 @@ public sealed class SalesController : Controller
                     precheckUrl = $"/Sales/CanDeleteDocumentJson?id={order.Id}",
                     confirm = $"Bu siparisi silmek istediginizden emin misiniz? ({order.DocumentNumber})",
                 },
-                extraActions = canViewAuditLog
-                    ? new object[] { BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode) }
-                    : Array.Empty<object>(),
+                extraActions = new object[] { BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode) },
             });
         }
 
@@ -547,7 +545,6 @@ public sealed class SalesController : Controller
     {
         var docs = await _quoteService.GetByTypeAsync("satis_irsaliyesi", search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
-        var canViewAuditLog = await HasFormPermissionAsync(FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
         var deliveryAuditFormCode = DocumentTypeFormMap.Resolve("satis_irsaliyesi").Header;
 
         var schema = await _widgetService.GetFormSchemaByCodeAsync("SALES_DELIVERY_EDIT", ct);
@@ -601,9 +598,7 @@ public sealed class SalesController : Controller
                     apiUrl = $"/Sales/DeleteDocumentJson?id={doc.Id}",
                     precheckUrl = $"/Sales/CanDeleteDocumentJson?id={doc.Id}",
                     confirm = $"Bu irsaliyeyi silmek istediginizden emin misiniz? ({doc.DocumentNumber})" },
-                extraActions = canViewAuditLog
-                    ? new object[] { BuildAuditLogAction("satis_irsaliyesi", doc.Id, deliveryAuditFormCode) }
-                    : Array.Empty<object>(),
+                extraActions = new object[] { BuildAuditLogAction("satis_irsaliyesi", doc.Id, deliveryAuditFormCode) },
             });
         }
 

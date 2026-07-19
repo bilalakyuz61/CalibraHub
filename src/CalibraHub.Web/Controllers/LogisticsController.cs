@@ -1,7 +1,6 @@
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
-using CalibraHub.Application.Security;
 using CalibraHub.Application.Ui;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Models.Logistics;
@@ -25,7 +24,6 @@ public sealed class LogisticsController : Controller
     private readonly ICurrencyService _currencyService;
     private readonly Application.Abstractions.Persistence.ICardGroupRepository _cardGroupRepo;
     private readonly ILogger<LogisticsController> _logger;
-    private readonly IPermissionService _permService;
 
     public LogisticsController(
         ILogisticsConfigurationService logisticsConfigurationService,
@@ -35,8 +33,7 @@ public sealed class LogisticsController : Controller
         IPriceListService priceListService,
         ICurrencyService currencyService,
         Application.Abstractions.Persistence.ICardGroupRepository cardGroupRepo,
-        ILogger<LogisticsController> logger,
-        IPermissionService permService)
+        ILogger<LogisticsController> logger)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _uiConfigurationService = uiConfigurationService;
@@ -46,7 +43,6 @@ public sealed class LogisticsController : Controller
         _currencyService = currencyService;
         _cardGroupRepo = cardGroupRepo;
         _logger = logger;
-        _permService = permService;
     }
 
     private int GetCompanyId()
@@ -55,19 +51,10 @@ public sealed class LogisticsController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
-    /// <summary>
-    /// SmartBoard kart "İşlemler" menüsündeki "İşlem Logu" aksiyonu AUDIT_LOG:VIEW|VIEW_OWN
-    /// yetkisi olmayan kullanıcıya hiç gösterilmez. Sayfa/sayfalama başına TEK sorgu.
-    /// </summary>
-    private async Task<bool> CanViewAuditLogAsync(CancellationToken ct)
-    {
-        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
-        int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
-        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : 0;
-        return await _permService.CheckAnyAsync(userId, role, deptId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
-    }
-
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.</summary>
+    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
+    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
+    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
+    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
     private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
     {
         var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
@@ -359,7 +346,6 @@ public sealed class LogisticsController : Controller
         // UnitId ? UnitCode cevirici — ItemUnit.UnitId int, filter UnitCode string match yapar.
         var allUnitsLookup = (await _logisticsConfigurationService.GetUnitsAsync(ct))
             .ToDictionary(u => u.Id, u => u.Code, EqualityComparer<int>.Default);
-        var canViewAuditLog = await CanViewAuditLogAsync(ct);
 
         var trCulture = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
 
@@ -563,9 +549,7 @@ public sealed class LogisticsController : Controller
                     apiUrl = $"/Logistics/DeleteMaterialCardJson?id={card.Id}",
                     confirm = "Bu malzeme kartini silmek istediginizden emin misiniz?"
                 },
-                extraActions = canViewAuditLog
-                    ? new object[] { BuildAuditLogAction("Item", card.Id, FormCodes.MaterialCardEdit) }
-                    : Array.Empty<object>(),
+                extraActions = new object[] { BuildAuditLogAction("Item", card.Id, FormCodes.MaterialCardEdit) },
             });
         }
         return entities;

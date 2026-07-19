@@ -127,21 +127,10 @@ public sealed class WarehouseController : Controller
         return await _permService.CheckAnyAsync(CurrentUserId() ?? 0, role, deptId, formCode, actionCodes, ct);
     }
 
-    /// <summary>
-    /// SmartBoard kart "İşlemler" menüsündeki "İşlem Logu" aksiyonu AUDIT_LOG:VIEW|VIEW_OWN
-    /// yetkisi olmayan kullanıcıya hiç gösterilmez. Board başına TEK sorgu (entity loop'unda
-    /// tekrar edilmez) — çağıran, entities listesi kurulmadan ÖNCE bir kez çağırır.
-    /// Hedef /AuditLog?entity=&amp;recordId= zaten kayda-kilitli modda yalnızca [Authorize]
-    /// ister (AuditLogController.Index) — bu kontrol yalnızca menü öğesinin görünürlüğü içindir.
-    /// </summary>
-    private async Task<bool> CanViewAuditLogAsync(CancellationToken ct)
-    {
-        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
-        int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
-        return await _permService.CheckAnyAsync(CurrentUserId() ?? 0, role, deptId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
-    }
-
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.</summary>
+    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
+    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
+    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
+    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
     private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
     {
         var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
@@ -1212,7 +1201,6 @@ public sealed class WarehouseController : Controller
     {
         var docs = await _stockDocRepo.GetByTypeAsync("TRANSFER", ct);
         var tr = CultureInfo.GetCultureInfo("tr-TR");
-        var canViewAuditLog = await CanViewAuditLogAsync(ct);
         var masterWidgets = new List<object>
         {
             SmartBoardFilterHelpers.MakeStdWidget("w_depo",  "Depo",  "text"),
@@ -1246,9 +1234,7 @@ public sealed class WarehouseController : Controller
                 apiMethod = "POST",
                 confirm = $"Bu transfer belgesini silmek istediğinizden emin misiniz? ({d.DocNo})",
             },
-            extraActions = canViewAuditLog
-                ? new object[] { BuildAuditLogAction(AuditEntityFor("TRANSFER"), d.Id, FormCodes.Transfer) }
-                : Array.Empty<object>(),
+            extraActions = new object[] { BuildAuditLogAction(AuditEntityFor("TRANSFER"), d.Id, FormCodes.Transfer) },
         }).ToList();
 
         return new
@@ -1283,7 +1269,6 @@ public sealed class WarehouseController : Controller
         string[] docTypes = isIn ? ["STOCK_IN"] : isOut ? ["STOCK_OUT"] : ["STOCK_IN", "STOCK_OUT"];
         var docs = await _stockDocRepo.GetByTypesAsync(docTypes, ct);
         var tr = CultureInfo.GetCultureInfo("tr-TR");
-        var canViewAuditLog = await CanViewAuditLogAsync(ct);
         var typeOptions = SmartBoardFilterHelpers.ToOptionsList(new[] { "Giriş", "Çıkış" });
         var masterWidgets = new List<object>
         {
@@ -1324,9 +1309,7 @@ public sealed class WarehouseController : Controller
                 apiMethod = "POST",
                 confirm = $"Bu belgeyi silmek istediğinizden emin misiniz? ({d.DocNo})",
             },
-            extraActions = canViewAuditLog
-                ? new object[] { BuildAuditLogAction(AuditEntityFor(d.DocType), d.Id, d.DocType) }
-                : Array.Empty<object>(),
+            extraActions = new object[] { BuildAuditLogAction(AuditEntityFor(d.DocType), d.Id, d.DocType) },
         }).ToList();
 
         var actions = isIn
@@ -1541,7 +1524,6 @@ public sealed class WarehouseController : Controller
         var docs = await _stockDocRepo.GetByTypeAsync("INVENTORY_COUNT", ct);
         var appliedIds = await _inventoryCountRepo.GetAppliedDocumentIdsAsync(ct);
         var tr   = CultureInfo.GetCultureInfo("tr-TR");
-        var canViewAuditLog = await CanViewAuditLogAsync(ct);
         var masterWidgets = new List<object>
         {
             SmartBoardFilterHelpers.MakeStdWidget("w_depo",  "Depo",  "text"),
@@ -1588,9 +1570,7 @@ public sealed class WarehouseController : Controller
                         apiMethod = "POST",
                         confirm   = $"Bu sayım belgesini silmek istediğinizden emin misiniz? ({d.DocNo})",
                     },
-                extraActions = canViewAuditLog
-                    ? new object[] { BuildAuditLogAction(AuditEntityFor("INVENTORY_COUNT"), d.Id, FormCodes.InventoryCount) }
-                    : Array.Empty<object>(),
+                extraActions = new object[] { BuildAuditLogAction(AuditEntityFor("INVENTORY_COUNT"), d.Id, FormCodes.InventoryCount) },
             };
         }).ToList();
 

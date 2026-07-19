@@ -2,12 +2,10 @@ using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
-using CalibraHub.Application.Security;
 using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -19,7 +17,6 @@ public sealed class FinanceController : Controller
     private readonly IDocumentService _documentService;
     private readonly IDocumentTypeRepository _docTypeRepo;
     private readonly ISalesRepresentativeService _salesRepService;
-    private readonly IPermissionService _permService;
 
     private const int DefaultPageSize = 50;
 
@@ -28,30 +25,19 @@ public sealed class FinanceController : Controller
         IWidgetService widgetService,
         IDocumentService documentService,
         IDocumentTypeRepository docTypeRepo,
-        ISalesRepresentativeService salesRepService,
-        IPermissionService permService)
+        ISalesRepresentativeService salesRepService)
     {
         _financeService = financeService;
         _widgetService = widgetService;
         _documentService = documentService;
         _docTypeRepo = docTypeRepo;
         _salesRepService = salesRepService;
-        _permService = permService;
     }
 
-    /// <summary>
-    /// SmartBoard kart "İşlemler" menüsündeki "İşlem Logu" aksiyonu AUDIT_LOG:VIEW|VIEW_OWN
-    /// yetkisi olmayan kullanıcıya hiç gösterilmez. Sayfa/sayfalama başına TEK sorgu.
-    /// </summary>
-    private async Task<bool> CanViewAuditLogAsync(CancellationToken ct)
-    {
-        UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
-        int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
-        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : 0;
-        return await _permService.CheckAnyAsync(userId, role, deptId, FormCodes.AuditLog, new[] { "VIEW", "VIEW_OWN" }, ct);
-    }
-
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.</summary>
+    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
+    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
+    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
+    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
     private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
     {
         var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
@@ -349,7 +335,6 @@ public sealed class FinanceController : Controller
         var batchWidgets = recordIds.Length > 0
             ? await _widgetService.GetBatchRenderModelsAsync("CONTACTS", recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
-        var canViewAuditLog = await CanViewAuditLogAsync(ct);
 
         var entities = new List<object>();
         foreach (var account in accounts)
@@ -407,9 +392,7 @@ public sealed class FinanceController : Controller
                     apiUrl = $"/Finance/DeleteContactJson?id={account.Id}",
                     confirm = $"Bu cari hesabi silmek istediginizden emin misiniz? ({account.AccountCode} — {account.AccountTitle})",
                 },
-                extraActions = canViewAuditLog
-                    ? new object[] { BuildAuditLogAction("Contact", account.Id, FormCodes.Contacts) }
-                    : Array.Empty<object>(),
+                extraActions = new object[] { BuildAuditLogAction("Contact", account.Id, FormCodes.Contacts) },
             });
         }
         return entities;
