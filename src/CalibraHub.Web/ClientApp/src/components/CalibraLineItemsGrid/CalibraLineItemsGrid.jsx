@@ -120,10 +120,27 @@ export default function CalibraLineItemsGrid(props) {
 
   var allColumns = useMemo(function () {
     var src = Array.isArray(config.columns) ? config.columns : []
-    if (!decimalCfg) return src
     return src.map(function (c) {
-      var p = resolveColumnDecimals(c, decimalCfg)
-      return p == null ? c : Object.assign({}, c, { precision: p })
+      var out = Object.assign({}, c)
+      if (decimalCfg) {
+        var p = resolveColumnDecimals(c, decimalCfg)
+        if (p != null) out.precision = p
+      }
+      // Zorunlu-pozitif dogrulama (ör. Miktar) — kolon config'i ACIKCA
+      // requirePositive:true/false belirtmediyse, sayisal tip + key==='quantity'
+      // kolonunda varsayilan ACIK. 'quantity' zaten bu grid'in kendi ic
+      // mantiginda (handleCellChange, footer hasEmptyRow vb.) sabit/kanonik
+      // anahtar olarak kullaniliyor — korukoru bir tahmin degil. decimalCfg'den
+      // BAGIMSIZ cozulur: miktar dogrulamasi network round-trip'e bagli
+      // olmamali, ilk render'dan itibaren aktif olmali.
+      // Ileride baska bir sayisal kolonu da ayni kurala tabi tutmak icin
+      // backend requirePositive:true set edebilir; kapatmak icin de
+      // requirePositive:false yeterli.
+      if (out.requirePositive !== true && out.requirePositive !== false) {
+        var isNumericType = out.type === 'number' || out.type === 'currency' || out.type === 'percent'
+        out.requirePositive = isNumericType && out.key === 'quantity'
+      }
+      return out
     })
   }, [config.columns, decimalCfg])
   // Kolonlari yerlesime gore ayir:
@@ -914,6 +931,25 @@ export default function CalibraLineItemsGrid(props) {
   function canDelete(row) { return !isRowLocked(row) && row.__canDelete !== false }
   function canModify(row) { return !isRowLocked(row) }
 
+  // ── Zorunlu-pozitif (ör. Miktar) dogrulama — satir seviyesinde ──
+  // Yalnizca satirda zaten icerik (materialCode) VARSA degerlendirir — henuz
+  // stok kodu secilmemis tamamen bos/yeni satir bu isaretle kirmizi boyanmaz
+  // (kullanici daha yeni ekledi). Icerik varsa VE herhangi bir requirePositive
+  // kolonu bos/<=0 ise true doner. NumericCell'deki hucre-ici kirmizi kenarlik
+  // ile ayni "satir icerigi var mi" kuralini paylasir — bkz. LineGridCell.jsx.
+  function rowHasInvalidRequiredQty(row) {
+    var hasContent = !!(row && row.materialCode != null && String(row.materialCode).trim() !== '')
+    if (!hasContent) return false
+    for (var i = 0; i < columns.length; i++) {
+      var c = columns[i]
+      if (c.requirePositive !== true) continue
+      var v = row[c.key]
+      var n = typeof v === 'number' ? v : (v == null || v === '' ? null : parseFloat(String(v).replace(',', '.')))
+      if (v == null || v === '' || n == null || isNaN(n) || n <= 0) return true
+    }
+    return false
+  }
+
   // ── Not paneli toggle ──
   // Panel acik: manuel acildi (openNoteRows[uid]) VEYA satir pinli (row.notesPinned)
   // ONEMLI: Yalniz dolu olmak panele otomatik acilma saglamaz — kullanici not simgesiyle acar.
@@ -1082,7 +1118,7 @@ export default function CalibraLineItemsGrid(props) {
             >
               <Icon size={11} strokeWidth={1.8} className="text-slate-400 dark:text-white/40 flex-shrink-0" />
               <span className="truncate">{col.label}</span>
-              {col.required && <span className="text-rose-500 dark:text-rose-400">*</span>}
+              {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
             </div>
           )
         })}
@@ -1271,6 +1307,23 @@ export default function CalibraLineItemsGrid(props) {
                         </div>
                       )
                     })}
+                    {/* Zorunlu-pozitif (Miktar) uyari seridi — satirin SOL kenarinda ince
+                        kirmizi cizgi. Sadece satirda icerik (materialCode) varken ve bir
+                        requirePositive kolonu bos/<=0 iken gorunur (bkz. rowHasInvalidRequiredQty).
+                        Uzun listede sorunlu satiri hucrelere tek tek girmeden taramaya yarar.
+                        Silme geri sayim cubugu ile ayni "satir-ici absolute overlay" deseni —
+                        farkli kenarda (sol/tam yukseklik) oldugu icin aksiyon butonlariyla
+                        cakismaz, tiklamayi engellemesin diye pointer-events:none. */}
+                    {rowHasInvalidRequiredQty(row) && !isPending && (
+                      <div
+                        style={{
+                          position: 'absolute', left: 0, top: 0, bottom: 0,
+                          width: 3, zIndex: 4, pointerEvents: 'none',
+                          background: '#ef4444',
+                          boxShadow: '0 0 6px rgba(239,68,68,.6)',
+                        }}
+                      />
+                    )}
                     {/* Silme geri sayim cubugu — satir seviyesinde, kod kolonundan baslar,
                         170px aksiyon alanini atlar, satirin sag ucuna kadar uzanir.
                         Bar 3 saniyede 0'a kuculur (sagdan sola). */}

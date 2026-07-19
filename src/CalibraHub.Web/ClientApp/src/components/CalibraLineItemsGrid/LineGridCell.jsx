@@ -172,7 +172,7 @@ export default function LineGridCell(props) {
 
   // ── Number / Currency / Percent ────────────────────
   if (column.type === 'number' || column.type === 'currency' || column.type === 'percent') {
-    return <NumericCell column={column} value={value} onChange={onChange} baseInputClass={baseInputClass} />
+    return <NumericCell column={column} row={row} value={value} onChange={onChange} baseInputClass={baseInputClass} />
   }
 
   // ── Combination Lookup (Kombinasyon Seçici) ────────
@@ -490,10 +490,14 @@ function SelectCell(props) {
    ══════════════════════════════════════════════════════════════ */
 function NumericCell(props) {
   var column = props.column
+  var row = props.row
   var value = props.value
   var onChange = props.onChange
   var [focused, setFocused] = useState(false)
   var [localText, setLocalText] = useState('')
+  // touched: kullanici bu hucreden en az bir kez blur ile cikti mi — dogrulama
+  // gorselini yalnizca blur SONRASI (veya satir zaten dolu ise, asagida) gostermek icin.
+  var [touched, setTouched] = useState(false)
 
   // Focus disindaysa formatli goster, focus'ta ham degeri goster
   var displayValue
@@ -519,7 +523,33 @@ function NumericCell(props) {
     }
     onChange(column.key, parsed)
     setFocused(false)
+    setTouched(true)
   }
+
+  // ── Zorunlu-pozitif dogrulama (ör. Miktar) ────────────────────────────
+  // column.requirePositive CalibraLineItemsGrid.allColumns'ta cozulur (bkz.
+  // orada key==='quantity' varsayilani). Deger bos/0/negatif ise gecersiz.
+  // Kirmizi gosterim SADECE su iki durumdan biri gerceklestiginde:
+  //   a) kullanici bu hucreden en az bir kez cikmis (touched), VEYA
+  //   b) satirda zaten icerik var (row.materialCode dolu) — boylece malzeme
+  //      secilip miktarin atlandigi satir, kullanici o hucreye hic
+  //      dokunmadan ANINDA isaretlenir (raporlanan bug tam olarak bu).
+  // Yazarken (focused=true) hicbir zaman kirmizi gosterilmez — "yazarken
+  // bagirma" kurali. Dokunulmamis + icerigi olmayan yeni bos satir da
+  // gosterilmez ("kullanici daha yeni ekledi").
+  var requirePositive = column.requirePositive === true
+  var numericValue = typeof value === 'number' ? value : parseNumber(value)
+  var isInvalidValue = requirePositive && (value == null || value === '' || numericValue == null || isNaN(numericValue) || numericValue <= 0)
+  var rowHasContent = !!(row && row.materialCode != null && String(row.materialCode).trim() !== '')
+  var showInvalid = isInvalidValue && !focused && (touched || rowHasContent)
+
+  // Tailwind'in baseInputClass'taki border-0'ini guvenilir sekilde ezmek icin
+  // inline stil kullanilir (utility-cascade sirasina bagimli kalmamak icin) —
+  // inset box-shadow ile duzen kaymadan (border-width degismeden) "kenarlik" verir.
+  var invalidStyle = showInvalid ? {
+    boxShadow: 'inset 0 0 0 1.5px #ef4444',
+    backgroundColor: 'rgba(239,68,68,0.08)',
+  } : undefined
 
   return (
     <input
@@ -529,8 +559,11 @@ function NumericCell(props) {
       onFocus={handleFocus}
       onBlur={handleBlur}
       onChange={function(e) { setLocalText(e.target.value) }}
+      aria-invalid={requirePositive ? (showInvalid ? 'true' : 'false') : undefined}
       className={props.baseInputClass + ' tabular-nums font-mono'}
+      style={invalidStyle}
       placeholder={column.precision ? '0,' + '0'.repeat(column.precision) : '0'}
+      title={showInvalid ? 'Bu alan sıfırdan büyük olmalı' : undefined}
     />
   )
 }
