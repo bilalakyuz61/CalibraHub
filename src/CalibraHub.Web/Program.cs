@@ -998,9 +998,75 @@ using (var scope = app.Services.CreateScope())
     var companyRepo = scope.ServiceProvider.GetRequiredService<ICompanyRepository>();
     var registry = app.Services.GetRequiredService<CompanyConnectionRegistry>();
     var allCompanies = await companyRepo.GetAllAsync(CancellationToken.None);
+
+    // FAZ 1 (2026-07-19): Company.ConnectionString (sunucu+kullanici+parola dahil tam dize,
+    // duz metin SQL parolasi tasir) yerine Company.DatabaseName (yalnizca veritabani adi)
+    // gecisi basliyor. Eski kolon SILINMEDI (bkz. CLAUDE.md) — bu yalnizca cozumleme
+    // oncelik sirasini degistirir. DatabaseName doluysa etkin baglanti master baglanti
+    // dizesi (databaseOptions.ConnectionString) + InitialCatalog override ile kurulur;
+    // bossa eski tam dizeye (guvenlik agi) dusulur. Boylece migration yarim kalsa da,
+    // hatta backfill'in kendisi hata verse de hicbir sirket erisilemez hale gelmez.
+    string ResolveCompanyConnectionString(int companyId, string? databaseName, string? legacyConnectionString)
+    {
+        if (!string.IsNullOrWhiteSpace(databaseName))
+        {
+            try
+            {
+                return new SqlConnectionStringBuilder(databaseOptions.ConnectionString)
+                {
+                    InitialCatalog = databaseName
+                }.ConnectionString;
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex,
+                    "[Company DB Resolve] Sirket {CompanyId} icin DatabaseName ('{DatabaseName}') ile baglanti kurulamadi — DatabaseConnectionString'e dusuluyor",
+                    companyId, databaseName);
+            }
+        }
+        return legacyConnectionString ?? string.Empty;
+    }
+
+    // Backfill: DatabaseName bos ama DatabaseConnectionString doluysa, tam dizeden
+    // veritabani adini cikarip kalici olarak yazar. Idempotent — DatabaseName bir kez
+    // dolunca kosul bir sonraki restart'ta false doner, tekrar calismaz. Ayristirma
+    // hatasi (bozuk/eksik connection string) sirketi atlar, startup'i asla cokertmez.
+    // Not: bu dongu DatabaseName'i DB'ye yazar ama asagidaki registry.Set/schema-migration
+    // dongulerinde hala bellekteki 'allCompanies' (fetch anindaki DatabaseName=null hali)
+    // kullanilir — Company immutable (init-only) oldugu icin 'c' burada guncellenmez.
+    // Yeni yol bir sonraki restart'ta (fresh GetAllAsync ile) devreye girer; bu calistirma
+    // sadece backfill yapar + loglar, mevcut baglanti davranisini degistirmez — bilincli
+    // olarak en guvenli rollout sirasi.
     foreach (var c in allCompanies)
     {
-        registry.Set(c.Id, c.DatabaseConnectionString);
+        if (!string.IsNullOrWhiteSpace(c.DatabaseName)) continue;
+        if (string.IsNullOrWhiteSpace(c.DatabaseConnectionString)) continue;
+
+        try
+        {
+            var derivedName = new SqlConnectionStringBuilder(c.DatabaseConnectionString).InitialCatalog;
+            if (string.IsNullOrWhiteSpace(derivedName))
+            {
+                app.Logger.LogWarning(
+                    "[Company DB Backfill] Sirket {CompanyId} icin connection string'de veritabani adi bulunamadi — DatabaseName bos birakildi", c.Id);
+                continue;
+            }
+
+            await companyRepo.UpdateDatabaseNameAsync(c.Id, derivedName, CancellationToken.None);
+            app.Logger.LogInformation(
+                "[Company DB Backfill] Sirket {CompanyId} icin DatabaseName '{DatabaseName}' olarak dolduruldu",
+                c.Id, derivedName);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex,
+                "[Company DB Backfill] Sirket {CompanyId} icin DatabaseConnectionString ayristirilamadi — DatabaseName bos kaldi, eski yol (tam baglanti dizesi) kullanilmaya devam eder", c.Id);
+        }
+    }
+
+    foreach (var c in allCompanies)
+    {
+        registry.Set(c.Id, ResolveCompanyConnectionString(c.Id, c.DatabaseName, c.DatabaseConnectionString));
     }
 
     // Per-company DB tam şema migration — her şirket DB'si system DB ile aynı
@@ -1033,7 +1099,8 @@ using (var scope = app.Services.CreateScope())
 
         foreach (var c in allCompanies)
         {
-            if (string.IsNullOrWhiteSpace(c.DatabaseConnectionString)) continue;
+            var resolvedConnectionString = ResolveCompanyConnectionString(c.Id, c.DatabaseName, c.DatabaseConnectionString);
+            if (string.IsNullOrWhiteSpace(resolvedConnectionString)) continue;
 
             // Tam şema pipeline — hata tek şirketi atlatır, startup'ı engellemez;
             // idempotent olduğundan bir sonraki restart'ta kaldığı yerden tamamlanır.
@@ -1041,7 +1108,7 @@ using (var scope = app.Services.CreateScope())
             {
                 var initSw = System.Diagnostics.Stopwatch.StartNew();
                 await dbInitForCompanies.InitializeForConnectionAsync(
-                    c.DatabaseConnectionString, CancellationToken.None);
+                    resolvedConnectionString, CancellationToken.None);
                 app.Logger.LogInformation(
                     "[Company Schema] Sirket {CompanyId} tam sema init tamamlandi ({ElapsedMs} ms)",
                     c.Id, initSw.ElapsedMilliseconds);
@@ -1058,7 +1125,7 @@ using (var scope = app.Services.CreateScope())
             try
             {
                 await dbInitForCompanies.EnsureReportDocumentViewAsync(
-                    c.DatabaseConnectionString, systemDbName, CancellationToken.None);
+                    resolvedConnectionString, systemDbName, CancellationToken.None);
             }
             catch (Exception ex)
             {

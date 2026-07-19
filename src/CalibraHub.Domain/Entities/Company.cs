@@ -16,6 +16,14 @@ public sealed class Company
     public required string TaxNumber { get; init; }
     public bool IsEDocumentApprovalEnabled { get; init; }
     public string? DatabaseConnectionString { get; init; }
+    /// <summary>
+    /// FAZ 1 (2026-07-19): Sunucu/kullanici/parola tasimayan, yalnizca veritabani adi.
+    /// Doluysa calisma zamani baglantisi master connection string + bu ad ile kurulur
+    /// (bkz. Program.cs ResolveCompanyConnectionString); bossa DatabaseConnectionString'e
+    /// (tam dize, guvenlik agi) dusulur. DatabaseConnectionString kolonu bilinçli olarak
+    /// silinmedi — bkz. CLAUDE.md.
+    /// </summary>
+    public string? DatabaseName { get; init; }
     public string? PublicBaseUrl { get; init; }
     public bool IsActive { get; private set; } = true;
 

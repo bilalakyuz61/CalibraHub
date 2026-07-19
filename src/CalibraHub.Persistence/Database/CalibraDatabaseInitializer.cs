@@ -3709,6 +3709,21 @@ END;";
                 ADD [public_url] NVARCHAR(300) NULL;
             END;
 
+            -- DatabaseName (2026-07-19): sirket basina TAM baglanti dizesi yerine yalnizca
+            -- VERITABANI ADI saklanir; sunucu + kimlik bilgisi master baglantisindan gelir
+            -- (kullanici karari: hicbir sirket baska sunucuda olmayacak). Boylece Company
+            -- tablosunda duz metin SQL PAROLASI tutulmasi ortadan kalkar.
+            -- Faz 1 EKLEMELIDIR: [ConnectionString] kolonu AYNEN durur ve DatabaseName bos
+            -- oldugunda fallback olarak kullanilir (bkz. Program.cs ResolveCompanyConnectionString)
+            -- -> migration yarim kalsa bile hicbir sirket erisilemez hale gelmez.
+            -- Eski snake_case varyanti YOK (yepyeni kolon), tek COL_LENGTH kontrolu yeterli.
+            IF OBJECT_ID(N'[{schemaForSql}].[Company]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Company]', N'DatabaseName') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Company]
+                ADD [DatabaseName] NVARCHAR(128) NULL;
+            END;
+
             IF OBJECT_ID(N'[{schemaForSql}].[User]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[User]', N'company_id') IS NULL
             BEGIN

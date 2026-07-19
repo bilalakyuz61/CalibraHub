@@ -45,6 +45,34 @@ public sealed class InMemoryCompanyRepository : ICompanyRepository
         return Task.CompletedTask;
     }
 
+    public Task UpdateDatabaseNameAsync(int id, string databaseName, CancellationToken cancellationToken)
+    {
+        // Company sealed class'tir (record degil) — 'with' ifadesi yok ve DatabaseName 'init'
+        // oldugu icin mevcut degerleri kopyalayip yeni bir instance ile degistiriyoruz.
+        if (_dataStore.Companies.TryGetValue(id, out var existing))
+        {
+            var updated = new Company
+            {
+                Id = existing.Id,
+                Name = existing.Name,
+                Title = existing.Title,
+                Address = existing.Address,
+                City = existing.City,
+                District = existing.District,
+                PostalCode = existing.PostalCode,
+                TaxOffice = existing.TaxOffice,
+                TaxNumber = existing.TaxNumber,
+                IsEDocumentApprovalEnabled = existing.IsEDocumentApprovalEnabled,
+                DatabaseConnectionString = existing.DatabaseConnectionString,
+                PublicBaseUrl = existing.PublicBaseUrl,
+                DatabaseName = databaseName
+            };
+            if (!existing.IsActive) updated.Deactivate();
+            _dataStore.Companies[id] = updated;
+        }
+        return Task.CompletedTask;
+    }
+
     public Task DeleteAsync(int id, CancellationToken cancellationToken)
     {
         _dataStore.Companies.TryRemove(id, out _);

@@ -30,7 +30,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             SELECT [Id], [Name], [Title], [Address], [City], [District], [PostalCode],
                    [TaxOffice], [TaxNumber],
                    [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString],
-                   [PublicUrl]
+                   [PublicUrl], [DatabaseName]
             FROM {_tableName}
             ORDER BY [Name];
             """;
@@ -52,7 +52,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             SELECT [Id], [Name], [Title], [Address], [City], [District], [PostalCode],
                    [TaxOffice], [TaxNumber],
                    [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString],
-                   [PublicUrl]
+                   [PublicUrl], [DatabaseName]
             FROM {_tableName}
             WHERE [Id] = @Id;
             """;
@@ -75,12 +75,14 @@ public sealed class SqlCompanyRepository : ICompanyRepository
                 ([Name], [Title], [Address], [City], [District], [PostalCode],
                  [TaxOffice], [TaxNumber],
                  [IsEDocumentApprovalEnabled], [IsActive], [ConnectionString], [PublicUrl],
+                 [DatabaseName],
                  [Created], [Updated])
             OUTPUT INSERTED.[Id]
             VALUES
                 (@Name, @Title, @Address, @City, @District, @PostalCode,
                  @TaxOffice, @TaxNumber,
                  @IsEDocumentApprovalEnabled, @IsActive, @ConnectionString, @PublicBaseUrl,
+                 @DatabaseName,
                  @CreatedAt, @UpdatedAt);
             """;
         AddInsertParameters(command, company);
@@ -109,12 +111,32 @@ public sealed class SqlCompanyRepository : ICompanyRepository
                 [IsActive] = @IsActive,
                 [ConnectionString] = @ConnectionString,
                 [PublicUrl] = @PublicBaseUrl,
+                [DatabaseName] = @DatabaseName,
                 [Updated] = @UpdatedAt
             WHERE [Id] = @Id;
             """;
         AddInsertParameters(command, company);
         command.Parameters.Add(new SqlParameter("@Id", company.Id));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// FAZ 1 backfill/derivation — yalnizca [DatabaseName] kolonunu yazar. UpdateAsync'in
+    /// aksine diger kolonlara ve [Updated] denetim alanina dokunmaz (yan etkisiz, tekil kolon).
+    /// </summary>
+    public async Task UpdateDatabaseNameAsync(int id, string databaseName, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_tableName}
+            SET [DatabaseName] = @DatabaseName
+            WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@DatabaseName", databaseName));
+        command.Parameters.Add(new SqlParameter("@Id", id));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -133,6 +155,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.Parameters.Add(new SqlParameter("@IsActive", company.IsActive));
         command.Parameters.Add(new SqlParameter("@ConnectionString", (object?)company.DatabaseConnectionString ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@PublicBaseUrl", (object?)company.PublicBaseUrl ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@DatabaseName", (object?)company.DatabaseName ?? DBNull.Value));
     }
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken)
@@ -159,7 +182,8 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             TaxNumber = r.GetString(r.GetOrdinal("TaxNumber")),
             IsEDocumentApprovalEnabled = r.GetBoolean(r.GetOrdinal("IsEDocumentApprovalEnabled")),
             DatabaseConnectionString = r.IsDBNull(r.GetOrdinal("ConnectionString")) ? null : r.GetString(r.GetOrdinal("ConnectionString")),
-            PublicBaseUrl = r.IsDBNull(r.GetOrdinal("PublicUrl")) ? null : r.GetString(r.GetOrdinal("PublicUrl"))
+            PublicBaseUrl = r.IsDBNull(r.GetOrdinal("PublicUrl")) ? null : r.GetString(r.GetOrdinal("PublicUrl")),
+            DatabaseName = r.IsDBNull(r.GetOrdinal("DatabaseName")) ? null : r.GetString(r.GetOrdinal("DatabaseName"))
         };
 
         if (!r.GetBoolean(r.GetOrdinal("IsActive")))

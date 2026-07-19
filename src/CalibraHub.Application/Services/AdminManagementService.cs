@@ -6,6 +6,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
+using Microsoft.Data.SqlClient;
 using System.Net;
 using System.Net.Mail;
 
@@ -128,6 +129,29 @@ public sealed class AdminManagementService : IAdminManagementService
             ? null
             : request.DatabaseConnectionString.Trim();
 
+        // FAZ 1 (2026-07-19): Bu save cagrisinda tam bir baglanti dizesi geldiyse DatabaseName'i
+        // ondan turet (Initial Catalog). Gelmediyse (bu kayitta SQL ayarlari degistirilmedi —
+        // ör. CompanySettings/Parameters akislari) mevcut kaydin DatabaseName'ini koru; yeni
+        // kayitta bos kalir. Ayristirma basarisiz olursa mevcut deger korunur — hicbir zaman
+        // DatabaseConnectionString'i dolu birakip DatabaseName'i yanlislikla temizlemeyiz.
+        var databaseName = existingById?.DatabaseName;
+        if (!string.IsNullOrWhiteSpace(connectionString))
+        {
+            try
+            {
+                var derivedName = new SqlConnectionStringBuilder(connectionString).InitialCatalog;
+                if (!string.IsNullOrWhiteSpace(derivedName))
+                {
+                    databaseName = derivedName;
+                }
+            }
+            catch
+            {
+                // Ayristirilamayan baglanti dizesi — DatabaseName mevcut degerinde kalir,
+                // cozumleme DatabaseConnectionString (guvenlik agi) uzerinden calismaya devam eder.
+            }
+        }
+
         var company = new Company
         {
             Id = existingById?.Id ?? 0,
@@ -141,6 +165,7 @@ public sealed class AdminManagementService : IAdminManagementService
             TaxNumber = taxNumber,
             IsEDocumentApprovalEnabled = request.IsEDocumentApprovalEnabled,
             DatabaseConnectionString = connectionString,
+            DatabaseName = databaseName,
             PublicBaseUrl = string.IsNullOrWhiteSpace(request.PublicBaseUrl) ? null : request.PublicBaseUrl.Trim()
         };
 
