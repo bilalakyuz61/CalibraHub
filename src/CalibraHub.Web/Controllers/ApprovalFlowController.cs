@@ -561,6 +561,12 @@ public sealed class ApprovalFlowController : Controller
                     approverName          = s.ApproverName,
                     intendedApproverLabel = s.ApproverName ?? flowStep?.ApproverLabel,
                     actionDate            = s.ActionDate?.AddHours(3).ToString("dd.MM.yyyy HH:mm"),
+                    // Son tarih akış başlarken hesaplanıp kaydediliyor (ComputeDueDateFromNodeData);
+                    // süreç çekmecesi geciken adımı işaretleyebilsin diye yanıta eklendi (2026-07-19).
+                    dueDate               = s.DueDate?.AddHours(3).ToString("dd.MM.yyyy HH:mm"),
+                    isOverdue             = s.DueDate.HasValue
+                                            && s.Status == "Pending"
+                                            && s.DueDate.Value < DateTime.UtcNow,
                     note                  = s.Note,
                     isCurrent             = s.StepOrder == instance.CurrentStep,
                 };
