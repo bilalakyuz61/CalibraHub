@@ -1963,6 +1963,30 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         if (request.Lines is null || request.Lines.Count == 0)
             throw new InvalidOperationException("Sarf için en az bir satır girilmelidir.");
 
+        // Miktar sıfır/negatif satır engeli (2026-07-19) — SaveDirectDocAsync'teki desenin AYNISI:
+        // "miktar > 0" projede yerleşik kural. Öncesinde Qty<=0 satır aşağıdaki döngüde sessizce
+        // atlanıyordu (continue); birden fazla satır gönderildiğinde diğerleri yazılıp written>0
+        // olduğu için "Sarf için geçerli satır yok" fallback'i de hiç tetiklenmiyordu — kullanıcı
+        // hangi satırın sessizce düştüğünü asla göremiyordu. İstemci (WorkOrderEdit.cshtml
+        // saveSarf()) zaten Qty<=0 satırları POST'tan ÖNCE filtreliyor
+        // (`.filter(r => (parseFloat(r.quantity)||0) > 0)`) — "planlandı ama henüz sarf edilmedi"
+        // durumu satırı hiç GÖNDERMEMEKLE ifade edilir, Qty=0 satır göndermekle değil. Dolayısıyla
+        // buraya Qty<=0 satır ulaşması her zaman bir hata/bypass'tır. Transaction açılmadan ÖNCE
+        // kontrol edilir; ProductionController.IssueConsumptionJson InvalidOperationException'ı
+        // yakalayıp mesajı olduğu gibi kullanıcıya döndürür (lot/seri zorunluluğu hatalarıyla aynı).
+        var incomingLines = request.Lines.ToList();
+        for (var i = 0; i < incomingLines.Count; i++)
+        {
+            var ln = incomingLines[i];
+            if (ln.Qty <= 0)
+            {
+                var lineDesc = string.IsNullOrWhiteSpace(ln.MaterialCode)
+                    ? $"{i + 1}. kalem"
+                    : $"{i + 1}. kalem ({ln.MaterialCode})";
+                throw new InvalidOperationException($"{lineDesc}: miktar sıfırdan büyük olmalı.");
+            }
+        }
+
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
@@ -2017,7 +2041,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if ((!itemId.HasValue || itemId.Value <= 0) && !string.IsNullOrWhiteSpace(line.MaterialCode))
                     itemId = await ResolveItemIdByCodeAsync(conn, tx, line.MaterialCode!, ct);
                 if (!itemId.HasValue || itemId.Value <= 0) continue;
-                if (line.Qty <= 0) continue;
+                // Qty<=0 satırlar metot başında (transaction açılmadan önce) reddedildi —
+                // buraya yalnızca Qty>0 satırlar ulaşır.
 
                 var fromLoc = line.FromLocationId ?? woLocationId;
                 if (fromLoc is not > 0)
