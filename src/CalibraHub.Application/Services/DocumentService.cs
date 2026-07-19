@@ -47,7 +47,9 @@ public sealed class DocumentService : IDocumentService
 
     // ── İşlem logu (audit trail) yardımcıları ──────────────────────────────
     // Belgenin audit entity kodu = DocumentType.Code ("satis_siparisi", "alis_talebi"...).
-    // Edit ekranındaki "Değişiklik Geçmişi" sekmesi aynı kodla sorgular (_AuditTrailHost).
+    // Liste ekranlarının İşlemler menüsündeki "İşlem Logu" öğesi aynı kodla sorgular
+    // (/AuditLog?entity=<kod>&recordId=<id>). 2026-07-19: kayıt içindeki "Değişiklik
+    // Geçmişi" sekmesi kaldırıldı, erişim listeye taşındı — kod sözleşmesi DEĞİŞMEDİ.
 
     private async Task<string> ResolveAuditEntityAsync(int? documentTypeId, CancellationToken ct)
     {
