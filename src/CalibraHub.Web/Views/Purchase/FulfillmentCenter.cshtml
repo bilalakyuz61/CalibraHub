@@ -653,6 +653,7 @@
         font-size:.79rem; font-weight:600; cursor:pointer; border:1.5px solid; transition:all .13s;
         text-decoration:none; background:none;
     }
+    .fc3-atab:disabled { opacity:.4; cursor:not-allowed; }
     .fc3-atab--t { border-color:rgba(99,102,241,.3); color:#a5b4fc; }
     .fc3-atab--t:hover, .fc3-atab--t.on { background:rgba(99,102,241,.17); border-color:rgba(99,102,241,.5); color:#c7d2fe; }
     .fc3-atab--s { border-color:rgba(245,158,11,.28); color:#fcd34d; }
@@ -1133,6 +1134,10 @@
         <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnClose" onclick="fc3CloseRequests()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             İhtiyacı Kapat
+        </button>
+        <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnCloseLines" onclick="fc3CloseFulfillmentLines()" title="Seçili kalemlerin karşılanmamış kalan miktarını kapatır — belgenin diğer kalemlerine dokunmaz">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Kalanı Kapat
         </button>
         <span class="fc3-fb-sep"></span>
         <button type="button" class="fc3-fb-cancel" onclick="fc3LineSelClear()">İptal</button>
@@ -1735,7 +1740,10 @@
     // Belge-seviyesi fulfillCategory karışık belgede 'partial' döndürüp tamamlanan
     // kalemi de gösteriyordu; artık her kalem kendi durumuna göre elenir.
     var _fulfillSel = [];
-    var _LINE_FCAT = { 0: 'pending', 1: 'partial', 2: 'full' };
+    // 3 = Kalanı Kapat ile kapatılmış kalem (CloseFulfillmentLines) — mevcut 3 filtre chip'inden
+    // (pending/partial/full) hiçbirine karşılık gelmez; "full" gibi varsayılan filtrede görünmez,
+    // yalnız "hepsi" (filtre boş) durumunda listelenir ve Kapatıldı rozetiyle gösterilir.
+    var _LINE_FCAT = { 0: 'pending', 1: 'partial', 2: 'full', 3: 'closed' };
     function lineFulfillCat(l) { return (l && _LINE_FCAT[l.fulfillmentStatus]) || 'pending'; }
     function visibleLines(r) {
         var lines = _docLineCache[r.id] || [];
@@ -1992,7 +2000,7 @@
 
     // ── Gruplama değeri (her kolon için) ─────────────────────────────────────
     function getGroupValue(r, l, key) {
-        var FSL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam' };
+        var FSL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam', 3: 'Kapatıldı' };
         switch (key) {
             case 'num':    return r.documentNumber || '—';
             case 'who':    return r.requesterPersonnelName || r.contactName || '—';
@@ -2039,8 +2047,8 @@
         }
 
         var visCols = _colDefs.filter(function(c) { return c.visible; });
-        var FS_CLASS = { 0: 'fm-fst--pending', 1: 'fm-fst--partial', 2: 'fm-fst--full' };
-        var FS_LABEL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam' };
+        var FS_CLASS = { 0: 'fm-fst--pending', 1: 'fm-fst--partial', 2: 'fm-fst--full', 3: 'fm-fst--cancelled' };
+        var FS_LABEL = { 0: 'Bekliyor', 1: 'Kısmen', 2: 'Tamam', 3: 'Kapatıldı' };
 
         function buildRowHtml(r, l) {
             var who = r.requesterPersonnelName || r.contactName || '—';
@@ -3117,6 +3125,47 @@
                 }
             })
             .catch(function() { CalibraAlert.show('Bağlantı hatası.', { type: 'error' }); });
+        });
+    };
+
+    // Seçili KALEMLERİN karşılanmamış kalan miktarını kapatır — CloseRequests'ten farkı:
+    // yalnız verilen satırlar etkilenir (FulfillmentStatus=3), aynı belgedeki diğer
+    // kalemlere ve belge Status'üne dokunulmaz.
+    window.fc3CloseFulfillmentLines = function() {
+        var ids = Object.keys(_lineSel).map(Number);
+        if (!ids.length) return;
+        var names = ids.map(function(id) {
+            var l = _lines.find(function(x) { return x.lineId === id; });
+            return l ? (l.materialName || l.materialCode || ('#' + id)) : ('#' + id);
+        }).join(', ');
+        showConfirm({
+            title:   'Kalem Kalanı Kapatılacak',
+            message: 'Seçili ' + ids.length + ' kalemin karşılanmamış kalan miktarı kapatılacak'
+                + (names ? ':\n' + names : '') + '.\n\nKarşılanan miktarlar korunur, yalnızca kalan kısımdan vazgeçilir.'
+                + '\nBu işlem geri alınamaz. Devam edilsin mi?',
+            okLabel: 'Kalanı Kapat',
+        }).then(function(ok) {
+            if (!ok) return;
+            var btn = document.getElementById('fc3BtnCloseLines');
+            if (btn) btn.disabled = true;
+            fetch('/Purchase/CloseFulfillmentLines', {
+                method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
+                body: JSON.stringify({ lineIds: ids }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (btn) btn.disabled = false;
+                if (d.ok) {
+                    CalibraAlert.show((d.closed || 0) + ' kalemin kalanı kapatıldı.', { type: 'success', autoDismissMs: 2500 });
+                    _lineSel = {};
+                    document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
+                    fc3UpdateFulfillBar();
+                    invalidateDocCache();
+                } else {
+                    CalibraAlert.show('Kapatma başarısız: ' + (d.error || 'Hata'), { type: 'error' });
+                }
+            })
+            .catch(function() { if (btn) btn.disabled = false; CalibraAlert.show('Bağlantı hatası.', { type: 'error' }); });
         });
     };
 
