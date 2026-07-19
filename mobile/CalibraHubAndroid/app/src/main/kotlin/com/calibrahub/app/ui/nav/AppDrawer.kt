@@ -241,6 +241,15 @@ val pinnableDrawerLeaves: List<DrawerLeaf> = drawerEntries.flatMap { entry ->
         is DrawerEntry.Expandable -> entry.group.leaves
     }
 }
+    // distinctBy ZORUNLU (2026-07-19 crash fix): iki drawer yapragi AYNI rotayi paylasabilir —
+    // SHIPPING_OPEN_ORDERS = SALES_OPEN_ORDERS (takma ad; "Açık Satış Siparişleri" Satış altinda,
+    // "Açık Satış Siparişleri (Teslim)" Sevkiyat altinda, ikisi de ayni ekrani acar). Dedup
+    // olmadan o rota sabitlendiginde HomeScreen'deki LazyVerticalGrid'e IKI kayit birden giriyor
+    // ve `key = { it.route }` cakisiyor:
+    //   IllegalArgumentException: Key "warehouse_open_orders/sales" was already used
+    // -> uygulama ACILIR ACILMAZ cokuyordu. Kisayol zaten rota bazli oldugu icin rota basina TEK
+    // kutucuk dogru davranistir; ilk gorulen (drawer sirasindaki) yaprak korunur.
+    .distinctBy { it.route }
 
 /**
  * 2026-07-19 — Yaprak route'u → ÜST GRUP etiketi ("Çıkış" → "Depo") eşlemesi.
@@ -255,12 +264,18 @@ val pinnableDrawerLeaves: List<DrawerLeaf> = drawerEntries.flatMap { entry ->
  * Akordeon grubu ALTINDA olmayan yapraklar (ör. "Sohbetler" — [DrawerEntry.Single])
  * bu haritada YER ALMAZ; kutucukta üst satır hiç çizilmez (boş satır bırakılmaz).
  */
+// NOT: ayni rota birden fazla grupta gecebilir (bkz. pinnableDrawerLeaves distinctBy notu).
+// toMap() cakismada SONUNCUYU tutar; oysa pinnableDrawerLeaves ILKINI koruyor. Ikisi ayrisirsa
+// kutucukta yanlis grup adi yazardi ("Açık Satış Siparişleri" korunur ama ustunde "Sevkiyat"
+// gorunurdu). Bu yuzden burada da ILK gorulen grup kazanir.
 val leafGroupLabels: Map<String, String> = drawerEntries.flatMap { entry ->
     when (entry) {
         is DrawerEntry.Single -> emptyList()
         is DrawerEntry.Expandable -> entry.group.leaves.map { it.route to entry.group.label }
     }
-}.toMap()
+}
+    .groupBy({ it.first }, { it.second })
+    .mapValues { (_, labels) -> labels.first() }
 
 /**
  * Sol navigasyon menüsünün içeriği — [androidx.compose.material3.ModalNavigationDrawer]'ın
