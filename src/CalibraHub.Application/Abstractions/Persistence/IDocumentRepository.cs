@@ -58,8 +58,45 @@ public interface IDocumentRepository
     /// <summary>
     /// İhtiyaç Kaydı satırının karşılama miktarlarını günceller ve FulfillmentStatus'ı yeniden hesaplar.
     /// fulfilledFromStock / fulfilledByPurchase kümülatif DELTA değil, yeni toplam değerdir.
+    ///
+    /// DİKKAT (2026-07-19): karşılama üreten yeni akışlar bunu DEĞİL
+    /// <see cref="AddFulfillmentEntriesAsync"/>'i kullanmalıdır. Bu metod toplamı doğrudan
+    /// ezer; "hangi belge ne kadar karşıladı" bilgisi tutulmadığı için karşılayan belge
+    /// silindiğinde geri düşüm yapılamaz (satır sonsuza dek karşılanmış görünür). Metod
+    /// yalnızca defterden yeniden hesaplama yapan iç yol ve geriye dönük onarım için durur.
     /// </summary>
     Task UpdateLineFulfillmentAsync(int lineId, decimal fulfilledFromStock, decimal fulfilledByPurchase, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-19 — Karşılama defterine (DocumentLineFulfillment) kayıt yazar ve etkilenen
+    /// İhtiyaç Kaydı satırlarının toplamlarını DEFTERDEN yeniden hesaplar (tek işlem).
+    ///
+    /// Neden defter: toplamı doğrudan artırmak "kim neyi karşıladı"yı kaybettirir; karşılayan
+    /// belge silinince geri alınamaz. Defter sayesinde ters çevirme
+    /// (<see cref="ReverseFulfillmentByDocumentAsync"/>) mümkün olur ve bir satır birden çok
+    /// belgeyle (kısmi transfer + kısmi talep) karşılanabilir.
+    ///
+    /// Durum yeniden hesaplanır; kapatılmış (3) satıra yeni karşılama gelirse satır yeniden
+    /// açılır — mevcut <see cref="CloseLineFulfillmentAsync"/> sözleşmesiyle kasıtlı olarak aynı.
+    /// </summary>
+    /// <returns>Toplamları güncellenen ihtiyaç satırı sayısı.</returns>
+    Task<int> AddFulfillmentEntriesAsync(IReadOnlyCollection<FulfillmentEntry> entries, int? userId, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-19 — Bir KARŞILAYAN belge silindiğinde defterdeki katkısını pasifleştirir
+    /// (IsActive = 0) ve etkilenen İhtiyaç Kaydı satırlarının toplamlarını yeniden hesaplar.
+    ///
+    /// KRİTİK: <paramref name="stockDocument"/> zorunludur çünkü RefDocId iki ayrı tablodan
+    /// gelir — StockDoc.Id ve Document.Id aynı sayı olabilir. Taraf filtresi olmadan bir
+    /// belgeyi silmek başka bir belgenin karşılamasını geri alır.
+    ///
+    /// Kapatılmış (FulfillmentStatus = 3) satırlar kapalı KALIR: kapatma kullanıcının ayrı
+    /// bir kararıdır, karşılamanın geri alınması onu geçersiz kılmaz.
+    /// </summary>
+    /// <param name="refDocId">Silinen karşılama belgesinin Id'si.</param>
+    /// <param name="stockDocument">true → StockDoc (transfer/ambar çıkış); false → Document (teklif/sipariş/talep).</param>
+    /// <returns>Toplamları geri alınan ihtiyaç satırı sayısı (defterde kayıt yoksa 0).</returns>
+    Task<int> ReverseFulfillmentByDocumentAsync(int refDocId, bool stockDocument, int? userId, CancellationToken ct);
 
     /// <summary>
     /// 2026-07-19 — İhtiyaç Kaydı satırının KALAN miktarını kapatır: FulfillmentStatus = 3

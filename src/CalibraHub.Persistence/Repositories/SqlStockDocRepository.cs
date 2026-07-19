@@ -1906,6 +1906,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
+            // Bu fiş bir İhtiyaç Kaydı'nı karşılıyorduysa (transfer / ambar çıkış), karşılama
+            // defterindeki katkısını AYNI transaction'da geri al. Aksi halde ihtiyaç satırı
+            // karşılanmış görünmeye devam eder ve kaynak belge bir daha ASLA silinemez
+            // ("karşılanmış kalem içerdiği için silinemez" guard'ı) — fiş silinmiş olsa bile.
+            // stockDocument: true → yalnız StockDoc tarafı tipleri; Document.Id ile karışmaz.
+            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, stockDocument: true, null, ct);
+
             await tx.CommitAsync(ct);
         }
         catch

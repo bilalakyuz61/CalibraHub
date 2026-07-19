@@ -1077,13 +1077,20 @@ public sealed class PurchaseController : Controller
                     foreach (var l in lines2) allLines[l.Id] = l;
                 }
 
+                // Karşılama defterine yaz — toplamlar defterden türetilir. Sayacı doğrudan
+                // artırmak "kim neyi karşıladı"yı kaybettirir; bu fiş silinince geri düşüm
+                // yapılamaz ve ihtiyaç satırı sonsuza dek karşılanmış görünür.
+                var entries = new List<FulfillmentEntry>();
                 foreach (var (reqLineId, transferQty) in linesWithTracking)
                 {
-                    if (!allLines.TryGetValue(reqLineId, out var ln)) continue;
-                    var newFromStock = ln.FulfilledFromStock + transferQty;
-                    await _documentRepo.UpdateLineFulfillmentAsync(
-                        reqLineId, newFromStock, ln.FulfilledByPurchase, ct);
+                    // allLines GEÇERLİLİK FİLTRESİ: yalnızca bildirilen İhtiyaç belgelerine
+                    // ait satırlar deftere girer (istemciden gelen rastgele LineId kabul edilmez).
+                    if (!allLines.ContainsKey(reqLineId)) continue;
+                    entries.Add(new FulfillmentEntry(
+                        reqLineId, FulfillmentSourceKind.Transfer, newDocId, transferQty));
                 }
+                if (entries.Count > 0)
+                    await _documentRepo.AddFulfillmentEntriesAsync(entries, CurrentUserId(), ct);
             }
 
             return Json(new { ok = true, docNo });
@@ -1186,12 +1193,16 @@ public sealed class PurchaseController : Controller
                     var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
                     foreach (var l in lines2) allLines[l.Id] = l;
                 }
+                // Deftere yaz (bkz. CreateTransfer'daki gerekçe) — allLines geçerlilik filtresi.
+                var entries = new List<FulfillmentEntry>();
                 foreach (var (reqLineId, issueQty) in linesWithTracking)
                 {
-                    if (!allLines.TryGetValue(reqLineId, out var ln)) continue;
-                    var newFromStock = ln.FulfilledFromStock + issueQty;
-                    await _documentRepo.UpdateLineFulfillmentAsync(reqLineId, newFromStock, ln.FulfilledByPurchase, ct);
+                    if (!allLines.ContainsKey(reqLineId)) continue;
+                    entries.Add(new FulfillmentEntry(
+                        reqLineId, FulfillmentSourceKind.StockIssue, newDocId, issueQty));
                 }
+                if (entries.Count > 0)
+                    await _documentRepo.AddFulfillmentEntriesAsync(entries, CurrentUserId(), ct);
             }
 
             return Json(new { ok = true, docNo });
@@ -1534,11 +1545,16 @@ public sealed class PurchaseController : Controller
         var lineMap = lines.ToDictionary(l => l.LineId);
         var byLineId = planned.GroupBy(l => l.RequestLineId!.Value)
                               .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
+        // Deftere yaz (bkz. CreateTransfer'daki gerekçe) — lineMap geçerlilik filtresi.
+        var fulfillmentEntries = new List<FulfillmentEntry>();
         foreach (var (lineId, qty) in byLineId)
         {
-            if (!lineMap.TryGetValue(lineId, out var ln)) continue;
-            await _documentRepo.UpdateLineFulfillmentAsync(lineId, ln.FromStock + qty, ln.FromPurch, ct);
+            if (!lineMap.ContainsKey(lineId)) continue;
+            fulfillmentEntries.Add(new FulfillmentEntry(
+                lineId, FulfillmentSourceKind.StockIssue, newDocId, qty));
         }
+        if (fulfillmentEntries.Count > 0)
+            await _documentRepo.AddFulfillmentEntriesAsync(fulfillmentEntries, CurrentUserId(), ct);
 
         return Json(new { ok = true, docNo, results });
     }
@@ -1641,12 +1657,16 @@ public sealed class PurchaseController : Controller
                     var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
                     foreach (var l in lines2) allLines[l.Id] = l;
                 }
+                // Deftere yaz (bkz. CreateTransfer'daki gerekçe) — allLines geçerlilik filtresi.
+                var entries = new List<FulfillmentEntry>();
                 foreach (var (reqLineId, purQty) in linesWithTracking)
                 {
-                    if (!allLines.TryGetValue(reqLineId, out var ln)) continue;
-                    var newByPurchase = ln.FulfilledByPurchase + purQty;
-                    await _documentRepo.UpdateLineFulfillmentAsync(reqLineId, ln.FulfilledFromStock, newByPurchase, ct);
+                    if (!allLines.ContainsKey(reqLineId)) continue;
+                    entries.Add(new FulfillmentEntry(
+                        reqLineId, FulfillmentSourceKind.PurchaseOrder, doc.Id, purQty));
                 }
+                if (entries.Count > 0)
+                    await _documentRepo.AddFulfillmentEntriesAsync(entries, CurrentUserId(), ct);
             }
 
             return Json(new { ok = true, docNo = doc.DocumentNumber, docId = doc.Id });
@@ -1984,12 +2004,14 @@ public sealed class PurchaseController : Controller
             foreach (var srcId in sourceDocIds)
                 await _docSourceRepo.AddAsync(doc.Id, srcId, ct);
 
-            // FulfilledByPurchase artır — FulfilledFromStock korunur (0'a EZME).
-            foreach (var dl in demandLines)
-            {
-                await _documentRepo.UpdateLineFulfillmentAsync(
-                    dl.LineId, dl.FulfilledFromStock, dl.FulfilledByPurchase + dl.Qty, ct);
-            }
+            // Deftere yaz (bkz. CreateTransfer'daki gerekçe). Diğer kova (FulfilledFromStock)
+            // artık ezilemez — toplamlar defterden türetildiği için korunması otomatiktir.
+            var demandEntries = demandLines
+                .Select(dl => new FulfillmentEntry(
+                    dl.LineId, FulfillmentSourceKind.PurchaseDemand, doc.Id, dl.Qty))
+                .ToList();
+            if (demandEntries.Count > 0)
+                await _documentRepo.AddFulfillmentEntriesAsync(demandEntries, CurrentUserId(), ct);
 
             return Json(new { ok = true, docNo = doc.DocumentNumber, docId = doc.Id });
         }

@@ -8274,9 +8274,17 @@ END;";
                 (
                     [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentLineFulfillment] PRIMARY KEY,
                     [RequestLineId]    INT           NOT NULL CONSTRAINT [FK_DLF_RequestLine] REFERENCES [{s}].[DocumentLine]([Id]),
-                    -- 1=Transfer (StockDocLine), 2=PurchaseQuote (DocumentLine), 3=PurchaseOrder (DocumentLine)
+                    -- 1=Transfer (StockDoc), 2=PurchaseQuote (Document), 3=PurchaseOrder (Document),
+                    -- 4=StockIssue (StockDoc), 5=PurchaseDemand (Document)
+                    -- Bkz. Application/Contracts/FulfillmentLedgerContracts.cs (tek dogruluk kaynagi).
                     [FulfillmentType]  TINYINT       NOT NULL,
-                    [RefDocLineId]     INT           NOT NULL,
+                    -- Karsilayan BELGE Id'si. DIKKAT: tip ailesine gore AYRI tablodan gelir —
+                    -- tip 1 ve 4 icin StockDoc.Id, tip 2/3/5 icin Document.Id. Ayni sayi iki
+                    -- tabloda farkli belgedir; sorgular her zaman [FulfillmentType] ile filtrelenir.
+                    [RefDocId]         INT           NULL,
+                    -- Karsilayan SATIR Id'si — biliniyorsa. Belge kaydedildigi anda satir Id'leri
+                    -- cogunlukla elde olmadigi icin NULL olabilir; ters cevirme RefDocId uzerinden yapilir.
+                    [RefDocLineId]     INT           NULL,
                     [Quantity]         DECIMAL(18,4) NOT NULL,
                     [Notes]            NVARCHAR(500) NULL,
                     [IsActive]         BIT           NOT NULL CONSTRAINT [DF_DLF_IsActive] DEFAULT(1),
@@ -8287,7 +8295,37 @@ END;";
                 );
                 CREATE INDEX [IX_DLF_RequestLineId] ON [{s}].[DocumentLineFulfillment]([RequestLineId]) WHERE [IsActive] = 1;
                 CREATE INDEX [IX_DLF_RefDocLine] ON [{s}].[DocumentLineFulfillment]([FulfillmentType], [RefDocLineId]) WHERE [IsActive] = 1;
+                CREATE INDEX [IX_DLF_RefDoc] ON [{s}].[DocumentLineFulfillment]([FulfillmentType], [RefDocId]) WHERE [IsActive] = 1;
             END;
+
+            -- 2026-07-19: karsilama defteri gercekten devreye alindi (once tablo vardi ama hic
+            -- yazilmiyordu). Ters cevirme BELGE bazlidir → [RefDocId] eklenir; satir Id'si
+            -- olusturma aninda elde olmadigi icin [RefDocLineId] NULL kabul eder.
+            IF OBJECT_ID(N'[{s}].[DocumentLineFulfillment]', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                                WHERE object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]') AND name = N'RefDocId')
+                    ALTER TABLE [{s}].[DocumentLineFulfillment] ADD [RefDocId] INT NULL;
+
+                -- RefDocLineId NOT NULL → NULL. Kolon indeksli oldugu icin ALTER COLUMN dogrudan
+                -- calismaz: once indeksi dusur, kolonu degistir, indeksi geri kur.
+                IF EXISTS (SELECT 1 FROM sys.columns
+                            WHERE object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]')
+                              AND name = N'RefDocLineId' AND is_nullable = 0)
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM sys.indexes
+                                WHERE object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]') AND name = N'IX_DLF_RefDocLine')
+                        DROP INDEX [IX_DLF_RefDocLine] ON [{s}].[DocumentLineFulfillment];
+
+                    ALTER TABLE [{s}].[DocumentLineFulfillment] ALTER COLUMN [RefDocLineId] INT NULL;
+
+                    CREATE INDEX [IX_DLF_RefDocLine] ON [{s}].[DocumentLineFulfillment]([FulfillmentType], [RefDocLineId]) WHERE [IsActive] = 1;
+                END
+
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                                WHERE object_id = OBJECT_ID(N'[{s}].[DocumentLineFulfillment]') AND name = N'IX_DLF_RefDoc')
+                    CREATE INDEX [IX_DLF_RefDoc] ON [{s}].[DocumentLineFulfillment]([FulfillmentType], [RefDocId]) WHERE [IsActive] = 1;
+            END
 
             -- Migration: [CreatedBy]/[UpdatedBy] NVARCHAR -> [CreatedById]/[UpdatedById] INT
             IF OBJECT_ID(N'[{s}].[DocumentLineFulfillment]', N'U') IS NOT NULL

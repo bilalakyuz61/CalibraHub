@@ -20,6 +20,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     private readonly ILogger<SqlDocumentRepository>? _logger;
     private readonly string _quoteTable;
     private readonly string _lineTable;
+    private readonly string _fulfillmentTable;
     private readonly string _detailTable;
     private readonly string _schema;
 
@@ -38,6 +39,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         _schema = schema;
         _quoteTable = $"[{schema}].[Document]";
         _lineTable = $"[{schema}].[DocumentLine]";
+        _fulfillmentTable = $"[{schema}].[DocumentLineFulfillment]";
         _detailTable = $"[{schema}].[SalesQuoteLineDetail]";
     }
 
@@ -681,11 +683,33 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     public async Task DeleteAsync(int id, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_quoteTable} SET [IsActive] = 0, [Updated] = @Now WHERE [Id] = @Id;";
-        cmd.Parameters.Add(new SqlParameter("@Id", id));
-        cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
-        await cmd.ExecuteNonQueryAsync(ct);
+        await using var tx   = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = $"UPDATE {_quoteTable} SET [IsActive] = 0, [Updated] = @Now WHERE [Id] = @Id;";
+                cmd.Parameters.Add(new SqlParameter("@Id", id));
+                cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // Bu belge bir İhtiyaç Kaydı'nı karşılıyorduysa (satın alma teklif/sipariş/talep),
+            // defterdeki katkısını AYNI transaction'da geri al. Ayrı çağrı olarak yapılsaydı
+            // "belge silindi, karşılama geri alınmadı" yarım durumu oluşabilirdi — ki bu tam
+            // olarak düzeltmeye çalıştığımız hatanın kendisi (ihtiyaç satırı sonsuza dek
+            // karşılanmış görünür ve kaynak belge bir daha silinemez).
+            // stockDocument: false → yalnız Document tarafı tipleri; StockDoc.Id ile karışmaz.
+            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, stockDocument: false, null, ct);
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(ct); } catch { /* bağlantı düşmüşse yut */ }
+            throw;
+        }
     }
 
     public async Task UpdateStatusAsync(int id, string status, CancellationToken ct)
@@ -1011,6 +1035,87 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@FulfilledFromStock",  fulfilledFromStock));
         cmd.Parameters.Add(new SqlParameter("@FulfilledByPurchase", fulfilledByPurchase));
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // ── Karşılama defteri (DocumentLineFulfillment) ──────────────────────
+    //
+    // Toplamlar (FulfilledFromStock/ByPurchase) artık TÜRETİLMİŞ değerdir: defterdeki aktif
+    // satırların toplamı. Doğruluk kaynağı defter, DocumentLine kolonları ise okuma kolaylığı
+    // için tutulan önbellektir. Bu yüzden her yazma/ters çevirme sonrası yeniden hesaplanır.
+
+    public async Task<int> AddFulfillmentEntriesAsync(IReadOnlyCollection<FulfillmentEntry> entries, int? userId, CancellationToken ct)
+    {
+        if (entries is null || entries.Count == 0) return 0;
+
+        var lineIds = entries.Select(e => e.RequestLineId).Distinct().ToList();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx   = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // 1) Defter satırlarını yaz
+            await using (var insert = conn.CreateCommand())
+            {
+                insert.Transaction = tx;
+                var values = new List<string>(entries.Count);
+                var i = 0;
+                foreach (var e in entries)
+                {
+                    values.Add($"(@Q{i}, @K{i}, @D{i}, @V{i}, @L{i}, @N{i}, 1, @User, SYSUTCDATETIME())");
+                    insert.Parameters.Add(new SqlParameter($"@Q{i}", e.RequestLineId));
+                    insert.Parameters.Add(new SqlParameter($"@K{i}", (byte)e.Kind));
+                    insert.Parameters.Add(new SqlParameter($"@D{i}", e.RefDocId));
+                    insert.Parameters.Add(new SqlParameter($"@V{i}", e.Quantity));
+                    insert.Parameters.Add(new SqlParameter($"@L{i}", (object?)e.RefDocLineId ?? DBNull.Value));
+                    insert.Parameters.Add(new SqlParameter($"@N{i}", (object?)e.Notes ?? DBNull.Value));
+                    i++;
+                }
+                insert.Parameters.Add(new SqlParameter("@User", (object?)userId ?? DBNull.Value));
+                insert.CommandText = $"""
+                    INSERT INTO {_fulfillmentTable}
+                        ([RequestLineId], [FulfillmentType], [RefDocId], [Quantity], [RefDocLineId], [Notes], [IsActive], [CreatedById], [Created])
+                    VALUES {string.Join(",\n           ", values)};
+                    """;
+                await insert.ExecuteNonQueryAsync(ct);
+            }
+
+            // 2) Toplamları defterden yeniden hesapla (kapatmayı temizler — satır yeniden açılır)
+            int affected;
+            await using (var recalc = conn.CreateCommand())
+            {
+                recalc.Transaction = tx;
+                recalc.CommandText = FulfillmentLedger.BuildRecalcSql(
+                    _fulfillmentTable, _lineTable, lineIds, preserveClosed: false, out var ps);
+                foreach (var p in ps) recalc.Parameters.Add(p);
+                affected = await recalc.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return affected;
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(ct); } catch { /* bağlantı düşmüşse yut */ }
+            throw;
+        }
+    }
+
+    public async Task<int> ReverseFulfillmentByDocumentAsync(int refDocId, bool stockDocument, int? userId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx   = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            var n = await FulfillmentLedger.ReverseByDocumentAsync(
+                conn, tx, _schema, refDocId, stockDocument, userId, ct);
+            await tx.CommitAsync(ct);
+            return n;
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(ct); } catch { /* bağlantı düşmüşse yut */ }
+            throw;
+        }
     }
 
     /// <summary>

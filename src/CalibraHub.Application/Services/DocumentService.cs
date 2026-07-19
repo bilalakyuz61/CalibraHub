@@ -843,6 +843,10 @@ public sealed class DocumentService : IDocumentService
             try { lines = await GetQuoteLinesAsync(id, ct); } catch { }
         }
 
+        // NOT: karşılama defterinin ters çevrilmesi (bu belge bir İhtiyaç Kaydı'nı
+        // karşılıyorduysa katkısını geri alma) DeleteAsync'in İÇİNDE, aynı transaction'da
+        // yapılır — bkz. SqlDocumentRepository.DeleteAsync. Burada ayrı bir çağrı yok ki
+        // "silindi ama geri düşüm yapılmadı" yarım durumu oluşmasın.
         await _repo.DeleteAsync(id, ct);
 
         if (_audit is not null && docForAudit is not null)
