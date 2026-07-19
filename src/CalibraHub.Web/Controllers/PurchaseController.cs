@@ -1681,6 +1681,41 @@ public sealed class PurchaseController : Controller
         return Json(new { ok = errors.Count == 0, closed, errors });
     }
 
+    /// <summary>
+    /// FulfillmentCenter — seçili İhtiyaç KALEMLERİNİN kalan miktarını kapatır.
+    /// POST /Purchase/CloseFulfillmentLines
+    ///
+    /// Yukarıdaki <see cref="CloseRequests"/>'ten FARKI: o BELGENİN TAMAMINI "Cancelled"
+    /// yapar; aynı belgede kısmen karşılanmış başka bir kalem varsa o da iptal olur.
+    /// Bu uç yalnız verilen satırları etkiler (FulfillmentStatus = 3), karşılanan
+    /// miktarları korur — "bu kalem için artık bir şey yapmayacağız" anlamındadır.
+    ///
+    /// Tipik senaryo: bir ihtiyaç kaleminin bir kısmı depodan/transferle, bir kısmı
+    /// satın alma talebiyle karşılanır; geri kalanından vazgeçilip kalem kapatılır.
+    /// </summary>
+    [HttpPost("/Purchase/CloseFulfillmentLines")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseFulfillment)]
+    public async Task<IActionResult> CloseFulfillmentLines(
+        [FromBody] CloseFulfillmentLinesRequest req, CancellationToken ct)
+    {
+        if (req?.LineIds == null || req.LineIds.Count == 0)
+            return Json(new { ok = false, error = "Kapatılacak kalem seçilmedi." });
+
+        try
+        {
+            // Repo tarafı UPDATE'i yalnız "alis_talebi" satırlarıyla sınırlar; başka belge
+            // tipinin satırı gönderilse bile etkilenmez (closed < gönderilen sayı olur).
+            var closed = await _documentRepo.CloseLineFulfillmentAsync(req.LineIds, ct);
+            return Json(new { ok = true, closed });
+        }
+        catch (Exception)
+        {
+            // Bu controller'da logger yok (mevcut desen); ic detay istemciye sizdirilmez.
+            return Json(new { ok = false, error = "Kalemler kapatılamadı." });
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Satın Alma Talebi — Wizard
     // ─────────────────────────────────────────────────────────────────────────

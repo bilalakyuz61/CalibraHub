@@ -65,6 +65,14 @@ public sealed record PurchaseOrderLineRequest(
 public sealed record CloseRequestsModel(IReadOnlyList<int> RequestIds);
 
 /// <summary>
+/// FulfillmentCenter — seçili İhtiyaç KALEMLERİNİN kalan miktarını kapat.
+/// POST /Purchase/CloseFulfillmentLines
+/// Belge bazlı <see cref="CloseRequestsModel"/>'den farkı: yalnız verilen satırlar
+/// etkilenir (FulfillmentStatus = 3), aynı belgedeki diğer kalemlere dokunulmaz.
+/// </summary>
+public sealed record CloseFulfillmentLinesRequest(IReadOnlyList<int> LineIds);
+
+/// <summary>
 /// Satın Alma Talebi — seçilen İhtiyaç kalemlerinden belge oluşturma.
 /// POST /Purchase/CreatePurchaseDemand
 /// İki çağrı şekli desteklenir:

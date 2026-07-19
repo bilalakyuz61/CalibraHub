@@ -62,6 +62,22 @@ public interface IDocumentRepository
     Task UpdateLineFulfillmentAsync(int lineId, decimal fulfilledFromStock, decimal fulfilledByPurchase, CancellationToken ct);
 
     /// <summary>
+    /// 2026-07-19 — İhtiyaç Kaydı satırının KALAN miktarını kapatır: FulfillmentStatus = 3
+    /// (Cancelled). Karşılanan miktarlar (FulfilledFromStock/ByPurchase) KORUNUR; kapatma
+    /// "bu satır için artık bir şey yapılmayacak" demektir, karşılananı geri almaz.
+    ///
+    /// Neden ayrı bir metod: mevcut <see cref="UpdateLineFulfillmentAsync"/> durumu iki
+    /// toplamdan yeniden hesaplar ve yalnız 0/1/2 üretir — 3'ü hiçbir zaman yazmaz.
+    /// Belge bazlı CloseRequests ise TÜM belgeyi Cancelled yapar, aynı belgedeki diğer
+    /// kalemi de vurur; senaryo (bir kalemin kalanını kapat, diğerine dokunma) bunu gerektirir.
+    ///
+    /// NOT: kapatılmış satıra sonradan karşılama gelirse UpdateLineFulfillmentAsync durumu
+    /// yeniden hesaplayıp 3'ü siler — bu KASITLIDIR, satır yeniden açılmış sayılır.
+    /// </summary>
+    /// <returns>Durumu güncellenen satır sayısı.</returns>
+    Task<int> CloseLineFulfillmentAsync(IReadOnlyCollection<int> lineIds, CancellationToken ct);
+
+    /// <summary>
     /// Belgenin satırlarına SourceLineId ile referans veren (AKTİF belgelerdeki) türetilmiş
     /// satır agregatları: kaynakLineId → (türetilmiş satır sayısı, toplam miktar).
     /// Bağlantı bütünlüğü guard'ları için: referanslı kaynak kalem silinemez, miktarı

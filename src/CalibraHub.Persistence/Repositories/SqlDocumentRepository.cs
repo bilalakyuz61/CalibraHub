@@ -1013,6 +1013,42 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>
+    /// Satirlarin KALAN miktarini kapatir (FulfillmentStatus = 3). Karsilanan miktarlar korunur.
+    /// Bkz. IDocumentRepository.CloseLineFulfillmentAsync KDoc'u.
+    ///
+    /// GUVENLIK/DOGRULUK: UPDATE yalnizca ihtiyac kaydi ("alis_talebi") belgelerinin satirlarini
+    /// hedefler — bu metodun yanlislikla baska belge tipinin (siparis/irsaliye) satirini iptal
+    /// etmesi mumkun degil. Id listesi PARAMETRELI IN ile gecirilir, SQL'e gomulmez.
+    /// </summary>
+    public async Task<int> CloseLineFulfillmentAsync(IReadOnlyCollection<int> lineIds, CancellationToken ct)
+    {
+        if (lineIds is null || lineIds.Count == 0) return 0;
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+
+        var paramNames = new List<string>(lineIds.Count);
+        var i = 0;
+        foreach (var id in lineIds)
+        {
+            var p = "@L" + i++;
+            paramNames.Add(p);
+            cmd.Parameters.Add(new SqlParameter(p, id));
+        }
+
+        cmd.CommandText = $"""
+            UPDATE l
+               SET l.[FulfillmentStatus] = 3
+              FROM {_lineTable} l
+             INNER JOIN [{_schema}].[Document]     d  ON d.[Id]  = l.[DocumentId]
+             INNER JOIN [{_schema}].[DocumentType] dt ON dt.[Id] = d.[DocumentTypeId]
+             WHERE l.[Id] IN ({string.Join(",", paramNames)})
+               AND dt.[Code] = 'alis_talebi';
+            """;
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<IReadOnlyDictionary<int, (int Count, decimal QtySum)>> GetDerivedLineAggregatesAsync(
         int documentId, CancellationToken ct)
     {
