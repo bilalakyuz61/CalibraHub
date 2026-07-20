@@ -26,6 +26,26 @@ import { adaptFormatJson, extractValueDisplay } from '../GuideLookup/guideLookup
 import { resolveTokens as resolveAllTokens } from '../../utils/fieldTokens'
 
 /**
+ * extractCellId — row.cells (GuideRowDto.Cells / GuideResolveDto.Cells) icinden
+ * secilen kaydin PK Id'sini cikarir. Standart rehber view'lari (CLAUDE.md —
+ * "Standart rehber kurali") daima 'Id' kolonunu icerir; backend bu kolonu
+ * GridColumnsJson'a (INFORMATION_SCHEMA'dan otomatik turetilir, SqlGuideRepository.
+ * GetByCodeAsync) her zaman dahil eder — admin'in formatJson.visibleColumns
+ * override'i SADECE modal'daki gorunur sutunlari etkiler, cells payload'ini
+ * degil (bkz. Cari seciminde calisan fillMap: { '#sqCustomerId': 'Id' } ornegi,
+ * Views/Sales/DocumentEdit.cshtml). Farkli casing'e karsi savunmaci (Id/id/ID);
+ * hicbiri yoksa null doner (ozel/admin rehberinde PK kolonu olmayabilir — bu
+ * durumda data-record-id caller'a hic yazilmaz, mevcut davranis degismez).
+ */
+function extractCellId(cells) {
+  if (!cells) return null
+  var raw = cells.Id
+  if (raw == null) raw = cells.id
+  if (raw == null) raw = cells.ID
+  return raw != null ? String(raw) : null
+}
+
+/**
  * fillTargets — fillMap hedeflerini sender row.cells (veya bos) ile doldurur.
  * INPUT/TEXTAREA/SELECT icin .value, diger elementler icin .textContent.
  */
