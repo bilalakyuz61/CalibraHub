@@ -841,6 +841,13 @@ END;";
             // override/custom tablolarını kur. Zincirin SONUNDA olmalı: hemen aşağıdaki
             // ApplyActiveViewOverridesAsync bu tablodan okur (sıralama garantisi).
             await EnsureViewDefinitionTablesAsync(connection, cancellationToken);
+            // 2026-07-20: DocumentLineLink Faz 1a — backfill. Mevcut uc kalem-eslesme
+            // mekanizmasinin (DocumentLine.SourceLineId, WorkOrderSource, DocumentLineFulfillment)
+            // STATIK verisini birlesik link tablosuna kopyalar. Zincirin sonunda: tum kaynak
+            // tablolar ve hedef (DocumentLineLink) bu noktada kurulu. Idempotent (NOT EXISTS) +
+            // her kaynak icin ayri try/catch (logla+atla) — bir kaynak patlarsa startup kirilmaz.
+            // Canli yazim (dual-write) YOK — o Faz 1b. Bkz. DocumentLineLink-Tasarim.md.
+            await EnsureDocumentLineLinkBackfillAsync(connection, cancellationToken);
             // Startup override pass (clobber savunması) — BİRİNCİL geçiş. Kod baseline'ı
             // yukarıdaki tüm program view'larını ensure ettikten SONRA aktif kullanıcı
             // override'larını uygular (kullanıcı sürümü kazanır). NOT: flat view'lar +
@@ -855,6 +862,126 @@ END;";
             Console.Error.WriteLine($"[DB INIT ERROR] SqlException {sqlEx.Number}: {sqlEx.Message}");
             Console.Error.WriteLine($"[DB INIT ERROR] Procedure: {sqlEx.Procedure}");
             throw;
+        }
+    }
+
+    /// <summary>
+    /// DocumentLineLink Faz 1a — backfill. Mevcut uc kalem-eslesme mekanizmasinin STATIK
+    /// verisini birlesik DocumentLineLink tablosuna kopyalar. Canli yazim (dual-write) YOK;
+    /// o Faz 1b. Yon her zaman "kaynak satir -> hedef" olarak normalize edilir.
+    ///
+    /// Uc kaynak (bkz. DocumentLineLink-Tasarim.md §5):
+    ///   A) DocumentLine.SourceLineId -> LinkType 10 (Derivation, donusum zinciri)
+    ///   B) WorkOrderSource           -> LinkType 20 (WorkOrderAlloc, is emri tahsisi)
+    ///   C) DocumentLineFulfillment   -> LinkType = FulfillmentType (1-7, ihtiyac karsilama)
+    ///
+    /// Idempotent: her INSERT NOT EXISTS ile korunur — her startup'ta guvenle tekrar calisir,
+    /// dual-write (Faz 1b) devreye girince cift yazmaz. Her kaynak AYRI komut + AYRI try/catch:
+    /// bir sirketin (ya da bir kaynagin) backfill'i patlarsa digerleri ve startup ETKILENMEZ
+    /// (logla+atla). Kolon adlari INFORMATION_SCHEMA'ya karsi canli DB'de dogrulandi (2026-07-20).
+    /// </summary>
+    private async Task EnsureDocumentLineLinkBackfillAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+
+        // ── A: DocumentLine.SourceLineId -> LinkType 10 (Derivation) ─────────────────
+        // Turev satir (dl) kaynak satirina (src) SourceLineId ile bagli; link tek yon
+        // "kaynak (src) -> hedef (turev dl)". Miktar turev satirin Quantity'si (kopyalanir).
+        // Her turev satirin dl.[Id]'si benzersiz oldugundan (SourceLineId, 10, TargetLineId)
+        // uclusu tekrar etmez -> INSERT-ici cakisma yok. Yalniz SourceLineId dolu satirlar.
+        var backfillDerivation = $"""
+            IF OBJECT_ID(N'[{s}].[DocumentLineLink]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+            BEGIN
+                INSERT INTO [{s}].[DocumentLineLink]
+                    ([LinkType], [SourceLineId], [SourceDocId], [TargetLineId], [TargetDocId], [Quantity], [IsActive], [Created])
+                SELECT 10, dl.[SourceLineId], src.[DocumentId], dl.[Id], dl.[DocumentId], dl.[Quantity], 1, SYSUTCDATETIME()
+                  FROM [{s}].[DocumentLine] dl
+                  INNER JOIN [{s}].[DocumentLine] src ON src.[Id] = dl.[SourceLineId]
+                 WHERE dl.[SourceLineId] IS NOT NULL
+                   AND NOT EXISTS (
+                       SELECT 1 FROM [{s}].[DocumentLineLink] l
+                        WHERE l.[LinkType] = 10 AND l.[SourceLineId] = dl.[SourceLineId]
+                          AND l.[TargetLineId] = dl.[Id] AND l.[IsActive] = 1);
+            END;
+            """;
+        try
+        {
+            await using var cmdA = connection.CreateCommand();
+            cmdA.CommandText = backfillDerivation;
+            await cmdA.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DLL Backfill] Derivation (tip 10) atlandi: {ex.Message}");
+        }
+
+        // ── B: WorkOrderSource -> LinkType 20 (WorkOrderAlloc) ───────────────────────
+        // Iptal/pasif is emri HARIC (okuma filtresiyle tutarli: Status <> 5 AND IsActive = 1).
+        // TargetLineId NULL (WO satir tutmaz); TargetDocId = WorkOrder.DocumentId, TargetWorkOrderId
+        // = WorkOrder.Id (grafik gezinme + guard icin ikisi de dolu). Created kaynaktan korunur.
+        var backfillWorkOrderAlloc = $"""
+            IF OBJECT_ID(N'[{s}].[DocumentLineLink]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[WorkOrderSource]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[WorkOrder]', N'U') IS NOT NULL
+            BEGIN
+                INSERT INTO [{s}].[DocumentLineLink]
+                    ([LinkType], [SourceLineId], [SourceDocId], [TargetDocId], [TargetWorkOrderId], [Quantity], [IsActive], [Created])
+                SELECT 20, ws.[SourceLineId], ws.[SourceDocumentId], w.[DocumentId], ws.[WorkOrderId], ws.[AllocatedQuantity], 1, ws.[Created]
+                  FROM [{s}].[WorkOrderSource] ws
+                  INNER JOIN [{s}].[WorkOrder] w ON w.[Id] = ws.[WorkOrderId]
+                 WHERE w.[Status] <> 5 AND w.[IsActive] = 1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM [{s}].[DocumentLineLink] l
+                        WHERE l.[LinkType] = 20 AND l.[SourceLineId] = ws.[SourceLineId]
+                          AND l.[TargetWorkOrderId] = ws.[WorkOrderId] AND l.[IsActive] = 1);
+            END;
+            """;
+        try
+        {
+            await using var cmdB = connection.CreateCommand();
+            cmdB.CommandText = backfillWorkOrderAlloc;
+            await cmdB.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DLL Backfill] WorkOrderAlloc (tip 20) atlandi: {ex.Message}");
+        }
+
+        // ── C: DocumentLineFulfillment (aktif) -> LinkType = FulfillmentType (1-7) ────
+        // Karsilama zaten "kaynak (talep) -> hedef" yonunde; LinkType aynen FulfillmentType.
+        // SourceDocId talep satirinin belgesinden (rdl JOIN). TargetLineId/TargetDocId NULL
+        // olabilir (legacy tip 6/7: RefDocId NULL, kalici taban) -> NOT EXISTS ISNULL(-1) ile
+        // esitlenir; legacy satirlar UX_DocumentLineLink muafiyeti (LinkType 6/7) sayesinde
+        // tekillik kisitina takilmaz. Yalniz IsActive = 1 karsilamalar.
+        var backfillFulfillment = $"""
+            IF OBJECT_ID(N'[{s}].[DocumentLineLink]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLineFulfillment]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+            BEGIN
+                INSERT INTO [{s}].[DocumentLineLink]
+                    ([LinkType], [SourceLineId], [SourceDocId], [TargetLineId], [TargetDocId], [Quantity], [IsActive], [Created])
+                SELECT f.[FulfillmentType], f.[RequestLineId], rdl.[DocumentId], f.[RefDocLineId], f.[RefDocId], f.[Quantity], 1, f.[Created]
+                  FROM [{s}].[DocumentLineFulfillment] f
+                  INNER JOIN [{s}].[DocumentLine] rdl ON rdl.[Id] = f.[RequestLineId]
+                 WHERE f.[IsActive] = 1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM [{s}].[DocumentLineLink] l
+                        WHERE l.[LinkType] = f.[FulfillmentType] AND l.[SourceLineId] = f.[RequestLineId]
+                          AND ISNULL(l.[TargetDocId], -1) = ISNULL(f.[RefDocId], -1)
+                          AND ISNULL(l.[TargetLineId], -1) = ISNULL(f.[RefDocLineId], -1)
+                          AND l.[IsActive] = 1);
+            END;
+            """;
+        try
+        {
+            await using var cmdC = connection.CreateCommand();
+            cmdC.CommandText = backfillFulfillment;
+            await cmdC.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[DLL Backfill] Fulfillment (tip 1-7) atlandi: {ex.Message}");
         }
     }
 

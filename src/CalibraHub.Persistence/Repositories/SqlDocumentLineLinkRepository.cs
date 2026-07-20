@@ -19,6 +19,12 @@ namespace CalibraHub.Persistence.Repositories;
 /// INSERT/UPDATE parametreli) + FulfillmentLedger ile aynı ters-çevirme deseni (tür filtresi
 /// yok, yalnız hedef Id ile pasifleştirme) izlenir. Bu tabloda CompanyId kolonu YOKTUR —
 /// per-company DB mimarisi gereği bağlantının kendisi zaten ilgili şirkete çözülür.
+///
+/// FAZ 1a EKLEMESİ (2026-07-20): <see cref="GetFloorComponentsAsync"/> ve
+/// <see cref="GetFloorComponentsForDocumentAsync"/> okuma-only metotları eklendi — bunlar da
+/// hiçbir servis/controller tarafından henüz çağrılmıyor, yalnız Faz 1b'de çapraz-doğrulama
+/// (link'ten hesaplanan floor == eski ComputeLineFloor) ve Faz 2'de gerçek okuma geçişi için
+/// hazırlandı. InsertAsync/GetBySourceLineAsync/ReverseByTargetAsync Faz 0'dan değişmedi.
 /// </summary>
 public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
 {
@@ -115,5 +121,72 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         cmd.Parameters.AddWithValue("@TargetDocId", targetDocId);
         cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
         return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // ── FAZ 1a (2026-07-20): floor-okuma — tasarım §5, çapraz-doğrulama için ────────────
+    // Bu iki metot yalnız OKUR; hiçbir yazma yolu yok, hiçbir servis/controller henüz çağırmıyor.
+
+    public async Task<(decimal Consumed, decimal Derived, decimal WorkOrder)> GetFloorComponentsAsync(int sourceLineId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // Üç bileşen TEK sorguda: karşılama kovası (1-7), dönüşüm zinciri (10), iş emri
+        // tahsisi (20). LinkType 21/22 (üretim sarf/mamul) bilinçli olarak hariç — sipariş
+        // floor'una girmez (tasarım §4). GROUP BY yok -> agregat SUM'lar hiç satır
+        // eşleşmese bile NULL döner, aşağıda 0'a çevrilir.
+        cmd.CommandText = $"""
+            SELECT
+                SUM(CASE WHEN [LinkType] IN (1,2,3,4,5,6,7) THEN [Quantity] ELSE 0 END) AS Consumed,
+                SUM(CASE WHEN [LinkType] = 10 THEN [Quantity] ELSE 0 END) AS Derived,
+                SUM(CASE WHEN [LinkType] = 20 THEN [Quantity] ELSE 0 END) AS WorkOrder
+              FROM {_table}
+             WHERE [SourceLineId] = @SourceLineId
+               AND [IsActive] = 1;
+            """;
+        cmd.Parameters.AddWithValue("@SourceLineId", sourceLineId);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (await r.ReadAsync(ct))
+        {
+            var consumed = r.IsDBNull(0) ? 0m : r.GetDecimal(0);
+            var derived = r.IsDBNull(1) ? 0m : r.GetDecimal(1);
+            var workOrder = r.IsDBNull(2) ? 0m : r.GetDecimal(2);
+            return (consumed, derived, workOrder);
+        }
+        return (0m, 0m, 0m);
+    }
+
+    public async Task<IReadOnlyDictionary<int, (decimal Consumed, decimal Derived, decimal WorkOrder)>> GetFloorComponentsForDocumentAsync(int documentId, CancellationToken ct)
+    {
+        var map = new Dictionary<int, (decimal Consumed, decimal Derived, decimal WorkOrder)>();
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // GetFloorComponentsAsync ile aynı üç bileşen, belge bazında TOPLU: N satırlık
+        // doküman için N ayrı sorgu yerine tek sorgu (SqlWorkOrderRepository.
+        // GetAllocatedQuantitiesForDocumentAsync ile aynı N+1-önleme deseni). SourceDocId
+        // denormalize kolonu üzerinden filtrelenip SourceLineId'ye göre gruplanır.
+        cmd.CommandText = $"""
+            SELECT [SourceLineId],
+                   SUM(CASE WHEN [LinkType] IN (1,2,3,4,5,6,7) THEN [Quantity] ELSE 0 END) AS Consumed,
+                   SUM(CASE WHEN [LinkType] = 10 THEN [Quantity] ELSE 0 END) AS Derived,
+                   SUM(CASE WHEN [LinkType] = 20 THEN [Quantity] ELSE 0 END) AS WorkOrder
+              FROM {_table}
+             WHERE [SourceDocId] = @SourceDocId
+               AND [IsActive] = 1
+             GROUP BY [SourceLineId];
+            """;
+        cmd.Parameters.AddWithValue("@SourceDocId", documentId);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var sourceLineId = r.GetInt32(0);
+            var consumed = r.IsDBNull(1) ? 0m : r.GetDecimal(1);
+            var derived = r.IsDBNull(2) ? 0m : r.GetDecimal(2);
+            var workOrder = r.IsDBNull(3) ? 0m : r.GetDecimal(3);
+            map[sourceLineId] = (consumed, derived, workOrder);
+        }
+        return map;
     }
 }
