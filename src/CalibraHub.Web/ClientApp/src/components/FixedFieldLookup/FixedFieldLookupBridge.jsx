@@ -139,7 +139,7 @@ export default function FixedFieldLookupBridge(props) {
   }
 
   // DOM input ile state senkronu — tum mutasyonlar bu fonksiyondan gecer
-  var syncToDom = useCallback(function (val, disp) {
+  var syncToDom = useCallback(function (val, disp, id) {
     if (!inputEl) return
     inputEl.value = val || ''
     if (val) {
@@ -151,6 +151,19 @@ export default function FixedFieldLookupBridge(props) {
       inputEl.setAttribute('data-display', disp)
     } else {
       inputEl.removeAttribute('data-display')
+    }
+    // data-record-id — secilen kaydin PK Id'si (varsa). Yeni attribute; mevcut
+    // tuketiciler (Cari/Stok) bunu okumaz, kendi fillMap'leriyle 'Id' cell'ini
+    // ayrica cekerler — bu satir onlarin davranisini degistirmez. WorkOrderEdit
+    // gibi hidden FK input'una Id yazmasi gereken caller'lar icin: attribute
+    // asagidaki dispatchEvent('change')'DEN ONCE, ayni senkron blokta set edilir
+    // ki input.addEventListener('change', ...) icinde okundugunda guncel olsun.
+    // id verilmezse (manuel yazim, temizleme) attribute kaldirilir — eski
+    // secimden kalan Id yanlislikla kullanilmasin.
+    if (id) {
+      inputEl.setAttribute('data-record-id', id)
+    } else {
+      inputEl.removeAttribute('data-record-id')
     }
     inputEl.dispatchEvent(new Event('input', { bubbles: true }))
     inputEl.dispatchEvent(new Event('change', { bubbles: true }))
@@ -305,7 +318,7 @@ export default function FixedFieldLookupBridge(props) {
           setError(false)
           setDisplay(result.display)
           lastResolvedRef.current = trimmed
-          syncToDom(trimmed, result.display)
+          syncToDom(trimmed, result.display, extractCellId(result.cells))
           if (result.cells) fillTargets(result.cells, props.fillMap, false)
         } else {
           setError(true)
@@ -349,12 +362,13 @@ export default function FixedFieldLookupBridge(props) {
     var disp = (override.displayColumn && row.cells && row.cells[override.displayColumn] != null)
       ? String(row.cells[override.displayColumn])
       : (row.display || '')
+    var recId = extractCellId(row.cells)
 
     setValue(val)
     setDisplay(disp)
     setError(false)
     lastResolvedRef.current = val
-    syncToDom(val, disp)
+    syncToDom(val, disp, recId)
     fillTargets(row.cells, props.fillMap, false)
     // Odak yonetimi closeModal'de yapiliyor (modal-mount iken focus trap aktif).
   }

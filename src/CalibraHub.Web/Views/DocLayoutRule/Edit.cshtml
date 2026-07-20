@@ -346,7 +346,9 @@
 @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
 {
     ["Title"]      = Model.Id == 0 ? "Yeni Tasarım Kuralı" : "Tasarım Kuralı Düzenle",
-    ["ListUrl"]    = "/DocLayoutRule",
+    // embed=1 zorunlu — bu Edit ekranı _DesignRulesTabs'in İÇ iframe'i içinde açılıyor;
+    // embed'siz "Geri" hedefi iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
+    ["ListUrl"]    = "/DocLayoutRule?embed=1",
     ["SaveBtnId"]  = "trf-save",
     ["ShowDelete"] = false,
     ["ShowNew"]    = false,
@@ -868,7 +870,8 @@
                 var msg = res.count > 1 ? (res.count + ' kural kaydedildi.') : 'Kural başarıyla kaydedildi.';
                 dlrToast(msg, 'success');
                 navigatedAway = true;
-                setTimeout(function() { window.location.href = '/DocLayoutRule'; }, 700);
+                // embed=1 — kaydet sonrası dönüş de iç iframe'i embed modda tutmalı (bkz. ListUrl notu).
+                setTimeout(function() { window.location.href = '/DocLayoutRule?embed=1'; }, 700);
             } else {
                 dlrToast((res && res.error) || 'Kayıt sırasında hata.', 'error');
             }

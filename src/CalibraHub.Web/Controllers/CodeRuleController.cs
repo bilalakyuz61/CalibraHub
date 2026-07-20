@@ -214,7 +214,9 @@ public sealed class CodeRuleController : Controller
             primaryAction = new
             {
                 label = "Düzenle", icon = "Edit", color = "amber",
-                url = $"/CodeRule/Edit/{r.Id}",
+                // embed=1 zorunlu: bu kart _DesignRulesTabs'in İÇ iframe'inde render edilir;
+                // embed'siz url iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
+                url = $"/CodeRule/Edit/{r.Id}?embed=1",
                 hideButton = true,
             },
             secondaryAction = new
@@ -238,8 +240,9 @@ public sealed class CodeRuleController : Controller
             emptyText = "Henüz kural tanımlanmamış",
             actions = new object[]
             {
+                // embed=1 — bkz. primaryAction üstündeki not (iç iframe host moduna düşmesin).
                 new { id = "new", label = $"Yeni {label} Kuralı", icon = "Plus", variant = "primary",
-                      url = $"/CodeRule/New?entity={entityType.ToLowerInvariant()}" },
+                      url = $"/CodeRule/New?entity={entityType.ToLowerInvariant()}&embed=1" },
             },
             masterWidgets = Array.Empty<object>(),
             entities,

@@ -118,8 +118,10 @@
     @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
     {
         ["Title"]      = (string)ViewData["Title"],
-        ["ListUrl"]    = $"/CodeRule?entity={(entityType == "Item" ? "item" : "contact")}",
-        ["NewUrl"]     = $"/CodeRule/New?entity={(entityType == "Item" ? "item" : "contact")}",
+        // embed=1 zorunlu — bu Edit ekranı _DesignRulesTabs'in İÇ iframe'i içinde açılıyor;
+        // embed'siz hedef iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
+        ["ListUrl"]    = $"/CodeRule?entity={(entityType == "Item" ? "item" : "contact")}&embed=1",
+        ["NewUrl"]     = $"/CodeRule/New?entity={(entityType == "Item" ? "item" : "contact")}&embed=1",
         ["SaveBtnId"]  = "crSaveBtn",
         ["ShowDelete"] = false,
     })
@@ -295,7 +297,8 @@
         .then(function(res) {
             if (res.ok && res.body.ok) {
                 alert('Kaydedildi');
-                window.location.href = '/CodeRule?entity=' + INITIAL.entityType.toLowerCase();
+                // embed=1 — kaydet sonrası dönüş de iç iframe'i embed modda tutmalı (bkz. ListUrl notu).
+                window.location.href = '/CodeRule?entity=' + INITIAL.entityType.toLowerCase() + '&embed=1';
             } else {
                 alert('Hata: ' + (res.body.error || 'bilinmiyor'));
             }

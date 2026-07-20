@@ -218,7 +218,9 @@
 @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
 {
     ["Title"]      = (string)(ViewData["Title"] ?? ""),
-    ["ListUrl"]    = "/DocumentNumberRule",
+    // embed=1 zorunlu — bu Edit ekranı _DesignRulesTabs'in İÇ iframe'i içinde açılıyor;
+    // embed'siz "Geri" hedefi iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
+    ["ListUrl"]    = "/DocumentNumberRule?embed=1",
     ["SaveBtnId"]  = "dnr-save",
     ["ShowDelete"] = false,
     ["ShowNew"]    = false,
@@ -453,7 +455,8 @@
             var d = await r.json();
             if (d.ok) {
                 if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Kaydedildi', 'ok');
-                setTimeout(function() { window.location.href = '/DocumentNumberRule'; }, 600);
+                // embed=1 — kaydet sonrası dönüş de iç iframe'i embed modda tutmalı (bkz. ListUrl notu).
+                setTimeout(function() { window.location.href = '/DocumentNumberRule?embed=1'; }, 600);
             } else {
                 if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(d.error || 'Hata', 'err');
                 else alert(d.error || 'Hata');

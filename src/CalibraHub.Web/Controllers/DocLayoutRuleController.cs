@@ -419,7 +419,9 @@ public sealed class DocLayoutRuleController : Controller
                     label      = "Düzenle",
                     icon       = "Edit",
                     color      = "amber",
-                    url        = $"/DocLayoutRule/Edit/{r.Id}",
+                    // embed=1 zorunlu: bu kart _DesignRulesTabs'in İÇ iframe'inde render edilir;
+                    // embed'siz url iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
+                    url        = $"/DocLayoutRule/Edit/{r.Id}?embed=1",
                     hideButton = false,
                 },
                 secondaryAction = new
@@ -445,7 +447,8 @@ public sealed class DocLayoutRuleController : Controller
             emptyText         = "Henüz kural yok — \"Yeni Kural\" ile ekleyin",
             actions = new object[]
             {
-                new { id = "new", label = "Yeni Kural", icon = "Plus", variant = "primary", url = "/DocLayoutRule/New" },
+                // embed=1 — bkz. primaryAction üstündeki not (iç iframe host moduna düşmesin).
+                new { id = "new", label = "Yeni Kural", icon = "Plus", variant = "primary", url = "/DocLayoutRule/New?embed=1" },
             },
             masterWidgets,
             entities,

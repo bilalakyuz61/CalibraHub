@@ -219,7 +219,9 @@ public sealed class DocumentNumberRuleController : Controller
                 primaryAction = new
                 {
                     label = "Düzenle", icon = "Edit", color = "amber",
-                    url = $"/DocumentNumberRule/Edit/{r.Id}",
+                    // embed=1 zorunlu: bu kart _DesignRulesTabs'in İÇ iframe'inde render edilir;
+                    // embed'siz url iç iframe'i host moduna düşürüp şerit çiftlenmesine yol açar.
+                    url = $"/DocumentNumberRule/Edit/{r.Id}?embed=1",
                     hideButton = true,
                 },
                 secondaryAction = new
@@ -244,8 +246,9 @@ public sealed class DocumentNumberRuleController : Controller
             emptyText = "Henüz numara kuralı tanımlanmamış",
             actions = new object[]
             {
+                // embed=1 — bkz. primaryAction üstündeki not (iç iframe host moduna düşmesin).
                 new { id = "new", label = "Yeni Numara Kuralı", icon = "Plus", variant = "primary",
-                      url = "/DocumentNumberRule/New" },
+                      url = "/DocumentNumberRule/New?embed=1" },
             },
             masterWidgets = new List<object>
             {
