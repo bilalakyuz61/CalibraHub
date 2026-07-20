@@ -8436,6 +8436,45 @@ END;";
                         FOREIGN KEY ([RequestLineId]) REFERENCES [{s}].[DocumentLine]([Id])
                         ON DELETE CASCADE;
             END
+
+            -- 2026-07-20: DocumentLineLink — birlesik kalem-eslesme tablosu (Faz 0: sema + iskelet).
+            -- Uc mevcut mekanizmayi tek yon "kaynak satir -> hedef" altinda toplar:
+            -- DocumentLine.SourceLineId (donusum zinciri), WorkOrderSource (is emri tahsisi),
+            -- DocumentLineFulfillment (ihtiyac karsilama). Faz 0'da OLU tablo: hicbir yazma/okuma
+            -- baglanmaz, davranis birebir korunur (Faz 1'de dual-write + backfill). FK YOK — Faz 1'de
+            -- karar verilecek; mevcut SourceLineId de FK'siz oldugu icin tutarli. LinkType enum:
+            -- 1-7 karsilama, 10 donusum, 20/21/22 is emri (bkz. DocumentLineLink-Tasarim.md §4).
+            IF OBJECT_ID(N'[{s}].[DocumentLineLink]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DocumentLineLink]
+                (
+                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentLineLink] PRIMARY KEY,
+                    [LinkType]          TINYINT        NOT NULL,
+                    -- KAYNAK (her zaman kalem)
+                    [SourceLineId]      INT            NOT NULL,   -- DocumentLine.Id
+                    [SourceDocId]       INT            NOT NULL,   -- Document.Id (denormalize; join'siz filtre)
+                    -- HEDEF (biri dolu)
+                    [TargetLineId]      INT            NULL,       -- DocumentLine.Id (irsaliye/cikis satiri)
+                    [TargetDocId]       INT            NULL,       -- Document.Id (is emrinde WorkOrder.DocumentId)
+                    [TargetWorkOrderId] INT            NULL,       -- WorkOrder.Id (yalniz is emri link'lerinde)
+                    -- ORTAK
+                    [Quantity]          DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_DocumentLineLink_Quantity] DEFAULT(0),
+                    [Notes]             NVARCHAR(1000) NULL,
+                    [IsActive]          BIT            NOT NULL CONSTRAINT [DF_DocumentLineLink_IsActive] DEFAULT(1),
+                    [CreatedById]       INT            NULL,
+                    [Created]           DATETIME       NOT NULL CONSTRAINT [DF_DocumentLineLink_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedById]       INT            NULL,
+                    [Updated]           DATETIME       NULL
+                );
+                -- Okuma yollari (hepsi WHERE IsActive=1 filtreli)
+                CREATE INDEX [IX_DocumentLineLink_Source]    ON [{s}].[DocumentLineLink]([SourceLineId])      WHERE [IsActive] = 1;
+                CREATE INDEX [IX_DocumentLineLink_SourceDoc] ON [{s}].[DocumentLineLink]([SourceDocId])       WHERE [IsActive] = 1;
+                CREATE INDEX [IX_DocumentLineLink_Target]    ON [{s}].[DocumentLineLink]([TargetLineId])      WHERE [IsActive] = 1;
+                CREATE INDEX [IX_DocumentLineLink_WorkOrder] ON [{s}].[DocumentLineLink]([TargetWorkOrderId]) WHERE [IsActive] = 1;
+                -- Tekillik: ayni kaynak -> hedef -> tur ikilenmesin
+                CREATE UNIQUE INDEX [UX_DocumentLineLink] ON [{s}].[DocumentLineLink]
+                    ([SourceLineId], [LinkType], [TargetLineId], [TargetWorkOrderId]) WHERE [IsActive] = 1;
+            END;
             """;
 
         await using var cmd = connection.CreateCommand();

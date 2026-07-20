@@ -627,6 +627,14 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IShiftAs
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderComponentRepository,
     CalibraHub.Persistence.Repositories.SqlWorkOrderComponentRepository>();
 
+// Birlesik Kalem-Eslesme (DocumentLineLink) — FAZ 0 ISKELET (2026-07-20, bkz. tasarim dokumani
+// "Birlesik Kalem-Esleme Tablosu (DocumentLineLink)"). DI'a kayitli ama henuz hicbir servis/
+// controller tarafindan cagrilmiyor — tablo su an icin "olu" (davranis degismez). Faz 1'de
+// mevcut uc mekanizmanin (SourceLineId / WorkOrderSource / DocumentLineFulfillment) dual-write
+// adaptoru buraya baglanacak.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDocumentLineLinkRepository,
+    CalibraHub.Persistence.Repositories.SqlDocumentLineLinkRepository>();
+
 // Personnel — uretim personneli kartlari (User tablosundan ayri, Faz 3a revize)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository,
     CalibraHub.Persistence.Repositories.SqlPersonnelRepository>();

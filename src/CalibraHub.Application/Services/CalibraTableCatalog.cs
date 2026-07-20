@@ -89,6 +89,9 @@ public static class CalibraTableCatalog
         // Uretim Is Emri (Faz 1)
         "WorkOrder", "WorkOrderSource",
 
+        // Birlesik Kalem-Eslesme (Faz 0 iskelet — bkz. DocumentLineLink-Tasarim.md)
+        "DocumentLineLink",
+
         // Uretim Operasyon Sozlugu + Routing + Makine Sureleri (Faz 3)
         "Operation", "Routing", "RoutingOperation", "OperationMachineTime",
 
