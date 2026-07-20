@@ -8,23 +8,27 @@ namespace CalibraHub.Persistence.Repositories;
 
 /// <summary>
 /// DocumentLineLink persistence — FAZ 0 İSKELET (2026-07-20, bkz. tasarım dökümanı
-/// "Birleşik Kalem-Eşleşme Tablosu (DocumentLineLink)"). Bu sınıf DI'a kayıtlıdır ama
-/// HİÇBİR servis/controller tarafından çağrılmıyor; tablo şu an için "ölü" (davranış
-/// değişmez). Faz 1'de dual-write adaptörü bağlandığında InsertAsync mevcut üç mekanizmanın
-/// (SourceLineId / WorkOrderSource / DocumentLineFulfillment) yazdığı her noktaya paralel
-/// eklenecek — o zamana kadar metod gövdeleri kasıtlı olarak basit tutuldu (tek SQL ifadesi,
-/// açık transaction gerektirmez).
+/// "Birleşik Kalem-Eşleşme Tablosu (DocumentLineLink)") olarak başladı; FAZ 1a (okuma) ve
+/// FAZ 1b-i (yazma, iş emri) ile genişledi — bkz. aşağıdaki notlar.
 ///
 /// SqlWorkOrderRepository ile aynı bağlantı deseni (per-company connection factory, SELECT/
-/// INSERT/UPDATE parametreli) + FulfillmentLedger ile aynı ters-çevirme deseni (tür filtresi
-/// yok, yalnız hedef Id ile pasifleştirme) izlenir. Bu tabloda CompanyId kolonu YOKTUR —
-/// per-company DB mimarisi gereği bağlantının kendisi zaten ilgili şirkete çözülür.
+/// INSERT/UPDATE parametreli) + FulfillmentLedger ile aynı ters-çevirme deseni izlenir. Bu
+/// tabloda CompanyId kolonu YOKTUR — per-company DB mimarisi gereği bağlantının kendisi zaten
+/// ilgili şirkete çözülür.
 ///
 /// FAZ 1a EKLEMESİ (2026-07-20): <see cref="GetFloorComponentsAsync"/> ve
-/// <see cref="GetFloorComponentsForDocumentAsync"/> okuma-only metotları eklendi — bunlar da
+/// <see cref="GetFloorComponentsForDocumentAsync"/> okuma-only metotları eklendi — bunlar
 /// hiçbir servis/controller tarafından henüz çağrılmıyor, yalnız Faz 1b'de çapraz-doğrulama
 /// (link'ten hesaplanan floor == eski ComputeLineFloor) ve Faz 2'de gerçek okuma geçişi için
-/// hazırlandı. InsertAsync/GetBySourceLineAsync/ReverseByTargetAsync Faz 0'dan değişmedi.
+/// hazırlandı. InsertAsync/GetBySourceLineAsync Faz 0'dan değişmedi.
+///
+/// FAZ 1b-i EKLEMESİ (2026-07-20 — iş emri dual-write): <see cref="ReverseByTargetAsync"/>'e
+/// opsiyonel <c>LinkType?</c> tür filtresi eklendi (imza değişti: yeni bir zorunlu-ama-nullable
+/// parametre araya girdi). NULL geçilirse eski (tür filtresiz) davranış aynen sürer; belirli
+/// bir tür geçilirse yalnız o LinkType pasiflenir. İlk çağıran: <c>WorkOrderService</c>
+/// (WorkOrderSource insert/cancel/revise akışlarına paralel best-effort yazım — bkz. tasarım
+/// §8 "defensive best-effort" kararı). Bu değişiklik yayınlandığında repoda bu metodu çağıran
+/// başka bir yer yoktu; imza değişikliği geriye dönük kırılma yaratmadı.
 /// </summary>
 public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
 {
@@ -104,22 +108,27 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         return list;
     }
 
-    public async Task<int> ReverseByTargetAsync(int targetDocId, int? userId, CancellationToken ct)
+    public async Task<int> ReverseByTargetAsync(int targetDocId, int? userId, LinkType? linkType, CancellationToken ct)
     {
         if (targetDocId <= 0) return 0;
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // FAZ 1b (2026-07-20): linkType verilirse WHERE'e ek AND — bkz. arayüz KDoc'u.
+        var typeFilter = linkType.HasValue ? "AND [LinkType] = @LinkType" : "";
         cmd.CommandText = $"""
             UPDATE {_table}
                SET [IsActive] = 0,
                    [UpdatedById] = @UpdatedById,
                    [Updated] = SYSUTCDATETIME()
              WHERE [IsActive] = 1
-               AND [TargetDocId] = @TargetDocId;
+               AND [TargetDocId] = @TargetDocId
+               {typeFilter};
             """;
         cmd.Parameters.AddWithValue("@TargetDocId", targetDocId);
         cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
+        if (linkType.HasValue)
+            cmd.Parameters.AddWithValue("@LinkType", (byte)linkType.Value);
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 

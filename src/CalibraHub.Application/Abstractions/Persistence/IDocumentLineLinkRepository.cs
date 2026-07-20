@@ -32,10 +32,19 @@ public interface IDocumentLineLinkRepository
     /// pasifleştirir — hedef belge silinince/iptal edilince çağrılır. İş emri link'lerinde de
     /// TargetDocId dolu olduğundan (tasarım KN-2: WorkOrder.DocumentId ile doldurulur) tek
     /// parametre hem ticari belge hem iş emri iptalini kapsar. FulfillmentLedger.ReverseByDocumentAsync
-    /// ile aynı desen: tür filtresi YOK, yalnız TargetDocId ile çalışır — bir hedef Id'si tek
-    /// bir belgeye ait olduğundan çakışma riski yoktur. Etkilenen kayıt sayısını döner.
+    /// ile aynı desen: TargetDocId ile çalışır — bir hedef Id'si tek bir belgeye ait olduğundan
+    /// farklı belgeler arası çakışma riski yoktur. Etkilenen kayıt sayısını döner.
+    ///
+    /// FAZ 1b EKLEMESİ (2026-07-20 — iş emri dual-write): <paramref name="linkType"/> opsiyonel
+    /// tür filtresi eklendi. NULL geçilirse Faz 0 davranışı aynen sürer (o TargetDocId'ye ait
+    /// TÜM aktif link'ler, tür fark etmeksizin pasiflenir). Belirli bir tür geçilirse yalnız o
+    /// LinkType pasiflenir — örn. iş emri iptalinde <c>LinkType.WorkOrderAlloc</c> geçilir ki
+    /// aynı TargetDocId'ye (WorkOrder.DocumentId) ileride başka bir tür (örn. 21/22 üretim
+    /// sarf/mamul, ama onlar zaten WO'nun kendi belgesini SOURCE değil TARGET olarak kullanmaz)
+    /// bağlanırsa yanlışlıkla pasiflenmesin — tip-filtreli reverse en güvenli yol (bkz.
+    /// WorkOrderService.TryReverseWorkOrderLinksAsync).
     /// </summary>
-    Task<int> ReverseByTargetAsync(int targetDocId, int? userId, CancellationToken ct);
+    Task<int> ReverseByTargetAsync(int targetDocId, int? userId, LinkType? linkType, CancellationToken ct);
 
     /// <summary>
     /// FAZ 1a (2026-07-20) — bir kaynak satırın (<paramref name="sourceLineId"/>) link

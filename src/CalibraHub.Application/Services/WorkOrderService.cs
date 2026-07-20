@@ -37,6 +37,7 @@ public sealed class WorkOrderService : IWorkOrderService
     private readonly IArgeProjectRepository? _argeProjects;
     private readonly IAuditTrailService? _audit;
     private readonly IDocumentSourceRepository? _docSourceRepo;
+    private readonly IDocumentLineLinkRepository? _lineLinks;
     private readonly ILogger<WorkOrderService>? _logger;
 
     public WorkOrderService(
@@ -52,6 +53,7 @@ public sealed class WorkOrderService : IWorkOrderService
         IArgeProjectRepository? argeProjects = null,
         IAuditTrailService? audit = null,
         IDocumentSourceRepository? docSourceRepo = null,
+        IDocumentLineLinkRepository? lineLinks = null,
         ILogger<WorkOrderService>? logger = null)
     {
         _workOrders = workOrders;
@@ -66,6 +68,7 @@ public sealed class WorkOrderService : IWorkOrderService
         _argeProjects = argeProjects;
         _audit = audit;
         _docSourceRepo = docSourceRepo;
+        _lineLinks = lineLinks;
         _logger = logger;
     }
 
@@ -259,6 +262,14 @@ public sealed class WorkOrderService : IWorkOrderService
 
         await _workOrders.ChangeStatusAsync(id, newStatus, null, ct);
 
+        // DocumentLineLink dual-write reverse (Faz 1b-i, best-effort) — iş emri Cancelled'a
+        // geçtiğinde tahsis link'lerini pasifleştir (tasarım KN-3). Yalnız gerçek bir duruma
+        // geçişte çalışır (aynı statüye tekrar "geçiş" — örn. zaten Cancelled — atlanır).
+        if (current.Status != newStatus && newStatus == WorkOrderStatus.Cancelled)
+        {
+            await TryReverseWorkOrderLinksAsync(current.DocumentId, ct);
+        }
+
         // İşlem logu — iptal kullanıcı gözünden silmedir (LogDelete), diğer geçişler durum değişikliği
         if (_audit is not null && current.Status != newStatus)
         {
@@ -305,6 +316,9 @@ public sealed class WorkOrderService : IWorkOrderService
 
         var revisionId = await _workOrders.CreateRevisionAsync(id, newDocumentId, null, ct);
 
+        // DocumentLineLink dual-write (Faz 1b-i, best-effort) — bkz. TryRelinkWorkOrderRevisionAsync KDoc'u.
+        await TryRelinkWorkOrderRevisionAsync(current.DocumentId, revisionId, ct);
+
         // İşlem logu — revizyon yeni kayıttır; eski emir repo tarafında Cancelled olur
         if (_audit is not null)
         {
@@ -345,6 +359,8 @@ public sealed class WorkOrderService : IWorkOrderService
             // Lineage kenarı (İlişkili Belgeler) — WorkOrderSource miktar tahsisinden AYRI,
             // salt belge-graf gezinme amaçlı DocumentSource kenarı (bkz. LinkWorkOrderLineageAsync KDoc'u).
             await LinkWorkOrderLineageAsync(target.DocumentId, request.SourceDocumentId, ct);
+            // DocumentLineLink dual-write (Faz 1b-i, best-effort) — bkz. TryLinkWorkOrderAllocAsync KDoc'u.
+            await TryLinkWorkOrderAllocAsync(request.SourceLineId, request.SourceDocumentId, target.DocumentId, target.Id, request.Quantity, ct);
             await _workOrders.UpdateAsync(target.Id, new UpdateWorkOrderRequest(
                 PlannedQuantity: target.PlannedQuantity + request.Quantity,
                 UnitId: target.UnitId,
@@ -391,7 +407,11 @@ public sealed class WorkOrderService : IWorkOrderService
         // dönüş değeri WorkOrder.Id'dir, Document.Id değil).
         var createdWo = await _workOrders.GetAsync(newId, ct);
         if (createdWo is not null)
+        {
             await LinkWorkOrderLineageAsync(createdWo.DocumentId, request.SourceDocumentId, ct);
+            // DocumentLineLink dual-write (Faz 1b-i, best-effort) — bkz. TryLinkWorkOrderAllocAsync KDoc'u.
+            await TryLinkWorkOrderAllocAsync(request.SourceLineId, request.SourceDocumentId, createdWo.DocumentId, newId, request.Quantity, ct);
+        }
 
         return newId;
     }
@@ -425,6 +445,106 @@ public sealed class WorkOrderService : IWorkOrderService
             _logger?.LogError(ex,
                 "[WorkOrder] Lineage kenarı eklenemedi: WO Document {WoDocumentId} -> Source {SourceDocumentId}",
                 workOrderDocumentId, sourceDocumentId);
+        }
+    }
+
+    // ── DocumentLineLink dual-write — Faz 1b-i (2026-07-20, "B: iş emri" mekanizması) ─────────
+    // bkz. DocumentLineLink-Tasarim.md §5 (eşleme B → Link) ve §8 (Faz 1b defensive karar).
+    // KRİTİK ilke: bu üç yardımcı, WorkOrderSource'a yazan/onu tersine çeviren ana işlemlerin
+    // TAMAMLANMASINDAN SONRA çağrılır, kendi try/catch'i içinde çalışır ve ASLA exception
+    // fırlatmaz — link tablosu bir bug taşırsa canlı iş emri kaydı/iptali/revizyonu kırılmaz
+    // (CLAUDE.md audit trail deseniyle birebir aynı "sessiz kırık" önleme kuralı: boş catch
+    // yasak, exception loglanır). _lineLinks DI'da her zaman kayıtlı olsa da (Program.cs)
+    // nullable bırakıldı — _docSourceRepo ile aynı "opsiyonel best-effort bağımlılık" üslubu.
+    // Ayrı bir transaction'da çalışır; ana WorkOrderSource insert/update ile ORTAK transaction
+    // PAYLAŞMAZ (tasarım §8: "Link, ana kayıttan ayrı; aynı transaction'a SOKMA").
+
+    /// <summary>
+    /// Bir iş emri tahsisini (Satış Sipariş kalemi → İş Emri, <c>WorkOrderSource</c> ile aynı
+    /// olay) <c>DocumentLineLink</c>'e <c>LinkType.WorkOrderAlloc</c> (20) olarak paralel yazar.
+    /// <c>CreateFromSalesLineAsync</c>'in hem "toplama" (mevcut emre ekleme) hem "yeni emir"
+    /// dalından, ana <c>AddSourceAsync</c> çağrısı başarıyla TAMAMLANDIKTAN SONRA çağrılır.
+    /// CreatedById şu an bu serviste (AddSourceAsync/ChangeStatusAsync gibi diğer repo
+    /// çağrılarıyla aynı şekilde) hep NULL geçiliyor — dosyada henüz current-user thread'i yok,
+    /// bu metot da o mevcut deseni bozmuyor.
+    /// </summary>
+    private async Task TryLinkWorkOrderAllocAsync(int sourceLineId, int sourceDocId, int targetDocId, int targetWorkOrderId, decimal quantity, CancellationToken ct)
+    {
+        if (_lineLinks is null) return;
+        try
+        {
+            await _lineLinks.InsertAsync(new DocumentLineLinkEntry(
+                LinkType.WorkOrderAlloc,
+                SourceLineId: sourceLineId,
+                SourceDocId: sourceDocId,
+                TargetLineId: null,
+                TargetDocId: targetDocId,
+                TargetWorkOrderId: targetWorkOrderId,
+                Quantity: quantity), userId: null, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex,
+                "[WorkOrder] DocumentLineLink insert edilemedi: SourceLine {SourceLineId} (Doc {SourceDocId}) -> WO {WorkOrderId} (Doc {TargetDocId})",
+                sourceLineId, sourceDocId, targetWorkOrderId, targetDocId);
+        }
+    }
+
+    /// <summary>
+    /// Bir iş emrinin (<paramref name="workOrderDocumentId"/> = WorkOrder.DocumentId) AKTİF
+    /// tahsis link'lerini (yalnız <c>LinkType.WorkOrderAlloc</c> — tür filtreli, bkz.
+    /// <see cref="IDocumentLineLinkRepository.ReverseByTargetAsync"/> KDoc'u) pasifleştirir.
+    /// İş emri iptalinde (<see cref="ChangeStatusAsync"/>) VE revizyonda (eski emrin link'leri,
+    /// <see cref="TryRelinkWorkOrderRevisionAsync"/> içinden) çağrılır.
+    /// </summary>
+    private async Task TryReverseWorkOrderLinksAsync(int workOrderDocumentId, CancellationToken ct)
+    {
+        if (_lineLinks is null) return;
+        try
+        {
+            await _lineLinks.ReverseByTargetAsync(workOrderDocumentId, userId: null, LinkType.WorkOrderAlloc, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex,
+                "[WorkOrder] DocumentLineLink reverse edilemedi: WO Document {WoDocumentId}",
+                workOrderDocumentId);
+        }
+    }
+
+    /// <summary>
+    /// Revizyon senkronu — <c>CreateRevisionAsync</c> (repo, tek transaction) eski WO'yu
+    /// Cancelled yapıp <c>WorkOrderSource</c> satırlarını yeni WO'ya kopyaladıktan SONRA
+    /// çağrılır; link tablosunda aynı iki adımı best-effort yansıtır: (1) eski WO'nun tahsis
+    /// link'lerini pasifleştir (<see cref="TryReverseWorkOrderLinksAsync"/> — kendi try/catch'i
+    /// var, asla fırlatmaz), (2) yeni WO'ya kopyalanan her source için link 20 ekle
+    /// (<see cref="TryLinkWorkOrderAllocAsync"/> — o da kendi try/catch'i var). Bu metodun
+    /// kendi try/catch'i yalnız "yeni WO'yu ve kopyalanan source listesini oku" adımını
+    /// sarar — o okuma başarısız olursa (silinmiş kayıt, geçici bağlantı hatası vb.) link
+    /// senkronu atlanır ama revizyon işleminin kendisi (zaten tamamlanmış) etkilenmez.
+    /// </summary>
+    private async Task TryRelinkWorkOrderRevisionAsync(int oldWorkOrderDocumentId, int newWorkOrderId, CancellationToken ct)
+    {
+        if (_lineLinks is null) return;
+
+        await TryReverseWorkOrderLinksAsync(oldWorkOrderDocumentId, ct);
+
+        try
+        {
+            var newWo = await _workOrders.GetAsync(newWorkOrderId, ct);
+            if (newWo is null) return;
+
+            var copiedSources = await _workOrders.GetSourcesAsync(newWorkOrderId, ct);
+            foreach (var src in copiedSources)
+            {
+                await TryLinkWorkOrderAllocAsync(src.SourceLineId, src.SourceDocumentId, newWo.DocumentId, newWorkOrderId, src.AllocatedQuantity, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex,
+                "[WorkOrder] Revizyon icin yeni WO source'lari okunamadi (DocumentLineLink senkronu atlandi): eski WO Document {OldDocId} -> yeni WO {NewWorkOrderId}",
+                oldWorkOrderDocumentId, newWorkOrderId);
         }
     }
 
