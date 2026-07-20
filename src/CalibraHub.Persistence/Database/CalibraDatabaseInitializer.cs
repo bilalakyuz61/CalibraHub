@@ -889,6 +889,9 @@ END;";
         // "kaynak (src) -> hedef (turev dl)". Miktar turev satirin Quantity'si (kopyalanir).
         // Her turev satirin dl.[Id]'si benzersiz oldugundan (SourceLineId, 10, TargetLineId)
         // uclusu tekrar etmez -> INSERT-ici cakisma yok. Yalniz SourceLineId dolu satirlar.
+        // KRITIK: turev BELGE aktif olmali (td.IsActive=1) — eski GetDerivedLineAggregatesAsync
+        // (SqlDocumentRepository.cs:1189) ile birebir: soft-delete edilen turev belge derived'i
+        // saymaz (turev bagi serbest birakir). Filtre olmadan link floor eski floor'u asar.
         var backfillDerivation = $"""
             IF OBJECT_ID(N'[{s}].[DocumentLineLink]', N'U') IS NOT NULL
                AND OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
@@ -898,6 +901,7 @@ END;";
                 SELECT 10, dl.[SourceLineId], src.[DocumentId], dl.[Id], dl.[DocumentId], dl.[Quantity], 1, SYSUTCDATETIME()
                   FROM [{s}].[DocumentLine] dl
                   INNER JOIN [{s}].[DocumentLine] src ON src.[Id] = dl.[SourceLineId]
+                  INNER JOIN [{s}].[Document] td ON td.[Id] = dl.[DocumentId] AND td.[IsActive] = 1
                  WHERE dl.[SourceLineId] IS NOT NULL
                    AND NOT EXISTS (
                        SELECT 1 FROM [{s}].[DocumentLineLink] l
