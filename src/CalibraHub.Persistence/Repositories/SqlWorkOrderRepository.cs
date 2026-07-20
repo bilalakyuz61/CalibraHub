@@ -450,6 +450,31 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<IReadOnlyDictionary<int, decimal>> GetAllocatedQuantitiesForDocumentAsync(int sourceDocumentId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        var map = new Dictionary<int, decimal>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // GetAllocatedQuantityForLineAsync ile ayni filtre (Cancelled/IsActive), belge bazinda
+        // TOPLU: N satirlik dokuman icin N ayri sorgu yerine tek sorgu (SaveQuoteAsync guard'i).
+        cmd.CommandText = $@"
+            SELECT s.[SourceLineId], SUM(s.[AllocatedQuantity])
+            FROM {_srcTable} s
+            INNER JOIN {_woTable} w ON w.[Id] = s.[WorkOrderId]
+            WHERE s.[SourceDocumentId] = @SourceDocumentId
+              AND w.[CompanyId] = @CompanyId
+              AND w.[Status] <> 5 /* Cancelled */
+              AND w.[IsActive] = 1
+            GROUP BY s.[SourceLineId];";
+        cmd.Parameters.AddWithValue("@SourceDocumentId", sourceDocumentId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+            map[r.GetInt32(0)] = r.IsDBNull(1) ? 0m : r.GetDecimal(1);
+        return map;
+    }
+
     public async Task<int?> FindRoutingForItemAsync(int itemId, int? configId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();

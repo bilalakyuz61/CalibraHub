@@ -34,6 +34,16 @@ public interface IWorkOrderRepository
     /// <summary>Bir DocumentLine icin atanmis toplam miktar — kalan açik miktar hesaplama icin.</summary>
     Task<decimal> GetAllocatedQuantityForLineAsync(int sourceLineId, CancellationToken ct);
 
+    /// <summary>
+    /// 2026-07-20 — Bir kaynak belgenin (ör. satış siparişi) TÜM satırları için WorkOrderSource
+    /// tahsis toplamı, tek sorguda: sourceLineId → toplam AllocatedQuantity. Yalnızca aktif iş
+    /// emirleri sayılır (Status &lt;&gt; Cancelled, IsActive=1) — <see cref="GetAllocatedQuantityForLineAsync"/>
+    /// ile aynı filtre, TOPLU (N+1'siz) sürüm. DocumentService'in miktar guard'ları
+    /// (SaveQuoteAsync/GetLineLocksAsync/GetDeleteBlockReasonAsync) belge başına tek çağrıyla
+    /// kullanır. Tahsisi olmayan belge için boş sözlük döner.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, decimal>> GetAllocatedQuantitiesForDocumentAsync(int sourceDocumentId, CancellationToken ct);
+
     /// <summary>Toplama (mevcut emire ekleme) icin uygun is emirleri: ayni Item+Config, Status IN (Planned, Released).</summary>
     Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct);
 

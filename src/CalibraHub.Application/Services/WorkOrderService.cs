@@ -4,6 +4,7 @@ using CalibraHub.Application.Auditing;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Application.Services;
 
@@ -35,6 +36,8 @@ public sealed class WorkOrderService : IWorkOrderService
     private readonly IDocumentTypeRepository? _documentTypeRepo;
     private readonly IArgeProjectRepository? _argeProjects;
     private readonly IAuditTrailService? _audit;
+    private readonly IDocumentSourceRepository? _docSourceRepo;
+    private readonly ILogger<WorkOrderService>? _logger;
 
     public WorkOrderService(
         IWorkOrderRepository workOrders,
@@ -47,7 +50,9 @@ public sealed class WorkOrderService : IWorkOrderService
         IDocumentNumberService? docNumberService = null,
         IDocumentTypeRepository? documentTypeRepo = null,
         IArgeProjectRepository? argeProjects = null,
-        IAuditTrailService? audit = null)
+        IAuditTrailService? audit = null,
+        IDocumentSourceRepository? docSourceRepo = null,
+        ILogger<WorkOrderService>? logger = null)
     {
         _workOrders = workOrders;
         _numerator = numerator;
@@ -60,6 +65,8 @@ public sealed class WorkOrderService : IWorkOrderService
         _documentTypeRepo = documentTypeRepo;
         _argeProjects = argeProjects;
         _audit = audit;
+        _docSourceRepo = docSourceRepo;
+        _logger = logger;
     }
 
     /// <summary>
@@ -335,6 +342,9 @@ public sealed class WorkOrderService : IWorkOrderService
                 throw new InvalidOperationException("Mamul/konfigurasyon uyusmuyor.");
 
             await _workOrders.AddSourceAsync(target.Id, request.SourceDocumentId, request.SourceLineId, request.Quantity, ct);
+            // Lineage kenarı (İlişkili Belgeler) — WorkOrderSource miktar tahsisinden AYRI,
+            // salt belge-graf gezinme amaçlı DocumentSource kenarı (bkz. LinkWorkOrderLineageAsync KDoc'u).
+            await LinkWorkOrderLineageAsync(target.DocumentId, request.SourceDocumentId, ct);
             await _workOrders.UpdateAsync(target.Id, new UpdateWorkOrderRequest(
                 PlannedQuantity: target.PlannedQuantity + request.Quantity,
                 UnitId: target.UnitId,
@@ -375,7 +385,47 @@ public sealed class WorkOrderService : IWorkOrderService
             Notes: null), ct);
 
         await _workOrders.AddSourceAsync(newId, request.SourceDocumentId, request.SourceLineId, request.Quantity, ct);
+
+        // Lineage kenarı (bkz. LinkWorkOrderLineageAsync KDoc'u) — yeni emrin DocumentId'si
+        // CreateAsync içinde üretildi, burada tek bir GetAsync ile okunur (CreateAsync'in kendi
+        // dönüş değeri WorkOrder.Id'dir, Document.Id değil).
+        var createdWo = await _workOrders.GetAsync(newId, ct);
+        if (createdWo is not null)
+            await LinkWorkOrderLineageAsync(createdWo.DocumentId, request.SourceDocumentId, ct);
+
         return newId;
+    }
+
+    /// <summary>
+    /// İş emri belgesini (türetilen) kaynak sipariş belgesine (kaynak) DocumentSource köprüsüyle
+    /// bağlar — <c>/Document/Lineage</c> paneli (İlişkili Belgeler) bu köprüyü okuyup iş
+    /// emri↔sipariş bağını gösterir. WorkOrderSource'taki miktar tahsisinden BAĞIMSIZ, salt
+    /// gezinme/görsel amaçlı bir kenardır (2026-07-20). AddAsync idempotent (IF NOT EXISTS) —
+    /// toplama akışında aynı çift birden fazla kez eklenmeye çalışılsa da tekrarlanmaz.
+    ///
+    /// İş emri iptal edildiğinde (Status=Cancelled) bu kenar BİLEREK temizlenmiyor — lineage
+    /// düğümü WorkOrder'ın kendi Document.IsActive bayrağına göre "Silinmiş" gösterilir. NOT:
+    /// bu bayrak iptalde OTOMATİK 0 OLMUYOR (yalnız WorkOrder.Status değişiyor) — bkz. rapor.
+    ///
+    /// _docSourceRepo kayıtlı değilse (nullable — cross-module bağımlılık, opsiyonel) sessizce
+    /// no-op. Gerçek bir hata (ör. şema/kolon sorunu) ise YUTULUR ama LOGLANIR — iş emri
+    /// bağlama akışı hiçbir zaman bu yüzden bozulmaz (bkz. CLAUDE.md "sessiz kırık" kural #2:
+    /// catch boş bırakılmaz, exception loglanır).
+    /// </summary>
+    private async Task LinkWorkOrderLineageAsync(int workOrderDocumentId, int sourceDocumentId, CancellationToken ct)
+    {
+        if (_docSourceRepo is null) return;
+        try
+        {
+            await _docSourceRepo.EnsureSchemaAsync(ct);
+            await _docSourceRepo.AddAsync(workOrderDocumentId, sourceDocumentId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex,
+                "[WorkOrder] Lineage kenarı eklenemedi: WO Document {WoDocumentId} -> Source {SourceDocumentId}",
+                workOrderDocumentId, sourceDocumentId);
+        }
     }
 
     public Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct)

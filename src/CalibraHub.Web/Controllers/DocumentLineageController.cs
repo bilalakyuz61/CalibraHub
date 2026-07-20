@@ -152,6 +152,11 @@ public sealed class DocumentLineageController : Controller
             "depo_giris"        => ("Depo Girişi",         "STOCK_IN",         $"/Warehouse/StockEntryEdit?id={id}"),
             "depo_cikis"        => ("Ambar Çıkış",         "STOCK_OUT",        $"/Warehouse/StockEntryEdit?id={id}"),
             "sayim"             => ("Sayım Fişi",          "INVENTORY_COUNT",  $"/Warehouse/InventoryEdit?id={id}"),
+            // 2026-07-20 — İş emri (üretim), sipariş satırından üretildiğinde WorkOrderService
+            // DocumentSource kenarı yazar (bkz. WorkOrderService.LinkWorkOrderLineageAsync).
+            // Case eklenmezse düğüm default'a düşer: etiket ham kod ("is_emri"), permForm boş,
+            // editUrl boş → link üretilmez (tıklanamaz görünür).
+            "is_emri"           => ("İş Emri",             "WORK_ORDERS",      $"/Production/WorkOrderEdit?id={id}"),
             _                   => (string.IsNullOrWhiteSpace(code) ? "Belge" : code!, "", ""),
         };
 }

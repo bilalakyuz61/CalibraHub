@@ -20,8 +20,10 @@ public sealed class DocumentService : IDocumentService
     private readonly ICompanyParameterService? _companyParameters;
     private readonly IDecimalSettingService? _decimalSettings;
     private readonly IAuditTrailService? _audit;
+    private readonly IWorkOrderRepository? _workOrders;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
+    private static readonly IReadOnlyDictionary<int, decimal> EmptyWorkOrderAllocations = new Dictionary<int, decimal>();
 
     public DocumentService(
         IDocumentRepository repo,
@@ -32,7 +34,8 @@ public sealed class DocumentService : IDocumentService
         IApprovalFlowService? approvalFlowService = null,
         ICompanyParameterService? companyParameters = null,
         IDecimalSettingService? decimalSettings = null,
-        IAuditTrailService? audit = null)
+        IAuditTrailService? audit = null,
+        IWorkOrderRepository? workOrders = null)
     {
         _repo = repo;
         _financeService = financeService;
@@ -43,6 +46,43 @@ public sealed class DocumentService : IDocumentService
         _companyParameters = companyParameters;
         _decimalSettings = decimalSettings;
         _audit = audit;
+        _workOrders = workOrders;
+    }
+
+    /// <summary>
+    /// 2026-07-20 — İş emri↔sipariş miktar guard'ı. Belgenin satırlarına WorkOrderSource ile
+    /// tahsis edilmiş miktar (sourceLineId → toplam), TEK sorguda (N+1'den kaçınmak için
+    /// belge başına bir kez çağrılır). <see cref="_workOrders"/> kayıtlı değilse (üretim modülü
+    /// devre dışı senaryosu) boş sözlük döner — guard sessizce no-op olur. Repo çağrısı KENDİSİ
+    /// try/catch İLE SARILMAZ: gerçek bir hata (ör. tablo/kolon adı sorunu) olursa yukarı fırlar,
+    /// guard'ın "hata oldu, sanki tahsis yokmuş gibi devam et" şeklinde sessizce atlanması KURALA
+    /// AYKIRI olurdu (bkz. CLAUDE.md "sessiz kırık" kural #2/#3).
+    /// </summary>
+    private Task<IReadOnlyDictionary<int, decimal>> GetWorkOrderAllocationsAsync(int documentId, CancellationToken ct)
+        => _workOrders?.GetAllocatedQuantitiesForDocumentAsync(documentId, ct)
+           ?? Task.FromResult(EmptyWorkOrderAllocations);
+
+    /// <summary>
+    /// Kalem miktar tabanı (floor) — kullanıcı kararı (2026-07-20): karşılanan (consumed),
+    /// türetilmiş belge satırı toplamı (derivedQty — irsaliye/sevkiyat SourceLineId zinciri) ve
+    /// iş emri tahsisi (woQty — WorkOrderSource) AYRI kaynaklardır ve TOPLANMAZ; üçünden BÜYÜK
+    /// OLANI taban olur. Örnek: sipariş 100, iş emri tahsisi 90, teslimat 95 → floor = max(90,95)
+    /// = 95 (185 değil). SaveQuoteAsync / GetLineLocksAsync / GetDeleteBlockReasonAsync AYNI bu
+    /// formülü kullanır — üçü ayrı ayrı hesaplarsa sapabilir (kaydet-sonra-hata / sil-sonra-hata).
+    /// </summary>
+    private static decimal ComputeLineFloor(decimal consumed, decimal derivedQty, decimal woQty)
+        => Math.Max(Math.Max(consumed, derivedQty), woQty);
+
+    /// <summary>Floor=0 iken kilit yok; floor&gt;0 iken üç kaynaktan hangisinin payı en büyükse
+    /// kullanıcı mesajı onu anlatır (eşitlikte öncelik: iş emri &gt; türetilmiş &gt; karşılanan).</summary>
+    private enum LineFloorSource { None, Consumed, Derived, WorkOrder }
+
+    private static LineFloorSource DominantLineFloorSource(decimal consumed, decimal derivedQty, decimal woQty)
+    {
+        if (consumed <= 0 && derivedQty <= 0 && woQty <= 0) return LineFloorSource.None;
+        if (woQty >= derivedQty && woQty >= consumed) return LineFloorSource.WorkOrder;
+        if (derivedQty >= consumed) return LineFloorSource.Derived;
+        return LineFloorSource.Consumed;
     }
 
     // ── İşlem logu (audit trail) yardımcıları ──────────────────────────────
@@ -63,6 +103,22 @@ public sealed class DocumentService : IDocumentService
             catch { /* audit için tip çözümlenemedi — genel koda düş */ }
         }
         return "belge";
+    }
+
+    /// <summary>
+    /// 2026-07-20 — Miktar/bağlantı guard'ı (consumed/derived/iş emri tahsisi) bir kaydı
+    /// reddettiğinde "başarısız işlem" olarak loglar (CLAUDE.md audit kuralı: reddi logla).
+    /// Ayrı bir Insert/Update/Delete DEĞİL — kayıt hiç değişmedi; bu yüzden AuditActions.Event
+    /// (serbest olay) kullanılır. Audit yazımı iş akışını asla bozmaz (_audit null-conditional +
+    /// AuditTrailService'in kendi iç try/catch'i zaten var).
+    /// </summary>
+    private async Task LogGuardRejectionAsync(int? documentTypeId, int documentId, string reason, CancellationToken ct)
+    {
+        if (_audit is null) return;
+        var entity = await ResolveAuditEntityAsync(documentTypeId, ct);
+        _audit.LogEvent(AuditActions.Event,
+            detail: $"Kayıt reddedildi (miktar/bağlantı guard'ı): {reason}",
+            entity: entity, entityId: documentId);
     }
 
     /// <summary>Header diff snapshot'ı — yalnızca kullanıcı tarafından düzenlenen alanlar
@@ -326,7 +382,8 @@ public sealed class DocumentService : IDocumentService
 
     /// <summary>
     /// Bağlantı-kilitli satırlar — SaveQuoteAsync'teki koruma ile AYNI taban formülü:
-    /// floor = max(karşılanan miktar, türetilmiş aktif satır miktar toplamı). Kilitli
+    /// floor = max(karşılanan miktar, türetilmiş aktif satır miktar toplamı, iş emri tahsisi)
+    /// — bkz. <see cref="ComputeLineFloor"/> (2026-07-20: iş emri tahsisi eklendi). Kilitli
     /// olmayan (floor yok) satırlar döndürülmez. UI önden silme engeli + miktar tabanı için kullanır.
     /// </summary>
     public async Task<IReadOnlyList<DocumentLineLockDto>> GetLineLocksAsync(int documentId, CancellationToken ct)
@@ -337,18 +394,25 @@ public sealed class DocumentService : IDocumentService
         if (lines.Count == 0) return result;
 
         var derivedAgg = await _repo.GetDerivedLineAggregatesAsync(documentId, ct);
+        var woAlloc = await GetWorkOrderAllocationsAsync(documentId, ct);
         foreach (var ln in lines)
         {
             // consumed: karşılanan miktar. İhtiyaç dışı türlerde Fulfilled* zaten 0 (domain
             // invariant) → SaveQuoteAsync'teki isPurchaseRequest-gate ile aynı sonucu verir.
             var consumed   = ln.FulfilledFromStock + ln.FulfilledByPurchase;
             var hasDerived = derivedAgg.TryGetValue(ln.Id, out var da);
-            if (consumed <= 0 && !hasDerived) continue;
+            var derivedQty = hasDerived ? da.QtySum : 0m;
+            var woQty      = woAlloc.TryGetValue(ln.Id, out var wq) ? wq : 0m;
+            var source = DominantLineFloorSource(consumed, derivedQty, woQty);
+            if (source == LineFloorSource.None) continue;
 
-            var floor  = Math.Max(consumed, hasDerived ? da.QtySum : 0m);
-            var reason = hasDerived
-                ? $"Bu kalemden türetilmiş {da.Count} belge satırı olduğu için silinemez."
-                : $"Bu kalem {consumed:0.##} birim karşılandığı için silinemez.";
+            var floor  = ComputeLineFloor(consumed, derivedQty, woQty);
+            var reason = source switch
+            {
+                LineFloorSource.WorkOrder => $"Bu kalemden {woQty:0.##} birim iş emrine tahsis edildiği için silinemez.",
+                LineFloorSource.Derived   => $"Bu kalemden türetilmiş {da.Count} belge satırı olduğu için silinemez.",
+                _                         => $"Bu kalem {consumed:0.##} birim karşılandığı için silinemez.",
+            };
             result.Add(new DocumentLineLockDto(ln.Id, floor, reason));
         }
         return result;
@@ -436,11 +500,16 @@ public sealed class DocumentService : IDocumentService
         //  1) İhtiyaç zinciri: karşılanan (FulfilledFromStock+ByPurchase) miktar tabandır.
         //  2) Dönüşüm zinciri (teklif→sipariş vb.): başka AKTİF belgede SourceLineId ile
         //     referans alınan kalem silinemez; miktarı türetilmiş toplamın altına inemez.
+        //  3) İş emri tahsisi (2026-07-20): WorkOrderSource ile bu kaleme tahsis edilmiş miktar
+        //     da tabandır. Üç kaynak (consumed/derived/woAlloc) AYRIDIR ve TOPLANMAZ — floor
+        //     üçünden BÜYÜK OLANI (bkz. ComputeLineFloor). Ör. sipariş 100, iş emri tahsisi 90,
+        //     teslimat 95 → floor = max(90,95) = 95 (185 değil).
         // Bağlantıyı etkilemeyen düzenlemeler (not, fiyat, artırma...) serbesttir.
         if (!isNew && request.Id.HasValue)
         {
             var derivedAgg = await _repo.GetDerivedLineAggregatesAsync(request.Id.Value, ct);
-            if (isPurchaseRequest || derivedAgg.Count > 0)
+            var woAlloc = await GetWorkOrderAllocationsAsync(request.Id.Value, ct);
+            if (isPurchaseRequest || derivedAgg.Count > 0 || woAlloc.Count > 0)
             {
                 var existingLines = await GetQuoteLinesAsync(request.Id.Value, ct);
                 var incomingById = request.Lines
@@ -451,17 +520,31 @@ public sealed class DocumentService : IDocumentService
                 {
                     var consumed = isPurchaseRequest ? ex.FulfilledFromStock + ex.FulfilledByPurchase : 0m;
                     var hasDerived = derivedAgg.TryGetValue(ex.Id, out var da);
-                    var floor = Math.Max(consumed, hasDerived ? da.QtySum : 0m);
-                    if (consumed <= 0 && !hasDerived) continue;
+                    var derivedQty = hasDerived ? da.QtySum : 0m;
+                    var woQty = woAlloc.TryGetValue(ex.Id, out var wq) ? wq : 0m;
+                    var source = DominantLineFloorSource(consumed, derivedQty, woQty);
+                    if (source == LineFloorSource.None) continue;
+                    var floor = ComputeLineFloor(consumed, derivedQty, woQty);
 
                     var name = ex.MaterialName ?? ex.MaterialCode ?? $"#{ex.Id}";
-                    var reason = hasDerived
-                        ? $"bu kalemden türetilmiş {da.Count} belge satırı olduğu"
-                        : $"{consumed:0.##} birim karşılandığı";
+                    var reason = source switch
+                    {
+                        LineFloorSource.WorkOrder => $"{woQty:0.##} birim iş emrine tahsis edildiği",
+                        LineFloorSource.Derived   => $"bu kalemden türetilmiş {da.Count} belge satırı olduğu",
+                        _                         => $"{consumed:0.##} birim karşılandığı",
+                    };
                     if (!incomingById.TryGetValue(ex.Id, out var inc))
-                        return (false, $"'{name}' kalemi {reason} için silinemez. Önce bağlantılı belgeleri geri alın.", null, false);
+                    {
+                        var msg = $"'{name}' kalemi {reason} için silinemez. Önce bağlantılı belgeleri geri alın.";
+                        await LogGuardRejectionAsync(request.DocumentTypeId, request.Id.Value, msg, ct);
+                        return (false, msg, null, false);
+                    }
                     if (inc.Quantity < floor)
-                        return (false, $"'{name}' kalemi {reason} için miktarı {floor:0.##} altına düşürülemez (girilen: {inc.Quantity:0.##}).", null, false);
+                    {
+                        var msg = $"'{name}' kalemi {reason} için miktarı {floor:0.##} altına düşürülemez (girilen: {inc.Quantity:0.##}).";
+                        await LogGuardRejectionAsync(request.DocumentTypeId, request.Id.Value, msg, ct);
+                        return (false, msg, null, false);
+                    }
                 }
             }
 
@@ -850,9 +933,29 @@ public sealed class DocumentService : IDocumentService
         if (lines.Any(l => l.FulfilledFromStock + l.FulfilledByPurchase > 0))
             return "Bu belge karşılanmış kalem(ler) içerdiği için silinemez. Önce karşılama belgelerini geri alın.";
 
-        // 2) Bu belgeden türetilmiş AKTİF belge varsa (DocumentSource: teklif→sipariş,
-        //    İhtiyaç→talep/fiş...) kaynak silinemez — bağlantı bozulur. Türetilenler
+        // 2) İş emrine tahsis edilmiş kalem içeren belge silinemez (2026-07-20 — iş emri↔sipariş
+        //    miktar guard'ı, SaveQuoteAsync/GetLineLocksAsync ile AYNI kaynak: WorkOrderSource).
+        //    Yalnızca AKTİF (iptal edilmemiş) iş emirleri sayılır — bkz. GetWorkOrderAllocationsAsync.
+        //    Kalemi silmek miktarı 0'a indirmekle eşdeğerdir; tahsis varsa 0 daima taban altıdır.
+        var woAlloc = await GetWorkOrderAllocationsAsync(id, ct);
+        if (woAlloc.Count > 0 && woAlloc.Values.Any(q => q > 0))
+        {
+            var names = lines
+                .Where(l => woAlloc.TryGetValue(l.Id, out var q) && q > 0)
+                .Select(l => l.MaterialName ?? l.MaterialCode ?? $"#{l.Id}")
+                .Distinct()
+                .ToList();
+            return $"Bu belgede iş emrine tahsis edilmiş kalem(ler) var: {string.Join(", ", names)}. " +
+                   "Kaynak belge silinemez; önce ilgili iş emirlerini iptal edin.";
+        }
+
+        // 3) Bu belgeden türetilmiş AKTİF belge varsa (DocumentSource: teklif→sipariş,
+        //    İhtiyaç→talep/fiş, iş emri...) kaynak silinemez — bağlantı bozulur. Türetilenler
         //    silinirse (soft-delete) kaynak yeniden silinebilir hale gelir.
+        //    NOT (2026-07-20): iş emri belgesi Cancelled olunca IsActive=0 olmuyor (yalnız
+        //    WorkOrder.Status değişiyor) — bu kontrol bu durumda hâlâ "aktif" görüp bloklamaya
+        //    devam edebilir; #2'deki Status-farkındalı kontrol asıl doğru kaynak, bu blok teklif/
+        //    sipariş/irsaliye zincirleri için değişmeden kalıyor (bkz. rapor notu).
         var derivedIds = await _docSourceRepo.GetDerivedDocumentIdsAsync(id, ct);
         if (derivedIds.Count > 0)
         {
@@ -872,10 +975,20 @@ public sealed class DocumentService : IDocumentService
 
     public async Task<(bool Ok, string? Error)> DeleteQuoteAsync(int id, CancellationToken ct)
     {
-        // Silme engelleri (karşılanmış kalem / türetilmiş aktif belge) — UI precheck
-        // ile aynı kaynak. Engelliyse silme.
+        // Silme engelleri (karşılanmış kalem / iş emri tahsisi / türetilmiş aktif belge) — UI
+        // precheck ile aynı kaynak. Engelliyse silme + reddi logla (başarısız işlem).
+        // NOT: documentTypeId burada bilinmiyor (belge henüz okunmadı) — LogGuardRejectionAsync
+        // null ile çağrılır, ResolveAuditEntityAsync generic "belge" koduna düşer. Bunun için
+        // ayrı bir GetByIdAsync round-trip'i eklemedik (yalnız kozmetik etiket kazandırırdı) —
+        // hem gereksiz DB çağrısı hem onu saracak bir try/catch (CLAUDE.md kural #2: boş catch
+        // yasak) gerektirirdi. LogGuardRejectionAsync zaten hiçbir zaman fırlatmaz (iç
+        // ResolveAuditEntityAsync + AuditTrailService.Enqueue kendi try/catch'lerine sahip).
         var blockReason = await GetDeleteBlockReasonAsync(id, ct);
-        if (blockReason is not null) return (false, blockReason);
+        if (blockReason is not null)
+        {
+            await LogGuardRejectionAsync(null, id, blockReason, ct);
+            return (false, blockReason);
+        }
 
         // İşlem logu için silinen belgenin kimliğini + kalem dökümünü silmeden ÖNCE al
         Document? docForAudit = null;
