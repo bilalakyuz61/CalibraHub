@@ -475,6 +475,20 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         return map;
     }
 
+    public async Task<int?> GetIdByDocumentIdAsync(int documentId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT [Id] FROM {_woTable}
+            WHERE [DocumentId] = @DocumentId AND [CompanyId] = @CompanyId;";
+        cmd.Parameters.AddWithValue("@DocumentId", documentId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result != null && result != DBNull.Value ? Convert.ToInt32(result) : null;
+    }
+
     public async Task<int?> FindRoutingForItemAsync(int itemId, int? configId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();

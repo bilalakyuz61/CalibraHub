@@ -44,6 +44,16 @@ public interface IWorkOrderRepository
     /// </summary>
     Task<IReadOnlyDictionary<int, decimal>> GetAllocatedQuantitiesForDocumentAsync(int sourceDocumentId, CancellationToken ct);
 
+    /// <summary>
+    /// 2026-07-20 (review Bulgu 2) — İş emrinin companion Document.Id'sinden kendi WorkOrder.Id
+    /// (PK) değerini çözer. WorkOrderEdit ekranı WorkOrder.Id ile anahtarlanır, Document.Id İLE
+    /// DEĞİL — ikisi ayrı IDENTITY sütunudur (ilk iş emrinde bile Id=1, DocumentId=2 gibi farklı
+    /// olabilir). Lineage panelinin "is_emri" düğümü linkini kurarken bu metodla doğru PK'ya
+    /// çevrilir; aksi halde Document.Id ile açılan URL 404 verir veya alakasız bir iş emrini açar.
+    /// UNIQUE INDEX UX_WorkOrder_Document(DocumentId) sayesinde en fazla bir eşleşme olur.
+    /// </summary>
+    Task<int?> GetIdByDocumentIdAsync(int documentId, CancellationToken ct);
+
     /// <summary>Toplama (mevcut emire ekleme) icin uygun is emirleri: ayni Item+Config, Status IN (Planned, Released).</summary>
     Task<IReadOnlyCollection<WorkOrderListItemDto>> ListEligibleForMergeAsync(int itemId, int? configId, CancellationToken ct);
 

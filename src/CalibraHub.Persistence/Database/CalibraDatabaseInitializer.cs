@@ -15047,6 +15047,25 @@ END;";
                     REFERENCES [{schemaForSql}].[WorkOrder]([Id]) ON DELETE CASCADE;
             END;
 
+            -- 2026-07-20: is emri<->siparis baglarini (WorkOrderSource) belge soyagacina
+            -- (DocumentSource) gecmise donuk tasi. Yeni baglar WorkOrderService.
+            -- LinkWorkOrderLineageAsync ile DocumentSource'a yaziliyor; ama bu ozellikten
+            -- ONCE kurulmus baglar yalniz WorkOrderSource'taydi -> siparisin Iliskili
+            -- Belgeler ekraninda is emri gorunmuyordu. Idempotent (NOT EXISTS); zaman-damgasi
+            -- kolonu INSERT'te belirtilmez (DocumentSource.CreatedAt DEFAULT GETDATE()).
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderSource]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[DocumentSource]', N'U') IS NOT NULL
+            BEGIN
+                INSERT INTO [{schemaForSql}].[DocumentSource] ([DocumentId], [SourceDocumentId])
+                SELECT DISTINCT w.[DocumentId], s.[SourceDocumentId]
+                  FROM [{schemaForSql}].[WorkOrderSource] s
+                  INNER JOIN [{schemaForSql}].[WorkOrder] w ON w.[Id] = s.[WorkOrderId]
+                 WHERE NOT EXISTS (
+                       SELECT 1 FROM [{schemaForSql}].[DocumentSource] ds
+                        WHERE ds.[DocumentId] = w.[DocumentId]
+                          AND ds.[SourceDocumentId] = s.[SourceDocumentId]);
+            END;
+
             -- 2026-06-11: Migration: WorkOrder.AssignedUserId → INT (Users.Id FK).
             -- CreatedById/UpdatedById → INT NULL (kullanici ID'si, soft-delete nedeniyle FK constraint yok).
             IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL

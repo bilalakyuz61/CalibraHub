@@ -945,17 +945,23 @@ public sealed class DocumentService : IDocumentService
                 .Select(l => l.MaterialName ?? l.MaterialCode ?? $"#{l.Id}")
                 .Distinct()
                 .ToList();
-            return $"Bu belgede iş emrine tahsis edilmiş kalem(ler) var: {string.Join(", ", names)}. " +
+            // İsim listesi boş çıkabilir (ör. tahsisli satır sonradan belgeden silindiyse —
+            // WorkOrderSource.SourceLineId artık mevcut lines'ta yok) — jenerik ifadeye düş,
+            // boş "..." (2026-07-20 review Bulgu 4).
+            var label = names.Count > 0 ? string.Join(", ", names) : "bir veya daha fazla kalem";
+            return $"Bu belgede iş emrine tahsis edilmiş kalem(ler) var: {label}. " +
                    "Kaynak belge silinemez; önce ilgili iş emirlerini iptal edin.";
         }
 
         // 3) Bu belgeden türetilmiş AKTİF belge varsa (DocumentSource: teklif→sipariş,
-        //    İhtiyaç→talep/fiş, iş emri...) kaynak silinemez — bağlantı bozulur. Türetilenler
+        //    İhtiyaç→talep/fiş...) kaynak silinemez — bağlantı bozulur. Türetilenler
         //    silinirse (soft-delete) kaynak yeniden silinebilir hale gelir.
-        //    NOT (2026-07-20): iş emri belgesi Cancelled olunca IsActive=0 olmuyor (yalnız
-        //    WorkOrder.Status değişiyor) — bu kontrol bu durumda hâlâ "aktif" görüp bloklamaya
-        //    devam edebilir; #2'deki Status-farkındalı kontrol asıl doğru kaynak, bu blok teklif/
-        //    sipariş/irsaliye zincirleri için değişmeden kalıyor (bkz. rapor notu).
+        //    İSTİSNA (2026-07-20 review Bulgu 1 — DÜZELTİLDİ): "is_emri" türündeki türevler bu
+        //    listeye HİÇ eklenmez. Sebep: iş emri Document'ını soft-delete eden bir yol yok —
+        //    ChangeStatusAsync(Cancelled) yalnız WorkOrder.Status'u değiştirir, Document.IsActive
+        //    hep 1 kalır. Bu kontrol status'a bakmadığı için Cancelled bir iş emri bile kaynağı
+        //    KALICI olarak bloklardı — madde 2 (Status-farkında, WorkOrderSource üzerinden) zaten
+        //    doğru kapsamı sağlıyor; iş emri türevleri için TEK doğru kaynak odur.
         var derivedIds = await _docSourceRepo.GetDerivedDocumentIdsAsync(id, ct);
         if (derivedIds.Count > 0)
         {
@@ -963,7 +969,17 @@ public sealed class DocumentService : IDocumentService
             foreach (var did in derivedIds)
             {
                 var d = await GetQuoteByIdAsync(did, ct);
-                if (d is { IsActive: true }) activeNos.Add(d.DocumentNumber);
+                if (d is not { IsActive: true }) continue;
+
+                string? typeCode = null;
+                if (d.DocumentTypeId is > 0)
+                {
+                    var dt = await _documentTypeRepo.GetByIdAsync(d.DocumentTypeId.Value, ct);
+                    typeCode = dt?.Code;
+                }
+                if (string.Equals(typeCode, "is_emri", StringComparison.OrdinalIgnoreCase)) continue;
+
+                activeNos.Add(d.DocumentNumber);
             }
             if (activeNos.Count > 0)
                 return $"Bu belgeden türetilmiş belge(ler) var: {string.Join(", ", activeNos)}. " +

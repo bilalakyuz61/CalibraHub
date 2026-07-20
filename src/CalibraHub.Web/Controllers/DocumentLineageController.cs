@@ -23,6 +23,7 @@ public sealed class DocumentLineageController : Controller
     private readonly IDocumentService _docService;
     private readonly IDocumentTypeRepository _docTypeRepo;
     private readonly IPermissionService _permService;
+    private readonly IWorkOrderRepository _workOrders;
 
     // Döngü/patlama koruması — soyağacı zinciri normalde birkaç seviyedir.
     private const int MaxDepth = 25;
@@ -31,12 +32,14 @@ public sealed class DocumentLineageController : Controller
         IDocumentSourceRepository docSource,
         IDocumentService docService,
         IDocumentTypeRepository docTypeRepo,
-        IPermissionService permService)
+        IPermissionService permService,
+        IWorkOrderRepository workOrders)
     {
         _docSource = docSource;
         _docService = docService;
         _docTypeRepo = docTypeRepo;
         _permService = permService;
+        _workOrders = workOrders;
     }
 
     [HttpGet("/Document/Lineage")]
@@ -104,6 +107,17 @@ public sealed class DocumentLineageController : Controller
             }
 
             var (fallbackName, permForm, editUrl) = ResolveNav(typeCode, nodeId);
+
+            // 2026-07-20 (review Bulgu 2) — İş emri edit ekranı (WorkOrderEdit) WorkOrder.Id
+            // (kendi PK'sı) ile anahtarlanır, nodeId (=Document.Id) İLE DEĞİL — ayrı IDENTITY
+            // sütunlarıdır. ResolveNav genel kural olarak nodeId'yi kullanır (diğer tüm belge
+            // tipleri Document.Id ile açılıyor); yalnız is_emri için gerçek WorkOrder.Id'ye çevrilir.
+            // Çevrilemezse (WorkOrder bulunamadı — beklenmez ama savunma amaçlı) link boş bırakılır.
+            if (string.Equals(typeCode, "is_emri", StringComparison.OrdinalIgnoreCase))
+            {
+                var workOrderId = await _workOrders.GetIdByDocumentIdAsync(nodeId, ct);
+                editUrl = workOrderId.HasValue ? $"/Production/WorkOrderEdit?id={workOrderId.Value}" : "";
+            }
 
             // Yetki: form kodu çözülebiliyorsa VIEW/EDIT yetkisi kontrol edilir; çözülemezse
             // link açık bırakılır (hedef ekran kendi PermissionScope'u ile zaten korur).
