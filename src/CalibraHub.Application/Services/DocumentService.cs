@@ -355,7 +355,8 @@ public sealed class DocumentService : IDocumentService
     }
 
     public async Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(
-        SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct)
+        SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct,
+        IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null)
     {
         // ── Cari cozumleme ─────────────────────────────────────
         // contact_id otorite kaynaktir; client ContactName gondermiyor (label),
@@ -461,6 +462,34 @@ public sealed class DocumentService : IDocumentService
                         return (false, $"'{name}' kalemi {reason} için silinemez. Önce bağlantılı belgeleri geri alın.", null, false);
                     if (inc.Quantity < floor)
                         return (false, $"'{name}' kalemi {reason} için miktarı {floor:0.##} altına düşürülemez (girilen: {inc.Quantity:0.##}).", null, false);
+                }
+            }
+
+            // ── Karşılama defteri koruması (2026-07-20, Madde 1) ─────────────────
+            // Bu belge (satın alma siparişi/talebi) bir İhtiyaç Kaydı satırını karşılıyorsa
+            // (DocumentLineFulfillment.RefDocId = bu belge), malzeme bazında miktar defterdeki
+            // katkısının altına düşürülemez — aksi halde belge daha az mal hareket ettirir/daha
+            // az satın alır ama defter eski (yüksek) toplamı göstermeye devam eder. Yukarıdaki
+            // guard'ın (kaynak taraf, isPurchaseRequest) TERSİ: burada bu belge alis_talebi
+            // OLMADIĞI için (RefDocId hiçbir zaman kendi Id'si olamaz) doğal olarak no-op kalır,
+            // yalnız karşılayan belge türlerinde (alis_siparisi/satin_alma_talebi) devreye girer.
+            var fulfillmentFloor = await _repo.GetFulfillmentContributionByItemAsync(request.Id.Value, ct);
+            if (fulfillmentFloor.Count > 0)
+            {
+                var incomingQtyByItem = request.Lines
+                    .GroupBy(l => l.ItemId)
+                    .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
+                foreach (var (itemId, floorInfo) in fulfillmentFloor)
+                {
+                    var incomingQty = incomingQtyByItem.GetValueOrDefault(itemId);
+                    if (incomingQty < floorInfo.FloorQty)
+                    {
+                        var label = floorInfo.MaterialName ?? floorInfo.MaterialCode ?? $"#{itemId}";
+                        return (false,
+                            $"{label} malzemesi bu belgede {floorInfo.FloorQty:0.##} birim ihtiyaç karşılıyor; " +
+                            $"miktarı {floorInfo.FloorQty:0.##} altına düşürülemez (girilen: {incomingQty:0.##}).",
+                            null, false);
+                    }
                 }
             }
         }
@@ -656,7 +685,9 @@ public sealed class DocumentService : IDocumentService
             RevisedFromId = ln.RevisedFromId,
         }).ToArray();
 
-        await _repo.SaveLinesAsync(quote.Id, finalLines, ct);
+        // 2026-07-20 (Madde 2): fulfillmentEntries verilmişse (bu belge bir İhtiyaç Kaydı'nı
+        // karşılıyorsa) kalem yazımıyla AYNI transaction'da deftere yazılır — atomiklik.
+        await _repo.SaveLinesAsync(quote.Id, finalLines, ct, createdById, fulfillmentEntries);
 
         // ── Kit snapshot (Faz 2) — kit satirlarini o anki aktif ItemKit icerigiyle DONDUR ──
         // Bir kit belge kalemine eklendiginde icerigi satira snapshot'lanir; kit sonradan revize
@@ -855,6 +886,23 @@ public sealed class DocumentService : IDocumentService
             try { lines = await GetQuoteLinesAsync(id, ct); } catch { }
         }
 
+        // İşlem logu (Madde 3, 2026-07-20): bu belge bir İhtiyaç Kaydı satırını karşılıyorsa,
+        // silmeden ÖNCE etkilenen satırların eski durumunu yakala — ters çevirme DeleteAsync'in
+        // İÇİNDE (aynı transaction'da) yapıldığı için "sonra"sını ayrıca DB'den okuyup diff'leriz
+        // (bkz. LogFulfillmentAuditAsync). Salt-okunur ön-kontrol; ReverseByDocumentAsync'in
+        // davranışına dokunmaz.
+        IReadOnlyDictionary<int, DocumentLineDto>? oldFulfillmentLines = null;
+        if (_audit is not null)
+        {
+            try
+            {
+                var affectedIds = await _repo.GetFulfillmentAffectedLineIdsAsync(id, ct);
+                if (affectedIds.Count > 0)
+                    oldFulfillmentLines = await GetLinesSnapshotAsync(affectedIds, ct);
+            }
+            catch { oldFulfillmentLines = null; }
+        }
+
         // NOT: karşılama defterinin ters çevrilmesi (bu belge bir İhtiyaç Kaydı'nı
         // karşılıyorduysa katkısını geri alma) DeleteAsync'in İÇİNDE, aynı transaction'da
         // yapılır — bkz. SqlDocumentRepository.DeleteAsync. Burada ayrı bir çağrı yok ki
@@ -874,6 +922,17 @@ public sealed class DocumentService : IDocumentService
                 detail: $"{lines.Count} kalem · Genel Toplam {AuditDiff.Normalize(docForAudit.GrandTotal)}",
                 snapshot: snapshot);
         }
+
+        // İşlem logu (Madde 3): ters çevirmenin İhtiyaç Kaydı tarafındaki etkisi — ayrı
+        // belge(ler)e (İhtiyaç Kaydı) yazılır, silinen belgenin kendi log kaydından bağımsız.
+        if (oldFulfillmentLines is { Count: > 0 })
+        {
+            var detail = docForAudit is not null
+                ? $"Karşılayan belge silindi (#{docForAudit.DocumentNumber})"
+                : $"Karşılayan belge silindi (#{id})";
+            await LogFulfillmentAuditAsync(oldFulfillmentLines, detail, ct);
+        }
+
         return (true, null);
     }
 
@@ -934,6 +993,90 @@ public sealed class DocumentService : IDocumentService
     /// </summary>
     public Task<int?> GetDocumentIdByLineAsync(int lineId, CancellationToken ct)
         => _repo.GetDocumentIdByLineAsync(lineId, ct);
+
+    // ── Karşılama defteri — audit yardımcıları (Madde 3, 2026-07-20) ───────────────
+
+    /// <summary>Bkz. IDocumentService.GetFulfillmentAffectedLineIdsAsync KDoc'u.</summary>
+    public Task<IReadOnlyList<int>> GetFulfillmentAffectedLineIdsAsync(int refDocId, CancellationToken ct)
+        => _repo.GetFulfillmentAffectedLineIdsAsync(refDocId, ct);
+
+    /// <summary>Bkz. IDocumentService.GetLinesSnapshotAsync KDoc'u.</summary>
+    public async Task<IReadOnlyDictionary<int, DocumentLineDto>> GetLinesSnapshotAsync(
+        IReadOnlyCollection<int> lineIds, CancellationToken ct)
+    {
+        var result = new Dictionary<int, DocumentLineDto>();
+        if (lineIds is null || lineIds.Count == 0) return result;
+
+        // Satırlar farklı belgelere ait olabilir — önce hangi belgeye ait olduklarını çöz,
+        // sonra belge başına TEK GetQuoteLinesAsync ile hepsini birden çek (N+1 belge bazında,
+        // satır bazında değil).
+        var docIds = new HashSet<int>();
+        var lineToDoc = new Dictionary<int, int>();
+        foreach (var lineId in lineIds.Distinct())
+        {
+            var docId = await _repo.GetDocumentIdByLineAsync(lineId, ct);
+            if (docId is > 0)
+            {
+                lineToDoc[lineId] = docId.Value;
+                docIds.Add(docId.Value);
+            }
+        }
+
+        foreach (var docId in docIds)
+        {
+            var lines = await GetQuoteLinesAsync(docId, ct);
+            foreach (var l in lines)
+                if (lineToDoc.TryGetValue(l.Id, out var d) && d == docId)
+                    result[l.Id] = l;
+        }
+        return result;
+    }
+
+    /// <summary>Karşılama durumu (FulfillmentStatus) → Türkçe etiket.</summary>
+    private static string FulfillmentStatusLabel(int status) => status switch
+    {
+        1 => "Kısmen Karşılandı",
+        2 => "Karşılandı",
+        3 => "Kapatıldı",
+        _ => "Açık",
+    };
+
+    /// <summary>Bkz. IDocumentService.LogFulfillmentAuditAsync KDoc'u.</summary>
+    public async Task LogFulfillmentAuditAsync(
+        IReadOnlyDictionary<int, DocumentLineDto> oldLinesById, string detail, CancellationToken ct)
+    {
+        if (_audit is null || oldLinesById is null || oldLinesById.Count == 0) return;
+        try
+        {
+            foreach (var grp in oldLinesById.Values.GroupBy(l => l.DocumentId))
+            {
+                var docId = grp.Key;
+                var newLines = (await GetQuoteLinesAsync(docId, ct)).ToDictionary(l => l.Id);
+                var changes = new List<AuditFieldChange>();
+                foreach (var oldLn in grp)
+                {
+                    // Satır silinmiş olabilir (nadiren) — o durumda yeni durumu yok, atla.
+                    if (!newLines.TryGetValue(oldLn.Id, out var newLn)) continue;
+
+                    var oldQty = oldLn.FulfilledFromStock + oldLn.FulfilledByPurchase;
+                    var newQty = newLn.FulfilledFromStock + newLn.FulfilledByPurchase;
+                    if (oldQty == newQty && oldLn.FulfillmentStatus == newLn.FulfillmentStatus) continue;
+
+                    var label = newLn.MaterialName ?? newLn.MaterialCode ?? ("#" + newLn.ItemId);
+                    changes.Add(new AuditFieldChange(
+                        $"Line[{newLn.Id}].Fulfillment",
+                        $"{label} · Karşılama",
+                        $"{AuditDiff.Normalize(oldQty)} ({FulfillmentStatusLabel(oldLn.FulfillmentStatus)})",
+                        $"{AuditDiff.Normalize(newQty)} ({FulfillmentStatusLabel(newLn.FulfillmentStatus)})"));
+                }
+                if (changes.Count == 0) continue;
+
+                var doc = await GetQuoteByIdAsync(docId, ct);
+                _audit.LogChanges("alis_talebi", docId, doc?.DocumentNumber, changes, detail: detail);
+            }
+        }
+        catch { /* audit yazımı işlem akışını asla bozmaz */ }
+    }
 
     /// <summary>
     /// Tekliflerden cari bazli siparis(ler) uretir.

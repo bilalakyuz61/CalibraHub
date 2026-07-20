@@ -27,7 +27,15 @@ public interface IDocumentRepository
     /// <summary>INSERT veya UPDATE. Yeni Id'yi doner (IDENTITY).</summary>
     Task<int> UpsertAsync(Document document, CancellationToken ct);
 
-    Task SaveLinesAsync(int documentId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct);
+    /// <summary>
+    /// <paramref name="fulfillmentEntries"/> (2026-07-20, Madde 2) — verilirse, karşılama
+    /// defteri kayıtları kalem yazımıyla AYNI transaction'da yazılır (belge kaydı ile defter
+    /// yazımı atomik olur). RefDocId = <paramref name="documentId"/> (repo İÇİNDE set edilir,
+    /// <see cref="PendingFulfillmentEntry"/> bu alanı taşımaz — çağıran zaten documentId'yi
+    /// parametre olarak verdiği için ayrıca bilmesi gerekmez).
+    /// </summary>
+    Task SaveLinesAsync(int documentId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct,
+        int? createdById = null, IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null);
     Task DeleteAsync(int id, CancellationToken ct);
 
     /// <summary>Sadece [status] kolonunu günceller — onay başlatıldığında, onaylandığında vb.</summary>
@@ -81,6 +89,29 @@ public interface IDocumentRepository
     /// </summary>
     /// <returns>Toplamları güncellenen ihtiyaç satırı sayısı.</returns>
     Task<int> AddFulfillmentEntriesAsync(IReadOnlyCollection<FulfillmentEntry> entries, int? userId, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-20 (Madde 1 — karşılayan belge düzenleme koruması) — Verilen belgenin
+    /// (<paramref name="refDocId"/>) karşılama defterindeki AKTİF katkısını malzeme (ItemId)
+    /// bazında toplar: DocumentLineFulfillment.RequestLineId → DocumentLine.ItemId join'i ile
+    /// "bu belge hangi malzemeden ne kadar İhtiyaç karşılıyor" sorusuna cevap verir.
+    ///
+    /// Kaynak taraftaki (İhtiyaç Kaydı'nın kendi satırı) korumasıyla (SaveQuoteAsync,
+    /// isPurchaseRequest guard'ı) AYNI ilkenin karşılayan belge tarafındaki uygulaması: bu
+    /// belge düzenlenirken malzeme bazında miktar döndürülen değerin altına düşürülemez.
+    /// Boş sözlük = bu belgenin defterde hiç katkısı yok → düzenleme serbest.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, (string? MaterialCode, string? MaterialName, decimal FloorQty)>>
+        GetFulfillmentContributionByItemAsync(int refDocId, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-20 (Madde 3 — audit) — Bu belgenin (<paramref name="refDocId"/>) karşılama
+    /// defterinde şu an AKTİF katkısı olan İhtiyaç Kaydı satır Id'lerini (RequestLineId,
+    /// distinct) döner. Silme/ters çevirme ÖNCESİ audit "eski durum" snapshot'ı almak için
+    /// kullanılır — salt-okunur bir ön-kontroldür, ReverseByDocumentAsync'in davranışına
+    /// dokunmaz (aynı WHERE koşulunu paylaşır).
+    /// </summary>
+    Task<IReadOnlyList<int>> GetFulfillmentAffectedLineIdsAsync(int refDocId, CancellationToken ct);
 
     // NOT: ters çevirmenin (karşılama belgesi silinince katkıyı geri alma) burada bir
     // sözleşmesi YOKTUR — bilinçli. İşlem, silme ile AYNI transaction'da yapılmak zorunda

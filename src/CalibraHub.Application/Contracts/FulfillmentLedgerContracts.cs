@@ -95,3 +95,18 @@ public sealed record FulfillmentEntry(
     decimal Quantity,
     int? RefDocLineId = null,
     string? Notes = null);
+
+/// <summary>
+/// 2026-07-20 (Madde 2) — <see cref="FulfillmentEntry"/> ile AYNI amaç, RefDocId HARİÇ:
+/// belge kaydıyla aynı transaction'da deftere yazılacak satırlar için kullanılır
+/// (IStockDocRepository.SaveAsync / IDocumentService.SaveQuoteAsync yeni opsiyonel parametresi).
+/// Çağıran (controller), belge henüz INSERT edilmediği için kendi Id'sini bilmez — bu yüzden
+/// RefDocId burada YOKTUR; repo, belgeyi yazdığı transaction içinde INSERT sonrası elde ettiği
+/// Id'yi tek doğruluk kaynağı olarak kullanır (bkz. Persistence/Repositories/FulfillmentLedger.InsertEntriesAsync).
+/// </summary>
+public sealed record PendingFulfillmentEntry(
+    int RequestLineId,
+    FulfillmentSourceKind Kind,
+    decimal Quantity,
+    int? RefDocLineId = null,
+    string? Notes = null);

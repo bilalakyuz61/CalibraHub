@@ -28,6 +28,7 @@ public sealed class WarehouseController : Controller
     private readonly ICompanyParameterService _companyParams;
     private readonly IDocumentTypeRepository _documentTypeRepo;
     private readonly IDocumentSourceRepository _docSourceRepo;
+    private readonly IDocumentService _documentService;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IAuditTrailService _audit;
     private readonly IPermissionService _permService;
@@ -49,6 +50,7 @@ public sealed class WarehouseController : Controller
         ICompanyParameterService companyParams,
         IDocumentTypeRepository documentTypeRepo,
         IDocumentSourceRepository docSourceRepo,
+        IDocumentService documentService,
         SqlServerConnectionFactory connectionFactory,
         IAuditTrailService audit,
         IPermissionService permService,
@@ -62,6 +64,7 @@ public sealed class WarehouseController : Controller
         _companyParams = companyParams;
         _documentTypeRepo = documentTypeRepo;
         _docSourceRepo = docSourceRepo;
+        _documentService = documentService;
         _connectionFactory = connectionFactory;
         _audit = audit;
         _permService = permService;
@@ -1011,12 +1014,38 @@ public sealed class WarehouseController : Controller
                     return Json(new { ok = false, error = "Yansıtılmış sayım fişi silinemez. Yansıtılan stok farkları bu belgeye bağlıdır; silinmesi bakiyeyi bozar." });
             }
 
+            // İşlem logu (Madde 3, 2026-07-20): bu belge (transfer/ambar çıkış) bir İhtiyaç
+            // Kaydı satırını karşılıyorsa, silmeden ÖNCE etkilenen satırların eski durumunu
+            // yakala — ters çevirme DeleteAsync'in İÇİNDE (aynı transaction'da) yapıldığı için
+            // "sonra"sını ayrıca DB'den okuyup diff'leriz. Salt-okunur ön-kontrol;
+            // FulfillmentLedger.ReverseByDocumentAsync'in davranışına dokunmaz. INVENTORY_COUNT/
+            // STOCK_IN belgeleri defterde hiç katkı üretmediği için burada doğal olarak no-op'tur.
+            IReadOnlyDictionary<int, DocumentLineDto>? oldFulfillmentLines = null;
+            try
+            {
+                var affectedIds = await _documentService.GetFulfillmentAffectedLineIdsAsync(id, ct);
+                if (affectedIds.Count > 0)
+                    oldFulfillmentLines = await _documentService.GetLinesSnapshotAsync(affectedIds, ct);
+            }
+            catch { oldFulfillmentLines = null; }
+
             await _stockDocRepo.DeleteAsync(id, ct);
 
             if (docForAudit is not null)
                 _audit.LogDelete(AuditEntityFor(docForAudit.DocType), id, docForAudit.DocNo,
                     detail: linesForAudit is { Count: > 0 } ? $"{linesForAudit.Count} kalem" : null,
                     snapshot: BuildDeletedLineSnapshot(linesForAudit));
+
+            // İşlem logu (Madde 3): ters çevirmenin İhtiyaç Kaydı tarafındaki etkisi — ayrı
+            // belge(ler)e (İhtiyaç Kaydı) yazılır, silinen belgenin kendi log kaydından bağımsız.
+            if (oldFulfillmentLines is { Count: > 0 })
+            {
+                var detail = docForAudit is not null
+                    ? $"Karşılayan belge silindi (#{docForAudit.DocNo})"
+                    : $"Karşılayan belge silindi (#{id})";
+                await _documentService.LogFulfillmentAuditAsync(oldFulfillmentLines, detail, ct);
+            }
+
             return Json(new { ok = true });
         }
         catch (Exception ex)

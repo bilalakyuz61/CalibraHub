@@ -513,10 +513,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     ///   - Request'teki her satir: Id>0 ve mevcut ise UPDATE, aksi halde INSERT
     ///   - Request'te olmayan mevcut Id'leri DELETE et (CASCADE detaylari temizler)
     /// </summary>
-    public async Task SaveLinesAsync(int documentId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct)
+    public async Task SaveLinesAsync(int documentId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct,
+        int? createdById = null, IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null)
     {
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-
         // TANI LOG: hangi satir id'lerine hangi qty/price geliyor — revize sorunlarini
         // takip etmek icin (kullanici "qty parent'a yaziliyor" raporu).
         if (_logger != null)
@@ -529,92 +528,115 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             }
         }
 
-        // 1) Mevcut satir Id'lerini topla
-        var existingIds = new HashSet<int>();
-        await using (var getCmd = conn.CreateCommand())
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        // 2026-07-20 (Madde 2): transaction eklendi — kalem yazımı (sil+upsert) İLE karşılama
+        // defteri kaydının (fulfillmentEntries doluysa) atomik olabilmesi için gerekliydi; bu
+        // metod öncesinde transaction TAŞIMIYORDU (her komut kendi auto-commit'i ile çalışıyordu).
+        // Yan etki (kasıtlı iyileştirme): kalem sil+upsert döngüsünün kendisi de artık atomik.
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
         {
-            getCmd.CommandText = $"SELECT [Id] FROM {_lineTable} WHERE [DocumentId] = @DocumentId;";
-            getCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
-            await using var r = await getCmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) existingIds.Add(r.GetInt32(0));
-        }
-
-        var keptIds = new HashSet<int>();
-
-        // 2) Request satirlari — UPSERT
-        foreach (var ln in lines)
-        {
-            var isUpdate = ln.Id > 0 && existingIds.Contains(ln.Id);
-            if (isUpdate) keptIds.Add(ln.Id);
-
-            await using var cmd = conn.CreateCommand();
-            // BaseQuantity: ana birime normalize miktar (ticari satırlarda da tutarlı doldurulur —
-            // stok etkilemez ama teklif→sipariş→irsaliye dönüşümü/raporlamada baz miktar hazır olur)
-            var baseQtyExpr = StockUnitSql.BaseQtyExpr($"[{_schema}].[Items]", $"[{_schema}].[ItemUnits]", "@Quantity", "@ItemId", "@UnitId");
-            if (isUpdate)
+            // 1) Mevcut satir Id'lerini topla
+            var existingIds = new HashSet<int>();
+            await using (var getCmd = conn.CreateCommand())
             {
-                cmd.CommandText = $"""
-                    UPDATE {_lineTable} SET
-                        [LineNo]         = @LineNo,
-                        [ItemId]         = @ItemId,
-                        [UnitId]         = @UnitId,
-                        [Quantity]        = @Quantity,
-                        [BaseQuantity]   = {baseQtyExpr},
-                        [UnitPrice]      = @UnitPrice,
-                        [DiscountRate]   = @DiscountRate,
-                        [LineTotal]      = @LineTotal,
-                        [CombinationId]  = @CombinationId,
-                        [LocationId]     = @LocationId,
-                        [Notes]           = @Notes,
-                        [NotesPinned]    = @NotesPinned,
-                        [RevisedFromId] = @RevisedFromId,
-                        [SourceLineId]  = @SourceLineId,
-                        [DeliveryDate]  = @DeliveryDate,
-                        [DeliveryDays]  = @DeliveryDays
-                    WHERE [Id] = @Id AND [DocumentId] = @DocumentId;
-                    """;
-                cmd.Parameters.Add(new SqlParameter("@Id", ln.Id));
+                getCmd.Transaction = tx;
+                getCmd.CommandText = $"SELECT [Id] FROM {_lineTable} WHERE [DocumentId] = @DocumentId;";
+                getCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+                await using var r = await getCmd.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct)) existingIds.Add(r.GetInt32(0));
             }
-            else
-            {
-                cmd.CommandText = $"""
-                    INSERT INTO {_lineTable}
-                        ([DocumentId],[LineNo],[ItemId],[UnitId],
-                         [Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                         [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
-                    VALUES
-                        (@DocumentId,@LineNo,@ItemId,@UnitId,
-                         @Quantity,{baseQtyExpr},@UnitPrice,@DiscountRate,@LineTotal,
-                         @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays);
-                    """;
-            }
-            cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
-            cmd.Parameters.Add(new SqlParameter("@LineNo", ln.LineNo));
-            cmd.Parameters.Add(new SqlParameter("@ItemId", ln.ItemId));
-            cmd.Parameters.Add(new SqlParameter("@UnitId", (object?)ln.UnitId ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@Quantity", ln.Quantity));
-            cmd.Parameters.Add(new SqlParameter("@UnitPrice", ln.UnitPrice));
-            cmd.Parameters.Add(new SqlParameter("@DiscountRate", ln.DiscountRate));
-            cmd.Parameters.Add(new SqlParameter("@LineTotal", ln.LineTotal));
-            cmd.Parameters.Add(new SqlParameter("@CombinationId", (object?)ln.CombinationId ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@LocationId", (object?)ln.LocationId ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@Notes", (object?)ln.Notes ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@NotesPinned", ln.NotesPinned));
-            cmd.Parameters.Add(new SqlParameter("@RevisedFromId", (object?)ln.RevisedFromId ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@SourceLineId", (object?)ln.SourceLineId ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@DeliveryDate", (object?)ln.DeliveryDate ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@DeliveryDays", (object?)ln.DeliveryDays ?? DBNull.Value));
-            await cmd.ExecuteNonQueryAsync(ct);
-        }
 
-        // 3) Request'te olmayan mevcut Id'leri sil (CASCADE detaylari temizler)
-        var toDelete = existingIds.Except(keptIds).ToArray();
-        if (toDelete.Length > 0)
+            var keptIds = new HashSet<int>();
+
+            // 2) Request satirlari — UPSERT
+            foreach (var ln in lines)
+            {
+                var isUpdate = ln.Id > 0 && existingIds.Contains(ln.Id);
+                if (isUpdate) keptIds.Add(ln.Id);
+
+                await using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                // BaseQuantity: ana birime normalize miktar (ticari satırlarda da tutarlı doldurulur —
+                // stok etkilemez ama teklif→sipariş→irsaliye dönüşümü/raporlamada baz miktar hazır olur)
+                var baseQtyExpr = StockUnitSql.BaseQtyExpr($"[{_schema}].[Items]", $"[{_schema}].[ItemUnits]", "@Quantity", "@ItemId", "@UnitId");
+                if (isUpdate)
+                {
+                    cmd.CommandText = $"""
+                        UPDATE {_lineTable} SET
+                            [LineNo]         = @LineNo,
+                            [ItemId]         = @ItemId,
+                            [UnitId]         = @UnitId,
+                            [Quantity]        = @Quantity,
+                            [BaseQuantity]   = {baseQtyExpr},
+                            [UnitPrice]      = @UnitPrice,
+                            [DiscountRate]   = @DiscountRate,
+                            [LineTotal]      = @LineTotal,
+                            [CombinationId]  = @CombinationId,
+                            [LocationId]     = @LocationId,
+                            [Notes]           = @Notes,
+                            [NotesPinned]    = @NotesPinned,
+                            [RevisedFromId] = @RevisedFromId,
+                            [SourceLineId]  = @SourceLineId,
+                            [DeliveryDate]  = @DeliveryDate,
+                            [DeliveryDays]  = @DeliveryDays
+                        WHERE [Id] = @Id AND [DocumentId] = @DocumentId;
+                        """;
+                    cmd.Parameters.Add(new SqlParameter("@Id", ln.Id));
+                }
+                else
+                {
+                    cmd.CommandText = $"""
+                        INSERT INTO {_lineTable}
+                            ([DocumentId],[LineNo],[ItemId],[UnitId],
+                             [Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                             [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
+                        VALUES
+                            (@DocumentId,@LineNo,@ItemId,@UnitId,
+                             @Quantity,{baseQtyExpr},@UnitPrice,@DiscountRate,@LineTotal,
+                             @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays);
+                        """;
+                }
+                cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+                cmd.Parameters.Add(new SqlParameter("@LineNo", ln.LineNo));
+                cmd.Parameters.Add(new SqlParameter("@ItemId", ln.ItemId));
+                cmd.Parameters.Add(new SqlParameter("@UnitId", (object?)ln.UnitId ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@Quantity", ln.Quantity));
+                cmd.Parameters.Add(new SqlParameter("@UnitPrice", ln.UnitPrice));
+                cmd.Parameters.Add(new SqlParameter("@DiscountRate", ln.DiscountRate));
+                cmd.Parameters.Add(new SqlParameter("@LineTotal", ln.LineTotal));
+                cmd.Parameters.Add(new SqlParameter("@CombinationId", (object?)ln.CombinationId ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@LocationId", (object?)ln.LocationId ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@Notes", (object?)ln.Notes ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@NotesPinned", ln.NotesPinned));
+                cmd.Parameters.Add(new SqlParameter("@RevisedFromId", (object?)ln.RevisedFromId ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@SourceLineId", (object?)ln.SourceLineId ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@DeliveryDate", (object?)ln.DeliveryDate ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@DeliveryDays", (object?)ln.DeliveryDays ?? DBNull.Value));
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // 3) Request'te olmayan mevcut Id'leri sil (CASCADE detaylari temizler)
+            var toDelete = existingIds.Except(keptIds).ToArray();
+            if (toDelete.Length > 0)
+            {
+                await using var delCmd = conn.CreateCommand();
+                delCmd.Transaction = tx;
+                delCmd.CommandText = $"DELETE FROM {_lineTable} WHERE [DocumentId] = @DocumentId AND [Id] IN ({string.Join(",", toDelete)});";
+                delCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+                await delCmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // 4) Karşılama defteri (2026-07-20, Madde 2) — kalem yazımıyla AYNI transaction'da.
+            if (fulfillmentEntries is { Count: > 0 })
+                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, documentId, fulfillmentEntries, createdById, ct);
+
+            await tx.CommitAsync(ct);
+        }
+        catch
         {
-            await using var delCmd = conn.CreateCommand();
-            delCmd.CommandText = $"DELETE FROM {_lineTable} WHERE [DocumentId] = @DocumentId AND [Id] IN ({string.Join(",", toDelete)});";
-            delCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
-            await delCmd.ExecuteNonQueryAsync(ct);
+            try { await tx.RollbackAsync(ct); } catch { /* bağlantı düşmüşse yut */ }
+            throw;
         }
     }
 
@@ -1097,6 +1119,21 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             try { await tx.RollbackAsync(ct); } catch { /* bağlantı düşmüşse yut */ }
             throw;
         }
+    }
+
+    /// <summary>Bkz. IDocumentRepository.GetFulfillmentContributionByItemAsync KDoc'u (Madde 1).</summary>
+    public async Task<IReadOnlyDictionary<int, (string? MaterialCode, string? MaterialName, decimal FloorQty)>>
+        GetFulfillmentContributionByItemAsync(int refDocId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        return await FulfillmentLedger.GetContributionByItemAsync(conn, null, _schema, refDocId, ct);
+    }
+
+    /// <summary>Bkz. IDocumentRepository.GetFulfillmentAffectedLineIdsAsync KDoc'u (Madde 3).</summary>
+    public async Task<IReadOnlyList<int>> GetFulfillmentAffectedLineIdsAsync(int refDocId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        return await FulfillmentLedger.GetAffectedLineIdsAsync(conn, null, _schema, refDocId, ct);
     }
 
 

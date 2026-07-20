@@ -1044,6 +1044,34 @@ public sealed class PurchaseController : Controller
                 if (nums.Count > 0) refNo = string.Join(", ", nums);
             }
 
+            // Fulfillment takibi: RequestLineId gönderilmiş satırların FulfilledFromStock artır.
+            // 2026-07-20 (Madde 2): entries belge kaydından ÖNCE hazırlanır (newDocId henüz yok —
+            // PendingFulfillmentEntry RefDocId taşımaz) ve SaveAsync'e verilir; repo bunu belgenin
+            // kendi transaction'ı İÇİNDE yazar (atomik — "belge var, defter yok" oluşamaz).
+            var linesWithTracking = validLines
+                .Where(l => l.RequestLineId.HasValue && l.RequestLineId.Value > 0)
+                .GroupBy(l => l.RequestLineId!.Value)
+                .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
+
+            var allLines = new Dictionary<int, DocumentLineDto>();
+            List<PendingFulfillmentEntry>? pendingEntries = null;
+            if (linesWithTracking.Count > 0 && req.RequestIds?.Count > 0)
+            {
+                // Mevcut satır değerlerini request belgelerinden çek (N+1 ama küçük set)
+                foreach (var rid in req.RequestIds)
+                {
+                    var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
+                    foreach (var l in lines2) allLines[l.Id] = l;
+                }
+
+                // allLines GEÇERLİLİK FİLTRESİ: yalnızca bildirilen İhtiyaç belgelerine ait
+                // satırlar deftere girer (istemciden gelen rastgele LineId kabul edilmez).
+                pendingEntries = linesWithTracking
+                    .Where(kv => allLines.ContainsKey(kv.Key))
+                    .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.Transfer, kv.Value))
+                    .ToList();
+            }
+
             var saveReq = new SaveStockDocRequest(
                 Id:             null,
                 DocType:        "TRANSFER",
@@ -1069,42 +1097,16 @@ public sealed class PurchaseController : Controller
                 ArgeProjectId:  null
             );
 
-            var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+            var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct, pendingEntries);
 
             // Belge soyağacı: transfer fişi ← kaynak İhtiyaç belge(ler)i (soyağacı akış görünümü)
             await LinkFulfillmentSourcesAsync(newDocId, req.RequestIds, ct);
 
-            // Fulfillment takibi: RequestLineId gönderilmiş satırların FulfilledFromStock artır
-            var linesWithTracking = validLines
-                .Where(l => l.RequestLineId.HasValue && l.RequestLineId.Value > 0)
-                .GroupBy(l => l.RequestLineId!.Value)
-                .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
-
-            if (linesWithTracking.Count > 0 && req.RequestIds?.Count > 0)
-            {
-                // Mevcut satır değerlerini request belgelerinden çek (N+1 ama küçük set)
-                var allLines = new Dictionary<int, DocumentLineDto>();
-                foreach (var rid in req.RequestIds)
-                {
-                    var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
-                    foreach (var l in lines2) allLines[l.Id] = l;
-                }
-
-                // Karşılama defterine yaz — toplamlar defterden türetilir. Sayacı doğrudan
-                // artırmak "kim neyi karşıladı"yı kaybettirir; bu fiş silinince geri düşüm
-                // yapılamaz ve ihtiyaç satırı sonsuza dek karşılanmış görünür.
-                var entries = new List<FulfillmentEntry>();
-                foreach (var (reqLineId, transferQty) in linesWithTracking)
-                {
-                    // allLines GEÇERLİLİK FİLTRESİ: yalnızca bildirilen İhtiyaç belgelerine
-                    // ait satırlar deftere girer (istemciden gelen rastgele LineId kabul edilmez).
-                    if (!allLines.ContainsKey(reqLineId)) continue;
-                    entries.Add(new FulfillmentEntry(
-                        reqLineId, FulfillmentSourceKind.Transfer, newDocId, transferQty));
-                }
-                if (entries.Count > 0)
-                    await _documentRepo.AddFulfillmentEntriesAsync(entries, CurrentUserId(), ct);
-            }
+            // İşlem logu (Madde 3, 2026-07-20): etkilenen İhtiyaç Kaydı satırlarının karşılama
+            // durumu değişikliği. allLines = mutasyondan ÖNCEki snapshot; dokunulmayan satırlar
+            // eski=yeni olduğu için otomatik atlanır (bkz. LogFulfillmentAuditAsync).
+            if (allLines.Count > 0)
+                await _documentService.LogFulfillmentAuditAsync(allLines, $"Depo transferi #{docNo}", ct);
 
             return Json(new { ok = true, docNo });
         }
@@ -1162,6 +1164,30 @@ public sealed class PurchaseController : Controller
                 if (nums.Count > 0) refNo = string.Join(", ", nums);
             }
 
+            // Fulfillment takibi: FulfilledFromStock artır (Madde 2 — bkz. CreateTransfer'daki
+            // gerekçe: entries belge kaydından ÖNCE hazırlanır, SaveAsync'e verilir, repo
+            // belgenin kendi transaction'ı İÇİNDE yazar).
+            var linesWithTracking = validLines
+                .Where(l => l.RequestLineId.HasValue && l.RequestLineId.Value > 0)
+                .GroupBy(l => l.RequestLineId!.Value)
+                .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
+
+            var allLines = new Dictionary<int, CalibraHub.Application.Contracts.DocumentLineDto>();
+            List<PendingFulfillmentEntry>? pendingEntries = null;
+            if (linesWithTracking.Count > 0 && req.RequestIds?.Count > 0)
+            {
+                foreach (var rid in req.RequestIds)
+                {
+                    var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
+                    foreach (var l in lines2) allLines[l.Id] = l;
+                }
+                // allLines geçerlilik filtresi (bkz. CreateTransfer'daki gerekçe).
+                pendingEntries = linesWithTracking
+                    .Where(kv => allLines.ContainsKey(kv.Key))
+                    .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.StockIssue, kv.Value))
+                    .ToList();
+            }
+
             var saveReq = new SaveStockDocRequest(
                 Id:             null,
                 DocType:        "STOCK_OUT",
@@ -1187,36 +1213,14 @@ public sealed class PurchaseController : Controller
                 ArgeProjectId:  null
             );
 
-            var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+            var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct, pendingEntries);
 
             // Belge soyağacı: ambar çıkış fişi ← kaynak İhtiyaç belge(ler)i
             await LinkFulfillmentSourcesAsync(newDocId, req.RequestIds, ct);
 
-            // Fulfillment takibi: FulfilledFromStock artır
-            var linesWithTracking = validLines
-                .Where(l => l.RequestLineId.HasValue && l.RequestLineId.Value > 0)
-                .GroupBy(l => l.RequestLineId!.Value)
-                .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
-
-            if (linesWithTracking.Count > 0 && req.RequestIds?.Count > 0)
-            {
-                var allLines = new Dictionary<int, CalibraHub.Application.Contracts.DocumentLineDto>();
-                foreach (var rid in req.RequestIds)
-                {
-                    var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
-                    foreach (var l in lines2) allLines[l.Id] = l;
-                }
-                // Deftere yaz (bkz. CreateTransfer'daki gerekçe) — allLines geçerlilik filtresi.
-                var entries = new List<FulfillmentEntry>();
-                foreach (var (reqLineId, issueQty) in linesWithTracking)
-                {
-                    if (!allLines.ContainsKey(reqLineId)) continue;
-                    entries.Add(new FulfillmentEntry(
-                        reqLineId, FulfillmentSourceKind.StockIssue, newDocId, issueQty));
-                }
-                if (entries.Count > 0)
-                    await _documentRepo.AddFulfillmentEntriesAsync(entries, CurrentUserId(), ct);
-            }
+            // İşlem logu (Madde 3, 2026-07-20) — bkz. CreateTransfer'daki gerekçe.
+            if (allLines.Count > 0)
+                await _documentService.LogFulfillmentAuditAsync(allLines, $"Ambar çıkışı #{docNo}", ct);
 
             return Json(new { ok = true, docNo });
         }
@@ -1526,6 +1530,29 @@ public sealed class PurchaseController : Controller
             if (doc != null) refNo = (refNo == null ? "" : refNo + ", ") + doc.DocumentNumber;
         }
 
+        // İşlem logu (Madde 3) için mutasyondan ÖNCEki satır snapshot'ı — aynı zamanda
+        // Madde 2 entries validity filtresi de bu koleksiyona taşınabilirdi ama lineMap
+        // (aşağıda) zaten aynı işi görüyor; ikisi paralel tutuldu (lineMap = ham sorgu,
+        // allLines = DTO/MaterialName — audit mesajı için).
+        var allLines = new Dictionary<int, DocumentLineDto>();
+        foreach (var docId in docIds)
+        {
+            var lines3 = await _documentService.GetQuoteLinesAsync(docId, ct);
+            foreach (var l in lines3) allLines[l.Id] = l;
+        }
+
+        // FulfilledFromStock güncelle — Madde 2: entries belge kaydından ÖNCE hazırlanır
+        // (newDocId henüz yok), SaveAsync'e verilir, repo belgenin kendi transaction'ı İÇİNDE
+        // yazar (bkz. CreateTransfer'daki gerekçe). lineMap = üstteki `lines` sorgusu (bu
+        // metodun başında yüklendi) — geçerlilik filtresi.
+        var lineMap = lines.ToDictionary(l => l.LineId);
+        var byLineId = planned.GroupBy(l => l.RequestLineId!.Value)
+                              .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
+        var pendingEntries = byLineId
+            .Where(kv => lineMap.ContainsKey(kv.Key))
+            .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.StockIssue, kv.Value))
+            .ToList();
+
         var saveReq = new SaveStockDocRequest(
             Id:             null,
             DocType:        "STOCK_OUT",
@@ -1549,25 +1576,14 @@ public sealed class PurchaseController : Controller
                                 UnitCost:       null)).ToList(),
             ArgeProjectId:  null);
 
-        var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct);
+        var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct, pendingEntries);
 
         // Belge soyağacı: FIFO ambar çıkış fişi ← kaynak İhtiyaç belge(ler)i
         await LinkFulfillmentSourcesAsync(newDocId, docIds, ct);
 
-        // FulfilledFromStock güncelle
-        var lineMap = lines.ToDictionary(l => l.LineId);
-        var byLineId = planned.GroupBy(l => l.RequestLineId!.Value)
-                              .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
-        // Deftere yaz (bkz. CreateTransfer'daki gerekçe) — lineMap geçerlilik filtresi.
-        var fulfillmentEntries = new List<FulfillmentEntry>();
-        foreach (var (lineId, qty) in byLineId)
-        {
-            if (!lineMap.ContainsKey(lineId)) continue;
-            fulfillmentEntries.Add(new FulfillmentEntry(
-                lineId, FulfillmentSourceKind.StockIssue, newDocId, qty));
-        }
-        if (fulfillmentEntries.Count > 0)
-            await _documentRepo.AddFulfillmentEntriesAsync(fulfillmentEntries, CurrentUserId(), ct);
+        // İşlem logu (Madde 3, 2026-07-20) — bkz. CreateTransfer'daki gerekçe.
+        if (allLines.Count > 0)
+            await _documentService.LogFulfillmentAuditAsync(allLines, $"Depodan otomatik karşılama #{docNo}", ct);
 
         return Json(new { ok = true, docNo, results });
     }
@@ -1618,6 +1634,30 @@ public sealed class PurchaseController : Controller
                 }
             }
 
+            // Fulfillment takibi: FulfilledByPurchase artır (Madde 2 — entries belge
+            // kaydından ÖNCE hazırlanır, SaveQuoteAsync'e verilir; repo kalem yazımıyla AYNI
+            // transaction'da deftere yazar — bkz. CreateTransfer'daki gerekçe).
+            var linesWithTracking = validLines
+                .Where(l => l.RequestLineId.HasValue && l.RequestLineId.Value > 0)
+                .GroupBy(l => l.RequestLineId!.Value)
+                .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
+
+            var allLines = new Dictionary<int, CalibraHub.Application.Contracts.DocumentLineDto>();
+            List<PendingFulfillmentEntry>? pendingEntries = null;
+            if (linesWithTracking.Count > 0 && req.RequestIds?.Count > 0)
+            {
+                foreach (var rid in req.RequestIds)
+                {
+                    var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
+                    foreach (var l in lines2) allLines[l.Id] = l;
+                }
+                // allLines geçerlilik filtresi (bkz. CreateTransfer'daki gerekçe).
+                pendingEntries = linesWithTracking
+                    .Where(kv => allLines.ContainsKey(kv.Key))
+                    .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.PurchaseOrder, kv.Value))
+                    .ToList();
+            }
+
             var saveDocReq = new CalibraHub.Application.Contracts.SaveDocumentRequest(
                 Id:                    null,
                 DocumentDate:          DateTime.Today,
@@ -1648,7 +1688,8 @@ public sealed class PurchaseController : Controller
                 FromRequestId:         req.RequestIds?.FirstOrDefault()
             );
 
-            var (success, error, doc, _) = await _documentService.SaveQuoteAsync(saveDocReq, CurrentUserId(), User?.Identity?.Name, ct);
+            var (success, error, doc, _) = await _documentService.SaveQuoteAsync(
+                saveDocReq, CurrentUserId(), User?.Identity?.Name, ct, pendingEntries);
             if (!success || doc == null)
                 return Json(new { ok = false, error = error ?? "Belge oluşturulamadı." });
 
@@ -1656,31 +1697,9 @@ public sealed class PurchaseController : Controller
             // FromRequestId=ilkini bağlar; çoklu kaynak için hepsini idempotent ekle).
             await LinkFulfillmentSourcesAsync(doc.Id, req.RequestIds, ct);
 
-            // Fulfillment takibi: FulfilledByPurchase artır
-            var linesWithTracking = validLines
-                .Where(l => l.RequestLineId.HasValue && l.RequestLineId.Value > 0)
-                .GroupBy(l => l.RequestLineId!.Value)
-                .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
-
-            if (linesWithTracking.Count > 0 && req.RequestIds?.Count > 0)
-            {
-                var allLines = new Dictionary<int, CalibraHub.Application.Contracts.DocumentLineDto>();
-                foreach (var rid in req.RequestIds)
-                {
-                    var lines2 = await _documentService.GetQuoteLinesAsync(rid, ct);
-                    foreach (var l in lines2) allLines[l.Id] = l;
-                }
-                // Deftere yaz (bkz. CreateTransfer'daki gerekçe) — allLines geçerlilik filtresi.
-                var entries = new List<FulfillmentEntry>();
-                foreach (var (reqLineId, purQty) in linesWithTracking)
-                {
-                    if (!allLines.ContainsKey(reqLineId)) continue;
-                    entries.Add(new FulfillmentEntry(
-                        reqLineId, FulfillmentSourceKind.PurchaseOrder, doc.Id, purQty));
-                }
-                if (entries.Count > 0)
-                    await _documentRepo.AddFulfillmentEntriesAsync(entries, CurrentUserId(), ct);
-            }
+            // İşlem logu (Madde 3, 2026-07-20) — bkz. CreateTransfer'daki gerekçe.
+            if (allLines.Count > 0)
+                await _documentService.LogFulfillmentAuditAsync(allLines, $"Satın alma siparişi #{doc.DocumentNumber}", ct);
 
             return Json(new { ok = true, docNo = doc.DocumentNumber, docId = doc.Id });
         }
@@ -1953,6 +1972,16 @@ public sealed class PurchaseController : Controller
             if (guardError != null)
                 return Json(new { ok = false, error = guardError });
 
+            // İşlem logu (Madde 3) için mutasyondan ÖNCEki satır snapshot'ı — lineRows ham SQL
+            // olduğu için MaterialName/FulfillmentStatus taşımıyor; DTO'yu ayrıca çekeriz
+            // (bkz. CreateTransfer'daki gerekçe — diğer 4 yazım noktasıyla aynı desen).
+            var allLines = new Dictionary<int, DocumentLineDto>();
+            foreach (var rid in sourceDocIds)
+            {
+                var lines4 = await _documentService.GetQuoteLinesAsync(rid, ct);
+                foreach (var l in lines4) allLines[l.Id] = l;
+            }
+
             // Talep miktarı: kullanıcı miktarı verdiyse o, vermediyse kalan
             // (Quantity − FulfilledFromStock − FulfilledByPurchase).
             var demandLines = new List<(int LineId, int ItemId, int? UnitId, decimal Qty, int? CombinationId, string? Notes,
@@ -1988,6 +2017,15 @@ public sealed class PurchaseController : Controller
                 }
             }
 
+            // Madde 2: entries belge kaydından ÖNCE hazırlanır (bkz. CreateTransfer'daki
+            // gerekçe). demandLines zaten İhtiyaç satırlarından türediği için (RequestLineId
+            // = lr.Id) ayrıca bir allLines doğrulamasına gerek yok — kaynak sorgu zaten yalnız
+            // 'alis_talebi' satırlarını döner (yukarıda cmdFetch). Diğer kova (FulfilledFromStock)
+            // artık ezilemez — toplamlar defterden türetildiği için korunması otomatiktir.
+            var pendingEntries = demandLines
+                .Select(dl => new PendingFulfillmentEntry(dl.LineId, FulfillmentSourceKind.PurchaseDemand, dl.Qty))
+                .ToList();
+
             var saveReq = new CalibraHub.Application.Contracts.SaveDocumentRequest(
                 Id:              null,
                 DocumentDate:    DateTime.Today,
@@ -2018,7 +2056,8 @@ public sealed class PurchaseController : Controller
                 FromRequestId:   sourceDocIds.FirstOrDefault()
             );
 
-            var (success, error, doc, _) = await _documentService.SaveQuoteAsync(saveReq, CurrentUserId(), User?.Identity?.Name, ct);
+            var (success, error, doc, _) = await _documentService.SaveQuoteAsync(
+                saveReq, CurrentUserId(), User?.Identity?.Name, ct, pendingEntries);
             if (!success || doc == null)
                 return Json(new { ok = false, error = error ?? "Belge oluşturulamadı." });
 
@@ -2027,14 +2066,9 @@ public sealed class PurchaseController : Controller
             foreach (var srcId in sourceDocIds)
                 await _docSourceRepo.AddAsync(doc.Id, srcId, ct);
 
-            // Deftere yaz (bkz. CreateTransfer'daki gerekçe). Diğer kova (FulfilledFromStock)
-            // artık ezilemez — toplamlar defterden türetildiği için korunması otomatiktir.
-            var demandEntries = demandLines
-                .Select(dl => new FulfillmentEntry(
-                    dl.LineId, FulfillmentSourceKind.PurchaseDemand, doc.Id, dl.Qty))
-                .ToList();
-            if (demandEntries.Count > 0)
-                await _documentRepo.AddFulfillmentEntriesAsync(demandEntries, CurrentUserId(), ct);
+            // İşlem logu (Madde 3, 2026-07-20) — bkz. CreateTransfer'daki gerekçe.
+            if (allLines.Count > 0)
+                await _documentService.LogFulfillmentAuditAsync(allLines, $"Satın alma talebi #{doc.DocumentNumber}", ct);
 
             return Json(new { ok = true, docNo = doc.DocumentNumber, docId = doc.Id });
         }

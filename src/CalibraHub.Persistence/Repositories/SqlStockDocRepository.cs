@@ -272,18 +272,23 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         return lines.Select(l => map.TryGetValue(l.Id, out var s) ? l with { Serials = s } : l).ToList();
     }
 
-    public async Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct)
+    public async Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct,
+        IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null)
     {
         if (request.DocType == "INVENTORY_COUNT")
             return await SaveInventoryCountAsync(request, createdById, ct);
-        return await SaveDirectDocAsync(request, createdById, ct);
+        return await SaveDirectDocAsync(request, createdById, ct, fulfillmentEntries);
     }
 
-    private async Task<(int Id, string DocNo)> SaveDirectDocAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct)
+    private async Task<(int Id, string DocNo)> SaveDirectDocAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct,
+        IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         var typeCode = TypeCodeFor(request.DocType);
         var movementType = MovementTypeFor(request.DocType);
+        // Karşılama defteri koruması (Madde 1) yalnız güncellemede anlamlı — yeni belgenin
+        // henüz defterde katkısı olamaz (RefDocId INSERT'ten sonra doğar).
+        var isUpdate = request.Id.HasValue && request.Id.Value > 0;
 
         // Miktar sıfır/negatif satır engeli (2026-07-19) — Giriş/Çıkış/Transfer (bu metot) için
         // "miktar > 0" projede yerleşik kural (bkz. CalibroDocumentTools, BomImportHandler,
@@ -413,6 +418,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             var decreases = new HashSet<(int ItemId, int LocationId)>();
             // Lot bakiye kontrolü: azaltılan (item, lot, kaynak lokasyon) üçlüleri
             var lotDecreases = new HashSet<(int ItemId, int LotId, int LocationId)>();
+            // Karşılama defteri koruması (Madde 1) — malzeme bazında gelen toplam miktar
+            // (aşağıda belge kaydedildikten sonra defterdeki katkıyla karşılaştırılır).
+            var incomingQtyByItem = new Dictionary<int, decimal>();
             foreach (var line in request.Lines ?? [])
             {
                 var itemId = line.ItemId;
@@ -421,6 +429,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if (!itemId.HasValue || itemId.Value <= 0) continue;
                 // Qty<=0 satırlar metot başında (transaction açılmadan önce) reddedildi —
                 // buraya yalnızca Qty>0 satırlar ulaşır.
+                incomingQtyByItem[itemId.Value] = incomingQtyByItem.GetValueOrDefault(itemId.Value) + line.Qty;
 
                 // Lot çözümleme — lot-takipli stokta (TrackingType='Lot') zorunlu:
                 // girişte yoksa oluşturulur, çıkış/transferde mevcut lot şarttır.
@@ -479,6 +488,29 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 }
             }
 
+            // Karşılama defteri koruması (2026-07-20, Madde 1): bu belge daha önce bir İhtiyaç
+            // Kaydı satırını karşılamışsa (DocumentLineFulfillment.RefDocId = bu belge), malzeme
+            // bazında miktar defterdeki katkısının altına düşürülemez. Aksi halde belge daha az
+            // mal hareket ettirir ama defter (ve dolayısıyla İhtiyaç satırının
+            // FulfilledFromStock/ByPurchase'ı) eski yüksek toplamı göstermeye devam eder — ihtiyaç
+            // fazla-karşılanmış görünür. Kaynak taraftaki (DocumentService.SaveQuoteAsync,
+            // isPurchaseRequest guard'ı) ile AYNI ilke, karşılayan belge tarafında uygulanır.
+            if (isUpdate)
+            {
+                var contributions = await FulfillmentLedger.GetContributionByItemAsync(conn, tx, _schema, docId, ct);
+                foreach (var (contribItemId, c) in contributions)
+                {
+                    var incoming = incomingQtyByItem.GetValueOrDefault(contribItemId);
+                    if (incoming < c.FloorQty)
+                    {
+                        var label = c.MaterialName ?? c.MaterialCode ?? $"#{contribItemId}";
+                        throw new InvalidOperationException(
+                            $"{label} malzemesi bu belgede {c.FloorQty:0.##} birim ihtiyaç karşılıyor; " +
+                            $"miktarı {c.FloorQty:0.##} altına düşürülemez (girilen: {incoming:0.##}).");
+                    }
+                }
+            }
+
             // Tüm satırlar tx içinde yazıldı → eksi bakiye kontrolü (yeni satırlar hesaba dahil)
             foreach (var (dItem, dLoc) in decreases)
                 await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, dItem, dLoc, request.DocDate.Date, ct);
@@ -500,6 +532,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ret.Parameters.AddWithValue("@Sid", sid);
                 await ret.ExecuteNonQueryAsync(ct);
             }
+
+            // Karşılama defteri (2026-07-20, Madde 2) — belge kaydıyla AYNI transaction'da:
+            // commit ya ikisini birlikte kalıcı yapar ya da (hata durumunda) ikisini birlikte
+            // geri alır. "Belge var, defter kaydı yok" yarım durumu artık oluşamaz.
+            if (fulfillmentEntries is { Count: > 0 })
+                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, docId, fulfillmentEntries, createdById, ct);
 
             await tx.CommitAsync(ct);
             return (docId, docNo);

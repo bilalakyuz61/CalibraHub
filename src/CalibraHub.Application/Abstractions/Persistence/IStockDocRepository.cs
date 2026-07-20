@@ -8,7 +8,17 @@ public interface IStockDocRepository
     Task<IReadOnlyList<StockDocDto>> GetByTypesAsync(IEnumerable<string> docTypes, CancellationToken ct);
     Task<StockDocDto?> GetByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyList<StockDocLineDto>> GetLinesAsync(int docId, CancellationToken ct);
-    Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct);
+
+    /// <summary>
+    /// <paramref name="fulfillmentEntries"/> (2026-07-20, Madde 2) — verilirse, karşılama
+    /// defteri kayıtları belgenin kendi INSERT/UPDATE transaction'ı İÇİNDE yazılır (belge
+    /// kaydı ile defter yazımı atomik olur — "belge var, defter yok" yarım durumu oluşamaz).
+    /// RefDocId bu belgenin (yeni ise INSERT sonrası üretilen) Id'sidir; çağıran bunu bilmek
+    /// zorunda değildir, <see cref="PendingFulfillmentEntry"/> bu alanı taşımaz. INVENTORY_COUNT
+    /// bu yolu kullanmaz (karşılama üretmez) — parametre yalnız STOCK_IN/STOCK_OUT/TRANSFER'de anlamlıdır.
+    /// </summary>
+    Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct,
+        IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null);
 
     /// <summary>Bir siparişin açık (teslim edilmemiş) kalemlerini kısmi teslimat modalı için döner.
     /// Miktarlar gösterim biriminde (Quantity birimi). BaseQuantity &gt; DeliveredQuantity olan satırlar.</summary>

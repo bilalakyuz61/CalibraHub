@@ -45,7 +45,17 @@ public interface IDocumentService
     /// Grid'de kit satirinin acilir dokumu + Faz 3 patlatma icin. Kit satiri degilse bos liste.</summary>
     Task<IReadOnlyCollection<CalibraHub.Domain.Entities.DocumentLineKitComponent>> GetKitLineComponentsAsync(
         int documentLineId, CancellationToken ct);
-    Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct);
+    /// <summary>
+    /// <paramref name="fulfillmentEntries"/> (2026-07-20, Madde 2) — verilirse, bu belgenin
+    /// karşıladığı İhtiyaç Kaydı satırları defter kaydı belgenin kendi kalem yazım transaction'ı
+    /// İÇİNDE yapılır (belge kaydı ile defter yazımı atomik olur). Yalnız yeni belge kaydında
+    /// (RequestIds → yeni sipariş/talep) anlamlıdır; controller'lar (PurchaseController)
+    /// <see cref="PendingFulfillmentEntry"/> listesini kaydetmeden ÖNCE hazırlar (RefDocId
+    /// henüz bilinmediği için taşımaz — repo, kendi ürettiği belge Id'sini kullanır).
+    /// </summary>
+    Task<(bool Success, string? Error, DocumentDto? Quote, bool ApprovalStarted)> SaveQuoteAsync(
+        SaveDocumentRequest request, int? createdById, string? startedByUser, CancellationToken ct,
+        IReadOnlyCollection<PendingFulfillmentEntry>? fulfillmentEntries = null);
     /// <summary>
     /// Belge silinebilir mi — silinebilirse <c>null</c>, silinemezse kullanıcıya
     /// gösterilecek gerekçe mesajını döner (karşılanmış kalem / türetilmiş aktif
@@ -78,4 +88,33 @@ public interface IDocumentService
     /// endpoint'lerin yetkiyi BELGE tipinden cozebilmesi icin eklendi.
     /// </summary>
     Task<int?> GetDocumentIdByLineAsync(int lineId, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-20 (Madde 3 — audit) — Bir belgenin (<paramref name="refDocId"/>) karşılama
+    /// defterinde şu an AKTİF katkısı olan İhtiyaç Kaydı satır Id'lerini döner. Silme/ters
+    /// çevirme ÖNCESİ audit "eski durum" snapshot'ı almak için — salt-okunur ön-kontrol.
+    /// </summary>
+    Task<IReadOnlyList<int>> GetFulfillmentAffectedLineIdsAsync(int refDocId, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-20 (Madde 3) — Verilen satır Id'lerinin (farklı belgelere ait olabilir) o anki
+    /// DTO snapshot'ını döner (Id → DocumentLineDto). Bulunamayan Id'ler sonuçta yer almaz.
+    /// Audit "eski durum" (mutasyondan ÖNCE) veya "yeni durum" (mutasyondan SONRA) okumak için
+    /// kullanılır — <see cref="LogFulfillmentAuditAsync"/> ile birlikte.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, DocumentLineDto>> GetLinesSnapshotAsync(
+        IReadOnlyCollection<int> lineIds, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-20 (Madde 3) — Karşılama/ters çevirme sonrası etkilenen İhtiyaç Kaydı
+    /// satırlarının audit log'unu yazar. <paramref name="oldLinesById"/> mutasyondan ÖNCE
+    /// alınmış snapshot'tır (bkz. <see cref="GetLinesSnapshotAsync"/> veya çağıranın zaten
+    /// elinde bulunan veri — ör. PurchaseController'ın karşılama öncesi çektiği İhtiyaç
+    /// satırları); yeni durum burada DB'den taze okunur. Satırlar DocumentId'ye göre gruplanıp
+    /// entity="alis_talebi" + recordId=İhtiyaç belgesinin Id'si ile loglanır — bir işlem birden
+    /// çok İhtiyaç belgesini etkileyebilir (çoklu RequestIds/FulfillFromStock). Audit servisi
+    /// yoksa veya hata olursa sessizce no-op (işlem akışını asla bozmaz).
+    /// </summary>
+    Task LogFulfillmentAuditAsync(
+        IReadOnlyDictionary<int, DocumentLineDto> oldLinesById, string detail, CancellationToken ct);
 }
