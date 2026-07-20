@@ -175,19 +175,19 @@ internal static class FulfillmentLedger
 
         // 4) DocumentLineLink dual-write reverse (FAZ 1b-ii, 2026-07-20) — defter ters çevirme
         // TAMAMLANDIKTAN SONRA, best-effort. Bu metodun kendi transaction'ını (conn/tx) KULLANMAZ —
-        // ReverseByTargetAsync kendi bağlantısını açar (bkz. SqlDocumentLineLinkRepository), tasarım
-        // §8 "aynı transaction'a sokma" kararıyla birebir. linkType=null: bu refDocId (Transfer/
-        // PurchaseQuote/PurchaseOrder/PurchaseDemand/StockIssue belgesi) hiçbir zaman BAŞKA bir
-        // LinkType'ın TargetDocId'si olamaz — WorkOrderAlloc(20)'nin TargetDocId'si yalnız
-        // WorkOrder'ın KENDİ Document satırıdır (ayrı bir INSERT ile üretilir, Document.Id tekil
-        // IDENTITY olduğundan aynı Id iki farklı belgeye ait olamaz); Derivation(10) henüz hiçbir
-        // yazma yolunda üretilmiyor (Faz "A" kapsam dışı). Dolayısıyla bu refDocId için
-        // TargetDocId eşleşen tüm aktif link satırları HER ZAMAN karşılama (1-7) türündendir.
+        // repo kendi bağlantısını açar (bkz. SqlDocumentLineLinkRepository), tasarım §8 "aynı
+        // transaction'a sokma" kararıyla birebir.
+        // KARSILAMA KOVASI (1-7) ile sınırlı: bu refDocId'ye gelen bir Derivation(10) link'i de
+        // olabilir (aynı Satın Alma Sipariş/Teklif belgesi hem bir İhtiyaç'ı karşılar hem teklif→
+        // sipariş dönüşümüyle üretilmiş olabilir). Dönüşüm link'i A mekanizmasının kendi reverse'ünce
+        // (DerivationLinkHelper, aynı DeleteAsync akışında ayrıca çağrılır) yönetilir — burada
+        // tip-filtresiz reverse onu YANLIŞLIKLA pasiflerdi. Her mekanizma yalnız kendi türünü
+        // reverse eder (A=10, B=20, C=1-7) — desen tutarlı, gelecek-güvenli.
         if (lineLinks is not null)
         {
             try
             {
-                await lineLinks.ReverseByTargetAsync(refDocId, userId, linkType: null, ct);
+                await lineLinks.ReverseConsumedByTargetAsync(refDocId, userId, ct);
             }
             catch (Exception ex)
             {

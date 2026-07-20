@@ -59,6 +59,16 @@ public interface IDocumentLineLinkRepository
     Task<int> ReverseByTargetAsync(int targetDocId, int? userId, LinkType? linkType, CancellationToken ct);
 
     /// <summary>
+    /// FAZ 1b (2026-07-20) — bir KARŞILAYAN belgeye (<paramref name="targetDocId"/>) ait AKTİF
+    /// karşılama link'lerini (LinkType 1-7, kova) pasifleştirir; Derivation(10)/WorkOrderAlloc(20)
+    /// link'lerine DOKUNMAZ. Karşılama defteri reverse'ünde (FulfillmentLedger.ReverseByDocumentAsync)
+    /// kullanılır — aynı belgeye bağlı dönüşüm link'i (10) A mekanizmasının kendi reverse'ünce
+    /// (DerivationLinkHelper) yönetilir. <see cref="ReverseByTargetAsync"/>'in tekil <c>LinkType?</c>
+    /// filtresi bir KOVA'yı (1-7) ifade edemediğinden ayrı metot. Etkilenen kayıt sayısını döner.
+    /// </summary>
+    Task<int> ReverseConsumedByTargetAsync(int targetDocId, int? userId, CancellationToken ct);
+
+    /// <summary>
     /// FAZ 1a (2026-07-20) — bir kaynak satırın (<paramref name="sourceLineId"/>) link
     /// tablosundan taban (floor) bileşenlerini döner: tasarım §5 "Floor hesabı yeni tabloda"
     /// birebir. Üç bileşen AYRIDIR ve bu metotta TOPLANMAZ:

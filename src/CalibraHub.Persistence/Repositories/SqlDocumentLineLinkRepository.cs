@@ -176,6 +176,31 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<int> ReverseConsumedByTargetAsync(int targetDocId, int? userId, CancellationToken ct)
+    {
+        if (targetDocId <= 0) return 0;
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // Karsilama kovasi (LinkType 1-7) — bir karsilayan belge silinince o belgeye gelen TUM
+        // karsilama link'lerini pasifler. Derivation(10) ve WorkOrderAlloc(20) DOKUNULMAZ: onlar
+        // kendi mekanizmalarinin reverse'unce yonetilir (A: DerivationLinkHelper, B: WorkOrderService)
+        // -> her mekanizma yalniz kendi LinkType'ini reverse eder (desen tutarliligi + gelecek-guvenli).
+        // Tek tip degil KOVA gerektiginden ReverseByTargetAsync'in LinkType? filtresi yetmez.
+        cmd.CommandText = $"""
+            UPDATE {_table}
+               SET [IsActive] = 0,
+                   [UpdatedById] = @UpdatedById,
+                   [Updated] = SYSUTCDATETIME()
+             WHERE [IsActive] = 1
+               AND [TargetDocId] = @TargetDocId
+               AND [LinkType] IN (1,2,3,4,5,6,7);
+            """;
+        cmd.Parameters.AddWithValue("@TargetDocId", targetDocId);
+        cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     // ── FAZ 1a (2026-07-20): floor-okuma — tasarım §5, çapraz-doğrulama için ────────────
     // Bu iki metot yalnız OKUR; hiçbir yazma yolu yok, hiçbir servis/controller henüz çağırmıyor.
 
