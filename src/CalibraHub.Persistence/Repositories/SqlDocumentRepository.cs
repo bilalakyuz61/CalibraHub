@@ -639,6 +639,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             if (fulfillmentEntries is { Count: > 0 })
                 await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, documentId, fulfillmentEntries, createdById, ct, _lineLinks, _logger);
 
+            // 5) DocumentLineLink dual-write (FAZ 1b-iii, 2026-07-20, "A: dönüşüm zinciri") —
+            // yukarıdaki upsert/silme TAMAMLANDIKTAN SONRA, best-effort. Bkz. DerivationLinkHelper
+            // sınıf başlığı (WorkOrderService/FulfillmentLedger ile birebir aynı defensive desen).
+            await DerivationLinkHelper.TryLinkDerivedLinesAsync(conn, tx, _schema, documentId, createdById, _lineLinks, _logger, ct);
+
             await tx.CommitAsync(ct);
         }
         catch
@@ -732,6 +737,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             // kaynak belge bir daha silinemez). _lineLinks/_logger: FAZ 1b-ii DocumentLineLink
             // dual-write reverse (best-effort).
             await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct, _lineLinks, _logger);
+
+            // Bu belge bir TÜREV belgeyse (başka bir belgenin SourceLineId ile referans verdiği
+            // satırlara sahipse — örn. teklif→sipariş), dönüşüm link'lerini (LinkType.Derivation)
+            // pasifleştir — FAZ 1b-iii (2026-07-20, "A" mekanizması) KN-3 senkronu. Bkz.
+            // DerivationLinkHelper sınıf başlığı; tip-10 filtreli, karşılama link'lerine dokunmaz.
+            await DerivationLinkHelper.TryReverseDerivedLinksAsync(id, null, _lineLinks, _logger, ct);
 
             await tx.CommitAsync(ct);
         }

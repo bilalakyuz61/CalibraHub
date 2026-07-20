@@ -1079,6 +1079,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             if (!isPurchase)
                 await ResolveOrderSerialsToIssuedAsync(conn, tx, docId, ct);
 
+            // 6) DocumentLineLink dual-write (FAZ 1b-iii, 2026-07-20, "A: dönüşüm zinciri +
+            // teslimat") — irsaliye satırları (SourceLineId=sipariş satırı) yazıldıktan SONRA,
+            // best-effort. Bkz. DerivationLinkHelper sınıf başlığı.
+            await DerivationLinkHelper.TryLinkDerivedLinesAsync(conn, tx, _schema, docId, createdById, _lineLinks, _logger, ct);
+
             await tx.CommitAsync(ct);
             return (docId, docNo);
         }
@@ -1598,6 +1603,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     await EnsureLotBalanceAsync(conn, tx, companyId, it, lot, loc, ct);
             }
 
+            // 7) DocumentLineLink dual-write (FAZ 1b-iii, 2026-07-20, "A: dönüşüm zinciri +
+            // teslimat") — bağlanan (SourceLineId'li) irsaliye satırları yazıldıktan SONRA,
+            // best-effort. Bağlantısız (Unlinked) satırlar SourceLineId taşımadığından sorgu
+            // onları zaten hariç bırakır (bkz. DerivationLinkHelper KDoc'u).
+            await DerivationLinkHelper.TryLinkDerivedLinesAsync(conn, tx, _schema, docId, createdById, _lineLinks, _logger, ct);
+
             await tx.CommitAsync(ct);
             return new MobileDeliveryResult(docId, docNo, distinctOrderIds, resultLines);
         }
@@ -1988,6 +1999,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // ("karşılanmış kalem içerdiği için silinemez" guard'ı) — fiş silinmiş olsa bile.
             // _lineLinks/_logger: FAZ 1b-ii DocumentLineLink dual-write reverse (best-effort).
             await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct, _lineLinks, _logger);
+
+            // Bu fiş bir TÜREV belgeyse (irsaliye — SourceLineId ile sipariş satırına bağlı),
+            // dönüşüm link'lerini (LinkType.Derivation) pasifleştir — FAZ 1b-iii (2026-07-20,
+            // "A" mekanizması) KN-3 senkronu. Bkz. DerivationLinkHelper sınıf başlığı; tip-10
+            // filtreli, yukarıdaki karşılama reverse'ine dokunmaz.
+            await DerivationLinkHelper.TryReverseDerivedLinksAsync(id, null, _lineLinks, _logger, ct);
 
             await tx.CommitAsync(ct);
         }
