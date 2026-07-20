@@ -1805,8 +1805,8 @@ public sealed class PurchaseController : Controller
                 d.[DocumentNumber]    AS docNumber,
                 d.[DocumentDate]      AS docDate,
                 i.[Id]                AS itemId,
-                i.[MaterialCode]      AS materialCode,
-                i.[MaterialName]      AS materialName,
+                i.[Code]              AS materialCode,
+                i.[Name]              AS materialName,
                 mu.[Name]             AS unitCode,
                 dl.[Quantity]         AS quantity,
                 dl.[FulfilledByPurchase] AS fulfilledByPurchase,
@@ -1817,7 +1817,7 @@ public sealed class PurchaseController : Controller
             INNER JOIN [{s}].[Document]       d   ON d.[Id] = dl.[DocumentId]
             INNER JOIN [{s}].[DocumentType]   dt  ON dt.[Id] = d.[DocumentTypeId]
             INNER JOIN [{s}].[Items]          i   ON i.[Id] = dl.[ItemId]
-            LEFT  JOIN [{s}].[MeasureUnits]   mu  ON mu.[Id] = dl.[UnitId]
+            LEFT  JOIN [{s}].[Unit]           mu  ON mu.[Id] = dl.[UnitId]
             LEFT  JOIN (
                 SELECT sm.[ItemId],
                        SUM(CASE
@@ -1835,7 +1835,7 @@ public sealed class PurchaseController : Controller
             WHERE dt.[code] = N'alis_talebi'
               AND d.[Status] NOT IN (N'Cancelled', N'Closed', N'Converted')
               AND dl.[Quantity] > ISNULL(dl.[FulfilledByPurchase], 0)
-              AND (@MatSearch IS NULL OR i.[MaterialCode] LIKE @MatSearch OR i.[MaterialName] LIKE @MatSearch)
+              AND (@MatSearch IS NULL OR i.[Code] LIKE @MatSearch OR i.[Name] LIKE @MatSearch)
               AND (@DocNo IS NULL OR d.[DocumentNumber] LIKE @DocNo)
             ORDER BY d.[DocumentDate] DESC, d.[DocumentNumber], dl.[Id];
             """;
