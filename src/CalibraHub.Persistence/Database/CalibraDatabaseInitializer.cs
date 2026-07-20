@@ -841,12 +841,12 @@ END;";
             // override/custom tablolarını kur. Zincirin SONUNDA olmalı: hemen aşağıdaki
             // ApplyActiveViewOverridesAsync bu tablodan okur (sıralama garantisi).
             await EnsureViewDefinitionTablesAsync(connection, cancellationToken);
-            // 2026-07-20: DocumentLineLink Faz 1a — backfill. Mevcut uc kalem-eslesme
+            // 2026-07-20: DocumentLineLink Faz 1a - backfill. Mevcut uc kalem-eslesme
             // mekanizmasinin (DocumentLine.SourceLineId, WorkOrderSource, DocumentLineFulfillment)
             // STATIK verisini birlesik link tablosuna kopyalar. Zincirin sonunda: tum kaynak
             // tablolar ve hedef (DocumentLineLink) bu noktada kurulu. Idempotent (NOT EXISTS) +
-            // her kaynak icin ayri try/catch (logla+atla) — bir kaynak patlarsa startup kirilmaz.
-            // Canli yazim (dual-write) YOK — o Faz 1b. Bkz. DocumentLineLink-Tasarim.md.
+            // her kaynak icin ayri try/catch (logla+atla) - bir kaynak patlarsa startup kirilmaz.
+            // Canli yazim (dual-write) YOK - o Faz 1b. Bkz. DocumentLineLink-Tasarim.md.
             await EnsureDocumentLineLinkBackfillAsync(connection, cancellationToken);
             // Startup override pass (clobber savunması) — BİRİNCİL geçiş. Kod baseline'ı
             // yukarıdaki tüm program view'larını ensure ettikten SONRA aktif kullanıcı
@@ -866,16 +866,16 @@ END;";
     }
 
     /// <summary>
-    /// DocumentLineLink Faz 1a — backfill. Mevcut uc kalem-eslesme mekanizmasinin STATIK
+    /// DocumentLineLink Faz 1a - backfill. Mevcut uc kalem-eslesme mekanizmasinin STATIK
     /// verisini birlesik DocumentLineLink tablosuna kopyalar. Canli yazim (dual-write) YOK;
     /// o Faz 1b. Yon her zaman "kaynak satir -> hedef" olarak normalize edilir.
     ///
-    /// Uc kaynak (bkz. DocumentLineLink-Tasarim.md §5):
+    /// Uc kaynak (bkz. DocumentLineLink-Tasarim.md, 5. bolum):
     ///   A) DocumentLine.SourceLineId -> LinkType 10 (Derivation, donusum zinciri)
     ///   B) WorkOrderSource           -> LinkType 20 (WorkOrderAlloc, is emri tahsisi)
     ///   C) DocumentLineFulfillment   -> LinkType = FulfillmentType (1-7, ihtiyac karsilama)
     ///
-    /// Idempotent: her INSERT NOT EXISTS ile korunur — her startup'ta guvenle tekrar calisir,
+    /// Idempotent: her INSERT NOT EXISTS ile korunur - her startup'ta guvenle tekrar calisir,
     /// dual-write (Faz 1b) devreye girince cift yazmaz. Her kaynak AYRI komut + AYRI try/catch:
     /// bir sirketin (ya da bir kaynagin) backfill'i patlarsa digerleri ve startup ETKILENMEZ
     /// (logla+atla). Kolon adlari INFORMATION_SCHEMA'ya karsi canli DB'de dogrulandi (2026-07-20).
@@ -884,7 +884,7 @@ END;";
     {
         var s = _schema.Replace("]", "]]");
 
-        // ── A: DocumentLine.SourceLineId -> LinkType 10 (Derivation) ─────────────────
+        // -- A: DocumentLine.SourceLineId -> LinkType 10 (Derivation) -----------------
         // Turev satir (dl) kaynak satirina (src) SourceLineId ile bagli; link tek yon
         // "kaynak (src) -> hedef (turev dl)". Miktar turev satirin Quantity'si (kopyalanir).
         // Her turev satirin dl.[Id]'si benzersiz oldugundan (SourceLineId, 10, TargetLineId)
@@ -916,7 +916,7 @@ END;";
             Console.Error.WriteLine($"[DLL Backfill] Derivation (tip 10) atlandi: {ex.Message}");
         }
 
-        // ── B: WorkOrderSource -> LinkType 20 (WorkOrderAlloc) ───────────────────────
+        // -- B: WorkOrderSource -> LinkType 20 (WorkOrderAlloc) -----------------------
         // Iptal/pasif is emri HARIC (okuma filtresiyle tutarli: Status <> 5 AND IsActive = 1).
         // TargetLineId NULL (WO satir tutmaz); TargetDocId = WorkOrder.DocumentId, TargetWorkOrderId
         // = WorkOrder.Id (grafik gezinme + guard icin ikisi de dolu). Created kaynaktan korunur.
@@ -948,7 +948,7 @@ END;";
             Console.Error.WriteLine($"[DLL Backfill] WorkOrderAlloc (tip 20) atlandi: {ex.Message}");
         }
 
-        // ── C: DocumentLineFulfillment (aktif) -> LinkType = FulfillmentType (1-7) ────
+        // -- C: DocumentLineFulfillment (aktif) -> LinkType = FulfillmentType (1-7) ---
         // Karsilama zaten "kaynak (talep) -> hedef" yonunde; LinkType aynen FulfillmentType.
         // SourceDocId talep satirinin belgesinden (rdl JOIN). TargetLineId/TargetDocId NULL
         // olabilir (legacy tip 6/7: RefDocId NULL, kalici taban) -> NOT EXISTS ISNULL(-1) ile
