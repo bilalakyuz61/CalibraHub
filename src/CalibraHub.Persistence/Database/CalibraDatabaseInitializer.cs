@@ -8471,14 +8471,15 @@ END;";
                 CREATE INDEX [IX_DocumentLineLink_SourceDoc] ON [{s}].[DocumentLineLink]([SourceDocId])       WHERE [IsActive] = 1;
                 CREATE INDEX [IX_DocumentLineLink_Target]    ON [{s}].[DocumentLineLink]([TargetLineId])      WHERE [IsActive] = 1;
                 CREATE INDEX [IX_DocumentLineLink_WorkOrder] ON [{s}].[DocumentLineLink]([TargetWorkOrderId]) WHERE [IsActive] = 1;
-                -- Tekillik: ayni kaynak -> hedef -> tur ikilenmesin. Null-hedef muafiyeti
-                -- (kardes UX_DLF_Line_Type_Doc deseni): legacy taban link'leri (LinkType 6/7) her iki
-                -- hedefi de NULL olur; SQL Server unique index'te NULL'lar esit sayildigindan, ayni
-                -- (SourceLineId, LinkType) icin coklu tabana izin vermek uzere "en az bir hedef dolu"
-                -- kosulu eklenir. Aksi halde ikinci taban satiri duplicate-key ile Faz 1'de patlar.
+                -- Tekillik: ayni (kaynak, tur, hedef) ikilenmesin. Hedef = (TargetLineId, TargetDocId,
+                -- TargetWorkOrderId) uclusu — karsilamada TargetLineId NULL olup TargetDocId dolu olabilir,
+                -- bu yuzden ucu de anahtarda. Legacy taban muafiyeti: LinkType 6/7 (RefDocId'siz tarihsel
+                -- taban) ayni kaynak+tur icin coklu olabildiginden index disi birakilir.
+                -- NOT: SQL Server filtered index WHERE'de OR DESTEKLEMEZ -> muafiyet null-OR yerine
+                -- LinkType <> 6 AND <> 7 (saf AND) ile ifade edilir.
                 CREATE UNIQUE INDEX [UX_DocumentLineLink] ON [{s}].[DocumentLineLink]
-                    ([SourceLineId], [LinkType], [TargetLineId], [TargetWorkOrderId])
-                    WHERE [IsActive] = 1 AND ([TargetLineId] IS NOT NULL OR [TargetWorkOrderId] IS NOT NULL);
+                    ([SourceLineId], [LinkType], [TargetLineId], [TargetDocId], [TargetWorkOrderId])
+                    WHERE [IsActive] = 1 AND [LinkType] <> 6 AND [LinkType] <> 7;
             END;
             """;
 
