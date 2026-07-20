@@ -24,6 +24,18 @@ public interface IDocumentLineLinkRepository
     /// </summary>
     Task InsertAsync(DocumentLineLinkEntry entry, int? userId, CancellationToken ct);
 
+    /// <summary>
+    /// FAZ 1b-i (2026-07-20) — merge-aware upsert: aynı (SourceLineId, LinkType, TargetLineId,
+    /// TargetDocId, TargetWorkOrderId) AKTİF link varsa <c>Quantity</c>'yi biriktirir, yoksa yeni
+    /// satır ekler. <c>WorkOrderAlloc</c> (20) gibi <c>TargetLineId=NULL</c> link'lerde aynı
+    /// (satır, WO) TEKRAR tahsisi <c>UX_DocumentLineLink</c>'i (NULL'ları eşit sayar) ihlal
+    /// etmeden tek satırda toplanır — link, <c>WorkOrderSource</c>'un satır+WO SUM'u ile birebir
+    /// kalır. <see cref="InsertAsync"/>'ten farkı: ikinci aynı-anahtar çağrı INSERT değil, mevcut
+    /// satırın <c>Quantity</c>'sine EKLEME. Her türev satırı benzersiz hedef taşıyan mekanizmalarda
+    /// (dönüşüm 10 — TargetLineId dolu) davranış <c>InsertAsync</c> ile aynıdır (UPDATE hiç eşleşmez → INSERT).
+    /// </summary>
+    Task InsertOrAccumulateAsync(DocumentLineLinkEntry entry, int? userId, CancellationToken ct);
+
     /// <summary>Bir kaynak satırın AKTİF bağlantı kayıtlarını döner (SourceLineId index'i üzerinden).</summary>
     Task<IReadOnlyList<DocumentLineLink>> GetBySourceLineAsync(int sourceLineId, CancellationToken ct);
 

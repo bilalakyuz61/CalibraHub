@@ -473,7 +473,10 @@ public sealed class WorkOrderService : IWorkOrderService
         if (_lineLinks is null) return;
         try
         {
-            await _lineLinks.InsertAsync(new DocumentLineLinkEntry(
+            // Merge-aware: ayni (satir, WO) tekrar tahsisi tek link satirinda toplanir
+            // (WorkOrderAlloc'ta TargetLineId=NULL -> UX ihlali olmasin; WorkOrderSource
+            // satir+WO SUM'u ile birebir kalsin). Bkz. IDocumentLineLinkRepository KDoc'u.
+            await _lineLinks.InsertOrAccumulateAsync(new DocumentLineLinkEntry(
                 LinkType.WorkOrderAlloc,
                 SourceLineId: sourceLineId,
                 SourceDocId: sourceDocId,

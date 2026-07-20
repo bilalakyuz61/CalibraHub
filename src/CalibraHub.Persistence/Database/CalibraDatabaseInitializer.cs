@@ -923,7 +923,13 @@ END;";
         // -- B: WorkOrderSource -> LinkType 20 (WorkOrderAlloc) -----------------------
         // Iptal/pasif is emri HARIC (okuma filtresiyle tutarli: Status <> 5 AND IsActive = 1).
         // TargetLineId NULL (WO satir tutmaz); TargetDocId = WorkOrder.DocumentId, TargetWorkOrderId
-        // = WorkOrder.Id (grafik gezinme + guard icin ikisi de dolu). Created kaynaktan korunur.
+        // = WorkOrder.Id (grafik gezinme + guard icin ikisi de dolu).
+        // KRITIK: (satir, WO) basina TEK link — WorkOrderSource ayni (SourceLineId, WorkOrderId)
+        // icin COKLU satir tutabilir (unique kisit yok; toplama-tahsis). WorkOrderAlloc link'inde
+        // TargetLineId=NULL oldugundan UX_DocumentLineLink bu ucluyu tekil sayar; naif satir-satir
+        // INSERT ikinci satirda unique ihlali -> tum tip-20 backfill patlardi. Cozum: GROUP BY
+        // (SourceLineId, WorkOrderId) + SUM(AllocatedQuantity) -> eski GetAllocatedQuantityForLineAsync
+        // (satir basina SUM) ile birebir. MIN(...) agregatlari grup icinde zaten sabit degerlerdir.
         var backfillWorkOrderAlloc = $"""
             IF OBJECT_ID(N'[{s}].[DocumentLineLink]', N'U') IS NOT NULL
                AND OBJECT_ID(N'[{s}].[WorkOrderSource]', N'U') IS NOT NULL
@@ -931,14 +937,16 @@ END;";
             BEGIN
                 INSERT INTO [{s}].[DocumentLineLink]
                     ([LinkType], [SourceLineId], [SourceDocId], [TargetDocId], [TargetWorkOrderId], [Quantity], [IsActive], [Created])
-                SELECT 20, ws.[SourceLineId], ws.[SourceDocumentId], w.[DocumentId], ws.[WorkOrderId], ws.[AllocatedQuantity], 1, ws.[Created]
+                SELECT 20, ws.[SourceLineId], MIN(ws.[SourceDocumentId]), MIN(w.[DocumentId]),
+                       ws.[WorkOrderId], SUM(ws.[AllocatedQuantity]), 1, MIN(ws.[Created])
                   FROM [{s}].[WorkOrderSource] ws
                   INNER JOIN [{s}].[WorkOrder] w ON w.[Id] = ws.[WorkOrderId]
                  WHERE w.[Status] <> 5 AND w.[IsActive] = 1
                    AND NOT EXISTS (
                        SELECT 1 FROM [{s}].[DocumentLineLink] l
                         WHERE l.[LinkType] = 20 AND l.[SourceLineId] = ws.[SourceLineId]
-                          AND l.[TargetWorkOrderId] = ws.[WorkOrderId] AND l.[IsActive] = 1);
+                          AND l.[TargetWorkOrderId] = ws.[WorkOrderId] AND l.[IsActive] = 1)
+                 GROUP BY ws.[SourceLineId], ws.[WorkOrderId];
             END;
             """;
         try

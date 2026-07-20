@@ -69,6 +69,50 @@ public sealed class SqlDocumentLineLinkRepository : IDocumentLineLinkRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task InsertOrAccumulateAsync(DocumentLineLinkEntry entry, int? userId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // Merge-aware upsert: ayni (SourceLineId, LinkType, TargetLineId, TargetDocId,
+        // TargetWorkOrderId) aktif link varsa Quantity'yi biriktir; yoksa yeni satir.
+        // WorkOrderAlloc (20) gibi TargetLineId=NULL link'lerde ayni (satir, WO) TEKRAR
+        // tahsisi tek link satirinda toplanir -> WorkOrderSource'un satir+WO SUM'u ile birebir
+        // esler ve UX_DocumentLineLink (NULL'lari esit sayar) ihlali olusmaz. NULL hedefler
+        // ISNULL(...,-1) ile karsilastirilir (SQL NULL = NULL degildir). Tekil satir icin
+        // atomik: UPDATE ... IF @@ROWCOUNT=0 INSERT (ayni baglanti/komut).
+        cmd.CommandText = $"""
+            UPDATE {_table}
+               SET [Quantity] = [Quantity] + @Quantity,
+                   [UpdatedById] = @CreatedById,
+                   [Updated] = SYSUTCDATETIME()
+             WHERE [IsActive] = 1
+               AND [LinkType] = @LinkType
+               AND [SourceLineId] = @SourceLineId
+               AND ISNULL([TargetLineId], -1) = ISNULL(@TargetLineId, -1)
+               AND ISNULL([TargetDocId], -1) = ISNULL(@TargetDocId, -1)
+               AND ISNULL([TargetWorkOrderId], -1) = ISNULL(@TargetWorkOrderId, -1);
+            IF @@ROWCOUNT = 0
+                INSERT INTO {_table}
+                    ([LinkType],[SourceLineId],[SourceDocId],[TargetLineId],[TargetDocId],[TargetWorkOrderId],
+                     [Quantity],[Notes],[IsActive],[CreatedById],[Created])
+                VALUES
+                    (@LinkType,@SourceLineId,@SourceDocId,@TargetLineId,@TargetDocId,@TargetWorkOrderId,
+                     @Quantity,@Notes,1,@CreatedById,SYSUTCDATETIME());
+            """;
+        cmd.Parameters.AddWithValue("@LinkType", (byte)entry.LinkType);
+        cmd.Parameters.AddWithValue("@SourceLineId", entry.SourceLineId);
+        cmd.Parameters.AddWithValue("@SourceDocId", entry.SourceDocId);
+        cmd.Parameters.AddWithValue("@TargetLineId", (object?)entry.TargetLineId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@TargetDocId", (object?)entry.TargetDocId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@TargetWorkOrderId", (object?)entry.TargetWorkOrderId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Quantity", entry.Quantity);
+        cmd.Parameters.AddWithValue("@Notes", (object?)entry.Notes ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CreatedById", (object?)userId ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<IReadOnlyList<DocumentLineLink>> GetBySourceLineAsync(int sourceLineId, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
