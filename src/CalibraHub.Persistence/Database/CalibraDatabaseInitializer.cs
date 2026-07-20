@@ -8471,9 +8471,14 @@ END;";
                 CREATE INDEX [IX_DocumentLineLink_SourceDoc] ON [{s}].[DocumentLineLink]([SourceDocId])       WHERE [IsActive] = 1;
                 CREATE INDEX [IX_DocumentLineLink_Target]    ON [{s}].[DocumentLineLink]([TargetLineId])      WHERE [IsActive] = 1;
                 CREATE INDEX [IX_DocumentLineLink_WorkOrder] ON [{s}].[DocumentLineLink]([TargetWorkOrderId]) WHERE [IsActive] = 1;
-                -- Tekillik: ayni kaynak -> hedef -> tur ikilenmesin
+                -- Tekillik: ayni kaynak -> hedef -> tur ikilenmesin. Null-hedef muafiyeti
+                -- (kardes UX_DLF_Line_Type_Doc deseni): legacy taban link'leri (LinkType 6/7) her iki
+                -- hedefi de NULL olur; SQL Server unique index'te NULL'lar esit sayildigindan, ayni
+                -- (SourceLineId, LinkType) icin coklu tabana izin vermek uzere "en az bir hedef dolu"
+                -- kosulu eklenir. Aksi halde ikinci taban satiri duplicate-key ile Faz 1'de patlar.
                 CREATE UNIQUE INDEX [UX_DocumentLineLink] ON [{s}].[DocumentLineLink]
-                    ([SourceLineId], [LinkType], [TargetLineId], [TargetWorkOrderId]) WHERE [IsActive] = 1;
+                    ([SourceLineId], [LinkType], [TargetLineId], [TargetWorkOrderId])
+                    WHERE [IsActive] = 1 AND ([TargetLineId] IS NOT NULL OR [TargetWorkOrderId] IS NOT NULL);
             END;
             """;
 
