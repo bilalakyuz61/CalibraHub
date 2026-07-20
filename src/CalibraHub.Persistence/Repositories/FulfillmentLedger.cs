@@ -1,5 +1,7 @@
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Persistence.Repositories;
 
@@ -101,6 +103,16 @@ internal static class FulfillmentLedger
     /// Id'si Sales silme endpoint'ine düşerse) ters çevirme SESSİZCE atlanır ve ihtiyaç satırı
     /// sonsuza dek karşılanmış kalırdı — tam olarak bu defterin düzelttiği hata.
     /// </summary>
+    /// <param name="lineLinks">
+    /// FAZ 1b-ii (2026-07-20, "C: karşılama" dual-write) — opsiyonel, best-effort.
+    /// Dolu verilirse, defter ters çevirme BAŞARIYLA TAMAMLANDIKTAN SONRA
+    /// <c>DocumentLineLink</c>'teki aynı belgeye (TargetDocId=refDocId) ait aktif karşılama
+    /// link'leri de pasifleştirilir — kendi try/catch'i içinde, asla fırlatmaz (bkz.
+    /// <c>WorkOrderService</c>'teki B mekanizmasıyla birebir aynı defensive desen).
+    /// NULL geçilirse (mevcut çağıranların hepsi bugün NULL geçer) davranış Faz 0/1a ile
+    /// birebir aynı kalır.
+    /// </param>
+    /// <param name="logger">Link reverse hatası olursa loglanacak logger (opsiyonel).</param>
     /// <returns>Toplamları geri alınan ihtiyaç satırı sayısı (defterde kayıt yoksa 0).</returns>
     public static async Task<int> ReverseByDocumentAsync(
         SqlConnection conn,
@@ -108,7 +120,9 @@ internal static class FulfillmentLedger
         string schema,
         int refDocId,
         int? userId,
-        CancellationToken ct)
+        CancellationToken ct,
+        IDocumentLineLinkRepository? lineLinks = null,
+        ILogger? logger = null)
     {
         if (refDocId <= 0) return 0;
 
@@ -157,6 +171,30 @@ internal static class FulfillmentLedger
             recalc.CommandText = BuildRecalcSql(ledgerTable, lineTable, lineIds, preserveClosed: true, out var ps);
             foreach (var p in ps) recalc.Parameters.Add(p);
             await recalc.ExecuteNonQueryAsync(ct);
+        }
+
+        // 4) DocumentLineLink dual-write reverse (FAZ 1b-ii, 2026-07-20) — defter ters çevirme
+        // TAMAMLANDIKTAN SONRA, best-effort. Bu metodun kendi transaction'ını (conn/tx) KULLANMAZ —
+        // ReverseByTargetAsync kendi bağlantısını açar (bkz. SqlDocumentLineLinkRepository), tasarım
+        // §8 "aynı transaction'a sokma" kararıyla birebir. linkType=null: bu refDocId (Transfer/
+        // PurchaseQuote/PurchaseOrder/PurchaseDemand/StockIssue belgesi) hiçbir zaman BAŞKA bir
+        // LinkType'ın TargetDocId'si olamaz — WorkOrderAlloc(20)'nin TargetDocId'si yalnız
+        // WorkOrder'ın KENDİ Document satırıdır (ayrı bir INSERT ile üretilir, Document.Id tekil
+        // IDENTITY olduğundan aynı Id iki farklı belgeye ait olamaz); Derivation(10) henüz hiçbir
+        // yazma yolunda üretilmiyor (Faz "A" kapsam dışı). Dolayısıyla bu refDocId için
+        // TargetDocId eşleşen tüm aktif link satırları HER ZAMAN karşılama (1-7) türündendir.
+        if (lineLinks is not null)
+        {
+            try
+            {
+                await lineLinks.ReverseByTargetAsync(refDocId, userId, linkType: null, ct);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex,
+                    "[FulfillmentLedger] DocumentLineLink reverse edilemedi: RefDocId {RefDocId}",
+                    refDocId);
+            }
         }
 
         return lineIds.Count;
@@ -250,11 +288,22 @@ internal static class FulfillmentLedger
     /// bilmeyebilir; tek doğruluk kaynağı bu metodun <paramref name="refDocId"/> parametresidir.
     /// Mevcut (transaction dışı) <see cref="AddFulfillmentEntriesAsync"/> — entry başına
     /// RefDocId taşıyan eski <see cref="FulfillmentEntry"/> sözleşmesini korur, buradan
-    /// ÇAĞRILMAZ (kasıtlı — davranışı bu değişiklikten etkilenmesin).
+    /// ÇAĞRILMAZ (kasıtlı — davranışı bu değişiklikten etkilenmesin). NOT (2026-07-20, FAZ
+    /// 1b-ii): dolayısıyla <c>AddFulfillmentEntriesAsync</c> üzerinden yazılan karşılama
+    /// girdileri bu metodun altındaki DocumentLineLink dual-write'ına DA girmez — kapsam
+    /// dışı bırakıldı (bkz. görev raporu).
     /// </summary>
+    /// <param name="lineLinks">
+    /// FAZ 1b-ii (2026-07-20, "C: karşılama" dual-write) — opsiyonel, best-effort. Dolu
+    /// verilirse, defter INSERT+recalc BAŞARIYLA TAMAMLANDIKTAN SONRA her <paramref
+    /// name="entries"/> öğesi <c>DocumentLineLink</c>'e <c>LinkType</c> 1-7 (FulfillmentType
+    /// ile sayısal olarak aynı) olarak paralel yazılır — bkz. <see cref="TryLinkFulfillmentEntriesAsync"/>.
+    /// </param>
+    /// <param name="logger">Link insert hatası olursa loglanacak logger (opsiyonel).</param>
     public static async Task InsertEntriesAsync(
         SqlConnection conn, SqlTransaction tx, string schema, int refDocId,
-        IReadOnlyCollection<PendingFulfillmentEntry> entries, int? userId, CancellationToken ct)
+        IReadOnlyCollection<PendingFulfillmentEntry> entries, int? userId, CancellationToken ct,
+        IDocumentLineLinkRepository? lineLinks = null, ILogger? logger = null)
     {
         if (entries is null || entries.Count == 0 || refDocId <= 0) return;
 
@@ -293,6 +342,83 @@ internal static class FulfillmentLedger
             recalc.CommandText = BuildRecalcSql(ledgerTable, lineTable, lineIds, preserveClosed: false, out var ps);
             foreach (var p in ps) recalc.Parameters.Add(p);
             await recalc.ExecuteNonQueryAsync(ct);
+        }
+
+        // DocumentLineLink dual-write (FAZ 1b-ii, 2026-07-20, "C: karşılama" mekanizması) —
+        // defter INSERT+recalc TAMAMLANDIKTAN SONRA, best-effort. WorkOrderService.
+        // TryLinkWorkOrderAllocAsync (B mekanizması) ile birebir aynı defensive desen.
+        await TryLinkFulfillmentEntriesAsync(conn, tx, schema, refDocId, entries, userId, lineLinks, logger, ct);
+    }
+
+    /// <summary>
+    /// FAZ 1b-ii (2026-07-20) — <see cref="InsertEntriesAsync"/>'in yazdığı her
+    /// <see cref="PendingFulfillmentEntry"/>'yi <c>DocumentLineLink</c>'e paralel yazar
+    /// (eşleme: tasarım §5 "C → Link" satırı, <c>CalibraDatabaseInitializer</c>'ın backfill-C
+    /// bloğuyla — <c>rdl.[DocumentId]</c> join'i — birebir aynı). <paramref name="lineLinks"/>
+    /// NULL ise no-op. Tüm gövde TEK try/catch içindedir: <c>SourceDocId</c> çözümü
+    /// (ambient <paramref name="conn"/>/<paramref name="tx"/> üzerinden OKUMA — DocumentLine
+    /// tablosuna, recalc'ın az önce güncellediği AYNI satırlara, AYNI oturumdan; çapraz bağlantı
+    /// kilit beklemesi/deadlock riski YOK) dahil hiçbir adım ana karşılama işlemini etkilemez;
+    /// asıl link YAZIMI ise (<see cref="IDocumentLineLinkRepository.InsertOrAccumulateAsync"/>)
+    /// kendi bağlantısını açar — ana <paramref name="tx"/>'e GİRMEZ (tasarım §8).
+    /// </summary>
+    private static async Task TryLinkFulfillmentEntriesAsync(
+        SqlConnection conn, SqlTransaction tx, string schema, int refDocId,
+        IReadOnlyCollection<PendingFulfillmentEntry> entries, int? userId,
+        IDocumentLineLinkRepository? lineLinks, ILogger? logger, CancellationToken ct)
+    {
+        if (lineLinks is null) return;
+        try
+        {
+            // SourceDocId: her RequestLineId'nin bağlı olduğu İhtiyaç Kaydı belgesi.
+            // CalibraDatabaseInitializer backfill-C: "rdl.[DocumentId]" (DocumentLine rdl ON
+            // rdl.Id = f.RequestLineId) ile birebir aynı çözümleme, tek farkla: burada N
+            // RequestLineId için TEK toplu sorgu (N+1 önleme).
+            var lineTable = $"[{schema}].[DocumentLine]";
+            var lineIds = entries.Select(e => e.RequestLineId).Distinct().ToList();
+            var docIdByLine = new Dictionary<int, int>(lineIds.Count);
+
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                var names = new List<string>(lineIds.Count);
+                for (var i = 0; i < lineIds.Count; i++)
+                {
+                    var p = "@SL" + i;
+                    names.Add(p);
+                    cmd.Parameters.Add(new SqlParameter(p, lineIds[i]));
+                }
+                cmd.CommandText = $"""
+                    SELECT [Id], [DocumentId] FROM {lineTable} WHERE [Id] IN ({string.Join(", ", names)});
+                    """;
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                    docIdByLine[r.GetInt32(0)] = r.GetInt32(1);
+            }
+
+            foreach (var e in entries)
+            {
+                // RequestLineId'nin DocumentId'si bulunamadıysa (olağan akışta olmaması gerekir —
+                // FK ile az önce referans verildi) bu TEK entry'nin link yazımı atlanır; asıl
+                // karşılama kaydı zaten defterde yazılı, yalnız aynadaki bu satır eksik kalır.
+                if (!docIdByLine.TryGetValue(e.RequestLineId, out var sourceDocId)) continue;
+
+                await lineLinks.InsertOrAccumulateAsync(new DocumentLineLinkEntry(
+                    (LinkType)e.Kind,
+                    SourceLineId: e.RequestLineId,
+                    SourceDocId: sourceDocId,
+                    TargetLineId: e.RefDocLineId,
+                    TargetDocId: refDocId,
+                    TargetWorkOrderId: null,
+                    Quantity: e.Quantity,
+                    Notes: e.Notes), userId, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex,
+                "[FulfillmentLedger] DocumentLineLink insert edilemedi: RefDocId {RefDocId}, {Count} entry",
+                refDocId, entries.Count);
         }
     }
 }

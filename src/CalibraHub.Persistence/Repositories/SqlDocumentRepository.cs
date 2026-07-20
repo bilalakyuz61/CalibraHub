@@ -18,6 +18,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IDataVisibilityFilter _dvFilter;
     private readonly ILogger<SqlDocumentRepository>? _logger;
+    // FAZ 1b-ii (2026-07-20) — DocumentLineLink dual-write, best-effort. Bkz. FulfillmentLedger
+    // sınıf başlığındaki "C: karşılama" notu; nullable — _docSourceRepo/_logger ile aynı
+    // "opsiyonel best-effort bağımlılık" üslubu (WorkOrderService deseniyle birebir).
+    private readonly IDocumentLineLinkRepository? _lineLinks;
     private readonly string _quoteTable;
     private readonly string _lineTable;
     private readonly string _fulfillmentTable;
@@ -29,12 +33,14 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         CalibraDatabaseOptions options,
         IHttpContextAccessor httpContextAccessor,
         IDataVisibilityFilter dvFilter,
-        ILogger<SqlDocumentRepository>? logger = null)
+        ILogger<SqlDocumentRepository>? logger = null,
+        IDocumentLineLinkRepository? lineLinks = null)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _httpContextAccessor = httpContextAccessor;
         _dvFilter = dvFilter;
+        _lineLinks = lineLinks;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _schema = schema;
         _quoteTable = $"[{schema}].[Document]";
@@ -628,8 +634,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             }
 
             // 4) Karşılama defteri (2026-07-20, Madde 2) — kalem yazımıyla AYNI transaction'da.
+            // _lineLinks/_logger: FAZ 1b-ii DocumentLineLink dual-write (best-effort, bkz.
+            // FulfillmentLedger.TryLinkFulfillmentEntriesAsync) — ana kaydı asla etkilemez.
             if (fulfillmentEntries is { Count: > 0 })
-                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, documentId, fulfillmentEntries, createdById, ct);
+                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, documentId, fulfillmentEntries, createdById, ct, _lineLinks, _logger);
 
             await tx.CommitAsync(ct);
         }
@@ -721,8 +729,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             // transaction'da geri al. Ayrı çağrı olarak yapılsaydı "belge silindi, karşılama
             // geri alınmadı" yarım durumu oluşabilirdi — ki bu tam olarak düzeltmeye
             // çalıştığımız hatanın kendisi (ihtiyaç satırı sonsuza dek karşılanmış görünür ve
-            // kaynak belge bir daha silinemez).
-            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct);
+            // kaynak belge bir daha silinemez). _lineLinks/_logger: FAZ 1b-ii DocumentLineLink
+            // dual-write reverse (best-effort).
+            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct, _lineLinks, _logger);
 
             await tx.CommitAsync(ct);
         }

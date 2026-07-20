@@ -4,6 +4,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Persistence.Repositories;
 
@@ -23,17 +24,26 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     private readonly IDocumentNumberService _numberService;
     private readonly ICompanyParameterService _companyParams;
     private readonly string _schema;
+    // FAZ 1b-ii (2026-07-20) — DocumentLineLink dual-write, best-effort. Bkz. FulfillmentLedger
+    // sınıf başlığındaki "C: karşılama" notu + SqlDocumentRepository'deki aynı alan çifti
+    // (WorkOrderService _lineLinks/_docSourceRepo deseniyle birebir "opsiyonel bağımlılık").
+    private readonly IDocumentLineLinkRepository? _lineLinks;
+    private readonly ILogger<SqlStockDocRepository>? _logger;
 
     public SqlStockDocRepository(
         SqlServerConnectionFactory connectionFactory,
         IDocumentNumberService numberService,
         ICompanyParameterService companyParams,
-        CalibraDatabaseOptions options)
+        CalibraDatabaseOptions options,
+        IDocumentLineLinkRepository? lineLinks = null,
+        ILogger<SqlStockDocRepository>? logger = null)
     {
         _connectionFactory = connectionFactory;
         _numberService = numberService;
         _companyParams = companyParams;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
+        _lineLinks = lineLinks;
+        _logger = logger;
     }
 
     /// <summary>Seri benzersizlik kapsamı "Global" mi (barkod gibi tüm malzemeler arası tek)?</summary>
@@ -535,9 +545,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
             // Karşılama defteri (2026-07-20, Madde 2) — belge kaydıyla AYNI transaction'da:
             // commit ya ikisini birlikte kalıcı yapar ya da (hata durumunda) ikisini birlikte
-            // geri alır. "Belge var, defter kaydı yok" yarım durumu artık oluşamaz.
+            // geri alır. "Belge var, defter kaydı yok" yarım durumu artık oluşamaz. _lineLinks/
+            // _logger: FAZ 1b-ii DocumentLineLink dual-write (best-effort, ana kaydı etkilemez).
             if (fulfillmentEntries is { Count: > 0 })
-                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, docId, fulfillmentEntries, createdById, ct);
+                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, docId, fulfillmentEntries, createdById, ct, _lineLinks, _logger);
 
             await tx.CommitAsync(ct);
             return (docId, docNo);
@@ -1975,7 +1986,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // defterindeki katkısını AYNI transaction'da geri al. Aksi halde ihtiyaç satırı
             // karşılanmış görünmeye devam eder ve kaynak belge bir daha ASLA silinemez
             // ("karşılanmış kalem içerdiği için silinemez" guard'ı) — fiş silinmiş olsa bile.
-            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct);
+            // _lineLinks/_logger: FAZ 1b-ii DocumentLineLink dual-write reverse (best-effort).
+            await FulfillmentLedger.ReverseByDocumentAsync(conn, tx, _schema, id, null, ct, _lineLinks, _logger);
 
             await tx.CommitAsync(ct);
         }
