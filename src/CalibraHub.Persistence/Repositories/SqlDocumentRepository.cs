@@ -888,6 +888,15 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 await copyDetails.ExecuteNonQueryAsync(ct);
             }
 
+            // 6) DocumentLineLink dual-write (FAZ 1b-iii, 2026-07-20) — revize yeni satir da
+            // SourceLineId'yi kopyaladigindan (yukarida INSERT, [SourceLineId] aynen tasinir),
+            // o belgenin turev link'lerini reset+rebuild ile guncelle (SaveLinesAsync ile ayni
+            // helper). Boylece revize sonrasi link SUM(tip 10) eski GetDerivedLineAggregatesAsync
+            // ile birebir kalir (superseded eski + yeni satir birlikte sayilir; helper de
+            // SourceLineId IS NOT NULL olan her satiri linkler, RevisedFromId filtrelemez ->
+            // eski okuma ile ayni). Best-effort; ana revize kaydini asla bozmaz.
+            await DerivationLinkHelper.TryLinkDerivedLinesAsync(conn, tx, _schema, documentId, null, _lineLinks, _logger, ct);
+
             await tx.CommitAsync(ct);
             return newLineId;
         }
