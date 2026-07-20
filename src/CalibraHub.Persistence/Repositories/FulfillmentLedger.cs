@@ -183,13 +183,17 @@ internal static class FulfillmentLedger
 
         await using var cmd = conn.CreateCommand();
         if (tx is not null) cmd.Transaction = tx;
+        // Items tablosunun fiziksel kolonları [Code]/[Name] — [MaterialCode]/[MaterialName]
+        // yalnızca diğer sorgularda alias'tır, gerçek kolon değil (bkz. SqlDocumentRepository
+        // ana kalem sorgusu: i.[Code] AS [material_code]). Fiziksel adı kullan, aksi halde
+        // "Invalid column name" ile HER belge düzenleme-kaydı patlar.
         cmd.CommandText = $"""
-            SELECT rl.[ItemId], it.[MaterialCode], it.[MaterialName], SUM(f.[Quantity]) AS FloorQty
+            SELECT rl.[ItemId], it.[Code], it.[Name], SUM(f.[Quantity]) AS FloorQty
               FROM {ledgerTable} f
               INNER JOIN {lineTable}  rl ON rl.[Id] = f.[RequestLineId]
               INNER JOIN {itemsTable} it ON it.[Id] = rl.[ItemId]
              WHERE f.[IsActive] = 1 AND f.[RefDocId] = @RefDocId
-             GROUP BY rl.[ItemId], it.[MaterialCode], it.[MaterialName];
+             GROUP BY rl.[ItemId], it.[Code], it.[Name];
             """;
         cmd.Parameters.Add(new SqlParameter("@RefDocId", refDocId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
