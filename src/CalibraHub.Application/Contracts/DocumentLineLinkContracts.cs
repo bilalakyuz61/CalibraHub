@@ -70,7 +70,7 @@ public enum LinkType : byte
 /// <see cref="FulfillmentEntry"/> ile aynı isimlendirme üslubunu takip eder ama BAĞIMSIZ bir
 /// sözleşmedir — FulfillmentEntry'ye dokunulmadı.
 /// </summary>
-/// <param name="LinkType">İlişki türü — bkz. <see cref="LinkType"/>.</param>
+/// <param name="LinkType">İlişki türü — değer kümesi için yukarıdaki enum tanımına bakınız.</param>
 /// <param name="SourceLineId">Kaynak satır (DocumentLine.Id). Yön her zaman kaynak→hedef (tasarım KN-1).</param>
 /// <param name="SourceDocId">Kaynak satırın bağlı olduğu belge (Document.Id) — denormalize, hızlı filtre için.</param>
 /// <param name="TargetLineId">Hedef satır (DocumentLine.Id) — irsaliye/çıkış satırı gibi. İş emri tahsis link'lerinde (WorkOrderAlloc) NULL kalır.</param>

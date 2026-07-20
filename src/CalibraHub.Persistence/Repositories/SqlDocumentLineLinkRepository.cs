@@ -3,7 +3,6 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
-using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Persistence.Repositories;
 
