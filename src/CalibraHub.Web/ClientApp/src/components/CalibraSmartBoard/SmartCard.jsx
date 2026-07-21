@@ -622,7 +622,12 @@ export default function SmartCard(props) {
       return
     }
 
-    if (action.url) navigateInFrame((action.url).replace('{id}', id))
+    // Diger tum url'li aksiyonlar: dispatchActionUrl ile ayni yoldan gec (openInTab +
+    // hash-only ozel durumu handlePrimary ile TUTARLI olsun — 2026-07-21, PageComment
+    // Seq 11 fix'iyle ayni sinif: extraActions da openInTab'i onceden yok sayiyordu,
+    // bu da baska bir sayfaya "ayni sekmede" navigasyona dusup Shell tab basligini
+    // guncellemiyordu. openInTab yoksa davranis ONCEKIYLE BIREBIR AYNI (navigateInFrame).
+    if (action.url) dispatchActionUrl(Object.assign({}, action, { url: String(action.url).replace('{id}', id) }))
   }
 
   // Action button renderer — colorHint uses hoverBgMap/hoverTextMap

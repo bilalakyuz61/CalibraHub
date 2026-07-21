@@ -144,6 +144,8 @@ public static class AuditFieldLabels
             ["MinStock"] = "Asgari Stok",
             ["MaxStock"] = "Azami Stok",
             ["IsMachinePark"] = "Makine Parkı",
+            ["IsCountReference"] = "Sayım Referansı",
+            ["IsSingleChildType"] = "Tek Tür Alt Kırılım",
             ["DepartmentId"] = "Departman",
             ["DepartmentName"] = "Departman",
             ["Role"] = "Rol",

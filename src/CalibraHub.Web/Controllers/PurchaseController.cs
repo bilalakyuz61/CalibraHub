@@ -70,15 +70,23 @@ public sealed class PurchaseController : Controller
 
     private int? CurrentUserId() => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
-    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
-    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
-    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
+    /// <summary>SmartBoard "İşlemler" menüsündeki "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile
+    /// birebir aynı olmalı. Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda
+    /// yalnızca [Authorize] ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik
+    /// Geçmişi" sekmesi de aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.
+    /// openInTab (2026-07-21, PageComment Seq 11 fix): aynı iframe içinde window.location.href ile
+    /// navigasyon Shell'in workspace-tab başlığını GÜNCELLEMEZ (tab eski sayfanın başlığında kalır) —
+    /// _AuditTrailHost.cshtml'deki openLog() ile AYNI kural (EntityLabel + " — Log Kayıtları") kullanılarak
+    /// window.top.CalibraHub.openWorkspaceTab ile doğru başlıklı (yeni veya mevcut) sekmede açılır.</summary>
     private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
     {
         var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
             + (string.IsNullOrWhiteSpace(formCode) ? "" : $"&formCode={Uri.EscapeDataString(formCode)}");
-        return new { label = "İşlem Logu", icon = "ScrollText", color = "slate", url };
+        var tabTitle = CalibraHub.Application.Auditing.AuditFieldLabels.EntityLabel(entity) + " — Log Kayıtları";
+        return new {
+            label = "İşlem Logu", icon = "ScrollText", color = "slate", url,
+            openInTab = new { title = tabTitle },
+        };
     }
 
     /// <summary>

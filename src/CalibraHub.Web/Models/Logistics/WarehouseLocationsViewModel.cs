@@ -62,6 +62,12 @@ public sealed class LocationInput
 
     public bool IsStorageArea { get; set; }
 
+    // Sayım referansı: sayımda alt kırılımların bu lokasyon üzerinden sayılması (toplama noktası).
+    public bool IsCountReference { get; set; }
+
+    // Alt kırılımlar tek türde olmalı: bu lokasyon altında raf/hücre gibi farklı tipler karışamaz.
+    public bool IsSingleChildType { get; set; }
+
     // Eksi bakiye izni (üç durumlu): null=devral, true=izin (kontrol kapalı), false=engelle (kontrol açık).
     public bool? AllowNegativeBalance { get; set; }
 }
