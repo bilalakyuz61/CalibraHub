@@ -758,6 +758,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@LotNo", (object?)firstLotNo ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@LotBreakdown", (object?)lotBreakdownJson ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@Serials", (object?)serialsText ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@SerialBreakdown", (object?)serialBreakdownJson ?? DBNull.Value);
                 await lineIns.ExecuteNonQueryAsync(ct);
             }
 
