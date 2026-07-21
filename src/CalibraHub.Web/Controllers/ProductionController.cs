@@ -208,7 +208,7 @@ public sealed class ProductionController : Controller
             {
                 var future = o.PlannedEndDate.Value.Date >= DateTime.Today;
                 widgets.Add(new { id = "w_planned_end", type = "data", dataType = "date",
-                    label = "Plan Bitiş", value = o.PlannedEndDate.Value.ToLocalTime().ToString("dd.MM.yyyy", trCulture),
+                    label = "Plan Bitiş", value = o.PlannedEndDate.Value.ToString("dd.MM.yyyy", trCulture),
                     detail = (string?)null, color = future ? "emerald" : "rose" });
             }
             // Sorumlu — once Personnel adi (yeni atama), yoksa User adi (legacy fallback)

@@ -1,0 +1,258 @@
+/**
+ * FulfillmentDetailModal — Karsilama Detayi (PageComment Seq 18)
+ *
+ * Tema kurali: light degerler default (html body), body.app-theme-dark override eder.
+ * Referans: IntegrationQueue.jsx + IntegrationWizard.css (.iq-root) pattern'i.
+ */
+
+html body {
+  --fdm-overlay-bg:   rgba(15, 23, 42, 0.45);
+  --fdm-panel-bg:     #ffffff;
+  --fdm-panel-border: #e2e8f0;
+  --fdm-text:         #1e293b;
+  --fdm-muted:        #64748b;
+  --fdm-subsurface:   #f8fafc;
+  --fdm-row-hover:    rgba(15, 23, 42, 0.03);
+  --fdm-row-border:   #eef2f7;
+  --fdm-accent-bg:    #e0f2fe;
+  --fdm-accent-text:  #0369a1;
+  --fdm-off-bg:       #f1f5f9;
+  --fdm-off-text:     #64748b;
+  --fdm-error-bg:     #fef2f2;
+  --fdm-error-text:   #b91c1c;
+  --fdm-error-border: rgba(239, 68, 68, 0.35);
+  --fdm-btn-bg:       #6366f1;
+  --fdm-btn-border:   #4f46e5;
+}
+body.app-theme-dark {
+  --fdm-overlay-bg:   rgba(0, 0, 0, 0.55);
+  --fdm-panel-bg:     rgba(23, 26, 43, 0.97);
+  --fdm-panel-border: rgba(255, 255, 255, 0.08);
+  --fdm-text:         rgba(255, 255, 255, 0.88);
+  --fdm-muted:        rgba(255, 255, 255, 0.55);
+  --fdm-subsurface:   rgba(255, 255, 255, 0.03);
+  --fdm-row-hover:    rgba(255, 255, 255, 0.04);
+  --fdm-row-border:   rgba(255, 255, 255, 0.08);
+  --fdm-accent-bg:    rgba(14, 165, 233, 0.16);
+  --fdm-accent-text:  #7dd3fc;
+  --fdm-off-bg:       rgba(148, 163, 184, 0.12);
+  --fdm-off-text:     #94a3b8;
+  --fdm-error-bg:     rgba(239, 68, 68, 0.12);
+  --fdm-error-text:   #fca5a5;
+  --fdm-error-border: rgba(239, 68, 68, 0.35);
+  --fdm-btn-bg:       #6366f1;
+  --fdm-btn-border:   #4f46e5;
+}
+
+.fdm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--fdm-overlay-bg);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fdmFadeIn 0.15s ease-out;
+}
+
+@keyframes fdmFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fdmSlide { from { transform: translateY(8px) scale(0.97); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fdmSpin { to { transform: rotate(360deg); } }
+
+.fdm-panel {
+  color-scheme: light;
+  width: min(760px, 96vw);
+  max-height: min(600px, 88vh);
+  background: var(--fdm-panel-bg);
+  border: 1px solid var(--fdm-panel-border);
+  border-radius: 16px;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--fdm-text);
+  animation: fdmSlide 0.22s cubic-bezier(0.23, 1, 0.32, 1);
+}
+body.app-theme-dark .fdm-panel {
+  color-scheme: dark;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.55);
+}
+
+.fdm-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--fdm-panel-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.fdm-header-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fdm-accent-bg);
+  color: var(--fdm-accent-text);
+  flex-shrink: 0;
+}
+.fdm-header-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+.fdm-header-sub {
+  font-size: 0.72rem;
+  color: var(--fdm-muted);
+  margin-top: 2px;
+}
+.fdm-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--fdm-muted);
+  padding: 6px;
+  border-radius: 6px;
+}
+.fdm-close-btn:hover {
+  background: var(--fdm-row-hover);
+}
+
+.fdm-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  min-height: 120px;
+}
+
+.fdm-state {
+  padding: 32px 18px;
+  text-align: center;
+  color: var(--fdm-muted);
+  font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.fdm-state svg.fdm-spin {
+  animation: fdmSpin 0.8s linear infinite;
+}
+
+.fdm-error {
+  margin: 12px 18px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--fdm-error-bg);
+  border: 1px solid var(--fdm-error-border);
+  color: var(--fdm-error-text);
+}
+
+.fdm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.fdm-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--fdm-subsurface);
+  padding: 8px 16px;
+  text-align: left;
+  color: var(--fdm-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--fdm-row-border);
+}
+.fdm-table th.fdm-col-right,
+.fdm-table td.fdm-col-right {
+  text-align: right;
+}
+.fdm-table tbody td {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--fdm-row-border);
+  vertical-align: top;
+}
+.fdm-table tbody tr:hover {
+  background: var(--fdm-row-hover);
+}
+.fdm-table tbody tr.fdm-row--inactive {
+  opacity: 0.55;
+}
+.fdm-row--inactive .fdm-doc-number {
+  text-decoration: line-through;
+}
+
+.fdm-doc-number {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 600;
+}
+.fdm-doc-sub {
+  font-size: 0.7rem;
+  color: var(--fdm-muted);
+  margin-top: 2px;
+}
+
+.fdm-qty {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 700;
+}
+
+.fdm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: var(--fdm-accent-bg);
+  color: var(--fdm-accent-text);
+  white-space: nowrap;
+}
+.fdm-badge--off {
+  background: var(--fdm-off-bg);
+  color: var(--fdm-off-text);
+}
+
+.fdm-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--fdm-panel-border);
+  background: var(--fdm-subsurface);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fdm-footer-total-label {
+  font-size: 0.72rem;
+  color: var(--fdm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.fdm-footer-total-value {
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  margin-left: 8px;
+}
+.fdm-footer-btn {
+  margin-left: auto;
+  padding: 8px 18px;
+  min-height: 34px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--fdm-btn-bg);
+  border: 1px solid var(--fdm-btn-border);
+  color: #fff;
+}

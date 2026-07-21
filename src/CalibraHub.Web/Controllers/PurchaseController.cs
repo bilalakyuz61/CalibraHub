@@ -1004,6 +1004,74 @@ public sealed class PurchaseController : Controller
     }
 
     /// <summary>
+    /// PageComment Seq 18 (2026-07-21) — İhtiyaç Kaydı kalem "İşlemler" menüsündeki
+    /// "Karşılama Detayı" için: bir İhtiyaç satırının (DocumentLine.Id = RequestLineId)
+    /// karşılama defteri (DocumentLineFulfillment) kayıtlarını döner — hangi belge ne kadarını
+    /// karşıladı, ne zaman, hâlâ aktif mi (ters çevrilmemiş mi). Salt-okunur; defteri
+    /// DEĞİŞTİRMEZ. 2026-07-02 konsolidasyonu gereği RefDocId her zaman dbo.Document(Id) —
+    /// transfer/ambar çıkışı da dahil tek JOIN yeterli (bkz. FulfillmentLedgerContracts.cs).
+    /// GET /Purchase/GetLineFulfillmentEntriesJson?lineId=123
+    /// </summary>
+    [HttpGet("/Purchase/GetLineFulfillmentEntriesJson")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseFulfillment)]
+    public async Task<IActionResult> GetLineFulfillmentEntriesJson(int lineId, CancellationToken ct)
+    {
+        if (lineId <= 0) return Json(Array.Empty<object>());
+
+        var s = _schema.Replace("]", "]]");
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT f.[Id], f.[FulfillmentType], f.[RefDocId], f.[Quantity], f.[Notes],
+                   f.[IsActive], f.[Created],
+                   d.[DocumentNumber], d.[DocumentDate], d.[Status] AS DocStatus,
+                   ca.[AccountTitle] AS ContactName
+              FROM [{s}].[DocumentLineFulfillment] f
+              LEFT JOIN [{s}].[Document] d ON d.[Id] = f.[RefDocId]
+              LEFT JOIN [{s}].[Contact]  ca ON ca.[Id] = d.[ContactId]
+             WHERE f.[RequestLineId] = @LineId
+             ORDER BY f.[IsActive] DESC, f.[Created] DESC;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@LineId", lineId));
+
+        var result = new List<object>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var kind = r.GetByte(r.GetOrdinal("FulfillmentType"));
+            result.Add(new
+            {
+                id               = r.GetInt32(r.GetOrdinal("Id")),
+                kind,
+                kindLabel        = FulfillmentKindLabel((FulfillmentSourceKind)kind),
+                refDocId         = r.IsDBNull(r.GetOrdinal("RefDocId")) ? (int?)null : r.GetInt32(r.GetOrdinal("RefDocId")),
+                documentNumber   = r.IsDBNull(r.GetOrdinal("DocumentNumber")) ? null : r.GetString(r.GetOrdinal("DocumentNumber")),
+                documentDate     = r.IsDBNull(r.GetOrdinal("DocumentDate")) ? (DateTime?)null : r.GetDateTime(r.GetOrdinal("DocumentDate")),
+                documentStatus   = r.IsDBNull(r.GetOrdinal("DocStatus")) ? null : r.GetString(r.GetOrdinal("DocStatus")),
+                contactName      = r.IsDBNull(r.GetOrdinal("ContactName")) ? null : r.GetString(r.GetOrdinal("ContactName")),
+                quantity         = r.GetDecimal(r.GetOrdinal("Quantity")),
+                notes            = r.IsDBNull(r.GetOrdinal("Notes")) ? null : r.GetString(r.GetOrdinal("Notes")),
+                isActive         = r.GetBoolean(r.GetOrdinal("IsActive")),
+                created          = r.GetDateTime(r.GetOrdinal("Created")),
+            });
+        }
+        return Json(result);
+    }
+
+    /// <summary>Karşılama türü (FulfillmentSourceKind) → kullanıcıya gösterilecek Türkçe etiket.</summary>
+    private static string FulfillmentKindLabel(FulfillmentSourceKind kind) => kind switch
+    {
+        FulfillmentSourceKind.Transfer       => "Depo Transferi",
+        FulfillmentSourceKind.PurchaseQuote  => "Satın Alma Teklifi",
+        FulfillmentSourceKind.PurchaseOrder  => "Satın Alma Siparişi",
+        FulfillmentSourceKind.StockIssue     => "Ambar Çıkışı",
+        FulfillmentSourceKind.PurchaseDemand => "Satın Alma Talebi",
+        FulfillmentSourceKind.LegacyStock    => "Stok (Geçmiş Kayıt)",
+        FulfillmentSourceKind.LegacyPurchase => "Satın Alma (Geçmiş Kayıt)",
+        _                                     => "Bilinmeyen",
+    };
+
+    /// <summary>
     /// Depo transferi oluşturur ve kaynak İhtiyaç kaydına RefNo üzerinden bağlar.
     /// POST /Purchase/CreateTransfer
     /// Yanıt: { ok: true, docNo } veya { ok: false, error }
