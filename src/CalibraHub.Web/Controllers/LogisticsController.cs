@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Routing;
 using System.Security.Claims;
+using static CalibraHub.Web.Helpers.AuditLogActionHelper;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -49,17 +50,6 @@ public sealed class LogisticsController : Controller
     {
         var raw = User.FindFirstValue("company_id");
         return int.TryParse(raw, out var id) ? id : 0;
-    }
-
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
-    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
-    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
-    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
-    private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
-    {
-        var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
-            + (string.IsNullOrWhiteSpace(formCode) ? "" : $"&formCode={Uri.EscapeDataString(formCode)}");
-        return new { label = "İşlem Logu", icon = "ScrollText", color = "slate", url };
     }
 
     [HttpGet]

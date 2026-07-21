@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CircleDot, ChevronLeft, ChevronRight, X, AlertTriangle, Trash2, Check, Loader2 } from 'lucide-react'
 import SmartWidget from './SmartWidget'
 import { resolveColor, resolveIcon } from './DynamicWidgetFactory'
-import { navigateInWorkspace } from '../../utils/workspaceNav'
+import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
 import { getTopBody } from '../../utils/topPortal'
 
 // Bir widget'ın kısıt ihlali varsa açıklama döndür, yoksa null.
@@ -356,10 +356,20 @@ export default function SmartCard(props) {
     if (action.openInTab) {
       try {
         if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
+          // matchPath GENEL kurali (2026-07-21): alan acikca verilmemisse (undefined —
+          // backend openInTab: { title } gonderip matchPath'i hic eklemediyse) URL'in
+          // path kisminden otomatik turetilir, boylece "ayni sayfa zaten aciksa mevcut
+          // sekmeye git" davranisi caller ayrica matchPath gondermese bile calisir.
+          // Acikca null/false verilmis (alan mevcut ama falsy) "her tiklamada yeni
+          // sekme ac" istisnalari KIRILMAZ — sadece "tanimsiz" durumda turetme yapilir.
+          var explicitMatchPath = action.openInTab.matchPath
+          var matchPath = (explicitMatchPath !== undefined)
+            ? (explicitMatchPath || null)
+            : deriveMatchPathFromUrl(action.url)
           window.top.CalibraHub.openWorkspaceTab({
             url: action.url,
             title: action.openInTab.title || action.label || 'Yeni Sekme',
-            matchPath: action.openInTab.matchPath || null,
+            matchPath: matchPath,
           })
           return
         }

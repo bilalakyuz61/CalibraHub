@@ -54,7 +54,7 @@ import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical } from 'luci
 import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
-import { navigateInWorkspace } from '../../utils/workspaceNav'
+import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
 import { getTopBody } from '../../utils/topPortal'
 
 /* ── Per-sutun render yardimcilari — align/pin/font tum hucre tiplerinde ortak ── */
@@ -470,10 +470,17 @@ export default function SmartTableRow(props) {
     if (action.openInTab) {
       try {
         if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
+          // matchPath GENEL kurali (2026-07-21) — bkz. SmartCard.jsx dispatchActionUrl
+          // (birebir ayni mantik): alan acikca verilmemisse (undefined) URL path'inden
+          // turetilir; acikca null/false verilmis istisnalar KIRILMAZ.
+          var explicitMatchPath = action.openInTab.matchPath
+          var matchPath = (explicitMatchPath !== undefined)
+            ? (explicitMatchPath || null)
+            : deriveMatchPathFromUrl(action.url)
           window.top.CalibraHub.openWorkspaceTab({
             url: action.url,
             title: action.openInTab.title || action.label || 'Yeni Sekme',
-            matchPath: action.openInTab.matchPath || null,
+            matchPath: matchPath,
           })
           return
         }

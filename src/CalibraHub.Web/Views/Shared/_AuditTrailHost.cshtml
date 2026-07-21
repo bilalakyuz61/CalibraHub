@@ -131,7 +131,12 @@
             try {
                 var topWin = window.top || window;
                 if (topWin && topWin.CalibraHub && typeof topWin.CalibraHub.openWorkspaceTab === 'function') {
-                    topWin.CalibraHub.openWorkspaceTab({ url: url, title: title });
+                    // matchPath: bu partial dispatchActionUrl'den gecmedigi icin (dogrudan
+                    // openWorkspaceTab cagrisi) otomatik turetme devreye girmez — elle
+                    // eklenir. Ayni /AuditLog sekmesi zaten aciksa yeni sekme yerine
+                    // mevcut sekme yeni entity/recordId ile guncellenir (workspace-tabs
+                    // GENEL kurali, 2026-07-21).
+                    topWin.CalibraHub.openWorkspaceTab({ url: url, title: title, matchPath: '/AuditLog' });
                     return;
                 }
             } catch (e) { /* cross-origin — shell'e erişilemedi */ }

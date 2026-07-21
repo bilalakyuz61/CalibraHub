@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using static CalibraHub.Web.Helpers.AuditLogActionHelper;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -128,17 +129,6 @@ public sealed class WarehouseController : Controller
         UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var role);
         int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
         return await _permService.CheckAnyAsync(CurrentUserId() ?? 0, role, deptId, formCode, actionCodes, ct);
-    }
-
-    /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
-    /// Koşulsuz eklenir: hedef /AuditLog?entity=&amp;recordId= kayda-kilitli modda yalnızca [Authorize]
-    /// ister (AuditLogController.Index, 2026-07-16 kararı) — kaldırılan "Değişiklik Geçmişi" sekmesi de
-    /// aynı şekilde kapısızdı, bu aksiyon o erişimi aynen korur.</summary>
-    private static object BuildAuditLogAction(string entity, int recordId, string? formCode)
-    {
-        var url = $"/AuditLog?entity={Uri.EscapeDataString(entity)}&recordId={recordId}"
-            + (string.IsNullOrWhiteSpace(formCode) ? "" : $"&formCode={Uri.EscapeDataString(formCode)}");
-        return new { label = "İşlem Logu", icon = "ScrollText", color = "slate", url };
     }
 
     /// <summary>RefNo repo tarafında Notes'a "[Ref: x]" olarak gömülür (CombineNotesWithRef) —
