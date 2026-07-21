@@ -976,6 +976,9 @@ public sealed class LogisticsController : Controller
                 ["isMachinePark"] = l.IsMachinePark,
                 ["isStorageArea"] = l.IsStorageArea,
                 ["allowNegativeBalance"] = l.AllowNegativeBalance,
+                // Faz 1 taşıma: sonraki faz switchkey UI + kural bunları okuyacak.
+                ["isCountReference"] = l.IsCountReference,
+                ["isSingleChildType"] = l.IsSingleChildType,
                 ["widgets"]       = widgets,
                 ["children"]      = new List<Dictionary<string, object?>>(),
             });

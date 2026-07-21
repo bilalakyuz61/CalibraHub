@@ -357,6 +357,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 x.IsActive,
                 x.IsMachinePark,
                 x.IsStorageArea,
+                x.IsCountReference,
+                x.IsSingleChildType,
                 x.AllowNegativeBalance))
             .ToArray();
     }
@@ -1260,6 +1262,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     IsActive = parent.IsActive,
                     IsMachinePark = false,
                     IsStorageArea = false,
+                    // Konteyner bayraklarını KORU — child eklendiğinde parent artık leaf değil,
+                    // ama bu bayraklar tam da konteyner (bölüm) lokasyon için anlamlıdır. Repo UPDATE
+                    // tüm kolonları yazdığından, atlanırlarsa sessizce false'a düşerlerdi (veri kaybı).
+                    IsCountReference = parent.IsCountReference,
+                    IsSingleChildType = parent.IsSingleChildType,
                 };
                 await _repository.UpdateLocationAsync(clearedParent, cancellationToken);
             }
@@ -1279,6 +1286,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             IsActive = request.IsActive,
             IsMachinePark = request.IsMachinePark,
             IsStorageArea = request.IsStorageArea,
+            // Faz 1: bayraklar olduğu gibi taşınır; anlam/kısıt uygulaması (yalnız konteyner
+            // lokasyonda geçerlilik, tek-tür doğrulaması, sayım davranışı) sonraki fazda.
+            IsCountReference = request.IsCountReference,
+            IsSingleChildType = request.IsSingleChildType,
             AllowNegativeBalance = request.AllowNegativeBalance
         };
 
@@ -1383,6 +1394,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             IsActive = request.IsActive,
             IsMachinePark = isMachinePark,
             IsStorageArea = isStorageArea,
+            // Faz 1: doğrudan taşınır (leaf/konteyner koşullama, tek-tür doğrulaması,
+            // sayım davranışı sonraki fazda). Bu bayraklar konteyner lokasyonda anlamlıdır.
+            IsCountReference = request.IsCountReference,
+            IsSingleChildType = request.IsSingleChildType,
             AllowNegativeBalance = allowNegativeBalance
         };
 

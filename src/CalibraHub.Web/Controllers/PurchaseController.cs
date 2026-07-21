@@ -1778,8 +1778,17 @@ public sealed class PurchaseController : Controller
     }
 
     /// <summary>
-    /// İhtiyaç kayıtlarını "Converted" statüsüne alır (ihtiyaç kapatma).
+    /// İhtiyaç kayıtlarını (BELGENİN TAMAMI) "Cancelled" statüsüne alır — aynı belgedeki
+    /// kısmen karşılanmış başka kalemler varsa onlar da iptal olur.
     /// POST /Purchase/CloseRequests
+    ///
+    /// 2026-07-21 (PageComment Seq 12): FulfillmentCenter ekranındaki "İhtiyacı Kapat" /
+    /// "Kalanı Kapat" iki ayrı aksiyonu TEK butona indirildi; ekran artık yalnız
+    /// <see cref="CloseFulfillmentLines"/>'ı çağırıyor (satır bazlı kapatma zaten hem
+    /// "hiç karşılanmamışsa tamamını" hem "kısmen karşılanmışsa kalanını" kapsıyor — bkz. o
+    /// metodun KDoc'u). Bu uç FulfillmentCenter'ın JS'inden artık ÇAĞRILMIYOR; başka bir
+    /// çağıranı olup olmadığı doğrulanmadı (bu görevin kapsamı dışında, bkz. görev raporu) —
+    /// bilinçli olarak SİLİNMEDİ, yetim kalmış olabilir.
     /// </summary>
     [HttpPost("/Purchase/CloseRequests")]
     [ValidateAntiForgeryToken]
@@ -1802,7 +1811,8 @@ public sealed class PurchaseController : Controller
     }
 
     /// <summary>
-    /// FulfillmentCenter — seçili İhtiyaç KALEMLERİNİN kalan miktarını kapatır.
+    /// FulfillmentCenter — TEK "İhtiyacı Kapat" aksiyonu (2026-07-21, PageComment Seq 12).
+    /// Seçili İhtiyaç KALEMLERİNİN karşılanmamış kalan miktarını kapatır.
     /// POST /Purchase/CloseFulfillmentLines
     ///
     /// Yukarıdaki <see cref="CloseRequests"/>'ten FARKI: o BELGENİN TAMAMINI "Cancelled"
@@ -1810,8 +1820,18 @@ public sealed class PurchaseController : Controller
     /// Bu uç yalnız verilen satırları etkiler (FulfillmentStatus = 3), karşılanan
     /// miktarları korur — "bu kalem için artık bir şey yapmayacağız" anlamındadır.
     ///
+    /// Hem "hiç karşılama yapılmadı" hem "kısmen karşılandı" senaryosunu AYNI koşulsuz
+    /// UPDATE ile kapsar: FulfilledFromStock/FulfilledByPurchase koşulsuz korunur (0 da
+    /// olsa, kısmi bir değer de olsa dokunulmaz), yalnızca FulfillmentStatus=3 yazılır. Bu
+    /// yüzden hiç karşılanmamış bir kalemde "kalan miktar" zaten miktarın tamamı olduğundan
+    /// ayrı bir "tam kapat" dalı GEREKMEZ — FulfillmentCenter ekranı artık tek "İhtiyacı
+    /// Kapat" butonuyla yalnız bu uca bağlanıyor.
+    ///
     /// Tipik senaryo: bir ihtiyaç kaleminin bir kısmı depodan/transferle, bir kısmı
-    /// satın alma talebiyle karşılanır; geri kalanından vazgeçilip kalem kapatılır.
+    /// satın alma talebiyle karşılanır; geri kalanından vazgeçilip kalem kapatılır. Karşılama
+    /// defterine (DocumentLineFulfillment) kayıt YAZILMAZ — kapatma bir karşılama kaynağı
+    /// değildir, defterdeki mevcut aktif kayıtlar (ve onlardan türetilen toplamlar) aynen
+    /// korunur.
     /// </summary>
     [HttpPost("/Purchase/CloseFulfillmentLines")]
     [ValidateAntiForgeryToken]

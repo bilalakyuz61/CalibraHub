@@ -82,7 +82,8 @@ public sealed class LocationController : Controller
                         : string.IsNullOrWhiteSpace(parent.LocationName) ? parent.LocationCode
                         : $"{parent.LocationCode} - {parent.LocationName}",
                     x.SortOrder, x.MaxWeightCapacity, x.VolumeCapacity, x.IsActive,
-                    x.IsMachinePark, x.IsStorageArea
+                    x.IsMachinePark, x.IsStorageArea,
+                    x.IsCountReference, x.IsSingleChildType
                 };
             });
         return Json(filtered);
@@ -101,7 +102,8 @@ public sealed class LocationController : Controller
             item.LocationCode,
             locationName = item.LocationName ?? string.Empty,
             item.SortOrder, item.MaxWeightCapacity, item.VolumeCapacity, item.IsActive,
-            item.IsMachinePark, item.IsStorageArea
+            item.IsMachinePark, item.IsStorageArea,
+            item.IsCountReference, item.IsSingleChildType
         });
     }
 
@@ -118,14 +120,16 @@ public sealed class LocationController : Controller
                 await _logisticsConfigurationService.UpdateLocationAsync(
                     new UpdateLocationRequest(input.Id.Value, input.ParentId, typeCode, input.LocationCode,
                         input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity,
-                        input.IsActive, input.IsMachinePark, input.IsStorageArea, input.AllowNegativeBalance), ct);
+                        input.IsActive, input.IsMachinePark, input.IsStorageArea,
+                        input.IsCountReference, input.IsSingleChildType, input.AllowNegativeBalance), ct);
             }
             else
             {
                 await _logisticsConfigurationService.CreateLocationAsync(
                     new CreateLocationRequest(input.ParentId, typeCode, input.LocationCode,
                         input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity,
-                        input.IsActive, input.IsMachinePark, input.IsStorageArea, input.AllowNegativeBalance), ct);
+                        input.IsActive, input.IsMachinePark, input.IsStorageArea,
+                        input.IsCountReference, input.IsSingleChildType, input.AllowNegativeBalance), ct);
             }
             return Json(new { success = true });
         }

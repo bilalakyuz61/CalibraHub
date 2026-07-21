@@ -1135,9 +1135,9 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
             Satın Alma Talebi
         </button>
-        <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnCloseLines" onclick="fc3CloseFulfillmentLines()" title="Seçili kalemlerin karşılanmamış kalan miktarını kapatır — belgenin diğer kalemlerine dokunmaz">
+        <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnCloseLines" onclick="fc3CloseFulfillmentLines()" title="Karşılanmamış miktarı kapatır: hiç karşılama yapılmadıysa ihtiyacın tamamı, kısmen karşılandıysa yalnız kalan kısmı kapanır — belgenin diğer kalemlerine dokunmaz">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            Kapat
+            İhtiyacı Kapat
         </button>
         <span class="fc3-fb-sep"></span>
         <button type="button" class="fc3-fb-cancel" onclick="fc3LineSelClear()">İptal</button>
@@ -3201,40 +3201,15 @@
         .catch(function() { if (btn) btn.disabled=false; err.textContent='✖ Bağlantı hatası'; err.style.display='block'; });
     };
 
-    window.fc3CloseRequests = function() {
-        var ids = Array.from(new Set(Object.values(_lineSel).map(function(v) { return v.docId; })));
-        if (!ids.length) return;
-        var names = ids.map(function(id) {
-            var r = ALL.find(function(x) { return x.id === id; });
-            return r ? r.documentNumber : '#' + id;
-        }).join(', ');
-        showConfirm({
-            title:   'İhtiyaç Kaydı Kapatılacak',
-            message: 'Seçili ' + ids.length + ' ihtiyaç kaydı kapatılacak:\n' + names + '\n\nBu işlem geri alınamaz. Devam edilsin mi?',
-            okLabel: 'Kapat',
-        }).then(function(ok) {
-            if (!ok) return;
-            fetch('/Purchase/CloseRequests', {
-                method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
-                body: JSON.stringify({ requestIds:ids }),
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.ok || (d.closed && d.closed.length > 0)) {
-                    var msg = (d.closed||[]).length + ' kayıt kapatıldı.' + (d.errors&&d.errors.length ? ' Hatalar: '+d.errors.join(', ') : '');
-                    CalibraAlert.show(msg, { type: 'success', autoDismissMs: 2500 });
-                    setTimeout(function() { window.location.reload(); }, 1800);
-                } else {
-                    CalibraAlert.show('Kapatma başarısız: ' + (d.errors||[]).join(', '), { type: 'error' });
-                }
-            })
-            .catch(function() { CalibraAlert.show('Bağlantı hatası.', { type: 'error' }); });
-        });
-    };
-
-    // Seçili KALEMLERİN karşılanmamış kalan miktarını kapatır — CloseRequests'ten farkı:
-    // yalnız verilen satırlar etkilenir (FulfillmentStatus=3), aynı belgedeki diğer
-    // kalemlere ve belge Status'üne dokunulmaz.
+    // TEK kapatma aksiyonu ("İhtiyacı Kapat" — PageComment Seq 12, 2026-07-21 birleştirmesi):
+    // seçili KALEMLERİN karşılanmamış kalan miktarını kapatır (FulfillmentStatus=3). Hiç
+    // karşılama yapılmamış bir kalemde "kalan miktar" = miktarın tamamı olduğundan bu TEK uç
+    // hem "ihtiyacı tamamen kapat" hem "kısmi karşılamadan sonra kalanı kapat" senaryosunu
+    // aynı şekilde kapsar — ayrı bir "tam kapat" dalına ihtiyaç yok. Yalnız verilen satırlar
+    // etkilenir; aynı belgedeki diğer kalemlere ve belge (header) Status'üne dokunulmaz.
+    // Önceki belge-bazlı "İhtiyacı Kapat" aksiyonu (/Purchase/CloseRequests — TÜM belgeyi
+    // Cancelled yapardı, seçili satırlar dışındaki kalemleri de etkilerdi) bu ekrandan
+    // kaldırıldı; backend ucu başka bir çağıran yoksa artık kullanılmıyor (bkz. görev raporu).
     window.fc3CloseFulfillmentLines = function() {
         var ids = Object.keys(_lineSel).map(Number);
         if (!ids.length) return;
@@ -3243,11 +3218,12 @@
             return l ? (l.materialName || l.materialCode || ('#' + id)) : ('#' + id);
         }).join(', ');
         showConfirm({
-            title:   'Kalem Kalanı Kapatılacak',
+            title:   'İhtiyacı Kapat',
             message: 'Seçili ' + ids.length + ' kalemin karşılanmamış kalan miktarı kapatılacak'
-                + (names ? ':\n' + names : '') + '.\n\nKarşılanan miktarlar korunur, yalnızca kalan kısımdan vazgeçilir.'
+                + (names ? ':\n' + names : '') + '.\n\nKarşılanan miktarlar korunur, yalnızca kalan kısımdan vazgeçilir'
+                + ' (hiç karşılama yapılmadıysa ihtiyacın tamamından vazgeçilmiş olur).'
                 + '\nBu işlem geri alınamaz. Devam edilsin mi?',
-            okLabel: 'Kalanı Kapat',
+            okLabel: 'Kapat',
         }).then(function(ok) {
             if (!ok) return;
             var btn = document.getElementById('fc3BtnCloseLines');

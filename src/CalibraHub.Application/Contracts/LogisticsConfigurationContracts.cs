@@ -178,6 +178,10 @@ public sealed record LocationDto(
     bool IsActive,
     bool IsMachinePark,
     bool IsStorageArea,
+    // Sayım referansı: sayımda alt kırılımların bu lokasyon üzerinden sayılması.
+    bool IsCountReference,
+    // Alt kırılımlar tek türde olmalı (raf/hücre karışamaz).
+    bool IsSingleChildType,
     // Depo bazında eksi bakiye izni (üç durumlu): null=şirket varsayılanını devral,
     // true=izin ver (kontrol kapalı), false=engelle (kontrol açık).
     bool? AllowNegativeBalance = null);
@@ -234,6 +238,8 @@ public sealed record CreateLocationRequest(
     bool IsActive,
     bool IsMachinePark,
     bool IsStorageArea,
+    bool IsCountReference,
+    bool IsSingleChildType,
     bool? AllowNegativeBalance = null);
 
 public sealed record CreateUnitRequest(
@@ -255,6 +261,8 @@ public sealed record UpdateLocationRequest(
     bool IsActive,
     bool IsMachinePark,
     bool IsStorageArea,
+    bool IsCountReference,
+    bool IsSingleChildType,
     bool? AllowNegativeBalance = null);
 
 public sealed record UpdateUnitRequest(

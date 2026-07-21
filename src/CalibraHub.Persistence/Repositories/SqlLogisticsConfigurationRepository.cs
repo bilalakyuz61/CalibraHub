@@ -1331,7 +1331,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [IsActive],
                    ISNULL([IsMachinePark], 0),
                    ISNULL([IsStorageArea], 0),
-                   [AllowNegativeBalance]
+                   [AllowNegativeBalance],
+                   ISNULL([IsCountReference], 0),
+                   ISNULL([IsSingleChildType], 0)
             FROM {_warehouseLocationsTableName}
             ORDER BY [SortOrder], [LocationTypeCode], [LocationCode];
             """;
@@ -1352,7 +1354,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 IsActive = !reader.IsDBNull(8) && reader.GetBoolean(8),
                 IsMachinePark = !reader.IsDBNull(9) && reader.GetBoolean(9),
                 IsStorageArea = !reader.IsDBNull(10) && reader.GetBoolean(10),
-                AllowNegativeBalance = reader.IsDBNull(11) ? (bool?)null : reader.GetBoolean(11)
+                AllowNegativeBalance = reader.IsDBNull(11) ? (bool?)null : reader.GetBoolean(11),
+                IsCountReference = !reader.IsDBNull(12) && reader.GetBoolean(12),
+                IsSingleChildType = !reader.IsDBNull(13) && reader.GetBoolean(13)
             });
         }
 
@@ -1508,9 +1512,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_warehouseLocationsTableName}
-                ([ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive], [IsMachinePark], [IsStorageArea], [AllowNegativeBalance])
+                ([ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive], [IsMachinePark], [IsStorageArea], [IsCountReference], [IsSingleChildType], [AllowNegativeBalance])
             VALUES
-                (@ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive, @IsMachinePark, @IsStorageArea, @AllowNegativeBalance);
+                (@ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive, @IsMachinePark, @IsStorageArea, @IsCountReference, @IsSingleChildType, @AllowNegativeBalance);
             """;
 
         command.Parameters.Add(new SqlParameter("@ParentId", (object?)location.ParentId ?? DBNull.Value));
@@ -1523,6 +1527,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@IsActive", location.IsActive));
         command.Parameters.Add(new SqlParameter("@IsMachinePark", location.IsMachinePark));
         command.Parameters.Add(new SqlParameter("@IsStorageArea", location.IsStorageArea));
+        command.Parameters.Add(new SqlParameter("@IsCountReference", location.IsCountReference));
+        command.Parameters.Add(new SqlParameter("@IsSingleChildType", location.IsSingleChildType));
         command.Parameters.Add(new SqlParameter("@AllowNegativeBalance", (object?)location.AllowNegativeBalance ?? DBNull.Value));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1545,6 +1551,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [IsActive] = @IsActive,
                 [IsMachinePark] = @IsMachinePark,
                 [IsStorageArea] = @IsStorageArea,
+                [IsCountReference] = @IsCountReference,
+                [IsSingleChildType] = @IsSingleChildType,
                 [AllowNegativeBalance] = @AllowNegativeBalance
             WHERE [Id] = @Id;
             """;
@@ -1560,6 +1568,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@IsActive", location.IsActive));
         command.Parameters.Add(new SqlParameter("@IsMachinePark", location.IsMachinePark));
         command.Parameters.Add(new SqlParameter("@IsStorageArea", location.IsStorageArea));
+        command.Parameters.Add(new SqlParameter("@IsCountReference", location.IsCountReference));
+        command.Parameters.Add(new SqlParameter("@IsSingleChildType", location.IsSingleChildType));
         command.Parameters.Add(new SqlParameter("@AllowNegativeBalance", (object?)location.AllowNegativeBalance ?? DBNull.Value));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
