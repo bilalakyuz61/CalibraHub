@@ -71,11 +71,6 @@
     body.app-theme-light .inv-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
     .inv-btn--secondary:hover { background: rgba(255,255,255,0.1); color: #fff; }
     body.app-theme-light .inv-btn--secondary:hover { background: #f1f5f9; color: #1e293b; }
-    .inv-btn--danger {
-        background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #f87171;
-    }
-    body.app-theme-light .inv-btn--danger { color: #dc2626; }
-    .inv-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
     .inv-btn--violet {
         background: rgba(139,92,246,0.14); border-color: rgba(139,92,246,0.35); color: #c4b5fd;
     }
@@ -223,14 +218,11 @@
     .inv-ops-card {
         padding: 14px 16px; border-radius: 12px; border: 1px dashed;
     }
-    .inv-ops-card--danger { border-color: rgba(239,68,68,.4);  background: rgba(239,68,68,.04); }
     .inv-ops-card--warn   { border-color: rgba(139,92,246,.35); background: rgba(139,92,246,.04); }
     .inv-ops-title {
         display: flex; align-items: center; gap: 6px;
         font-size: .82rem; font-weight: 600; margin-bottom: 8px;
     }
-    .inv-ops-card--danger .inv-ops-title { color: #f87171; }
-    body.app-theme-light .inv-ops-card--danger .inv-ops-title { color: #dc2626; }
     .inv-ops-card--warn .inv-ops-title { color: #a78bfa; }
     body.app-theme-light .inv-ops-card--warn .inv-ops-title { color: #6d28d9; }
     .inv-ops-desc {
@@ -343,23 +335,6 @@
             İşlemleri kullanabilmek için önce sayım belgesini depo seçerek kaydedin.
           </div>
 
-          <!-- Sayım bağlantısız bakiye sıfırlama -->
-          <div class="inv-ops-card inv-ops-card--danger">
-            <div class="inv-ops-title">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-              Sayım Bağlantısız Bakiye Sıfırlama
-            </div>
-            <div class="inv-ops-desc">
-              Sayım deposundaki <strong>tüm güncel stok bakiyeleri</strong> — sayım kalemlerinden bağımsız olarak —
-              sıfırlanacak şekilde düzeltme (Adjust) satırları yazılır. Genellikle sayım öncesi depoyu temiz bir
-              başlangıca çekmek için kullanılır; ardından Yansıt ile sayılan miktarlar sıfır baz üzerine işlenir.
-            </div>
-            <button type="button" class="inv-btn inv-btn--danger inv-ops-btn" id="invZeroAllBtn" style="font-size:0.78rem;padding:7px 12px;">
-              Bakiyeleri Sıfırla
-            </button>
-            <div class="inv-load-status" id="invZeroAllStatus"></div>
-          </div>
-
           <!-- Sayılmayan stokların sıfırlanması -->
           <div class="inv-ops-card inv-ops-card--warn">
             <div class="inv-ops-title">
@@ -442,6 +417,14 @@
 (function() {
     var DOC_ID     = @Html.Raw(Model.DocId.HasValue ? Model.DocId.Value.ToString() : "null");
     var LINE_GRID_CONFIG = @Html.Raw(Model.LineGridConfigJson);
+    // Kullanıcı geri bildirimi (2026-07-21, Seq 16): kalem gridinde satır bazlı Lokasyon
+    // kolonu kaldırıldı — sayım kalemleri her zaman üst bilgideki "Sayım Deposu"nu kullanır
+    // (bkz. save() lines-map + header 'change' listener aşağıda). Kolon burada, config
+    // kaynağında (WarehouseController.BuildInventoryLineGridConfig) DEĞİL, render öncesi
+    // istemci tarafında süzülür.
+    if (LINE_GRID_CONFIG && Array.isArray(LINE_GRID_CONFIG.columns)) {
+        LINE_GRID_CONFIG.columns = LINE_GRID_CONFIG.columns.filter(function(c) { return c.key !== 'fromLocationId'; });
+    }
     var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
     var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
     var TOKEN      = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
@@ -499,6 +482,7 @@
                 var locEl = document.getElementById('invLocation');
                 var locId = doc.fromLocationId || null;
                 if (locEl && locId) locEl.value = String(locId);
+                invUpdateTitleSuffix();
 
                 var notesEl = document.getElementById('invNotes');
                 if (notesEl) notesEl.value = doc.notes || '';
@@ -560,6 +544,22 @@
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Sayım</span>';
     }
 
+    // Sayfa başlığındaki "Sayım" yazısına seçili depo/lokasyon adını ekler (kullanıcı geri
+    // bildirimi Seq 16, 2026-07-21) — kalem gridinde artık satır bazlı lokasyon sorulmuyor,
+    // üst bilgideki depo tek kaynak olduğundan başlıkta da görünür kılınır. Depo değişince
+    // (loadDoc sonrası veya kullanıcı seçince) tekrar çağrılır.
+    function invUpdateTitleSuffix() {
+        var titleEl = document.querySelector('.pte-action-bar .pte-action-bar__title');
+        if (!titleEl) return;
+        var locEl = document.getElementById('invLocation');
+        var locName = '';
+        if (locEl && locEl.value && locEl.selectedIndex >= 0) {
+            var opt = locEl.options[locEl.selectedIndex];
+            if (opt) locName = (opt.textContent || '').trim();
+        }
+        titleEl.textContent = 'Sayım' + (locName ? ' / ' + locName : '');
+    }
+
     // ── Grid satırları ────────────────────────────────────────────────
     function setGridRows(rows) {
         if (_gridReady && window.CalibraHub && window.CalibraHub.whLineGrid) {
@@ -604,7 +604,10 @@
                         qty:           parseFloat(r.quantity) || 0,
                         combinationId: r.combinationId || null,
                         notes:         r.notes || null,
-                        fromLocationId: r.fromLocationId || null,
+                        // Seq 16 (2026-07-21): satır bazlı lokasyon girişi kaldırıldı — kalem her
+                        // zaman üst bilgideki "Sayım Deposu"nu kullanır (r.fromLocationId artık
+                        // UI'da düzenlenemiyor, tutarlılık için doğrudan header değeri gönderilir).
+                        fromLocationId: fromLoc,
                         toLocationId:   null,
                         // İzlenebilirlik — seri listesi VEYA çoklu lot kırılımı (server zorunlu kılar)
                         serials:        (Array.isArray(r.serials) && r.serials.length > 0) ? r.serials : null,
@@ -798,8 +801,8 @@
         ['invDocDate', 'invLocation', 'invNotes'].forEach(function(idv) {
             var el = document.getElementById(idv); if (el) el.disabled = true;
         });
-        // İşlemler sekmesi sıfırlama operasyonları da kilitlenir (stok-mutasyonu).
-        ['invZeroAllBtn', 'invZeroUncountedBtn'].forEach(function(idv) {
+        // İşlemler sekmesi sıfırlama operasyonu da kilitlenir (stok-mutasyonu).
+        ['invZeroUncountedBtn'].forEach(function(idv) {
             var el = document.getElementById(idv); if (el) el.disabled = true;
         });
         var applyBtn = document.getElementById('invApplyBtn');
@@ -868,7 +871,7 @@
         var enabled = !!DOC_ID;
         var hint = document.getElementById('invOpsHint');
         if (hint) hint.style.display = enabled ? 'none' : '';
-        ['invZeroAllBtn', 'invZeroUncountedBtn'].forEach(function(id) {
+        ['invZeroUncountedBtn'].forEach(function(id) {
             var b = document.getElementById(id);
             if (b) b.disabled = !enabled;
         });
@@ -899,8 +902,11 @@
             window.CalibraHub.mountLineItemsGrid(el, LINE_GRID_CONFIG, {
                 onRowsChange: function(rows) {
                     window.__INV_LINES__ = rows || [];
-                    // Yeni kalemler header "Sayım Deposu"nu varsayılan devralır (satır bazlı override serbest).
-                    // Lokasyonu boş (yeni eklenen) satırlara header depoyu bas; dolu olanlara dokunma.
+                    // Kalem gridinde satır bazlı Lokasyon kolonu YOK (Seq 16) — satırlar her zaman
+                    // header "Sayım Deposu"nu kullanır; save() de ayrıca fromLoc'u zorunlu kılar.
+                    // Burada yalnızca grid'in dahili row state'i (lot/seri lookup token'ları
+                    // {fromLocationId} için) header ile senkron tutulur. Lokasyonu boş (yeni
+                    // eklenen) satırlara header depoyu bas; dolu olanlara dokunma.
                     // patchRows KİLİTLEMEZ → kullanıcının aktif düzenlemesini bozmaz; needs guard'ı loop'u keser.
                     var locEl = document.getElementById('invLocation');
                     var headLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
@@ -994,9 +1000,11 @@
             });
         });
 
-        // Header lokasyon değişince tüm satırlara propagate et (kilitlemeden — patchRows).
+        // Header lokasyon değişince tüm satırlara propagate et (kilitlemeden — patchRows)
+        // + başlıktaki "Sayım / <lokasyon>" ekini güncelle (Seq 16).
         document.getElementById('invLocation')?.addEventListener('change', function() {
             var newLocId = this.value ? parseInt(this.value, 10) : null;
+            invUpdateTitleSuffix();
             var api = window.CalibraHub && window.CalibraHub.whLineGrid;
             if (!api || !api.patchRows) return;
             api.patchRows(function(r) { return Object.assign({}, r, { fromLocationId: newLocId }); });
@@ -1025,14 +1033,6 @@
         });
 
         // İşlemler sekmesi butonları
-        document.getElementById('invZeroAllBtn')?.addEventListener('click', function() {
-            showOpsModal(
-                'Bakiyeleri Sıfırla',
-                'Sayım deposundaki TÜM güncel stok bakiyeleri sıfırlanacak şekilde düzeltme satırları yazılacak. Bu işlem sayım kalemlerinden bağımsız çalışır ve geri alınamaz. Devam edilsin mi?',
-                'Sıfırla',
-                function() { runZeroOp('/Warehouse/ZeroLocationBalancesJson', 'invZeroAllBtn', 'invZeroAllStatus'); }
-            );
-        });
         document.getElementById('invZeroUncountedBtn')?.addEventListener('click', function() {
             showOpsModal(
                 'Sayılmayanları Sıfırla',

@@ -49,6 +49,7 @@ public sealed class ProductionController : Controller
     private readonly ICompanyParameterService _companyParameters;
     private readonly CalibraHub.Application.Services.ShopFloorLockoutTracker _shopFloorLockout;
     private readonly CalibraHub.Persistence.Database.SqlServerConnectionFactory _connectionFactory;
+    private readonly ILogger<ProductionController> _logger;
 
     public ProductionController(
         IWorkOrderService service,
@@ -66,7 +67,8 @@ public sealed class ProductionController : Controller
         IPersonnelRepository personnelRepo,
         ICompanyParameterService companyParameters,
         CalibraHub.Application.Services.ShopFloorLockoutTracker shopFloorLockout,
-        CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory)
+        CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
+        ILogger<ProductionController> logger)
     {
         _service = service;
         _operations = operations;
@@ -84,6 +86,7 @@ public sealed class ProductionController : Controller
         _companyParameters = companyParameters;
         _shopFloorLockout = shopFloorLockout;
         _connectionFactory = connectionFactory;
+        _logger = logger;
     }
 
     /// <summary>SmartBoard extraActions "İşlem Logu" öğesi — entity/formCode _AuditTrailHost ile birebir aynı olmalı.
@@ -399,6 +402,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.Create] iş emri oluşturulamadı. ItemId={ItemId}", req?.ItemId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -415,6 +419,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.Update] id={Id} güncellenemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -431,6 +436,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.ChangeStatus] id={Id} newStatus={NewStatus} durum değiştirilemedi.", id, req?.NewStatus);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -447,6 +453,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.Revise] id={Id} revize oluşturulamadı.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

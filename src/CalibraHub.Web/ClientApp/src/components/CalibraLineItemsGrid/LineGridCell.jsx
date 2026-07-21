@@ -1520,14 +1520,30 @@ function SerialBreakdownModal(props) {
     }
     setRows(n)
   }
-  function addRow() { setRows(rows.concat([{ serialNo: '', expiryDate: '', description: '', qty: '1' }])) }
   function removeRow(i) { var n = rows.slice(); n.splice(i, 1); setRows(n.length ? n : [{ serialNo: '', expiryDate: '', description: '', qty: '1' }]) }
 
   // Seri = 1 adet (sabit) → geçerli satır sayısı = toplam.
   var valid = rows.filter(function(r) { return String(r.serialNo).trim() })
   var total = valid.length
+  var targetQty = parseNumber(props.qtyTarget)
   var serialSuggest = (lookup.options || [])
   var dup = (function() { var seen = {}, d = false; valid.forEach(function(r) { var k = String(r.serialNo).trim().toLowerCase(); if (seen[k]) d = true; seen[k] = 1 }); return d })()
+
+  // "Satır ekle" guard'ları (kullanıcı geri bildirimi 2026-07-21): (i) boş seri satırı varken
+  // yeni satır eklenemez — önce mevcut satır doldurulmalı; (ii) girilen seri sayısı satır
+  // miktarına ulaştıysa (örn. miktar=1 + 1 seri girildi) yeni satır eklenemez. Sessiz engelleme
+  // YOK — buton disabled olur VE gerekçe görünür metinle yazılır (CLAUDE.md sessiz-atlama kuralı).
+  var hasEmptySerial = rows.some(function(r) { return !String(r.serialNo).trim() })
+  var reachedTarget = !hasEmptySerial && targetQty != null && total >= targetQty
+  var addBlockReason = hasEmptySerial
+    ? 'Önce boş seri satırını doldurun.'
+    : (reachedTarget ? ('Seri sayısı satır miktarına ulaştı (' + targetQty + ') — yeni satır eklenemez.') : '')
+  var addDisabled = !!addBlockReason
+
+  function addRow() {
+    if (addDisabled) return
+    setRows(rows.concat([{ serialNo: '', expiryDate: '', description: '', qty: '1' }]))
+  }
 
   var panelStyle = isLight
     ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
@@ -1544,11 +1560,10 @@ function SerialBreakdownModal(props) {
             <div className="text-[11px] text-slate-500 dark:text-white/45 font-mono">{(props.row.materialCode || '') + (props.row.materialName ? ' · ' + props.row.materialName : '')}</div>
           </div>
           {(function () {
-            var target = parseNumber(props.qtyTarget)
-            var match = target == null || Math.abs(total - target) < 0.0001
+            var match = targetQty == null || Math.abs(total - targetQty) < 0.0001
             return (
               <div className={'text-[12px] font-mono font-bold tabular-nums ' + (match ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300')}>
-                Toplam: {total}{target != null ? ' / ' + target : ''}
+                Toplam: {total}{targetQty != null ? ' / ' + targetQty : ''}
               </div>
             )
           })()}
@@ -1580,7 +1595,9 @@ function SerialBreakdownModal(props) {
               </div>
             )
           })}
-          <button type="button" onClick={addRow} className="mt-1 text-[11.5px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-300">+ Seri Ekle</button>
+          <button type="button" onClick={addRow} disabled={addDisabled} title={addBlockReason || undefined}
+            className={'mt-1 text-[11.5px] font-medium transition-colors ' + (addDisabled ? 'text-slate-400 dark:text-white/30 cursor-not-allowed' : 'text-indigo-600 hover:text-indigo-700 dark:text-indigo-300')}>+ Seri Ekle</button>
+          {addBlockReason && <div className="mt-1 text-[11px] text-amber-600 dark:text-amber-300">{addBlockReason}</div>}
           {dup && <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-300">Aynı seri birden fazla girildi.</div>}
         </div>
         <div className="px-4 py-3 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-white/[0.07]">

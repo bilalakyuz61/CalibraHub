@@ -6,7 +6,13 @@
     ViewData["FormCode"] = "WORK_ORDER";
     ViewData["BodyClass"] = "page-work-order-edit";
 
-    string Iso(DateTime? d) => d?.ToLocalTime().ToString("yyyy-MM-ddTHH:mm") ?? "";
+    // 2026-07-21 fix: PlannedStartDate/PlannedEndDate ADO.NET'ten Kind=Unspecified doner ve
+    // bu deger zaten kullanicinin datetime-local input'una yazdigi ham saat (hicbir asamada
+    // UTC'ye cevrilmiyor — bkz. payload() 'plannedStartDate: txt(...)' JS'i, cift Z eklemiyor).
+    // Eskiden burada .ToLocalTime() cagriliyordu; Unspecified Kind'i UTC sanip sunucunun yerel
+    // saat farkini (orn. +3) EKLIYORDU, boylece kayit->yeniden-acilis her seferinde saati
+    // kaydirip kullaniciya "girdigim saat degil" izlenimi veriyordu (PageComment Seq 9).
+    string Iso(DateTime? d) => d?.ToString("yyyy-MM-ddTHH:mm") ?? "";
 
     var status = Model?.Status ?? WorkOrderStatus.Planned;
     var canEditPlan = status == WorkOrderStatus.Planned;
@@ -803,7 +809,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
             </button>
             <button type="button" class="woe-nav-btn" data-tab="makine">
                 <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                <span>Planlama</span>
+                <span>Planlama Bilgileri</span>
             </button>
             <button type="button" class="woe-nav-btn" data-tab="rota">
                 <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
@@ -928,17 +934,21 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                     <textarea id="f-notes" @(canEditPlan || isNew ? "" : "readonly")>@Model?.Notes</textarea>
                 </div>
 
-                @* "Üretime Planla" switch — sadece YENİ iş emrinde göster. Default ON; kapatırsa
-                   WO Taslak (Planned) statüsünde kaydedilir. ON ise Save sırasında autoRelease=true
-                   gönderilir, backend operasyonları otomatik patlatır + Released statüsüne yazar. *@
+                @* "Üretime Planla" switch — sadece YENİ iş emrinde göster. 2026-07-21 (PageComment
+                   Seq 10): default KAPALI — açıkken WO doğrudan Released statüsüne geçer, bu da
+                   Planlama Bilgileri sekmesini salt-okunur yapar (canEditPlan yalnızca Planned'da
+                   true) ve kullanıcı az sonra aynı ekrandan planlama alanlarını düzenleyemez hale
+                   gelir. Kapalıysa (varsayılan) WO Taslak (Planned) kalır, sonra Yayımla butonuyla
+                   açılır. Kullanıcı bilinçli olarak açarsa Save sırasında autoRelease=true gönderilir,
+                   backend operasyonları otomatik patlatır + Released statüsüne yazar. *@
                 @if (isNew)
                 {
                     <div class="woe-row">
                         <label>Üretime Planla</label>
-                        <label class="woe-switch-inline" title="Açıkken: kaydet sonrası iş emri Yayımlandı statüsüne geçer ve üretim sahasına açılır. Kapatırsan: Taslak kalır, sonra Yayımla butonuyla açarsın.">
-                            <input type="checkbox" id="f-autoRelease" checked />
+                        <label class="woe-switch-inline" title="Açıkken: kaydet sonrası iş emri Yayımlandı statüsüne geçer ve üretim sahasına açılır. Kapalıyken (varsayılan): Taslak kalır, sonra Yayımla butonuyla açarsın.">
+                            <input type="checkbox" id="f-autoRelease" />
                             <span class="woe-switch-track"></span>
-                            <span class="woe-switch-text">Evet — kaydet sonrası yayımlanır</span>
+                            <span class="woe-switch-text" id="f-autoReleaseText">Hayır — taslak kalır</span>
                         </label>
                     </div>
                 }
@@ -960,9 +970,10 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                 }
             </section>
 
-            <!-- Tab: Makine / Planlama -->
+            <!-- Tab: Makine / Planlama (nav label: "Planlama Bilgileri" — data-tab/data-pane="makine" kimligi
+                 mekanizma icin degismedi, PageComment Seq 9 sadece gorunen adi istedi) -->
             <section class="woe-pane-section" data-pane="makine">
-                <h2>Planlama &amp; Makine</h2>
+                <h2>Planlama Bilgileri</h2>
                 <div class="pane-hint">Üretim takvimi, sorumlu, öncelik, üretim konumu ve default makine. Default Makine, operasyon patlatmasında satır makinesizse fallback olur — operasyon satırında ayrıca override edilebilir.</div>
 
                 @* 2026-05-22: Single-column stack — Oncelik / Plan Baslangic / Plan Bitis /
@@ -1466,6 +1477,23 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
         };
     }
 
+    // ── "Üretime Planla" switch metnini durumla senkron tut (2026-07-21) ──
+    // Switch varsayılan kapalı geliyor (bkz. checkbox markup) — metin de buna göre
+    // başlıyor ve her değişimde günceller; aksi halde "Evet" yazan grileşmiş bir
+    // metin kapalı bir switch'in yanında kalır (kafa karıştırıcı, PageComment Seq 10).
+    (function () {
+        var releaseSwitch = document.getElementById('f-autoRelease');
+        var releaseText = document.getElementById('f-autoReleaseText');
+        if (!releaseSwitch || !releaseText) return;
+        function syncReleaseText() {
+            releaseText.textContent = releaseSwitch.checked
+                ? 'Evet — kaydet sonrası yayımlanır'
+                : 'Hayır — taslak kalır';
+        }
+        releaseSwitch.addEventListener('change', syncReleaseText);
+        syncReleaseText();
+    })();
+
     // ── AR-GE/ÜR-GE proje dropdown'u doldur (Faz 3) ──
     (function () {
         var sel = document.getElementById('f-argeProject');
@@ -1727,6 +1755,10 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
 
         const url = isNew ? '@Url.Action("Create")' : '@Url.Action("Update")/' + id;
         // Update payload: tum alanlari gonder — backend UpdateWorkOrderRequest record'u bekliyor.
+        // 2026-07-21 fix: argeProjectId burada eksikti — UpdateWorkOrderRequest.ArgeProjectId
+        // default'u null oldugu icin bu alan JSON'da hic gonderilmeyince her Update'te sessizce
+        // null'a resetleniyordu (Planlama Bilgileri sekmesindeki "AR-GE/ÜR-GE Projesi" secimi
+        // kaydedip tekrar acinca kayboluyordu — PageComment Seq 9).
         const r = await call(url, isNew ? body : {
             plannedQuantity: body.plannedQuantity, unitId: body.unitId,
             plannedStartDate: body.plannedStartDate, plannedEndDate: body.plannedEndDate,
@@ -1736,6 +1768,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
             warehouseLocationId: body.warehouseLocationId,
             routingId: body.routingId,
             defaultMachineId: body.defaultMachineId,
+            argeProjectId: body.argeProjectId,
             notes: body.notes
         });
         if (!r.ok) { flash(r.error || 'Hata.', false); return; }

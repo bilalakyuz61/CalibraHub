@@ -2735,6 +2735,34 @@
         code: '@Model.DocumentTypeCode',
         isOrder: @(string.Equals(Model.DocumentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase) ? "true" : "false")
     };
+    // PageComment Seq 6 (2026-07-21): "Satis siparis kalemlerinde depo kodu gorunmeli."
+    // DocumentLineDto zaten locationId/locationCode/locationName tasir — malzeme secilince
+    // lookupFillMap (materialCode kolonu) ile Item'in varsayilan lokasyonu otomatik yaziliyor
+    // ve sqSave zaten r.locationId'yi SaveDocumentLineRequest'e gonderiyor (bkz. asagida
+    // "locationId: r.locationId..."); ama grid'de GORUNUR bir kolon olmadigi icin kullanici
+    // bu veriyi hic goremiyor/duzenleyemiyordu. Kolon tanimi backend'in BuildDocumentLineGridConfig
+    // (SalesController, Controller sahasi) yerine burada View katmaninda enjekte edilir — ayni
+    // yontem documentTypeCode/lineFormCode enjeksiyonunda yukarida zaten kullaniliyor. Yalnizca
+    // satis siparisinde (isOrder) eklenir; teklif/talep/diger belge tipleri ETKILENMEZ.
+    (function () {
+        var cfg = window.__CALIBRA_SALES_QUOTE_LINE_GRID__;
+        if (!window.__CALIBRA_DOC_TYPE__.isOrder || !cfg || !Array.isArray(cfg.columns)) return;
+        var cols = cfg.columns.filter(function (c) { return c && c.key !== 'locationId'; });
+        var qtyIdx = cols.findIndex(function (c) { return c && c.key === 'quantity'; });
+        var locationCol = {
+            key: 'locationId',
+            label: 'Depo',
+            type: 'select',
+            optionsUrl: '/Warehouse/GetLocationsJson',
+            optionsValueKey: 'id',
+            optionsLabelKey: 'locationName',
+            width: 150,
+            align: 'left',
+            icon: 'Warehouse',
+        };
+        cols.splice(qtyIdx >= 0 ? qtyIdx + 1 : cols.length, 0, locationCol);
+        cfg.columns = cols;
+    })();
 </script>
 <script>
 (function () {

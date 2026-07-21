@@ -22,12 +22,13 @@ import {
   Plus, Trash2, Pencil, Hash, FileText, Ruler, Sigma, DollarSign,
   Percent, Calculator, StickyNote, CircleDot, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
-  MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode,
+  MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode, Warehouse, Layers,
 } from 'lucide-react'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, SerialBreakdownModal, TraceEntryCell } from './LineGridCell'
 import CostViewerModal from './CostViewerModal'
 import QuoteCostSummaryModal from './QuoteCostSummaryModal'
+import FulfillmentDetailModal from './FulfillmentDetailModal'
 import { evaluate } from './formulaEvaluator'
 import { getTopBody } from '../../utils/topPortal'
 import DynamicWidgetRenderer from '../DynamicWidgetRenderer/DynamicWidgetRenderer'
@@ -45,6 +46,7 @@ var ICON_MAP = {
   StickyNote: StickyNote,
   Tag: Tag,
   Barcode: Barcode,
+  Warehouse: Warehouse,
 }
 function resolveIcon(name) {
   return ICON_MAP[name] || CircleDot
@@ -247,6 +249,10 @@ export default function CalibraLineItemsGrid(props) {
   // Maliyet Goruntuleme — kisayol menusunden acilan standart modal.
   // null veya { materialCode, configCode, quantity, materialName }
   var [costViewer, setCostViewer] = useState(null)
+  // Karsilama Detayi (PageComment Seq 18) — Ihtiyac Kaydi (alis_talebi) kalem kisayol
+  // menusunden acilan modal; secili satirin karsilama defteri (DocumentLineFulfillment)
+  // kayitlarini gosterir. null veya { lineId, materialCode, materialName }
+  var [fulfillmentDetail, setFulfillmentDetail] = useState(null)
   // Split-pane: modal body icinde solda grup listesi, sagda secili grubun alanlari.
   // DynamicWidgetRenderer her grup icin [data-dyn-group-id] karti render eder;
   // MutationObserver ile bu kartlari yakalayip grup listesini olusturuyoruz.
@@ -1796,6 +1802,18 @@ export default function CalibraLineItemsGrid(props) {
               materialName: srow.materialName || '',
             })
           }
+          // PageComment Seq 18: Ihtiyac Kaydi kalem satirinin karsilama defteri kayitlarini
+          // gosteren modal. Kaydedilmemis (id'siz) satirin henuz defter kaydi olamaz — buton
+          // items dizisinde disabled olarak isaretlenir, buraya tiklanamaz normal akiste.
+          function openFulfillmentDetailFromMenu() {
+            close()
+            if (!srow || srow.id == null || Number(srow.id) <= 0) return
+            setFulfillmentDetail({
+              lineId:       Number(srow.id),
+              materialCode: srow.materialCode || '',
+              materialName: srow.materialName || '',
+            })
+          }
 
           // Not durumuna gore label + ikon degisir.
           var noteDisabled = !srow || !canModify(srow) || (belowColumns.length === 0)
@@ -1876,6 +1894,23 @@ export default function CalibraLineItemsGrid(props) {
           if (__hidePricingFeatures) {
             items = items.filter(function (it) {
               return it.key === 'stock-card' || it.key === 'note'
+            })
+          }
+          // PageComment Seq 18 (2026-07-21): "Ihtiyac karsilama kalem bilgilerindeki kalem
+          // bazinda islemler butonuna karsilama detayi menusu ekleyebilir misin." Yalnizca
+          // Ihtiyac Kaydi'nda (alis_talebi) gorunur — Sayim'da (__isInventoryCount) karsilama
+          // kavrami yok, bu yuzden __hidePricingFeatures degil __isPurchaseRequest ile kosullanir.
+          if (__isPurchaseRequest) {
+            items.push({
+              key: 'fulfillment-detail',
+              label: 'Karşılama Detayı',
+              hint: 'Karşılama Defteri',
+              icon: Layers,
+              accent: 'sky',
+              groupBefore: true,
+              onClick: openFulfillmentDetailFromMenu,
+              disabled: !srow || srow.id == null || Number(srow.id) <= 0,
+              disabledTitle: 'Önce satırı kaydedin',
             })
           }
           // Aksent renk haritasi — icon pill bg / text + hover bg.
@@ -2593,6 +2628,17 @@ export default function CalibraLineItemsGrid(props) {
               + (costViewer.materialName ? ' (' + costViewer.materialName + ')' : '')
               + (costViewer.configCode ? ' / ' + costViewer.configCode : ''))
           : ''}
+      />
+
+      {/* ── Karşılama Detayı modal (PageComment Seq 18) ─────────────────────
+          İhtiyaç Kaydı kalem kısayol menüsünden çağrılır; seçili satırın
+          karşılama defteri (DocumentLineFulfillment) kayıtlarını listeler. */}
+      <FulfillmentDetailModal
+        isOpen={!!fulfillmentDetail}
+        onClose={function () { setFulfillmentDetail(null) }}
+        lineId={fulfillmentDetail ? fulfillmentDetail.lineId : null}
+        materialCode={fulfillmentDetail ? fulfillmentDetail.materialCode : ''}
+        materialName={fulfillmentDetail ? fulfillmentDetail.materialName : ''}
       />
     </div>
   )
