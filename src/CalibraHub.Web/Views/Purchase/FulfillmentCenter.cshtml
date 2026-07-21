@@ -625,17 +625,13 @@
         color:#c7d2fe; font-family:ui-monospace, Menlo, Consolas, monospace;
     }
 
-    /* ── Kalem section ── */
-    .fc3-section { background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07); border-radius:10px; overflow:hidden; }
-    /* Satın Alma paneli — Belge Tipi (Talep/Sipariş) toggle satırı — fc3-ms-chip'i tekrar kullanır */
+    /* Satın Alma paneli — Belge Tipi (Talep/Sipariş) toggle satırı — fc3-ms-chip'i tekrar kullanır
+       (2026-07-21: artık merkez modal içinde; fc3-modal-body zaten padding+gap veriyor, bu yüzden
+       modal bağlamında kendi üst padding'i sıfırlanır). */
     .fc3-pr-doctype-row { display:flex; align-items:center; gap:10px; padding:9px 13px 0; flex-wrap:wrap; }
+    .fc3-modal-body .fc3-pr-doctype-row { padding:0; }
     .fc3-pr-doctype-lbl { font-size:.7rem; font-weight:700; color:#64748b; }
     body.app-theme-light .fc3-pr-doctype-lbl { color:#475569; }
-    .fc3-sec-hd {
-        padding:7px 13px; border-bottom:1px solid rgba(255,255,255,.05);
-        font-size:.7rem; font-weight:700; color:#64748b;
-        display:flex; align-items:center; gap:8px;
-    }
     .fc3-spinner { width:10px; height:10px; border:1.5px solid rgba(99,102,241,.3); border-top-color:#6366f1; border-radius:50%; animation:fc3spin .6s linear infinite; flex-shrink:0; }
     @@keyframes fc3spin { to{transform:rotate(360deg);} }
     .fc3-load-badge { display:none; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:rgba(99,102,241,.12); color:#818cf8; font-size:.7rem; }
@@ -667,13 +663,6 @@
     .fc3-atab--close { border-color:rgba(239,68,68,.25); color:#fca5a5; }
     .fc3-atab--close:hover { background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.4); color:#fecaca; }
 
-    /* Transfer formu */
-    .fc3-tf-panel { display:none; }
-    .fc3-tf-panel.open { display:block; }
-    .fc3-tf-tbl { width:100%; border-collapse:collapse; font-size:.79rem; }
-    .fc3-tf-tbl th { text-align:left; padding:5px 8px; font-size:.68rem; font-weight:600; color:#475569; border-bottom:1px solid rgba(255,255,255,.07); }
-    .fc3-tf-tbl td { padding:5px 7px; border-bottom:1px solid rgba(255,255,255,.03); vertical-align:middle; }
-    .fc3-tf-tbl tr:last-child td { border-bottom:none; }
     .fc3-ti,.fc3-ts {
         width:100%; padding:5px 7px;
         background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09);
@@ -682,7 +671,6 @@
     .fc3-ti:focus,.fc3-ts:focus { border-color:rgba(99,102,241,.44); }
     .fc3-ti[type=number] { text-align:right; }
     .fc3-ts option { background:#1e293b; }
-    .fc3-tf-foot { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:9px 12px; border-top:1px solid rgba(255,255,255,.07); }
     .fc3-btn { display:inline-flex; align-items:center; gap:5px; padding:6px 13px; border-radius:7px; font-size:.79rem; font-weight:600; cursor:pointer; border:none; transition:all .13s; }
     .fc3-btn--p { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; }
     .fc3-btn--p:hover { opacity:.88; }
@@ -837,12 +825,6 @@
         background:rgba(99,102,241,0.14); border-color:rgba(99,102,241,0.4); color:#4338ca;
     }
 
-    body.app-theme-light .fc3-section {
-        background:#ffffff; border-color:#e2e8f0;
-    }
-    body.app-theme-light .fc3-sec-hd {
-        color:#475569; border-bottom-color:#e2e8f0;
-    }
     body.app-theme-light .fc3-load-badge { background:rgba(99,102,241,0.1); color:#4338ca; }
     body.app-theme-light .fc3-tbl th {
         color:#64748b; border-bottom-color:#e2e8f0;
@@ -870,10 +852,6 @@
     body.app-theme-light .fc3-atab--close { border-color:rgba(239,68,68,0.35); color:#b91c1c; }
     body.app-theme-light .fc3-atab--close:hover { background:rgba(239,68,68,0.08); }
 
-    body.app-theme-light .fc3-tf-tbl th {
-        color:#64748b; border-bottom-color:#e2e8f0;
-    }
-    body.app-theme-light .fc3-tf-tbl td { border-bottom-color:#f1f5f9; }
     body.app-theme-light .fc3-ti,
     body.app-theme-light .fc3-ts {
         background:#ffffff; border-color:#e2e8f0; color:#0f172a;
@@ -881,7 +859,6 @@
     body.app-theme-light .fc3-ti:focus,
     body.app-theme-light .fc3-ts:focus { border-color:rgba(99,102,241,0.5); }
     body.app-theme-light .fc3-ts option { background:#ffffff; color:#0f172a; }
-    body.app-theme-light .fc3-tf-foot { border-top-color:#e2e8f0; }
     body.app-theme-light .fc3-btn--g {
         background:#f1f5f9; border-color:#e2e8f0; color:#475569;
     }
@@ -939,36 +916,100 @@
         transition:all .12s; flex-shrink:0;
     }
     .fc3-fb-cancel:hover { background:rgba(255,255,255,.06); color:#94a3b8; }
-    .fc3-fb-res { font-size:.76rem; font-weight:600; display:none; flex-shrink:0; }
-    .fc3-fb-res.ok  { display:inline; color:#34d399; }
-    .fc3-fb-res.err { display:inline; color:#f87171; }
+    /* ── Merkez Modal (5 alt aksiyon ortak) — backdrop + ortalanmış kart, CLAUDE.md silme-onay
+       deseni: backdrop+card, Vazgeç(ghost)+aksiyon butonu, Esc/backdrop=iptal, Enter=onay, ok
+       butonu varsayılan focus'ta. Eski alt-çekmece (fc3-action-sheet/fc3-as-*) 2026-07-21'de bunun
+       yerine geçti — Depodan Karşıla/Transfer/Ambar Çıkış/Satın Alma/İhtiyacı Kapat hepsi buradan
+       açılır (bkz. FC_ACTIONS script bloğu). ── */
+    .fc3-modal-backdrop {
+        position:fixed; inset:0; z-index:99990;
+        display:flex; align-items:center; justify-content:center; padding:20px;
+        background:rgba(2,6,16,.62); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+        opacity:0; pointer-events:none; transition:opacity 140ms;
+    }
+    .fc3-modal-backdrop.open { opacity:1; pointer-events:auto; }
+    .fc3-modal {
+        width:min(760px,100%); max-height:min(84vh,760px);
+        background:rgba(13,18,34,.98); border:1px solid rgba(255,255,255,.1);
+        border-radius:16px; box-shadow:0 32px 80px rgba(0,0,0,.5);
+        display:flex; flex-direction:column; overflow:hidden;
+        transform:translateY(10px) scale(.98); opacity:0;
+        transition:transform 180ms cubic-bezier(.23,1,.32,1), opacity 180ms;
+    }
+    .fc3-modal-backdrop.open .fc3-modal { transform:translateY(0) scale(1); opacity:1; }
+    .fc3-modal-hd {
+        display:flex; align-items:center; gap:11px; padding:16px 18px; flex-shrink:0;
+        border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .fc3-modal-hd-icon { width:36px; height:36px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+    .fc3-modal-hd-icon--fulfill { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; }
+    .fc3-modal-hd-icon--t       { background:rgba(99,102,241,.16); border:1px solid rgba(99,102,241,.3); color:#a5b4fc; }
+    .fc3-modal-hd-icon--s       { background:rgba(245,158,11,.16); border:1px solid rgba(245,158,11,.3); color:#fcd34d; }
+    .fc3-modal-hd-icon--pr      { background:rgba(16,185,129,.16); border:1px solid rgba(16,185,129,.3); color:#6ee7b7; }
+    .fc3-modal-hd-icon--close   { background:rgba(239,68,68,.15);  border:1px solid rgba(239,68,68,.32); color:#fca5a5; }
+    .fc3-modal-hd-tx   { flex:1; min-width:0; }
+    .fc3-modal-hd-tx strong { display:block; font-size:.95rem; font-weight:700; color:#e2e8f0; }
+    .fc3-modal-hd-tx small  { font-size:.74rem; color:#64748b; }
+    .fc3-modal-close {
+        padding:5px; border-radius:7px; background:none; flex-shrink:0;
+        border:1px solid rgba(255,255,255,.07); color:#475569;
+        cursor:pointer; transition:all .12s; display:flex; align-items:center;
+    }
+    .fc3-modal-close:hover { background:rgba(255,255,255,.07); color:#94a3b8; }
+    .fc3-modal-body {
+        flex:1; overflow-y:auto; padding:14px 18px;
+        display:flex; flex-direction:column; gap:12px;
+    }
+    .fc3-modal-body::-webkit-scrollbar { width:5px; }
+    .fc3-modal-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:3px; }
+    .fc3-modal-tablewrap { border:1px solid rgba(255,255,255,.07); border-radius:10px; overflow:hidden; }
+    .fc3-modal-tbl { width:100%; border-collapse:collapse; font-size:.8rem; }
+    .fc3-modal-tbl thead th {
+        text-align:left; padding:7px 8px; font-size:.68rem; font-weight:700; letter-spacing:.02em;
+        color:#64748b; background:rgba(255,255,255,.03); border-bottom:1px solid rgba(255,255,255,.08); white-space:nowrap;
+    }
+    .fc3-modal-tbl tbody td { padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:middle; }
+    .fc3-modal-tbl tbody tr:last-child td { border-bottom:none; }
+    .fc3-modal-mat { color:#cbd5e1; font-size:.79rem; }
+    .fc3-modal-mat small { display:block; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.68rem; color:#818cf8; margin-top:1px; }
+    .fc3-modal-rm {
+        width:22px; height:22px; padding:0; border-radius:6px;
+        border:1px solid rgba(239,68,68,.25); background:rgba(239,68,68,.08); color:#f87171;
+        cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .12s;
+    }
+    .fc3-modal-rm:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.4); color:#fca5a5; }
+    .fc3-modal-simple {
+        font-size:.85rem; color:#94a3b8; line-height:1.6;
+        background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:14px 16px;
+    }
+    .fc3-modal-simple strong { color:#e2e8f0; }
+    .fc3-modal-chiplist { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+    .fc3-modal-chip {
+        display:inline-flex; align-items:center; gap:6px; padding:4px 6px 4px 10px; border-radius:999px;
+        background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.22); color:#fca5a5;
+        font-size:.76rem; font-weight:600;
+    }
+    .fc3-modal-chip-x {
+        width:16px; height:16px; padding:0; border:none; border-radius:50%;
+        background:rgba(255,255,255,.08); color:inherit; cursor:pointer;
+        display:flex; align-items:center; justify-content:center;
+    }
+    .fc3-modal-chip-x:hover { background:rgba(255,255,255,.18); }
+    .fc3-modal-ft {
+        flex-shrink:0; display:flex; align-items:center; gap:10px;
+        padding:12px 18px; border-top:1px solid rgba(255,255,255,.08);
+    }
+    .fc3-modal-ft .fc3-res { flex:1; margin:0; }
+    .fc3-modal-ft-btns { display:flex; gap:8px; flex-shrink:0; margin-left:auto; }
+    .fc3-modal-ok--t       { background:#6366f1; color:#fff; }
+    .fc3-modal-ok--s       { background:#f59e0b; color:#3f2200; }
+    .fc3-modal-ok--pr      { background:#10b981; color:#022c22; }
+    .fc3-modal-ok--close   { background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; }
+    .fc3-modal-ok--fulfill { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; }
+    .fc3-modal-ok:hover { opacity:.88; }
+    .fc3-modal-ok:disabled { opacity:.4; cursor:not-allowed; }
 
-    /* ── İşlem Formu Alt Çekmece ── */
-    .fc3-action-sheet {
-        position:fixed; bottom:60px; left:0; right:0; z-index:9965;
-        background:rgba(13,18,34,.97); border-top:1px solid rgba(99,102,241,.3);
-        box-shadow:0 -4px 32px rgba(0,0,0,.5);
-        transform:translateY(100%);
-        transition:transform 280ms cubic-bezier(.23,1,.32,1);
-        display:flex; flex-direction:column; max-height:65vh;
-    }
-    .fc3-action-sheet.open { transform:translateY(0); }
-    .fc3-as-hd {
-        display:flex; align-items:center; padding:10px 18px 9px; flex-shrink:0;
-        border-bottom:1px solid rgba(99,102,241,.18);
-    }
-    .fc3-as-title { font-size:.86rem; font-weight:700; color:#a5b4fc; flex:1; }
-    .fc3-as-close {
-        width:26px; height:26px; border:none; background:transparent; cursor:pointer;
-        color:#64748b; display:flex; align-items:center; justify-content:center;
-        border-radius:5px; transition:background .1s; flex-shrink:0;
-    }
-    .fc3-as-close:hover { background:rgba(255,255,255,.08); color:#94a3b8; }
-    .fc3-as-body { overflow-y:auto; flex:1; }
-    .fc3-as-body .fc3-section:first-child { border-top:none; }
-
-    body.app-theme-light .fc3-fulfill-bar,
-    body.app-theme-light .fc3-action-sheet {
+    body.app-theme-light .fc3-fulfill-bar {
         background:rgba(255,255,255,.98); border-top-color:rgba(99,102,241,.4);
         box-shadow:0 -4px 24px rgba(15,23,42,.15);
     }
@@ -977,11 +1018,27 @@
     body.app-theme-light .fc3-fb-sep   { background:rgba(0,0,0,.12); }
     body.app-theme-light .fc3-fb-cancel { border-color:#e2e8f0; color:#64748b; }
     body.app-theme-light .fc3-fb-cancel:hover { background:#f1f5f9; color:#0f172a; }
-    body.app-theme-light .fc3-fb-res.ok  { color:#047857; }
-    body.app-theme-light .fc3-fb-res.err { color:#b91c1c; }
-    body.app-theme-light .fc3-as-title { color:#4338ca; }
-    body.app-theme-light .fc3-as-close { color:#64748b; }
-    body.app-theme-light .fc3-as-close:hover { background:#f1f5f9; }
+
+    body.app-theme-light .fc3-modal-backdrop { background:rgba(15,23,42,.32); }
+    body.app-theme-light .fc3-modal { background:#ffffff; border-color:#e2e8f0; box-shadow:0 32px 80px rgba(15,23,42,.2); }
+    body.app-theme-light .fc3-modal-hd { border-bottom-color:#e2e8f0; }
+    body.app-theme-light .fc3-modal-hd-tx strong { color:#0f172a; }
+    body.app-theme-light .fc3-modal-hd-tx small  { color:#64748b; }
+    body.app-theme-light .fc3-modal-close { border-color:#e2e8f0; color:#64748b; }
+    body.app-theme-light .fc3-modal-close:hover { background:#f1f5f9; color:#0f172a; }
+    body.app-theme-light .fc3-modal-body::-webkit-scrollbar-thumb { background:#cbd5e1; }
+    body.app-theme-light .fc3-modal-tablewrap { border-color:#e2e8f0; }
+    body.app-theme-light .fc3-modal-tbl thead th { color:#64748b; background:#f8fafc; border-bottom-color:#e2e8f0; }
+    body.app-theme-light .fc3-modal-tbl tbody td { border-bottom-color:#f1f5f9; }
+    body.app-theme-light .fc3-modal-mat { color:#334155; }
+    body.app-theme-light .fc3-modal-rm { background:rgba(239,68,68,.06); border-color:rgba(239,68,68,.22); color:#dc2626; }
+    body.app-theme-light .fc3-modal-rm:hover { background:rgba(239,68,68,.12); }
+    body.app-theme-light .fc3-modal-simple { background:#f8fafc; border-color:#e2e8f0; color:#475569; }
+    body.app-theme-light .fc3-modal-simple strong { color:#0f172a; }
+    body.app-theme-light .fc3-modal-chip { background:rgba(239,68,68,.06); border-color:rgba(239,68,68,.22); color:#b91c1c; }
+    body.app-theme-light .fc3-modal-ft { border-top-color:#e2e8f0; }
+    body.app-theme-light .fc3-modal-ok--s  { color:#3f2200; }
+    body.app-theme-light .fc3-modal-ok--pr { color:#022c22; }
 
     /* ── Flat liste (tek katmanlı kalem satırları) ────────────────
        Başlık + satırlar AYNI grid şablonunu (--fc3-cols, JS üretir) kullanır:
@@ -1118,154 +1175,89 @@
         <span class="fc3-fb-chips" id="fc3FbChips"></span>
     </div>
     <div class="fc3-fb-right">
-        <button type="button" class="fc3-btn fc3-btn--p" id="fc3FbBtn" onclick="fc3FulfillFromStock()">
+        <button type="button" class="fc3-btn fc3-btn--p" id="fc3FbBtn" onclick="fc3OpenModal('fulfill')">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             Depodan Karşıla
         </button>
         <span class="fc3-fb-sep"></span>
-        <button type="button" id="fc3BtnT" class="fc3-atab fc3-atab--t" onclick="fc3TogglePanel('T')">
+        <button type="button" id="fc3BtnT" class="fc3-atab fc3-atab--t" onclick="fc3OpenModal('transfer')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
             Depo Transferi
         </button>
-        <button type="button" id="fc3BtnS" class="fc3-atab fc3-atab--s" onclick="fc3TogglePanel('S')">
+        <button type="button" id="fc3BtnS" class="fc3-atab fc3-atab--s" onclick="fc3OpenModal('stockIssue')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
             Ambar Çıkış Fişi
         </button>
-        <button type="button" id="fc3BtnP" class="fc3-atab fc3-atab--p" onclick="fc3TogglePanel('P')">
+        <button type="button" id="fc3BtnP" class="fc3-atab fc3-atab--p" onclick="fc3OpenModal('purchase')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
             Satın Alma Talebi
         </button>
-        <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnCloseLines" onclick="fc3CloseFulfillmentLines()" title="Karşılanmamış miktarı kapatır: hiç karşılama yapılmadıysa ihtiyacın tamamı, kısmen karşılandıysa yalnız kalan kısmı kapanır — belgenin diğer kalemlerine dokunmaz">
+        <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnCloseLines" onclick="fc3OpenModal('closeLines')" title="Karşılanmamış miktarı kapatır: hiç karşılama yapılmadıysa ihtiyacın tamamı, kısmen karşılandıysa yalnız kalan kısmı kapanır — belgenin diğer kalemlerine dokunmaz">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             İhtiyacı Kapat
         </button>
         <span class="fc3-fb-sep"></span>
         <button type="button" class="fc3-fb-cancel" onclick="fc3LineSelClear()">İptal</button>
     </div>
-    <span class="fc3-fb-res" id="fc3FbRes"></span>
 </div>
 
 @Html.AntiForgeryToken()
 
-@* ── İşlem Formu Alt Çekmece ── *@
-<div class="fc3-action-sheet" id="fc3ActionSheet">
-    <div class="fc3-as-hd">
-        <span class="fc3-as-title" id="fc3AsTitle"></span>
-        <button type="button" class="fc3-as-close" onclick="fc3CloseActionSheet()" title="Kapat">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-        </button>
-    </div>
-    <div class="fc3-as-body">
-
-        @* ── Depo Transferi Formu ── *@
-        <div class="fc3-section fc3-tf-panel" id="fc3TfPanel" style="display:none;">
-            <div class="fc3-sec-hd">Kaynak depo ve miktar girin</div>
-            <div style="overflow-x:auto;">
-                <table class="fc3-tf-tbl" id="fc3TfTbl">
-                    <thead><tr>
-                        <th style="width:22px;"><input type="checkbox" class="fc3-cb" id="fc3TfAll" checked onchange="document.querySelectorAll('.fc3-tf-cb').forEach(c=>c.checked=this.checked)"></th>
-                        <th>Malzeme</th>
-                        <th style="width:70px;">İhtiyaç</th>
-                        <th style="width:160px;">Kaynak Depo</th>
-                        <th style="width:80px;">Miktar</th>
-                        <th style="width:44px;">Birim</th>
-                    </tr></thead>
-                    <tbody id="fc3TfBody"></tbody>
-                </table>
+@* ── MERKEZ MODAL (5 alt aksiyon ortak) — ekran ortası, backdrop+card (CLAUDE.md silme-onay
+     deseni). Tek `_lines` kaynağından beslenir; aksiyona göre yalnız kolon seti + onay-butonu +
+     submit-hedefi değişir (bkz. Scripts bloğundaki FC_ACTIONS). ── *@
+<div class="fc3-modal-backdrop" id="fc3ModalBackdrop" onclick="fc3ModalBackdropClick(event)">
+    <div class="fc3-modal" id="fc3Modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+        <div class="fc3-modal-hd">
+            <div class="fc3-modal-hd-icon" id="fc3ModalIcon"></div>
+            <div class="fc3-modal-hd-tx">
+                <strong id="fc3ModalTitle"></strong>
+                <small id="fc3ModalSub"></small>
             </div>
-            <div style="padding:7px 12px 0;">
-                <label style="font-size:.73rem;color:#64748b;display:block;margin-bottom:3px;">Notlar</label>
-                <textarea id="fc3TfNotes" class="fc3-ti" rows="2" placeholder="Opsiyonel…"></textarea>
-            </div>
-            <div class="fc3-tf-foot">
-                <button type="button" class="fc3-btn fc3-btn--p" id="fc3TfSubmit" onclick="fc3CreateTransfer()">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    Transfer Belgesi Oluştur
-                </button>
-                <button type="button" class="fc3-btn fc3-btn--g" onclick="fc3CloseActionSheet()">İptal</button>
-                <span class="fc3-res fc3-res--ok"  id="fc3TfOk"></span>
-                <span class="fc3-res fc3-res--err" id="fc3TfErr"></span>
-            </div>
+            <button type="button" class="fc3-modal-close" onclick="fc3CloseModal()" title="Kapat (Esc)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
         </div>
+        <div class="fc3-modal-body">
 
-        @* ── Ambar Çıkış Fişi Formu ── *@
-        <div class="fc3-section fc3-tf-panel" id="fc3SfPanel" style="display:none;">
-            <div class="fc3-sec-hd">Kaynak depo ve miktar girin</div>
-            <div style="overflow-x:auto;">
-                <table class="fc3-tf-tbl" id="fc3SfTbl">
-                    <thead><tr>
-                        <th style="width:22px;"><input type="checkbox" class="fc3-cb" id="fc3SfAll" checked onchange="document.querySelectorAll('.fc3-sf-cb').forEach(c=>c.checked=this.checked)"></th>
-                        <th>Malzeme</th>
-                        <th style="width:70px;">İhtiyaç</th>
-                        <th style="width:160px;">Kaynak Depo</th>
-                        <th style="width:80px;">Miktar</th>
-                        <th style="width:44px;">Birim</th>
-                    </tr></thead>
-                    <tbody id="fc3SfBody"></tbody>
-                </table>
-            </div>
-            <div style="padding:7px 12px 0;">
-                <label style="font-size:.73rem;color:#64748b;display:block;margin-bottom:3px;">Notlar</label>
-                <textarea id="fc3SfNotes" class="fc3-ti" rows="2" placeholder="Opsiyonel…"></textarea>
-            </div>
-            <div class="fc3-tf-foot">
-                <button type="button" class="fc3-btn fc3-btn--p" id="fc3SfSubmit" onclick="fc3CreateStockIssue()">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    Ambar Çıkış Fişi Oluştur
-                </button>
-                <button type="button" class="fc3-btn fc3-btn--g" onclick="fc3CloseActionSheet()">İptal</button>
-                <span class="fc3-res fc3-res--ok"  id="fc3SfOk"></span>
-                <span class="fc3-res fc3-res--err" id="fc3SfErr"></span>
-            </div>
-        </div>
-
-        @* ── Satın Alma Talebi / Siparişi Formu ── *@
-        <div class="fc3-section fc3-tf-panel" id="fc3PrPanel" style="display:none;">
-            <div class="fc3-pr-doctype-row">
+            @* Satın Alma paneli — Belge Tipi (Talep/Sipariş) toggle satırı, yalnız o aksiyon açıkken görünür *@
+            <div class="fc3-pr-doctype-row" id="fc3ModalDocTypeRow" style="display:none;">
                 <span class="fc3-pr-doctype-lbl">Belge Tipi</span>
-                <span class="fc3-ms-chips" id="fc3PrDocTypeChips">
+                <span class="fc3-ms-chips" id="fc3ModalDocTypeChips">
                     <label class="fc3-ms-chip active" data-doctype="demand">
-                        <input type="radio" name="fc3PrDocType" value="demand" checked>
+                        <input type="radio" name="fc3ModalPrDocType" value="demand" checked>
                         Satın Alma Talebi
                     </label>
                     <label class="fc3-ms-chip" data-doctype="order">
-                        <input type="radio" name="fc3PrDocType" value="order">
+                        <input type="radio" name="fc3ModalPrDocType" value="order">
                         Satın Alma Siparişi
                     </label>
                 </span>
             </div>
-            <div class="fc3-sec-hd">Temin edilecek miktarı girin</div>
-            <div style="overflow-x:auto;">
-                <table class="fc3-tf-tbl" id="fc3PrTbl">
-                    <thead><tr>
-                        <th style="width:22px;"><input type="checkbox" class="fc3-cb" id="fc3PrAll" checked onchange="document.querySelectorAll('.fc3-pr-cb').forEach(c=>c.checked=this.checked)"></th>
-                        <th>Malzeme</th>
-                        <th style="width:70px;">İhtiyaç</th>
-                        <th style="width:70px;">Kalan</th>
-                        <th style="width:80px;" id="fc3PrQtyColHdr">Talep Miktarı</th>
-                        <th style="width:44px;">Birim</th>
-                        <th style="width:120px;">Notlar</th>
-                    </tr></thead>
-                    <tbody id="fc3PrBody"></tbody>
+
+            @* Tablo modu — Depodan Karşıla / Depo Transferi / Ambar Çıkış Fişi / Satın Alma *@
+            <div class="fc3-modal-tablewrap" id="fc3ModalTableWrap">
+                <table class="fc3-modal-tbl">
+                    <thead><tr id="fc3ModalThead"></tr></thead>
+                    <tbody id="fc3ModalTbody"></tbody>
                 </table>
             </div>
-            <div style="padding:7px 12px 0;">
-                <label style="font-size:.73rem;color:#64748b;display:block;margin-bottom:3px;">Genel Notlar</label>
-                <textarea id="fc3PrNotes" class="fc3-ti" rows="2" placeholder="Opsiyonel…"></textarea>
-            </div>
-            <div class="fc3-tf-foot">
-                <button type="button" class="fc3-btn fc3-btn--p" id="fc3PrSubmit" onclick="fc3CreatePurchaseOrder()">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span id="fc3PrSubmitLabel">Satın Alma Talebi Oluştur</span>
-                </button>
-                <button type="button" class="fc3-btn fc3-btn--g" onclick="fc3CloseActionSheet()">İptal</button>
-                <span class="fc3-res fc3-res--ok"  id="fc3PrOk"></span>
-                <span class="fc3-res fc3-res--err" id="fc3PrErr"></span>
+
+            @* Basit metin modu — İhtiyacı Kapat (tablo yerine onay metni + çıkarılabilir isim listesi) *@
+            <div id="fc3ModalSimpleText" style="display:none;"></div>
+
+            <div id="fc3ModalNotesWrap">
+                <label style="font-size:.73rem;color:#64748b;display:block;margin-bottom:3px;">Notlar</label>
+                <textarea id="fc3ModalNotes" class="fc3-ti" rows="2" placeholder="Opsiyonel…"></textarea>
             </div>
         </div>
-
+        <div class="fc3-modal-ft">
+            <span class="fc3-res" id="fc3ModalMsg"></span>
+            <div class="fc3-modal-ft-btns">
+                <button type="button" class="fc3-btn fc3-btn--g" id="fc3ModalCancelBtn" onclick="fc3CloseModal()">Vazgeç</button>
+                <button type="button" class="fc3-btn fc3-modal-ok" id="fc3ModalOkBtn" onclick="fc3ModalSubmit()"></button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1434,11 +1426,6 @@
         </div>
 
     </div>
-</div>
-
-@* ── SEÇİLİ KALEMLER DRAWER (hidden — seçim artık alt barda gösterilir) ── *@
-<div id="fc3SelDrawer" style="display:none;">
-    <table id="fc3LinesT" style="display:none;"><tbody id="fc3LinesTbody"></tbody></table>
 </div>
 
 @section Scripts {
@@ -2407,8 +2394,6 @@
         bar.classList.toggle('show', vals.length > 0);
         var cnt = document.getElementById('fc3FbCnt');
         if (cnt) cnt.textContent = vals.length + ' kalem seçili';
-        var res = document.getElementById('fc3FbRes');
-        if (res) { res.textContent = ''; res.className = 'fc3-fb-res'; }
         var chips = document.getElementById('fc3FbChips');
         if (chips) {
             var uniqueItems = new Set(vals.map(function(v) { return v.itemId; })).size;
@@ -2418,7 +2403,8 @@
             if (uniqueDocs  > 0) html += '<span class="fc3-fb-chip">' + uniqueDocs  + ' ihtiyaç</span>';
             chips.innerHTML = html;
         }
-        if (!vals.length) fc3CloseActionSheet();
+        // Not: modal artık _lineSel'e bağımlı değil (açılışta _modalLines'a snapshot alır), bu
+        // yüzden seçim boşalınca modalı kapatmaya gerek yok — kullanıcı sonucu görüp kendi kapatır.
     }
 
     function fc3Csrf() {
@@ -2432,49 +2418,7 @@
         window.location.reload();
     };
 
-    window.fc3FulfillFromStock = function() {
-        var ids = Object.keys(_lineSel).map(Number);
-        if (!ids.length) return;
-        var btn = document.getElementById('fc3FbBtn');
-        var res = document.getElementById('fc3FbRes');
-        if (btn) { btn.disabled = true; }
-        if (res) { res.textContent = ''; res.className = 'fc3-fb-res'; }
-        fetch('/Purchase/FulfillFromStock', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
-            body: JSON.stringify({ lineIds: ids, notes: null })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (btn) btn.disabled = false;
-            if (data.ok) {
-                var fulfilled = (data.results || []).filter(function(r) { return r.fulfilled > 0; }).length;
-                var msg = (data.docNo ? data.docNo + ' fişi oluşturuldu · ' : '') + fulfilled + ' kalem karşılandı';
-                if (res) { res.textContent = '✓ ' + msg; res.className = 'fc3-fb-res ok'; }
-                // Cache'i temizle ve yenile
-                _lineSel = {};
-                _docLineCache  = {};
-                _globalStockMap = {};
-                document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
-                fc3UpdateFulfillBar();
-                loadAllLines();
-                // Bar 3 sn sonra kapansın
-                setTimeout(function() {
-                    var b2 = document.getElementById('fc3FulfillBar');
-                    if (b2 && !Object.keys(_lineSel).length) b2.classList.remove('show');
-                    if (res) { res.textContent = ''; res.className = 'fc3-fb-res'; }
-                }, 3000);
-            } else {
-                if (res) { res.textContent = '✕ ' + (data.error || 'Hata'); res.className = 'fc3-fb-res err'; }
-            }
-        })
-        .catch(function(err) {
-            if (btn) btn.disabled = false;
-            if (res) { res.textContent = '✕ Bağlantı hatası'; res.className = 'fc3-fb-res err'; }
-        });
-    };
-
-    // ── Kalem seçimi → drawer beslemesi ──────────────────────────────────────
+    // ── Kalem seçimi → merkez modal beslemesi ─────────────────────────────────
     function buildSelectedLines() {
         var result = [];
         Object.keys(_lineSel).forEach(function(lineId) {
@@ -2486,11 +2430,13 @@
         return result;
     }
 
-    // Seçili kalemlerin ait olduğu belgeler _docLineCache'te henüz yoksa (cache boşsa)
-    // önce eksik belgeleri /Purchase/RequestLines'tan yükler, sonra _lines'ı günceller ve
-    // T/S/P panel tablolarını render eder. Hem checkbox seçiminde (onLineSel) hem panel
-    // açılışında (fc3TogglePanel) TEK bu fonksiyondan geçer — "Depodan Karşıla" ile tutarlı:
-    // hangi kalemler seçiliyse panelde de aynı kalemler görünür (bkz. CLAUDE.md İş 1).
+    // Seçili kalemlerin ait olduğu belgeler _docLineCache'te henüz yoksa (cache boşsa) önce
+    // eksik belgeleri /Purchase/RequestLines'tan yükler, sonra _lines'ı günceller. Hem checkbox
+    // seçiminde (onLineSel — arka planda cache'i ısıtır, render YOK) hem merkez modal açılışında
+    // (fc3OpenModal — render öncesi await edilir) TEK bu fonksiyondan geçer. Eskiden burada
+    // renderTf/renderSf/renderPr/renderLines de çağrılıyordu (alt-çekmece canlı senkron
+    // gerektiriyordu); merkez modal açılışta TEK seferlik snapshot aldığı için (bkz. _modalLines)
+    // render artık modalın kendi işi — Promise döner, çağıran .then() ile render'ı tetikler.
     function fc3RefreshSelectedLinesUI() {
         var missingDocIds = Array.from(new Set(
             Object.keys(_lineSel)
@@ -2499,8 +2445,7 @@
         ));
         if (!missingDocIds.length) {
             _lines = buildSelectedLines();
-            renderLines(); renderTf(); renderSf(); renderPr();
-            return;
+            return Promise.resolve();
         }
         var promises = missingDocIds.map(function(docId) {
             return fetch('/Purchase/RequestLines?requestIds=' + docId)
@@ -2508,9 +2453,8 @@
                 .then(function(lines) { _docLineCache[docId] = Array.isArray(lines) ? lines : []; })
                 .catch(function() { _docLineCache[docId] = []; });
         });
-        Promise.all(promises).then(function() {
+        return Promise.all(promises).then(function() {
             _lines = buildSelectedLines();
-            renderLines(); renderTf(); renderSf(); renderPr();
         });
     }
 
@@ -2889,365 +2833,513 @@
             renderList();
         }).catch(function() {});
 
-    // ── Drawer: seçili kalemler tablosu ─────────────────────────────────────
-    function renderLines() {
-        var tb = document.getElementById('fc3LinesTbody');
-        if (!tb) return;
-        if (!_lines.length) { tb.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#475569;font-size:.8rem;">Kalem bulunamadı</td></tr>'; return; }
-        tb.innerHTML = _lines.map(function(l, i) {
-            return '<tr data-item-id="' + l.itemId + '">'
-                + '<td style="color:#475569;font-size:.74rem;">' + (i + 1) + '</td>'
-                + '<td style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.74rem;color:#818cf8;">' + esc(l.requestNumber || '') + '</td>'
-                + '<td style="color:#cbd5e1;">' + esc(l.materialName || l.materialCode || '—') + '</td>'
-                + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
-                + '<td style="color:#94a3b8;font-size:.76rem;">' + esc(l.unitCode || '') + '</td>'
-                + '<td style="color:#94a3b8;font-size:.76rem;">' + esc(l.locationName || '') + '</td>'
-                + '<td id="stk' + i + '"><span class="fc3-sb fc3-sb--load">yükleniyor…</span></td>'
-                + '</tr>';
-        }).join('');
-    }
+    // ── Merkez Modal — 5 alt aksiyon TEK modal (backdrop+card, CLAUDE.md silme-onay deseni).
+    // Eskiden her aksiyon ya doğrudan fetch (Depodan Karşıla), ya alt-çekmece panel (Transfer/
+    // Ambar Çıkış/Satın Alma — renderTf/renderSf/renderPr + fc3TogglePanel, üç fonksiyon neredeyse
+    // birebir kopyaydı), ya da showConfirm (İhtiyacı Kapat) kullanıyordu. Artık TEK modal + TEK
+    // tablo render'ı (fc3RenderModalTable) var; kolon seti FC_ACTIONS'tan türer (DRY). ──────────
+    var _modalAction = null;   // aktif FC_ACTIONS girdisi
+    var _modalLines  = [];     // bu modal oturumuna özel çalışma kopyası — satır çıkarma (✕)
+                                // _lineSel'i BOZMAZ, yalnız bu diziden çıkarır (bkz. fc3ModalRemoveRow).
 
-
-
-    function updTfLoc(itemId, stockRows) {
-        var byLoc = {};
-        stockRows.forEach(function(r) { if (r.locationId) byLoc[r.locationId] = r; });
-        document.querySelectorAll('.fc3-tf-row[data-item-id="' + itemId + '"] .fc3-tf-loc').forEach(function(sel) {
-            Array.from(sel.options).forEach(function(opt) {
-                if (!opt.value) return;
-                var s = byLoc[parseInt(opt.value)];
-                if (s) opt.text = opt.text.replace(/ \(.*adet\)$/, '') + ' (' + fmtN(s.balance) + ' adet)';
-            });
-        });
-    }
-
-    function renderTf() {
-        var tb = document.getElementById('fc3TfBody');
-        if (!tb) return;
-        if (!_lines.length) { tb.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;color:#475569;font-size:.8rem;">Seçili kalem bulunamadı — listeden en az bir kalem seçin.</td></tr>'; return; }
-        var locOpts = LOCS.map(function(l) { return '<option value="' + l.id + '">' + esc(l.name) + '</option>'; }).join('');
-        tb.innerHTML = _lines.map(function(l) {
-            return '<tr class="fc3-tf-row" data-item-id="' + l.itemId + '"'
-                + ' data-unit-id="'  + (l.unitId || '')     + '"'
-                + ' data-to-loc="'   + (l.locationId || '') + '"'
-                + ' data-comb-id="'  + (l.combinationId||'') + '">'
-                + '<td><input type="checkbox" class="fc3-cb fc3-tf-cb" checked></td>'
-                + '<td style="color:#cbd5e1;font-size:.79rem;">' + esc(l.materialName || l.materialCode || '—')
-                + '<br><span style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.7rem;color:#6366f1;">' + esc(l.requestNumber) + '</span></td>'
-                + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
-                + '<td><select class="fc3-ts fc3-tf-loc" style="min-width:130px;"><option value="">— Depo Seçin —</option>' + locOpts + '</select></td>'
-                + '<td><input type="number" class="fc3-ti fc3-tf-qty" value="' + l.quantity.toFixed(2) + '" min="0.01" step="0.01" style="min-width:65px;text-align:right;"></td>'
-                + '<td style="color:#64748b;font-size:.76rem;">' + esc(l.unitCode || '') + '</td>'
-                + '</tr>';
-        }).join('');
-    }
-
-    // ── Panel aç/kapat — action sheet üzerinden (T=Transfer, S=StockIssue, P=PurchaseOrder) ──
-    var _PANELS = {
-        T: { panelId:'fc3TfPanel', btnId:'fc3BtnT', title:'Depo Transferi',      msgIds:['fc3TfOk','fc3TfErr'] },
-        S: { panelId:'fc3SfPanel', btnId:'fc3BtnS', title:'Ambar Çıkış Fişi',    msgIds:['fc3SfOk','fc3SfErr'] },
-        P: { panelId:'fc3PrPanel', btnId:'fc3BtnP', title:'Satın Alma Talebi',   msgIds:['fc3PrOk','fc3PrErr'] },
-    };
-    window.fc3CloseActionSheet = function() {
-        var sheet = document.getElementById('fc3ActionSheet');
-        if (sheet) sheet.classList.remove('open');
-        Object.keys(_PANELS).forEach(function(k) {
-            var pb = document.getElementById(_PANELS[k].btnId);
-            if (pb) pb.classList.remove('on');
-        });
-    };
-    window.fc3TogglePanel = function(key) {
-        var cfg = _PANELS[key]; if (!cfg) return;
-        var sheet = document.getElementById('fc3ActionSheet');
-        var p = document.getElementById(cfg.panelId);
-        var b = document.getElementById(cfg.btnId);
-        // Aynı panel açıksa sheet'i kapat (toggle)
-        var sheetOpen = sheet && sheet.classList.contains('open');
-        var samePanel = sheetOpen && p && p.style.display !== 'none';
-        if (samePanel) { fc3CloseActionSheet(); return; }
-        // Tüm diğer panelleri gizle
-        Object.keys(_PANELS).forEach(function(k) {
-            var c = _PANELS[k];
-            var pp = document.getElementById(c.panelId);
-            var pb = document.getElementById(c.btnId);
-            if (pp) pp.style.display = 'none';
-            if (pb) pb.classList.remove('on');
-        });
-        // Bu paneli göster
-        if (p) p.style.display = '';
-        if (b) b.classList.add('on');
-        // Sheet başlığını güncelle ve aç
-        var titleEl = document.getElementById('fc3AsTitle');
-        if (titleEl) titleEl.textContent = cfg.title;
-        if (sheet) sheet.classList.add('open');
-        // Mesajları temizle
-        cfg.msgIds.forEach(function(id) {
-            var el = document.getElementById(id);
-            if (el) { el.style.display='none'; el.textContent=''; }
-        });
-        // Panel tablosunun DOLU olduğunu garanti et (İş 1 fix) — onLineSel() zaten
-        // çağrılmış olsa bile burada tekrar çağırmak zararsız (idempotent) ve panel
-        // açılışını checkbox seçim akışına bağımlı olmaktan kurtarır.
-        fc3RefreshSelectedLinesUI();
-    };
-    window.fc3ToggleTf = function() { fc3TogglePanel('T'); };
-
-    // Ambar Çıkış Fişi formu — Transfer ile aynı yapı, Hedef Depo yok
-    function renderSf() {
-        var tb = document.getElementById('fc3SfBody');
-        if (!tb) return;
-        if (!_lines.length) { tb.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;color:#475569;font-size:.8rem;">Seçili kalem bulunamadı — listeden en az bir kalem seçin.</td></tr>'; return; }
-        var locOpts = LOCS.map(function(l) { return '<option value="' + l.id + '">' + esc(l.name) + '</option>'; }).join('');
-        tb.innerHTML = _lines.map(function(l) {
-            return '<tr class="fc3-sf-row" data-item-id="' + l.itemId + '"'
-                + ' data-unit-id="' + (l.unitId || '') + '"'
-                + ' data-comb-id="' + (l.combinationId||'') + '">'
-                + '<td><input type="checkbox" class="fc3-cb fc3-sf-cb" checked></td>'
-                + '<td style="color:#cbd5e1;font-size:.79rem;">' + esc(l.materialName || l.materialCode || '—')
-                + '<br><span style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.7rem;color:#fbbf24;">' + esc(l.requestNumber) + '</span></td>'
-                + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
-                + '<td><select class="fc3-ts fc3-sf-loc" style="min-width:130px;"><option value="">— Depo Seçin —</option>' + locOpts + '</select></td>'
-                + '<td><input type="number" class="fc3-ti fc3-sf-qty" value="' + l.quantity.toFixed(2) + '" min="0.01" step="0.01" style="min-width:65px;text-align:right;"></td>'
-                + '<td style="color:#64748b;font-size:.76rem;">' + esc(l.unitCode || '') + '</td>'
-                + '</tr>';
-        }).join('');
-    }
-
-    // Satın Alma Talebi formu
-    function renderPr() {
-        var tb = document.getElementById('fc3PrBody');
-        if (!tb) return;
-        if (!_lines.length) { tb.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#475569;font-size:.8rem;">Seçili kalem bulunamadı — listeden en az bir kalem seçin.</td></tr>'; return; }
-        tb.innerHTML = _lines.map(function(l) {
-            var remain = Math.max(0, l.quantity - (l.fulfilledFromStock||0) - (l.fulfilledByPurchase||0));
-            return '<tr class="fc3-pr-row" data-item-id="' + l.itemId + '"'
-                + ' data-unit-id="' + (l.unitId || '') + '"'
-                + ' data-comb-id="' + (l.combinationId||'') + '"'
-                + ' data-line-id="' + (l.lineId||'') + '">'
-                + '<td><input type="checkbox" class="fc3-cb fc3-pr-cb" checked></td>'
-                + '<td style="color:#cbd5e1;font-size:.79rem;">' + esc(l.materialName || l.materialCode || '—')
-                + '<br><span style="font-family:ui-monospace, Menlo, Consolas, monospace;font-size:.7rem;color:#6ee7b7;">' + esc(l.requestNumber) + '</span></td>'
-                + '<td style="text-align:right;font-weight:600;color:#e2e8f0;">' + fmtN(l.quantity) + '</td>'
-                + '<td style="text-align:right;color:' + (remain > 0 ? '#fbbf24' : '#34d399') + ';font-weight:600;">' + fmtN(remain) + '</td>'
-                + '<td><input type="number" class="fc3-ti fc3-pr-qty" value="' + remain.toFixed(2) + '" min="0.01" step="0.01" style="min-width:65px;text-align:right;"></td>'
-                + '<td style="color:#64748b;font-size:.76rem;">' + esc(l.unitCode || '') + '</td>'
-                + '<td><input type="text" class="fc3-ti fc3-pr-note" placeholder="Not…" style="min-width:100px;"></td>'
-                + '</tr>';
-        }).join('');
-    }
-
-    window.fc3CreateTransfer = function() {
-        var btn = document.getElementById('fc3TfSubmit');
-        var ok  = document.getElementById('fc3TfOk');
-        var err = document.getElementById('fc3TfErr');
-        ok.style.display = err.style.display = 'none';
-        var lines = [];
-        document.querySelectorAll('.fc3-tf-row').forEach(function(tr, idx) {
-            var cb  = tr.querySelector('.fc3-tf-cb');
-            if (!cb || !cb.checked) return;
-            var sel = tr.querySelector('.fc3-tf-loc');
-            var qty = tr.querySelector('.fc3-tf-qty');
-            var loc = sel ? parseInt(sel.value) : 0;
-            var q   = qty ? parseFloat(qty.value.replace(',', '.')) : 0;
-            if (!loc || q <= 0) return;
-            var l = _lines[idx];
-            if (!l) return;
-            lines.push({ itemId:l.itemId, unitId:l.unitId||null, qty:q,
-                         fromLocationId:loc, toLocationId:l.locationId||null,
-                         combinationId:l.combinationId||null, notes:null,
-                         requestLineId:l.lineId||null });
-        });
-        if (!lines.length) { err.textContent='Lütfen en az bir kalem seçin ve kaynak depoyu belirtin.'; err.style.display='block'; return; }
-        if (btn) btn.disabled = true;
-        fetch('/Purchase/CreateTransfer', {
-            method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
-            body: JSON.stringify({ requestIds:Array.from(new Set(Object.values(_lineSel).map(function(v){return v.docId;}))), notes:(document.getElementById('fc3TfNotes')||{}).value||null, lines:lines }),
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (btn) btn.disabled = false;
-            if (d.ok) { ok.textContent='✔ Transfer oluşturuldu: ' + d.docNo; ok.style.display='block'; }
-            else       { err.textContent='✖ ' + (d.error||'Hata'); err.style.display='block'; }
-        })
-        .catch(function() { if (btn) btn.disabled=false; err.textContent='✖ Bağlantı hatası'; err.style.display='block'; });
-    };
-
-    window.fc3CreateStockIssue = function() {
-        var btn = document.getElementById('fc3SfSubmit');
-        var ok  = document.getElementById('fc3SfOk');
-        var err = document.getElementById('fc3SfErr');
-        ok.style.display = err.style.display = 'none';
-        var lines = [];
-        document.querySelectorAll('.fc3-sf-row').forEach(function(tr, idx) {
-            var cb  = tr.querySelector('.fc3-sf-cb');
-            if (!cb || !cb.checked) return;
-            var sel = tr.querySelector('.fc3-sf-loc');
-            var qty = tr.querySelector('.fc3-sf-qty');
-            var loc = sel ? parseInt(sel.value) : 0;
-            var q   = qty ? parseFloat(qty.value.replace(',','.')) : 0;
-            if (!loc || q <= 0) return;
-            var l = _lines[idx]; if (!l) return;
-            lines.push({ itemId:l.itemId, unitId:l.unitId||null, qty:q,
-                         fromLocationId:loc, combinationId:l.combinationId||null,
-                         notes:null, requestLineId:l.lineId||null });
-        });
-        if (!lines.length) { err.textContent='Lütfen en az bir kalem seçin ve depoyu belirtin.'; err.style.display='block'; return; }
-        if (btn) btn.disabled = true;
-        fetch('/Purchase/CreateStockIssue', {
-            method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
-            body: JSON.stringify({ requestIds:Array.from(new Set(Object.values(_lineSel).map(function(v){return v.docId;}))), notes:(document.getElementById('fc3SfNotes')||{}).value||null, lines:lines }),
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (btn) btn.disabled = false;
-            if (d.ok) { ok.textContent='✔ Ambar çıkış fişi oluşturuldu: ' + d.docNo; ok.style.display='block'; invalidateDocCache(); }
-            else       { err.textContent='✖ ' + (d.error||'Hata'); err.style.display='block'; }
-        })
-        .catch(function() { if (btn) btn.disabled=false; err.textContent='✖ Bağlantı hatası'; err.style.display='block'; });
-    };
-
-    // ── Satın Alma paneli: Belge Tipi (Talep / Sipariş) toggle (İş 2) ────────
-    // demand → satin_alma_talebi (CreatePurchaseDemand, mevcut davranış)
+    // ── Satın Alma paneli: Belge Tipi (Talep / Sipariş) toggle ────────────────────────────────
+    // demand → satin_alma_talebi (CreatePurchaseDemand)
     // order  → alis_siparisi     (CreatePurchaseOrderFromIhtiyac, tedarikçisiz sipariş taslağı)
     var _prDocType = 'demand'; // 'demand' | 'order'
     var _PR_DOC_TYPE_META = {
         demand: { panelTitle: 'Satın Alma Talebi',   submitLabel: 'Satın Alma Talebi Oluştur',   qtyColLabel: 'Talep Miktarı',   okPrefix: 'Satın alma talebi oluşturuldu',   editType: 'purchase_demand' },
         order:  { panelTitle: 'Satın Alma Siparişi', submitLabel: 'Satın Alma Siparişi Oluştur', qtyColLabel: 'Sipariş Miktarı', okPrefix: 'Satın alma siparişi oluşturuldu', editType: 'purchase_order'  },
     };
+
+    // Kalan miktar — eski renderPr'deki orijinal hesap. Sunucunun ham `remaining` alanı (negatife
+    // düşebilir) yerine burada da 0 tabanlı clamp uygulanır; fulfill'in varsayılan miktarı için de
+    // aynı formül kullanılır (tek yardımcı, iki çağıran).
+    function fc3Remain(l) {
+        return Math.max(0, l.quantity - (l.fulfilledFromStock || 0) - (l.fulfilledByPurchase || 0));
+    }
+    function fc3LocSelect(l, cls) {
+        var opts = LOCS.map(function(loc) { return '<option value="' + loc.id + '">' + esc(loc.name) + '</option>'; }).join('');
+        return '<select class="fc3-ts ' + cls + '" data-line-id="' + l.lineId + '" style="min-width:130px;"><option value="">— Depo Seçin —</option>' + opts + '</select>';
+    }
+
+    // ── Aksiyon konfigürasyonu — TEK kaynak: modal başlık/ikon/renk, sabit+özel kolonlar,
+    // varsayılan miktar ve submit fonksiyonu buradan türer. Yeni bir aksiyon eklemek için yalnız
+    // burada yeni bir girdi + bir submit fonksiyonu yeterli, modal iskeleti sabit kalır. Sabit
+    // kolonlar (TÜM aksiyonlarda): [✕] Malzeme(+belge no) · İhtiyaç(readonly) · Miktar(editable) ·
+    // Birim — bkz. fc3RenderModalTable. extraCols aksiyona özel ek kolonlardır.
+    var FC_ACTIONS = {
+        fulfill: {
+            key: 'fulfill', mode: 'table', accent: 'fulfill',
+            icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+            title: function() { return 'Depodan Karşıla'; },
+            okLabel: function() { return 'Depodan Karşıla'; },
+            defaultQty: fc3Remain,
+            extraCols: [
+                { key: 'loc', label: 'Talep Deposu', align: 'left', render: function(l) { return esc(l.locationName || '—'); } },
+                { key: 'match', label: 'Durum', align: 'left', render: function(l) { return '<span id="fc3ModalMatch_' + l.lineId + '" class="fc3-sk fc3-sk--zero">bekliyor</span>'; } },
+            ],
+            submit: function() { fc3ModalSubmitFulfill(); },
+        },
+        transfer: {
+            key: 'transfer', mode: 'table', accent: 't',
+            icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+            title: function() { return 'Depo Transferi'; },
+            okLabel: function() { return 'Transfer Belgesi Oluştur'; },
+            defaultQty: function(l) { return l.quantity; },
+            extraCols: [
+                { key: 'srcLoc', label: 'Kaynak Depo', align: 'left', render: function(l) { return fc3LocSelect(l, 'fc3-mod-loc'); } },
+            ],
+            submit: function() { fc3ModalSubmitTransfer(); },
+        },
+        stockIssue: {
+            key: 'stockIssue', mode: 'table', accent: 's',
+            icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+            title: function() { return 'Ambar Çıkış Fişi'; },
+            okLabel: function() { return 'Ambar Çıkış Fişi Oluştur'; },
+            defaultQty: function(l) { return l.quantity; },
+            extraCols: [
+                { key: 'srcLoc', label: 'Kaynak Depo', align: 'left', render: function(l) { return fc3LocSelect(l, 'fc3-mod-loc'); } },
+            ],
+            submit: function() { fc3ModalSubmitStockIssue(); },
+        },
+        purchase: {
+            key: 'purchase', mode: 'table', accent: 'pr', hasDocType: true,
+            icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
+            title: function() { return _PR_DOC_TYPE_META[_prDocType].panelTitle; },
+            okLabel: function() { return _PR_DOC_TYPE_META[_prDocType].submitLabel; },
+            qtyLabel: function() { return _PR_DOC_TYPE_META[_prDocType].qtyColLabel; },
+            defaultQty: fc3Remain,
+            extraCols: [
+                { key: 'remain', label: 'Kalan', align: 'right', render: function(l) {
+                    var r = fc3Remain(l);
+                    return '<span style="color:' + (r > 0 ? '#fbbf24' : '#34d399') + ';font-weight:600;">' + fmtN(r) + '</span>';
+                } },
+                { key: 'note', label: 'Not', align: 'left', render: function(l) {
+                    return '<input type="text" class="fc3-ti fc3-mod-note" data-line-id="' + l.lineId + '" placeholder="Not…">';
+                } },
+            ],
+            submit: function() { fc3ModalSubmitPurchase(); },
+        },
+        closeLines: {
+            key: 'closeLines', mode: 'simple', accent: 'close',
+            icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+            title: function() { return 'İhtiyacı Kapat'; },
+            okLabel: function() { return 'Kapat'; },
+            submit: function() { fc3ModalSubmitCloseLines(); },
+        },
+    };
+
+    // ── Aç / Kapat ─────────────────────────────────────────────────────────────────────────
+    window.fc3OpenModal = function(actionKey) {
+        var cfg = FC_ACTIONS[actionKey];
+        if (!cfg) return;
+        var ids = Object.keys(_lineSel).map(Number);
+        if (!ids.length) return;
+        _modalAction = cfg;
+        // Seçili kalemlerin DOLU olduğunu garanti et (İş 1 fix'inin devamı) — onLineSel() zaten
+        // çağırmış olsa bile burada tekrar await etmek zararsız (idempotent) ve modalın render'ını
+        // checkbox seçim akışına bağımlı olmaktan kurtarır.
+        fc3RefreshSelectedLinesUI().then(function() {
+            _modalLines = _lines.slice();
+            fc3RenderModal();
+        });
+    };
+    window.fc3CloseModal = function() {
+        var backdrop = document.getElementById('fc3ModalBackdrop');
+        if (backdrop) backdrop.classList.remove('open');
+        document.removeEventListener('keydown', fc3ModalKeyHandler);
+        _modalAction = null;
+        _modalLines  = [];
+    };
+    window.fc3ModalBackdropClick = function(e) {
+        if (e && e.target && e.target.id === 'fc3ModalBackdrop') fc3CloseModal();
+    };
+    function fc3ModalKeyHandler(e) {
+        if (e.key === 'Escape') { fc3CloseModal(); return; }
+        if (e.key === 'Enter') {
+            var tag = (e.target && e.target.tagName) || '';
+            if (tag === 'TEXTAREA' || tag === 'SELECT') return;  // metin/depo seçiminde Enter submit tetiklemesin
+            e.preventDefault();
+            window.fc3ModalSubmit();
+        }
+    }
+    function fc3ShowModal() {
+        var backdrop = document.getElementById('fc3ModalBackdrop');
+        if (!backdrop) return;
+        backdrop.classList.add('open');
+        document.addEventListener('keydown', fc3ModalKeyHandler);
+        setTimeout(function() {
+            var okBtn = document.getElementById('fc3ModalOkBtn');
+            if (okBtn) okBtn.focus();
+        }, 50);
+    }
+
+    // ── Render — header/doctype/tablo|basit-metin/footer TEK yerden ─────────────────────────
+    function fc3RenderModal() {
+        var cfg = _modalAction;
+        if (!cfg) return;
+
+        var iconWrap = document.getElementById('fc3ModalIcon');
+        if (iconWrap) { iconWrap.className = 'fc3-modal-hd-icon fc3-modal-hd-icon--' + cfg.accent; iconWrap.innerHTML = cfg.icon; }
+        var titleEl = document.getElementById('fc3ModalTitle');
+        if (titleEl) titleEl.textContent = cfg.title();
+        var subEl = document.getElementById('fc3ModalSub');
+        if (subEl) subEl.textContent = _modalLines.length + ' kalem seçili';
+
+        var dtRow = document.getElementById('fc3ModalDocTypeRow');
+        if (dtRow) dtRow.style.display = cfg.hasDocType ? '' : 'none';
+        if (cfg.hasDocType) {
+            document.querySelectorAll('#fc3ModalDocTypeChips .fc3-ms-chip').forEach(function(chip) {
+                var active = chip.getAttribute('data-doctype') === _prDocType;
+                chip.classList.toggle('active', active);
+                var input = chip.querySelector('input');
+                if (input) input.checked = active;
+            });
+        }
+
+        var tableWrap  = document.getElementById('fc3ModalTableWrap');
+        var simpleWrap = document.getElementById('fc3ModalSimpleText');
+        if (cfg.mode === 'simple') {
+            if (tableWrap)  tableWrap.style.display  = 'none';
+            if (simpleWrap) { simpleWrap.style.display = ''; fc3RenderModalSimple(); }
+        } else {
+            if (simpleWrap) simpleWrap.style.display = 'none';
+            if (tableWrap)  { tableWrap.style.display  = ''; fc3RenderModalTable(); }
+        }
+
+        var notesWrap = document.getElementById('fc3ModalNotesWrap');
+        if (notesWrap) notesWrap.style.display = cfg.mode === 'simple' ? 'none' : '';
+        var notesTa = document.getElementById('fc3ModalNotes');
+        if (notesTa) notesTa.value = '';
+
+        var okBtn = document.getElementById('fc3ModalOkBtn');
+        if (okBtn) {
+            okBtn.className   = 'fc3-btn fc3-modal-ok fc3-modal-ok--' + cfg.accent;
+            okBtn.textContent = cfg.okLabel();
+            okBtn.disabled    = false;
+        }
+        fc3ModalShowMsg('', '');
+        fc3ShowModal();
+    }
+
+    function fc3RenderModalTable() {
+        var cfg   = _modalAction;
+        var thead = document.getElementById('fc3ModalThead');
+        var tbody = document.getElementById('fc3ModalTbody');
+        if (!thead || !tbody) return;
+
+        var qtyLabel  = cfg.qtyLabel ? cfg.qtyLabel() : 'Miktar';
+        var headCells = ['', 'Malzeme', 'İhtiyaç', qtyLabel, 'Birim'].concat(cfg.extraCols.map(function(c) { return c.label; }));
+        thead.innerHTML = headCells.map(function(h, i) {
+            return '<th' + (i === 2 || i === 3 ? ' style="text-align:right;"' : '') + '>' + esc(h) + '</th>';
+        }).join('');
+
+        if (!_modalLines.length) {
+            tbody.innerHTML = '<tr><td colspan="' + headCells.length + '" style="padding:16px;text-align:center;color:#475569;font-size:.8rem;">Kalem kalmadı.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = _modalLines.map(function(l) {
+            var defQty   = cfg.defaultQty(l);
+            var extraTds = cfg.extraCols.map(function(c) {
+                return '<td' + (c.align === 'right' ? ' style="text-align:right;"' : '') + '>' + c.render(l) + '</td>';
+            }).join('');
+            return '<tr data-row-id="' + l.lineId + '">'
+                + '<td><button type="button" class="fc3-modal-rm" onclick="fc3ModalRemoveRow(' + l.lineId + ')" title="Bu kalemi çıkar">'
+                +   '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+                + '</button></td>'
+                + '<td class="fc3-modal-mat">' + esc(l.materialName || l.materialCode || '—') + '<small>' + esc(l.requestNumber || '') + '</small></td>'
+                + '<td style="text-align:right;color:#94a3b8;">' + fmtN(l.quantity) + '</td>'
+                + '<td><input type="number" class="fc3-ti fc3-mod-qty" data-line-id="' + l.lineId + '" value="' + defQty.toFixed(2) + '" min="0.01" step="0.01" style="min-width:70px;text-align:right;"></td>'
+                + '<td style="color:#64748b;">' + esc(l.unitCode || '') + '</td>'
+                + extraTds
+                + '</tr>';
+        }).join('');
+    }
+
+    function fc3RenderModalSimple() {
+        var wrap = document.getElementById('fc3ModalSimpleText');
+        if (!wrap) return;
+        var chips = _modalLines.map(function(l) {
+            return '<span class="fc3-modal-chip" data-row-id="' + l.lineId + '">' + esc(l.materialName || l.materialCode || ('#' + l.lineId))
+                + '<button type="button" class="fc3-modal-chip-x" onclick="fc3ModalRemoveRow(' + l.lineId + ')" title="Çıkar">'
+                +   '<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+                + '</button></span>';
+        }).join('');
+        wrap.innerHTML =
+              '<div class="fc3-modal-simple">'
+            +   'Seçili <strong>' + _modalLines.length + '</strong> kalemin karşılanmamış kalan miktarı kapatılacak. '
+            +   'Karşılanan miktarlar korunur, yalnızca kalan kısımdan vazgeçilir (hiç karşılama yapılmadıysa ihtiyacın '
+            +   'tamamından vazgeçilmiş olur).<br><strong>Bu işlem geri alınamaz.</strong>'
+            +   '<div class="fc3-modal-chiplist">' + chips + '</div>'
+            + '</div>';
+    }
+
+    window.fc3ModalRemoveRow = function(lineId) {
+        if (_modalLines.length <= 1) { fc3ModalShowMsg('En az bir kalem kalmalı.', 'err'); return; }
+        _modalLines = _modalLines.filter(function(l) { return l.lineId !== lineId; });
+        var subEl = document.getElementById('fc3ModalSub');
+        if (subEl) subEl.textContent = _modalLines.length + ' kalem seçili';
+        if (_modalAction && _modalAction.mode === 'simple') fc3RenderModalSimple();
+        else fc3RenderModalTable();
+    };
+
+    // ── Belge Tipi (Talep/Sipariş) toggle — yalnız etiketleri günceller, tabloyu YENİDEN ÇİZMEZ
+    // (iki tip de aynı varsayılan miktarı — kalan — kullandığından satırlar zaten aynıdır;
+    // re-render kullanıcının satır bazında girdiği miktar/notu sıfırlardı). ───────────────────
     window.fc3PrDocTypeChange = function(value) {
         _prDocType = value === 'order' ? 'order' : 'demand';
         var meta = _PR_DOC_TYPE_META[_prDocType];
-        document.querySelectorAll('#fc3PrDocTypeChips .fc3-ms-chip').forEach(function(chip) {
+        document.querySelectorAll('#fc3ModalDocTypeChips .fc3-ms-chip').forEach(function(chip) {
             var active = chip.getAttribute('data-doctype') === _prDocType;
             chip.classList.toggle('active', active);
             var input = chip.querySelector('input');
             if (input) input.checked = active;
         });
-        var lbl = document.getElementById('fc3PrSubmitLabel'); if (lbl) lbl.textContent = meta.submitLabel;
-        var qh  = document.getElementById('fc3PrQtyColHdr');   if (qh)  qh.textContent  = meta.qtyColLabel;
-        _PANELS.P.title = meta.panelTitle;
-        var titleEl = document.getElementById('fc3AsTitle');
-        var pPanel  = document.getElementById('fc3PrPanel');
-        if (titleEl && pPanel && pPanel.style.display !== 'none') titleEl.textContent = meta.panelTitle;
-        // Farklı tip seçilince önceki sonuç mesajı yanıltıcı olmasın
-        var ok = document.getElementById('fc3PrOk'), err = document.getElementById('fc3PrErr');
-        if (ok)  { ok.style.display  = 'none'; ok.textContent  = ''; }
-        if (err) { err.style.display = 'none'; err.textContent = ''; }
+        if (!_modalAction || _modalAction.key !== 'purchase') return;
+        var titleEl = document.getElementById('fc3ModalTitle'); if (titleEl) titleEl.textContent = meta.panelTitle;
+        var qtyHdr  = document.querySelector('#fc3ModalThead th:nth-child(4)'); if (qtyHdr) qtyHdr.textContent = meta.qtyColLabel;
+        var okBtn   = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.textContent = meta.submitLabel;
+        fc3ModalShowMsg('', '');
     };
-    document.querySelectorAll('#fc3PrDocTypeChips .fc3-ms-chip').forEach(function(chip) {
+    document.querySelectorAll('#fc3ModalDocTypeChips .fc3-ms-chip').forEach(function(chip) {
         chip.addEventListener('click', function() { fc3PrDocTypeChange(chip.getAttribute('data-doctype')); });
     });
 
-    window.fc3CreatePurchaseOrder = function() {
-        var btn = document.getElementById('fc3PrSubmit');
-        var ok  = document.getElementById('fc3PrOk');
-        var err = document.getElementById('fc3PrErr');
-        ok.style.display = err.style.display = 'none';
-        var picked = [];
-        document.querySelectorAll('.fc3-pr-row').forEach(function(tr, idx) {
-            var cb  = tr.querySelector('.fc3-pr-cb');
-            if (!cb || !cb.checked) return;
-            var qty  = tr.querySelector('.fc3-pr-qty');
-            var note = tr.querySelector('.fc3-pr-note');
-            var q    = qty ? parseFloat(qty.value.replace(',','.')) : 0;
-            if (q <= 0) return;
-            var l = _lines[idx]; if (!l) return;
-            picked.push({ l:l, qty:q, notes:(note ? note.value : null) || null });
-        });
-        if (!picked.length) { err.textContent='Lütfen en az bir kalem seçin.'; err.style.display='block'; return; }
-        if (btn) btn.disabled = true;
+    // ── Footer yardımcıları ────────────────────────────────────────────────────────────────
+    function fc3ModalSetBusy(busy) {
+        var okBtn = document.getElementById('fc3ModalOkBtn');
+        var cnBtn = document.getElementById('fc3ModalCancelBtn');
+        if (okBtn) okBtn.disabled = busy;
+        if (cnBtn) cnBtn.disabled = busy;
+    }
+    function fc3ModalShowMsg(text, kind) {
+        var el = document.getElementById('fc3ModalMsg');
+        if (!el) return;
+        if (!text) { el.style.display = 'none'; el.textContent = ''; el.className = 'fc3-res'; return; }
+        el.textContent   = text;
+        el.className     = 'fc3-res ' + (kind === 'ok' ? 'fc3-res--ok' : 'fc3-res--err');
+        el.style.display = 'block';
+    }
+    window.fc3ModalSubmit = function() {
+        if (!_modalAction || !_modalLines.length) return;
+        _modalAction.submit();
+    };
 
-        var meta          = _PR_DOC_TYPE_META[_prDocType];
-        var notesGeneral  = (document.getElementById('fc3PrNotes')||{}).value || null;
+    // ── Submit — Depodan Karşıla (YENİ sözleşme, backend ajanının belirlediği response'a göre) ──
+    // POST /Purchase/FulfillFromStock  body { lines:[{lineId,qty}], notes }
+    // response { ok, docNo, approvalStarted, results:[{lineId, matched, fulfilled, reason}] }
+    // NOT: bu sözleşme backend ajanı tarafından ayrıca netleştirilecek; yol/şekil farklı çıkarsa
+    // lidere bildirilmesi gerekir — bkz. görev raporu.
+    function fc3ModalSubmitFulfill() {
+        var lines = [];
+        _modalLines.forEach(function(l) {
+            var inp = document.querySelector('.fc3-mod-qty[data-line-id="' + l.lineId + '"]');
+            var q   = inp ? parseFloat((inp.value || '0').replace(',', '.')) : 0;
+            if (q > 0) lines.push({ lineId: l.lineId, qty: q });
+        });
+        if (!lines.length) { fc3ModalShowMsg('Lütfen en az bir kalem için miktar girin.', 'err'); return; }
+        fc3ModalSetBusy(true);
+        fc3ModalShowMsg('', '');
+        var notes = (document.getElementById('fc3ModalNotes') || {}).value || null;
+        fetch('/Purchase/FulfillFromStock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
+            body: JSON.stringify({ lines: lines, notes: notes }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            fc3ModalSetBusy(false);
+            if (d.ok) {
+                (d.results || []).forEach(function(r) {
+                    var cell = document.getElementById('fc3ModalMatch_' + r.lineId);
+                    if (!cell) return;
+                    if (r.matched) {
+                        cell.className   = 'fc3-sk fc3-sk--ok';
+                        cell.textContent = '✓ Karşılandı' + (r.fulfilled ? ' (' + fmtN(r.fulfilled) + ')' : '');
+                    } else {
+                        cell.className   = 'fc3-sk fc3-sk--none';
+                        cell.textContent = '✕ ' + (r.reason || 'Eşleşmedi');
+                        cell.title       = r.reason || '';
+                    }
+                });
+                fc3ModalShowMsg('✔ ' + (d.docNo ? d.docNo + ' fişi oluşturuldu' : 'İşlem tamamlandı') + (d.approvalStarted ? ' · onaya gönderildi' : ''), 'ok');
+                var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;  // sonuç görüntülendi, tekrar gönderme kapalı
+                // Arka plandaki liste + seçim tazelenir; sonucu görebilmesi için modal açık kalır (kullanıcı kapatır).
+                _lineSel = {}; _docLineCache = {}; _globalStockMap = {};
+                document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
+                fc3UpdateFulfillBar();
+                loadAllLines();
+            } else {
+                fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
+            }
+        })
+        .catch(function() { fc3ModalSetBusy(false); fc3ModalShowMsg('✖ Bağlantı hatası', 'err'); });
+    }
+
+    // ── Submit — Depo Transferi (mevcut payload korunur) ─────────────────────────────────────
+    function fc3ModalSubmitTransfer() {
+        var lines = [];
+        _modalLines.forEach(function(l) {
+            var sel = document.querySelector('.fc3-mod-loc[data-line-id="' + l.lineId + '"]');
+            var inp = document.querySelector('.fc3-mod-qty[data-line-id="' + l.lineId + '"]');
+            var loc = sel ? parseInt(sel.value, 10) : 0;
+            var q   = inp ? parseFloat((inp.value || '0').replace(',', '.')) : 0;
+            if (!loc || q <= 0) return;
+            lines.push({ itemId: l.itemId, unitId: l.unitId || null, qty: q,
+                         fromLocationId: loc, toLocationId: l.locationId || null,
+                         combinationId: l.combinationId || null, notes: null,
+                         requestLineId: l.lineId || null });
+        });
+        if (!lines.length) { fc3ModalShowMsg('Lütfen en az bir kalem için kaynak depo ve miktar girin.', 'err'); return; }
+        // requestIds MODALDAKİ (✕ ile çıkarılmış olabilecek) kalan satırlardan türetilir — çıkarılan
+        // bir kalemin belgesi ne onay guard'ına ne soyağacı linkine karışır (bkz. görev raporu).
+        var requestIds = Array.from(new Set(_modalLines.map(function(l) { return l.requestId; }).filter(Boolean)));
+        fc3ModalSetBusy(true);
+        fc3ModalShowMsg('', '');
+        fetch('/Purchase/CreateTransfer', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
+            body: JSON.stringify({ requestIds: requestIds, notes: (document.getElementById('fc3ModalNotes') || {}).value || null, lines: lines }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            fc3ModalSetBusy(false);
+            if (d.ok) {
+                fc3ModalShowMsg('✔ Transfer oluşturuldu: ' + d.docNo, 'ok');
+                var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;
+                invalidateDocCache();
+            } else {
+                fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
+            }
+        })
+        .catch(function() { fc3ModalSetBusy(false); fc3ModalShowMsg('✖ Bağlantı hatası', 'err'); });
+    }
+
+    // ── Submit — Ambar Çıkış Fişi (mevcut payload korunur, Transfer ile aynı yapı, hedef depo yok) ─
+    function fc3ModalSubmitStockIssue() {
+        var lines = [];
+        _modalLines.forEach(function(l) {
+            var sel = document.querySelector('.fc3-mod-loc[data-line-id="' + l.lineId + '"]');
+            var inp = document.querySelector('.fc3-mod-qty[data-line-id="' + l.lineId + '"]');
+            var loc = sel ? parseInt(sel.value, 10) : 0;
+            var q   = inp ? parseFloat((inp.value || '0').replace(',', '.')) : 0;
+            if (!loc || q <= 0) return;
+            lines.push({ itemId: l.itemId, unitId: l.unitId || null, qty: q,
+                         fromLocationId: loc, combinationId: l.combinationId || null,
+                         notes: null, requestLineId: l.lineId || null });
+        });
+        if (!lines.length) { fc3ModalShowMsg('Lütfen en az bir kalem için kaynak depo ve miktar girin.', 'err'); return; }
+        var requestIds = Array.from(new Set(_modalLines.map(function(l) { return l.requestId; }).filter(Boolean)));
+        fc3ModalSetBusy(true);
+        fc3ModalShowMsg('', '');
+        fetch('/Purchase/CreateStockIssue', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
+            body: JSON.stringify({ requestIds: requestIds, notes: (document.getElementById('fc3ModalNotes') || {}).value || null, lines: lines }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            fc3ModalSetBusy(false);
+            if (d.ok) {
+                fc3ModalShowMsg('✔ Ambar çıkış fişi oluşturuldu: ' + d.docNo, 'ok');
+                var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;
+                invalidateDocCache();
+            } else {
+                fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
+            }
+        })
+        .catch(function() { fc3ModalSetBusy(false); fc3ModalShowMsg('✖ Bağlantı hatası', 'err'); });
+    }
+
+    // ── Submit — Satın Alma Talebi/Siparişi (mevcut payload'lar korunur, toggle'a göre uç değişir) ─
+    function fc3ModalSubmitPurchase() {
+        var picked = [];
+        _modalLines.forEach(function(l) {
+            var inp  = document.querySelector('.fc3-mod-qty[data-line-id="' + l.lineId + '"]');
+            var note = document.querySelector('.fc3-mod-note[data-line-id="' + l.lineId + '"]');
+            var q    = inp ? parseFloat((inp.value || '0').replace(',', '.')) : 0;
+            if (q <= 0) return;
+            picked.push({ l: l, qty: q, notes: (note ? note.value : null) || null });
+        });
+        if (!picked.length) { fc3ModalShowMsg('Lütfen en az bir kalem için miktar girin.', 'err'); return; }
+
+        var meta         = _PR_DOC_TYPE_META[_prDocType];
+        var notesGeneral = (document.getElementById('fc3ModalNotes') || {}).value || null;
         var url, body;
         if (_prDocType === 'order') {
             // alis_siparisi — tedarikçi (contactId) burada seçilmiyor, belge sonradan düzenlenebilir.
-            url = '/Purchase/CreatePurchaseOrderFromIhtiyac';
+            var requestIds = Array.from(new Set(_modalLines.map(function(l) { return l.requestId; }).filter(Boolean)));
+            url  = '/Purchase/CreatePurchaseOrderFromIhtiyac';
             body = {
-                requestIds: Array.from(new Set(Object.values(_lineSel).map(function(v) { return v.docId; }))),
-                notes:      notesGeneral,
-                contactId:  null,
+                requestIds: requestIds, notes: notesGeneral, contactId: null,
                 lines: picked.map(function(x) {
-                    return { itemId:x.l.itemId, unitId:x.l.unitId||null, qty:x.qty,
-                             combinationId:x.l.combinationId||null, notes:x.notes,
-                             requestLineId:x.l.lineId||null };
+                    return { itemId: x.l.itemId, unitId: x.l.unitId || null, qty: x.qty,
+                             combinationId: x.l.combinationId || null, notes: x.notes,
+                             requestLineId: x.l.lineId || null };
                 }),
             };
         } else {
-            // satin_alma_talebi (DocumentSource bağlantılı) — mevcut davranış
-            url = '/Purchase/CreatePurchaseDemand';
-            body = {
-                notes: notesGeneral,
-                lines: picked.map(function(x) { return { lineId:x.l.lineId, qty:x.qty, notes:x.notes }; }),
-            };
+            // satin_alma_talebi (DocumentSource bağlantılı) — requestIds gerekmez, backend her
+            // lineId'nin sahibi belgeyi kendisi çözer (bkz. CreatePurchaseDemand).
+            url  = '/Purchase/CreatePurchaseDemand';
+            body = { notes: notesGeneral, lines: picked.map(function(x) { return { lineId: x.l.lineId, qty: x.qty, notes: x.notes }; }) };
         }
 
+        fc3ModalSetBusy(true);
+        fc3ModalShowMsg('', '');
         fetch(url, {
-            method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
             body: JSON.stringify(body),
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {
-            if (btn) btn.disabled = false;
+            fc3ModalSetBusy(false);
             if (d.ok) {
-                ok.innerHTML = '✔ ' + meta.okPrefix + ': <a href="/Purchase/Edit?type=' + meta.editType + '&id=' + d.docId + '" target="_blank" style="color:#6ee7b7;">' + esc(d.docNo) + '</a>';
-                ok.style.display = 'block';
+                var msgEl = document.getElementById('fc3ModalMsg');
+                if (msgEl) {
+                    msgEl.innerHTML     = '✔ ' + meta.okPrefix + ': <a href="/Purchase/Edit?type=' + meta.editType + '&id=' + d.docId + '" target="_blank" style="color:inherit;text-decoration:underline;">' + esc(d.docNo) + '</a>';
+                    msgEl.className     = 'fc3-res fc3-res--ok';
+                    msgEl.style.display = 'block';
+                }
+                var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;
                 invalidateDocCache();
             } else {
-                err.textContent = '✖ ' + (d.error||'Hata');
-                err.style.display = 'block';
+                fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
             }
         })
-        .catch(function() { if (btn) btn.disabled=false; err.textContent='✖ Bağlantı hatası'; err.style.display='block'; });
-    };
+        .catch(function() { fc3ModalSetBusy(false); fc3ModalShowMsg('✖ Bağlantı hatası', 'err'); });
+    }
 
-    // TEK kapatma aksiyonu ("İhtiyacı Kapat" — PageComment Seq 12, 2026-07-21 birleştirmesi):
-    // seçili KALEMLERİN karşılanmamış kalan miktarını kapatır (FulfillmentStatus=3). Hiç
-    // karşılama yapılmamış bir kalemde "kalan miktar" = miktarın tamamı olduğundan bu TEK uç
-    // hem "ihtiyacı tamamen kapat" hem "kısmi karşılamadan sonra kalanı kapat" senaryosunu
-    // aynı şekilde kapsar — ayrı bir "tam kapat" dalına ihtiyaç yok. Yalnız verilen satırlar
-    // etkilenir; aynı belgedeki diğer kalemlere ve belge (header) Status'üne dokunulmaz.
-    // Önceki belge-bazlı "İhtiyacı Kapat" aksiyonu (/Purchase/CloseRequests — TÜM belgeyi
-    // Cancelled yapardı, seçili satırlar dışındaki kalemleri de etkilerdi) bu ekrandan
-    // kaldırıldı; backend ucu başka bir çağıran yoksa artık kullanılmıyor (bkz. görev raporu).
-    window.fc3CloseFulfillmentLines = function() {
-        var ids = Object.keys(_lineSel).map(Number);
+    // ── Submit — İhtiyacı Kapat (mevcut payload korunur; modal AÇILIŞI zaten onay adımı, ayrıca
+    // showConfirm sarmalamaya gerek yok — bkz. görev raporu). Seçili KALEMLERİN karşılanmamış
+    // kalan miktarını kapatır (FulfillmentStatus=3). Hiç karşılama yapılmamış bir kalemde "kalan
+    // miktar" = miktarın tamamı olduğundan bu TEK uç hem "ihtiyacı tamamen kapat" hem "kısmi
+    // karşılamadan sonra kalanı kapat" senaryosunu aynı şekilde kapsar. Yalnız verilen satırlar
+    // etkilenir; aynı belgedeki diğer kalemlere ve belge (header) Status'üne dokunulmaz. ────────
+    function fc3ModalSubmitCloseLines() {
+        var ids = _modalLines.map(function(l) { return l.lineId; });
         if (!ids.length) return;
-        var names = ids.map(function(id) {
-            var l = _lines.find(function(x) { return x.lineId === id; });
-            return l ? (l.materialName || l.materialCode || ('#' + id)) : ('#' + id);
-        }).join(', ');
-        showConfirm({
-            title:   'İhtiyacı Kapat',
-            message: 'Seçili ' + ids.length + ' kalemin karşılanmamış kalan miktarı kapatılacak'
-                + (names ? ':\n' + names : '') + '.\n\nKarşılanan miktarlar korunur, yalnızca kalan kısımdan vazgeçilir'
-                + ' (hiç karşılama yapılmadıysa ihtiyacın tamamından vazgeçilmiş olur).'
-                + '\nBu işlem geri alınamaz. Devam edilsin mi?',
-            okLabel: 'Kapat',
-        }).then(function(ok) {
-            if (!ok) return;
-            var btn = document.getElementById('fc3BtnCloseLines');
-            if (btn) btn.disabled = true;
-            fetch('/Purchase/CloseFulfillmentLines', {
-                method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
-                body: JSON.stringify({ lineIds: ids }),
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (btn) btn.disabled = false;
-                if (d.ok) {
-                    CalibraAlert.show((d.closed || 0) + ' kalemin kalanı kapatıldı.', { type: 'success', autoDismissMs: 2500 });
-                    _lineSel = {};
-                    document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
-                    fc3UpdateFulfillBar();
-                    invalidateDocCache();
-                } else {
-                    CalibraAlert.show('Kapatma başarısız: ' + (d.error || 'Hata'), { type: 'error' });
-                }
-            })
-            .catch(function() { if (btn) btn.disabled = false; CalibraAlert.show('Bağlantı hatası.', { type: 'error' }); });
-        });
-    };
+        fc3ModalSetBusy(true);
+        fc3ModalShowMsg('', '');
+        fetch('/Purchase/CloseFulfillmentLines', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
+            body: JSON.stringify({ lineIds: ids }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            fc3ModalSetBusy(false);
+            if (d.ok) {
+                fc3CloseModal();
+                CalibraAlert.show((d.closed || 0) + ' kalemin kalanı kapatıldı.', { type: 'success', autoDismissMs: 2500 });
+                _lineSel = {};
+                document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
+                fc3UpdateFulfillBar();
+                invalidateDocCache();
+            } else {
+                fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
+            }
+        })
+        .catch(function() { fc3ModalSetBusy(false); fc3ModalShowMsg('✖ Bağlantı hatası', 'err'); });
+    }
 
     function invalidateDocCache() {
         _docLineCache   = {};

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Approval.EntityTypes;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -40,6 +41,7 @@ public sealed class PurchaseController : Controller
     private readonly ICompanyParameterService _companyParams;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IUserSettingRepository _userSettingRepo;
+    private readonly IApprovalFlowService _approvalFlowService;
     private readonly ILogger<PurchaseController> _logger;
     private readonly string _schema;
     private const string FlatColCfgKey = "ui.fc3.col-cfg-flat";
@@ -55,6 +57,7 @@ public sealed class PurchaseController : Controller
         ICompanyParameterService companyParams,
         SqlServerConnectionFactory connectionFactory,
         IUserSettingRepository userSettingRepo,
+        IApprovalFlowService approvalFlowService,
         CalibraDatabaseOptions dbOptions,
         ILogger<PurchaseController> logger)
     {
@@ -69,6 +72,7 @@ public sealed class PurchaseController : Controller
         _companyParams     = companyParams;
         _connectionFactory = connectionFactory;
         _userSettingRepo   = userSettingRepo;
+        _approvalFlowService = approvalFlowService;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -157,6 +161,54 @@ public sealed class PurchaseController : Controller
         await _docSourceRepo.EnsureSchemaAsync(ct);
         foreach (var rid in sourceDocIds.Distinct())
             if (rid > 0) await _docSourceRepo.AddAsync(targetDocId, rid, ct);
+    }
+
+    /// <summary>
+    /// Yeni oluşturulan bir belge için aktif bir onay akışı varsa otomatik başlatır —
+    /// <see cref="CalibraHub.Application.Services.DocumentService.SaveQuoteAsync"/> içindeki
+    /// auto-start bloğuyla AYNI mantık (kind çözümleme + APPROVAL_ENABLED_{kind} parametre
+    /// kontrolü + MatchFlowAsync + StartAsync). Stok belgeleri (STOCK_IN/STOCK_OUT/TRANSFER)
+    /// <see cref="IStockDocRepository"/> üzerinden raw SQL ile yazılır — DocumentService'ten
+    /// HİÇ geçmez, dolayısıyla bu belgeler için otomatik onay tetikleme daha önce hiç yoktu
+    /// (2026-07-21 keşfi). Bu helper yalnızca Depodan Karşıla akışında oluşan Ambar Çıkış
+    /// Fişi (depo_cikis) için o boşluğu kapatır. "depo_cikis" DocumentEntityTypes.Definitions
+    /// listesinde yok → her zaman wildcard "Document" (Tüm Belgeler) kind'ına çözülür; bu,
+    /// diğer eşlenmemiş belge türleri için de geçerli olan mevcut davranıştır (yeni bir
+    /// özel durum icat edilmedi). Hata belge kaydını asla bozmaz (DocumentService ile aynı
+    /// "sessizce geç" kuralı).
+    /// </summary>
+    private async Task<bool> TryAutoStartApprovalAsync(int documentId, string documentTypeCode, CancellationToken ct)
+    {
+        try
+        {
+            var kind = DocumentEntityTypes.ResolveKind(documentTypeCode);
+
+            var approvalEnabled = true;
+            if (kind != DocumentEntityTypes.WildcardKind)
+            {
+                approvalEnabled = await _companyParams.GetBoolAsync(
+                    ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
+            }
+            if (!approvalEnabled) return false;
+
+            var flow = await _approvalFlowService.MatchFlowAsync(kind, null, null, null, ct);
+            if (flow is null) return false;
+
+            var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+            await _approvalFlowService.StartAsync(
+                new StartApprovalRequest(
+                    DocumentId:      documentId,
+                    FlowId:          flow.Id,
+                    StartedBy:       userName,
+                    StartedByUserId: CurrentUserId()),
+                ct);
+            return true;
+        }
+        catch
+        {
+            // Akış başlatma hatası belge kaydını iptal etmez — belge zaten kaydedildi.
+            return false;
+        }
     }
 
     [HttpGet("/Purchase/Requests")]
@@ -1341,333 +1393,275 @@ public sealed class PurchaseController : Controller
     }
 
     /// <summary>
-    /// Seçili ihtiyaç kalemlerini FIFO stok dağıtımıyla otomatik olarak depoden karşılar.
+    /// Depodan Karşıla (2026-07-21 iş kuralı revizyonu — eski FIFO/bakiye dağıtımı KALDIRILDI).
+    /// Seçili her ihtiyaç kalemi için: karşılama deposu (parametre — SPECIFIC modda
+    /// FULFILLMENT_LOCATION_IDS, ITEM_DEFAULT modda malzemenin ItemLocation.IsDefault deposu)
+    /// ile ihtiyaç kaydının deposu (satır DocumentLine.LocationId, boşsa belge başlığı
+    /// Document.LocationId — "Hedef Lokasyon") AYNIYSA o depodan Ambar Çıkış Fişi (depo_cikis)
+    /// oluşturulur; farklıysa kalem karşılanmaz (matched=false + reason — kullanıcı ayrıca
+    /// Depo Transferi kullanır, bu endpoint onu tetiklemez). Kıyaslama STOK BAKİYESİ/KARTI
+    /// ÜZERİNDEN DEĞİL yalnızca depo Id eşleşmesi üzerindendir (Location.Id ile Location.LocationCode
+    /// birebir - UNIQUE NOT NULL - olduğundan Id karşılaştırması kod karşılaştırmasıyla eşdeğerdir;
+    /// ID tabanlı eşleştirme kuralı gereği Id kullanılır, reason metninde kullanıcıya LocationCode
+    /// gösterilir). Miktar kullanıcının FulfillmentCenter ortak modalında düzenlediği değerdir
+    /// (req.Lines[].Qty) — sunucu "kalan miktar" tavanına otomatik kırpmaz (CreateStockIssue ile
+    /// aynı davranış); eksi bakiye SaveDirectDocAsync'in kendi NegativeBalanceGuard'ı (parametre
+    /// açıksa) ile engellenir.
     /// POST /Purchase/FulfillFromStock
-    /// Mantık:
-    ///   1. Şirket parametresinden karşılama deposu/modunu oku.
-    ///   2. Seçili satırların kalan miktarlarını çek.
-    ///   3. Belge tarihine göre FIFO sırala (eski talep önce karşılanır).
-    ///   4. Her kalem için uygun depolardan stok al, bakiyeyi düş.
-    ///   5. CreateStockIssue iç mantığıyla ambar çıkış fişi oluştur + FulfilledFromStock güncelle.
+    /// Kayıt yolu CreateStockIssue ile AYNI (_stockDocRepo.SaveAsync → SaveDirectDocAsync) —
+    /// karşılama defteri dual-write (DocumentLineFulfillment/DocumentLineLink) bu yoldan otomatik
+    /// gelir, burada elle dokunulmaz.
+    /// Onay: yeni Ambar Çıkış Fişi için aktif bir onay akışı varsa TryAutoStartApprovalAsync
+    /// otomatik başlatır (DocumentService.SaveQuoteAsync'teki auto-start ile aynı mantık).
     /// </summary>
     [HttpPost("/Purchase/FulfillFromStock")]
     [ValidateAntiForgeryToken]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseFulfillment)]
     public async Task<IActionResult> FulfillFromStock([FromBody] FulfillFromStockRequest req, CancellationToken ct)
     {
-        if (req?.LineIds == null || req.LineIds.Count == 0)
-            return Json(new { ok = false, error = "Kalem seçilmedi." });
-
-        const string fc = "PURCHASE_FULFILLMENT";
-        var mode   = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_MODE", ct) ?? "SPECIFIC";
-        var idsRaw = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_IDS",  ct) ?? "";
-        var respectMinStock = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.RespectMinStockKey, ct) ?? false;
-
-        List<int>? configuredLocIds = null;
-        if (string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            configuredLocIds = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                     .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
-                                     .Select(int.Parse).ToList();
-            if (configuredLocIds.Count == 0)
+            if (req?.Lines == null || req.Lines.Count == 0)
+                return Json(new { ok = false, error = "Kalem seçilmedi." });
+
+            // Aynı LineId birden fazla kez gönderilmişse miktarları topla (savunma amaçlı).
+            var qtyByLineId = req.Lines
+                .Where(l => l.LineId > 0)
+                .GroupBy(l => l.LineId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+            if (qtyByLineId.Count == 0)
+                return Json(new { ok = false, error = "Kalem seçilmedi." });
+
+            const string fc = "PURCHASE_FULFILLMENT";
+            var mode       = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_MODE", ct) ?? "SPECIFIC";
+            var idsRaw     = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_IDS",  ct) ?? "";
+            var isSpecific = string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase);
+
+            var configuredLocIds = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                         .Select(x => x.Trim()).Where(x => int.TryParse(x, out _))
+                                         .Select(int.Parse).ToList();
+            if (isSpecific && configuredLocIds.Count == 0)
                 return Json(new { ok = false, error = "Karşılama deposu tanımlanmamış. Şirket Ayarları → Satın Alma bölümünden depo seçin." });
-        }
 
-        var s         = _schema.Replace("]", "]]");
-        var paramList = string.Join(",", req.LineIds.Select((_, i) => $"@l{i}"));
+            var s         = _schema.Replace("]", "]]");
+            var lineIds   = qtyByLineId.Keys.ToList();
+            var paramList = string.Join(",", lineIds.Select((_, i) => $"@l{i}"));
 
-        // -- Seçili satırları yükle --
-        var lines = new List<(int LineId, int DocId, int ItemId, int? UnitId, decimal Remaining, decimal FromStock, decimal FromPurch, DateTime DocDate)>();
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = $"""
-                SELECT dl.[Id], dl.[DocumentId], dl.[ItemId], dl.[UnitId],
-                       dl.[Quantity], ISNULL(dl.[FulfilledFromStock],0), ISNULL(dl.[FulfilledByPurchase],0),
-                       ISNULL(d.[DocumentDate], SYSUTCDATETIME())
-                FROM [{s}].[DocumentLine] dl
-                INNER JOIN [{s}].[Document] d ON d.[Id] = dl.[DocumentId]
-                WHERE dl.[Id] IN ({paramList});
-                """;
-            for (var i = 0; i < req.LineIds.Count; i++)
-                cmd.Parameters.Add(new SqlParameter($"@l{i}", req.LineIds[i]));
-
-            await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct))
+            // -- Seçili satırları + talep deposunu yükle. Talep deposu: satır LocationId,
+            //    boşsa belge başlığı LocationId'ye (Hedef Lokasyon) düşer. --
+            var lines = new List<(int LineId, int DocId, int ItemId, int? UnitId, int? CombinationId,
+                                   int? ReqLocationId, string? ReqLocationCode, string? ReqLocationName)>();
+            await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+            await using (var cmd = conn.CreateCommand())
             {
-                var qty       = r.GetDecimal(4);
-                var fromStk   = r.GetDecimal(5);
-                var fromPur   = r.GetDecimal(6);
-                var remaining = Math.Max(0, qty - fromStk - fromPur);
-                lines.Add((r.GetInt32(0), r.GetInt32(1), r.GetInt32(2),
-                           r.IsDBNull(3) ? (int?)null : r.GetInt32(3),
-                           remaining, fromStk, fromPur, r.GetDateTime(7)));
-            }
-        }
+                cmd.CommandText = $"""
+                    SELECT dl.[Id], dl.[DocumentId], dl.[ItemId], dl.[UnitId], dl.[CombinationId],
+                           reqLoc.[Id], reqLoc.[LocationCode], reqLoc.[LocationName]
+                    FROM [{s}].[DocumentLine] dl
+                    INNER JOIN [{s}].[Document] d ON d.[Id] = dl.[DocumentId]
+                    LEFT JOIN [{s}].[Location] reqLoc ON reqLoc.[Id] = COALESCE(dl.[LocationId], d.[LocationId])
+                    WHERE dl.[Id] IN ({paramList});
+                    """;
+                for (var i = 0; i < lineIds.Count; i++)
+                    cmd.Parameters.Add(new SqlParameter($"@l{i}", lineIds[i]));
 
-        if (lines.Count == 0)
-            return Json(new { ok = false, error = "Seçili kalemler bulunamadı." });
-
-        if (lines.All(l => l.Remaining <= 0))
-            return Json(new { ok = false, error = "Seçili kalemlerin tamamı zaten karşılanmış." });
-
-        var guardError = await CheckFulfillmentApprovalGuardAsync(lines.Select(l => l.DocId), ct);
-        if (guardError != null)
-            return Json(new { ok = false, error = guardError });
-
-        // -- Stok bakiyelerini çek --
-        var distinctItemIds = lines.Select(l => l.ItemId).Distinct().ToList();
-        var iParamList      = string.Join(",", distinctItemIds.Select((_, i) => $"@i{i}"));
-        var (seFilter, seParams) = await BuildStockEffectFilterAsync("smd", ct);
-
-        // ITEM_DEFAULT modunda her malzemenin varsayılan deposunu al
-        var itemDefaultLoc = new Dictionary<int, int>(); // itemId → locationId
-        if (!string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase))
-        {
-            await using var cmdDef = conn.CreateCommand();
-            cmdDef.CommandText = $"""
-                SELECT [ItemId], [LocationId]
-                FROM [{s}].[ItemLocation]
-                WHERE [ItemId] IN ({iParamList}) AND [IsDefault] = 1;
-                """;
-            for (var i = 0; i < distinctItemIds.Count; i++)
-                cmdDef.Parameters.Add(new SqlParameter($"@i{i}", distinctItemIds[i]));
-            await using var rDef = await cmdDef.ExecuteReaderAsync(ct);
-            while (await rDef.ReadAsync(ct))
-                itemDefaultLoc[rDef.GetInt32(0)] = rDef.GetInt32(1);
-        }
-
-        // Stok sorgusu — lokasyon filtrelemesi moduna göre yapılır
-        var stockByItemLoc = new Dictionary<int, Dictionary<int, decimal>>(); // itemId → (locId → balance)
-        string locFilter = "";
-        if (string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase) && configuredLocIds != null)
-        {
-            var lParamList = string.Join(",", configuredLocIds.Select((_, i) => $"@loc{i}"));
-            locFilter = $"AND c.[LocId] IN ({lParamList})";
-        }
-
-        await using (var cmd2 = conn.CreateCommand())
-        {
-            cmd2.CommandText = $"""
-                WITH Combined AS (
-                    SELECT sm.[ItemId], sm.[LocationId] AS [LocId], sm.[Quantity] AS [Bal]
-                    FROM [{s}].[DocumentLine] sm
-                    INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
-                    WHERE sm.[ItemId] IN ({iParamList}) AND smd.[IsActive] = 1
-                      AND (sm.[MovementType] = 2 OR (sm.[MovementType] IN (3,4) AND sm.[LocationId] IS NOT NULL)){seFilter}
-
-                    UNION ALL
-
-                    SELECT sm.[ItemId], sm.[FromLocationId] AS [LocId], -sm.[Quantity]
-                    FROM [{s}].[DocumentLine] sm
-                    INNER JOIN [{s}].[Document] smd ON smd.[id] = sm.[DocumentId]
-                    WHERE sm.[ItemId] IN ({iParamList}) AND smd.[IsActive] = 1
-                      AND (sm.[MovementType] = 1 OR (sm.[MovementType] IN (3,4) AND sm.[FromLocationId] IS NOT NULL)){seFilter}
-                )
-                SELECT c.[ItemId], c.[LocId] AS [LocationId], SUM(c.[Bal]) AS [Balance]
-                FROM Combined c
-                WHERE 1=1 {locFilter}
-                GROUP BY c.[ItemId], c.[LocId]
-                HAVING SUM(c.[Bal]) > 0;
-                """;
-            for (var i = 0; i < distinctItemIds.Count; i++)
-                cmd2.Parameters.Add(new SqlParameter($"@i{i}", distinctItemIds[i]));
-            if (string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase) && configuredLocIds != null)
-                for (var i = 0; i < configuredLocIds.Count; i++)
-                    cmd2.Parameters.Add(new SqlParameter($"@loc{i}", configuredLocIds[i]));
-            foreach (var p in seParams) cmd2.Parameters.Add(p);
-
-            await using var r2 = await cmd2.ExecuteReaderAsync(ct);
-            while (await r2.ReadAsync(ct))
-            {
-                var itemId  = r2.GetInt32(0);
-                var locId   = r2.IsDBNull(1) ? 0 : r2.GetInt32(1);
-                var balance = r2.GetDecimal(2);
-                if (!stockByItemLoc.ContainsKey(itemId)) stockByItemLoc[itemId] = new();
-                stockByItemLoc[itemId][locId] = balance;
-            }
-        }
-
-        // ITEM_DEFAULT: sadece varsayılan depoyu bırak
-        if (!string.Equals(mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase))
-        {
-            foreach (var itemId in distinctItemIds)
-            {
-                if (!stockByItemLoc.ContainsKey(itemId)) continue;
-                if (itemDefaultLoc.TryGetValue(itemId, out var defLoc))
+                await using var r = await cmd.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
                 {
-                    var bal = stockByItemLoc[itemId].GetValueOrDefault(defLoc);
-                    stockByItemLoc[itemId] = bal > 0 ? new() { [defLoc] = bal } : new();
+                    lines.Add((
+                        r.GetInt32(0), r.GetInt32(1), r.GetInt32(2),
+                        r.IsDBNull(3) ? (int?)null : r.GetInt32(3),
+                        r.IsDBNull(4) ? (int?)null : r.GetInt32(4),
+                        r.IsDBNull(5) ? (int?)null : r.GetInt32(5),
+                        r.IsDBNull(6) ? null : r.GetString(6),
+                        r.IsDBNull(7) ? null : r.GetString(7)));
                 }
-                else
-                    stockByItemLoc[itemId] = new();
             }
-        }
 
-        // -- Asgari stok koruması (FULFILLMENT_RESPECT_MIN_STOCK) --
-        // Depo bazında asgari (ItemLocation.MinStock) o deponun bakiyesinden düşülür;
-        // genel asgari (Items.MinStock) görünen havuzun toplamından düşülerek malzeme
-        // bazında dağıtım tavanı (itemAllowedTotal) oluşturur.
-        var itemAllowedTotal = new Dictionary<int, decimal>();
-        if (respectMinStock && stockByItemLoc.Count > 0)
-        {
-            var itemMin = new Dictionary<int, decimal>();
-            var locMin  = new Dictionary<(int ItemId, int LocId), decimal>();
-            await using (var cmdMin = conn.CreateCommand())
+            if (lines.Count == 0)
+                return Json(new { ok = false, error = "Seçili kalemler bulunamadı." });
+
+            var guardError = await CheckFulfillmentApprovalGuardAsync(lines.Select(l => l.DocId), ct);
+            if (guardError != null)
+                return Json(new { ok = false, error = guardError });
+
+            // ITEM_DEFAULT modunda her malzemenin varsayılan deposunu çöz (FulfillmentLocationConfig
+            // ile aynı kaynak: ItemLocation.IsDefault).
+            var itemDefaultLoc = new Dictionary<int, int>(); // itemId → locationId
+            if (!isSpecific)
             {
-                cmdMin.CommandText = $"""
-                    SELECT [Id], [MinStock] FROM [{s}].[Items] WHERE [Id] IN ({iParamList}) AND [MinStock] > 0;
-                    SELECT [ItemId], [LocationId], [MinStock] FROM [{s}].[ItemLocation]
-                    WHERE [ItemId] IN ({iParamList}) AND [MinStock] > 0;
+                var distinctItemIds = lines.Select(l => l.ItemId).Distinct().ToList();
+                var iParamList = string.Join(",", distinctItemIds.Select((_, i) => $"@i{i}"));
+                await using var cmdDef = conn.CreateCommand();
+                cmdDef.CommandText = $"""
+                    SELECT [ItemId], [LocationId]
+                    FROM [{s}].[ItemLocation]
+                    WHERE [ItemId] IN ({iParamList}) AND [IsDefault] = 1;
                     """;
                 for (var i = 0; i < distinctItemIds.Count; i++)
-                    cmdMin.Parameters.Add(new SqlParameter($"@i{i}", distinctItemIds[i]));
-                await using var rm = await cmdMin.ExecuteReaderAsync(ct);
-                while (await rm.ReadAsync(ct)) itemMin[rm.GetInt32(0)] = rm.GetDecimal(1);
-                await rm.NextResultAsync(ct);
-                while (await rm.ReadAsync(ct)) locMin[(rm.GetInt32(0), rm.GetInt32(1))] = rm.GetDecimal(2);
+                    cmdDef.Parameters.Add(new SqlParameter($"@i{i}", distinctItemIds[i]));
+                await using var rDef = await cmdDef.ExecuteReaderAsync(ct);
+                while (await rDef.ReadAsync(ct))
+                    itemDefaultLoc[rDef.GetInt32(0)] = rDef.GetInt32(1);
             }
 
-            foreach (var itemId in stockByItemLoc.Keys.ToList())
+            // Karşılama deposu kod etiketleri (mismatch mesajı için) — SPECIFIC: configuredLocIds,
+            // ITEM_DEFAULT: çözülen varsayılan depoların kümesi.
+            var fulfillLocIdsToLabel = isSpecific ? configuredLocIds : itemDefaultLoc.Values.Distinct().ToList();
+            var fulfillLocCodes = new Dictionary<int, string>();
+            if (fulfillLocIdsToLabel.Count > 0)
             {
-                var locs     = stockByItemLoc[itemId];
-                var totalRaw = locs.Values.Sum();
-                foreach (var locId in locs.Keys.ToList())
-                    if (locMin.TryGetValue((itemId, locId), out var lm) && lm > 0)
-                        locs[locId] -= lm;   // negatife düşebilir → dağıtımda avail<=0 zaten atlanır
-                var im = itemMin.GetValueOrDefault(itemId);
-                itemAllowedTotal[itemId] = Math.Max(0m, totalRaw - im);
-            }
-        }
-
-        // -- FIFO dağıtım --
-        // mutableStock: değiştirilebilir kopya
-        var mutableStock = stockByItemLoc.ToDictionary(
-            kv => kv.Key,
-            kv => new Dictionary<int, decimal>(kv.Value));
-
-        // Satırları belge tarihine göre sırala (eski talep önce)
-        var sorted  = lines.OrderBy(l => l.DocDate).ThenBy(l => l.LineId).ToList();
-        var planned = new List<StockIssueLineRequest>();
-        var results = new List<object>();
-
-        foreach (var line in sorted)
-        {
-            if (line.Remaining <= 0)
-            {
-                results.Add(new { lineId = line.LineId, fulfilled = 0m, note = "Zaten karşılanmış" });
-                continue;
-            }
-            if (!mutableStock.TryGetValue(line.ItemId, out var locMap) || locMap.Values.All(b => b <= 0))
-            {
-                results.Add(new { lineId = line.LineId, fulfilled = 0m, note = "Stok yok" });
-                continue;
+                var lParamList = string.Join(",", fulfillLocIdsToLabel.Select((_, i) => $"@fl{i}"));
+                await using var cmdLoc = conn.CreateCommand();
+                cmdLoc.CommandText = $"SELECT [Id], [LocationCode] FROM [{s}].[Location] WHERE [Id] IN ({lParamList});";
+                for (var i = 0; i < fulfillLocIdsToLabel.Count; i++)
+                    cmdLoc.Parameters.Add(new SqlParameter($"@fl{i}", fulfillLocIdsToLabel[i]));
+                await using var rLoc = await cmdLoc.ExecuteReaderAsync(ct);
+                while (await rLoc.ReadAsync(ct))
+                    fulfillLocCodes[rLoc.GetInt32(0)] = rLoc.IsDBNull(1) ? $"#{rLoc.GetInt32(0)}" : rLoc.GetString(1);
             }
 
-            decimal toFulfill = line.Remaining;
-            decimal fulfilled = 0;
-            // Yüksek bakiyeli depodan başla
-            foreach (var locId in locMap.Keys.OrderByDescending(k => locMap[k]).ToList())
+            var planned = new List<StockIssueLineRequest>();
+            var results = new List<object>();
+
+            // Bulunamayan LineId'ler (geçersiz/stale) — sessizce atlamak yerine açıkça bildir.
+            var foundLineIds = lines.Select(l => l.LineId).ToHashSet();
+            foreach (var missingId in lineIds.Where(id => !foundLineIds.Contains(id)))
+                results.Add(new { lineId = missingId, matched = false, fulfilled = 0m, reason = "Kalem bulunamadı." });
+
+            // -- Depo eşleşmesi: kalem bazında karar (stok bakiyesi sorgulanmaz) --
+            foreach (var line in lines)
             {
-                if (toFulfill <= 0) break;
-                var avail = locMap[locId];
-                if (avail <= 0) continue;
-                var take = Math.Min(toFulfill, avail);
-                // Genel asgari stok tavanı (parametre açıksa) — malzeme bazında kalan izin
-                if (respectMinStock && itemAllowedTotal.TryGetValue(line.ItemId, out var capLeft))
+                var qty = qtyByLineId.GetValueOrDefault(line.LineId);
+                if (qty <= 0)
                 {
-                    if (capLeft <= 0) break;
-                    take = Math.Min(take, capLeft);
-                    itemAllowedTotal[line.ItemId] = capLeft - take;
+                    results.Add(new { lineId = line.LineId, matched = false, fulfilled = 0m, reason = "Miktar sıfır veya negatif olamaz." });
+                    continue;
                 }
+                if (!line.ReqLocationId.HasValue)
+                {
+                    results.Add(new { lineId = line.LineId, matched = false, fulfilled = 0m, reason = "İhtiyaç kaydında depo belirtilmemiş." });
+                    continue;
+                }
+
+                bool matched;
+                string fulfillLabel;
+                if (isSpecific)
+                {
+                    matched      = configuredLocIds.Contains(line.ReqLocationId.Value);
+                    fulfillLabel = string.Join(", ", configuredLocIds.Select(id => fulfillLocCodes.GetValueOrDefault(id, $"#{id}")));
+                }
+                else if (itemDefaultLoc.TryGetValue(line.ItemId, out var defLoc))
+                {
+                    matched      = defLoc == line.ReqLocationId.Value;
+                    fulfillLabel = fulfillLocCodes.GetValueOrDefault(defLoc, $"#{defLoc}");
+                }
+                else
+                {
+                    results.Add(new { lineId = line.LineId, matched = false, fulfilled = 0m, reason = "Malzemenin varsayılan deposu tanımlı değil." });
+                    continue;
+                }
+
+                if (!matched)
+                {
+                    var reqLabel = line.ReqLocationCode ?? line.ReqLocationName ?? $"#{line.ReqLocationId}";
+                    results.Add(new
+                    {
+                        lineId    = line.LineId,
+                        matched   = false,
+                        fulfilled = 0m,
+                        reason    = $"Talep deposu ({reqLabel}) karşılama deposundan ({fulfillLabel}) farklı.",
+                    });
+                    continue;
+                }
+
                 planned.Add(new StockIssueLineRequest(
                     ItemId:         line.ItemId,
                     UnitId:         line.UnitId,
-                    Qty:            take,
-                    FromLocationId: locId,
-                    CombinationId:  null,
+                    Qty:            qty,
+                    FromLocationId: line.ReqLocationId.Value,
+                    CombinationId:  line.CombinationId,
                     Notes:          null,
                     RequestLineId:  line.LineId));
-                mutableStock[line.ItemId][locId] -= take;
-                fulfilled += take;
-                toFulfill -= take;
+                results.Add(new { lineId = line.LineId, matched = true, fulfilled = qty, reason = (string?)null });
             }
 
-            var note = fulfilled >= line.Remaining
-                ? "Tamamen karşılandı"
-                : $"Kısmen ({fulfilled:F2}/{line.Remaining:F2})";
-            results.Add(new { lineId = line.LineId, fulfilled, note });
+            if (planned.Count == 0)
+                return Json(new { ok = true, docNo = (string?)null, approvalStarted = false, results });
+
+            // -- Ambar Çıkış Fişi oluştur (CreateStockIssue ile AYNI kayıt yolu) + FulfilledFromStock güncelle --
+            var docIds = lines.Select(l => l.DocId).Distinct().ToList();
+            string? refNo = null;
+            foreach (var docId in docIds)
+            {
+                var doc = await _documentService.GetQuoteByIdAsync(docId, ct);
+                if (doc != null) refNo = (refNo == null ? "" : refNo + ", ") + doc.DocumentNumber;
+            }
+
+            var allLines = new Dictionary<int, DocumentLineDto>();
+            foreach (var docId in docIds)
+            {
+                var lines3 = await _documentService.GetQuoteLinesAsync(docId, ct);
+                foreach (var l in lines3) allLines[l.Id] = l;
+            }
+
+            var byLineId = planned.GroupBy(l => l.RequestLineId!.Value)
+                                  .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
+            var pendingEntries = byLineId
+                .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.StockIssue, kv.Value))
+                .ToList();
+
+            var saveReq = new SaveStockDocRequest(
+                Id:             null,
+                DocType:        "STOCK_OUT",
+                DocNo:          null,
+                DocDate:        DateTime.Today,
+                FromLocationId: null,
+                ToLocationId:   null,
+                RefNo:          refNo,
+                Notes:          req.Notes,
+                Lines:          planned.Select(l => new SaveStockDocLineRequest(
+                                    Id:             null,
+                                    ItemId:         l.ItemId,
+                                    MaterialCode:   null,
+                                    MaterialName:   null,
+                                    UnitId:         l.UnitId,
+                                    Qty:            l.Qty,
+                                    CombinationId:  l.CombinationId,
+                                    Notes:          l.Notes,
+                                    FromLocationId: l.FromLocationId,
+                                    ToLocationId:   null,
+                                    UnitCost:       null)).ToList(),
+                ArgeProjectId:  null);
+
+            var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct, pendingEntries);
+
+            // Belge soyağacı: Ambar Çıkış Fişi ← kaynak İhtiyaç belge(ler)i
+            await LinkFulfillmentSourcesAsync(newDocId, docIds, ct);
+
+            // Onay: depo_cikis için aktif akış varsa otomatik başlat (bkz. metot/helper XML doc'u).
+            var approvalStarted = await TryAutoStartApprovalAsync(newDocId, "depo_cikis", ct);
+
+            // İşlem logu (Madde 3, 2026-07-20) — bkz. CreateTransfer'daki gerekçe.
+            if (allLines.Count > 0)
+                await _documentService.LogFulfillmentAuditAsync(allLines, $"Depodan karşılama #{docNo}", ct);
+
+            return Json(new { ok = true, docNo, approvalStarted, results });
         }
-
-        if (planned.Count == 0)
-            return Json(new { ok = false, error = "Yeterli stok bulunamadı — hiçbir kalem karşılanamadı." });
-
-        // -- Stok fişi oluştur ve FulfilledFromStock güncelle --
-        var docIds = lines.Select(l => l.DocId).Distinct().ToList();
-        string? refNo = null;
-        foreach (var docId in docIds)
+        catch (CalibraHub.Domain.Exceptions.NegativeBalanceException nbex)
         {
-            var doc = await _documentService.GetQuoteByIdAsync(docId, ct);
-            if (doc != null) refNo = (refNo == null ? "" : refNo + ", ") + doc.DocumentNumber;
+            return Json(new { ok = false, error = nbex.Message });
         }
-
-        // İşlem logu (Madde 3) için mutasyondan ÖNCEki satır snapshot'ı — aynı zamanda
-        // Madde 2 entries validity filtresi de bu koleksiyona taşınabilirdi ama lineMap
-        // (aşağıda) zaten aynı işi görüyor; ikisi paralel tutuldu (lineMap = ham sorgu,
-        // allLines = DTO/MaterialName — audit mesajı için).
-        var allLines = new Dictionary<int, DocumentLineDto>();
-        foreach (var docId in docIds)
+        catch (InvalidOperationException ioex)
         {
-            var lines3 = await _documentService.GetQuoteLinesAsync(docId, ct);
-            foreach (var l in lines3) allLines[l.Id] = l;
+            // Lot zorunluluğu / lot bakiyesi doğrulama mesajları kullanıcıya aynen gösterilir.
+            return Json(new { ok = false, error = ioex.Message });
         }
-
-        // FulfilledFromStock güncelle — Madde 2: entries belge kaydından ÖNCE hazırlanır
-        // (newDocId henüz yok), SaveAsync'e verilir, repo belgenin kendi transaction'ı İÇİNDE
-        // yazar (bkz. CreateTransfer'daki gerekçe). lineMap = üstteki `lines` sorgusu (bu
-        // metodun başında yüklendi) — geçerlilik filtresi.
-        var lineMap = lines.ToDictionary(l => l.LineId);
-        var byLineId = planned.GroupBy(l => l.RequestLineId!.Value)
-                              .ToDictionary(g => g.Key, g => g.Sum(l => l.Qty));
-        var pendingEntries = byLineId
-            .Where(kv => lineMap.ContainsKey(kv.Key))
-            .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.StockIssue, kv.Value))
-            .ToList();
-
-        var saveReq = new SaveStockDocRequest(
-            Id:             null,
-            DocType:        "STOCK_OUT",
-            DocNo:          null,
-            DocDate:        DateTime.Today,
-            FromLocationId: null,
-            ToLocationId:   null,
-            RefNo:          refNo,
-            Notes:          req.Notes,
-            Lines:          planned.Select(l => new SaveStockDocLineRequest(
-                                Id:             null,
-                                ItemId:         l.ItemId,
-                                MaterialCode:   null,
-                                MaterialName:   null,
-                                UnitId:         l.UnitId,
-                                Qty:            l.Qty,
-                                CombinationId:  l.CombinationId,
-                                Notes:          l.Notes,
-                                FromLocationId: l.FromLocationId,
-                                ToLocationId:   null,
-                                UnitCost:       null)).ToList(),
-            ArgeProjectId:  null);
-
-        var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct, pendingEntries);
-
-        // Belge soyağacı: FIFO ambar çıkış fişi ← kaynak İhtiyaç belge(ler)i
-        await LinkFulfillmentSourcesAsync(newDocId, docIds, ct);
-
-        // İşlem logu (Madde 3, 2026-07-20) — bkz. CreateTransfer'daki gerekçe.
-        if (allLines.Count > 0)
-            await _documentService.LogFulfillmentAuditAsync(allLines, $"Depodan otomatik karşılama #{docNo}", ct);
-
-        return Json(new { ok = true, docNo, results });
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "FulfillFromStock: Depodan karşılama sırasında beklenmeyen hata.");
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
+        }
     }
 
     /// <summary>

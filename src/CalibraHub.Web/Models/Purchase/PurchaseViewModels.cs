@@ -91,9 +91,18 @@ public sealed record PurchaseDemandLineInput(
     string? Notes = null);
 
 /// <summary>
-/// Depodan Karşıla — seçili ihtiyaç kalemlerini FIFO stok dağıtımıyla karşıla.
+/// Depodan Karşıla (2026-07-21 revizyonu) — seçili ihtiyaç kalemlerini, karşılama deposu
+/// (parametre: FULFILLMENT_LOCATION_MODE/IDS) ile ihtiyaç kaydı deposu AYNIYSA Ambar Çıkış
+/// Fişi (depo_cikis) oluşturarak karşılar. Stok bakiyesi bu eşleşmede KULLANILMAZ — yalnız
+/// depo Id/Code eşleşmesi (bkz. PurchaseController.FulfillFromStock XML doc'u).
 /// POST /Purchase/FulfillFromStock
+/// Qty = kullanıcının FulfillmentCenter ortak modalında satır bazlı düzenlediği miktar
+/// (eski FIFO'nun aksine sunucu otomatik dağıtım yapmaz).
 /// </summary>
 public sealed record FulfillFromStockRequest(
-    IReadOnlyList<int> LineIds,
+    IReadOnlyList<FulfillFromStockLineRequest> Lines,
     string?            Notes);
+
+public sealed record FulfillFromStockLineRequest(
+    int     LineId,
+    decimal Qty);
