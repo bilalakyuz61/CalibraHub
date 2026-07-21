@@ -1237,6 +1237,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var typesForHierarchy = await _repository.GetLocationTypesAsync(cancellationToken);
         ValidateLocationTypeHierarchy(locationTypeCode, request.ParentId, locations, typesForHierarchy);
 
+        // Alt Kirilimlar Tek Turde: parent IsSingleChildType ise yeni kayit mevcut
+        // kardeslerinin tipiyle eslesmeli (ilk cocuk serbest).
+        ValidateSingleChildTypeConstraint(locationTypeCode, request.ParentId, excludeLocationId: null, locations, typesForHierarchy);
+
         if (locations.Any(x => string.Equals(x.LocationCode, locationCode, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Ayni lokasyon kodu ile kayit zaten mevcut.");
@@ -1331,6 +1335,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var typesForHierarchyU = await _repository.GetLocationTypesAsync(cancellationToken);
         ValidateLocationTypeHierarchy(locationTypeCode, request.ParentId, locations, typesForHierarchyU);
 
+        // Alt Kirilimlar Tek Turde: hem tasima (yeni parent) hem tip degisikligi bu tek
+        // fonksiyonla kapsanir — yeni (parent,tip) kombinasyonu hedef parent'in mevcut
+        // kardesleriyle (kendisi haric) cakismamali.
+        ValidateSingleChildTypeConstraint(locationTypeCode, request.ParentId, excludeLocationId: request.Id, locations, typesForHierarchyU);
+
         // Bu lokasyonun kendi child'lari icin de kontrol: eger tipi degistirilirse,
         // child'larin tipinin sortOrder'i bu yeni tipinkinden buyuk olmali.
         var directChildren = locations.Where(x => x.ParentId == request.Id).ToList();
@@ -1353,6 +1362,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 }
             }
         }
+
+        // Alt Kirilimlar Tek Turde bayragi FALSE->TRUE aciliyorsa, mevcut aktif cocuklar
+        // bayrak kapaliyken zaten karisik tipte eklenmis olabilir — bayrak "yalan" soylemesin.
+        ValidateSingleChildTypeToggle(request.Id, existingLocation.IsSingleChildType, request.IsSingleChildType, locations, typesForHierarchyU);
 
         if (locations.Any(x =>
                 x.Id != request.Id &&
@@ -1472,6 +1485,84 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 $"'{childType.Name}' tipindeki bir lokasyon '{parentType.Name}' (parent: {parentLabel}) altina eklenemez. " +
                 $"Hiyerarsi: child tipi parent tipinden daha alt seviyede olmalidir.");
         }
+    }
+
+    /// <summary>
+    /// "Alt Kırılımlar Tek Türde" (IsSingleChildType) kuralı: parent bu bayrakla işaretliyse,
+    /// altındaki tüm AKTİF çocuklar aynı LocationTypeCode'a sahip olmak zorundadır — ilk çocuk
+    /// serbesttir (tipi o belirler), sonraki her ekleme/taşıma/tip değişikliği bu tiple eşleşmeli.
+    /// Karşılaştırma tip KODU üzerinden yapılır (ad değil). excludeLocationId, update sırasında
+    /// düzenlenen kaydın kendisini sibling kümesinden çıkarmak için kullanılır (kendi eski tipiyle
+    /// kendine çakışma raporlamasın).
+    /// </summary>
+    private static void ValidateSingleChildTypeConstraint(
+        string childTypeCode,
+        int? parentLocationId,
+        int? excludeLocationId,
+        IReadOnlyCollection<Location> locations,
+        IReadOnlyCollection<LocationType> types)
+    {
+        if (!parentLocationId.HasValue || parentLocationId.Value <= 0) return;
+        if (string.IsNullOrWhiteSpace(childTypeCode)) return;
+
+        var parent = locations.FirstOrDefault(x => x.Id == parentLocationId.Value);
+        if (parent is null || !parent.IsSingleChildType) return;
+
+        // Mevcut aktif kardeşlerden (kendisi hariç) yeni tiple çakışan ilk kayıt — varsa
+        // parent zaten homojen bir tip belirlemiş demektir, yeni/taşınan kayıt onunla eşleşmeli.
+        var conflictingSiblingTypeCode = locations
+            .Where(x => x.ParentId == parentLocationId.Value && x.IsActive)
+            .Where(x => !excludeLocationId.HasValue || x.Id != excludeLocationId.Value)
+            .Select(x => x.LocationTypeCode)
+            .FirstOrDefault(code => !string.Equals(code, childTypeCode, StringComparison.OrdinalIgnoreCase));
+
+        if (conflictingSiblingTypeCode is null) return; // hiç kardeş yok veya hepsi zaten aynı tip
+
+        var parentLabel = string.IsNullOrWhiteSpace(parent.LocationName) ? parent.LocationCode : parent.LocationName;
+        var existingTypeName = types.FirstOrDefault(t =>
+            string.Equals(t.Code, conflictingSiblingTypeCode, StringComparison.OrdinalIgnoreCase))?.Name
+            ?? conflictingSiblingTypeCode;
+
+        throw new ArgumentException(
+            $"'{parentLabel}' lokasyonu 'Alt Kırılımlar Tek Türde' olarak işaretli — altına yalnız " +
+            $"'{existingTypeName}' tipinde kırılım eklenebilir.");
+    }
+
+    /// <summary>
+    /// Bir lokasyonun "Alt Kırılımlar Tek Türde" (IsSingleChildType) bayrağı FALSE'tan TRUE'ya
+    /// çevriliyorsa, mevcut AKTİF çocukları bayrak henüz kapalıyken karışık tiplerde eklenmiş
+    /// olabilir. Bayrak "yalan söylemesin" diye, açılış anında çocuklar zaten homojen değilse
+    /// reddedilir. Yalnızca FALSE→TRUE geçişinde çalışır; TRUE→FALSE (gevşetme) veya değişmeyen
+    /// değer serbesttir.
+    /// </summary>
+    private static void ValidateSingleChildTypeToggle(
+        int locationId,
+        bool wasSingleChildType,
+        bool isSingleChildType,
+        IReadOnlyCollection<Location> locations,
+        IReadOnlyCollection<LocationType> types)
+    {
+        if (wasSingleChildType || !isSingleChildType) return;
+
+        var distinctChildTypeCodes = locations
+            .Where(x => x.ParentId == locationId && x.IsActive)
+            .Select(x => x.LocationTypeCode)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (distinctChildTypeCodes.Count <= 1) return;
+
+        var typeNames = distinctChildTypeCodes.Select(code =>
+            types.FirstOrDefault(t => string.Equals(t.Code, code, StringComparison.OrdinalIgnoreCase))?.Name ?? code);
+
+        var self = locations.FirstOrDefault(x => x.Id == locationId);
+        var selfLabel = self is null
+            ? locationId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : (string.IsNullOrWhiteSpace(self.LocationName) ? self.LocationCode : self.LocationName);
+
+        throw new ArgumentException(
+            $"'{selfLabel}' lokasyonunun altında birden fazla türde kırılım var ({string.Join(", ", typeNames)}) " +
+            $"— önce alt kırılımları tek türe indirin.");
     }
 
     /// <summary>
