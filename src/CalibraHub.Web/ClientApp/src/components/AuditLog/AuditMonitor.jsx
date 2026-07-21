@@ -255,17 +255,23 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
           { id: 'title', label: 'Kayıt' }, { id: 'changes', label: 'Değişiklikler' },
           { id: 'detail', label: 'Detay' }, { id: 'ip', label: 'IP' }, { id: 'src', label: 'Kaynak' },
         ],
-        rows: rows.map(e => ({
-          ts: formatTs(e.ts),
-          user: e.user || '',
-          action: e.actionLabel || e.action,
-          entity: e.entityLabel || e.entity || '',
-          title: e.title || (e.entityId ? '#' + e.entityId : ''),
-          changes: (e.changes || []).map(c => c.label + ': ' + (c.old ?? '—') + ' → ' + (c.new ?? '—')).join('; '),
-          detail: e.detail || '',
-          ip: e.ip || '',
-          src: e.src || '',
-        })),
+        rows: rows.map(e => {
+          const rowIsInsert = (e.action || '').toLowerCase() === 'insert'
+          return {
+            ts: formatTs(e.ts),
+            user: e.user || '',
+            action: e.actionLabel || e.action,
+            entity: e.entityLabel || e.entity || '',
+            title: e.title || (e.entityId ? '#' + e.entityId : ''),
+            // Ekleme kayıtlarında "eski değer" olmaz — yalnız alınan değer yazılır.
+            changes: (e.changes || []).map(c => rowIsInsert
+              ? (c.label + ': ' + (c.new ?? '—'))
+              : (c.label + ': ' + (c.old ?? '—') + ' → ' + (c.new ?? '—'))).join('; '),
+            detail: e.detail || '',
+            ip: e.ip || '',
+            src: e.src || '',
+          }
+        }),
       }
       const ti = document.querySelector('input[name="__RequestVerificationToken"]')
       const token = ti ? ti.value : ''
@@ -465,6 +471,8 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
                 const open = expanded === key
                 const meta = ACTION_META[(e.action || '').toLowerCase()] || ACTION_META.event
                 const hasChanges = e.changes && e.changes.length > 0
+                // Ekleme kaydında "eski değer" kavramı yok (kayıt yeni oluşturuldu) — yalnız alınan değer gösterilir.
+                const isInsert = (e.action || '').toLowerCase() === 'insert'
                 return (
                   <React.Fragment key={key}>
                     <tr className={'al-row' + (open ? ' is-open' : '')}
@@ -503,15 +511,25 @@ export default function AuditMonitor({ apiBase = '/AuditLog' }) {
                             {hasChanges ? (
                               <table className="al-diff-table">
                                 <thead>
-                                  <tr><th>Alan</th><th>Eski Değer</th><th /><th>Yeni Değer</th></tr>
+                                  {isInsert ? (
+                                    <tr><th>Alan</th><th>Değer</th></tr>
+                                  ) : (
+                                    <tr><th>Alan</th><th>Eski Değer</th><th /><th>Yeni Değer</th></tr>
+                                  )}
                                 </thead>
                                 <tbody>
                                   {e.changes.map((c, ci) => (
                                     <tr key={ci}>
                                       <td className="al-diff-field">{c.label || c.field}</td>
-                                      <td>{c.old != null && c.old !== '' ? <span className="al-diff-old">{c.old}</span> : <span className="al-diff-empty">boş</span>}</td>
-                                      <td className="al-trail-arrow">→</td>
-                                      <td>{c.new != null && c.new !== '' ? <span className="al-diff-new">{c.new}</span> : <span className="al-diff-empty">boş</span>}</td>
+                                      {isInsert ? (
+                                        <td>{c.new != null && c.new !== '' ? <span className="al-diff-new">{c.new}</span> : <span className="al-diff-empty">boş</span>}</td>
+                                      ) : (
+                                        <>
+                                          <td>{c.old != null && c.old !== '' ? <span className="al-diff-old">{c.old}</span> : <span className="al-diff-empty">boş</span>}</td>
+                                          <td className="al-trail-arrow">→</td>
+                                          <td>{c.new != null && c.new !== '' ? <span className="al-diff-new">{c.new}</span> : <span className="al-diff-empty">boş</span>}</td>
+                                        </>
+                                      )}
                                     </tr>
                                   ))}
                                 </tbody>

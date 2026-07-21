@@ -79,6 +79,7 @@ export default function AuditTrailPanel({ entity, recordId, widgetFormCode, apiB
           <div className="al-trail-list">
             {visible.map((e, i) => {
               const meta = ACTION_META[(e.action || '').toLowerCase()] || ACTION_META.event
+              const isInsert = (e.action || '').toLowerCase() === 'insert'
               return (
                 <div className="al-trail-item" key={e.ts + '|' + i}>
                   <span className={'al-trail-dot al-trail-dot--' + meta.dot} />
@@ -96,10 +97,14 @@ export default function AuditTrailPanel({ entity, recordId, widgetFormCode, apiB
                         {e.changes.map((c, ci) => (
                           <div className="al-trail-chg" key={ci}>
                             <span className="al-trail-chg-label">{c.label || c.field}</span>
-                            {c.old != null && c.old !== ''
-                              ? <span className="al-diff-old">{c.old}</span>
-                              : <span className="al-diff-empty">boş</span>}
-                            <span className="al-trail-arrow">→</span>
+                            {!isInsert && (
+                              <>
+                                {c.old != null && c.old !== ''
+                                  ? <span className="al-diff-old">{c.old}</span>
+                                  : <span className="al-diff-empty">boş</span>}
+                                <span className="al-trail-arrow">→</span>
+                              </>
+                            )}
                             {c.new != null && c.new !== ''
                               ? <span className="al-diff-new">{c.new}</span>
                               : <span className="al-diff-empty">boş</span>}
