@@ -39,6 +39,7 @@ public sealed class PurchaseController : Controller
     private readonly ICompanyParameterService _companyParams;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IUserSettingRepository _userSettingRepo;
+    private readonly ILogger<PurchaseController> _logger;
     private readonly string _schema;
     private const string FlatColCfgKey = "ui.fc3.col-cfg-flat";
 
@@ -53,8 +54,10 @@ public sealed class PurchaseController : Controller
         ICompanyParameterService companyParams,
         SqlServerConnectionFactory connectionFactory,
         IUserSettingRepository userSettingRepo,
-        CalibraDatabaseOptions dbOptions)
+        CalibraDatabaseOptions dbOptions,
+        ILogger<PurchaseController> logger)
     {
+        _logger = logger;
         _documentService   = documentService;
         _documentRepo      = documentRepo;
         _documentTypeRepo  = documentTypeRepo;
@@ -1857,9 +1860,9 @@ public sealed class PurchaseController : Controller
             var closed = await _documentRepo.CloseLineFulfillmentAsync(req.LineIds, ct);
             return Json(new { ok = true, closed });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Bu controller'da logger yok (mevcut desen); ic detay istemciye sizdirilmez.
+            _logger.LogError(ex, "[Fulfillment.CloseLines] Kalem kapatma başarısız. LineIds: {LineIds}", string.Join(",", req.LineIds));
             return Json(new { ok = false, error = "Kalemler kapatılamadı." });
         }
     }
