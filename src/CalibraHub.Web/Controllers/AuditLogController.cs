@@ -231,7 +231,14 @@ public sealed class AuditLogController : Controller
         entityLabel = AuditFieldLabels.EntityLabel(e.Entity),
         entityId = e.EntityId,
         title = e.Title,
-        changes = e.Changes?.Select(c => new { field = c.Field, label = c.Label ?? c.Field, old = c.Old, @new = c.New }),
+        // 2026-07-21 (PageComment Seq 20 geri bildirimi): etiket+değer çevirisi TEK noktadan
+        // (AuditFieldLabels.ResolveChange) — hem eksik Türkçe etiketleri hem ham enum/bool
+        // değerlerini görüntüleme anında çözer, eski log kayıtları da otomatik düzelir.
+        changes = e.Changes?.Select(c =>
+        {
+            var (label, oldVal, newVal) = AuditFieldLabels.ResolveChange(e.Entity, e.Src, c);
+            return new { field = c.Field, label, old = oldVal, @new = newVal };
+        }),
         detail = e.Detail,
         ip = e.Ip,
         src = e.Src,

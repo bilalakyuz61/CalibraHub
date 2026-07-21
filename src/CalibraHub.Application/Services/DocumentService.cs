@@ -1116,6 +1116,64 @@ public sealed class DocumentService : IDocumentService
     public Task<int?> ReviseLineAsync(int parentLineId, string? description, CancellationToken ct)
         => _repo.ReviseLineAsync(parentLineId, description, ct);
 
+    /// <summary>Bkz. IDocumentService.CopyDocumentAsync KDoc'u.</summary>
+    public async Task<(bool Success, string? Error, DocumentDto? NewDocument)> CopyDocumentAsync(
+        int sourceId, int? createdById, string? startedByUser, CancellationToken ct)
+    {
+        var source = await GetQuoteByIdAsync(sourceId, ct);
+        if (source is null) return (false, "Kopyalanacak belge bulunamadı.", null);
+
+        var sourceLines = await GetQuoteLinesAsync(sourceId, ct);
+        if (sourceLines.Count == 0) return (false, "Kalemsiz belge kopyalanamaz.", null);
+
+        var lineRequests = sourceLines
+            .OrderBy(l => l.LineNo)
+            .Select(l => new SaveDocumentLineRequest(
+                Id: null,
+                ItemId: l.ItemId,
+                UnitId: l.UnitId,
+                Quantity: l.Quantity,
+                UnitPrice: l.UnitPrice,
+                DiscountRate: l.DiscountRate,
+                CombinationId: l.CombinationId,
+                LocationId: l.LocationId,
+                Notes: l.Notes,
+                CombinationDetails: l.CombinationDetails?.Select(d => new SaveQuoteLineDetailItem(
+                    d.FeatureName, null, d.ValueCode, d.ValueName, d.Description, d.LineOrder)).ToList(),
+                TrackCombinations: l.CombinationId.HasValue,
+                NotesPinned: l.NotesPinned,
+                RevisedFromId: null,
+                Serials: null))
+            .ToList();
+
+        var request = new SaveDocumentRequest(
+            Id: null,
+            DocumentDate: DateTime.Today,
+            ValidUntil: source.ValidUntil,
+            ContactId: source.ContactId,
+            ContactName: source.ContactName,
+            ContactAddress: source.ContactAddress,
+            SalesRepId: source.SalesRepId,
+            CurrencyId: source.CurrencyId,
+            DiscountRate: source.DiscountRate,
+            TaxRate: source.TaxRate,
+            PaymentTerms: source.PaymentTerms,
+            DeliveryTerms: source.DeliveryTerms,
+            DeliveryAddress: source.DeliveryAddress,
+            Notes: source.Notes,
+            Lines: lineRequests,
+            ContactCode: source.ContactCode,
+            DocumentTypeId: source.DocumentTypeId,
+            DeliveryDate: source.DeliveryDate,
+            DeliveryDays: source.DeliveryDays,
+            RequesterPersonnelId: source.RequesterPersonnelId,
+            FromRequestId: null,
+            LocationId: source.LocationId);
+
+        var (success, error, newDoc, _) = await SaveQuoteAsync(request, createdById, startedByUser, ct);
+        return (success, error, newDoc);
+    }
+
     /// <summary>
     /// Satirin bagli oldugu belge Id'si — repository'ye delege eder. Yetkilendirme
     /// amacli (satir-bazli endpoint'te izin BELGE tipinden cozulur).

@@ -117,4 +117,24 @@ public interface IDocumentService
     /// </summary>
     Task LogFulfillmentAuditAsync(
         IReadOnlyDictionary<int, DocumentLineDto> oldLinesById, string detail, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-07-21 (PageComment Seq 19) — Belge kopyalama: kaynak belgenin başlığı ve
+    /// kalemleri (+ kalem detayları) yeni bir Draft belgeye klonlanır. <see cref="SaveQuoteAsync"/>'in
+    /// yeni-kayıt (Id=null) yolunu AYNEN kullanır — ikinci bir insert yolu icat edilmez; bu sayede
+    /// yeni DocumentNumber (numaralandırma servisinden), Status=Draft, audit LogInsert, kit
+    /// snapshot ve onay akışı otomatik başlatma davranışları TUTARLI kalır (tek kaynak).
+    /// Karşılama/rezervasyon/seri/DocumentLineLink verileri KOPYALANMAZ: <see cref="SaveDocumentLineRequest"/>
+    /// bu alanları zaten taşımaz (Id=null → satır fresh INSERT olur, Fulfilled*/FulfillmentStatus
+    /// domain'de 0 başlar) ve <c>Serials</c> bilinçli olarak null verilir (seri rezervasyonu
+    /// tetiklenmez). DocumentDate=bugün; diğer başlık alanları (ValidUntil, DeliveryDate, ödeme/
+    /// teslim şartları, notlar, cari/lokasyon/temsilci...) kaynaktan BİREBİR taşınır. document_source
+    /// köprüsü KURULMAZ (FromRequestId=null) — kopya, kaynağın "türevi" değil bağımsız bir belgedir.
+    /// Widget/EAV (Ek Alanlar) değerlerinin kopyalanması bu metotta YAPILMAZ — <see cref="ReviseLineAsync"/>
+    /// ile aynı sebep (form şeması dinamik, IWidgetRepository controller katmanında) controller
+    /// IWidgetRepository.CopyValuesAsync ile header + her satır için ayrıca kopyalar.
+    /// Kaynak bulunamazsa veya kalemsizse (false, mesaj, null) döner.
+    /// </summary>
+    Task<(bool Success, string? Error, DocumentDto? NewDocument)> CopyDocumentAsync(
+        int sourceId, int? createdById, string? startedByUser, CancellationToken ct);
 }
