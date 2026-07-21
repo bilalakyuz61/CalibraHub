@@ -55,7 +55,7 @@ import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } fr
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
-import { getTopBody } from '../../utils/topPortal'
+import { getTopBody, getTopFrameOffset, getTopViewportSize } from '../../utils/topPortal'
 
 /* ── Per-sutun render yardimcilari — align/pin/font tum hucre tiplerinde ortak ── */
 function tdStyleFor(column) {
@@ -92,10 +92,14 @@ var PREFERS_REDUCED_MOTION = (function () {
  * kenariyla hizali. Viewport altta yer yoksa yukari acilir (ters); solda
  * tasma olacaksa sol kenara sabitlenir — hicbir zaman viewport disina
  * tasmaz ("satirdan/viewport'tan taşmasın" kurali).
+ *
+ * btnRect/menuRect ve vw/vh AYNI koordinat uzayinda olmalidir — cagiran
+ * (asagidaki useLayoutEffect) btnRect'i getTopFrameOffset() ile window.top
+ * uzayina cevirir ve vw/vh'i getTopViewportSize()'dan verir, cunku menu
+ * getTopBody() araciligiyla window.top govdesine portallanir (bkz. 2026-07-21,
+ * PageComment Seq 19 — iframe offset duzeltmesi, dosya ustu topPortal.js kdoc'u).
  */
-function computeMenuPlacement(btnRect, menuRect) {
-  var vw = window.innerWidth
-  var vh = window.innerHeight
+function computeMenuPlacement(btnRect, menuRect, vw, vh) {
   var margin = 8
   var gap = 6
 
@@ -458,9 +462,25 @@ export default function SmartTableRow(props) {
     var btn = menuBtnRef.current
     var menuEl = menuRef.current
     if (!btn || !menuEl) return undefined
-    var btnRect = btn.getBoundingClientRect()
+    // btn, bu bilesenin CALISTIGI dokumanda (workspace tab iframe'i) olculur —
+    // getBoundingClientRect iframe-local koordinat doner. menuEl ise getTopBody()
+    // ile window.top govdesine PORTALLANMIS bir node — getBoundingClientRect'i
+    // zaten window.top viewport'una gore doner (kendi dokumaninin metodu).
+    // Ikisini AYNI uzayda kiyaslayabilmek icin btn dikdortgeni, iframe'in top
+    // penceredeki offset'i (Sidebar genisligi + header/tab-bar yuksekligi) kadar
+    // kaydirilir — aksi halde menu, butonun gercek ekran konumundan o offset
+    // kadar sola/yukari kaymis acilirdi (2026-07-21, PageComment Seq 19).
+    var rawBtnRect = btn.getBoundingClientRect()
+    var frameOffset = getTopFrameOffset()
+    var btnRect = {
+      top: rawBtnRect.top + frameOffset.y,
+      bottom: rawBtnRect.bottom + frameOffset.y,
+      left: rawBtnRect.left + frameOffset.x,
+      right: rawBtnRect.right + frameOffset.x,
+    }
     var menuRect = menuEl.getBoundingClientRect()
-    setMenuPos(computeMenuPlacement(btnRect, menuRect))
+    var viewport = getTopViewportSize()
+    setMenuPos(computeMenuPlacement(btnRect, menuRect, viewport.width, viewport.height))
     var raf = requestAnimationFrame(function () { setMenuVisible(true) })
     return function () { cancelAnimationFrame(raf) }
   }, [menuOpen])
@@ -604,6 +624,15 @@ export default function SmartTableRow(props) {
           return
         }
         if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('İşlem tamamlandı.', 'ok')
+        // Sunucu bir sonuc URL'i dondurduyse (orn. belge kopyalama → yeni belgenin
+        // duzenleme ekrani) o URL AYRI bir workspace sekmesinde acilir — liste
+        // sekmesi yerinde kalir, board asagida normal sekilde yenilenir. matchPath
+        // BILINCLI olarak null: her aksiyon kendi hedefine (ornegin yeni kopyalanan
+        // belge Id'sine) gitmeli, ayni path'teki BASKA bir acik sekmeyi (ilgisiz bir
+        // belge duzenleme sekmesi) HIJACK ETMEMELI (2026-07-21, PageComment Seq 19).
+        if (data && data.redirectUrl) {
+          dispatchActionUrl({ url: data.redirectUrl, openInTab: { title: data.redirectTitle || action.label || 'Yeni Sekme', matchPath: null } })
+        }
         if (onRefresh) setTimeout(function () { onRefresh(id) }, 400)
         else setTimeout(function () { window.location.reload() }, 600)
       })

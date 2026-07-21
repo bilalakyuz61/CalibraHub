@@ -149,6 +149,31 @@ public sealed class SalesController : Controller
         return int.TryParse(raw, out var id) ? id : null;
     }
 
+    /// <summary>
+    /// SmartBoard extraActions "Kopyala" ögesi (PageComment Seq 19, 2026-07-21) — belge
+    /// tipinden bağımsız TEK paylaşılan endpoint'e (bu controller'daki CopyDocumentJson) gider.
+    /// Purchase board'ları da AYNI endpoint'i kullanır — Delete'in DeleteDocumentJson için zaten
+    /// kurduğu "tek merkez, iki controller paylaşır" deseniyle özdeş (tip SUNUCUDA kaynak
+    /// belgeden çözülür, istemci-beyanlı-tip açığı yaratılmaz). type/url İKİ ALANI birden taşır
+    /// çünkü SmartCard.jsx'in api-post dalı action.url okur, SmartTableRow.jsx'in menü çalıştırıcısı
+    /// ise action.apiUrl okur — aynı JSON hem kart hem tablo görünümünde POST'u doğru tetikler.
+    /// Sunucu başarılı kopyada JSON'da redirectUrl/redirectTitle döner; SmartTableRow.jsx
+    /// runMenuApiAction / SmartCard.jsx handleExtraAction bunu okuyup yeni belgenin düzenleme
+    /// ekranını AYRI bir workspace sekmesinde açar (openInTab, matchPath=null — bkz. o dosyalardaki
+    /// kod içi not).
+    /// </summary>
+    private static object BuildCopyAction(int documentId) => new
+    {
+        id = "copy",
+        label = "Kopyala",
+        icon = "Copy",
+        color = "indigo",
+        type = "api-post",
+        url = $"/Sales/CopyDocumentJson?id={documentId}",
+        apiUrl = $"/Sales/CopyDocumentJson?id={documentId}",
+        apiMethod = "POST",
+    };
+
     [HttpGet]
     [Route("/Sales/Quotes")]               // YENI tercih edilen URL — teklif-spesifik (CamelCase + anlamli)
     [Route("/Sales/Documents")]            // ESKI route'u yasatiyoruz — mevcut bookmark/integration'lar kirilmasin.
@@ -292,6 +317,7 @@ public sealed class SalesController : Controller
                 // sol panele soft/slate renkli ekstra ikonlar olarak basar.
                 extraActions = new object[]
                 {
+                    BuildCopyAction(quote.Id),
                     new
                     {
                         // Tek teklif → siparise donustur (kart-bazli) + opsiyonel is emri.
@@ -475,7 +501,7 @@ public sealed class SalesController : Controller
                     precheckUrl = $"/Sales/CanDeleteDocumentJson?id={order.Id}",
                     confirm = $"Bu siparisi silmek istediginizden emin misiniz? ({order.DocumentNumber})",
                 },
-                extraActions = new object[] { BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode) },
+                extraActions = new object[] { BuildCopyAction(order.Id), BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode) },
             });
         }
 
@@ -588,7 +614,7 @@ public sealed class SalesController : Controller
                     apiUrl = $"/Sales/DeleteDocumentJson?id={doc.Id}",
                     precheckUrl = $"/Sales/CanDeleteDocumentJson?id={doc.Id}",
                     confirm = $"Bu irsaliyeyi silmek istediginizden emin misiniz? ({doc.DocumentNumber})" },
-                extraActions = new object[] { BuildAuditLogAction("satis_irsaliyesi", doc.Id, deliveryAuditFormCode) },
+                extraActions = new object[] { BuildCopyAction(doc.Id), BuildAuditLogAction("satis_irsaliyesi", doc.Id, deliveryAuditFormCode) },
             });
         }
 
@@ -1803,6 +1829,78 @@ public sealed class SalesController : Controller
         {
             // Ön-kontrol hata verirse silmeyi engelleme — normal onay akışına düşülür.
             return Json(new { ok = true, reason = (string?)null });
+        }
+    }
+
+    /// <summary>
+    /// Belge kopyalama (PageComment Seq 19, 2026-07-21) — kaynak belgenin başlığı + kalemleri
+    /// (+ kalem detayları) yeni bir Draft belgeye klonlanır (bkz. IDocumentService.CopyDocumentAsync
+    /// KDoc'u — karşılama/rezervasyon/seri/DocumentLineLink verileri KOPYALANMAZ). Tip-agnostik:
+    /// query'de yalnız id alınır, belge tipi SUNUCUDA kaynak belgeden çözülür (istemci-beyanlı-tip
+    /// açığı yaratılmaz — HasDocumentPermissionAsync/DeleteDocumentJson ile aynı desen). Yetki:
+    /// kaynak belgenin PARENT form kodunda CREATE/EDIT_OWN/EDIT_ALL — SaveDocument'ın kullandığı
+    /// AYNI kapı (kopyalama, o tip için "yeni belge oluşturma" ile eşdeğer bir yetki sorusudur).
+    /// Sales + Purchase board'ları (8 liste) TEK bu endpoint'i kullanır — DeleteDocumentJson'ın
+    /// zaten kurduğu "tek merkez, iki controller paylaşır" deseniyle aynı (bkz. BuildCopyAction).
+    /// Widget/EAV (Ek Alanlar) değerleri header + her satır için ReviseLine ile AYNI mekanizmayla
+    /// (IWidgetRepository.CopyValuesAsync) best-effort kopyalanır — hata olursa kopya belge yine de
+    /// başarılı sayılır, yalnız loglanır (widget kaybı asıl işlemi geri almaz/başarısız göstermez).
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> CopyDocumentJson(int id, CancellationToken ct)
+    {
+        if (id <= 0) return Json(new { success = false, message = "Geçersiz belge." });
+        try
+        {
+            var source = await _quoteService.GetQuoteByIdAsync(id, ct);
+            if (source == null) return Json(new { success = false, message = "Kopyalanacak belge bulunamadı." });
+
+            string? typeCode = null;
+            if (source.DocumentTypeId is int typeId)
+                typeCode = (await _documentTypeRepo.GetByIdAsync(typeId, ct))?.Code;
+            var forms = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(typeCode);
+
+            if (!await HasFormPermissionAsync(forms.Parent, WriteActionCodes, ct))
+                return Json(new { success = false, message = "Bu belgeyi kopyalamak için yetkiniz bulunmuyor." });
+
+            var (ok, error, newDoc) = await _quoteService.CopyDocumentAsync(id, CurrentUserId(), User?.Identity?.Name, ct);
+            if (!ok || newDoc is null) return Json(new { success = false, message = error ?? "Belge kopyalanamadı." });
+
+            // Widget/EAV degerleri — ReviseLine ile AYNI desen (best-effort, kopyanin
+            // basarisini etkilemez). Header top-level degerleri + her satirin (LineNo
+            // sirasina gore eslenmis) kendi degerleri ayri ayri kopyalanir.
+            try
+            {
+                var headerSchema = await _widgetService.GetFormSchemaByCodeAsync(forms.Header, ct);
+                if (headerSchema != null)
+                    await _widgetRepo.CopyValuesAsync(headerSchema.FormId, id.ToString(), newDoc.Id.ToString(), ct);
+
+                var lineSchema = await _widgetService.GetFormSchemaByCodeAsync(forms.Lines, ct);
+                if (lineSchema != null)
+                {
+                    var sourceLines = (await _quoteService.GetQuoteLinesAsync(id, ct)).OrderBy(l => l.LineNo).ToList();
+                    var newLines = (await _quoteService.GetQuoteLinesAsync(newDoc.Id, ct)).OrderBy(l => l.LineNo).ToList();
+                    for (int i = 0; i < sourceLines.Count && i < newLines.Count; i++)
+                        await _widgetRepo.CopyValuesAsync(lineSchema.FormId, sourceLines[i].Id.ToString(), newLines[i].Id.ToString(), ct);
+                }
+            }
+            catch (Exception widgetEx)
+            {
+                _logger.LogWarning(widgetEx, "CopyDocumentJson widget kopyalama hatasi (sourceId={SourceId}, newId={NewId})", id, newDoc.Id);
+            }
+
+            return Json(new
+            {
+                success = true,
+                newId = newDoc.Id,
+                redirectUrl = $"/Sales/DocumentEdit?id={newDoc.Id}",
+                redirectTitle = $"{newDoc.DocumentNumber} — Düzenle",
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CopyDocumentJson] belge kopyalanamadi (id={Id})", id);
+            return Json(new { success = false, message = "Belge kopyalanırken bir hata oluştu." });
         }
     }
 

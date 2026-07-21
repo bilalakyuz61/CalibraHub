@@ -621,8 +621,17 @@ export default function SmartCard(props) {
           // Mesaj sayfa ortasında uyarı modalıyla gösterilir (toast değil).
           if (data && (data.success === false || data.ok === false)) {
             showAlert(data.message || data.error || 'İşlem gerçekleştirilemedi.')
+            return
           }
-          else if (onRefresh) onRefresh(id)
+          // Sunucu bir sonuc URL'i dondurduyse (orn. belge kopyalama → yeni belgenin
+          // duzenleme ekrani) o URL AYRI bir workspace sekmesinde acilir (SmartTableRow.jsx
+          // runMenuApiAction ile AYNI sozlesme/davranis — 2026-07-21, PageComment Seq 19).
+          // matchPath BILINCLI null: ilgisiz, ayni path'teki BASKA acik bir sekmeyi
+          // hijack etmesin, her kopya kendi yeni sekmesini acsin.
+          if (data && data.redirectUrl) {
+            dispatchActionUrl({ url: data.redirectUrl, openInTab: { title: data.redirectTitle || action.label || 'Yeni Sekme', matchPath: null } })
+          }
+          if (onRefresh) onRefresh(id)
           else window.location.reload()
         })
         .catch(function(err) {

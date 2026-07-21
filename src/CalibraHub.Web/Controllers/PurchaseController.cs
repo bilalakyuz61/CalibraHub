@@ -75,6 +75,26 @@ public sealed class PurchaseController : Controller
     private int? CurrentUserId() => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
     /// <summary>
+    /// SmartBoard extraActions "Kopyala" ögesi (PageComment Seq 19, 2026-07-21) — SalesController
+    /// tarafındaki TEK paylaşılan CopyDocumentJson endpoint'ine gider (Delete'in DeleteDocumentJson
+    /// için zaten kurduğu "tek merkez, iki controller paylaşır" deseniyle aynı — tip SUNUCUDA
+    /// kaynak belgeden çözülür). SalesController.BuildCopyAction ile birebir aynı gövde (private
+    /// static, controller'lar arası paylaşılamadığı için — mevcut BuildAuditLogAction öncesi
+    /// duplikasyon deseniyle tutarlı).
+    /// </summary>
+    private static object BuildCopyAction(int documentId) => new
+    {
+        id = "copy",
+        label = "Kopyala",
+        icon = "Copy",
+        color = "indigo",
+        type = "api-post",
+        url = $"/Sales/CopyDocumentJson?id={documentId}",
+        apiUrl = $"/Sales/CopyDocumentJson?id={documentId}",
+        apiMethod = "POST",
+    };
+
+    /// <summary>
     /// Stok etkisi kapalı (STOCK_EFFECT_{code}=false) belge türleri için SQL filtre
     /// parçası üretir. Bakiye sorgularında Document alias'ına eklenir; parametre
     /// tanımsızken boş döner (filtre yok = mevcut davranış).
@@ -399,6 +419,7 @@ public sealed class PurchaseController : Controller
             // İhtiyaç kartlarında "Onaya Gönder" extra aksiyon — diğer tiplerde yok.
             // Karşılama işlemi artık header "Karşılama Merkezi" butonu → FulfillmentCenter ekranından yapılır.
             var extraActionsList = new List<object>();
+            extraActionsList.Add(BuildCopyAction(doc.Id));
             if (string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase) && purchaseReqApprovalEnabled)
             {
                 // "Onaya Gönder" — Draft belgeler için aktif, diğerleri için pasif (disabled).
