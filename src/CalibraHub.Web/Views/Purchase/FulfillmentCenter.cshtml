@@ -627,6 +627,10 @@
 
     /* ── Kalem section ── */
     .fc3-section { background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07); border-radius:10px; overflow:hidden; }
+    /* Satın Alma paneli — Belge Tipi (Talep/Sipariş) toggle satırı — fc3-ms-chip'i tekrar kullanır */
+    .fc3-pr-doctype-row { display:flex; align-items:center; gap:10px; padding:9px 13px 0; flex-wrap:wrap; }
+    .fc3-pr-doctype-lbl { font-size:.7rem; font-weight:700; color:#64748b; }
+    body.app-theme-light .fc3-pr-doctype-lbl { color:#475569; }
     .fc3-sec-hd {
         padding:7px 13px; border-bottom:1px solid rgba(255,255,255,.05);
         font-size:.7rem; font-weight:700; color:#64748b;
@@ -1131,13 +1135,9 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
             Satın Alma Talebi
         </button>
-        <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnClose" onclick="fc3CloseRequests()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            İhtiyacı Kapat
-        </button>
         <button type="button" class="fc3-atab fc3-atab--close" id="fc3BtnCloseLines" onclick="fc3CloseFulfillmentLines()" title="Seçili kalemlerin karşılanmamış kalan miktarını kapatır — belgenin diğer kalemlerine dokunmaz">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            Kalanı Kapat
+            Kapat
         </button>
         <span class="fc3-fb-sep"></span>
         <button type="button" class="fc3-fb-cancel" onclick="fc3LineSelClear()">İptal</button>
@@ -1221,8 +1221,21 @@
             </div>
         </div>
 
-        @* ── Satın Alma Talebi Formu ── *@
+        @* ── Satın Alma Talebi / Siparişi Formu ── *@
         <div class="fc3-section fc3-tf-panel" id="fc3PrPanel" style="display:none;">
+            <div class="fc3-pr-doctype-row">
+                <span class="fc3-pr-doctype-lbl">Belge Tipi</span>
+                <span class="fc3-ms-chips" id="fc3PrDocTypeChips">
+                    <label class="fc3-ms-chip active" data-doctype="demand">
+                        <input type="radio" name="fc3PrDocType" value="demand" checked>
+                        Satın Alma Talebi
+                    </label>
+                    <label class="fc3-ms-chip" data-doctype="order">
+                        <input type="radio" name="fc3PrDocType" value="order">
+                        Satın Alma Siparişi
+                    </label>
+                </span>
+            </div>
             <div class="fc3-sec-hd">Temin edilecek miktarı girin</div>
             <div style="overflow-x:auto;">
                 <table class="fc3-tf-tbl" id="fc3PrTbl">
@@ -1231,7 +1244,7 @@
                         <th>Malzeme</th>
                         <th style="width:70px;">İhtiyaç</th>
                         <th style="width:70px;">Kalan</th>
-                        <th style="width:80px;">Talep Miktarı</th>
+                        <th style="width:80px;" id="fc3PrQtyColHdr">Talep Miktarı</th>
                         <th style="width:44px;">Birim</th>
                         <th style="width:120px;">Notlar</th>
                     </tr></thead>
@@ -1245,7 +1258,7 @@
             <div class="fc3-tf-foot">
                 <button type="button" class="fc3-btn fc3-btn--p" id="fc3PrSubmit" onclick="fc3CreatePurchaseOrder()">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    Satın Alma Talebi Oluştur
+                    <span id="fc3PrSubmitLabel">Satın Alma Talebi Oluştur</span>
                 </button>
                 <button type="button" class="fc3-btn fc3-btn--g" onclick="fc3CloseActionSheet()">İptal</button>
                 <span class="fc3-res fc3-res--ok"  id="fc3PrOk"></span>
@@ -2473,13 +2486,40 @@
         return result;
     }
 
+    // Seçili kalemlerin ait olduğu belgeler _docLineCache'te henüz yoksa (cache boşsa)
+    // önce eksik belgeleri /Purchase/RequestLines'tan yükler, sonra _lines'ı günceller ve
+    // T/S/P panel tablolarını render eder. Hem checkbox seçiminde (onLineSel) hem panel
+    // açılışında (fc3TogglePanel) TEK bu fonksiyondan geçer — "Depodan Karşıla" ile tutarlı:
+    // hangi kalemler seçiliyse panelde de aynı kalemler görünür (bkz. CLAUDE.md İş 1).
+    function fc3RefreshSelectedLinesUI() {
+        var missingDocIds = Array.from(new Set(
+            Object.keys(_lineSel)
+                .map(function(lineId) { return _lineSel[lineId].docId; })
+                .filter(function(docId) { return !_docLineCache[docId]; })
+        ));
+        if (!missingDocIds.length) {
+            _lines = buildSelectedLines();
+            renderLines(); renderTf(); renderSf(); renderPr();
+            return;
+        }
+        var promises = missingDocIds.map(function(docId) {
+            return fetch('/Purchase/RequestLines?requestIds=' + docId)
+                .then(function(res) { return res.json(); })
+                .then(function(lines) { _docLineCache[docId] = Array.isArray(lines) ? lines : []; })
+                .catch(function() { _docLineCache[docId] = []; });
+        });
+        Promise.all(promises).then(function() {
+            _lines = buildSelectedLines();
+            renderLines(); renderTf(); renderSf(); renderPr();
+        });
+    }
+
     function onLineSel() {
         var lineIds = Object.keys(_lineSel);
         var sc = document.getElementById('fc3SelCnt');
         if (sc) { sc.textContent = lineIds.length ? lineIds.length + ' kalem seçili' : ''; sc.classList.toggle('show', lineIds.length > 0); }
         if (!lineIds.length) return;
-        _lines = buildSelectedLines();
-        renderLines(); renderTf(); renderSf(); renderPr();
+        fc3RefreshSelectedLinesUI();
     }
 
     // ── Sütun yapılandırması ──────────────────────────────────────────────────
@@ -2884,6 +2924,7 @@
     function renderTf() {
         var tb = document.getElementById('fc3TfBody');
         if (!tb) return;
+        if (!_lines.length) { tb.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;color:#475569;font-size:.8rem;">Seçili kalem bulunamadı — listeden en az bir kalem seçin.</td></tr>'; return; }
         var locOpts = LOCS.map(function(l) { return '<option value="' + l.id + '">' + esc(l.name) + '</option>'; }).join('');
         tb.innerHTML = _lines.map(function(l) {
             return '<tr class="fc3-tf-row" data-item-id="' + l.itemId + '"'
@@ -2944,6 +2985,10 @@
             var el = document.getElementById(id);
             if (el) { el.style.display='none'; el.textContent=''; }
         });
+        // Panel tablosunun DOLU olduğunu garanti et (İş 1 fix) — onLineSel() zaten
+        // çağrılmış olsa bile burada tekrar çağırmak zararsız (idempotent) ve panel
+        // açılışını checkbox seçim akışına bağımlı olmaktan kurtarır.
+        fc3RefreshSelectedLinesUI();
     };
     window.fc3ToggleTf = function() { fc3TogglePanel('T'); };
 
@@ -2951,6 +2996,7 @@
     function renderSf() {
         var tb = document.getElementById('fc3SfBody');
         if (!tb) return;
+        if (!_lines.length) { tb.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;color:#475569;font-size:.8rem;">Seçili kalem bulunamadı — listeden en az bir kalem seçin.</td></tr>'; return; }
         var locOpts = LOCS.map(function(l) { return '<option value="' + l.id + '">' + esc(l.name) + '</option>'; }).join('');
         tb.innerHTML = _lines.map(function(l) {
             return '<tr class="fc3-sf-row" data-item-id="' + l.itemId + '"'
@@ -2971,6 +3017,7 @@
     function renderPr() {
         var tb = document.getElementById('fc3PrBody');
         if (!tb) return;
+        if (!_lines.length) { tb.innerHTML = '<tr><td colspan="7" style="padding:12px;text-align:center;color:#475569;font-size:.8rem;">Seçili kalem bulunamadı — listeden en az bir kalem seçin.</td></tr>'; return; }
         tb.innerHTML = _lines.map(function(l) {
             var remain = Math.max(0, l.quantity - (l.fulfilledFromStock||0) - (l.fulfilledByPurchase||0));
             return '<tr class="fc3-pr-row" data-item-id="' + l.itemId + '"'
@@ -3059,12 +3106,44 @@
         .catch(function() { if (btn) btn.disabled=false; err.textContent='✖ Bağlantı hatası'; err.style.display='block'; });
     };
 
+    // ── Satın Alma paneli: Belge Tipi (Talep / Sipariş) toggle (İş 2) ────────
+    // demand → satin_alma_talebi (CreatePurchaseDemand, mevcut davranış)
+    // order  → alis_siparisi     (CreatePurchaseOrderFromIhtiyac, tedarikçisiz sipariş taslağı)
+    var _prDocType = 'demand'; // 'demand' | 'order'
+    var _PR_DOC_TYPE_META = {
+        demand: { panelTitle: 'Satın Alma Talebi',   submitLabel: 'Satın Alma Talebi Oluştur',   qtyColLabel: 'Talep Miktarı',   okPrefix: 'Satın alma talebi oluşturuldu',   editType: 'purchase_demand' },
+        order:  { panelTitle: 'Satın Alma Siparişi', submitLabel: 'Satın Alma Siparişi Oluştur', qtyColLabel: 'Sipariş Miktarı', okPrefix: 'Satın alma siparişi oluşturuldu', editType: 'purchase_order'  },
+    };
+    window.fc3PrDocTypeChange = function(value) {
+        _prDocType = value === 'order' ? 'order' : 'demand';
+        var meta = _PR_DOC_TYPE_META[_prDocType];
+        document.querySelectorAll('#fc3PrDocTypeChips .fc3-ms-chip').forEach(function(chip) {
+            var active = chip.getAttribute('data-doctype') === _prDocType;
+            chip.classList.toggle('active', active);
+            var input = chip.querySelector('input');
+            if (input) input.checked = active;
+        });
+        var lbl = document.getElementById('fc3PrSubmitLabel'); if (lbl) lbl.textContent = meta.submitLabel;
+        var qh  = document.getElementById('fc3PrQtyColHdr');   if (qh)  qh.textContent  = meta.qtyColLabel;
+        _PANELS.P.title = meta.panelTitle;
+        var titleEl = document.getElementById('fc3AsTitle');
+        var pPanel  = document.getElementById('fc3PrPanel');
+        if (titleEl && pPanel && pPanel.style.display !== 'none') titleEl.textContent = meta.panelTitle;
+        // Farklı tip seçilince önceki sonuç mesajı yanıltıcı olmasın
+        var ok = document.getElementById('fc3PrOk'), err = document.getElementById('fc3PrErr');
+        if (ok)  { ok.style.display  = 'none'; ok.textContent  = ''; }
+        if (err) { err.style.display = 'none'; err.textContent = ''; }
+    };
+    document.querySelectorAll('#fc3PrDocTypeChips .fc3-ms-chip').forEach(function(chip) {
+        chip.addEventListener('click', function() { fc3PrDocTypeChange(chip.getAttribute('data-doctype')); });
+    });
+
     window.fc3CreatePurchaseOrder = function() {
         var btn = document.getElementById('fc3PrSubmit');
         var ok  = document.getElementById('fc3PrOk');
         var err = document.getElementById('fc3PrErr');
         ok.style.display = err.style.display = 'none';
-        var lines = [];
+        var picked = [];
         document.querySelectorAll('.fc3-pr-row').forEach(function(tr, idx) {
             var cb  = tr.querySelector('.fc3-pr-cb');
             if (!cb || !cb.checked) return;
@@ -3073,20 +3152,45 @@
             var q    = qty ? parseFloat(qty.value.replace(',','.')) : 0;
             if (q <= 0) return;
             var l = _lines[idx]; if (!l) return;
-            lines.push({ lineId:l.lineId, qty:q, notes:(note ? note.value : null) || null });
+            picked.push({ l:l, qty:q, notes:(note ? note.value : null) || null });
         });
-        if (!lines.length) { err.textContent='Lütfen en az bir kalem seçin.'; err.style.display='block'; return; }
+        if (!picked.length) { err.textContent='Lütfen en az bir kalem seçin.'; err.style.display='block'; return; }
         if (btn) btn.disabled = true;
-        // satin_alma_talebi belgesi oluşturur (DocumentSource bağlantılı) — sipariş değil
-        fetch('/Purchase/CreatePurchaseDemand', {
+
+        var meta          = _PR_DOC_TYPE_META[_prDocType];
+        var notesGeneral  = (document.getElementById('fc3PrNotes')||{}).value || null;
+        var url, body;
+        if (_prDocType === 'order') {
+            // alis_siparisi — tedarikçi (contactId) burada seçilmiyor, belge sonradan düzenlenebilir.
+            url = '/Purchase/CreatePurchaseOrderFromIhtiyac';
+            body = {
+                requestIds: Array.from(new Set(Object.values(_lineSel).map(function(v) { return v.docId; }))),
+                notes:      notesGeneral,
+                contactId:  null,
+                lines: picked.map(function(x) {
+                    return { itemId:x.l.itemId, unitId:x.l.unitId||null, qty:x.qty,
+                             combinationId:x.l.combinationId||null, notes:x.notes,
+                             requestLineId:x.l.lineId||null };
+                }),
+            };
+        } else {
+            // satin_alma_talebi (DocumentSource bağlantılı) — mevcut davranış
+            url = '/Purchase/CreatePurchaseDemand';
+            body = {
+                notes: notesGeneral,
+                lines: picked.map(function(x) { return { lineId:x.l.lineId, qty:x.qty, notes:x.notes }; }),
+            };
+        }
+
+        fetch(url, {
             method:'POST', headers:{'Content-Type':'application/json', 'RequestVerificationToken': fc3Csrf()},
-            body: JSON.stringify({ lines:lines, notes:(document.getElementById('fc3PrNotes')||{}).value||null }),
+            body: JSON.stringify(body),
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (btn) btn.disabled = false;
             if (d.ok) {
-                ok.innerHTML = '✔ Satın alma talebi oluşturuldu: <a href="/Purchase/Edit?type=purchase_demand&id=' + d.docId + '" target="_blank" style="color:#6ee7b7;">' + esc(d.docNo) + '</a>';
+                ok.innerHTML = '✔ ' + meta.okPrefix + ': <a href="/Purchase/Edit?type=' + meta.editType + '&id=' + d.docId + '" target="_blank" style="color:#6ee7b7;">' + esc(d.docNo) + '</a>';
                 ok.style.display = 'block';
                 invalidateDocCache();
             } else {
