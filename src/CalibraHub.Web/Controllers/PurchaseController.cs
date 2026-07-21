@@ -474,21 +474,28 @@ public sealed class PurchaseController : Controller
             extraActionsList.Add(BuildCopyAction(doc.Id));
             if (string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase) && purchaseReqApprovalEnabled)
             {
-                // "Onaya Gönder" — Draft belgeler için aktif, diğerleri için pasif (disabled).
-                // Onay tetikleme kapalıysa buton hiç gösterilmez (elle de onaya sokulamaz).
+                // "Onaya Gönder" — yalnız Draft belgelerde menüye eklenir; onay tetikleme
+                // kapalıysa hiç gösterilmez (elle de onaya sokulamaz).
+                // NOT (2026-07-21 fix): eski şekil `type:"api-post"` + `url:"...{id}"` yalnız
+                // SmartCard sözleşmesiydi — bu board'lar tablo modunda render edildiğinden
+                // SmartTableRow menüsü aksiyonu sessizce çalıştıramıyordu. Tablo menüsünün
+                // anladığı sözleşme apiUrl (gerçek id) + apiMethod'dur; confirm/disabled
+                // alanları menüde desteklenmediği için öğe Draft-dışında hiç gönderilmez,
+                // tıklama doğrudan tetikler (Kopyala ve entegrasyon butonlarıyla tutarlı;
+                // yanlış başlatma _WorkflowDrawer'daki CancelApproval ile geri alınabilir).
                 var isDraft = string.Equals(doc.Status, "Draft", StringComparison.OrdinalIgnoreCase);
-                extraActionsList.Add(new
+                if (isDraft)
                 {
-                    type           = "api-post",
-                    label          = "Onaya Gönder",
-                    icon           = "Send",
-                    color          = "emerald",
-                    url            = "/ApprovalFlow/StartByDocument?documentId={id}",
-                    confirm        = $"{doc.DocumentNumber} numaralı ihtiyaç kaydını onaya göndermek istiyor musunuz?",
-                    confirmOkLabel = "Evet, Gönder",
-                    confirmVariant = "primary",
-                    disabled       = !isDraft,
-                });
+                    extraActionsList.Add(new
+                    {
+                        id        = "sendApproval",
+                        label     = "Onaya Gönder",
+                        icon      = "Send",
+                        color     = "emerald",
+                        apiUrl    = $"/ApprovalFlow/StartByDocument?documentId={doc.Id}",
+                        apiMethod = "POST",
+                    });
+                }
             }
             extraActionsList.Add(BuildAuditLogAction(typeCode, doc.Id, auditFormCode));
             var extraActions = extraActionsList.ToArray();

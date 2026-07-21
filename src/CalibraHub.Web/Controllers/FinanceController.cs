@@ -7,6 +7,7 @@ using CalibraHub.Web.Models.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using static CalibraHub.Web.Helpers.AuditLogActionHelper;
+using static CalibraHub.Web.Helpers.IntegrationButtonActionHelper;
 
 namespace CalibraHub.Web.Controllers;
 
@@ -18,6 +19,9 @@ public sealed class FinanceController : Controller
     private readonly IDocumentService _documentService;
     private readonly IDocumentTypeRepository _docTypeRepo;
     private readonly ISalesRepresentativeService _salesRepService;
+    private readonly IIntegrationRepository _integrationRepo;
+    private readonly IPermissionDefRepository _permDefRepo;
+    private readonly IPermissionService _permService;
 
     private const int DefaultPageSize = 50;
 
@@ -26,13 +30,19 @@ public sealed class FinanceController : Controller
         IWidgetService widgetService,
         IDocumentService documentService,
         IDocumentTypeRepository docTypeRepo,
-        ISalesRepresentativeService salesRepService)
+        ISalesRepresentativeService salesRepService,
+        IIntegrationRepository integrationRepo,
+        IPermissionDefRepository permDefRepo,
+        IPermissionService permService)
     {
         _financeService = financeService;
         _widgetService = widgetService;
         _documentService = documentService;
         _docTypeRepo = docTypeRepo;
         _salesRepService = salesRepService;
+        _integrationRepo = integrationRepo;
+        _permDefRepo = permDefRepo;
+        _permService = permService;
     }
 
     // GET /Finance/GetContactQuotes?contactId=X — cariye ait verilen teklifler
@@ -164,7 +174,9 @@ public sealed class FinanceController : Controller
         var (accounts, totalCount) = await _financeService.GetContactsPagedAsync(
             null, null, 0, DefaultPageSize, ct);
         var masterWidgets = await BuildMasterWidgetsAsync(ct);
-        var entities = await BuildEntitiesAsync(accounts, ct);
+        var integrationButtons = await GetAuthorizedManualButtonsAsync(
+            FormCodes.Contacts, User, _integrationRepo, _permDefRepo, _permService, ct);
+        var entities = await BuildEntitiesAsync(accounts, integrationButtons, ct);
 
         return Json(new
         {
@@ -251,7 +263,9 @@ public sealed class FinanceController : Controller
             var (accounts, totalCount) = await _financeService.GetContactsPagedAsync(
                 accountType, search, offset, pageSize, ct);
 
-            var entities = await BuildEntitiesAsync(accounts, ct);
+            var integrationButtons = await GetAuthorizedManualButtonsAsync(
+                FormCodes.Contacts, User, _integrationRepo, _permDefRepo, _permService, ct);
+            var entities = await BuildEntitiesAsync(accounts, integrationButtons, ct);
 
             return Json(new
             {
@@ -274,7 +288,9 @@ public sealed class FinanceController : Controller
             null, search, offset, pageSize, ct);
 
         var masterWidgets = await BuildMasterWidgetsAsync(ct);
-        var entities = await BuildEntitiesAsync(accounts, ct);
+        var integrationButtons = await GetAuthorizedManualButtonsAsync(
+            FormCodes.Contacts, User, _integrationRepo, _permDefRepo, _permService, ct);
+        var entities = await BuildEntitiesAsync(accounts, integrationButtons, ct);
 
         return new
         {
@@ -319,7 +335,9 @@ public sealed class FinanceController : Controller
     }
 
     private async Task<List<object>> BuildEntitiesAsync(
-        IReadOnlyCollection<ContactDto> accounts, CancellationToken ct)
+        IReadOnlyCollection<ContactDto> accounts,
+        IReadOnlyCollection<IntegrationManualButtonInfo> integrationButtons,
+        CancellationToken ct)
     {
         var recordIds = accounts.Select(a => a.Id.ToString()).ToArray();
         var batchWidgets = recordIds.Length > 0
@@ -360,6 +378,13 @@ public sealed class FinanceController : Controller
                 }
             }
 
+            // Sira: İşlem Logu (audit) → aktif Manual entegrasyon buton(lar)ı (varsa, ör. "ERP'ye
+            // Aktar") → Sil (ayrı render edilir, secondaryAction). Entegrasyon butonu yoksa
+            // (board'a hiç Manual entegrasyon tanımlanmamışsa veya kullanıcı yetkisizse)
+            // integrationButtons boş gelir — BuildRowActions boş dizi döner, menüde ek öğe çıkmaz.
+            var extraActions = new List<object> { BuildAuditLogAction("Contact", account.Id, FormCodes.Contacts) };
+            extraActions.AddRange(BuildRowActions(integrationButtons, account.Id));
+
             entities.Add(new
             {
                 id = account.Id,
@@ -382,7 +407,7 @@ public sealed class FinanceController : Controller
                     apiUrl = $"/Finance/DeleteContactJson?id={account.Id}",
                     confirm = $"Bu cari hesabi silmek istediginizden emin misiniz? ({account.AccountCode} — {account.AccountTitle})",
                 },
-                extraActions = new object[] { BuildAuditLogAction("Contact", account.Id, FormCodes.Contacts) },
+                extraActions,
             });
         }
         return entities;
