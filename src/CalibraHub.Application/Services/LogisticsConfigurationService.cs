@@ -1335,10 +1335,17 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var typesForHierarchyU = await _repository.GetLocationTypesAsync(cancellationToken);
         ValidateLocationTypeHierarchy(locationTypeCode, request.ParentId, locations, typesForHierarchyU);
 
-        // Alt Kirilimlar Tek Turde: hem tasima (yeni parent) hem tip degisikligi bu tek
-        // fonksiyonla kapsanir — yeni (parent,tip) kombinasyonu hedef parent'in mevcut
-        // kardesleriyle (kendisi haric) cakismamali.
-        ValidateSingleChildTypeConstraint(locationTypeCode, request.ParentId, excludeLocationId: request.Id, locations, typesForHierarchyU);
+        // Alt Kirilimlar Tek Turde: yalnizca gercekten tasiniyorsa (parent degisti) veya tipi
+        // degisiyorsa kontrol edilir — parent/tip ayniysa (ornegin sadece ad/kapasite duzenleniyorsa)
+        // sessizce atlanir; aksi halde Faz 1 oncesi/kenar-durum mevcut karisik kardes verisi,
+        // bu alanla ilgisiz bir duzenlemeyi bile bloke ederdi.
+        var parentOrTypeChanged =
+            existingLocation.ParentId != request.ParentId ||
+            !string.Equals(existingLocation.LocationTypeCode, locationTypeCode, StringComparison.OrdinalIgnoreCase);
+        if (parentOrTypeChanged)
+        {
+            ValidateSingleChildTypeConstraint(locationTypeCode, request.ParentId, excludeLocationId: request.Id, locations, typesForHierarchyU);
+        }
 
         // Bu lokasyonun kendi child'lari icin de kontrol: eger tipi degistirilirse,
         // child'larin tipinin sortOrder'i bu yeni tipinkinden buyuk olmali.

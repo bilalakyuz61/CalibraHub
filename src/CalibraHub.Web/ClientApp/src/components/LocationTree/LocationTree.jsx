@@ -14,7 +14,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   ChevronRight, ChevronDown, MapPin, Plus, PlusCircle,
   Edit2, Trash2, Check, X, Search, AlertTriangle, Cog, Boxes, Settings2,
-  Filter, Download, Loader2, RefreshCw, Tags,
+  Filter, Download, Loader2, RefreshCw, Tags, ClipboardList, Layers,
 } from 'lucide-react'
 import SmartBoardConfigPanel from '../CalibraSmartBoard/SmartBoardConfigPanel'
 import SmartBoardFilterPanel, { entityMatchesFilters } from '../CalibraSmartBoard/SmartBoardFilterPanel'
@@ -125,6 +125,11 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
   // (isStorageArea) işaretliyken SEÇİLEBİLİR. İki durumlu: Açık = eksiye düşebilir,
   // Kapalı = engellenir. Şirket ana anahtarı (Eksi Bakiye Kontrolü) kapalıyken etkisiz.
   const [allowNeg, setAllowNeg] = useState(initial?.allowNegativeBalance === true)
+  // Sayım Referansı + Alt Kırılımlar Tek Türde — KONTEYNER ("Bölüm" / SECTION tipi)
+  // bayraklarıdır; isMP/isSA/allowNeg'in aksine leaf/hasChildren durumuna göre değil,
+  // seçili lokasyon TİPİNE göre gösterilir (aşağıda isSectionType).
+  const [isCountRef, setIsCountRef]         = useState(!!initial?.isCountReference)
+  const [isSingleChild, setIsSingleChild]   = useState(!!initial?.isSingleChildType)
   const [saving, setSaving]     = useState(false)
   const codeRef = useRef(null)
   useEffect(() => { codeRef.current?.focus() }, [])
@@ -132,6 +137,8 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
   // Yeni eklenen veya child'i olmayan = leaf → flag'ler aktif
   // Child'i olan node → flag'ler disabled + false (backend zaten zorlar)
   const flagsAllowed = !hasChildren
+  // Konteyner ("Bölüm") tipi mi? — tip dropdown'undan canlı okunur, hasChildren'dan bağımsız.
+  const isSectionType = String(typeCode || '').toUpperCase() === 'SECTION'
 
   const handleSave = async () => {
     const c = code.trim().toUpperCase()
@@ -145,6 +152,10 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
         isStorageArea: flagsAllowed && isSA,
         // Eksi bakiye yalnızca Fiziksel Depo işaretli yaprakta saklanır; değilse null.
         allowNegativeBalance: (flagsAllowed && isSA) ? allowNeg : null,
+        // Konteyner bayrakları yalnızca Bölüm tipinde saklanır; tip değişip switch
+        // gizlendiğinde eski açık değer sessizce başka bir tipte kalmasın.
+        isCountReference: isSectionType && isCountRef,
+        isSingleChildType: isSectionType && isSingleChild,
       })
     } finally { setSaving(false) }
   }
@@ -191,6 +202,25 @@ function InlineForm({ initial, types, hasChildren, parentTypeSortOrder = null, c
             <span className="lt-fi-sw-thumb" />
           </span>
           <AlertTriangle size={11} /> Eksi Bakiye İzni
+        </label>
+      )}
+      {/* Konteyner ("Bölüm") bayrakları — yalnızca Bölüm tipinde görünür (leaf/hasChildren'dan bağımsız) */}
+      {isSectionType && (
+        <label className={'lt-fi-sw' + (isCountRef ? ' is-on' : '')}
+               title="Sayım Referansı: sayımda alt kırılımların (raf/hücre) bu bölüm üzerinden toplanarak sayılması.">
+          <span className="lt-fi-sw-track" onClick={() => !saving && setIsCountRef(v => !v)}>
+            <span className="lt-fi-sw-thumb" />
+          </span>
+          <ClipboardList size={11} /> Sayım Referansı
+        </label>
+      )}
+      {isSectionType && (
+        <label className={'lt-fi-sw' + (isSingleChild ? ' is-on' : '')}
+               title="Alt Kırılımlar Tek Türde: bu bölümün altına farklı türde (örn. hem raf hem hücre) kırılım tanımlanamaz.">
+          <span className="lt-fi-sw-track" onClick={() => !saving && setIsSingleChild(v => !v)}>
+            <span className="lt-fi-sw-thumb" />
+          </span>
+          <Layers size={11} /> Alt Kırılımlar Tek Türde
         </label>
       )}
       <button className="lt-fi-ok" onClick={handleSave} disabled={saving} title="Kaydet (Enter)">
@@ -704,6 +734,8 @@ export default function LocationTree({ config }) {
       isMachinePark:    !!payload.isMachinePark,
       isStorageArea:    !!payload.isStorageArea,
       allowNegativeBalance: payload.allowNegativeBalance ?? null,
+      isCountReference:  !!payload.isCountReference,
+      isSingleChildType: !!payload.isSingleChildType,
       maxWeightCapacity: null,
       volumeCapacity:    null,
     }
