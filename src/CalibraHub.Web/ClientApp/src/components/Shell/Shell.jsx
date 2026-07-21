@@ -1859,6 +1859,10 @@ function Header(props) {
       />
 
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Sayfa-içi Yorum butonu yuvası — page-comments-widget.js (vanilla, admin-only)
+            kendi ✏️ butonunu ve panelini bu boş div'in İÇİNE taşır (ensureDocked).
+            React bu div'in çocuklarını render etmez/yönetmez; içi hep "boş" görünür. */}
+        <div id="pcHeaderSlot" className="relative flex-shrink-0"></div>
         <div className="relative" ref={notifBtnRef}>
           <button
             onClick={function () { setNotifOpen(function (p) { return !p }) }}

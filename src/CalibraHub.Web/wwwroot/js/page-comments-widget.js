@@ -293,6 +293,31 @@
         });
         closeBtn.addEventListener('click', closePanel);
 
+        // ── Shell header'a yerleşme (zil simgesinin yanı) ───────────────
+        // React Shell üst çubuğu #pcHeaderSlot yuvasını render eder (Shell.jsx).
+        // Yuva bulununca buton + panel oraya taşınır (DOM taşıma listener'ları korur);
+        // Shell'siz top-level sayfalarda yüzer (fixed) mod olduğu gibi kalır.
+        // Interval sürekli çalışır: React, header'ı unmount/remount ederse yuva boş
+        // yeniden doğar — buton kopmuş kalmasın diye her turda yeniden yerleşilir.
+        function ensureDocked() {
+            var slot = document.getElementById('pcHeaderSlot');
+            if (slot) {
+                if (fabBtn.parentNode !== slot) {
+                    slot.appendChild(fabBtn);
+                    slot.appendChild(panelEl);
+                    fabBtn.classList.add('pc-fab--header');
+                    panelEl.classList.add('pc-panel--header');
+                }
+            } else if (fabBtn.parentNode !== root) {
+                root.appendChild(fabBtn);
+                root.appendChild(panelEl);
+                fabBtn.classList.remove('pc-fab--header');
+                panelEl.classList.remove('pc-panel--header');
+            }
+        }
+        ensureDocked();
+        setInterval(ensureDocked, 500);
+
         // ── Yeni yorum kaydet (optimistik) ─────────────────────────────
         function showComposeError(msg) {
             if (!msg) { composeError.hidden = true; composeError.textContent = ''; return; }

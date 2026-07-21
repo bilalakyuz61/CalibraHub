@@ -57,6 +57,24 @@ body.app-theme-dark #pcWidgetRoot { color-scheme: dark; }
 body.app-theme-dark .pc-fab__badge { border-color: #0f172a; }
 .pc-fab__badge[hidden] { display: none; }
 
+/* Header'a yerleşmiş mod — buton React Shell üst çubuğunda, zil simgesinin yanında
+   (#pcHeaderSlot yuvası; bkz. page-comments-widget.js ensureDocked). Zil butonunun
+   görünümüyle eşleşir: p-2 + rounded-xl + slate hover. */
+.pc-fab--header {
+    position: static;
+    width: 32px; height: 32px; border-radius: 12px;
+    background: transparent; color: #64748b;
+    box-shadow: none;
+}
+.pc-fab--header:hover {
+    transform: none; box-shadow: none;
+    background: #f1f5f9; color: #1e293b;
+}
+.pc-fab--header:active { transform: none; }
+.pc-fab--header svg { width: 15px; height: 15px; }
+body.app-theme-dark .pc-fab--header { color: rgba(255,255,255,.6); }
+body.app-theme-dark .pc-fab--header:hover { background: rgba(255,255,255,.05); color: #fff; }
+
 .pc-panel {
     position: fixed; right: 22px; bottom: 84px; z-index: 99991;
     width: 380px; max-width: calc(100vw - 32px);
@@ -74,6 +92,16 @@ body.app-theme-dark .pc-panel {
     box-shadow: 0 22px 60px rgba(0,0,0,.55);
 }
 .pc-panel[hidden] { display: none; }
+
+/* Panel, header modunda yuvaya göre (absolute) butonun sağ-altına açılır.
+   NOT: bu blok taban .pc-panel kuralından SONRA gelmeli — eşit özgüllükte
+   kaynak sırası kazanır; önce gelirse fixed/bottom taban değerleri ezer. */
+.pc-panel--header {
+    position: absolute;
+    right: 0; left: auto;
+    top: calc(100% + 10px); bottom: auto;
+    max-height: min(640px, calc(100vh - 90px));
+}
 @keyframes pcPopIn {
     from { opacity: 0; transform: translateY(10px) scale(.97); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
