@@ -18,6 +18,21 @@ public sealed class Location
     public bool IsStorageArea { get; init; }
 
     /// <summary>
+    /// Sayım referansı: true ise sayım (envanter) sırasında bu lokasyonun altındaki alt
+    /// kırılımlar ayrı ayrı değil, bu lokasyon üzerinden (toplama noktası olarak) sayılır.
+    /// Genellikle "bölüm" (SECTION) gibi konteyner tipi lokasyonlarda anlamlıdır.
+    /// NOT: İş kuralı uygulaması (sayım davranışı) sonraki fazda yapılacak; bu alan yalnız taşınır.
+    /// </summary>
+    public bool IsCountReference { get; init; }
+
+    /// <summary>
+    /// Alt kırılımlar tek türde olmalı: true ise bu lokasyonun doğrudan alt kırılımları aynı
+    /// LocationTypeCode'a sahip olmak zorundadır (ör. bir bölüm altında hem raf hem hücre karışamaz).
+    /// NOT: Doğrulama/enforcement sonraki fazda; bu alan yalnız taşınır.
+    /// </summary>
+    public bool IsSingleChildType { get; init; }
+
+    /// <summary>
     /// Depo bazında eksi bakiye izni (üç durumlu): null = Stok parametresindeki varsayılanı
     /// devral, true = bu depoda eksi bakiyeye izin ver, false = engelle. Yalnızca şirket ana
     /// anahtarı (NEG_BALANCE_CONTROL) açıkken dikkate alınır.

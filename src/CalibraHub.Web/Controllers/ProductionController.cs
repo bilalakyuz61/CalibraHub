@@ -384,8 +384,9 @@ public sealed class ProductionController : Controller
             // İş kuralı mesajları (lot/seri zorunluluğu, bakiye, durum) kullanıcıya aynen gösterilir
             return Json(new { ok = false, error = ex.Message });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.IssueConsumption] workOrderId={WorkOrderId} üretim sarfı yapılamadı.", req.WorkOrderId);
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -470,6 +471,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.CreateFromSalesLine] satış satırından iş emri oluşturulamadı. SourceLineId={SourceLineId}", req?.SourceLineId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -634,6 +636,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Operation.Save] id={Id} kaydedilemedi.", req?.Id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -650,6 +653,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Operation.Delete] id={Id} silinemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1023,6 +1027,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Routing.Save] id={Id} kaydedilemedi.", req?.Id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1039,6 +1044,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Routing.Delete] id={Id} silinemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1065,6 +1071,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Routing.AddItemMap] routingId={RoutingId} itemId={ItemId} eşleme eklenemedi.", routingId, itemId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1082,6 +1089,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Routing.DeleteItemMap] id={Id} eşleme silinemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1106,6 +1114,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Operation.SaveMachineTime] operationId={OperationId} makine süresi kaydedilemedi.", req?.OperationId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1122,6 +1131,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Operation.DeleteMachineTime] id={Id} makine süresi silinemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1265,6 +1275,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Personnel.Save] id={Id} kaydedilemedi.", req?.Id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1281,6 +1292,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Personnel.Delete] id={Id} silinemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1318,6 +1330,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.SaveOperation] id={Id} workOrderId={WorkOrderId} operasyon kaydedilemedi.", req?.Id, req?.WorkOrderId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1334,6 +1347,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.DeleteOperation] id={Id} operasyon silinemedi.", id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1354,6 +1368,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.ExplodeFromRouting] workOrderId={WorkOrderId} routingId={RoutingId} rota patlatılamadı.", req?.WorkOrderId, req?.RoutingId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1373,6 +1388,7 @@ public sealed class ProductionController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[WorkOrder.ExplodeBom] workOrderId={WorkOrderId} reçete patlatılamadı.", workOrderId);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1473,7 +1489,11 @@ public sealed class ProductionController : Controller
                 new StartOperationRequest(req.WorkOrderOperationId, req.OperatorPersonnelId), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShopFloor.Start] opId={OpId} operasyon başlatılamadı.", req?.WorkOrderOperationId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     public sealed record ShopFloorPartialRequest(int WorkOrderOperationId, int OperatorPersonnelId, decimal Quantity, decimal? ScrapQuantity);
@@ -1490,7 +1510,11 @@ public sealed class ProductionController : Controller
                 new PartialCompleteOperationRequest(req.WorkOrderOperationId, req.OperatorPersonnelId, req.Quantity, req.ScrapQuantity), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShopFloor.PartialComplete] opId={OpId} kısmi tamamlama yapılamadı.", req?.WorkOrderOperationId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     public sealed record ShopFloorIssueComponentRequest(int WorkOrderComponentId, decimal Quantity, int OperatorPersonnelId);
@@ -1523,7 +1547,11 @@ public sealed class ProductionController : Controller
             // bu yoldan sarf edilemez (bkz. SqlWorkOrderComponentRepository.IssueAsync).
             return Json(new { ok = false, error = ex.Message });
         }
-        catch (Exception) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShopFloor.IssueComponent] componentId={ComponentId} malzeme sarfı yapılamadı.", req?.WorkOrderComponentId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     public sealed record ShopFloorCompleteRequest(int WorkOrderOperationId, int OperatorPersonnelId, decimal? FinalQuantity);
@@ -1544,7 +1572,11 @@ public sealed class ProductionController : Controller
                 new EndActivityRequest(req.WorkOrderOperationId, req.OperatorPersonnelId, Notes: null), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShopFloor.Complete] opId={OpId} operasyon tamamlanamadı.", req?.WorkOrderOperationId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     // ── Faz 1 MVP (2026-05-20): Üretim sahası aktivite log ────────────────────
@@ -1577,7 +1609,11 @@ public sealed class ProductionController : Controller
                 Notes:                req.Notes), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShopFloor.StartActivity] opId={OpId} aktivite başlatılamadı.", req?.WorkOrderOperationId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     public sealed record ShopFloorEndActivityRequest(
@@ -1599,7 +1635,11 @@ public sealed class ProductionController : Controller
                 new EndActivityRequest(req.WorkOrderOperationId, req.OperatorPersonnelId, req.Notes), ct);
             return Json(new { ok = true, ended });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShopFloor.EndActivity] opId={OpId} aktivite kapatılamadı.", req?.WorkOrderOperationId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     /// <summary>Operasyonun aktif (an devam eden) aktivitesi — yoksa null döner.</summary>
@@ -1836,7 +1876,11 @@ public sealed class ProductionController : Controller
             var id = await _activityReasons.SaveAsync(req, CurrentUserId(), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ActivityReason.Save] id={Id} kaydedilemedi.", req?.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     [HttpPost]
@@ -1849,7 +1893,11 @@ public sealed class ProductionController : Controller
             await _activityReasons.DeleteAsync(id, CurrentUserId(), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ActivityReason.Delete] id={Id} silinemedi.", id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -2000,7 +2048,11 @@ public sealed class ProductionController : Controller
             var id = await _shifts.SaveAsync(req, CurrentUserId(), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Shift.Save] id={Id} vardiya kaydedilemedi.", req?.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     [HttpPost]
@@ -2013,7 +2065,11 @@ public sealed class ProductionController : Controller
             await _shifts.DeleteAsync(id, CurrentUserId(), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Shift.Delete] id={Id} vardiya silinemedi.", id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     // ── Atama (matrix UI sayfası — tüm personel × 7 gün) ──
@@ -2047,7 +2103,11 @@ public sealed class ProductionController : Controller
             var id = await _shiftAssignments.SaveAsync(req, CurrentUserId(), ct);
             return Json(new { ok = true, id });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Shift.SaveAssignment] personnelId={PersonnelId} vardiya ataması kaydedilemedi.", req?.PersonnelId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     [HttpPost]
@@ -2060,7 +2120,11 @@ public sealed class ProductionController : Controller
             await _shiftAssignments.DeleteAsync(id, CurrentUserId(), ct);
             return Json(new { ok = true });
         }
-        catch (Exception ex) { return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Shift.DeleteAssignment] id={Id} vardiya ataması silinemedi.", id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
     }
 
     [HttpGet]

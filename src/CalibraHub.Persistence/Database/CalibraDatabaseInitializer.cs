@@ -3167,6 +3167,10 @@ END;";
                     [IsActive] BIT NOT NULL CONSTRAINT [df_Locations_IsActive] DEFAULT(1),
                     [IsMachinePark] BIT NOT NULL CONSTRAINT [df_Locations_IsMachinePark] DEFAULT(0),
                     [IsStorageArea] BIT NOT NULL CONSTRAINT [df_Locations_IsStorageArea] DEFAULT(0),
+                    -- Sayım referansı: alt kırılımların bu lokasyon üzerinden sayılması (sayım toplama noktası).
+                    [IsCountReference] BIT NOT NULL CONSTRAINT [df_Locations_IsCountReference] DEFAULT(0),
+                    -- Alt kırılımlar tek türde olmalı: bu lokasyon altında farklı tipte (raf/hücre) alt kırılım karışamaz.
+                    [IsSingleChildType] BIT NOT NULL CONSTRAINT [df_Locations_IsSingleChildType] DEFAULT(0),
                     [AllowNegativeBalance] BIT NULL,
                     CONSTRAINT [FK_Location_Parent]
                         FOREIGN KEY ([ParentId]) REFERENCES [{schemaForSql}].[Location]([Id])
@@ -3278,6 +3282,22 @@ END;";
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Location]
                 ADD [AllowNegativeBalance] BIT NULL;
+            END;
+
+            -- Sayım referansı: sayımda alt kırılımların bu lokasyon üzerinden sayılması (toplama noktası)
+            IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Location]', N'IsCountReference') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Location]
+                ADD [IsCountReference] BIT NOT NULL CONSTRAINT [df_Locations_IsCountReference] DEFAULT(0);
+            END;
+
+            -- Alt kırılımlar tek türde olmalı: bu lokasyon altında raf/hücre gibi farklı tipler karışamaz
+            IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Location]', N'IsSingleChildType') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Location]
+                ADD [IsSingleChildType] BIT NOT NULL CONSTRAINT [df_Locations_IsSingleChildType] DEFAULT(0);
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL
