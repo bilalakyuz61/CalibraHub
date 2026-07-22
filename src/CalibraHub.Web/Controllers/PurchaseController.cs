@@ -1792,48 +1792,20 @@ public sealed class PurchaseController : Controller
         }
     }
 
-    /// <summary>
-    /// İhtiyaç kayıtlarını (BELGENİN TAMAMI) "Cancelled" statüsüne alır — aynı belgedeki
-    /// kısmen karşılanmış başka kalemler varsa onlar da iptal olur.
-    /// POST /Purchase/CloseRequests
-    ///
-    /// 2026-07-21 (PageComment Seq 12): FulfillmentCenter ekranındaki "İhtiyacı Kapat" /
-    /// "Kalanı Kapat" iki ayrı aksiyonu TEK butona indirildi; ekran artık yalnız
-    /// <see cref="CloseFulfillmentLines"/>'ı çağırıyor (satır bazlı kapatma zaten hem
-    /// "hiç karşılanmamışsa tamamını" hem "kısmen karşılanmışsa kalanını" kapsıyor — bkz. o
-    /// metodun KDoc'u). Bu uç FulfillmentCenter'ın JS'inden artık ÇAĞRILMIYOR; başka bir
-    /// çağıranı olup olmadığı doğrulanmadı (bu görevin kapsamı dışında, bkz. görev raporu) —
-    /// bilinçli olarak SİLİNMEDİ, yetim kalmış olabilir.
-    /// </summary>
-    [HttpPost("/Purchase/CloseRequests")]
-    [ValidateAntiForgeryToken]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseRequest)]
-    public async Task<IActionResult> CloseRequests([FromBody] CloseRequestsModel req, CancellationToken ct)
-    {
-        if (req?.RequestIds == null || req.RequestIds.Count == 0)
-            return Json(new { ok = false, error = "Kapatılacak kayıt belirtilmedi." });
-
-        var closed = new List<int>();
-        var errors = new List<string>();
-        foreach (var id in req.RequestIds)
-        {
-            var (ok, err) = await _documentService.ChangeStatusAsync(id, "Cancelled", ct);
-            if (ok) closed.Add(id);
-            else    errors.Add($"#{id}: {err}");
-        }
-
-        return Json(new { ok = errors.Count == 0, closed, errors });
-    }
+    // NOT (2026-07-22, kullanıcı kararı): Eski "POST /Purchase/CloseRequests" ucu (belgenin
+    // TAMAMINI Cancelled yapan sweep) KALDIRILDI — UI'dan çağıranı kalmamıştı (Seq 12 tek-buton
+    // birleşimi) ve belge iptali zaten belge ekranındaki durum değiştirme akışında mevcut.
+    // Satır bazlı kapatma ihtiyacının tek ucu aşağıdaki CloseFulfillmentLines'tır.
 
     /// <summary>
     /// FulfillmentCenter — TEK "İhtiyacı Kapat" aksiyonu (2026-07-21, PageComment Seq 12).
     /// Seçili İhtiyaç KALEMLERİNİN karşılanmamış kalan miktarını kapatır.
     /// POST /Purchase/CloseFulfillmentLines
     ///
-    /// Yukarıdaki <see cref="CloseRequests"/>'ten FARKI: o BELGENİN TAMAMINI "Cancelled"
-    /// yapar; aynı belgede kısmen karşılanmış başka bir kalem varsa o da iptal olur.
     /// Bu uç yalnız verilen satırları etkiler (FulfillmentStatus = 3), karşılanan
     /// miktarları korur — "bu kalem için artık bir şey yapmayacağız" anlamındadır.
+    /// (Belgenin tamamını iptal eden eski CloseRequests sweep'i 2026-07-22'de kaldırıldı;
+    /// belge iptali için belge ekranındaki durum değiştirme akışı kullanılır.)
     ///
     /// Hem "hiç karşılama yapılmadı" hem "kısmen karşılandı" senaryosunu AYNI koşulsuz
     /// UPDATE ile kapsar: FulfilledFromStock/FulfilledByPurchase koşulsuz korunur (0 da

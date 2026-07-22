@@ -127,8 +127,9 @@ public interface IDocumentRepository
     ///
     /// Neden ayrı bir metod: mevcut <see cref="UpdateLineFulfillmentAsync"/> durumu iki
     /// toplamdan yeniden hesaplar ve yalnız 0/1/2 üretir — 3'ü hiçbir zaman yazmaz.
-    /// Belge bazlı CloseRequests ise TÜM belgeyi Cancelled yapar, aynı belgedeki diğer
-    /// kalemi de vurur; senaryo (bir kalemin kalanını kapat, diğerine dokunma) bunu gerektirir.
+    /// Belge-seviyesi toptan iptal (eski CloseRequests sweep'i, 2026-07-22'de kaldırıldı)
+    /// aynı belgedeki diğer kalemi de vururdu; senaryo (bir kalemin kalanını kapat,
+    /// diğerine dokunma) satır-seviyesi bu metodu gerektirir.
     ///
     /// NOT: kapatılmış satıra sonradan karşılama gelirse UpdateLineFulfillmentAsync durumu
     /// yeniden hesaplayıp 3'ü siler — bu KASITLIDIR, satır yeniden açılmış sayılır.

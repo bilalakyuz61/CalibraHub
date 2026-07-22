@@ -59,16 +59,10 @@ public sealed record PurchaseOrderLineRequest(
     int?    RequestLineId = null);
 
 /// <summary>
-/// FulfillmentCenter — İhtiyaç kaydını kapat (Converted statüsüne al).
-/// POST /Purchase/CloseRequests
-/// </summary>
-public sealed record CloseRequestsModel(IReadOnlyList<int> RequestIds);
-
-/// <summary>
 /// FulfillmentCenter — seçili İhtiyaç KALEMLERİNİN kalan miktarını kapat.
 /// POST /Purchase/CloseFulfillmentLines
-/// Belge bazlı <see cref="CloseRequestsModel"/>'den farkı: yalnız verilen satırlar
-/// etkilenir (FulfillmentStatus = 3), aynı belgedeki diğer kalemlere dokunulmaz.
+/// Yalnız verilen satırlar etkilenir (FulfillmentStatus = 3), aynı belgedeki diğer
+/// kalemlere dokunulmaz. (Belge bazlı eski CloseRequests ucu 2026-07-22'de kaldırıldı.)
 /// </summary>
 public sealed record CloseFulfillmentLinesRequest(IReadOnlyList<int> LineIds);
 
