@@ -3650,7 +3650,7 @@
     window.sqRecalcValidFromDays = sqRecalcValidFromDays;
     window.sqRecalcDaysFromValid = sqRecalcDaysFromValid;
 
-    // Başlık depo → satırlar propagasyonu: locationId boş satırlara header lokasyonunu yaz.
+    // Başlık lokasyon → satırlar propagasyonu: locationId boş satırlara header lokasyonunu yaz.
     window.sqPropagateHeaderLocation = function () {
         var sel = document.getElementById('sqLocationId');
         if (!sel) return;
