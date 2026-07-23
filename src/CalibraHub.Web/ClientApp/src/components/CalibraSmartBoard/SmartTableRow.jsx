@@ -55,7 +55,7 @@ import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } fr
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
 import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
-import { getTopBody, getTopFrameOffset, getTopViewportSize } from '../../utils/topPortal'
+import { getTopBody, getTopFrameOffset, getTopViewportSize, useClosePortalOnFrameHidden } from '../../utils/topPortal'
 
 /* ── Per-sutun render yardimcilari — align/pin/font tum hucre tiplerinde ortak ── */
 function tdStyleFor(column) {
@@ -418,6 +418,12 @@ export default function SmartTableRow(props) {
   var [menuVisible, setMenuVisible] = useState(false)
   var menuBtnRef = useRef(null)
   var menuRef = useRef(null)
+  // confirm/alert portal'larinin ust-duzey DOM node'lari — sadece
+  // useClosePortalOnFrameHidden'in hard-navigasyon (pagehide) senaryosunda
+  // dogrudan DOM'dan sokmesi icin (bkz. asagidaki hook cagrilari + dosya
+  // ustu portal aciklamasi).
+  var confirmPortalRef = useRef(null)
+  var alertPortalRef = useRef(null)
 
   useEffect(function () {
     if (!confirmOpen) return
@@ -432,6 +438,16 @@ export default function SmartTableRow(props) {
     document.addEventListener('keydown', onKey)
     return function () { document.removeEventListener('keydown', onKey) }
   }, [alertOpen])
+
+  // ── window.top govdesine portallanmis "Islemler" menusu + onay/uyari
+  //    modallerinin iki "sessiz yetim kalma" senaryosuna karsi kendini
+  //    kapatmasi — bkz. utils/topPortal.js useClosePortalOnFrameHidden kdoc'u
+  //    (2026-07-23, PageComment Seq 25): (1) iframe icinde baska sayfaya
+  //    hard-navigasyon, (2) Shell sekme/sol menu ile baska tab'a gecis
+  //    (iframe display:none olur, portal top dokumaninda gorunur kalirdi). ──
+  useClosePortalOnFrameHidden(menuOpen, function () { setMenuOpen(false) }, menuRef)
+  useClosePortalOnFrameHidden(confirmOpen, handleConfirmNo, confirmPortalRef)
+  useClosePortalOnFrameHidden(alertOpen, function () { setAlertOpen(false) }, alertPortalRef)
 
   useEffect(function () {
     if (!menuOpen) return undefined
@@ -781,6 +797,7 @@ export default function SmartTableRow(props) {
 
       {confirmOpen && createPortal(
         <div
+          ref={confirmPortalRef}
           style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={handleConfirmNo}
         >
@@ -808,6 +825,7 @@ export default function SmartTableRow(props) {
 
       {alertOpen && createPortal(
         <div
+          ref={alertPortalRef}
           style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={function () { setAlertOpen(false) }}
         >

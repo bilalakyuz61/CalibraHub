@@ -17,7 +17,7 @@ import { CircleDot, ChevronLeft, ChevronRight, X, AlertTriangle, Trash2, Check, 
 import SmartWidget from './SmartWidget'
 import { resolveColor, resolveIcon } from './DynamicWidgetFactory'
 import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
-import { getTopBody } from '../../utils/topPortal'
+import { getTopBody, useClosePortalOnFrameHidden } from '../../utils/topPortal'
 
 // Bir widget'ın kısıt ihlali varsa açıklama döndür, yoksa null.
 function getWidgetViolation(w) {
@@ -192,6 +192,11 @@ export default function SmartCard(props) {
   var [confirmMsg,  setConfirmMsg]    = useState('')
   var [confirmOpts, setConfirmOpts]   = useState(null)  // { okLabel, variant: 'danger'|'primary' }
   var confirmCallbackRef = useRef(null)
+  // Onay/uyari portal'larinin ust-duzey DOM node'lari — sadece
+  // useClosePortalOnFrameHidden'in hard-navigasyon (pagehide) senaryosunda
+  // dogrudan DOM'dan sokmesi icin (bkz. asagidaki hook cagrilari).
+  var confirmPortalRef = useRef(null)
+  var alertPortalRef = useRef(null)
 
   // ── Uyarı modalı (api-post hata mesajları — sayfa ortasında) ──
   var [alertOpen, setAlertOpen] = useState(false)
@@ -278,6 +283,17 @@ export default function SmartCard(props) {
     setConfirmOpen(false)
     confirmCallbackRef.current = null
   }
+
+  // ── window.top govdesine portallanmis onay/uyari modallerinin iki "sessiz
+  //    yetim kalma" senaryosuna karsi kendini kapatmasi — bkz. utils/topPortal.js
+  //    useClosePortalOnFrameHidden kdoc'u (2026-07-23, PageComment Seq 25):
+  //    (1) iframe icinde baska sayfaya hard-navigasyon, (2) Shell sekme/sol
+  //    menu ile baska tab'a gecis (iframe display:none olur, portal top
+  //    dokumaninda gorunur kalirdi). SmartCard'da kebab-menu portali yok —
+  //    fetch-modal (modalOpen) top'a portallanmadigi (iframe icinde kalir)
+  //    icin bu sinifa girmez, kapsam disi birakildi. ──
+  useClosePortalOnFrameHidden(confirmOpen, handleConfirmNo, confirmPortalRef)
+  useClosePortalOnFrameHidden(alertOpen, function () { setAlertOpen(false) }, alertPortalRef)
 
   // ── Tema algilama (SmartBoard ile ayni desen) ──
   // Inline style'lari theme-aware yapmak icin body/html class'ini okuyup
@@ -1003,6 +1019,7 @@ export default function SmartCard(props) {
           var okBg      = isPrimary ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'
           return (
         <div
+          ref={confirmPortalRef}
           style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={handleConfirmNo}
         >
@@ -1035,6 +1052,7 @@ export default function SmartCard(props) {
       {/* Uyarı modali — api-post hataları sayfa ortasında (toast değil) */}
       {alertOpen && createPortal(
         <div
+          ref={alertPortalRef}
           style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={function() { setAlertOpen(false) }}
         >
