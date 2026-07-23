@@ -78,6 +78,8 @@ public sealed class AiClientFactory : IAiClientFactory
             // 2026-05-24: DeepSeek — OpenAI-uyumlu API. Mevcut OpenAIClient'i farkli endpoint ile
             // kullanmak yeterli; tool calling native MEAI cevirisiyle calisir.
             "deepseek"     => CreateDeepSeek(apiKey!, provider.EndpointUrl, provider.DefaultModel),
+            // 2026-07-23: Groq — OpenAI-uyumlu API (chat completions), PageComment Seq 22 talebi.
+            "groq"         => CreateGroq(apiKey!, provider.EndpointUrl, provider.DefaultModel),
             _              => null,
         };
     }
@@ -143,6 +145,30 @@ public sealed class AiClientFactory : IAiClientFactory
         var inner = client.GetChatClient(modelId).AsIChatClient();
         // 2026-05-24: DeepSeek text-only — resim eklenirse HTTP 400 ('image_url' unknown variant)
         // doner. Wrapper resim bloklarini siyirip kullaniciya bilgi notu ekler.
+        return new Providers.TextOnlyChatClientWrapper(inner);
+    }
+
+    /// <summary>
+    /// 2026-07-23 — Groq (OpenAI-uyumlu chat-completions API, LPU inference altyapısı —
+    /// çok düşük gecikme). DeepSeek ile birebir aynı entegrasyon deseni: mevcut OpenAIClient'i
+    /// farklı base URL ile kullanır, yeni istemci sınıfı gerekmez.
+    /// Default model: llama-3.3-70b-versatile. Diğer örnekler: llama-3.1-8b-instant,
+    /// gemma2-9b-it (güncel model listesi console.groq.com/docs/models — değişebilir,
+    /// admin DefaultModel alanından override edebilir).
+    /// Endpoint default: https://api.groq.com/openai/v1 — provider.EndpointUrl ile override edilir.
+    /// </summary>
+    private static IChatClient CreateGroq(string apiKey, string? endpoint, string? defaultModel)
+    {
+        var modelId = string.IsNullOrWhiteSpace(defaultModel) ? "llama-3.3-70b-versatile" : defaultModel;
+        var baseUrl = string.IsNullOrWhiteSpace(endpoint) ? "https://api.groq.com/openai/v1" : endpoint.TrimEnd('/');
+        var opts = new OpenAI.OpenAIClientOptions
+        {
+            Endpoint = new Uri(baseUrl),
+        };
+        var client = new OpenAIClient(new ApiKeyCredential(apiKey), opts);
+        var inner = client.GetChatClient(modelId).AsIChatClient();
+        // 2026-07-23: Groq'un mainstream text modelleri (llama/gemma serisi) resim kabul etmez —
+        // DeepSeek'teki ayni HTTP 400 riski. Ayni savunma: TextOnlyChatClientWrapper.
         return new Providers.TextOnlyChatClientWrapper(inner);
     }
 

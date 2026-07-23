@@ -39,6 +39,10 @@ const PROVIDER_CHOICES = [
   // 2026-05-24: DeepSeek — OpenAI-uyumlu API. Ucuz, native tool calling. Endpoint
   // varsayilan https://api.deepseek.com/v1. Modeller: deepseek-chat (V3), deepseek-reasoner (R1), deepseek-coder.
   { code: 'deepseek',      label: 'DeepSeek',       defaultModel: 'deepseek-chat',              requiresEndpoint: false, requiresKey: true,  defaultLabel: 'DeepSeek (Şirket)',     endpointPlaceholder: 'https://api.deepseek.com/v1' },
+  // 2026-07-22 (PageComment Seq 22): Groq — OpenAI-uyumlu API, DeepSeek deseninin birebiri.
+  // Endpoint varsayilan https://api.groq.com/openai/v1. Metin modelleri gorsel kabul etmez
+  // (backend TextOnlyChatClientWrapper ile sarar).
+  { code: 'groq',          label: 'Groq',           defaultModel: 'llama-3.3-70b-versatile',    requiresEndpoint: false, requiresKey: true,  defaultLabel: 'Groq (Şirket)',         endpointPlaceholder: 'https://api.groq.com/openai/v1' },
 ]
 
 function getCsrf() {

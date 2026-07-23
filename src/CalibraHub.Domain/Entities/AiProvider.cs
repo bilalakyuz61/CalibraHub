@@ -26,6 +26,7 @@ public sealed class AiProvider
         "gemini",
         "ollama",     // 2026-05-23: Lokal LLM runtime — API key opsiyonel.
         "deepseek",   // 2026-05-24: OpenAI-uyumlu API; ucuz; tool calling native.
+        "groq",       // 2026-07-23: OpenAI-uyumlu API (LPU inference, çok hızlı); PageComment Seq 22.
     };
 
     public int Id { get; init; }
