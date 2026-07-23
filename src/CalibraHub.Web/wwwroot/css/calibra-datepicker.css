@@ -8,6 +8,13 @@
         body.app-theme-dark override — referans: Sales/DocumentEdit)
    Ekran bazlı ince ayar gerekiyorsa daha yüksek specificity ile ezilir
    (örn. .sqe-hform kuralları flex-basis ile genişliği yönetmeye devam eder).
+
+   Tıklama/yazma davranışı (2026-07-23): alan artık "her yeri tıkla-aç"
+   değil — metin kısmı serbestçe yazılabilir, yalnız sağ kenardaki takvim
+   ikonuna tıklayınca takvim açılır (mantık js/calibra-datepicker.js'te).
+   Bu yüzden taban cursor "text"tir; ikon üzerindeyken JS inline stille
+   "pointer"a çevirir. .cdp-invalid-flash, elle girilen geçersiz tarihte
+   (parse başarısız → önceki değere dönüş) kısa bir uyarı halkasıdır.
    ═══════════════════════════════════════════════════════════════════ */
 
 html body {
@@ -19,11 +26,24 @@ body.app-theme-dark {
 
 /* ── 1) Standart tarih inputu (flatpickr altInput) ─────────────────── */
 input.calibra-date-input {
-    cursor: pointer;
+    /* Metin bölgesi serbest yazım (text); ikon bölgesinde JS "pointer"a
+       çevirir (bkz. calibra-datepicker.js mousemove dinleyicisi). */
+    cursor: text;
     background-image: var(--cdp-input-icon);
     background-repeat: no-repeat;
     background-position: right 10px center;
     background-size: 15px 15px;
+}
+/* Elle girilen tarih parse edilemediğinde (flatpickr alanı boşaltmadan
+   önce) kısa bir kırmızı halka — alanın SESSİZCE boşa düşmediğini,
+   girişin reddedilip önceki değere dönüldüğünü bildirir. */
+@keyframes cdpInvalidPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    30%      { box-shadow: 0 0 0 3px rgba(239,68,68,.45); }
+    70%      { box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
+}
+input.calibra-date-input.cdp-invalid-flash {
+    animation: cdpInvalidPulse .55s ease-out;
 }
 /* Genişlik + ikon boşluğu: ekranların `input[type="text"] { width:100% }`
    tarzı (0,2,1) kurallarını ezebilmek için aynı specificity + geç yükleme.
