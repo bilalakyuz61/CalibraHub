@@ -292,12 +292,11 @@
         .cald-hub { fill: var(--cald-hub); transition: fill .3s ease; }
         .cald-wrap.is-solved .cald-hub { fill: var(--cald-success); }
         .cald-wrap.is-fail .cald-hub { fill: var(--cald-danger); }
-        .cald-check {
-            fill: none; stroke: var(--cald-success); stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round;
-            opacity: 0; transform: scale(.4); transform-origin: 100px 100px;
-            transition: opacity .3s, transform .35s cubic-bezier(.34,1.56,.5,1);
-        }
-        .cald-wrap.is-solved .cald-check { opacity: 1; transform: scale(1); }
+        /* 2026-07-23 kullanıcı geri bildirimi: kadran içinde beliren onay tiki (.cald-check
+           path'i) yelkovanlarla üst üste binip kötü görünüyordu — kaldırıldı. Başarı hissi
+           kadranın kalan öğeleriyle veriliyor: iğneler+hub yeşile döner (yukarıdaki
+           .cald-wrap.is-solved kuralları), stage glow'u (.cald-wrap.is-solved .cald-stage,
+           bkz. yukarı) ve durum metni rengi (.cald-wrap.is-solved .cald-status, aşağıda). */
         .cald-status {
             margin-top: 16px; text-align: center; font-size: .86rem; font-weight: 600;
             min-height: 1.2em; white-space: nowrap; color: var(--cald-status); transition: color .3s;
@@ -310,7 +309,7 @@
         @@keyframes caldShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(3px)} }
         .cald-wrap.cald-shake .cald-stage { animation: caldShake .5s ease; }
         @@media (prefers-reduced-motion: reduce) {
-            .cald-check, .cald-needle, .cald-stage { transition: none; }
+            .cald-needle, .cald-stage { transition: none; }
             .cald-stage,
             .cald-wrap.is-measuring .cald-stage { animation: none; }
             .cald-wrap.cald-shake .cald-stage { animation: none; }
@@ -403,7 +402,6 @@
                             <circle class="cald-tail" cx="100" cy="108" r="3" />
                         </g>
                         <circle class="cald-hub-ring" cx="100" cy="100" r="8" />
-                        <path class="cald-check" d="M91 101 l6 6 12 -13" />
                         <circle class="cald-hub" cx="100" cy="100" r="4.2" />
                     </svg>
                 </div>
