@@ -408,7 +408,30 @@ export default function SmartBoard(props) {
       else console.warn('[SmartBoard] trigger fonksiyon bulunamadi:', action.trigger)
       return
     }
-    if (action.url) navigateInWorkspace(action.url)
+    if (action.url) {
+      // openInTab (2026-07-25, PageComment Seq 27) — SmartCard.jsx / SmartTableRow.jsx
+      // dispatchActionUrl ile BİREBİR AYNI mantık (bkz. AuditLogActionHelper.cs XML doc'u):
+      // board header aksiyonlarında (örn. "Karşılama Merkezi") Shell.openWorkspaceTab
+      // API'siyle yeni/mevcut tab'da açar — sol menüden tıklanmışçasına davranır. openInTab
+      // sunulmamışsa davranış ÖNCEKİYLE BİREBİR AYNI (navigateInWorkspace, aynı iframe içinde).
+      if (action.openInTab) {
+        try {
+          if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
+            var explicitMatchPath = action.openInTab.matchPath
+            var matchPath = (explicitMatchPath !== undefined)
+              ? (explicitMatchPath || null)
+              : deriveMatchPathFromUrl(action.url)
+            window.top.CalibraHub.openWorkspaceTab({
+              url: action.url,
+              title: action.openInTab.title || action.label || 'Yeni Sekme',
+              matchPath: matchPath,
+            })
+            return
+          }
+        } catch (e) { /* cross-origin — fallback */ }
+      }
+      navigateInWorkspace(action.url)
+    }
   }, [])
 
   /* ── F8 — primary header action ("Yeni X") kisayolu ──
