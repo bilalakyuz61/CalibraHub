@@ -1424,6 +1424,10 @@ public sealed class PurchaseController : Controller
                     .ToList();
             }
 
+            // STOCK_DOC_CONSOLIDATE — aç/kapa parametre (varsayılan kapalı = mevcut davranış).
+            var consolidate = await _companyParams.GetBoolAsync(
+                FulfillmentParameters.FormCode, FulfillmentParameters.ConsolidateLinesKey, ct) ?? false;
+
             var saveReq = new SaveStockDocRequest(
                 Id:             null,
                 DocType:        "STOCK_OUT",
@@ -1433,19 +1437,9 @@ public sealed class PurchaseController : Controller
                 ToLocationId:   null,
                 RefNo:          refNo,
                 Notes:          req.Notes,
-                Lines:          validLines.Select(l => new SaveStockDocLineRequest(
-                    Id:             null,
-                    ItemId:         l.ItemId,
-                    MaterialCode:   null,
-                    MaterialName:   null,
-                    UnitId:         l.UnitId,
-                    Qty:            l.Qty,
-                    CombinationId:  l.CombinationId,
-                    Notes:          l.Notes,
-                    FromLocationId: l.FromLocationId,
-                    ToLocationId:   null,
-                    UnitCost:       null
-                )).ToList(),
+                Lines:          BuildStockDocLines(validLines.Select(l => new ConsolidationInputLine(
+                    l.ItemId, l.UnitId, l.Qty, l.FromLocationId, null, l.CombinationId, l.Notes, l.RequestLineId)),
+                    consolidate),
                 ArgeProjectId:  null
             );
 
@@ -1713,6 +1707,10 @@ public sealed class PurchaseController : Controller
                 .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.StockIssue, kv.Value))
                 .ToList();
 
+            // STOCK_DOC_CONSOLIDATE — aç/kapa parametre (varsayılan kapalı = mevcut davranış).
+            var consolidate = await _companyParams.GetBoolAsync(
+                FulfillmentParameters.FormCode, FulfillmentParameters.ConsolidateLinesKey, ct) ?? false;
+
             var saveReq = new SaveStockDocRequest(
                 Id:             null,
                 DocType:        "STOCK_OUT",
@@ -1722,18 +1720,9 @@ public sealed class PurchaseController : Controller
                 ToLocationId:   null,
                 RefNo:          refNo,
                 Notes:          req.Notes,
-                Lines:          planned.Select(l => new SaveStockDocLineRequest(
-                                    Id:             null,
-                                    ItemId:         l.ItemId,
-                                    MaterialCode:   null,
-                                    MaterialName:   null,
-                                    UnitId:         l.UnitId,
-                                    Qty:            l.Qty,
-                                    CombinationId:  l.CombinationId,
-                                    Notes:          l.Notes,
-                                    FromLocationId: l.FromLocationId,
-                                    ToLocationId:   null,
-                                    UnitCost:       null)).ToList(),
+                Lines:          BuildStockDocLines(planned.Select(l => new ConsolidationInputLine(
+                                    l.ItemId, l.UnitId, l.Qty, l.FromLocationId, null, l.CombinationId, l.Notes, l.RequestLineId)),
+                                    consolidate),
                 ArgeProjectId:  null);
 
             var (newDocId, docNo) = await _stockDocRepo.SaveAsync(saveReq, CurrentUserId(), ct, pendingEntries);
