@@ -37,3 +37,11 @@ export function markRead(id) {
 export function markAllRead() {
   return postJson(BASE + '/MarkAllReadJson', {})
 }
+
+export function togglePin(id) {
+  return postJson(BASE + '/TogglePinJson', { id: id })
+}
+
+export function deleteNotification(id) {
+  return postJson(BASE + '/DeleteJson', { id: id })
+}

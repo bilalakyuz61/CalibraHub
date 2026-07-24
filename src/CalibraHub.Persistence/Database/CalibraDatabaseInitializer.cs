@@ -5307,12 +5307,20 @@ END;";
                     [Link]        NVARCHAR(500) NULL,
                     [IsRead]      BIT NOT NULL CONSTRAINT [DF_UserNotification_IsRead] DEFAULT(0),
                     [ReadAt]      DATETIME NULL,
+                    [IsPinned]    BIT NOT NULL CONSTRAINT [DF_UserNotification_IsPinned] DEFAULT(0),
                     [CreatedById]   INT NULL,
                     [UpdatedById]   INT NULL,
                     [Updated]     DATETIME NULL
                 );
                 CREATE INDEX [IX_UserNotification_User_Unread]
                     ON [{s}].[UserNotification]([UserId], [IsRead], [Created] DESC);
+            END;
+
+            -- Migration: [IsPinned] eklendi (2026-07-25) — bildirim panelinde "uste tuttur" ozelligi
+            IF OBJECT_ID(N'[{s}].[UserNotification]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[UserNotification]') AND name = N'IsPinned')
+            BEGIN
+                ALTER TABLE [{s}].[UserNotification] ADD [IsPinned] BIT NOT NULL CONSTRAINT [DF_UserNotification_IsPinned] DEFAULT(0);
             END;
 
             -- Migration: [CreatedBy]/[UpdatedBy] NVARCHAR -> [CreatedById]/[UpdatedById] INT

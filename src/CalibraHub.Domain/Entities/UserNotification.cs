@@ -30,9 +30,17 @@ public sealed class UserNotification : EntityInt
     public bool IsRead { get; private set; }
     public DateTime? ReadAt { get; private set; }
 
+    /// <summary>Uste tuttur — panelde pinli bildirimler en usttedir.</summary>
+    public bool IsPinned { get; private set; }
+
     public void MarkRead(DateTime readAt)
     {
         IsRead = true;
         ReadAt = readAt;
+    }
+
+    public void SetPinned(bool pinned)
+    {
+        IsPinned = pinned;
     }
 }

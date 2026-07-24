@@ -52,10 +52,10 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         cmd.CommandText = $"""
             SELECT TOP (@Take)
                    [Id],[CompanyId],[UserId],[Created],[Title],[Body],
-                   [SourceType],[SourceId],[Link],[IsRead],[ReadAt]
+                   [SourceType],[SourceId],[Link],[IsRead],[ReadAt],[IsPinned]
             FROM {_table}
             WHERE [UserId] = @UserId
-            ORDER BY [IsRead] ASC, [Created] DESC;
+            ORDER BY [IsPinned] DESC, [IsRead] ASC, [Created] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Take",   take));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
@@ -95,6 +95,32 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<bool> TogglePinAsync(int notificationId, int userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {_table}
+            SET [IsPinned] = CASE WHEN [IsPinned] = 1 THEN 0 ELSE 1 END
+            WHERE [Id] = @Id AND [UserId] = @UserId;
+            SELECT [IsPinned] FROM {_table} WHERE [Id] = @Id AND [UserId] = @UserId;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Id", notificationId));
+        cmd.Parameters.Add(new SqlParameter("@UserId", userId));
+        var v = await cmd.ExecuteScalarAsync(cancellationToken);
+        return v != null && Convert.ToBoolean(v);
+    }
+
+    public async Task DeleteAsync(int notificationId, int userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [Id] = @Id AND [UserId] = @UserId;";
+        cmd.Parameters.Add(new SqlParameter("@Id", notificationId));
+        cmd.Parameters.Add(new SqlParameter("@UserId", userId));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private static UserNotification Map(SqlDataReader r)
     {
         var n = new UserNotification
@@ -112,6 +138,10 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         if (r.GetBoolean(9))
         {
             n.MarkRead(r.IsDBNull(10) ? DateTime.Now : r.GetDateTime(10));
+        }
+        if (r.GetBoolean(11))
+        {
+            n.SetPinned(true);
         }
         return n;
     }

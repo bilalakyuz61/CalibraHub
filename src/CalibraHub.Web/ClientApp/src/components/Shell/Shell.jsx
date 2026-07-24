@@ -36,7 +36,7 @@ import {
   // Shell internals
   Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
   Layers, MessageSquare, Languages, UserCircle, LogOut, Bot, Menu,
-  X, LayoutGrid, Building2, Check, Home, Plus, Pencil,
+  X, LayoutGrid, Building2, Check, Home, Plus, Pencil, Pin, PinOff, Trash2,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
@@ -73,6 +73,12 @@ var SHELL_I18N = {
   notif_new:               { TR: 'yeni',                             EN: 'new' },
   mark_all_read:           { TR: 'Tümünü okundu say',                EN: 'Mark all as read' },
   no_notifications:        { TR: 'Bildirim yok.',                    EN: 'No notifications.' },
+  notif_pin:               { TR: 'Üste tuttur',                      EN: 'Pin to top' },
+  notif_unpin:             { TR: 'Sabitlemeyi kaldır',               EN: 'Unpin' },
+  notif_mark_read:         { TR: 'Okundu işaretle',                  EN: 'Mark as read' },
+  notif_delete:            { TR: 'Sil',                              EN: 'Delete' },
+  notif_delete_confirm:    { TR: 'Bildirim silinsin mi?',            EN: 'Delete this notification?' },
+  notif_delete_yes:        { TR: 'Sil',                              EN: 'Delete' },
   open_pages:              { TR: 'Açık Sayfalar',                    EN: 'Open Pages' },
   // OpenTabsPopover
   pages_open_suffix:       { TR: 'sayfa açık',                       EN: 'pages open' },
@@ -1771,6 +1777,8 @@ function Header(props) {
   var [notifOpen, setNotifOpen] = useState(false)
   var [notifItems, setNotifItems] = useState([])
   var [notifUnread, setNotifUnread] = useState(0)
+  // Panel-ici mini sil-onayi (tam ekran modal degil) — pending id, panel kapaninca sifirlanir.
+  var [confirmDeleteId, setConfirmDeleteId] = useState(null)
   var notifBtnRef = useRef(null)
   var notifPanelRef = useRef(null)
 
@@ -1786,9 +1794,12 @@ function Header(props) {
   }, [])
 
   useEffect(function () {
-    if (!notifOpen) return
+    if (!notifOpen) {
+      setConfirmDeleteId(null) // panel kapaninca bekleyen sil-onayi banner'i temizlenir
+      return
+    }
     notifApi.list(30).then(function (d) {
-      setNotifItems((d && d.items) || [])
+      setNotifItems(sortNotifItems((d && d.items) || []))
       setNotifUnread((d && d.unreadCount) || 0)
     })
     function handleOutside(e) {
@@ -1800,13 +1811,69 @@ function Header(props) {
     return function () { document.removeEventListener('mousedown', handleOutside) }
   }, [notifOpen])
 
+  // Backend siralamasiyla ayni kural (pinned DESC, okunmamis once, tarih DESC) — pin/okundu
+  // toggle sonrasi in-place liste guncellenirken client-side yeniden uygulanir.
+  function sortNotifItems(list) {
+    return list.slice().sort(function (a, b) {
+      if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1
+      if (!!a.isRead !== !!b.isRead) return a.isRead ? 1 : -1
+      if (a.createdAt === b.createdAt) return 0
+      return a.createdAt < b.createdAt ? 1 : -1
+    })
+  }
+
   function handleNotifClick(n) {
+    setConfirmDeleteId(null)
     if (!n.isRead) {
       notifApi.markRead(n.id)
       setNotifItems(function (prev) { return prev.map(function (x) { return x.id === n.id ? { ...x, isRead: true } : x }) })
       setNotifUnread(function (c) { return Math.max(0, c - 1) })
     }
     if (n.link) window.location.href = n.link
+  }
+
+  /* Satir hover aksiyonlari: uste tuttur / okundu isaretle / sil.
+     Her biri stopPropagation ile satirin kendi onClick'ini (markRead+navigate) engeller. */
+  function handleTogglePinClick(n, e) {
+    e.stopPropagation()
+    var nextPinned = !n.isPinned
+    setNotifItems(function (prev) {
+      return sortNotifItems(prev.map(function (x) { return x.id === n.id ? { ...x, isPinned: nextPinned } : x }))
+    })
+    notifApi.togglePin(n.id).then(function (res) {
+      if (!res || !res.success) return
+      setNotifItems(function (prev) {
+        return sortNotifItems(prev.map(function (x) { return x.id === n.id ? { ...x, isPinned: !!res.isPinned } : x }))
+      })
+    })
+  }
+
+  function handleMarkReadClick(n, e) {
+    e.stopPropagation()
+    if (n.isRead) return
+    notifApi.markRead(n.id)
+    setNotifItems(function (prev) {
+      return sortNotifItems(prev.map(function (x) { return x.id === n.id ? { ...x, isRead: true } : x }))
+    })
+    setNotifUnread(function (c) { return Math.max(0, c - 1) })
+  }
+
+  function handleDeleteClick(n, e) {
+    e.stopPropagation()
+    setConfirmDeleteId(n.id)
+  }
+
+  function handleCancelDelete(e) {
+    e.stopPropagation()
+    setConfirmDeleteId(null)
+  }
+
+  function handleConfirmDelete(n, e) {
+    e.stopPropagation()
+    setConfirmDeleteId(null)
+    notifApi.deleteNotification(n.id)
+    setNotifItems(function (prev) { return prev.filter(function (x) { return x.id !== n.id }) })
+    if (!n.isRead) setNotifUnread(function (c) { return Math.max(0, c - 1) })
   }
 
   function handleMarkAllRead() {
@@ -1928,14 +1995,18 @@ function Header(props) {
                     </div>
                   )}
                   {notifItems.map(function (n) {
+                    var isConfirmingDelete = confirmDeleteId === n.id
                     return (
                       <div
                         key={n.id}
-                        onClick={function () { handleNotifClick(n) }}
+                        onClick={function () { if (!isConfirmingDelete) handleNotifClick(n) }}
                         className={
-                          'px-4 py-3 cursor-pointer border-b transition-colors ' +
-                          (isDark ? 'border-white/5 hover:bg-white/5' : 'border-slate-100 hover:bg-slate-50') +
-                          (!n.isRead ? (isDark ? ' bg-indigo-500/5' : ' bg-indigo-50/60') : '')
+                          'group relative px-4 py-3 border-b transition-colors ' +
+                          (isConfirmingDelete ? '' : 'cursor-pointer ') +
+                          (isDark ? 'border-white/5' : 'border-slate-100') +
+                          (!isConfirmingDelete ? (isDark ? ' hover:bg-white/5' : ' hover:bg-slate-50') : '') +
+                          (!n.isRead ? (isDark ? ' bg-indigo-500/5' : ' bg-indigo-50/60') : '') +
+                          (n.isPinned ? (isDark ? ' bg-amber-500/5' : ' bg-amber-50/50') : '')
                         }
                       >
                         <div className="flex items-start gap-2">
@@ -1943,8 +2014,13 @@ function Header(props) {
                             <span className="w-1.5 h-1.5 mt-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.7)] flex-shrink-0" />
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className={'text-[12.5px] font-semibold leading-snug ' + (n.isRead ? (isDark ? 'text-white/70' : 'text-slate-600') : '')}>
-                              {n.title}
+                            <div className="flex items-center gap-1">
+                              {n.isPinned && (
+                                <Pin size={10} strokeWidth={2.2} className={(isDark ? 'text-amber-400' : 'text-amber-500') + ' flex-shrink-0'} />
+                              )}
+                              <div className={'text-[12.5px] font-semibold leading-snug truncate ' + (n.isRead ? (isDark ? 'text-white/70' : 'text-slate-600') : '')}>
+                                {n.title}
+                              </div>
                             </div>
                             {n.body && (
                               <div className={'text-[11px] mt-0.5 leading-snug line-clamp-2 ' + (isDark ? 'text-white/50' : 'text-slate-500')}>
@@ -1955,7 +2031,77 @@ function Header(props) {
                               {formatNotifTime(n.createdAt)}
                             </div>
                           </div>
+
+                          {/* Hover aksiyonlari: uste tuttur / okundu isaretle / sil */}
+                          {!isConfirmingDelete && (
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                              <button
+                                onClick={function (e) { handleTogglePinClick(n, e) }}
+                                title={n.isPinned ? tShell('notif_unpin', lang) : tShell('notif_pin', lang)}
+                                className={
+                                  'p-1 rounded-md transition-colors ' +
+                                  (n.isPinned
+                                    ? (isDark ? 'text-amber-400 hover:bg-white/10' : 'text-amber-500 hover:bg-amber-100')
+                                    : (isDark ? 'text-white/40 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'))
+                                }
+                              >
+                                {n.isPinned ? <PinOff size={12} /> : <Pin size={12} />}
+                              </button>
+                              {!n.isRead && (
+                                <button
+                                  onClick={function (e) { handleMarkReadClick(n, e) }}
+                                  title={tShell('notif_mark_read', lang)}
+                                  className={
+                                    'p-1 rounded-md transition-colors ' +
+                                    (isDark ? 'text-white/40 hover:text-emerald-400 hover:bg-white/10' : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-100')
+                                  }
+                                >
+                                  <Check size={12} />
+                                </button>
+                              )}
+                              <button
+                                onClick={function (e) { handleDeleteClick(n, e) }}
+                                title={tShell('notif_delete', lang)}
+                                className={
+                                  'p-1 rounded-md transition-colors ' +
+                                  (isDark ? 'text-white/40 hover:text-rose-400 hover:bg-white/10' : 'text-slate-400 hover:text-rose-600 hover:bg-slate-100')
+                                }
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          )}
                         </div>
+
+                        {/* Panel-ici mini sil-onayi — tam ekran modal degil (kucuk yuzey). */}
+                        {isConfirmingDelete && (
+                          <div
+                            onClick={function (e) { e.stopPropagation() }}
+                            className={
+                              'mt-2 flex items-center justify-between gap-2 pl-2 pr-1.5 py-1.5 rounded-lg text-[11px] ' +
+                              (isDark ? 'bg-rose-500/10 text-rose-300' : 'bg-rose-50 text-rose-700')
+                            }
+                          >
+                            <span className="font-medium">{tShell('notif_delete_confirm', lang)}</span>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={function (e) { handleCancelDelete(e) }}
+                                className={
+                                  'px-2 py-0.5 rounded-md font-medium transition-colors ' +
+                                  (isDark ? 'hover:bg-white/10 text-white/60' : 'hover:bg-slate-200 text-slate-600')
+                                }
+                              >
+                                {tShell('cancel', lang)}
+                              </button>
+                              <button
+                                onClick={function (e) { handleConfirmDelete(n, e) }}
+                                className="px-2 py-0.5 rounded-md font-semibold text-white bg-rose-600 hover:bg-rose-500 transition-colors"
+                              >
+                                {tShell('notif_delete_yes', lang)}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })}

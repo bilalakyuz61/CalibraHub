@@ -14,4 +14,10 @@ public interface IUserNotificationRepository
     Task MarkReadAsync(int notificationId, int userId, DateTime readAt, CancellationToken cancellationToken);
 
     Task MarkAllReadAsync(int userId, DateTime readAt, CancellationToken cancellationToken);
+
+    /// <summary>Sabitleme durumunu tersine cevirir (pin/unpin toggle). Yeni IsPinned degerini doner.</summary>
+    Task<bool> TogglePinAsync(int notificationId, int userId, CancellationToken cancellationToken);
+
+    /// <summary>Bildirimi kalici olarak siler. Tablo IsActive tasimadigindan hard delete uygulanir.</summary>
+    Task DeleteAsync(int notificationId, int userId, CancellationToken cancellationToken);
 }

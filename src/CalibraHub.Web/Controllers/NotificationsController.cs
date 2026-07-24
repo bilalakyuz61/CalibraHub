@@ -41,6 +41,7 @@ public sealed class NotificationsController : Controller
                 sourceId   = n.SourceId,
                 link       = n.Link,
                 isRead     = n.IsRead,
+                isPinned   = n.IsPinned,
                 createdAt  = n.Created.ToString("yyyy-MM-ddTHH:mm:ss"),
             })
         });
@@ -72,6 +73,26 @@ public sealed class NotificationsController : Controller
         var userId = CurrentUserId();
         if (userId <= 0) return Json(new { success = false });
         await _repo.MarkAllReadAsync(userId, DateTime.Now, ct);
+        return Json(new { success = true });
+    }
+
+    /// <summary>Uste tuttur / kaldir toggle — WHERE UserId eslesmesi sahiplik denetimidir.</summary>
+    [HttpPost]
+    public async Task<IActionResult> TogglePinJson([FromBody] IdInput input, CancellationToken ct = default)
+    {
+        var userId = CurrentUserId();
+        if (userId <= 0) return Json(new { success = false });
+        var isPinned = await _repo.TogglePinAsync(input.Id, userId, ct);
+        return Json(new { success = true, isPinned });
+    }
+
+    /// <summary>Bildirimi kalici siler (tablo IsActive tasimiyor, hard delete).</summary>
+    [HttpPost]
+    public async Task<IActionResult> DeleteJson([FromBody] IdInput input, CancellationToken ct = default)
+    {
+        var userId = CurrentUserId();
+        if (userId <= 0) return Json(new { success = false });
+        await _repo.DeleteAsync(input.Id, userId, ct);
         return Json(new { success = true });
     }
 

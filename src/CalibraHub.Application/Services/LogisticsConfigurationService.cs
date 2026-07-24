@@ -1237,8 +1237,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var typesForHierarchy = await _repository.GetLocationTypesAsync(cancellationToken);
         ValidateLocationTypeHierarchy(locationTypeCode, request.ParentId, locations, typesForHierarchy);
 
-        // Alt Kirilimlar Tek Turde: parent IsSingleChildType ise yeni kayit mevcut
-        // kardeslerinin tipiyle eslesmeli (ilk cocuk serbest).
+        // Kardes tekduzeligi (genel kural, 2026-07-25): yeni kayit, parent altindaki mevcut
+        // aktif kardeslerin tipiyle eslesmeli (ilk cocuk serbest, tipi o belirler).
         ValidateSingleChildTypeConstraint(locationTypeCode, request.ParentId, excludeLocationId: null, locations, typesForHierarchy);
 
         if (locations.Any(x => string.Equals(x.LocationCode, locationCode, StringComparison.OrdinalIgnoreCase)))
@@ -1290,8 +1290,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             IsActive = request.IsActive,
             IsMachinePark = request.IsMachinePark,
             IsStorageArea = request.IsStorageArea,
-            // Faz 1: bayraklar olduğu gibi taşınır; anlam/kısıt uygulaması (yalnız konteyner
-            // lokasyonda geçerlilik, tek-tür doğrulaması, sayım davranışı) sonraki fazda.
+            // 2026-07-25: UI bu iki alanı artık göstermiyor/ayarlamıyor (bkz. LocationTree.jsx).
+            // IsSingleChildType kural katmanında da artık okunmuyor (kardeş tekdüzeliği koşulsuz
+            // genel kural oldu, bkz. ValidateSingleChildTypeConstraint). Yeni kayıtta önceki bir
+            // değer yok — request üzerinden geçer (UI hep false gönderir) → daima false.
+            // Kolonlar geriye-uyumluluk için kalır (proje konvansiyonu: UI'dan kalkar, kolon kalır).
             IsCountReference = request.IsCountReference,
             IsSingleChildType = request.IsSingleChildType,
             AllowNegativeBalance = request.AllowNegativeBalance
@@ -1335,10 +1338,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var typesForHierarchyU = await _repository.GetLocationTypesAsync(cancellationToken);
         ValidateLocationTypeHierarchy(locationTypeCode, request.ParentId, locations, typesForHierarchyU);
 
-        // Alt Kirilimlar Tek Turde: yalnizca gercekten tasiniyorsa (parent degisti) veya tipi
-        // degisiyorsa kontrol edilir — parent/tip ayniysa (ornegin sadece ad/kapasite duzenleniyorsa)
-        // sessizce atlanir; aksi halde Faz 1 oncesi/kenar-durum mevcut karisik kardes verisi,
-        // bu alanla ilgisiz bir duzenlemeyi bile bloke ederdi.
+        // Kardes tekduzeligi (genel kural, 2026-07-25): yalnizca gercekten tasiniyorsa (parent
+        // degisti) veya tipi degisiyorsa kontrol edilir — parent/tip ayniysa (ornegin sadece
+        // ad/kapasite duzenleniyorsa) sessizce atlanir; aksi halde kural genellenmeden once
+        // olusmus mevcut karisik-tipli kardes verisi, bu alanla ilgisiz bir duzenlemeyi bile
+        // bloke ederdi. Eski karisik veri bu sekilde DOKUNULMADAN kalir — kural yalnizca o
+        // parent altina YENİ ekleme/taşıma yapılınca devreye girer.
         var parentOrTypeChanged =
             existingLocation.ParentId != request.ParentId ||
             !string.Equals(existingLocation.LocationTypeCode, locationTypeCode, StringComparison.OrdinalIgnoreCase);
@@ -1369,10 +1374,6 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 }
             }
         }
-
-        // Alt Kirilimlar Tek Turde bayragi FALSE->TRUE aciliyorsa, mevcut aktif cocuklar
-        // bayrak kapaliyken zaten karisik tipte eklenmis olabilir — bayrak "yalan" soylemesin.
-        ValidateSingleChildTypeToggle(request.Id, existingLocation.IsSingleChildType, request.IsSingleChildType, locations, typesForHierarchyU);
 
         if (locations.Any(x =>
                 x.Id != request.Id &&
@@ -1414,10 +1415,15 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             IsActive = request.IsActive,
             IsMachinePark = isMachinePark,
             IsStorageArea = isStorageArea,
-            // Faz 1: doğrudan taşınır (leaf/konteyner koşullama, tek-tür doğrulaması,
-            // sayım davranışı sonraki fazda). Bu bayraklar konteyner lokasyonda anlamlıdır.
-            IsCountReference = request.IsCountReference,
-            IsSingleChildType = request.IsSingleChildType,
+            // 2026-07-25: UI bu iki alanı artık göstermiyor/ayarlamıyor (bkz. LocationTree.jsx) —
+            // IsSingleChildType kural katmanında da artık okunmuyor (kardeş tekdüzeliği koşulsuz
+            // genel kural oldu, bkz. ValidateSingleChildTypeConstraint). request.IsCountReference /
+            // request.IsSingleChildType artık her zaman false gelir (UI göndermiyor); bunu olduğu
+            // gibi yazarsak önceden true olan legacy kayıtları her düzenlemede sessizce false'a
+            // düşürürüz. Bunun yerine mevcut kaydın değeri korunur (kolon geriye-uyumluluk için
+            // kalıyor — proje konvansiyonu: UI'dan kalkar, kolon ve veri kalır).
+            IsCountReference = existingLocation.IsCountReference,
+            IsSingleChildType = existingLocation.IsSingleChildType,
             AllowNegativeBalance = allowNegativeBalance
         };
 
@@ -1495,12 +1501,19 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     }
 
     /// <summary>
-    /// "Alt Kırılımlar Tek Türde" (IsSingleChildType) kuralı: parent bu bayrakla işaretliyse,
-    /// altındaki tüm AKTİF çocuklar aynı LocationTypeCode'a sahip olmak zorundadır — ilk çocuk
+    /// Kardeş tekdüzeliği — GENEL KURAL (2026-07-25, kullanıcı kararı): bir parent'ın altındaki
+    /// tüm AKTİF çocuklar her zaman aynı LocationTypeCode'a sahip olmak zorundadır — ilk çocuk
     /// serbesttir (tipi o belirler), sonraki her ekleme/taşıma/tip değişikliği bu tiple eşleşmeli.
+    /// Örnek: bir bölümün altına "Raf" tanımlandıysa, aynı seviyede "Raf" dışında bir tip
+    /// eklenemez; "Hücre" ancak o Raf'ın altında (bir alt seviyede) olabilir. Bu kural artık
+    /// bayrak (eski adıyla IsSingleChildType) koşuluna bağlı DEĞİL, her parent için koşulsuz
+    /// uygulanır. Parent-child HİYERARŞİ sırası (bölüm→raf→hücre) ValidateLocationTypeHierarchy'nin
+    /// işidir — bu metod yalnızca aynı seviyedeki (sibling) kırılımların tek tip olmasını denetler.
     /// Karşılaştırma tip KODU üzerinden yapılır (ad değil). excludeLocationId, update sırasında
     /// düzenlenen kaydın kendisini sibling kümesinden çıkarmak için kullanılır (kendi eski tipiyle
-    /// kendine çakışma raporlamasın).
+    /// kendine çakışma raporlamasın). Kural genellenmeden önce oluşmuş karışık-tipli mevcut
+    /// kardeş grupları bu kontrolle GERİYE DÖNÜK bloklanmaz — yalnızca o parent altına yeni bir
+    /// ekleme/taşıma/tip değişikliği denendiğinde devreye girer (bkz. çağıran kod).
     /// </summary>
     private static void ValidateSingleChildTypeConstraint(
         string childTypeCode,
@@ -1513,7 +1526,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         if (string.IsNullOrWhiteSpace(childTypeCode)) return;
 
         var parent = locations.FirstOrDefault(x => x.Id == parentLocationId.Value);
-        if (parent is null || !parent.IsSingleChildType) return;
+        if (parent is null) return;
 
         // Mevcut aktif kardeşlerden (kendisi hariç) yeni tiple çakışan ilk kayıt — varsa
         // parent zaten homojen bir tip belirlemiş demektir, yeni/taşınan kayıt onunla eşleşmeli.
@@ -1531,45 +1544,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             ?? conflictingSiblingTypeCode;
 
         throw new ArgumentException(
-            $"'{parentLabel}' lokasyonu 'Alt Kırılımlar Tek Türde' olarak işaretli — altına yalnız " +
-            $"'{existingTypeName}' tipinde kırılım eklenebilir.");
-    }
-
-    /// <summary>
-    /// Bir lokasyonun "Alt Kırılımlar Tek Türde" (IsSingleChildType) bayrağı FALSE'tan TRUE'ya
-    /// çevriliyorsa, mevcut AKTİF çocukları bayrak henüz kapalıyken karışık tiplerde eklenmiş
-    /// olabilir. Bayrak "yalan söylemesin" diye, açılış anında çocuklar zaten homojen değilse
-    /// reddedilir. Yalnızca FALSE→TRUE geçişinde çalışır; TRUE→FALSE (gevşetme) veya değişmeyen
-    /// değer serbesttir.
-    /// </summary>
-    private static void ValidateSingleChildTypeToggle(
-        int locationId,
-        bool wasSingleChildType,
-        bool isSingleChildType,
-        IReadOnlyCollection<Location> locations,
-        IReadOnlyCollection<LocationType> types)
-    {
-        if (wasSingleChildType || !isSingleChildType) return;
-
-        var distinctChildTypeCodes = locations
-            .Where(x => x.ParentId == locationId && x.IsActive)
-            .Select(x => x.LocationTypeCode)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (distinctChildTypeCodes.Count <= 1) return;
-
-        var typeNames = distinctChildTypeCodes.Select(code =>
-            types.FirstOrDefault(t => string.Equals(t.Code, code, StringComparison.OrdinalIgnoreCase))?.Name ?? code);
-
-        var self = locations.FirstOrDefault(x => x.Id == locationId);
-        var selfLabel = self is null
-            ? locationId.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            : (string.IsNullOrWhiteSpace(self.LocationName) ? self.LocationCode : self.LocationName);
-
-        throw new ArgumentException(
-            $"'{selfLabel}' lokasyonunun altında birden fazla türde kırılım var ({string.Join(", ", typeNames)}) " +
-            $"— önce alt kırılımları tek türe indirin.");
+            $"'{parentLabel}' altında zaten '{existingTypeName}' tipinde kırılım var — aynı seviyeye " +
+            $"yalnız '{existingTypeName}' eklenebilir.");
     }
 
     /// <summary>
