@@ -514,6 +514,27 @@ body.app-theme-dark .ap-tab.is-active::before {
 
                 <div class="ap-row">
                     <div class="ap-row-main">
+                        <div class="ap-row-title">Karşı Fişte Stokları Kümüle Et</div>
+                        <div class="ap-row-desc">
+                            Açıkken "Depodan Karşıla", "Ambar Çıkış Fişi" ve "Depo Transferi" ile oluşan
+                            fişte aynı malzeme (aynı depo, kombinasyon ve birim) birden fazla ihtiyaç
+                            kaleminden geliyorsa <strong>tek satırda toplanır</strong>. Karşılama
+                            izlenebilirliği (hangi ihtiyaç ne kadar) korunur. Kapalıyken her kalem ayrı satır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-fc-consolidate" />
+                            <span class="ap-switch-track">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label" id="ap-fc-consolidate-label">Pasif</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
                         <div class="ap-row-title">Karşılama Deposu Seçimi</div>
                         <div class="ap-row-desc">
                             "Depodan Karşıla" aksiyonu çalışırken hangi depoların stok bakiyesine bakılacağını belirleyin.
@@ -966,6 +987,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     wireSwitch('ap-edoc-approval', 'ap-edoc-approval-label');
     wireSwitch('ap-bom-allow-dup', 'ap-bom-allow-dup-label');
     wireSwitch('ap-fc-min-stock', 'ap-fc-min-stock-label');
+    wireSwitch('ap-fc-consolidate', 'ap-fc-consolidate-label');
     // Belge türü onay switch'leri — dinamik liste (data-kind attribute'lu)
     document.querySelectorAll('.ap-kind-switch').forEach(function (cb) {
         wireSwitch(cb.id, cb.id + '-label');
@@ -1046,9 +1068,17 @@ body.app-theme-dark .ap-tab.is-active::before {
                     body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_RESPECT_MIN_STOCK', paramValue: (minEl && minEl.checked) ? 'true' : 'false', dataType: 3 })
                 });
                 var d3 = await r3.json();
-                ok = !!d1.ok && !!d2.ok && !!d3.ok;
+                var conEl = document.getElementById('ap-fc-consolidate');
+                var r4 = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'STOCK_DOC_CONSOLIDATE', paramValue: (conEl && conEl.checked) ? 'true' : 'false', dataType: 3 })
+                });
+                var d4 = await r4.json();
+                ok = !!d1.ok && !!d2.ok && !!d3.ok && !!d4.ok;
                 if (ok) flash('Kaydedildi.', true);
-                else    flash((d1.error || d2.error || d3.error || 'Kaydetme basarisiz.'), false);
+                else    flash((d1.error || d2.error || d3.error || d4.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'stok') {
                 var negCtrlEl = document.getElementById('ap-neg-control');
                 var pFifoEl = document.getElementById('ap-purchase-fifo');
@@ -1207,6 +1237,15 @@ body.app-theme-dark .ap-tab.is-active::before {
                 msEl.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', msOn);
                 var msLbl = document.getElementById('ap-fc-min-stock-label');
                 if (msLbl) { msLbl.textContent = msOn ? 'Aktif' : 'Pasif'; msLbl.classList.toggle('is-active', msOn); }
+            }
+            // Kumule switch'i (default: kapalı)
+            var conOn = cfg.consolidateLines === true;
+            var conEl2 = document.getElementById('ap-fc-consolidate');
+            if (conEl2) {
+                conEl2.checked = conOn;
+                conEl2.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', conOn);
+                var conLbl = document.getElementById('ap-fc-consolidate-label');
+                if (conLbl) { conLbl.textContent = conOn ? 'Aktif' : 'Pasif'; conLbl.classList.toggle('is-active', conOn); }
             }
 
             var locs = await (await fetch('/Warehouse/GetLocationsJson')).json();

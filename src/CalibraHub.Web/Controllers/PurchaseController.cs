@@ -1485,7 +1485,8 @@ public sealed class PurchaseController : Controller
                             .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
                             .Select(int.Parse).ToList();
         var respectMinStock = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.RespectMinStockKey, ct) ?? false;
-        return Json(new { mode, locationIds = ids, respectMinStock });
+        var consolidateLines = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.ConsolidateLinesKey, ct) ?? false;
+        return Json(new { mode, locationIds = ids, respectMinStock, consolidateLines });
     }
 
     /// <summary>
