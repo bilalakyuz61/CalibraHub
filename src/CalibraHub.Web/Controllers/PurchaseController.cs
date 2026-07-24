@@ -268,7 +268,11 @@ public sealed class PurchaseController : Controller
             .Select(n => n!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        return distinct.Count == 0 ? null : string.Join("; ", distinct);
+        if (distinct.Count == 0) return null;
+        var combined = string.Join("; ", distinct);
+        // DocumentLine.Notes NVARCHAR(500) — kumule birlestirmesi taban kolonu ASMAMALI, yoksa
+        // SQL truncation -> tum transaction rollback -> fis olusmaz (review Bulgu 1). 500'e kirp.
+        return combined.Length <= 500 ? combined : combined.Substring(0, 499) + "…";
     }
 
     /// <summary>
@@ -1357,6 +1361,9 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
+            // Sessizce yutma (CLAUDE.md kural #2) — kumule SQL truncation dahil beklenmeyen hatalar
+            // teshis edilebilsin diye logla, istemciye jenerik don.
+            _logger.LogError(ex, "[Purchase] Karsilama aksiyonu sirasinda beklenmeyen hata.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1465,6 +1472,9 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
+            // Sessizce yutma (CLAUDE.md kural #2) — kumule SQL truncation dahil beklenmeyen hatalar
+            // teshis edilebilsin diye logla, istemciye jenerik don.
+            _logger.LogError(ex, "[Purchase] Karsilama aksiyonu sirasinda beklenmeyen hata.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -1873,6 +1883,9 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
+            // Sessizce yutma (CLAUDE.md kural #2) — kumule SQL truncation dahil beklenmeyen hatalar
+            // teshis edilebilsin diye logla, istemciye jenerik don.
+            _logger.LogError(ex, "[Purchase] Karsilama aksiyonu sirasinda beklenmeyen hata.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -2234,6 +2247,9 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
+            // Sessizce yutma (CLAUDE.md kural #2) — kumule SQL truncation dahil beklenmeyen hatalar
+            // teshis edilebilsin diye logla, istemciye jenerik don.
+            _logger.LogError(ex, "[Purchase] Karsilama aksiyonu sirasinda beklenmeyen hata.");
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
