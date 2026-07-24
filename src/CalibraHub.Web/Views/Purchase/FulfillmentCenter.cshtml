@@ -3163,18 +3163,30 @@
                         cell.title       = r.reason || '';
                     }
                 });
-                fc3ModalShowMsg('✔ ' + (d.docNo ? d.docNo + ' fişi oluşturuldu' : 'İşlem tamamlandı') + (d.approvalStarted ? ' · onaya gönderildi' : ''), 'ok');
+                if (d.docNo) {
+                    fc3ModalShowMsg('✔ ' + d.docNo + ' fişi oluşturuldu' + (d.approvalStarted ? ' · onaya gönderildi' : ''), 'ok');
+                } else {
+                    // Hiç kalem eşleşmedi (docNo yok, belge oluşmadı) — yanıltıcı yeşil yerine uyarı (review LOW-4).
+                    fc3ModalShowMsg('⚠ Hiçbir kalem karşılanamadı — satırlardaki sebeplere bakın.', 'err');
+                }
                 var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;  // sonuç görüntülendi, tekrar gönderme kapalı
                 // Arka plandaki liste + seçim tazelenir; sonucu görebilmesi için modal açık kalır (kullanıcı kapatır).
-                _lineSel = {}; _docLineCache = {}; _globalStockMap = {};
-                document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
-                fc3UpdateFulfillBar();
-                loadAllLines();
+                fc3PostSubmitCleanup();
             } else {
                 fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
             }
         })
         .catch(function() { fc3ModalSetBusy(false); fc3ModalShowMsg('✖ Bağlantı hatası', 'err'); });
+    }
+
+    // Başarılı bir aksiyon sonrası ORTAK temizlik: seçim + cache sıfırla, fulfill-bar'ı kapat,
+    // listeyi tazele. Aksi halde işlenmiş kalemler seçili kalır → kullanıcı aynı kaleme ikinci
+    // aksiyon uygulayıp aşırı-karşılama yapabilir (review LOW-5).
+    function fc3PostSubmitCleanup() {
+        _lineSel = {}; _docLineCache = {}; _globalStockMap = {};
+        document.querySelectorAll('.fc3-sub-cb').forEach(function(cb) { cb.checked = false; });
+        fc3UpdateFulfillBar();
+        loadAllLines();
     }
 
     // ── Submit — Depo Transferi (mevcut payload korunur) ─────────────────────────────────────
@@ -3207,7 +3219,7 @@
             if (d.ok) {
                 fc3ModalShowMsg('✔ Transfer oluşturuldu: ' + d.docNo, 'ok');
                 var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;
-                invalidateDocCache();
+                fc3PostSubmitCleanup();
             } else {
                 fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
             }
@@ -3242,7 +3254,7 @@
             if (d.ok) {
                 fc3ModalShowMsg('✔ Ambar çıkış fişi oluşturuldu: ' + d.docNo, 'ok');
                 var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;
-                invalidateDocCache();
+                fc3PostSubmitCleanup();
             } else {
                 fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
             }
@@ -3301,7 +3313,7 @@
                     msgEl.style.display = 'block';
                 }
                 var okBtn = document.getElementById('fc3ModalOkBtn'); if (okBtn) okBtn.disabled = true;
-                invalidateDocCache();
+                fc3PostSubmitCleanup();
             } else {
                 fc3ModalShowMsg('✖ ' + (d.error || 'Hata'), 'err');
             }

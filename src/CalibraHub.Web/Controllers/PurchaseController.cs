@@ -204,9 +204,12 @@ public sealed class PurchaseController : Controller
                 ct);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
             // Akış başlatma hatası belge kaydını iptal etmez — belge zaten kaydedildi.
+            // Ama sessizce yutma (CLAUDE.md kural #2): yanlış yapılandırılmış akış / DB hatası
+            // teşhis edilebilsin diye logla, istemciye jenerik davran.
+            _logger.LogWarning(ex, "[Purchase] Depodan Karsila auto-start onay baslatilamadi: Document {DocumentId}, tip {TypeCode}", documentId, documentTypeCode);
             return false;
         }
     }
