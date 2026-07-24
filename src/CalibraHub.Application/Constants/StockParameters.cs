@@ -129,4 +129,18 @@ public static class FulfillmentParameters
     /// DB kayıtlarının artık okunmadığını belgelemek için tutulur; hiçbir runtime kodu tüketmez.
     /// </summary>
     public const string RequireApprovalKey = "FULFILLMENT_REQUIRE_APPROVAL";
+
+    /// <summary>
+    /// Karşı fiş satırlarını kümüle et (Bool, default false=kapalı — mevcut davranış). Açıkken
+    /// FulfillFromStock/CreateStockIssue/CreateTransfer'ın ürettiği stok belgesinde aynı
+    /// (ItemId, FromLocationId, ToLocationId, CombinationId, UnitId) kombinasyonuna sahip
+    /// satırlar TEK fiş satırında toplanır (Qty SUM) — aynı malzeme/depo birden fazla İhtiyaç
+    /// kaleminden geliyorsa fiş kalabalıklaşmaz. Kapalıyken her İhtiyaç satırı kendi fiş
+    /// satırını üretir (2026-07-24 öncesi davranış, geriye uyum). Karşılama defteri
+    /// (DocumentLineFulfillment) BUNDAN ETKİLENMEZ: her İhtiyaç satırı (RequestLineId) yine
+    /// kendi defter/link kaydını alır, yalnız fiziksel fiş satırı paylaşılır — bkz.
+    /// PurchaseController.BuildStockDocLines/ConsolidateStockLines +
+    /// SqlStockDocRepository.SaveDirectDocAsync (lineIdByRequestLineId).
+    /// </summary>
+    public const string ConsolidateLinesKey = "STOCK_DOC_CONSOLIDATE";
 }

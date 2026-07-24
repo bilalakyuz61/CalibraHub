@@ -214,6 +214,104 @@ public sealed class PurchaseController : Controller
         }
     }
 
+    // ── STOCK_DOC_CONSOLIDATE (2026-07-24) — karşı fiş satır kümülesi ──────────────────────
+    // FulfillFromStock / CreateStockIssue / CreateTransfer üçü de aynı deseni kullanır: parametre
+    // açıkken aynı (ItemId, FromLocationId, ToLocationId, CombinationId, UnitId) satırları tek
+    // fiş satırında toplar. Kapalıyken (varsayılan) davranış birebir korunur.
+
+    /// <summary>
+    /// Kümüleme girdisi — Transfer/StockIssue/FulfillFromStock kendi DTO'sundan buna map eder.
+    /// <see cref="ToLocationId"/> yalnız Transfer'de anlamlıdır (StockIssue/FulfillFromStock her
+    /// zaman null geçer — kümüleme anahtarına katılımı bu yüzden no-op'tur).
+    /// </summary>
+    private sealed record ConsolidationInputLine(
+        int ItemId, int? UnitId, decimal Qty, int? FromLocationId, int? ToLocationId,
+        int? CombinationId, string? Notes, int? RequestLineId);
+
+    /// <summary>
+    /// Kümüleme sonucu — <see cref="RequestLineIds"/> bu fiziksel satırı besleyen tüm İhtiyaç
+    /// Kaydı satırlarını (distinct) taşır; SqlStockDocRepository.SaveDirectDocAsync bunu kullanarak
+    /// karşılama defteri kayıtlarının RefDocLineId'sini bu satıra bağlar.
+    /// </summary>
+    private sealed record ConsolidatedStockLine(
+        int ItemId, int? UnitId, decimal Qty, int? FromLocationId, int? ToLocationId,
+        int? CombinationId, string? Notes, IReadOnlyList<int> RequestLineIds);
+
+    /// <summary>
+    /// Aynı (ItemId, FromLocationId, ToLocationId, CombinationId, UnitId) kombinasyonuna sahip
+    /// satırları TEK satırda toplar (Qty SUM). Farklı depo/hedef depo/kombinasyon/birim ayrı
+    /// fiziksel stok anlamına geldiği için her zaman ayrı satır kalır (kullanıcı kararı — Transfer'de
+    /// ToLocationId de anahtara dahil: farklı hedef depo ayrı satır ZORUNLU). Notes: kümülelenen
+    /// satırların benzersiz/boş-olmayan notları "; " ile birleştirilir (küçük karar, bkz. rapor).
+    /// </summary>
+    private static List<ConsolidatedStockLine> ConsolidateStockLines(IEnumerable<ConsolidationInputLine> lines) =>
+        lines
+            .GroupBy(l => (l.ItemId, l.FromLocationId, l.ToLocationId, l.CombinationId, l.UnitId))
+            .Select(g => new ConsolidatedStockLine(
+                ItemId:         g.Key.ItemId,
+                UnitId:         g.Key.UnitId,
+                Qty:            g.Sum(x => x.Qty),
+                FromLocationId: g.Key.FromLocationId,
+                ToLocationId:   g.Key.ToLocationId,
+                CombinationId:  g.Key.CombinationId,
+                Notes:          CombineConsolidatedNotes(g),
+                RequestLineIds: g.Where(x => x.RequestLineId is > 0)
+                                 .Select(x => x.RequestLineId!.Value)
+                                 .Distinct()
+                                 .ToList()))
+            .ToList();
+
+    private static string? CombineConsolidatedNotes(IEnumerable<ConsolidationInputLine> group)
+    {
+        var distinct = group.Select(x => x.Notes)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return distinct.Count == 0 ? null : string.Join("; ", distinct);
+    }
+
+    /// <summary>
+    /// STOCK_DOC_CONSOLIDATE parametresine göre karşı fiş satırlarını üretir. Kapalıyken
+    /// (varsayılan) her girdi satırı kendi fiş satırını korur — mevcut davranış birebir,
+    /// <c>RequestLineIds</c> hiç set edilmez (SaveDirectDocAsync'teki RefDocLineId zenginleştirmesi
+    /// devre dışı kalır, bugünkü null davranışı sürer). Açıkken ConsolidateStockLines ile kümülenir;
+    /// her kümüle satır kendi RequestLineIds listesini taşır.
+    /// </summary>
+    private static List<SaveStockDocLineRequest> BuildStockDocLines(
+        IEnumerable<ConsolidationInputLine> inputLines, bool consolidate)
+    {
+        if (!consolidate)
+        {
+            return inputLines.Select(l => new SaveStockDocLineRequest(
+                Id:             null,
+                ItemId:         l.ItemId,
+                MaterialCode:   null,
+                MaterialName:   null,
+                UnitId:         l.UnitId,
+                Qty:            l.Qty,
+                CombinationId:  l.CombinationId,
+                Notes:          l.Notes,
+                FromLocationId: l.FromLocationId,
+                ToLocationId:   l.ToLocationId,
+                UnitCost:       null)).ToList();
+        }
+
+        return ConsolidateStockLines(inputLines).Select(c => new SaveStockDocLineRequest(
+            Id:             null,
+            ItemId:         c.ItemId,
+            MaterialCode:   null,
+            MaterialName:   null,
+            UnitId:         c.UnitId,
+            Qty:            c.Qty,
+            CombinationId:  c.CombinationId,
+            Notes:          c.Notes,
+            FromLocationId: c.FromLocationId,
+            ToLocationId:   c.ToLocationId,
+            UnitCost:       null,
+            RequestLineIds: c.RequestLineIds)).ToList();
+    }
+
     [HttpGet("/Purchase/Requests")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseRequest)]
     public Task<IActionResult> Requests(CancellationToken ct) =>
@@ -1216,6 +1314,10 @@ public sealed class PurchaseController : Controller
                     .ToList();
             }
 
+            // STOCK_DOC_CONSOLIDATE — aç/kapa parametre (varsayılan kapalı = mevcut davranış).
+            var consolidate = await _companyParams.GetBoolAsync(
+                FulfillmentParameters.FormCode, FulfillmentParameters.ConsolidateLinesKey, ct) ?? false;
+
             var saveReq = new SaveStockDocRequest(
                 Id:             null,
                 DocType:        "TRANSFER",
@@ -1225,19 +1327,9 @@ public sealed class PurchaseController : Controller
                 ToLocationId:   null,  // satır bazlı farklı lokasyonlar
                 RefNo:          refNo,
                 Notes:          req.Notes,
-                Lines:          validLines.Select(l => new SaveStockDocLineRequest(
-                    Id:             null,
-                    ItemId:         l.ItemId,
-                    MaterialCode:   null,
-                    MaterialName:   null,
-                    UnitId:         l.UnitId,
-                    Qty:            l.Qty,
-                    CombinationId:  l.CombinationId,
-                    Notes:          l.Notes,
-                    FromLocationId: l.FromLocationId,
-                    ToLocationId:   l.ToLocationId,
-                    UnitCost:       null
-                )).ToList(),
+                Lines:          BuildStockDocLines(validLines.Select(l => new ConsolidationInputLine(
+                    l.ItemId, l.UnitId, l.Qty, l.FromLocationId, l.ToLocationId, l.CombinationId, l.Notes, l.RequestLineId)),
+                    consolidate),
                 ArgeProjectId:  null
             );
 

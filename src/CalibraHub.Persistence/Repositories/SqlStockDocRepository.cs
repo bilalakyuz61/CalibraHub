@@ -431,6 +431,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // Karşılama defteri koruması (Madde 1) — malzeme bazında gelen toplam miktar
             // (aşağıda belge kaydedildikten sonra defterdeki katkıyla karşılaştırılır).
             var incomingQtyByItem = new Dictionary<int, decimal>();
+            // STOCK_DOC_CONSOLIDATE (2026-07-24) — kümüle edilmiş fiziksel satırların hangi
+            // İhtiyaç Kaydı satırlarını (RequestLineId) taşıdığını yakalar; aşağıda
+            // fulfillmentEntries'in RefDocLineId'sini bu fiziksel satıra bağlamak için kullanılır
+            // (bkz. PurchaseController.BuildStockDocLines). Kümüle kapalıyken / diğer çağıranlarda
+            // (Warehouse/Mobile/InventoryCountImport) request.Lines[].RequestLineIds hiç dolmaz →
+            // bu sözlük boş kalır, aşağıdaki zenginleştirme no-op'tur.
+            var lineIdByRequestLineId = new Dictionary<int, int>();
             foreach (var line in request.Lines ?? [])
             {
                 var itemId = line.ItemId;
@@ -477,6 +484,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@Notes", (object?)line.Notes ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@DocDate", request.DocDate.Date);
                 var lineId = Convert.ToInt32(await lineIns.ExecuteScalarAsync(ct));
+
+                // STOCK_DOC_CONSOLIDATE — bu fiziksel satır bir kümüle satırsa, katkı sağlayan
+                // tüm İhtiyaç Kaydı satırlarını bu lineId'ye eşle (bkz. yukarıdaki tanım notu).
+                if (line.RequestLineIds is { Count: > 0 })
+                    foreach (var rlId in line.RequestLineIds)
+                        lineIdByRequestLineId[rlId] = lineId;
 
                 // Seri çözümleme — seri-takipli stokta (TrackingType='Serial') zorunlu:
                 // girişte liste boşsa AutoSerial açık stok için otomatik üretilir;
@@ -547,8 +560,23 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // commit ya ikisini birlikte kalıcı yapar ya da (hata durumunda) ikisini birlikte
             // geri alır. "Belge var, defter kaydı yok" yarım durumu artık oluşamaz. _lineLinks/
             // _logger: FAZ 1b-ii DocumentLineLink dual-write (best-effort, ana kaydı etkilemez).
-            if (fulfillmentEntries is { Count: > 0 })
-                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, docId, fulfillmentEntries, createdById, ct, _lineLinks, _logger);
+            // STOCK_DOC_CONSOLIDATE (2026-07-24): lineIdByRequestLineId doluysa (kümüle satır
+            // gönderildiyse) her entry'nin RefDocLineId'si kümüle FİZİKSEL satıra bağlanır —
+            // RequestLineId (defter anahtarı, satır sayısı, Quantity) DEĞİŞMEZ; yalnız
+            // izlenebilirlik alanı zenginleşir. TryLinkFulfillmentEntriesAsync bu zenginleştirilmiş
+            // RefDocLineId'yi DocumentLineLink.TargetLineId'ye de aynen taşır (aynı entries listesi
+            // ikisine de geçer) — iki tablo arasında ayrıca senkron gerekmez.
+            var entriesToInsert = fulfillmentEntries;
+            if (fulfillmentEntries is { Count: > 0 } && lineIdByRequestLineId.Count > 0)
+            {
+                entriesToInsert = fulfillmentEntries
+                    .Select(e => e.RefDocLineId is null && lineIdByRequestLineId.TryGetValue(e.RequestLineId, out var lid)
+                        ? e with { RefDocLineId = lid }
+                        : e)
+                    .ToList();
+            }
+            if (entriesToInsert is { Count: > 0 })
+                await FulfillmentLedger.InsertEntriesAsync(conn, tx, _schema, docId, entriesToInsert, createdById, ct, _lineLinks, _logger);
 
             await tx.CommitAsync(ct);
             return (docId, docNo);

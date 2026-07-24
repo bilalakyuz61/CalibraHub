@@ -79,7 +79,16 @@ public sealed record SaveStockDocLineRequest(
     IReadOnlyList<StockLotBreakdownItem>? LotBreakdown = null,
     // Sayım — seri-takipli kalemde zengin seri kırılımı ([{SerialNo, ExpiryDate, Description, Qty}]).
     // Seri = parti (miktar serbest); CountedQty = Qty toplamı. Uygula'da Lot(SKT)+ItemSerial'a yansır.
-    IReadOnlyList<CountSerialBreakdownItem>? SerialBreakdown = null);
+    IReadOnlyList<CountSerialBreakdownItem>? SerialBreakdown = null,
+    // STOCK_DOC_CONSOLIDATE (2026-07-24, PurchaseController): bu fiziksel satır birden fazla
+    // İhtiyaç Kaydı satırının kümülesiyse, katkı sağlayan satırların Id'leri (DocumentLine.Id —
+    // "RequestLineId"). SqlStockDocRepository.SaveDirectDocAsync bunu INSERT sonrası elde ettiği
+    // fiziksel lineId ile eşleyip aynı transaction'da yazılan karşılama defteri kayıtlarının
+    // (PendingFulfillmentEntry.RefDocLineId) bu satırı göstermesini sağlar — RequestLineId (defter
+    // anahtarı) DEĞİŞMEZ, yalnız izlenebilirlik alanı zenginleşir. Kümüleme kapalıyken veya bu
+    // yoldan gelmeyen çağrılarda (WarehouseController/MobileWarehouseApiController/
+    // InventoryCountImportHandler) null — davranış hiç değişmez.
+    IReadOnlyList<int>? RequestLineIds = null);
 
 /// <summary>Sayım lot kırılımı satırı — bir kalemde birden fazla lot sayılabilir.</summary>
 // Lot kırılımı — Seri kırılımıyla aynı zengin düzen (Lot No · SKT · Açıklama · Miktar).
