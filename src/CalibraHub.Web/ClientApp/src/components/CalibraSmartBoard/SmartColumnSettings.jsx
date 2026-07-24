@@ -3,14 +3,17 @@
  *
  * SmartBoard TABLO modu (viewMode:'table') icin gelismis "Sutun Ayarlari" paneli.
  * SmartBoardConfigPanel.jsx'in iskelet/etkilesim desenini (dnd-kit surukle, arama
- * kutusu, Sifirla, Kaydet/Iptal, master-kazanir reconcile) baz alir; buna ek olarak
+ * kutusu, Sifirla, master-kazanir reconcile) baz alir; buna ek olarak
  * FulfillmentCenter.cshtml `_renderColPanel` derinligindeki per-sutun eksenlerini
  * (hizala, genislik, sabitle/pin, font boyutu+agirligi, yeniden adlandirma) React'e
  * tasir.
  *
- * KAPSAM: sadece TABLO modu board'lari kullanir (bugun tek board: Malzeme Kartlari).
- * Kart modundaki SmartBoardConfigPanel bu dosyaya HIC dokunmaz — ayri, paralel bir
- * bilesendir (regresyonsuzluk, bkz. CLAUDE.md "CalibraSmartBoard (C-Grid)").
+ * KAPSAM: sadece TABLO modu board'lari kullanir. 2026-07-18 "kesin tablo" karari
+ * sonrasi viewMode varsayilani 'table' oldugu icin (bkz. SmartBoard.jsx), bu panel
+ * ACIKCA viewMode:'card' ile opt-out ETMEYEN TUM SmartBoard ekranlarinda kullanilir
+ * (bugun itibariyla opt-out eden tek board yok — pratikte tum C-Grid liste
+ * ekranlari). Kart modundaki SmartBoardConfigPanel bu dosyaya HIC dokunmaz — ayri,
+ * paralel bir bilesendir (regresyonsuzluk, bkz. CLAUDE.md "CalibraSmartBoard (C-Grid)").
  *
  * Calisma mantigi:
  *   1. Panel acildiginda columnConfigService.loadBoardColumnConfig(boardKey) ile
@@ -22,8 +25,23 @@
  *      sutunlar surukleme/gizleme kilitlidir (once sabitleme kaldirilmali) ve
  *      listenin basinda gosterilir — SmartTable'daki sticky-left render'i ile
  *      birebir tutarli olmasi icin.
- *   3. Kaydet → columnConfigService.saveBoardColumnConfig(boardKey, {visibleIds,
- *      order, columns}) — localStorage'a hemen, backend'e best-effort.
+ *   3. ANLIK UYGULAMA (2026-07-25, Kaydet/Iptal KALDIRILDI — kullanici geri
+ *      bildirimi "kaydet/iptal olmasin, degisiklik aninda gride yansisin"). Her
+ *      state degisikligi (goster/gizle, surukle-sirala, pin, hizala, genislik/
+ *      font/kalinlik stepper, baslik rename, headerWrap, "Genel" bolumu) IKI seyi
+ *      AYNI ANDA tetikler:
+ *        a) props.onChange(liveConfig) SENKRON cagrilir → SmartBoard bunu aninda
+ *           tableColumnConfig'e yazar → SmartTable o an yeniden render eder
+ *           (grid gecikmesiz gunceller).
+ *        b) columnConfigService.saveBoardColumnConfig(boardKey, ...) 400ms
+ *           DEBOUNCE ile cagrilir (klavye/stepper firehose'unu tek tek
+ *           localStorage+backend'e gondermemek icin) — kalicilik mekanizmasinin
+ *           kendisi degismedi (localStorage senkron + backend best-effort POST),
+ *           sadece TETIKLEME ZAMANLAMASI degisti.
+ *      Panel kapanirken (X/backdrop/Esc) bekleyen debounce varsa flushPendingSave()
+ *      ile hemen uygulanir — "Iptal" guvenlik agi kalktigi icin son degisiklik
+ *      kapanis oncesi kaybolmamali. Sifirla (handleReset) kendi kaydini senkron/
+ *      aninda yapar (debounce'a girmez — kullanici zaten onayladigi tekil bir eylem).
  */
 /* NOT (tema bug fix, bkz. CLAUDE.md "CSS ve Tema Kuralleri"): asagida bircok
  * className'de bare "border" ve "bg-white" yerine "border-[1px]" / "bg-white/100"
@@ -36,7 +54,7 @@
  * (bg-white/100, border-[1px]) esdeger ama Bootstrap'la CARPISMAYAN class adi
  * uretmek — gorsel sonuc birebir ayni, sadece isim collision'i ortadan kalkiyor.
  * Bu dosyada YENI bare "border"/"bg-white" EKLEME — ayni tuzaga dusersin. */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DndContext, closestCenter, pointerWithin, PointerSensor, TouchSensor, useSensor, useSensors,
@@ -95,6 +113,11 @@ var ALIGN_OPTIONS = [
 var WIDTH_STEP = 20
 var WIDTH_MIN = 90
 var WIDTH_MAX = 480
+
+// Anlik uygulama + kalicilik debounce'u (bkz. dosya ustu "ANLIK UYGULAMA" notu) —
+// SmartBoard.jsx'teki arama debounce'uyla (400ms) ayni deger; CLAUDE.md gorev
+// notundaki 300-500ms araligi icinde.
+var AUTOSAVE_DEBOUNCE_MS = 400
 
 // Boyut (font-size) / Kalınlık (font-weight) — Genişlik ile AYNI stepper deseni
 // (sayısal değer + -/+ + Otomatik toggle), eski segment butonları (Küçük/Orta/
@@ -583,16 +606,26 @@ export default function SmartColumnSettings(props) {
   var onClose = props.onClose
   var boardKey = props.boardKey
   var masterWidgets = Array.isArray(props.masterWidgets) ? props.masterWidgets : []
-  var onSaved = props.onSaved
+  // onChange — eskiden "onSaved" (yalnizca Kaydet'e tiklaninca cagrilirdi). Artik
+  // HER state degisikliginde senkron cagrilir (bkz. dosya ustu "ANLIK UYGULAMA"
+  // notu) — SmartBoard bunu aninda tableColumnConfig'e yazar, grid gecikmesiz gunceller.
+  var onChange = props.onChange
 
   var [visibleIds, setVisibleIds] = useState([])
   var [order, setOrder] = useState([])
   var [columns, setColumns] = useState({})
   var [tableFormat, setTableFormat] = useState({})
   var [loadingCfg, setLoadingCfg] = useState(false)
-  var [saving, setSaving] = useState(false)
   var [searchQuery, setSearchQuery] = useState('')
   var [expandedIds, setExpandedIds] = useState(function () { return new Set() })
+
+  // Otomatik-kaydetme refleri — skipNextPersistRef: config yuklenirken (veya
+  // Sifirla sonrasi) yapilan PROGRAMATIK state set'lerini "kullanici degisikligi"
+  // gibi tekrar persist ETMEMEK icin (asagidaki autosave useEffect'i bir sonraki
+  // tetiklenisini atlar). saveTimerRef: debounce zamanlayicisi — panel kapanirken
+  // flushPendingSave() ile hemen temizlenir/uygulanir.
+  var skipNextPersistRef = useRef(false)
+  var saveTimerRef = useRef(null)
 
   var [localMasterWidgets, setLocalMasterWidgets] = useState(masterWidgets)
   useEffect(function () { setLocalMasterWidgets(masterWidgets) }, [masterWidgets])
@@ -607,6 +640,11 @@ export default function SmartColumnSettings(props) {
     loadBoardColumnConfig(boardKey).then(function (saved) {
       if (cancelled) return
       var allIds = masterWidgets.map(function (w) { return w.id })
+      // Bu yukleme sonrasi state set'leri KULLANICI degisikligi degil — autosave
+      // effect'inin bir sonraki tetiklenisini atlamasi icin isaretle (React 18
+      // otomatik batching sayesinde asagidaki setState'ler TEK render'da islenir,
+      // bu yuzden tek bir skip yeterli).
+      skipNextPersistRef.current = true
       if (saved && Array.isArray(saved.visibleIds) && saved.visibleIds.length + saved.order.length > 0) {
         var cleanVisible = saved.visibleIds.filter(function (id) { return allIds.indexOf(id) !== -1 })
         var cleanOrder = (saved.order || []).filter(function (id) { return allIds.indexOf(id) !== -1 })
@@ -817,21 +855,55 @@ export default function SmartColumnSettings(props) {
     })
   }
 
-  function handleSave() {
-    setSaving(true)
-    try {
-      var payload = { visibleIds: visibleIds, order: order, columns: columns, table: tableFormat }
-      var normalized = saveBoardColumnConfig(boardKey, payload)
-      if (onSaved) onSaved(normalized)
-      if (onClose) onClose()
-    } catch (e) {
-      var em = 'Kaydedilirken hata: ' + e.message
-      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
-      else alert(em)
-    } finally {
-      setSaving(false)
+  // ── Anlik uygulama + debounce'li kalicilik (bkz. dosya ustu "ANLIK UYGULAMA" notu) ──
+  // Her degisiklikte (visibleIds/order/columns/tableFormat'tan herhangi biri) iki
+  // is yapilir: (a) onChange SENKRON cagrilir → grid aninda gunceller, (b) gercek
+  // persist (localStorage+backend) AUTOSAVE_DEBOUNCE_MS ile inceltilir.
+  useEffect(function () {
+    if (!isOpen) return undefined
+    if (skipNextPersistRef.current) { skipNextPersistRef.current = false; return undefined }
+
+    var live = { visibleIds: visibleIds, order: order, columns: columns, table: tableFormat }
+    if (onChange) onChange(live)
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(function () {
+      saveTimerRef.current = null
+      // saveBoardColumnConfig kendi ici hatalarini zaten yutar (localStorage
+      // quota / network) — burada ekstra try/catch sadece senkron throw'a karsi.
+      try { saveBoardColumnConfig(boardKey, live) } catch (e) { /* best-effort */ }
+    }, AUTOSAVE_DEBOUNCE_MS)
+
+    return function () {
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleIds, order, columns, tableFormat, isOpen])
+
+  // Panel kapanirken (X/backdrop/Esc) bekleyen debounce'u HEMEN uygular — Iptal
+  // kalktigi icin son degisiklik kapanis oncesi kaybolmamali.
+  function flushPendingSave() {
+    if (!saveTimerRef.current) return
+    clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = null
+    var live = { visibleIds: visibleIds, order: order, columns: columns, table: tableFormat }
+    try { saveBoardColumnConfig(boardKey, live) } catch (e) { /* best-effort */ }
   }
+  function handleClose() {
+    flushPendingSave()
+    if (onClose) onClose()
+  }
+
+  // Esc ile kapat — Kaydet/Iptal kalktigi icin Esc artik birincil "kapat" yolu
+  // (X ve backdrop tikla-kapat zaten vardi); SmartBoard.jsx showExportConfirm
+  // Esc handler'iyla ayni desen.
+  useEffect(function () {
+    if (!isOpen) return undefined
+    function onKey(e) { if (e.key === 'Escape') handleClose() }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen])
 
   async function handleReset() {
     var ok = window.CalibraAlert && window.CalibraAlert.confirm
@@ -843,12 +915,17 @@ export default function SmartColumnSettings(props) {
     var defaultOrder = leadsFirstIds(allIds)
     var defaultConfig = { visibleIds: defaultOrder.slice(), order: defaultOrder.slice(), columns: {}, table: {} }
     try {
+      // Sifirla acikca onaylanmis, tekil bir eylem — debounce beklemeden aninda
+      // kaydeder; bekleyen bir otomatik-kayit varsa gereksiz ikinci cagriyi
+      // onlemek icin iptal edilir.
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null }
       var normalized = saveBoardColumnConfig(boardKey, defaultConfig)
+      skipNextPersistRef.current = true
       setVisibleIds(normalized.visibleIds)
       setOrder(normalized.order)
       setColumns(normalized.columns)
       setTableFormat(normalized.table || {})
-      if (onSaved) onSaved(normalized)
+      if (onChange) onChange(normalized)
     } catch (e) {
       var em2 = 'Sıfırlanamadı: ' + e.message
       if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em2, 'err')
@@ -869,7 +946,7 @@ export default function SmartColumnSettings(props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[9998] bg-black/25"
-            onClick={onClose}
+            onClick={handleClose}
           />
 
           <motion.div
@@ -894,7 +971,7 @@ export default function SmartColumnSettings(props) {
                     <p className="text-[11px] text-slate-500 dark:text-white/30 mt-0.5">Görünürlük, sıralama ve biçim</p>
                   </div>
                 </div>
-                <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
+                <button onClick={handleClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
                   <X size={18} className="text-slate-400 dark:text-white/40" />
                 </button>
               </div>
@@ -1072,8 +1149,11 @@ export default function SmartColumnSettings(props) {
                 )}
               </div>
 
-              {/* Footer */}
-              <div className="px-5 py-4 border-t border-slate-200 dark:border-white/[0.06] flex items-center gap-2 flex-shrink-0">
+              {/* Footer — Kaydet/Iptal KALDIRILDI (2026-07-25, kullanici geri
+                  bildirimi): her degisiklik aninda grid'e yansir + debounce'li
+                  otomatik kaydedilir (bkz. dosya ustu "ANLIK UYGULAMA" notu).
+                  Sifirla tek kalan eylem — o da kendi ici senkron kaydeder. */}
+              <div className="px-5 py-4 border-t border-slate-200 dark:border-white/[0.06] flex items-center justify-between gap-2 flex-shrink-0">
                 <button
                   onClick={handleReset}
                   className="px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.06] border-[1px] border-slate-200 dark:border-white/[0.06] text-xs font-medium text-slate-500 dark:text-white/40 hover:text-slate-700 dark:hover:text-white/60 transition-all flex items-center gap-1.5"
@@ -1082,21 +1162,10 @@ export default function SmartColumnSettings(props) {
                   <RotateCcw size={13} />
                   Sıfırla
                 </button>
-                <div className="flex-1" />
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.04] hover:bg-slate-200 dark:hover:bg-white/[0.08] border-[1px] border-slate-200 dark:border-white/[0.06] text-sm font-medium text-slate-600 dark:text-white/50 hover:text-slate-800 dark:hover:text-white/70 transition-all"
-                >
-                  İptal
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving || loadingCfg}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-500/15 dark:bg-indigo-500/25 hover:bg-indigo-500/25 dark:hover:bg-indigo-500/35 border-[1px] border-indigo-400/30 dark:border-indigo-400/25 hover:border-indigo-400/50 dark:hover:border-indigo-400/35 text-sm font-semibold text-indigo-700 dark:text-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50"
-                >
-                  <Check size={15} />
-                  {saving ? 'Kaydediliyor...' : 'Kaydet'}
-                </button>
+                <span className="text-[10.5px] text-slate-400 dark:text-white/30 flex items-center gap-1.5 flex-shrink-0">
+                  <Check size={12} className="text-emerald-500 dark:text-emerald-400" />
+                  Değişiklikler anında kaydedilir
+                </span>
               </div>
             </div>
           </motion.div>

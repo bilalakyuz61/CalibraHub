@@ -636,10 +636,20 @@ public sealed class PurchaseController : Controller
 
         var effectiveNewUrl = newUrl ?? editUrl;
         // alis_talebi listesinde "Karsilama Merkezi" header butonu eklenir.
+        // openInTab + matchPath (2026-07-25, PageComment Seq 27): sol menüden "İhtiyaç Karşılama"ya
+        // tıklanmışçasına davranması istendi — SmartBoard header action'ları önceden bunu
+        // desteklemiyordu (yalnızca navigateInWorkspace ile aynı iframe içinde navigate ediyordu,
+        // matchPath'i hiç okumuyordu). SmartBoard.jsx handleActionClick'e AuditLogActionHelper'daki
+        // ile aynı openInTab desteği eklendi (bkz. o dosyanın XML doc'u) — matchPath = "/Purchase/
+        // FulfillmentCenter" sayesinde ekran zaten açık bir sekmede ise yeni sekme yerine o sekmeye
+        // odaklanılır, değilse yeni sekme açılır.
         var boardActions = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase)
             ? new object[]
             {
-                new { id = "center", label = "Karşılama Merkezi", icon = "Layers", variant = "secondary", url = "/Purchase/FulfillmentCenter" },
+                new {
+                    id = "center", label = "Karşılama Merkezi", icon = "Layers", variant = "secondary", url = "/Purchase/FulfillmentCenter",
+                    openInTab = new { title = "İhtiyaç Karşılama", matchPath = "/Purchase/FulfillmentCenter" },
+                },
                 new { id = "new",    label = $"Yeni {Capitalize(entityWord)}", icon = "Plus", variant = "primary", url = effectiveNewUrl },
             }
             : (object[])new object[]
@@ -1371,6 +1381,12 @@ public sealed class PurchaseController : Controller
     /// <summary>
     /// Ambar çıkış fişi oluşturur (STOCK_OUT) ve ihtiyaç satırlarının FulfilledFromStock günceller.
     /// POST /Purchase/CreateStockIssue
+    /// 2026-07-25 UI'dan kaldırıldı (PageComment Seq 26 birleşimi) — FulfillmentCenter ekranındaki
+    /// ayrı "Ambar Çıkış Fişi" butonu/modalı kaldırıldı; defter/stok düzeyinde FulfillFromStock ile
+    /// birebir aynı olduğu için serbest kaynak-depo seçme yeteneği FulfillFromStock'a opsiyonel
+    /// OverrideLocationId parametresi olarak taşındı (bkz. FulfillFromStockRequest XML doc'u).
+    /// Bu endpoint'i çağıran istemci kalmadı (grep ile doğrulandı) — YETİM ama kaldırma kararı
+    /// ayrı, burada silinmedi.
     /// </summary>
     [HttpPost("/Purchase/CreateStockIssue")]
     [ValidateAntiForgeryToken]
@@ -1511,15 +1527,20 @@ public sealed class PurchaseController : Controller
     /// birebir - UNIQUE NOT NULL - olduğundan Id karşılaştırması kod karşılaştırmasıyla eşdeğerdir;
     /// ID tabanlı eşleştirme kuralı gereği Id kullanılır, reason metninde kullanıcıya LocationCode
     /// gösterilir). Miktar kullanıcının FulfillmentCenter ortak modalında düzenlediği değerdir
-    /// (req.Lines[].Qty) — sunucu "kalan miktar" tavanına otomatik kırpmaz (CreateStockIssue ile
-    /// aynı davranış); eksi bakiye SaveDirectDocAsync'in kendi NegativeBalanceGuard'ı (parametre
+    /// (req.Lines[].Qty) — sunucu "kalan miktar" tavanına otomatik kırpmaz (eski CreateStockIssue
+    /// ile aynı davranış); eksi bakiye SaveDirectDocAsync'in kendi NegativeBalanceGuard'ı (parametre
     /// açıksa) ile engellenir.
     /// POST /Purchase/FulfillFromStock
-    /// Kayıt yolu CreateStockIssue ile AYNI (_stockDocRepo.SaveAsync → SaveDirectDocAsync) —
+    /// Kayıt yolu eski CreateStockIssue ile AYNI (_stockDocRepo.SaveAsync → SaveDirectDocAsync) —
     /// karşılama defteri dual-write (DocumentLineFulfillment/DocumentLineLink) bu yoldan otomatik
     /// gelir, burada elle dokunulmaz.
     /// Onay: yeni Ambar Çıkış Fişi için aktif bir onay akışı varsa TryAutoStartApprovalAsync
     /// otomatik başlatır (DocumentService.SaveQuoteAsync'teki auto-start ile aynı mantık).
+    /// req.OverrideLocationId (2026-07-25, PageComment Seq 26 — FulfillmentCenter'daki ayrı "Ambar
+    /// Çıkış Fişi" aksiyonu bu endpoint'le birleştirildi): doluysa yukarıdaki depo-eşleşme
+    /// karşılaştırması ve "karşılama deposu tanımlanmamış" kontrolü TAMAMEN atlanır — TÜM seçili
+    /// kalemler doğrudan bu depodan (matched=true) karşılanır. Bu dal yalnızca override doluyken
+    /// çalışır; override boş/null olduğu her çağrıda aşağıdaki kod AYNEN (değişmemiş) çalışır.
     /// </summary>
     [HttpPost("/Purchase/FulfillFromStock")]
     [ValidateAntiForgeryToken]
@@ -1539,6 +1560,12 @@ public sealed class PurchaseController : Controller
             if (qtyByLineId.Count == 0)
                 return Json(new { ok = false, error = "Kalem seçilmedi." });
 
+            // 2026-07-25 (PageComment Seq 26 birleşimi): opsiyonel kaynak depo override'ı — dolu ise
+            // aşağıdaki parametre-tabanlı eşleşme zorunluluğu bu çağrı için uygulanmaz (per-line
+            // loop'taki `if (overrideLocationId.HasValue)` dalına bkz.). Boş/0/null ise mevcut
+            // otomatik davranış AYNEN çalışır.
+            var overrideLocationId = req.OverrideLocationId is > 0 ? req.OverrideLocationId : null;
+
             const string fc = "PURCHASE_FULFILLMENT";
             var mode       = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_MODE", ct) ?? "SPECIFIC";
             var idsRaw     = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_IDS",  ct) ?? "";
@@ -1547,7 +1574,7 @@ public sealed class PurchaseController : Controller
             var configuredLocIds = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
                                          .Select(x => x.Trim()).Where(x => int.TryParse(x, out _))
                                          .Select(int.Parse).ToList();
-            if (isSpecific && configuredLocIds.Count == 0)
+            if (overrideLocationId == null && isSpecific && configuredLocIds.Count == 0)
                 return Json(new { ok = false, error = "Karşılama deposu tanımlanmamış. Şirket Ayarları → Satın Alma bölümünden depo seçin." });
 
             var s         = _schema.Replace("]", "]]");
@@ -1593,9 +1620,10 @@ public sealed class PurchaseController : Controller
                 return Json(new { ok = false, error = guardError });
 
             // ITEM_DEFAULT modunda her malzemenin varsayılan deposunu çöz (FulfillmentLocationConfig
-            // ile aynı kaynak: ItemLocation.IsDefault).
+            // ile aynı kaynak: ItemLocation.IsDefault). Override doluyken bu çözüm hiç kullanılmaz
+            // (per-line loop'ta atlanır) — gereksiz sorgudan kaçınmak için burada da atlanır.
             var itemDefaultLoc = new Dictionary<int, int>(); // itemId → locationId
-            if (!isSpecific)
+            if (overrideLocationId == null && !isSpecific)
             {
                 var distinctItemIds = lines.Select(l => l.ItemId).Distinct().ToList();
                 var iParamList = string.Join(",", distinctItemIds.Select((_, i) => $"@i{i}"));
@@ -1613,8 +1641,10 @@ public sealed class PurchaseController : Controller
             }
 
             // Karşılama deposu kod etiketleri (mismatch mesajı için) — SPECIFIC: configuredLocIds,
-            // ITEM_DEFAULT: çözülen varsayılan depoların kümesi.
-            var fulfillLocIdsToLabel = isSpecific ? configuredLocIds : itemDefaultLoc.Values.Distinct().ToList();
+            // ITEM_DEFAULT: çözülen varsayılan depoların kümesi. Override doluyken mismatch mesajı
+            // hiç üretilmez (per-line loop'ta atlanır) — gereksiz sorgudan kaçınmak için boş liste.
+            var fulfillLocIdsToLabel = overrideLocationId != null ? new List<int>()
+                : isSpecific ? configuredLocIds : itemDefaultLoc.Values.Distinct().ToList();
             var fulfillLocCodes = new Dictionary<int, string>();
             if (fulfillLocIdsToLabel.Count > 0)
             {
@@ -1645,6 +1675,26 @@ public sealed class PurchaseController : Controller
                     results.Add(new { lineId = line.LineId, matched = false, fulfilled = 0m, reason = "Miktar sıfır veya negatif olamaz." });
                     continue;
                 }
+
+                // Override modu (2026-07-25, PageComment Seq 26): kullanıcı kaynak depoyu bilinçli
+                // seçti — aşağıdaki talep-deposu / karşılama-deposu eşleşme kontrolü BU KALEM için
+                // uygulanmaz (eski CreateStockIssue/"Ambar Çıkış Fişi" davranışının birebir
+                // karşılığı; o akış da talep deposuna hiç bakmıyordu). Yalnızca override doluyken
+                // devreye girer, aşağıdaki AYNEN-korunan kod dalına hiç girmez (early continue).
+                if (overrideLocationId.HasValue)
+                {
+                    planned.Add(new StockIssueLineRequest(
+                        ItemId:         line.ItemId,
+                        UnitId:         line.UnitId,
+                        Qty:            qty,
+                        FromLocationId: overrideLocationId.Value,
+                        CombinationId:  line.CombinationId,
+                        Notes:          null,
+                        RequestLineId:  line.LineId));
+                    results.Add(new { lineId = line.LineId, matched = true, fulfilled = qty, reason = (string?)null });
+                    continue;
+                }
+
                 if (!line.ReqLocationId.HasValue)
                 {
                     results.Add(new { lineId = line.LineId, matched = false, fulfilled = 0m, reason = "İhtiyaç kaydında depo belirtilmemiş." });

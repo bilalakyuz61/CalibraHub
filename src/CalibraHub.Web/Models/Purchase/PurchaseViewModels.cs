@@ -92,10 +92,16 @@ public sealed record PurchaseDemandLineInput(
 /// POST /Purchase/FulfillFromStock
 /// Qty = kullanıcının FulfillmentCenter ortak modalında satır bazlı düzenlediği miktar
 /// (eski FIFO'nun aksine sunucu otomatik dağıtım yapmaz).
+/// OverrideLocationId (2026-07-25, PageComment Seq 26 — "Ambar Çıkış Fişi" ayrı aksiyonu bu
+/// endpoint'le birleştirildi): boş/null ise yukarıdaki otomatik depo-eşleşme davranışı AYNEN
+/// çalışır. Dolu ise TÜM seçili kalemler bu depodan karşılanır ve depo-eşleşme reddi bu çağrı
+/// için uygulanmaz — kaldırılan CreateStockIssue'nun (kullanıcının serbestçe kaynak depo
+/// seçtiği eski "Ambar Çıkış Fişi" akışı) birebir karşılığı.
 /// </summary>
 public sealed record FulfillFromStockRequest(
     IReadOnlyList<FulfillFromStockLineRequest> Lines,
-    string?            Notes);
+    string?            Notes,
+    int?               OverrideLocationId = null);
 
 public sealed record FulfillFromStockLineRequest(
     int     LineId,

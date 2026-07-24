@@ -27,7 +27,7 @@ import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './S
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
 import { loadWidgetConfig } from '../../services/widgetConfigService'
 import { loadBoardColumnConfig } from '../../services/columnConfigService'
-import { navigateInWorkspace } from '../../utils/workspaceNav'
+import { navigateInWorkspace, deriveMatchPathFromUrl } from '../../utils/workspaceNav'
 
 var FILTER_STORAGE_PREFIX = 'cb-sb-filters:'
 function loadInitialFilters(boardKey) {
@@ -974,14 +974,19 @@ export default function SmartBoard(props) {
       {/* ── Sutun Ayarlari Paneli (tablo modu) ─
           Sadece isTableMode iken mount edilir — kart modu board'lari icin bu
           bilesen HIC render edilmez (extra network call / hook calismaz,
-          regresyon riski sifir). */}
+          regresyon riski sifir). onChange artik SADECE Kaydet'te degil, panel
+          icindeki HER degisiklikte senkron cagrilir (2026-07-25, Kaydet/Iptal
+          kalkti — bkz. SmartColumnSettings.jsx dosya ustu notu); bu yuzden
+          tableColumnConfig set'i ve dolayisiyla SmartTable re-render'i panel
+          acikken sik sik tetiklenir — bilincli (anlik onizleme). Kalicilik
+          (localStorage+backend) panelin kendi icinde debounce'lidir. */}
       {isTableMode && (
         <SmartColumnSettings
           isOpen={columnSettingsOpen}
           onClose={function () { setColumnSettingsOpen(false) }}
           boardKey={boardKey}
           masterWidgets={tableMasterWidgets}
-          onSaved={function (cfg) { setTableColumnConfig(cfg) }}
+          onChange={function (cfg) { setTableColumnConfig(cfg) }}
         />
       )}
 
