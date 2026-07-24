@@ -76,17 +76,29 @@
         var currentList = [];
 
         // ── Bağlam (screenKey / pageTitle / formCode) ──────────────────
-        function getActiveContentDocument() {
+        // Sayfadaki tüm görünür + erişilebilir (same-origin) iframe dokümanlarını döner.
+        // Shell mimarisinde workspace-tab iframe'leri HEP mounted kalır (yalnız display:
+        // block/none ile gösterilir/gizlenir — bkz. Shell.jsx), bu yüzden "görünür" filtresi
+        // (display !== 'none') pratikte aktif tab'ı seçer. Cross-origin iframe'ler try/catch
+        // ile sessizce atlanır (contentDocument erişimi SecurityError fırlatır).
+        function getAccessibleFrameDocuments() {
+            var result = [];
             var frames;
-            try { frames = document.querySelectorAll('iframe'); } catch (e) { return null; }
+            try { frames = document.querySelectorAll('iframe'); } catch (e) { return result; }
             for (var i = 0; i < frames.length; i++) {
                 var f = frames[i];
                 try {
                     if (f.style && f.style.display === 'none') continue;
-                    if (f.contentDocument && f.contentDocument.body) return f.contentDocument;
+                    var d = f.contentDocument;
+                    if (d && d.body) result.push(d);
                 } catch (e) { /* cross-origin — atla */ }
             }
-            return null;
+            return result;
+        }
+
+        function getActiveContentDocument() {
+            var docs = getAccessibleFrameDocuments();
+            return docs.length ? docs[0] : null;
         }
 
         function getPageContext() {
@@ -264,6 +276,47 @@
         }
 
         // ── Panel aç/kapat ──────────────────────────────────────────────
+        // Esc / dışarı-tık kapsamı: gerçek sayfa içeriği çoğunlukla bir workspace-tab
+        // IFRAME'i İÇİNDEDİR (bkz. dosya başı açıklaması). document.addEventListener
+        // yalnız ÜST dokümana takılırsa, kullanıcı sayfa içeriğine (iframe'e) tıkladıktan
+        // sonra klavye odağı iframe'de olur — Esc keydown'u ya da mousedown'u üst dokümana
+        // HİÇ ULAŞMAZ (frame sınırını bubble/capture ile aşmaz) → panel kapanmaz. Çözüm:
+        // panel açıkken görünür + erişilebilir (same-origin) iframe dokümanlarına da AYNI
+        // dinleyicileri geçici olarak takıyoruz; panel kapanınca hepsi sökülür (leak yok).
+        var attachedFrameDocs = [];
+        var frameWatchTimer = null;
+
+        function attachFrameListeners() {
+            var docs = getAccessibleFrameDocuments();
+            docs.forEach(function (d) {
+                if (attachedFrameDocs.indexOf(d) !== -1) return;
+                try {
+                    d.addEventListener('keydown', onKeydown, true);
+                    d.addEventListener('mousedown', onOutsideClick, true);
+                    attachedFrameDocs.push(d);
+                } catch (e) { /* erişilemeyen döküman — atla */ }
+            });
+            // Artık görünür/erişilebilir olmayan (tab değişti, iframe içinde sayfa yeniden
+            // yüklendi) dokümanları bırak — stale referans birikmesin.
+            attachedFrameDocs = attachedFrameDocs.filter(function (d) {
+                if (docs.indexOf(d) !== -1) return true;
+                try {
+                    d.removeEventListener('keydown', onKeydown, true);
+                    d.removeEventListener('mousedown', onOutsideClick, true);
+                } catch (e) { /* yok say */ }
+                return false;
+            });
+        }
+        function detachFrameListeners() {
+            attachedFrameDocs.forEach(function (d) {
+                try {
+                    d.removeEventListener('keydown', onKeydown, true);
+                    d.removeEventListener('mousedown', onOutsideClick, true);
+                } catch (e) { /* yok say */ }
+            });
+            attachedFrameDocs = [];
+        }
+
         function openPanel() {
             renderContext();
             panelEl.hidden = false;
@@ -272,18 +325,30 @@
             setTimeout(function () { composeText.focus(); }, 30);
             document.addEventListener('keydown', onKeydown, true);
             document.addEventListener('mousedown', onOutsideClick, true);
+            attachFrameListeners();
+            // Panel açıkken kullanıcı workspace sekmesi değiştirebilir (başka bir iframe
+            // görünür olur) ya da iframe içinde sayfa yeniden yüklenebilir (yeni
+            // contentDocument) — kısa aralıklarla yeniden tara ki Esc/dışarı-tık her zaman
+            // o an görünür iframe'e bağlı kalsın. Basit tutuldu: tam bir mutation-observer
+            // yerine 1sn'lik poll (widget'ın mevcut ensureDocked deseniyle tutarlı).
+            frameWatchTimer = setInterval(attachFrameListeners, 1000);
         }
         function closePanel() {
             panelEl.hidden = true;
             fabBtn.setAttribute('aria-expanded', 'false');
             document.removeEventListener('keydown', onKeydown, true);
             document.removeEventListener('mousedown', onOutsideClick, true);
+            if (frameWatchTimer) { clearInterval(frameWatchTimer); frameWatchTimer = null; }
+            detachFrameListeners();
         }
         function onKeydown(e) {
             if (e.key === 'Escape') closePanel();
         }
         function onOutsideClick(e) {
             if (panelEl.hidden) return;
+            // panelEl/fabBtn üst dokümana ait; iframe içinden gelen event'in target'ı başka
+            // bir dokümana ait olduğundan contains() doğal olarak false döner (hata fırlatmaz)
+            // — yani iframe içi HER tıklama zaten doğru şekilde "dışarı" sayılır.
             if (panelEl.contains(e.target) || fabBtn.contains(e.target)) return;
             closePanel();
         }
