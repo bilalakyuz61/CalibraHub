@@ -7,6 +7,7 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Approval.EntityTypes;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models;
@@ -1497,22 +1498,135 @@ public sealed class PurchaseController : Controller
 
     // ── Depodan Karşıla ──────────────────────────────────────────────────────
 
+    // PageComment Seq 34 (2026-07-25, Admin → Parametreler → İhtiyaç Kayıtları): "Karşılama Deposu
+    // Seçimi" listesinde Raf (SHELF) / Hücre (BIN) tipli lokasyonlar seçilebilir OLMAMALI — yalnız
+    // depo seviyesi (FACTORY/SECTION veya admin'in LogisticsConfigurationService.CreateLocationTypeAsync
+    // ile eklediği özel tip) lokasyonlar. Gerçek tip kodları CalibraDatabaseInitializer LocationType
+    // seed'inden doğrulandı (FACTORY/SECTION/SHELF/BIN). Bu filtre YALNIZ bu parametrenin seçim
+    // listesi içindir — genel /Warehouse/GetLocationsJson (stok belgesi satırı lokasyon seçimi;
+    // orada raf/hücre GEÇERLİ bir seçimdir, üstelik "leaf-only" kuralıyla depo seviyesini zaten
+    // hariç tutar) kasıtlı olarak DOKUNULMADI.
+    private static readonly HashSet<string> FulfillmentExcludedLocationTypeCodes =
+        new(StringComparer.OrdinalIgnoreCase) { "SHELF", "BIN" };
+
+    private static bool IsFulfillmentExcludedLocationType(string? locationTypeCode) =>
+        !string.IsNullOrWhiteSpace(locationTypeCode) &&
+        FulfillmentExcludedLocationTypeCodes.Contains(locationTypeCode.Trim());
+
+    /// <summary>
+    /// "Karşılama Deposu Seçimi" (Admin → Parametreler → İhtiyaç Kayıtları) için seçilebilir depo
+    /// listesi. Raf/Hücre tipli lokasyonlar hariç tutulur (yukarı bkz.). /Warehouse/GetLocationsJson'ın
+    /// aksine "leaf-only" kısıtı YOKTUR — depo seviyesi lokasyonun altında raf/hücre kırılımı olması
+    /// normaldir (aslında tam olarak bu yüzden GetLocationsJson'da depo hiç görünmüyordu, yalnız
+    /// altındaki raf/hücre'ler görünüyordu), bu listeden düşürülmemelidir.
+    /// GET /Purchase/FulfillmentLocationOptions
+    /// </summary>
+    [HttpGet("/Purchase/FulfillmentLocationOptions")]
+    public async Task<IActionResult> FulfillmentLocationOptions(CancellationToken ct)
+    {
+        var locations = await _logisticsService.GetLocationsAsync(ct);
+        var options = locations
+            .Where(l => l.IsActive && !IsFulfillmentExcludedLocationType(l.LocationTypeCode))
+            .OrderBy(l => l.SortOrder).ThenBy(l => l.LocationName ?? l.LocationCode)
+            .Select(l => new { l.Id, l.LocationCode, l.LocationName })
+            .ToList();
+        return Json(options);
+    }
+
     /// <summary>
     /// Mevcut şirket parametrelerinden Depodan Karşıla konfigürasyonunu döner.
     /// GET /Purchase/FulfillmentLocationConfig
+    /// invalidLocations (PageComment Seq 34): kayıtlı FULFILLMENT_LOCATION_IDS içinde artık geçersiz
+    /// (raf/hücre tipine ait, pasifleşmiş veya silinmiş) id varsa burada listelenir — kayıtlı DEĞER
+    /// SESSİZCE DEĞİŞTİRİLMEZ veya üst depoya map EDİLMEZ (silent migration riskli); yalnızca UI'ın
+    /// uyarı gösterebilmesi içindir. Temizlik, admin'in seçimi elle güncelleyip kaydetmesiyle olur.
     /// </summary>
     [HttpGet("/Purchase/FulfillmentLocationConfig")]
     public async Task<IActionResult> FulfillmentLocationConfig(CancellationToken ct)
     {
         const string fc = "PURCHASE_FULFILLMENT";
-        var mode    = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_MODE", ct) ?? "SPECIFIC";
-        var idsRaw  = await _companyParams.GetStringAsync(fc, "FULFILLMENT_LOCATION_IDS",  ct) ?? "";
+        var mode    = await _companyParams.GetStringAsync(fc, FulfillmentParameters.LocationModeKey, ct) ?? "SPECIFIC";
+        var idsRaw  = await _companyParams.GetStringAsync(fc, FulfillmentParameters.LocationIdsKey,  ct) ?? "";
         var ids     = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
                             .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
                             .Select(int.Parse).ToList();
         var respectMinStock = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.RespectMinStockKey, ct) ?? false;
         var consolidateLines = await _companyParams.GetBoolAsync(fc, FulfillmentParameters.ConsolidateLinesKey, ct) ?? false;
-        return Json(new { mode, locationIds = ids, respectMinStock, consolidateLines });
+
+        var invalidLocations = new List<object>();
+        if (ids.Count > 0)
+        {
+            var locations = await _logisticsService.GetLocationsAsync(ct);
+            var byId = locations.ToDictionary(l => l.Id);
+            foreach (var id in ids)
+            {
+                var isKnown  = byId.TryGetValue(id, out var loc);
+                var isInvalid = !isKnown || !loc!.IsActive || IsFulfillmentExcludedLocationType(loc.LocationTypeCode);
+                if (isInvalid)
+                    invalidLocations.Add(new { id, label = isKnown ? (loc!.LocationName ?? loc.LocationCode) : $"#{id}" });
+            }
+        }
+
+        return Json(new { mode, locationIds = ids, respectMinStock, consolidateLines, invalidLocations });
+    }
+
+    /// <summary>
+    /// "Karşılama Deposu Seçimi" (mode + location id listesi) kaydı. Genel /Admin/SaveParameter
+    /// (ParametersController, DOKUNULMADI) yerine bu iki parametreye (FULFILLMENT_LOCATION_MODE/IDS)
+    /// özel bir uç: SPECIFIC modda gönderilen id listesi sunucu tarafında raf/hücre tipine ve
+    /// aktiflik durumuna karşı doğrulanır — geçersiz id varsa TÜM istek reddedilir (sessiz filtre/
+    /// atlama YOK, CLAUDE.md kural #3). Doğrulama sonrası aynı ICompanyParameterService.SetAsync
+    /// (genel altyapı) çağrılır — yalnız ek bir doğrulama katmanı eklenir, depolama mekanizması
+    /// değişmez. Yetki: eski /Admin/SaveParameter yolu ParametersController üzerinden CompanySettings
+    /// scope'una tabiydi; aynı korumayı burada da uyguluyoruz (aksi halde bu taşıma yetkiyi gevşetirdi).
+    /// PageComment Seq 34 (2026-07-25).
+    /// POST /Purchase/SaveFulfillmentLocationConfig
+    /// </summary>
+    [HttpPost("/Purchase/SaveFulfillmentLocationConfig")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.CompanySettings)]
+    public async Task<IActionResult> SaveFulfillmentLocationConfig(
+        [FromBody] SaveFulfillmentLocationConfigRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var mode = string.Equals(req?.Mode, "ITEM_DEFAULT", StringComparison.OrdinalIgnoreCase)
+                ? "ITEM_DEFAULT" : "SPECIFIC";
+            var ids = (req?.LocationIds ?? new List<int>()).Where(id => id > 0).Distinct().ToList();
+
+            if (mode == "SPECIFIC" && ids.Count > 0)
+            {
+                var locations = await _logisticsService.GetLocationsAsync(ct);
+                var byId = locations.ToDictionary(l => l.Id);
+                var invalidLabels = ids
+                    .Where(id => !byId.TryGetValue(id, out var loc) || !loc.IsActive || IsFulfillmentExcludedLocationType(loc.LocationTypeCode))
+                    .Select(id => byId.TryGetValue(id, out var l) ? (l.LocationName ?? l.LocationCode) : $"#{id}")
+                    .ToList();
+                if (invalidLabels.Count > 0)
+                {
+                    return Json(new
+                    {
+                        ok = false,
+                        error = "Raf/hücre tipinde veya artık geçersiz lokasyon seçilemez: "
+                            + string.Join(", ", invalidLabels) + ". Yalnızca depo seviyesi lokasyonlar seçilebilir.",
+                    });
+                }
+            }
+
+            const string fc = "PURCHASE_FULFILLMENT";
+            await _companyParams.SetAsync(
+                new SetCompanyParameterRequest(fc, FulfillmentParameters.LocationModeKey, mode, CompanyParameterDataType.String), ct);
+            await _companyParams.SetAsync(
+                new SetCompanyParameterRequest(fc, FulfillmentParameters.LocationIdsKey, string.Join(",", ids), CompanyParameterDataType.String), ct);
+
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            // Sessizce yutma (CLAUDE.md kural #2) — server'a logla, istemciye jenerik mesaj dön.
+            _logger.LogError(ex, "[Purchase] Karsilama deposu parametresi kaydedilirken hata.");
+            return Json(new { ok = false, error = "Kaydetme sırasında bir hata oluştu." });
+        }
     }
 
     /// <summary>

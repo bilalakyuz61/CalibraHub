@@ -106,3 +106,14 @@ public sealed record FulfillFromStockRequest(
 public sealed record FulfillFromStockLineRequest(
     int     LineId,
     decimal Qty);
+
+/// <summary>
+/// "Karşılama Deposu Seçimi" (Admin → Parametreler → İhtiyaç Kayıtları) kaydı.
+/// POST /Purchase/SaveFulfillmentLocationConfig — PageComment Seq 34 (2026-07-25).
+/// Mode: "SPECIFIC" (belirli depolar) | "ITEM_DEFAULT" (stok kartındaki varsayılan depo).
+/// LocationIds: SPECIFIC modda kullanılacak depo Id listesi — sunucu tarafında raf/hücre
+/// tipine karşı doğrulanır (bkz. PurchaseController.SaveFulfillmentLocationConfig XML doc'u).
+/// </summary>
+public sealed record SaveFulfillmentLocationConfigRequest(
+    string?    Mode,
+    List<int>? LocationIds);
