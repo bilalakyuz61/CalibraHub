@@ -2083,11 +2083,14 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         // Audit title icin tek seferde tum isim/kod bilgisini yukle (N+1 onleme — bkz. rapor 2026-05-17 madde 3.10 ruhu).
         var allItems = await _repository.GetItemsAsync(cancellationToken);
         var namesById = allItems.ToDictionary(x => x.Id, x => x.Name);
+        // Mevcut kilit setlerini TEK sorguda al (N ayrı GetItemDocumentLocksAsync yerine) —
+        // board listesi icin zaten var olan grouped okumayı burada da paylaşıyoruz.
+        var lockMap = await _repository.GetAllItemDocumentLocksGroupedAsync(cancellationToken);
 
         var updatedCount = 0;
         foreach (var itemId in distinctItemIds)
         {
-            var oldDocTypes = await _repository.GetItemDocumentLocksAsync(itemId, cancellationToken);
+            var oldDocTypes = lockMap.TryGetValue(itemId, out var existing) ? existing : Array.Empty<string>();
             var oldSet = new HashSet<string>(oldDocTypes, StringComparer.OrdinalIgnoreCase);
             var newSet = new HashSet<string>(oldSet, StringComparer.OrdinalIgnoreCase);
             if (isLock) newSet.UnionWith(requestedDocTypes);
