@@ -210,7 +210,7 @@ public sealed class LogisticsController : Controller
                 {
                     id = "new",
                     label = "Yeni Malzeme",
-                    icon = "Package",
+                    icon = "Plus",
                     variant = "primary",
                     url = "/Logistics/MaterialCardEdit"
                 }

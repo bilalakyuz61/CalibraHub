@@ -247,82 +247,78 @@ body.app-theme-dark .ap-tab.is-active::before {
 }
 .ap-fc-warn.is-visible { display: block; }
 
-/* ── Karşılama Deposu — açılır çoklu-seçim combobox (PageComment Seq 35) ── */
-.ap-fc-combo { position: relative; }
-.ap-fc-combo-box {
-    display: flex; align-items: center; gap: 6px;
-    min-height: 34px; padding: 5px 34px 5px 8px;
-    border: 1px solid var(--ap-border); border-radius: 8px;
-    background: var(--ap-input-bg); cursor: pointer;
-    position: relative; transition: border-color .12s, box-shadow .12s;
+/* ── Karşılama Deposu — satır özeti + "Depo Ekle / Gör" butonu (PageComment Seq 38) ── */
+.ap-fc-summary-row {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: 10px; flex-wrap: wrap;
 }
-.ap-fc-combo-box:hover { border-color: var(--ap-accent); }
-.ap-fc-combo-box:focus-visible {
-    outline: none; border-color: var(--ap-accent);
-    box-shadow: 0 0 0 3px var(--ap-accent-soft);
-}
-.ap-fc-combo.is-open .ap-fc-combo-box {
-    border-color: var(--ap-accent);
-    box-shadow: 0 0 0 3px var(--ap-accent-soft);
-}
-.ap-fc-pills { display: flex; flex-wrap: wrap; gap: 5px; flex: 1 1 auto; min-width: 0; }
-.ap-fc-placeholder { font-size: 12.5px; color: var(--ap-text-muted); padding: 2px 0; }
-.ap-fc-pill {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 3px 6px 3px 9px; border-radius: 6px;
-    background: var(--ap-accent-soft); color: var(--ap-text);
-    font-size: 12px; font-weight: 500; line-height: 1.5; white-space: nowrap;
-}
-.ap-fc-pill-remove {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0;
-    border: none; background: transparent; color: var(--ap-text-muted);
-    cursor: pointer; padding: 0; font-size: 13px; line-height: 1;
-    transition: background .12s, color .12s;
-}
-.ap-fc-pill-remove:hover { background: var(--ap-toast-er-bg); color: var(--ap-toast-er-tx); }
-.ap-fc-add { font-size: 11.5px; font-weight: 600; color: var(--ap-accent); white-space: nowrap; padding: 2px 0; }
-.ap-fc-chevron {
-    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-    color: var(--ap-text-muted); pointer-events: none; transition: transform .15s;
-}
-.ap-fc-combo.is-open .ap-fc-chevron { transform: translateY(-50%) rotate(180deg); }
-.ap-fc-summary { font-size: 11px; color: var(--ap-text-muted); margin-top: 5px; }
+.ap-fc-summary-text { font-size: 12.5px; font-weight: 500; color: var(--ap-text-muted); white-space: nowrap; }
+.ap-fc-openbtn { padding: 6px 12px; font-size: 12px; white-space: nowrap; }
 
-.ap-fc-panel {
-    display: none;
-    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 40;
-    background: var(--ap-surface); border: 1px solid var(--ap-border); border-radius: 10px;
-    box-shadow: 0 12px 28px rgba(0,0,0,.18);
-    padding: 10px; min-width: 260px;
+/* ── Karşılama Depoları seçim modali — ekran ortası (Silme onay standardı ile aynı iskelet:
+     tam ekran backdrop + ortalanmış card; destruktif olmadığından danger renk kullanılmaz,
+     var(--ap-accent)/var(--ap-surface) zaten light/dark ciftini .ap-wrapper uzerinde tasiyor) ── */
+.ap-fc-modal-backdrop {
+    position: fixed; inset: 0; z-index: 1100;
+    background: rgba(15,23,42,.5);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    animation: apFcFadeIn .14s ease;
 }
-.ap-fc-panel.is-open { display: block; }
-.ap-fc-panel-search input {
-    width: 100%; padding: 7px 10px; font-size: 12.5px; box-sizing: border-box;
-    border: 1px solid var(--ap-border); border-radius: 7px;
-    background: var(--ap-input-bg); color: var(--ap-text); margin-bottom: 8px;
+.ap-fc-modal-backdrop[hidden] { display: none; }
+@@keyframes apFcFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.ap-fc-modal {
+    width: 420px; max-width: 92vw; max-height: 82vh;
+    display: flex; flex-direction: column;
+    background: var(--ap-surface); color: var(--ap-text);
+    border: 1px solid var(--ap-border); border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.28);
+    padding: 20px 22px 18px;
+    animation: apFcPopIn .18s cubic-bezier(.2,.9,.3,1.2);
 }
-.ap-fc-panel-search input:focus { outline: none; border-color: var(--ap-accent); }
+@@keyframes apFcPopIn {
+    from { opacity: 0; transform: translateY(8px) scale(.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ap-fc-modal-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.ap-fc-modal-icon {
+    width: 38px; height: 38px; flex-shrink: 0; margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--ap-accent-soft); color: var(--ap-accent); border-radius: 10px;
+}
+.ap-fc-modal-title { font-size: 14.5px; font-weight: 700; color: var(--ap-text); }
+.ap-fc-modal-subtitle { font-size: 11.5px; color: var(--ap-text-muted); margin-top: 2px; line-height: 1.4; }
+
+.ap-fc-modal-search input {
+    width: 100%; padding: 8px 11px; font-size: 12.5px; box-sizing: border-box;
+    border: 1px solid var(--ap-border); border-radius: 8px;
+    background: var(--ap-input-bg); color: var(--ap-text); margin-bottom: 10px;
+}
+.ap-fc-modal-search input:focus { outline: none; border-color: var(--ap-accent); }
 .ap-fc-panel-list {
     display: flex; flex-direction: column; gap: 1px;
-    max-height: 220px; overflow-y: auto;
+    max-height: 320px; overflow-y: auto; flex: 1 1 auto;
     border: 1px solid var(--ap-border-light); border-radius: 8px;
     padding: 4px; background: var(--ap-input-bg);
 }
 .ap-fc-panel-empty { display: block; color: var(--ap-text-muted); font-size: 12px; font-style: italic; padding: 6px 4px; }
 .ap-fc-option {
     display: flex; align-items: center; gap: 8px;
-    padding: 6px 8px; border-radius: 6px; cursor: pointer;
+    padding: 7px 8px; border-radius: 6px; cursor: pointer;
     font-size: 12.5px; color: var(--ap-text);
 }
 .ap-fc-option:hover { background: var(--ap-accent-soft); }
 .ap-fc-option input[type="checkbox"] { accent-color: var(--ap-accent); flex-shrink: 0; }
-.ap-fc-panel-footer {
-    display: flex; justify-content: flex-end;
-    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--ap-border-light);
+
+.ap-fc-modal-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ap-border-light);
 }
-.ap-fc-panel-footer a { font-size: 11.5px; color: var(--ap-text-muted); text-decoration: none; }
-.ap-fc-panel-footer a:hover { color: var(--ap-accent); }
+.ap-fc-modal-count { font-size: 11.5px; color: var(--ap-text-muted); }
+.ap-fc-modal-clear { font-size: 11.5px; color: var(--ap-text-muted); text-decoration: none; }
+.ap-fc-modal-clear:hover { color: var(--ap-accent); }
+
+.ap-fc-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 
 /* ── Pane'ler ── */
 .ap-pane { display:none; }
@@ -661,32 +657,17 @@ body.app-theme-dark .ap-tab.is-active::before {
                         </div>
                         <div id="apFcLocWarning" class="ap-fc-warn"></div>
                     </div>
-                    <div class="ap-row-control" style="min-width:280px;max-width:380px;">
-                        <div class="ap-fc-combo" id="apFcLocCombo">
-                            <div class="ap-fc-combo-box" id="apFcLocTrigger" role="button" tabindex="0"
-                                 aria-haspopup="listbox" aria-expanded="false">
-                                <div class="ap-fc-pills" id="apFcLocPills">
-                                    <span class="ap-fc-placeholder">Depo seçilmedi</span>
-                                </div>
-                                <span class="ap-fc-add">+ Depo Seç</span>
-                                <svg class="ap-fc-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="6 9 12 15 18 9"/>
-                                </svg>
-                            </div>
-                            <div id="apFcLocCount" class="ap-fc-summary">0 depo seçili</div>
-
-                            <div class="ap-fc-panel" id="apFcLocPanel">
-                                <div class="ap-fc-panel-search">
-                                    <input type="text" id="apFcLocSearch" placeholder="Depo ara…" autocomplete="off" />
-                                </div>
-                                <div id="apFcLocList" class="ap-fc-panel-list">
-                                    <span id="apFcLocLoading" class="ap-fc-panel-empty">Yükleniyor…</span>
-                                </div>
-                                <div class="ap-fc-panel-footer">
-                                    <a href="#" id="apFcLocClearAll" title="Tüm seçimi kaldır">Temizle</a>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="ap-row-control ap-fc-summary-row" style="min-width:220px;">
+                        <span id="apFcLocCount" class="ap-fc-summary-text">0 depo seçili</span>
+                        <button type="button" id="apFcLocOpenBtn" class="ap-btn ap-fc-openbtn" title="Depo Ekle / Gör">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M16.5 9.4 7.55 4.24"/>
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                <polyline points="3.29 7 12 12 20.71 7"/>
+                                <line x1="12" y1="22" x2="12" y2="12"/>
+                            </svg>
+                            Depo Ekle / Gör
+                        </button>
                     </div>
                 </div>
             </section>
@@ -1023,6 +1004,46 @@ body.app-theme-dark .ap-tab.is-active::before {
 
         </main>
     </div>
+
+    @* ── Karşılama Depoları seçim modali (PageComment Seq 38 — Seq 35'teki açılır panel
+         yerine ekran-ortası modal; Silme onay standardı ile aynı iskelet ama destruktif
+         olmadığından danger renk/ikon kullanılmaz) ── *@
+    <div id="apFcModalBackdrop" class="ap-fc-modal-backdrop" hidden>
+        <div class="ap-fc-modal" role="dialog" aria-modal="true" aria-labelledby="apFcModalTitle">
+            <div class="ap-fc-modal-header">
+                <div class="ap-fc-modal-icon">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16.5 9.4 7.55 4.24"/>
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.29 7 12 12 20.71 7"/>
+                        <line x1="12" y1="22" x2="12" y2="12"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="ap-fc-modal-title" id="apFcModalTitle">Karşılama Depoları</div>
+                    <div class="ap-fc-modal-subtitle">Stok bakiyesi kontrol edilecek depoları seçin</div>
+                </div>
+            </div>
+
+            <div class="ap-fc-modal-search">
+                <input type="text" id="apFcLocSearch" placeholder="Depo ara…" autocomplete="off" />
+            </div>
+
+            <div id="apFcLocList" class="ap-fc-panel-list">
+                <span id="apFcLocLoading" class="ap-fc-panel-empty">Yükleniyor…</span>
+            </div>
+
+            <div class="ap-fc-modal-footer">
+                <span id="apFcModalCount" class="ap-fc-modal-count">0 depo seçili</span>
+                <a href="#" id="apFcLocClearAll" class="ap-fc-modal-clear" title="Tüm seçimi kaldır">Temizle</a>
+            </div>
+
+            <div class="ap-fc-modal-actions">
+                <button type="button" class="ap-btn" id="apFcModalCancelBtn">Vazgeç</button>
+                <button type="button" class="ap-btn ap-btn--primary" id="apFcModalOkBtn">Tamam</button>
+            </div>
+        </div>
+    </div>
 </div>
 </section>
 
@@ -1297,10 +1318,12 @@ body.app-theme-dark .ap-tab.is-active::before {
         }
     });
 
-    // ── İhtiyaç Kayıtları: depo listesi yönetimi (açılır çoklu-seçim, PageComment Seq 35) ──
-    var _fcLocsLoaded = false;
-    var _fcLocs       = [];
-    var _fcCheckedIds = [];
+    // ── İhtiyaç Kayıtları: depo listesi yönetimi (seçim modali, PageComment Seq 38 —
+    //    Seq 35'teki açılır panel ekran-ortası modal'a taşındı) ──
+    var _fcLoadPromise    = null;
+    var _fcLocs           = [];
+    var _fcCheckedIds     = [];
+    var _fcModalSnapshot  = [];   // modal açılış anındaki seçim — Vazgeç/Esc/backdrop bunu geri yükler
 
     function fcModeChange() {
         var mode = document.querySelector('input[name="apFcLocMode"]:checked')?.value;
@@ -1320,7 +1343,8 @@ body.app-theme-dark .ap-tab.is-active::before {
         if (!el) return;
         if (_fcLocs.length === 0) {
             el.innerHTML = '<span class="ap-fc-panel-empty">Aktif depo bulunamadı.</span>';
-            fcOnSelectionChange();
+            fcSyncRowSummary();
+            fcUpdateModalCount();
             return;
         }
         el.innerHTML = _fcLocs.map(function(l) {
@@ -1332,7 +1356,8 @@ body.app-theme-dark .ap-tab.is-active::before {
                  + '</label>';
         }).join('');
         fcFilterLocList();  // arama kutusunda zaten yazılmış bir terim varsa yeni render'a uygula
-        fcOnSelectionChange();
+        fcSyncRowSummary();
+        fcUpdateModalCount();
     }
 
     // Depo sayısı çok olabileceğinden aranabilir liste — DOM node'ları YENİDEN OLUŞTURMAZ
@@ -1344,38 +1369,48 @@ body.app-theme-dark .ap-tab.is-active::before {
         });
     }
 
-    function fcUpdateCount() {
-        var n = document.querySelectorAll('#apFcLocList input[type="checkbox"]:checked').length;
-        var el = document.getElementById('apFcLocCount');
-        if (el) el.textContent = n + ' depo seçili';
-    }
-
-    // Kapalı durumda gösterilen kaldırılabilir pill listesi — tek doğruluk kaynağı DOM'daki
-    // checkbox işaretli durumu (ayrı bir state kopyası tutulmaz, senkron kayması riski olmaz).
-    function fcRenderPills() {
-        var wrap = document.getElementById('apFcLocPills');
-        if (!wrap) return;
-        var checkedIds = [];
+    function fcCheckedIdsFromDom() {
+        var ids = [];
         document.querySelectorAll('#apFcLocList input[type="checkbox"]:checked').forEach(function(cb) {
-            checkedIds.push(parseInt(cb.value, 10));
+            ids.push(parseInt(cb.value, 10));
         });
-        if (checkedIds.length === 0) {
-            wrap.innerHTML = '<span class="ap-fc-placeholder">Depo seçilmedi</span>';
-            return;
-        }
-        wrap.innerHTML = checkedIds.map(function(id) {
-            var loc = _fcLocs.find(function(l) { return l.id === id; });
-            var label = loc ? (loc.locationName || loc.locationCode || ('Depo ' + id)) : ('Depo ' + id);
-            return '<span class="ap-fc-pill">' + fcEscapeHtml(label)
-                 + '<button type="button" class="ap-fc-pill-remove" data-id="' + id + '" title="Kaldır" aria-label="' + fcEscapeHtml(label) + ' kaldır">&times;</button>'
-                 + '</span>';
-        }).join('');
+        return ids;
     }
 
-    // Panel açıkken yapılan HER seçim değişikliğinde: sayaç + kapalı-durum pill listesi birlikte güncellenir.
-    function fcOnSelectionChange() {
-        fcUpdateCount();
-        fcRenderPills();
+    function fcApplyCheckedIds(ids) {
+        document.querySelectorAll('#apFcLocList input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = ids.indexOf(parseInt(cb.value, 10)) !== -1;
+        });
+    }
+
+    // Satırdaki "N depo seçili" özeti + buton tooltip'i (ilk birkaç depo adı) — yalnız ilk config
+    // yüklemesinde ve modal "Tamam" ile kapanınca güncellenir. Modalin içindeki geçici tikleme
+    // (Vazgeç ile iptal edilebilir) satırı ANINDA etkilemez — bkz. fcUpdateModalCount.
+    function fcSyncRowSummary() {
+        var ids = fcCheckedIdsFromDom();
+        var countEl = document.getElementById('apFcLocCount');
+        if (countEl) countEl.textContent = ids.length + ' depo seçili';
+
+        var btn = document.getElementById('apFcLocOpenBtn');
+        if (btn) {
+            if (ids.length === 0) {
+                btn.title = 'Depo Ekle / Gör';
+            } else {
+                var names = ids.slice(0, 3).map(function(id) {
+                    var loc = _fcLocs.find(function(l) { return l.id === id; });
+                    return loc ? (loc.locationName || loc.locationCode || ('Depo ' + id)) : ('Depo ' + id);
+                });
+                var extra = ids.length - names.length;
+                btn.title = names.join(', ') + (extra > 0 ? ' +' + extra + ' diğer' : '');
+            }
+        }
+    }
+
+    // Modal içindeki anlık sayaç — her checkbox değişiminde güncellenir (satır özetinden bağımsız,
+    // Tamam'a basılana kadar dışarı yansımaz).
+    function fcUpdateModalCount() {
+        var el = document.getElementById('apFcModalCount');
+        if (el) el.textContent = fcCheckedIdsFromDom().length + ' depo seçili';
     }
 
     // Kayıtlı seçimde artık geçersiz (raf/hücre tipine dönmüş, pasifleşmiş veya silinmiş) id
@@ -1395,97 +1430,89 @@ body.app-theme-dark .ap-tab.is-active::before {
         el.classList.add('is-visible');
     }
 
-    async function fcLoadConfig() {
-        if (_fcLocsLoaded) return;
-        _fcLocsLoaded = true;
-        try {
-            var cfg = await (await fetch('/Purchase/FulfillmentLocationConfig')).json();
-            _fcCheckedIds = cfg.locationIds || [];
-            var modeEl = document.getElementById(cfg.mode === 'ITEM_DEFAULT' ? 'apFcLocDefault' : 'apFcLocSpecific');
-            if (modeEl) modeEl.checked = true;
-            fcModeChange();
-            fcRenderWarning(cfg.invalidLocations);
+    // Promise cache: tab tıklaması fire-and-forget çağırır, modal açılışı await eder — ikisi de
+    // AYNI istek/promise'i paylaşır (yarış durumu yok, çift fetch atılmaz).
+    function fcLoadConfig() {
+        if (_fcLoadPromise) return _fcLoadPromise;
+        _fcLoadPromise = (async function() {
+            try {
+                var cfg = await (await fetch('/Purchase/FulfillmentLocationConfig')).json();
+                _fcCheckedIds = cfg.locationIds || [];
+                var modeEl = document.getElementById(cfg.mode === 'ITEM_DEFAULT' ? 'apFcLocDefault' : 'apFcLocSpecific');
+                if (modeEl) modeEl.checked = true;
+                fcModeChange();
+                fcRenderWarning(cfg.invalidLocations);
 
-            // Asgari stok switch'i (default: kapalı)
-            var msOn = cfg.respectMinStock === true;
-            var msEl = document.getElementById('ap-fc-min-stock');
-            if (msEl) {
-                msEl.checked = msOn;
-                msEl.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', msOn);
-                var msLbl = document.getElementById('ap-fc-min-stock-label');
-                if (msLbl) { msLbl.textContent = msOn ? 'Aktif' : 'Pasif'; msLbl.classList.toggle('is-active', msOn); }
-            }
-            // Kumule switch'i (default: kapalı)
-            var conOn = cfg.consolidateLines === true;
-            var conEl2 = document.getElementById('ap-fc-consolidate');
-            if (conEl2) {
-                conEl2.checked = conOn;
-                conEl2.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', conOn);
-                var conLbl = document.getElementById('ap-fc-consolidate-label');
-                if (conLbl) { conLbl.textContent = conOn ? 'Aktif' : 'Pasif'; conLbl.classList.toggle('is-active', conOn); }
-            }
+                // Asgari stok switch'i (default: kapalı)
+                var msOn = cfg.respectMinStock === true;
+                var msEl = document.getElementById('ap-fc-min-stock');
+                if (msEl) {
+                    msEl.checked = msOn;
+                    msEl.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', msOn);
+                    var msLbl = document.getElementById('ap-fc-min-stock-label');
+                    if (msLbl) { msLbl.textContent = msOn ? 'Aktif' : 'Pasif'; msLbl.classList.toggle('is-active', msOn); }
+                }
+                // Kumule switch'i (default: kapalı)
+                var conOn = cfg.consolidateLines === true;
+                var conEl2 = document.getElementById('ap-fc-consolidate');
+                if (conEl2) {
+                    conEl2.checked = conOn;
+                    conEl2.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', conOn);
+                    var conLbl = document.getElementById('ap-fc-consolidate-label');
+                    if (conLbl) { conLbl.textContent = conOn ? 'Aktif' : 'Pasif'; conLbl.classList.toggle('is-active', conOn); }
+                }
 
-            // PageComment Seq 34: raf/hücre tipli lokasyonlar seçilebilir listede gösterilmez —
-            // genel /Warehouse/GetLocationsJson yerine bu parametreye özel, sunucu-filtreli uç.
-            var locs = await (await fetch('/Purchase/FulfillmentLocationOptions')).json();
-            _fcLocs = locs || [];
-            fcRenderLocList();
-        } catch(e) {
-            var el = document.getElementById('apFcLocList');
-            if (el) el.innerHTML = '<span class="ap-fc-panel-empty">Yüklenirken hata oluştu.</span>';
+                // PageComment Seq 34: raf/hücre tipli lokasyonlar seçilebilir listede gösterilmez —
+                // genel /Warehouse/GetLocationsJson yerine bu parametreye özel, sunucu-filtreli uç.
+                var locs = await (await fetch('/Purchase/FulfillmentLocationOptions')).json();
+                _fcLocs = locs || [];
+                fcRenderLocList();
+            } catch(e) {
+                var el = document.getElementById('apFcLocList');
+                if (el) el.innerHTML = '<span class="ap-fc-panel-empty">Yüklenirken hata oluştu.</span>';
+            }
+        })();
+        return _fcLoadPromise;
+    }
+
+    // ── Seçim modali yaşam döngüsü (PageComment Seq 38: açılır panel → ekran-ortası modal) ──
+    async function fcOpenModal() {
+        await fcLoadConfig();   // zaten yüklüyse (tab tıklamasından) aynı promise'i bekler, no-op
+        _fcModalSnapshot = fcCheckedIdsFromDom();
+        fcUpdateModalCount();
+        var bd = document.getElementById('apFcModalBackdrop');
+        if (bd) bd.hidden = false;
+        document.getElementById('apFcLocSearch')?.focus();
+    }
+
+    // applyChanges=true (Tamam): DOM'daki mevcut tik durumu kalır + satır özetine yansır.
+    // applyChanges=false (Vazgeç/Esc/backdrop): modal açılış anındaki seçime geri döner (değişiklik uygulanmaz).
+    function fcCloseModal(applyChanges) {
+        var bd = document.getElementById('apFcModalBackdrop');
+        if (!bd || bd.hidden) return;
+        if (applyChanges) {
+            fcSyncRowSummary();
+        } else {
+            fcApplyCheckedIds(_fcModalSnapshot);
         }
-    }
-
-    // ── Açılır panel yaşam döngüsü (PageComment Seq 35: checkbox-chip listesi → dropdown) ──
-    var fcCombo   = document.getElementById('apFcLocCombo');
-    var fcTrigger = document.getElementById('apFcLocTrigger');
-    var fcPanel   = document.getElementById('apFcLocPanel');
-
-    function fcOpenPanel() {
-        if (!fcCombo || !fcPanel || fcPanel.classList.contains('is-open')) return;
-        fcCombo.classList.add('is-open');
-        fcPanel.classList.add('is-open');
-        fcTrigger.setAttribute('aria-expanded', 'true');
-        var search = document.getElementById('apFcLocSearch');
-        if (search) search.focus();
-    }
-    function fcClosePanel() {
-        if (!fcCombo || !fcPanel || !fcPanel.classList.contains('is-open')) return;
-        fcCombo.classList.remove('is-open');
-        fcPanel.classList.remove('is-open');
-        fcTrigger.setAttribute('aria-expanded', 'false');
         // Kapanışta arama terimini temizle — bir sonraki açılışta filtrelenmemiş liste görünsün.
         var search = document.getElementById('apFcLocSearch');
         if (search && search.value) { search.value = ''; fcFilterLocList(); }
-    }
-    function fcTogglePanel() {
-        if (fcPanel && fcPanel.classList.contains('is-open')) fcClosePanel(); else fcOpenPanel();
+        bd.hidden = true;
     }
 
-    if (fcTrigger) {
-        fcTrigger.addEventListener('click', function(ev) {
-            // Pill'in "x" kaldır butonuna tıklandıysa yalnızca o depo kaldırılır, panel aç/kapa tetiklenmez.
-            var removeBtn = ev.target.closest('.ap-fc-pill-remove');
-            if (removeBtn) {
-                ev.stopPropagation();
-                var id = parseInt(removeBtn.dataset.id, 10);
-                var cb = document.querySelector('#apFcLocList input[type="checkbox"][value="' + id + '"]');
-                if (cb) { cb.checked = false; fcOnSelectionChange(); }
-                return;
-            }
-            fcTogglePanel();
-        });
-        fcTrigger.addEventListener('keydown', function(ev) {
-            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fcTogglePanel(); }
-        });
-    }
-    // Panel dışına tıklama → kapat (arama kutusu/seçenek listesi/Temizle panel içinde olduğundan etkilenmez)
-    document.addEventListener('click', function(ev) {
-        if (fcCombo && !fcCombo.contains(ev.target)) fcClosePanel();
+    document.getElementById('apFcLocOpenBtn')?.addEventListener('click', function() { fcOpenModal(); });
+    document.getElementById('apFcModalOkBtn')?.addEventListener('click', function() { fcCloseModal(true); });
+    document.getElementById('apFcModalCancelBtn')?.addEventListener('click', function() { fcCloseModal(false); });
+    // Backdrop'un kendisine (karta değil) tıklama → Vazgeç
+    document.getElementById('apFcModalBackdrop')?.addEventListener('click', function(ev) {
+        if (ev.target && ev.target.id === 'apFcModalBackdrop') fcCloseModal(false);
     });
-    // Esc → kapat (odak arama kutusundayken de çalışır, event bubbling engellenmiyor)
+    // Esc → Vazgeç (yalnız modal açıkken; arama kutusu odaktayken de çalışır, event bubbling engellenmiyor)
     document.addEventListener('keydown', function(ev) {
-        if (ev.key === 'Escape') fcClosePanel();
+        if (ev.key !== 'Escape') return;
+        var bd = document.getElementById('apFcModalBackdrop');
+        if (bd && !bd.hidden) fcCloseModal(false);
     });
 
     // Radio değişiklik olayları
@@ -1496,19 +1523,20 @@ body.app-theme-dark .ap-tab.is-active::before {
     // Arama kutusu — anlık filtre (DOM'u yeniden oluşturmadan yalnız görünürlük toggle eder)
     document.getElementById('apFcLocSearch')?.addEventListener('input', fcFilterLocList);
 
-    // "Temizle" — tüm seçimi kaldırır (depo sayısı çok olduğunda tek tek işaret kaldırmak yerine)
+    // "Temizle" — tüm seçimi kaldırır (depo sayısı çok olduğunda tek tek işaret kaldırmak yerine).
+    // Yalnız modal içi anlık sayacı günceller — satır özeti Tamam'a basılana kadar değişmez.
     document.getElementById('apFcLocClearAll')?.addEventListener('click', function(ev) {
         ev.preventDefault();
         document.querySelectorAll('#apFcLocList input[type="checkbox"]:checked').forEach(function(cb) { cb.checked = false; });
-        fcOnSelectionChange();
+        fcUpdateModalCount();
     });
 
-    // Seçim değişince: sayaç + kapalı-durum pill listesi (event delegation, dinamik render sonrası da çalışır)
+    // Seçim değişince: modal içi anlık sayaç (event delegation, dinamik render sonrası da çalışır)
     document.getElementById('apFcLocList')?.addEventListener('change', function(ev) {
-        if (ev.target && ev.target.type === 'checkbox') fcOnSelectionChange();
+        if (ev.target && ev.target.type === 'checkbox') fcUpdateModalCount();
     });
 
-    // Tab tıklamasında config'i yükle
+    // Tab tıklamasında config'i yükle (fire-and-forget — modal açılışında aynı promise beklenir)
     tabs.forEach(function(t) {
         if (t.dataset.pane === 'ihtiyac') {
             t.addEventListener('click', function() { fcLoadConfig(); });

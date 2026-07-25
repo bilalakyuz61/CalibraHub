@@ -632,6 +632,27 @@
     .fc3-modal-body .fc3-pr-doctype-row { padding:0; }
     .fc3-pr-doctype-lbl { font-size:.7rem; font-weight:700; color:#64748b; }
     body.app-theme-light .fc3-pr-doctype-lbl { color:#475569; }
+
+    /* Depodan Karşıla — "Stokları Kümüle Et" switch (switchkey standardı, CLAUDE.md; checkbox
+       ham haliyle kullanılmaz). PageComment Seq 39 (2026-07-25). */
+    .fc3-switch { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
+    .fc3-switch input { display:none; }
+    .fc3-switch-track {
+        width:34px; height:19px; border-radius:10px; flex-shrink:0;
+        background:rgba(255,255,255,.14); position:relative; transition:background .15s;
+    }
+    .fc3-switch-track.is-on { background:linear-gradient(135deg,#6366f1,#8b5cf6); }
+    .fc3-switch-thumb {
+        position:absolute; top:2.5px; left:2.5px; width:14px; height:14px; border-radius:50%;
+        background:#fff; transition:transform .15s; box-shadow:0 1px 3px rgba(0,0,0,.35);
+    }
+    .fc3-switch-track.is-on .fc3-switch-thumb { transform:translateX(15px); }
+    .fc3-switch-label { font-size:.72rem; font-weight:600; color:#64748b; }
+    .fc3-switch-label.is-on { color:#a5b4fc; }
+    body.app-theme-light .fc3-switch-track { background:#cbd5e1; }
+    body.app-theme-light .fc3-switch-label { color:#64748b; }
+    body.app-theme-light .fc3-switch-label.is-on { color:#4338ca; }
+
     .fc3-spinner { width:10px; height:10px; border:1.5px solid rgba(99,102,241,.3); border-top-color:#6366f1; border-radius:50%; animation:fc3spin .6s linear infinite; flex-shrink:0; }
     @@keyframes fc3spin { to{transform:rotate(360deg);} }
     .fc3-load-badge { display:none; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:rgba(99,102,241,.12); color:#818cf8; font-size:.7rem; }
@@ -1237,6 +1258,24 @@
                 <select id="fc3ModalLocOverride" class="fc3-ts" style="max-width:220px;">
                     <option value="">— Otomatik (parametre) —</option>
                 </select>
+            </div>
+
+            @* Depodan Karşıla — "Stokları Kümüle Et" (PageComment Seq 39, 2026-07-25): karşı fişte
+               aynı malzeme/kaynak depo/kombinasyon/birime sahip kalemlerin tek satırda toplanıp
+               toplanmayacağını kullanıcı her karşılamada seçer. Modal açılışındaki varsayılan durum
+               STOCK_DOC_CONSOLIDATE şirket parametresinin GÜNCEL değerini yansıtır (bkz.
+               fc3FetchCumulateDefault + fc3OpenModal) — switch'e hiç dokunulmazsa davranış bugünküyle
+               birebir aynı kalır, bu yalnızca bir seçenek ekler. Karşılama defteri (İhtiyaç satırı
+               bazlı kayıtlar) bu seçimden ETKİLENMEZ. Yalnız 'fulfill' aksiyonu açıkken görünür. *@
+            <div class="fc3-pr-doctype-row" id="fc3ModalCumulateRow" style="display:none;">
+                <span class="fc3-pr-doctype-lbl">Stokları Kümüle Et</span>
+                <label class="fc3-switch">
+                    <input type="checkbox" id="fc3ModalCumulate" onchange="fc3ModalCumulateToggle(this)">
+                    <span class="fc3-switch-track" id="fc3ModalCumulateTrack">
+                        <span class="fc3-switch-thumb"></span>
+                    </span>
+                    <span class="fc3-switch-label" id="fc3ModalCumulateLabel">Pasif</span>
+                </label>
             </div>
 
             @* Tablo modu — Depodan Karşıla / Depo Transferi / Satın Alma *@
@@ -2845,6 +2884,8 @@
     var _modalAction = null;   // aktif FC_ACTIONS girdisi
     var _modalLines  = [];     // bu modal oturumuna özel çalışma kopyası — satır çıkarma (✕)
                                 // _lineSel'i BOZMAZ, yalnız bu diziden çıkarır (bkz. fc3ModalRemoveRow).
+    var _modalCumulateDefault = false; // "Stokları Kümüle Et" switch'inin açılıştaki varsayılanı —
+                                        // STOCK_DOC_CONSOLIDATE parametresinden (bkz. fc3OpenModal).
 
     // ── Satın Alma paneli: Belge Tipi (Talep / Sipariş) toggle ────────────────────────────────
     // demand → satin_alma_talebi (CreatePurchaseDemand)
@@ -2873,7 +2914,7 @@
     // Birim — bkz. fc3RenderModalTable. extraCols aksiyona özel ek kolonlardır.
     var FC_ACTIONS = {
         fulfill: {
-            key: 'fulfill', mode: 'table', accent: 'fulfill', hasLocOverride: true,
+            key: 'fulfill', mode: 'table', accent: 'fulfill', hasLocOverride: true, hasCumulateToggle: true,
             icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
             title: function() { return 'Depodan Karşıla'; },
             okLabel: function() { return 'Depodan Karşıla'; },
@@ -2922,6 +2963,17 @@
         },
     };
 
+    // "Stokları Kümüle Et" switch'inin varsayılanı — GET /Purchase/FulfillmentLocationConfig
+    // zaten consolidateLines alanını döner (Admin/Parameters.cshtml'in kullandığı aynı uç); burada
+    // yeniden okunur ki modal açılışında güncel parametre değeri yansısın. Ağ hatasında güvenli
+    // varsayılan (false = mevcut/kapalı davranış) döner — sessizce yutulmaz, yalnız zararsız fallback.
+    function fc3FetchCumulateDefault() {
+        return fetch('/Purchase/FulfillmentLocationConfig')
+            .then(function(r) { return r.json(); })
+            .then(function(d) { return !!(d && d.consolidateLines); })
+            .catch(function() { return false; });
+    }
+
     // ── Aç / Kapat ─────────────────────────────────────────────────────────────────────────
     window.fc3OpenModal = function(actionKey) {
         var cfg = FC_ACTIONS[actionKey];
@@ -2932,7 +2984,11 @@
         // Seçili kalemlerin DOLU olduğunu garanti et (İş 1 fix'inin devamı) — onLineSel() zaten
         // çağırmış olsa bile burada tekrar await etmek zararsız (idempotent) ve modalın render'ını
         // checkbox seçim akışına bağımlı olmaktan kurtarır.
-        fc3RefreshSelectedLinesUI().then(function() {
+        var tasks = [fc3RefreshSelectedLinesUI()];
+        if (cfg.hasCumulateToggle) {
+            tasks.push(fc3FetchCumulateDefault().then(function(v) { _modalCumulateDefault = v; }));
+        }
+        Promise.all(tasks).then(function() {
             _modalLines = _lines.slice();
             fc3RenderModal();
         });
@@ -3001,6 +3057,13 @@
             locOvrSel.value = '';
         }
 
+        // "Stokları Kümüle Et" switch satırı (yalnız 'fulfill') — her açılışta varsayılan
+        // _modalCumulateDefault'a (STOCK_DOC_CONSOLIDATE parametresi, fc3OpenModal'da önceden
+        // çekildi) sıfırlanır; kullanıcı bu oturumda değiştirebilir.
+        var cumRow = document.getElementById('fc3ModalCumulateRow');
+        if (cumRow) cumRow.style.display = cfg.hasCumulateToggle ? '' : 'none';
+        if (cfg.hasCumulateToggle) fc3SetCumulateSwitch(_modalCumulateDefault);
+
         var tableWrap  = document.getElementById('fc3ModalTableWrap');
         var simpleWrap = document.getElementById('fc3ModalSimpleText');
         if (cfg.mode === 'simple') {
@@ -3025,6 +3088,22 @@
         fc3ModalShowMsg('', '');
         fc3ShowModal();
     }
+
+    // "Stokları Kümüle Et" switch — checkbox durumu + görsel (track/label) tek yerden senkron.
+    function fc3SetCumulateSwitch(on) {
+        var cb = document.getElementById('fc3ModalCumulate');
+        if (cb) cb.checked = !!on;
+        fc3UpdateCumulateVisual(!!on);
+    }
+    function fc3UpdateCumulateVisual(on) {
+        var track = document.getElementById('fc3ModalCumulateTrack');
+        if (track) track.classList.toggle('is-on', on);
+        var lbl = document.getElementById('fc3ModalCumulateLabel');
+        if (lbl) { lbl.textContent = on ? 'Aktif' : 'Pasif'; lbl.classList.toggle('is-on', on); }
+    }
+    window.fc3ModalCumulateToggle = function(el) {
+        fc3UpdateCumulateVisual(!!(el && el.checked));
+    };
 
     function fc3RenderModalTable() {
         var cfg   = _modalAction;
@@ -3131,12 +3210,15 @@
     };
 
     // ── Submit — Depodan Karşıla ──────────────────────────────────────────────────────────────
-    // POST /Purchase/FulfillFromStock  body { lines:[{lineId,qty}], notes, overrideLocationId }
+    // POST /Purchase/FulfillFromStock  body { lines:[{lineId,qty}], notes, overrideLocationId, cumulateItems }
     // response { ok, docNo, approvalStarted, results:[{lineId, matched, fulfilled, reason}] }
     // overrideLocationId (2026-07-25, PageComment Seq 26 birleşimi): boş/null ise mevcut otomatik
     // (parametre) davranış AYNEN çalışır; dolu ise TÜM seçili kalemler o depodan karşılanır ve
     // sunucu depo-eşleşme reddini bu çağrı için uygulamaz (bkz. fc3ModalLocOverrideRow + backend
     // PurchaseController.FulfillFromStock XML doc'u).
+    // cumulateItems (2026-07-25, PageComment Seq 39): fc3ModalCumulate switch'inin o anki durumu —
+    // her zaman true/false gönderilir (switch açılışta parametre değerine set edildiği için "boş
+    // bırakma" diye bir hal yok; kontrol DOM'da bulunamazsa null gider, backend parametreye düşer).
     function fc3ModalSubmitFulfill() {
         var lines = [];
         _modalLines.forEach(function(l) {
@@ -3150,10 +3232,12 @@
         var notes  = (document.getElementById('fc3ModalNotes') || {}).value || null;
         var ovrSel = document.getElementById('fc3ModalLocOverride');
         var overrideLocationId = (ovrSel && ovrSel.value) ? parseInt(ovrSel.value, 10) : null;
+        var cumCb  = document.getElementById('fc3ModalCumulate');
+        var cumulateItems = cumCb ? !!cumCb.checked : null;
         fetch('/Purchase/FulfillFromStock', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': fc3Csrf() },
-            body: JSON.stringify({ lines: lines, notes: notes, overrideLocationId: overrideLocationId }),
+            body: JSON.stringify({ lines: lines, notes: notes, overrideLocationId: overrideLocationId, cumulateItems: cumulateItems }),
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {

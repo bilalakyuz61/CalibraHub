@@ -378,7 +378,7 @@ public sealed class GeneralDefsController : Controller
             {
                 new { id = "newNg", label = "Yeni Mahalle", icon = "Plus", variant = "primary",
                       url = "/GeneralDefs/NeighborhoodEdit" },
-                new { id = "newVl", label = "Yeni Köy", icon = "Trees",
+                new { id = "newVl", label = "Yeni Köy", icon = "Plus", variant = "secondary",
                       url = "/GeneralDefs/VillageEdit" },
             },
             masterWidgets = new List<object>

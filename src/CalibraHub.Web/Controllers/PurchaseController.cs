@@ -1655,6 +1655,13 @@ public sealed class PurchaseController : Controller
     /// karşılaştırması ve "karşılama deposu tanımlanmamış" kontrolü TAMAMEN atlanır — TÜM seçili
     /// kalemler doğrudan bu depodan (matched=true) karşılanır. Bu dal yalnızca override doluyken
     /// çalışır; override boş/null olduğu her çağrıda aşağıdaki kod AYNEN (değişmemiş) çalışır.
+    /// req.CumulateItems (2026-07-25, PageComment Seq 39 — kümüle davranışı modal seviyesinde
+    /// opsiyonel yapar): null ise STOCK_DOC_CONSOLIDATE şirket parametresi AYNEN geçerli olur;
+    /// true/false gönderilirse yalnız bu karşılama isteği için parametreyi ezer (kalıcı parametre
+    /// değişmez). Karşı fişte (STOCK_OUT) fiziksel satırların kümülelenip kümülelenmeyeceğini
+    /// belirler — karşılama defteri (DocumentLineFulfillment/pendingEntries) bundan bağımsızdır,
+    /// her zaman İhtiyaç satırı (RequestLineId) bazında ayrı yazılır (bkz. aşağıdaki pendingEntries
+    /// kurulumu — planned listesinden, BuildStockDocLines'tan ÖNCE ve ondan bağımsız üretilir).
     /// </summary>
     [HttpPost("/Purchase/FulfillFromStock")]
     [ValidateAntiForgeryToken]
@@ -1882,8 +1889,12 @@ public sealed class PurchaseController : Controller
                 .Select(kv => new PendingFulfillmentEntry(kv.Key, FulfillmentSourceKind.StockIssue, kv.Value))
                 .ToList();
 
-            // STOCK_DOC_CONSOLIDATE — aç/kapa parametre (varsayılan kapalı = mevcut davranış).
-            var consolidate = await _companyParams.GetBoolAsync(
+            // STOCK_DOC_CONSOLIDATE — şirket parametresi varsayılanı belirler; FulfillmentCenter
+            // "Depodan Karşıla" modalındaki "Stokları Kümüle Et" switch'i (PageComment Seq 39,
+            // 2026-07-25) req.CumulateItems doluysa BU TEK istek için parametreyi ezer (kalıcı
+            // parametre değişmez). Switch'e dokunulmadıysa (null) mevcut parametre-tabanlı davranış
+            // AYNEN çalışır — geriye dönük uyum.
+            var consolidate = req.CumulateItems ?? await _companyParams.GetBoolAsync(
                 FulfillmentParameters.FormCode, FulfillmentParameters.ConsolidateLinesKey, ct) ?? false;
 
             var saveReq = new SaveStockDocRequest(

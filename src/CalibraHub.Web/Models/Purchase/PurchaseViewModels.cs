@@ -97,11 +97,20 @@ public sealed record PurchaseDemandLineInput(
 /// çalışır. Dolu ise TÜM seçili kalemler bu depodan karşılanır ve depo-eşleşme reddi bu çağrı
 /// için uygulanmaz — kaldırılan CreateStockIssue'nun (kullanıcının serbestçe kaynak depo
 /// seçtiği eski "Ambar Çıkış Fişi" akışı) birebir karşılığı.
+/// CumulateItems (2026-07-25, PageComment Seq 39): FulfillmentCenter modalındaki "Stokları
+/// Kümüle Et" switch'i — bu TEK karşılama isteği için STOCK_DOC_CONSOLIDATE şirket parametresini
+/// ezer. null ise (switch'e dokunulmamış eski istemci) parametre-tabanlı mevcut davranış AYNEN
+/// çalışır; true/false ise karşı fişte (STOCK_OUT) aynı (ItemId, FromLocationId, CombinationId,
+/// UnitId) kombinasyonuna sahip satırlar sırasıyla TEK satırda toplanır / ayrı satır kalır.
+/// Karşılama defteri (DocumentLineFulfillment) bundan ETKİLENMEZ — her İhtiyaç satırı yine kendi
+/// defter kaydını alır (bkz. PurchaseController.FulfillFromStock XML doc'u). Kalıcı parametre
+/// DEĞİŞMEZ, yalnız bu istek için geçerlidir.
 /// </summary>
 public sealed record FulfillFromStockRequest(
     IReadOnlyList<FulfillFromStockLineRequest> Lines,
     string?            Notes,
-    int?               OverrideLocationId = null);
+    int?               OverrideLocationId = null,
+    bool?              CumulateItems = null);
 
 public sealed record FulfillFromStockLineRequest(
     int     LineId,
