@@ -54,6 +54,15 @@ public interface ILogisticsConfigurationRepository
     Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken);
     Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<int>> GetLockedItemIdsByDocTypeAsync(string docType, CancellationToken cancellationToken);
+    // 2026-07-25 — Malzeme Belge Kilitleri ekranı (ItemDocumentLockController):
+    /// <summary>Tüm kilitli kayıtları tek sorguda ItemId → DocType[] olarak döner (board liste ekranı N+1 önleme).</summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyCollection<string>>> GetAllItemDocumentLocksGroupedAsync(CancellationToken cancellationToken);
+    /// <summary>DocType → kilitli (distinct) malzeme sayısı — hızlı filtre çipleri için.</summary>
+    Task<IReadOnlyDictionary<string, int>> GetItemDocumentLockCountsByDocTypeAsync(CancellationToken cancellationToken);
+    /// <summary>GetItemsPagedAsync ile aynı şekil/sözleşme; ek olarak <paramref name="lockedDocType"/> verilirse
+    /// yalnız o belge tipinde kilitli malzemeler döner (null/boş = filtresiz, GetItemsPagedAsync ile eşdeğer sonuç kümesi).</summary>
+    Task<(IReadOnlyCollection<Item> Items, int TotalCount)> GetItemsPagedByDocumentLockAsync(
+        string? lockedDocType, string? search, int offset, int pageSize, CancellationToken cancellationToken);
     Task NullifyItemLocationsByLocationIdAsync(int locationId, CancellationToken cancellationToken);
     Task NullifyLocationHistoricalFkRefsAsync(int locationId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken);
