@@ -2024,11 +2024,119 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     public Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken)
         => _repository.GetItemDocumentLocksAsync(itemId, cancellationToken);
 
-    public Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken)
-        => _repository.SaveItemDocumentLocksAsync(itemId, docTypes, cancellationToken);
+    // 2026-07-25 — audit eklendi (CLAUDE.md "İşlem Log Modülü" zorunluluğu). Bu metod hem
+    // eski MaterialController.SaveItemDocumentLocks hem yeni ItemDocumentLockController'ın
+    // tekil kaydet ucu tarafından paylaşılır — audit burada olunca ikisi de kapsanır.
+    // FilterValid: DB'ye yalnız bilinen 12 koddan biri yazılır (garbage/typo korunmaz);
+    // mevcut 9-kodluk MaterialCardEdit çağrısı için davranış değişmez (hepsi geçerli kod).
+    public async Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken)
+    {
+        var oldDocTypes = await _repository.GetItemDocumentLocksAsync(itemId, cancellationToken);
+        var newDocTypes = ItemDocumentLockTypes.FilterValid(docTypes);
+        await _repository.SaveItemDocumentLocksAsync(itemId, newDocTypes, cancellationToken);
+
+        if (_audit is not null)
+        {
+            try
+            {
+                var change = BuildDocumentLockChange(oldDocTypes, newDocTypes);
+                if (change is not null)
+                {
+                    var stockCards = await _repository.GetItemsAsync(cancellationToken);
+                    var itemName = stockCards.FirstOrDefault(x => x.Id == itemId)?.Name;
+                    _audit.LogChanges("Item", itemId, itemName, new[] { change });
+                }
+            }
+            catch { /* audit yazımı kaydı asla bozmaz */ }
+        }
+    }
 
     public Task<IReadOnlyCollection<int>> GetLockedItemIdsByDocTypeAsync(string docType, CancellationToken cancellationToken)
         => _repository.GetLockedItemIdsByDocTypeAsync(docType, cancellationToken);
+
+    public Task<IReadOnlyDictionary<int, IReadOnlyCollection<string>>> GetAllItemDocumentLocksGroupedAsync(CancellationToken cancellationToken)
+        => _repository.GetAllItemDocumentLocksGroupedAsync(cancellationToken);
+
+    public Task<IReadOnlyDictionary<string, int>> GetItemDocumentLockCountsByDocTypeAsync(CancellationToken cancellationToken)
+        => _repository.GetItemDocumentLockCountsByDocTypeAsync(cancellationToken);
+
+    public async Task<(IReadOnlyCollection<ItemDto> Items, int TotalCount)> GetItemsPagedByDocumentLockAsync(
+        string? lockedDocType, string? search, int offset, int pageSize, CancellationToken cancellationToken)
+    {
+        var (cards, totalCount) = await _repository.GetItemsPagedByDocumentLockAsync(lockedDocType, search, offset, pageSize, cancellationToken);
+        var dtos = cards.Select(x => new ItemDto(
+            x.Id, x.Code, x.Name,
+            x.TypeId, x.IsActive, x.Created, x.Updated,
+            x.UnitId, x.Combinations, x.TaxRate,
+            Barcode: x.Barcode)).ToList();
+        return (dtos, totalCount);
+    }
+
+    public async Task<BulkItemDocumentLockResultDto> BulkSetItemDocumentLocksAsync(
+        IReadOnlyCollection<int> itemIds, IReadOnlyCollection<string> docTypes, bool isLock, CancellationToken cancellationToken)
+    {
+        var distinctItemIds = (itemIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct().ToList();
+        var requestedDocTypes = ItemDocumentLockTypes.FilterValid(docTypes);
+        if (distinctItemIds.Count == 0 || requestedDocTypes.Count == 0)
+            return new BulkItemDocumentLockResultDto(distinctItemIds.Count, 0, requestedDocTypes);
+
+        // Audit title icin tek seferde tum isim/kod bilgisini yukle (N+1 onleme — bkz. rapor 2026-05-17 madde 3.10 ruhu).
+        var allItems = await _repository.GetItemsAsync(cancellationToken);
+        var namesById = allItems.ToDictionary(x => x.Id, x => x.Name);
+
+        var updatedCount = 0;
+        foreach (var itemId in distinctItemIds)
+        {
+            var oldDocTypes = await _repository.GetItemDocumentLocksAsync(itemId, cancellationToken);
+            var oldSet = new HashSet<string>(oldDocTypes, StringComparer.OrdinalIgnoreCase);
+            var newSet = new HashSet<string>(oldSet, StringComparer.OrdinalIgnoreCase);
+            if (isLock) newSet.UnionWith(requestedDocTypes);
+            else newSet.ExceptWith(requestedDocTypes);
+
+            if (newSet.SetEquals(oldSet)) continue; // bu item icin fiili degisiklik yok
+
+            var newDocTypes = newSet.ToList();
+            await _repository.SaveItemDocumentLocksAsync(itemId, newDocTypes, cancellationToken);
+            updatedCount++;
+
+            if (_audit is not null)
+            {
+                try
+                {
+                    var change = BuildDocumentLockChange(oldDocTypes, newDocTypes);
+                    if (change is not null)
+                    {
+                        namesById.TryGetValue(itemId, out var itemName);
+                        _audit.LogChanges("Item", itemId, itemName, new[] { change },
+                            detail: isLock ? "Toplu kilitleme" : "Toplu kilit kaldırma");
+                    }
+                }
+                catch { /* audit yazımı kaydı asla bozmaz */ }
+            }
+        }
+
+        return new BulkItemDocumentLockResultDto(distinctItemIds.Count, updatedCount, requestedDocTypes);
+    }
+
+    /// <summary>
+    /// Belge kilidi eski/yeni kod kümesini tek alanlık okunur bir audit diff'ine çevirir.
+    /// Değişiklik yoksa null (audit gürültüsü üretme).
+    /// </summary>
+    private static AuditFieldChange? BuildDocumentLockChange(
+        IReadOnlyCollection<string> oldCodes, IReadOnlyCollection<string> newCodes)
+    {
+        var oldSet = new HashSet<string>(oldCodes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var newSet = new HashSet<string>(newCodes ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        if (oldSet.SetEquals(newSet)) return null;
+
+        static string Describe(IEnumerable<string> codes)
+        {
+            var labels = codes.Select(ItemDocumentLockTypes.LabelFor).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            return labels.Count > 0 ? string.Join(", ", labels) : "(yok)";
+        }
+
+        return new AuditFieldChange("DocumentLocks", "Belge Kilitleri", Describe(oldSet), Describe(newSet));
+    }
 
     public async Task ConfigureItemAsync(ConfigureItemRequest request, CancellationToken cancellationToken)
     {
