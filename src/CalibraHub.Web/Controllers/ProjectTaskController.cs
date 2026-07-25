@@ -2,6 +2,7 @@ using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
@@ -217,14 +218,9 @@ public sealed class ProjectTaskController : Controller
         var userId = CurrentUserId();
         if (userId is null or <= 0) return true;
 
+        // Rol claim'i legacy/Türkçe etiket olabilir — kanonik parse (AccountController.GetMenuItems deseni).
         var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-        var role = roleStr switch
-        {
-            "SystemAdmin"       => UserRole.SystemAdmin,
-            "DepartmentManager" => UserRole.DepartmentManager,
-            "Approver"          => UserRole.Approver,
-            _                   => UserRole.Operator,
-        };
+        var role = UserAuthorizationCatalog.TryParseRole(roleStr, out var parsed) ? parsed : UserRole.Operator;
         var deptStr = User.FindFirstValue("department_id");
         int? deptId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
 
