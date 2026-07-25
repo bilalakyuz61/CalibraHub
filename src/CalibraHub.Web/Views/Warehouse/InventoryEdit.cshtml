@@ -417,14 +417,12 @@
 (function() {
     var DOC_ID     = @Html.Raw(Model.DocId.HasValue ? Model.DocId.Value.ToString() : "null");
     var LINE_GRID_CONFIG = @Html.Raw(Model.LineGridConfigJson);
-    // Kullanıcı geri bildirimi (2026-07-21, Seq 16): kalem gridinde satır bazlı Lokasyon
-    // kolonu kaldırıldı — sayım kalemleri her zaman üst bilgideki "Sayım Deposu"nu kullanır
-    // (bkz. save() lines-map + header 'change' listener aşağıda). Kolon burada, config
-    // kaynağında (WarehouseController.BuildInventoryLineGridConfig) DEĞİL, render öncesi
-    // istemci tarafında süzülür.
-    if (LINE_GRID_CONFIG && Array.isArray(LINE_GRID_CONFIG.columns)) {
-        LINE_GRID_CONFIG.columns = LINE_GRID_CONFIG.columns.filter(function(c) { return c.key !== 'fromLocationId'; });
-    }
+    // Revize tasarım (2026-07-25): kalem gridindeki "Raf / Hücre" kolonu (key=fromLocationId)
+    // KORUNUR — üst bilgide depo/bölüm seçilir, kalem satırında alt kırılım (raf/hücre) girilir.
+    // Kolon seçenekleri üst bilgi deposunun aktif torunlarıdır: her satırın __invHeaderLoc alanı
+    // header lokasyonuyla senkronlanır ve kolon optionsUrl'i {__invHeaderLoc} token'ıyla
+    // GetDescendantLocationsJson'ı çağırır (bkz. onRowsChange + header 'change' listener aşağıda).
+    // Boş = kalem üst depoya sayılır; alt lokasyon seçilirse O lokasyona (save = satır ?? header).
     var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
     var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
     var TOKEN      = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
@@ -448,17 +446,37 @@
     // ── Lokasyon dropdown ─────────────────────────────────────────────
     async function loadLocations() {
         try {
-            var r    = await fetch('/Warehouse/GetLocationsJson', { credentials: 'same-origin' });
+            // Sayım başlığı: TÜM aktif lokasyonlar (konteyner + yaprak), hiyerarşi yol etiketiyle.
+            // Bir depo/bölüm (parent) seçilince kalem satırında alt kırılım (raf/hücre) verilebilir.
+            var r    = await fetch('/Warehouse/GetCountHeaderLocationsJson', { credentials: 'same-origin' });
             var locs = await r.json();
             var el   = document.getElementById('invLocation');
             if (!el) return;
-            locs.forEach(function(l) {
+            (Array.isArray(locs) ? locs : []).forEach(function(l) {
                 var o = document.createElement('option');
                 o.value = l.id;
-                o.textContent = (l.locationName || l.locationCode || '').trim();
+                o.textContent = (l.label || '').trim() || ('#' + l.id);
                 el.appendChild(o);
             });
         } catch (e) { console.warn('[INV] Lokasyon yüklenemedi:', e); }
+    }
+
+    // ── Alt lokasyon (Raf / Hücre) yardımcıları ───────────────────────
+    function currentHeaderLoc() {
+        var el = document.getElementById('invLocation');
+        return (el && el.value) ? parseInt(el.value, 10) : null;
+    }
+
+    // Üst bilgi deposunun aktif torun Id kümesini getirir (item E temizliği için). Boş header
+    // veya torun yoksa boş dizi. GetDescendantLocationsJson kalem kolonu ile aynı kaynak.
+    async function fetchDescendantIds(headLoc) {
+        if (!headLoc) return [];
+        try {
+            var r = await fetch('/Warehouse/GetDescendantLocationsJson?parentId=' + headLoc, { credentials: 'same-origin' });
+            if (!r.ok) return [];
+            var arr = await r.json();
+            return (Array.isArray(arr) ? arr : []).map(function(x) { return x.id; });
+        } catch (e) { console.warn('[INV] Torun lokasyon çekilemedi:', e); return []; }
     }
 
     // ── Belgeyi yükle (edit mod) ──────────────────────────────────────
@@ -513,7 +531,10 @@
                     trackLot:          l.trackingType === 'Lot',
                     autoSerial:        !!l.autoSerial,
                     notes:             l.notes || '',
-                    fromLocationId:    l.fromLocationId || null,
+                    // Yüklenen kalem lokasyonu efektif değerdir (alt lokasyon ?? header). Header'a
+                    // eşitse alt kırılım boştur (kalem üst depoya sayılmış); değilse gerçek alt lokasyon.
+                    fromLocationId:    (l.fromLocationId && l.fromLocationId !== locId) ? l.fromLocationId : null,
+                    __invHeaderLoc:    locId,
                 };
             });
             setGridRows(rows);
@@ -604,10 +625,11 @@
                         qty:           parseFloat(r.quantity) || 0,
                         combinationId: r.combinationId || null,
                         notes:         r.notes || null,
-                        // Seq 16 (2026-07-21): satır bazlı lokasyon girişi kaldırıldı — kalem her
-                        // zaman üst bilgideki "Sayım Deposu"nu kullanır (r.fromLocationId artık
-                        // UI'da düzenlenemiyor, tutarlılık için doğrudan header değeri gönderilir).
-                        fromLocationId: fromLoc,
+                        // Kalem alt lokasyonu (Raf / Hücre): satırda seçiliyse O lokasyon, boşsa
+                        // null → server üst bilgi deposunu devralır (SqlStockDocRepository:
+                        // InventoryCountLine.LocationId = satır.FromLocationId ?? request.FromLocationId).
+                        fromLocationId: (r.fromLocationId != null && r.fromLocationId !== '')
+                                          ? (parseInt(r.fromLocationId, 10) || null) : null,
                         toLocationId:   null,
                         // İzlenebilirlik — seri listesi VEYA çoklu lot kırılımı (server zorunlu kılar)
                         serials:        (Array.isArray(r.serials) && r.serials.length > 0) ? r.serials : null,
@@ -902,24 +924,19 @@
             window.CalibraHub.mountLineItemsGrid(el, LINE_GRID_CONFIG, {
                 onRowsChange: function(rows) {
                     window.__INV_LINES__ = rows || [];
-                    // Kalem gridinde satır bazlı Lokasyon kolonu YOK (Seq 16) — satırlar her zaman
-                    // header "Sayım Deposu"nu kullanır; save() de ayrıca fromLoc'u zorunlu kılar.
-                    // Burada yalnızca grid'in dahili row state'i (lot/seri lookup token'ları
-                    // {fromLocationId} için) header ile senkron tutulur. Lokasyonu boş (yeni
-                    // eklenen) satırlara header depoyu bas; dolu olanlara dokunma.
-                    // patchRows KİLİTLEMEZ → kullanıcının aktif düzenlemesini bozmaz; needs guard'ı loop'u keser.
-                    var locEl = document.getElementById('invLocation');
-                    var headLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
-                    if (!headLoc || !Array.isArray(rows)) return;
-                    // Yalnızca YENİ (kilitsiz) satırlar header depoyu devralır. Yüklenen kayıt
-                    // satırları (_locked:true) kendi kayıtlı lokasyonunu korur — üzerine yazma.
-                    var needsDefault = function(r) {
-                        return r && !r._locked && r.materialCode && (r.fromLocationId == null || r.fromLocationId === '');
-                    };
+                    // "Raf / Hücre" kolonu (fromLocationId) üst bilgi deposunun torunlarını gösterir.
+                    // Bunun için her satırın __invHeaderLoc alanı header lokasyonuyla senkron olmalı
+                    // (kolon optionsUrl'i {__invHeaderLoc} token'ını kullanır). fromLocationId'ye
+                    // DOKUNULMAZ — o artık kullanıcının alt kırılım seçimidir (boş = üst depoya sayılır).
+                    // patchRows KİLİTLEMEZ (kullanıcının düzenlemesini bozmaz). Guard ZORUNLU: patchRows
+                    // her çağrıda yeni dizi üretip onRowsChange'i tekrar tetikler → guard'sız sonsuz döngü.
+                    var headLoc = currentHeaderLoc();
+                    var list = Array.isArray(rows) ? rows : [];
+                    var needsSync = function(r) { return r && r.__invHeaderLoc !== headLoc; };
                     var api = window.CalibraHub && window.CalibraHub.whLineGrid;
-                    if (rows.some(needsDefault) && api && api.patchRows) {
+                    if (list.some(needsSync) && api && api.patchRows) {
                         api.patchRows(function(r) {
-                            return needsDefault(r) ? Object.assign({}, r, { fromLocationId: headLoc }) : null;
+                            return needsSync(r) ? Object.assign({}, r, { __invHeaderLoc: headLoc }) : null;
                         });
                     }
                 }
@@ -1000,14 +1017,36 @@
             });
         });
 
-        // Header lokasyon değişince tüm satırlara propagate et (kilitlemeden — patchRows)
-        // + başlıktaki "Sayım / <lokasyon>" ekini güncelle (Seq 16).
-        document.getElementById('invLocation')?.addEventListener('change', function() {
+        // Üst bilgi deposu değişince (item E): (1) başlık ekini güncelle, (2) her satırın
+        // __invHeaderLoc'unu yenile (Raf/Hücre seçenekleri yeni depoya göre çekilsin), (3) yeni
+        // deponun torunlarına AİT OLMAYAN alt lokasyonları temizle + kullanıcıyı uyar (sessiz
+        // kayıp yok). patchRows kilitlemez; loaded (kilitli) satırın geçersiz alt lokasyonu da
+        // temizlenir — düzenlemek için "Düzelt" gerekir ama veri tutarlı kalır.
+        document.getElementById('invLocation')?.addEventListener('change', async function() {
             var newLocId = this.value ? parseInt(this.value, 10) : null;
             invUpdateTitleSuffix();
             var api = window.CalibraHub && window.CalibraHub.whLineGrid;
             if (!api || !api.patchRows) return;
-            api.patchRows(function(r) { return Object.assign({}, r, { fromLocationId: newLocId }); });
+            var validIds = await fetchDescendantIds(newLocId);
+            var validSet = {};
+            validIds.forEach(function(id) { validSet[String(id)] = true; });
+            var cleared = 0;
+            api.patchRows(function(r) {
+                if (!r) return null;
+                var sub = r.fromLocationId;
+                var subInvalid = (sub != null && sub !== '' && !validSet[String(sub)]);
+                if (r.__invHeaderLoc === newLocId && !subInvalid) return null; // değişiklik yok
+                if (subInvalid) cleared++;
+                return Object.assign({}, r, {
+                    __invHeaderLoc: newLocId,
+                    fromLocationId: subInvalid ? null : r.fromLocationId,
+                });
+            });
+            if (cleared > 0) {
+                var msg = cleared + ' kalemdeki alt lokasyon (raf/hücre) yeni depoya ait olmadığı için temizlendi.';
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'warn');
+                else alert(msg);
+            }
         });
 
         // Buton olayları

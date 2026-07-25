@@ -324,41 +324,54 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
             if (!locationId.HasValue)
                 throw new InvalidOperationException("Sayım deposu seçilmemiş — önce belgeyi depo seçerek kaydedin.");
 
-            // 2) Depodaki net bakiyeler (Item + Kombinasyon + Birim kırılımı). onlyUncounted=true
-            // ise sayım kalemlerinde geçen (ItemId, ConfigId) çiftleri hariç tutulur.
+            // 2) Kapsam = üst lokasyon + TÜM torunları (recursive LocScope CTE). Net bakiye her
+            // (Item + Kombinasyon + KAPSAM LOKASYONU) için AYRI hesaplanır — roll-up YOK; bir
+            // bakiye hangi lokasyonda duruyorsa sıfır satırı O lokasyona yazılır (adım 3).
+            // onlyUncounted=true: (ItemId, ConfigId, LocationId) sayım kalemlerinde YOKSA dahil
+            // edilir — NOT EXISTS'e LocationId boyutu eklendi (sayım satırı depoyu
+            // InventoryCountLine.LocationId = satır alt-lokasyonu ?? header ile taşır; ISNULL ile
+            // eski/boş kayıtlar header'a düşer).
             var uncountedFilter = onlyUncounted
                 ? $"""
                     AND NOT EXISTS (SELECT 1 FROM {T("InventoryCountLine")} icl
                                     WHERE icl.[InventoryCountId] = @CountId
                                       AND icl.[ItemId] = dl.[ItemId]
-                                      AND ISNULL(icl.[ConfigId], 0) = ISNULL(dl.[CombinationId], 0))
+                                      AND ISNULL(icl.[ConfigId], 0) = ISNULL(dl.[CombinationId], 0)
+                                      AND ISNULL(icl.[LocationId], @HeaderLoc) = sl.[Id])
                    """
                 : "";
 
-            // BaseQuantity: ana birime normalize edilmis miktar. Birim kirilimi kaldirildi —
-            // farkli birimler baz birimde toplanip tek (Item+Config) bakiyesi cikarilir.
-            var balances = new List<(int ItemId, int? ConfigId, decimal Balance)>();
+            // BaseQuantity: ana birime normalize edilmis miktar (farkli birimler baz birimde
+            // toplanip tek (Item+Config+Lokasyon) bakiyesi cikarilir). Isaret semantigi
+            // GetLiveBalanceAsync ile birebir: 2 giris(+Loc), 1 cikis(-From), 3/4 (+Loc/-From).
+            var balances = new List<(int ItemId, int? ConfigId, int LocId, decimal Balance)>();
             await using (var balCmd = conn.CreateCommand())
             {
                 balCmd.Transaction = tx;
                 balCmd.CommandText = $"""
-                    SELECT dl.[ItemId], dl.[CombinationId],
-                           SUM(CASE WHEN dl.[MovementType] = 2 AND dl.[LocationId]     = @LocId THEN dl.[BaseQuantity] ELSE 0 END)
-                         - SUM(CASE WHEN dl.[MovementType] = 1 AND dl.[FromLocationId] = @LocId THEN dl.[BaseQuantity] ELSE 0 END)
-                         + SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[LocationId]     = @LocId THEN dl.[BaseQuantity] ELSE 0 END)
-                         - SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[FromLocationId] = @LocId THEN dl.[BaseQuantity] ELSE 0 END) AS Bal
-                    FROM {T("DocumentLine")} dl
+                    WITH LocScope AS (
+                        SELECT [Id] FROM {T("Location")} WHERE [Id] = @HeaderLoc
+                        UNION ALL
+                        SELECT c.[Id] FROM {T("Location")} c
+                        INNER JOIN LocScope s ON c.[ParentId] = s.[Id]
+                    )
+                    SELECT dl.[ItemId], dl.[CombinationId], sl.[Id] AS LocId,
+                           SUM(CASE WHEN dl.[MovementType] = 2      AND dl.[LocationId]     = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END)
+                         - SUM(CASE WHEN dl.[MovementType] = 1      AND dl.[FromLocationId] = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END)
+                         + SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[LocationId]     = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END)
+                         - SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[FromLocationId] = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END) AS Bal
+                    FROM LocScope sl
+                    INNER JOIN {T("DocumentLine")} dl ON (dl.[LocationId] = sl.[Id] OR dl.[FromLocationId] = sl.[Id])
                     INNER JOIN {T("Document")} d ON d.[Id] = dl.[DocumentId]
-                    WHERE d.[CompanyId] = @CompanyId AND d.[IsActive] = 1
-                      AND (dl.[LocationId] = @LocId OR dl.[FromLocationId] = @LocId){uncountedFilter}
-                    GROUP BY dl.[ItemId], dl.[CombinationId]
-                    HAVING SUM(CASE WHEN dl.[MovementType] = 2 AND dl.[LocationId]     = @LocId THEN dl.[BaseQuantity] ELSE 0 END)
-                         - SUM(CASE WHEN dl.[MovementType] = 1 AND dl.[FromLocationId] = @LocId THEN dl.[BaseQuantity] ELSE 0 END)
-                         + SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[LocationId]     = @LocId THEN dl.[BaseQuantity] ELSE 0 END)
-                         - SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[FromLocationId] = @LocId THEN dl.[BaseQuantity] ELSE 0 END) <> 0;
+                    WHERE d.[CompanyId] = @CompanyId AND d.[IsActive] = 1{uncountedFilter}
+                    GROUP BY dl.[ItemId], dl.[CombinationId], sl.[Id]
+                    HAVING SUM(CASE WHEN dl.[MovementType] = 2      AND dl.[LocationId]     = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END)
+                         - SUM(CASE WHEN dl.[MovementType] = 1      AND dl.[FromLocationId] = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END)
+                         + SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[LocationId]     = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END)
+                         - SUM(CASE WHEN dl.[MovementType] IN (3,4) AND dl.[FromLocationId] = sl.[Id] THEN dl.[BaseQuantity] ELSE 0 END) <> 0;
                     """;
                 balCmd.Parameters.AddWithValue("@CompanyId", companyId);
-                balCmd.Parameters.AddWithValue("@LocId", locationId.Value);
+                balCmd.Parameters.AddWithValue("@HeaderLoc", locationId.Value);
                 if (onlyUncounted) balCmd.Parameters.AddWithValue("@CountId", countId);
                 await using var r = await balCmd.ExecuteReaderAsync(ct);
                 while (await r.ReadAsync(ct))
@@ -366,17 +379,18 @@ public sealed class SqlInventoryCountRepository : IInventoryCountRepository
                     balances.Add((
                         r.GetInt32(0),
                         r.IsDBNull(1) ? null : r.GetInt32(1),
-                        r.GetDecimal(2)));
+                        r.GetInt32(2),
+                        r.GetDecimal(3)));
                 }
             }
 
-            // 3) Her bakiyeyi tersine çeviren Adjust satırı: pozitif bakiye → çıkış, negatif → giriş.
-            // unitId=null → baz birim (bakiye BaseQuantity toplamıdır).
+            // 3) Her bakiyeyi tersine çeviren Adjust satırı, bakiyenin DURDUĞU lokasyona (b.LocId):
+            // pozitif bakiye → çıkış, negatif → giriş. unitId=null → baz birim (bakiye BaseQuantity).
             var writtenCount = 0;
             foreach (var b in balances)
             {
                 await AppendAdjustLineAsync(conn, tx, documentId, b.ItemId, b.ConfigId, null,
-                    Math.Abs(b.Balance), positiveVariance: b.Balance < 0, locationId, notes, ct);
+                    Math.Abs(b.Balance), positiveVariance: b.Balance < 0, b.LocId, notes, ct);
                 writtenCount++;
             }
 

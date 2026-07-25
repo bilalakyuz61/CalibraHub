@@ -1059,6 +1059,67 @@ public sealed class WarehouseController : Controller
             .Select(l => new { l.Id, l.LocationCode, l.LocationName }));
     }
 
+    // Sayım üst bilgi lokasyon listesi — TÜM aktif lokasyonlar (konteyner + yaprak), her biri
+    // kök-yol etiketiyle ("Depo 1 › Bölüm A"). GetLocationsJson yalnız yaprak döndürür; sayımda
+    // ise bir depo/bölüm (parent) seçilip kalem satırında alt kırılım (raf/hücre) verilebilmesi
+    // için konteyner lokasyonlar da seçilebilir olmalıdır. Value = Id (ID tabanlı eşleştirme).
+    [HttpGet]
+    public async Task<IActionResult> GetCountHeaderLocationsJson(CancellationToken ct)
+    {
+        var locs = await _logisticsService.GetLocationsAsync(ct);
+        var byId = locs.ToDictionary(l => l.Id);
+        return Json(locs
+            .Where(l => l.IsActive)
+            .OrderBy(l => l.SortOrder).ThenBy(l => l.LocationCode, StringComparer.OrdinalIgnoreCase)
+            .Select(l => new { id = l.Id, label = BuildCountLocationPath(l.Id, byId, stopAtExclusive: null) }));
+    }
+
+    // Sayım kalem satırı "Raf / Hücre" seçenekleri — parentId (üst bilgi lokasyonu) altındaki
+    // TÜM aktif torunlar (recursive: raf VE rafın altındaki hücreler). Etiket parent'a görecelidir
+    // ("Raf A1 › Hücre 3"). parentId geçersiz/torunsuzsa boş döner → satırda alt kırılım yok demektir.
+    [HttpGet]
+    public async Task<IActionResult> GetDescendantLocationsJson(int parentId, CancellationToken ct)
+    {
+        if (parentId <= 0) return Json(Array.Empty<object>());
+        var locs = await _logisticsService.GetLocationsAsync(ct);
+        var byId = locs.ToDictionary(l => l.Id);
+        if (!byId.ContainsKey(parentId)) return Json(Array.Empty<object>());
+
+        return Json(locs
+            .Where(l => l.IsActive && IsLocationDescendantOf(l.Id, parentId, byId))
+            .Select(l => new { id = l.Id, label = BuildCountLocationPath(l.Id, byId, stopAtExclusive: parentId) })
+            .OrderBy(x => x.label, StringComparer.OrdinalIgnoreCase));
+    }
+
+    // Lokasyon hiyerarşi yol etiketi: node'dan köke (veya stopAtExclusive'e — hariç) kadar
+    // Ad (yoksa Kod) parçalarını " › " ile birleştirir. Guard ile FK zinciri bozuksa takılmaz.
+    private static string BuildCountLocationPath(int id, IReadOnlyDictionary<int, LocationDto> byId, int? stopAtExclusive)
+    {
+        var parts = new List<string>();
+        var guard = 0;
+        int? cur = id;
+        while (cur.HasValue && guard++ < 20 && byId.TryGetValue(cur.Value, out var node))
+        {
+            if (stopAtExclusive.HasValue && cur.Value == stopAtExclusive.Value) break;
+            parts.Insert(0, string.IsNullOrWhiteSpace(node.LocationName) ? node.LocationCode : node.LocationName!);
+            cur = node.ParentId;
+        }
+        return string.Join(" › ", parts);
+    }
+
+    // node, ancestorId'nin (recursive) alt torunu mu? ParentId zinciri yukarı yürünür (guard'lı).
+    private static bool IsLocationDescendantOf(int nodeId, int ancestorId, IReadOnlyDictionary<int, LocationDto> byId)
+    {
+        var guard = 0;
+        int? cur = byId.TryGetValue(nodeId, out var n) ? n.ParentId : null;
+        while (cur.HasValue && guard++ < 20)
+        {
+            if (cur.Value == ancestorId) return true;
+            cur = byId.TryGetValue(cur.Value, out var p) ? p.ParentId : null;
+        }
+        return false;
+    }
+
     // AR-GE/ÜR-GE proje listesi — ambar çıkış fişinde "Proje" seçici için (sarf malzeme takibi).
     [HttpGet]
     public async Task<IActionResult> GetArgeProjectsJson(CancellationToken ct)
@@ -1714,12 +1775,17 @@ public sealed class WarehouseController : Controller
             },
             new
             {
+                // Kalem bazlı alt kırılım (raf/hücre). Seçenekler üst bilgi deposunun aktif
+                // torunlarıdır ({__invHeaderLoc} = header lokasyonu; satırlara InventoryEdit.cshtml
+                // senkronlar). Boş bırakılırsa kalem üst bilgi deposuna sayılır; alt lokasyon
+                // seçilirse O lokasyona (bkz. SaveAsync: InventoryCountLine.LocationId = satır ?? header).
+                // Üst depoda torun yoksa endpoint boş döner → dropdown yalnız "—" gösterir (inert).
                 key             = "fromLocationId",
-                label           = "Lokasyon",
+                label           = "Raf / Hücre",
                 type            = "select",
-                optionsUrl      = "/Warehouse/GetLocationsJson",
+                optionsUrl      = "/Warehouse/GetDescendantLocationsJson?parentId={__invHeaderLoc}",
                 optionsValueKey = "id",
-                optionsLabelKey = "locationName",
+                optionsLabelKey = "label",
                 width           = 160,
                 align           = "left",
                 icon            = "Warehouse",
