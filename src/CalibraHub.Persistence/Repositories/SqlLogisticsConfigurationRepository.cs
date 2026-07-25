@@ -2263,6 +2263,126 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return result;
     }
 
+    // 2026-07-25 — Malzeme Belge Kilitleri ekranı (ItemDocumentLockController) icin batch okumalar.
+    public async Task<IReadOnlyDictionary<int, IReadOnlyCollection<string>>> GetAllItemDocumentLocksGroupedAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        var map = new Dictionary<int, List<string>>();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT [ItemId], [DocType] FROM [{_schema}].[ItemDocumentLock] ORDER BY [ItemId];";
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var itemId = reader.GetInt32(0);
+            var docType = reader.GetString(1);
+            if (!map.TryGetValue(itemId, out var list))
+            {
+                list = new List<string>();
+                map[itemId] = list;
+            }
+            list.Add(docType);
+        }
+        return map.ToDictionary(kv => kv.Key, kv => (IReadOnlyCollection<string>)kv.Value);
+    }
+
+    public async Task<IReadOnlyDictionary<string, int>> GetItemDocumentLockCountsByDocTypeAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT [DocType], COUNT(DISTINCT [ItemId]) FROM [{_schema}].[ItemDocumentLock] GROUP BY [DocType];";
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            result[reader.GetString(0)] = reader.GetInt32(1);
+        return result;
+    }
+
+    public async Task<(IReadOnlyCollection<Item> Items, int TotalCount)> GetItemsPagedByDocumentLockAsync(
+        string? lockedDocType, string? search, int offset, int pageSize, CancellationToken cancellationToken)
+    {
+        var items = new List<Item>();
+        var totalCount = 0;
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        // Item görünürlüğü MATERIAL_CARD_EDIT kapsamındaki DV kurallarını miras alır — bu ekran
+        // aynı Items tablosunu farklı bir lensten (kilit durumu) gösterir, ayrı DV seti gerekmez.
+        var dv = await _dvFilter.BuildAsync(FormCodes.MaterialCardEdit, "i", "Id", cancellationToken);
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        var lockedType = string.IsNullOrWhiteSpace(lockedDocType) ? null : lockedDocType.Trim();
+        var where = "WHERE i.[CompanyId] = @CompanyId AND i.[IsActive] = 1";
+        if (!string.IsNullOrWhiteSpace(search))
+            where += " AND (i.[Code] LIKE @Search OR i.[Name] LIKE @Search)";
+        if (lockedType != null)
+            where += $" AND EXISTS (SELECT 1 FROM [{_schema}].[ItemDocumentLock] idl WHERE idl.[ItemId] = i.[Id] AND idl.[DocType] = @LockedDocType)";
+        where += dv.Sql;
+
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT i.[Id], i.[Code], i.[Name],
+                       i.[IsActive], i.[Created], i.[Updated],
+                       i.[Combinations], ISNULL(i.[TaxRate], 20) AS [TaxRate], i.[TypeId],
+                       i.[UnitId], i.[CompanyId], i.[Barcode],
+                       COUNT(*) OVER() AS [_TotalCount]
+                FROM {_stockCardsTableName} i
+                {where}
+                ORDER BY i.[Code]
+                OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+                """;
+
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+            if (!string.IsNullOrWhiteSpace(search))
+                cmd.Parameters.Add(new SqlParameter("@Search", $"%{search}%"));
+            if (lockedType != null)
+                cmd.Parameters.Add(new SqlParameter("@LockedDocType", lockedType));
+            cmd.Parameters.Add(new SqlParameter("@Offset", offset));
+            cmd.Parameters.Add(new SqlParameter("@PageSize", pageSize));
+            foreach (var prm in dv.Parameters) cmd.Parameters.Add(new SqlParameter(prm.Name, prm.Value));
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var card = new Item
+                {
+                    Id = reader.GetInt32(0),
+                    Code = reader.GetString(1),
+                    Name = reader.GetString(2),
+                    Created = reader.IsDBNull(4) ? null : reader.GetDateTime(4),
+                    Updated = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                    Combinations = !reader.IsDBNull(6) && reader.GetBoolean(6),
+                    TaxRate = reader.IsDBNull(7) ? 20m : reader.GetDecimal(7),
+                    TypeId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                    UnitId = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                    CompanyId = reader.GetInt32(10),
+                    Barcode = reader.IsDBNull(11) ? null : reader.GetString(11)
+                };
+                if (!reader.GetBoolean(3)) card.Deactivate();
+                items.Add(card);
+                if (totalCount == 0) totalCount = reader.GetInt32(12);
+            }
+        }
+
+        if (items.Count == 0)
+        {
+            await using var countCmd = connection.CreateCommand();
+            countCmd.CommandText = $"SELECT COUNT(*) FROM {_stockCardsTableName} i {where};";
+            countCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+            if (!string.IsNullOrWhiteSpace(search))
+                countCmd.Parameters.Add(new SqlParameter("@Search", $"%{search}%"));
+            if (lockedType != null)
+                countCmd.Parameters.Add(new SqlParameter("@LockedDocType", lockedType));
+            foreach (var prm in dv.Parameters) countCmd.Parameters.Add(new SqlParameter(prm.Name, prm.Value));
+            totalCount = (int)(await countCmd.ExecuteScalarAsync(cancellationToken))!;
+        }
+
+        return (items, totalCount);
+    }
+
     // ── Location Types (dinamik tip sozlugu) ─────────────────────────
 
     private async Task EnsureLocationTypesTableAsync(SqlConnection connection, CancellationToken ct)

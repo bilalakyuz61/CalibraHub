@@ -47,6 +47,18 @@ public interface ILogisticsConfigurationService
     Task<IReadOnlyCollection<string>> GetItemDocumentLocksAsync(int itemId, CancellationToken cancellationToken);
     Task SaveItemDocumentLocksAsync(int itemId, IReadOnlyCollection<string> docTypes, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<int>> GetLockedItemIdsByDocTypeAsync(string docType, CancellationToken cancellationToken);
+    // 2026-07-25 — Malzeme Belge Kilitleri ekranı (ItemDocumentLockController):
+    Task<IReadOnlyDictionary<int, IReadOnlyCollection<string>>> GetAllItemDocumentLocksGroupedAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<string, int>> GetItemDocumentLockCountsByDocTypeAsync(CancellationToken cancellationToken);
+    Task<(IReadOnlyCollection<ItemDto> Items, int TotalCount)> GetItemsPagedByDocumentLockAsync(
+        string? lockedDocType, string? search, int offset, int pageSize, CancellationToken cancellationToken);
+    /// <summary>
+    /// Toplu kilitle/kaldır: <paramref name="isLock"/>=true iken UNION (mevcut kilitler korunur + eklenir),
+    /// false iken verilen docType'lar mevcut kilit setinden çıkarılır. Geçersiz/bilinmeyen itemId veya
+    /// docType kodu sessizce atlanır (ItemDocumentLockTypes.FilterValid). Her item için audit ayrı loglanır.
+    /// </summary>
+    Task<BulkItemDocumentLockResultDto> BulkSetItemDocumentLocksAsync(
+        IReadOnlyCollection<int> itemIds, IReadOnlyCollection<string> docTypes, bool isLock, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocationTypeDto>> GetLocationTypesAsync(CancellationToken cancellationToken);
     Task<int> SaveLocationTypeAsync(SaveLocationTypeRequest request, CancellationToken cancellationToken);
     Task<(bool Success, string? Error)> DeleteLocationTypeAsync(int id, CancellationToken cancellationToken);
