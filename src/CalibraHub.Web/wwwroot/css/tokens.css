@@ -11,6 +11,22 @@
      .btn-ghost    → arka plansiz (sadece text + hover ring)
 =========================================================================== */
 
+/* ═══════════════════════════════════════════════════════════════════
+   Gereksiz caret bastırma — src/CalibraHub.Web/wwwroot/css/site.css
+   içindeki AYNI kuralın kopyası. ShopFloor.cshtml (fabrika kiosk
+   ekranı) yalnız bu dosyayı yüklüyor, site.css'i yüklemiyor — bu
+   yüzden kural iki dosyada birlikte tutuluyor. Tam gerekçe/yorum için
+   site.css başındaki aynı başlığı gör. İki dosyayı BİRLİKTE değiştir
+   (drift'e izin verme) — reset satırı olmadan gerçek input/textarea/
+   [contenteditable] alanları da caret-color'u MİRAS yoluyla kaybeder.
+   ═══════════════════════════════════════════════════════════════════ */
+*:not(input):not(textarea):not(select):not([contenteditable]):not([contenteditable] *) {
+    caret-color: transparent;
+}
+input, textarea, select, [contenteditable] {
+    caret-color: auto;
+}
+
 :root {
     /* ── Button tokens (light) ── */
     --btn-radius: 8px;

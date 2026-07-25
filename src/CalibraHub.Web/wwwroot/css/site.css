@@ -10,6 +10,33 @@ html.light, html:has(body.app-theme-light) {
   background-color: #f8fafc;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Gereksiz caret bastırma (PageComment Seq 40, screenKey "/", 2026-07-26)
+   ---------------------------------------------------------------------
+   Metin girişi OLMAYAN yüzeylerde (buton, label, div, tıklanabilir
+   satır/kart) tıklanınca yanıp sönen metin imleci (caret) görünmesin.
+   caret-color MİRAS ALINAN bir özelliktir — yalnız "*:not(input)..."
+   kuralı YETMEZ: gerçek bir <input>/<textarea>/[contenteditable] her
+   zaman bir sarmalayıcı <div> içindedir; sarmalayıcıdaki transparent
+   değer miras yoluyla input'a da siner ve gerçek giriş alanlarının
+   caret'i de kaybolur. Bu yüzden 2. kural input/textarea/select/
+   [contenteditable] üzerinde caret-color'u AÇIKÇA auto'ya DÖNDÜRÜR
+   (elemanın kendi üzerine deklare edilen değer miras zincirini keser).
+   [contenteditable] * (editör içindeki <p>/<strong>/<span> vb.) ayrıca
+   ana kuraldan HARİÇ TUTULUR ki Notes/Tiptap zengin metin editörünün
+   içeriği de miras yoluyla auto alsın — yoksa editörde yazarken caret
+   kaybolur (bkz. ClientApp/src/components/NotesWorkspace, .tiptap kökü
+   contenteditable="true"). ShopFloor.cshtml (fabrika kiosk ekranı) bu
+   dosyayı değil yalnız tokens.css'i yüklüyor — AYNI kural orada da
+   tutuluyor (drift'e izin verme, ikisini birlikte değiştir).
+   ═══════════════════════════════════════════════════════════════════ */
+*:not(input):not(textarea):not(select):not([contenteditable]):not([contenteditable] *) {
+  caret-color: transparent;
+}
+input, textarea, select, [contenteditable] {
+  caret-color: auto;
+}
+
 /* ── Button design tokens (rapor §6.5) ───────────────────────────────────
    3 farkli buton naming (ca-btn--*, smartcard-kitt__btn--*, btn-primary) tek
    token set uzerinde birlestiriliyor. Mevcut class'lar ALIAS olarak kullanir;
