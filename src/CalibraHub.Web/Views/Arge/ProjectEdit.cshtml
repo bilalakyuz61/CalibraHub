@@ -858,6 +858,274 @@ function protoCloseDelModal() {
     }
     load();
 })();
+
+// ── Görev yönetimi ("Görevler" sekmesi) ──
+window.atCloseDelModal = function () {
+    var m = document.getElementById('at-del-modal');
+    if (m) m.style.display = 'none';
+    var b = document.getElementById('at-del-confirm');
+    if (b) { b.disabled = false; b.textContent = 'Sil'; }
+};
+(function () {
+    var pidEl = document.getElementById('ap-id');
+    var pid = pidEl ? (parseInt((pidEl.value || '').trim(), 10) || 0) : 0;
+    var listEl = document.getElementById('at-list');
+    if (!pid || !listEl) return;
+    var map = {};
+    var seqOn = false;
+    var usersLoaded = false;
+
+    function csrfT() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function statusMsg(msg, isErr) {
+        var el = document.getElementById('at-status');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; el.style.color = isErr ? 'var(--danger,#ef4444)' : ''; }
+        else el.style.display = 'none';
+    }
+    function fmtDate(s) {
+        if (!s) return '';
+        var d = new Date(s);
+        return isNaN(d) ? '' : d.toLocaleDateString('tr-TR');
+    }
+
+    // ── Atanan kullanıcı dropdown'u (lazy — form ilk açılışta doldurulur) ──
+    function ensureUsers(cb) {
+        if (usersLoaded) { cb(); return; }
+        fetch('/ProjectTask/UsersLookup', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                var sel = document.getElementById('at-assignee');
+                (list || []).forEach(function (u) {
+                    var o = document.createElement('option');
+                    o.value = u.id; o.textContent = u.name;
+                    sel.appendChild(o);
+                });
+                usersLoaded = true;
+                cb();
+            })
+            .catch(function () { cb(); });
+    }
+
+    // ── Şablon dropdown'u ──
+    (function () {
+        var sel = document.getElementById('at-tpl-select');
+        if (!sel) return;
+        fetch('/ProjectTask/TemplatesLookup', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                (list || []).forEach(function (t) {
+                    var o = document.createElement('option');
+                    o.value = t.id; o.textContent = t.label + ' (' + t.lineCount + ' görev)';
+                    sel.appendChild(o);
+                });
+            })
+            .catch(function () { });
+    })();
+
+    var applyBtn = document.getElementById('at-tpl-apply');
+    if (applyBtn) applyBtn.addEventListener('click', function () {
+        var tplId = parseInt(document.getElementById('at-tpl-select').value, 10) || 0;
+        if (!tplId) { statusMsg('Önce bir şablon seçiniz.', true); return; }
+        applyBtn.disabled = true;
+        statusMsg('');
+        fetch('/ProjectTask/ApplyTemplate', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfT() }, credentials: 'same-origin', body: JSON.stringify({ projectId: pid, templateId: tplId }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                applyBtn.disabled = false;
+                if (d && d.ok) {
+                    var msg = d.created + ' görev eklendi.';
+                    if (d.sequentialEnabled) msg += ' Şablon gereği "Sıralı İlerleme" açıldı.';
+                    statusMsg(msg);
+                    load();
+                } else statusMsg((d && d.error) || 'Şablon uygulanamadı.', true);
+            })
+            .catch(function () { applyBtn.disabled = false; statusMsg('Bağlantı hatası.', true); });
+    });
+
+    // ── Sıralı İlerleme switchkey ──
+    var seqToggle = document.getElementById('at-seq-toggle');
+    if (seqToggle) seqToggle.addEventListener('change', function () {
+        var want = seqToggle.checked;
+        seqToggle.disabled = true;
+        fetch('/ProjectTask/SetSequential', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfT() }, credentials: 'same-origin', body: JSON.stringify({ projectId: pid, enabled: want }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                seqToggle.disabled = false;
+                if (d && d.ok) { seqOn = want; load(); }
+                else { seqToggle.checked = !want; statusMsg((d && d.error) || 'Ayar kaydedilemedi.', true); }
+            })
+            .catch(function () { seqToggle.disabled = false; seqToggle.checked = !want; statusMsg('Bağlantı hatası.', true); });
+    });
+
+    // ── Inline form ──
+    var formEl = document.getElementById('at-form');
+    function openForm(t) {
+        ensureUsers(function () {
+            document.getElementById('at-edit-id').value = t ? t.id : '';
+            document.getElementById('at-title').value = t ? (t.title || '') : '';
+            document.getElementById('at-order').value = t ? (t.orderNo || '') : '';
+            document.getElementById('at-assignee').value = t && t.assignedUserId ? String(t.assignedUserId) : '';
+            document.getElementById('at-target').value = t && t.targetDate ? String(t.targetDate).substring(0, 10) : '';
+            document.getElementById('at-desc').value = t ? (t.description || '') : '';
+            document.getElementById('at-form-err').style.display = 'none';
+            formEl.style.display = '';
+            document.getElementById('at-title').focus();
+        });
+    }
+    function closeForm() { formEl.style.display = 'none'; }
+
+    var newBtn = document.getElementById('at-new-btn');
+    if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+    var cancelBtn = document.getElementById('at-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeForm);
+
+    var saveBtn = document.getElementById('at-save');
+    if (saveBtn) saveBtn.addEventListener('click', function () {
+        var title = (document.getElementById('at-title').value || '').trim();
+        var errEl = document.getElementById('at-form-err');
+        if (!title) { errEl.textContent = 'Görev başlığı zorunludur.'; errEl.style.display = ''; return; }
+        var tgt = (document.getElementById('at-target').value || '').trim();
+        var payload = {
+            id: parseInt(document.getElementById('at-edit-id').value) || 0,
+            projectId: pid,
+            title: title,
+            description: (document.getElementById('at-desc').value || '').trim() || null,
+            orderNo: parseInt(document.getElementById('at-order').value) || 0,
+            assignedUserId: parseInt(document.getElementById('at-assignee').value) || null,
+            targetDate: tgt ? tgt : null
+        };
+        saveBtn.disabled = true;
+        fetch('/ProjectTask/Save', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfT() }, credentials: 'same-origin', body: JSON.stringify(payload) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { saveBtn.disabled = false; if (d && d.ok) { closeForm(); load(); } else { errEl.textContent = (d && d.error) || 'Kayıt başarısız.'; errEl.style.display = ''; } })
+            .catch(function () { saveBtn.disabled = false; errEl.textContent = 'Bağlantı hatası.'; errEl.style.display = ''; });
+    });
+
+    // ── Silme modalı ──
+    var delId = 0;
+    function askDelete(t) {
+        delId = t.id;
+        var msg = document.getElementById('at-del-msg');
+        if (msg) msg.innerHTML = '<strong>' + esc(t.title) + '</strong> görevini silmek istediğinize emin misiniz?';
+        var m = document.getElementById('at-del-modal');
+        if (m) m.style.display = 'flex';
+        var c = document.getElementById('at-del-confirm');
+        if (c) c.focus();
+    }
+    var delConfirm = document.getElementById('at-del-confirm');
+    if (delConfirm) delConfirm.addEventListener('click', function () {
+        delConfirm.disabled = true; delConfirm.textContent = 'Siliniyor…';
+        fetch('/ProjectTask/DeleteTaskJson?id=' + delId, { method: 'POST', headers: { 'RequestVerificationToken': csrfT() }, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { window.atCloseDelModal(); if (d && d.ok) load(); else statusMsg((d && d.error) || 'Silinemedi.', true); })
+            .catch(function () { window.atCloseDelModal(); statusMsg('Bağlantı hatası.', true); });
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.atCloseDelModal(); });
+
+    // ── Durum aksiyonları (event delegation) ──
+    function changeStatus(taskId, newStatus, btn) {
+        if (btn) btn.disabled = true;
+        statusMsg('');
+        fetch('/ProjectTask/ChangeStatus', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfT() }, credentials: 'same-origin', body: JSON.stringify({ taskId: taskId, newStatus: newStatus }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) load();
+                else { if (btn) btn.disabled = false; statusMsg((d && d.error) || 'İşlem başarısız.', true); }
+            })
+            .catch(function () { if (btn) btn.disabled = false; statusMsg('Bağlantı hatası.', true); });
+    }
+
+    listEl.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('button[data-act]') : null;
+        if (!btn || btn.disabled) return;
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        var act = btn.getAttribute('data-act');
+        var t = map[id];
+        if (!t) return;
+        if (act === 'edit') { openForm(t); return; }
+        if (act === 'del') { askDelete(t); return; }
+        if (act === 'complete') { changeStatus(id, 1, btn); return; }
+        if (act === 'cancel') { changeStatus(id, 2, btn); return; }
+        if (act === 'reopen') { changeStatus(id, 0, btn); return; }
+    });
+
+    function chip(cls, text) { return '<span class="at-chip ' + cls + '">' + text + '</span>'; }
+
+    // Görevli projede ilerleme alanı salt-okunur olur (otorite görev-hesabıdır).
+    function syncProgressField(hasTasks, pct) {
+        var inp = document.getElementById('ap-progress');
+        if (!inp) return;
+        if (hasTasks) {
+            inp.readOnly = true;
+            inp.title = 'Görevlerden otomatik hesaplanır';
+            if (pct != null) inp.value = pct;
+        } else {
+            inp.readOnly = false;
+            inp.title = '';
+        }
+    }
+
+    function render(data) {
+        map = {};
+        seqOn = !!data.sequentialTasks;
+        if (seqToggle) seqToggle.checked = seqOn;
+
+        var tasks = data.tasks || [];
+        var wrap = document.getElementById('at-progress-wrap');
+        if (tasks.length && data.computedProgress != null) {
+            wrap.style.display = '';
+            document.getElementById('at-progress-fill').style.width = data.computedProgress + '%';
+            document.getElementById('at-progress-pct').textContent = '%' + data.computedProgress;
+        } else wrap.style.display = 'none';
+        syncProgressField(tasks.length > 0, data.computedProgress);
+
+        if (!tasks.length) {
+            listEl.innerHTML = '<div style="color:var(--app-text-muted,#94a3b8);font-size:13px;padding:8px 0;">Henüz görev yok. "+ Yeni Görev" ile ekleyin veya bir şablon uygulayın.</div>';
+            return;
+        }
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        listEl.innerHTML = tasks.map(function (t) {
+            map[t.id] = t;
+            var cardCls = t.status === 1 ? ' at-card--done' : (t.status === 2 ? ' at-card--cancelled' : '');
+            var st;
+            if (t.status === 1) st = chip('at-chip--done', '✓ Tamamlandı');
+            else if (t.status === 2) st = chip('at-chip--cancelled', 'İptal');
+            else if (t.isBlocked) st = chip('at-chip--blocked', '⏳ Sırada Bekliyor');
+            else st = chip('at-chip--open', 'Açık');
+            var who = t.assignedUserName ? esc(t.assignedUserName) : '<span style="color:var(--app-text-muted,#94a3b8);">atanmadı</span>';
+            var tgtDate = t.targetDate ? new Date(t.targetDate) : null;
+            var late = tgtDate && t.status === 0 && tgtDate < today;
+            var tgt = t.targetDate ? ('<span class="' + (late ? 'at-late' : '') + '">Hedef: ' + fmtDate(t.targetDate) + (late ? ' (gecikti)' : '') + '</span>') : '';
+            var acts = [];
+            if (t.status === 0) {
+                acts.push('<button type="button" class="proto-act" data-act="complete" data-id="' + t.id + '"' +
+                    (t.isBlocked ? ' disabled title="Önce sıradaki görevler tamamlanmalı"' : '') + '>✓ Tamamla</button>');
+                acts.push('<button type="button" class="proto-act" data-act="cancel" data-id="' + t.id + '">İptal Et</button>');
+                acts.push('<button type="button" class="proto-act" data-act="edit" data-id="' + t.id + '">Düzenle</button>');
+            } else {
+                acts.push('<button type="button" class="proto-act" data-act="reopen" data-id="' + t.id + '">Yeniden Aç</button>');
+            }
+            acts.push('<button type="button" class="proto-act proto-act--del" data-act="del" data-id="' + t.id + '">Sil</button>');
+            var meta = [who, tgt].filter(Boolean).join(' &nbsp;·&nbsp; ');
+            var desc = t.description ? '<div style="font-size:12.5px;color:var(--app-text-muted,#64748b);margin-bottom:8px;">' + esc(t.description) + '</div>' : '';
+            return '<div class="at-card' + cardCls + '">' +
+                '<div class="at-card__head"><span class="at-card__no">' + t.orderNo + '</span><strong>' + esc(t.title) + '</strong>' + st + '</div>' +
+                desc +
+                '<div class="at-card__meta">' + meta + '</div>' +
+                '<div class="at-card__acts">' + acts.join('') + '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    function load() {
+        fetch('/ProjectTask/List?projectId=' + pid, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+            .then(render)
+            .catch(function () { listEl.innerHTML = '<div class="ux-err">Görevler yüklenemedi.</div>'; });
+    }
+    load();
+})();
 </script>
 <script>
 (function () {

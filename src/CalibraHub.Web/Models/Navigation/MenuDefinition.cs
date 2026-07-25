@@ -215,6 +215,10 @@ public static class MenuDefinition
             {
                 new("arge.projects", isEn ? "Projects" : "Projeler", "FlaskConical", "/Arge/Projects", null,
                     MatchPath: "/Arge/Project", PermissionFormCode: "ARGE_PROJECT_EDIT"),
+                new("arge.mytasks", isEn ? "My Tasks" : "Görevlerim", "ListChecks", "/ProjectTask/MyTasks", null,
+                    MatchPath: "/ProjectTask/MyTasks", PermissionFormCode: FormCodes.ProjectTask),
+                new("arge.tasktemplates", isEn ? "Task Templates" : "Görev Şablonları", "LayoutTemplate", "/ProjectTask/Templates", null,
+                    MatchPath: "/ProjectTask/Templates", PermissionFormCode: FormCodes.ProjectTask),
             }),
 
             // ────────────── Varlık Yönetimi / Asset Management ──────────────

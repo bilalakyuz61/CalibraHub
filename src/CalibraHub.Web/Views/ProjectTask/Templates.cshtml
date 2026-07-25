@@ -1,0 +1,283 @@
+@{
+    ViewData["Title"] = "Görev Şablonları";
+    ViewData["FormCode"] = "PROJECT_TASK";
+}
+
+<div class="tt-page">
+  <div class="tt-head">
+    <div class="tt-head__id">
+      <span class="tt-head__icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="9" height="7" rx="1"/><rect x="16" y="14" width="5" height="7" rx="1"/></svg>
+      </span>
+      <div>
+        <h1>Görev Şablonları</h1>
+        <div class="tt-head__sub" id="tt-count">Yükleniyor…</div>
+      </div>
+    </div>
+    <button type="button" class="tt-btn tt-btn--primary" id="tt-new-btn">+ Yeni Şablon</button>
+  </div>
+
+  <div id="tt-form" class="tt-form" style="display:none;">
+    <input type="hidden" id="tt-edit-id" value="" />
+    <div class="tt-form__row">
+      <div class="tt-field tt-field--grow">
+        <label for="tt-name">Şablon Adı *</label>
+        <input id="tt-name" type="text" maxlength="200" placeholder="örn. APQP Standart Akışı" />
+      </div>
+      <label class="tt-switch" title="Bu şablon uygulanınca projede sıralı ilerleme açılır">
+        <input type="checkbox" id="tt-seq" />
+        <span class="tt-switch__track"><span class="tt-switch__thumb"></span></span>
+        <span class="tt-switch__label">Varsayılan Sıralı</span>
+      </label>
+    </div>
+    <div class="tt-field">
+      <label for="tt-desc">Açıklama</label>
+      <textarea id="tt-desc" maxlength="1000" placeholder="Şablon açıklaması…"></textarea>
+    </div>
+
+    <div class="tt-lines-head">
+      <span>Görev Satırları</span>
+      <button type="button" class="tt-btn tt-btn--sm" id="tt-line-add">+ Satır Ekle</button>
+    </div>
+    <div id="tt-lines"></div>
+
+    <div id="tt-form-err" class="tt-err" style="display:none;"></div>
+    <div class="tt-form__acts">
+      <button type="button" class="tt-btn tt-btn--primary" id="tt-save">Kaydet</button>
+      <button type="button" class="tt-btn" id="tt-cancel">Vazgeç</button>
+    </div>
+  </div>
+
+  <div id="tt-status" class="tt-err" style="display:none;"></div>
+  <div id="tt-list"><div class="tt-empty">Yükleniyor…</div></div>
+</div>
+
+<div id="tt-del-modal" class="ux-modal-backdrop" style="display:none;" onclick="ttCloseDelModal()">
+  <div class="ux-modal" onclick="event.stopPropagation()">
+    <div class="ux-modal-icon">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+    </div>
+    <div class="ux-modal-title">Şablonu Sil</div>
+    <div class="ux-modal-msg" id="tt-del-msg"></div>
+    <div class="ux-modal-actions">
+      <button class="ux-modal-cancel" onclick="ttCloseDelModal()">Vazgeç</button>
+      <button class="ux-modal-del" id="tt-del-confirm">Sil</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .tt-page{max-width:880px;margin:0 auto;padding:20px 16px 48px;}
+  .tt-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .tt-head__id{display:flex;align-items:center;gap:12px;}
+  .tt-head__icon{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;}
+  .tt-head__icon svg{width:20px;height:20px;}
+  .tt-head h1{margin:0;font-size:19px;font-weight:700;color:var(--app-text,#0f172a);}
+  .tt-head__sub{font-size:12.5px;color:var(--app-text-muted,#94a3b8);}
+  .tt-btn{font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--app-border,#e2e8f0);background:var(--app-surface,#fff);color:var(--app-text,#0f172a);cursor:pointer;}
+  .tt-btn:hover{background:var(--app-surface-2,rgba(99,102,241,.06));}
+  .tt-btn--primary{background:#4f46e5;border-color:#4f46e5;color:#fff;}
+  .tt-btn--primary:hover{background:#4338ca;}
+  .tt-btn--sm{font-size:12px;padding:5px 10px;}
+  .tt-btn:disabled{opacity:.55;cursor:not-allowed;}
+  .tt-form{border:1px solid var(--app-border,#e2e8f0);border-radius:12px;padding:16px;margin-bottom:18px;background:var(--app-surface-2,rgba(99,102,241,.04));}
+  .tt-form__row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:10px;}
+  .tt-field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+  .tt-field--grow{flex:1 1 260px;margin-bottom:0;}
+  .tt-field label{font-size:12px;font-weight:600;color:var(--app-text-muted,#64748b);}
+  .tt-field input,.tt-field textarea{font-size:13.5px;padding:8px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:8px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);}
+  .tt-field textarea{min-height:56px;resize:vertical;}
+  .tt-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;padding-bottom:8px;}
+  .tt-switch input{position:absolute;opacity:0;width:0;height:0;}
+  .tt-switch__track{position:relative;width:36px;height:20px;border-radius:999px;background:var(--app-border,#cbd5e1);transition:background .15s ease;flex-shrink:0;}
+  .tt-switch__thumb{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s ease;}
+  .tt-switch input:checked + .tt-switch__track{background:#4f46e5;}
+  .tt-switch input:checked + .tt-switch__track .tt-switch__thumb{transform:translateX(16px);}
+  .tt-switch input:focus-visible + .tt-switch__track{outline:2px solid #6366f1;outline-offset:2px;}
+  .tt-switch__label{font-size:13px;font-weight:600;color:var(--app-text,#0f172a);}
+  .tt-lines-head{display:flex;align-items:center;justify-content:space-between;margin:6px 0 8px;font-size:13px;font-weight:700;color:var(--app-text,#0f172a);}
+  .tt-line{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;}
+  .tt-line__no{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:34px;border-radius:8px;background:var(--app-surface,#fff);border:1px solid var(--app-border,#e2e8f0);color:#4f46e5;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;}
+  .tt-line input{flex:1 1 auto;font-size:13px;padding:8px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:8px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);}
+  .tt-line input.tt-line__title{flex:2 1 180px;}
+  .tt-line input.tt-line__desc{flex:3 1 220px;}
+  .tt-line__rm{width:34px;height:34px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:var(--app-surface,#fff);color:var(--danger,#ef4444);cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;}
+  .tt-line__rm:hover{background:rgba(239,68,68,.1);}
+  .tt-form__acts{display:flex;gap:8px;margin-top:12px;}
+  .tt-err{color:var(--danger,#ef4444);font-size:13px;margin:8px 0;}
+  .tt-empty{color:var(--app-text-muted,#94a3b8);font-size:13px;padding:24px 0;text-align:center;}
+  .tt-card{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:14px 16px;margin-bottom:10px;background:var(--app-surface,#fff);}
+  .tt-card__head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+  .tt-card__head strong{font-size:14.5px;color:var(--app-text,#0f172a);}
+  .tt-chip{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;}
+  .tt-chip--count{background:rgba(99,102,241,.14);color:#6366f1;}
+  .tt-chip--seq{background:rgba(245,158,11,.16);color:#d97706;}
+  .tt-card__desc{font-size:12.5px;color:var(--app-text-muted,#64748b);margin-bottom:8px;}
+  .tt-card__lines{font-size:12px;color:var(--app-text-muted,#94a3b8);margin-bottom:10px;line-height:1.7;}
+  .tt-card__acts{display:flex;gap:6px;}
+  .tt-act{font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid var(--app-border,#e2e8f0);background:var(--app-surface,#fff);color:var(--app-text,#0f172a);cursor:pointer;}
+  .tt-act:hover{background:var(--app-surface-2,rgba(99,102,241,.06));}
+  .tt-act--del{color:var(--danger,#ef4444);border-color:rgba(239,68,68,.35);}
+  .tt-act--del:hover{background:rgba(239,68,68,.1);}
+  body.app-theme-dark .tt-btn{background:var(--app-surface,#1e293b);}
+  body.app-theme-dark .tt-btn--primary{background:#6366f1;border-color:#6366f1;}
+  body.app-theme-dark .tt-line__no,body.app-theme-dark .tt-line input,body.app-theme-dark .tt-field input,body.app-theme-dark .tt-field textarea,body.app-theme-dark .tt-line__rm,body.app-theme-dark .tt-act{background:var(--app-surface,#1e293b);}
+</style>
+
+@Html.AntiForgeryToken()
+
+<script>
+window.ttCloseDelModal = function () {
+    var m = document.getElementById('tt-del-modal');
+    if (m) m.style.display = 'none';
+    var b = document.getElementById('tt-del-confirm');
+    if (b) { b.disabled = false; b.textContent = 'Sil'; }
+};
+(function () {
+    var listEl = document.getElementById('tt-list');
+    var countEl = document.getElementById('tt-count');
+    var formEl = document.getElementById('tt-form');
+    var linesEl = document.getElementById('tt-lines');
+    var map = {};
+
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function statusMsg(msg) {
+        var el = document.getElementById('tt-status');
+        if (msg) { el.textContent = msg; el.style.display = ''; } else el.style.display = 'none';
+    }
+
+    // ── Satır editörü ──
+    function renumber() {
+        Array.prototype.forEach.call(linesEl.querySelectorAll('.tt-line__no'), function (el, i) { el.textContent = i + 1; });
+    }
+    function addLine(line) {
+        var row = document.createElement('div');
+        row.className = 'tt-line';
+        row.innerHTML =
+            '<span class="tt-line__no"></span>' +
+            '<input type="text" class="tt-line__title" maxlength="200" placeholder="Görev başlığı *" value="' + esc(line ? line.title : '') + '" />' +
+            '<input type="text" class="tt-line__desc" maxlength="1000" placeholder="Açıklama (opsiyonel)" value="' + esc(line ? (line.description || '') : '') + '" />' +
+            '<button type="button" class="tt-line__rm" title="Satırı kaldır">×</button>';
+        row.querySelector('.tt-line__rm').addEventListener('click', function () { row.remove(); renumber(); });
+        linesEl.appendChild(row);
+        renumber();
+        return row;
+    }
+    document.getElementById('tt-line-add').addEventListener('click', function () {
+        var row = addLine(null);
+        row.querySelector('.tt-line__title').focus();
+    });
+
+    // ── Form aç/kapa ──
+    function openForm(t) {
+        document.getElementById('tt-edit-id').value = t ? t.id : '';
+        document.getElementById('tt-name').value = t ? (t.name || '') : '';
+        document.getElementById('tt-desc').value = t ? (t.description || '') : '';
+        document.getElementById('tt-seq').checked = !!(t && t.isSequentialDefault);
+        document.getElementById('tt-form-err').style.display = 'none';
+        linesEl.innerHTML = '';
+        var lines = (t && t.lines && t.lines.length) ? t.lines : [null];
+        lines.forEach(addLine);
+        formEl.style.display = '';
+        document.getElementById('tt-name').focus();
+        formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function closeForm() { formEl.style.display = 'none'; }
+
+    document.getElementById('tt-new-btn').addEventListener('click', function () { openForm(null); });
+    document.getElementById('tt-cancel').addEventListener('click', closeForm);
+
+    // ── Kaydet ──
+    var saveBtn = document.getElementById('tt-save');
+    saveBtn.addEventListener('click', function () {
+        var errEl = document.getElementById('tt-form-err');
+        var name = (document.getElementById('tt-name').value || '').trim();
+        if (!name) { errEl.textContent = 'Şablon adı zorunludur.'; errEl.style.display = ''; return; }
+        var lines = [];
+        Array.prototype.forEach.call(linesEl.querySelectorAll('.tt-line'), function (row, i) {
+            var title = (row.querySelector('.tt-line__title').value || '').trim();
+            if (!title) return;
+            lines.push({ id: 0, title: title, description: (row.querySelector('.tt-line__desc').value || '').trim() || null, orderNo: i + 1 });
+        });
+        if (!lines.length) { errEl.textContent = 'En az bir görev satırı girilmelidir.'; errEl.style.display = ''; return; }
+        var payload = {
+            id: parseInt(document.getElementById('tt-edit-id').value) || 0,
+            name: name,
+            description: (document.getElementById('tt-desc').value || '').trim() || null,
+            isSequentialDefault: document.getElementById('tt-seq').checked,
+            lines: lines
+        };
+        saveBtn.disabled = true;
+        fetch('/ProjectTask/SaveTemplate', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() }, credentials: 'same-origin', body: JSON.stringify(payload) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                saveBtn.disabled = false;
+                if (d && d.ok) { closeForm(); load(); }
+                else { errEl.textContent = (d && d.error) || 'Kayıt başarısız.'; errEl.style.display = ''; }
+            })
+            .catch(function () { saveBtn.disabled = false; errEl.textContent = 'Bağlantı hatası.'; errEl.style.display = ''; });
+    });
+
+    // ── Silme modalı ──
+    var delId = 0;
+    var delConfirm = document.getElementById('tt-del-confirm');
+    delConfirm.addEventListener('click', function () {
+        delConfirm.disabled = true; delConfirm.textContent = 'Siliniyor…';
+        fetch('/ProjectTask/DeleteTemplateJson?id=' + delId, { method: 'POST', headers: { 'RequestVerificationToken': csrf() }, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { window.ttCloseDelModal(); if (d && d.ok) load(); else statusMsg((d && d.error) || 'Silinemedi.'); })
+            .catch(function () { window.ttCloseDelModal(); statusMsg('Bağlantı hatası.'); });
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.ttCloseDelModal(); });
+
+    listEl.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('button[data-act]') : null;
+        if (!btn) return;
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        var t = map[id];
+        if (!t) return;
+        if (btn.getAttribute('data-act') === 'edit') { openForm(t); return; }
+        if (btn.getAttribute('data-act') === 'del') {
+            delId = id;
+            var msg = document.getElementById('tt-del-msg');
+            if (msg) msg.innerHTML = '<strong>' + esc(t.name) + '</strong> şablonunu silmek istediğinize emin misiniz?';
+            document.getElementById('tt-del-modal').style.display = 'flex';
+            delConfirm.focus();
+        }
+    });
+
+    // ── Liste ──
+    function render(list) {
+        map = {};
+        countEl.textContent = (list ? list.length : 0) + ' şablon';
+        if (!list || !list.length) {
+            listEl.innerHTML = '<div class="tt-empty">Henüz şablon yok. "+ Yeni Şablon" ile oluşturun.</div>';
+            return;
+        }
+        listEl.innerHTML = list.map(function (t) {
+            map[t.id] = t;
+            var chips = '<span class="tt-chip tt-chip--count">' + t.lines.length + ' görev</span>' +
+                (t.isSequentialDefault ? '<span class="tt-chip tt-chip--seq">Sıralı</span>' : '');
+            var lineTxt = t.lines.map(function (l, i) { return (i + 1) + '. ' + esc(l.title); }).join(' &nbsp;→&nbsp; ');
+            return '<div class="tt-card">' +
+                '<div class="tt-card__head"><strong>' + esc(t.name) + '</strong>' + chips + '</div>' +
+                (t.description ? '<div class="tt-card__desc">' + esc(t.description) + '</div>' : '') +
+                '<div class="tt-card__lines">' + lineTxt + '</div>' +
+                '<div class="tt-card__acts">' +
+                    '<button type="button" class="tt-act" data-act="edit" data-id="' + t.id + '">Düzenle</button>' +
+                    '<button type="button" class="tt-act tt-act--del" data-act="del" data-id="' + t.id + '">Sil</button>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    function load() {
+        fetch('/ProjectTask/TemplatesData', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+            .then(render)
+            .catch(function () { listEl.innerHTML = '<div class="tt-empty">Şablonlar yüklenemedi.</div>'; });
+    }
+    load();
+})();
+</script>

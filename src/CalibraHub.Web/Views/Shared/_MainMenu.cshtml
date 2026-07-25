@@ -530,9 +530,11 @@
 
     @{
         var argeProjectsActive = controller == "arge" && action is "projects" or "projectedit";
-        var argeOpen = controller == "arge";
+        var projectTaskMineActive = controller == "projecttask" && action is "mytasks";
+        var projectTaskTplActive = controller == "projecttask" && action is "templates";
+        var argeOpen = controller == "arge" || controller == "projecttask";
     }
-    @if (isMenuAdmin || canView("ARGE_PROJECT_EDIT"))
+    @if (isMenuAdmin || canView("ARGE_PROJECT_EDIT") || canView("PROJECT_TASK"))
     {
     <details class="side-group" @(argeOpen ? "open" : null)>
         <summary>
@@ -544,6 +546,8 @@
 
         <div class="menu-group-content">
             <div class="menu-group-content-inner">
+                @if (isMenuAdmin || canView("ARGE_PROJECT_EDIT"))
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-arge-projects">
                     <a class="side-subitem @(argeProjectsActive ? "active" : string.Empty)"
                        asp-controller="Arge" asp-action="Projects"
@@ -557,6 +561,36 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
+                @if (isMenuAdmin || canView("PROJECT_TASK"))
+                {
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-projecttask-mine">
+                    <a class="side-subitem @(projectTaskMineActive ? "active" : string.Empty)"
+                       asp-controller="ProjectTask" asp-action="MyTasks"
+                       title="Görevlerim">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                        </span>
+                        <span class="menu-text">Görevlerim</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Görevlerim favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-projecttask-templates">
+                    <a class="side-subitem @(projectTaskTplActive ? "active" : string.Empty)"
+                       asp-controller="ProjectTask" asp-action="Templates"
+                       title="Görev Şablonları">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="9" height="7" rx="1"/><rect x="16" y="14" width="5" height="7" rx="1"/></svg>
+                        </span>
+                        <span class="menu-text">Görev Şablonları</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Görev Şablonları favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+                }
             </div>
         </div>
     </details>

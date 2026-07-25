@@ -1,0 +1,169 @@
+@{
+    ViewData["Title"] = "Görevlerim";
+    ViewData["FormCode"] = "PROJECT_TASK";
+}
+
+<div class="mt-page">
+  <div class="mt-head">
+    <div class="mt-head__id">
+      <span class="mt-head__icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+      </span>
+      <div>
+        <h1>Görevlerim</h1>
+        <div class="mt-head__sub" id="mt-count">Yükleniyor…</div>
+      </div>
+    </div>
+    <div class="mt-filters">
+      <button type="button" class="mt-filter is-active" data-filter="open">Açık</button>
+      <button type="button" class="mt-filter" data-filter="all">Tümü</button>
+    </div>
+  </div>
+
+  <div id="mt-status" class="mt-status" style="display:none;"></div>
+  <div id="mt-list"><div class="mt-empty">Yükleniyor…</div></div>
+</div>
+
+<style>
+  .mt-page{max-width:960px;margin:0 auto;padding:20px 16px 48px;}
+  .mt-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .mt-head__id{display:flex;align-items:center;gap:12px;}
+  .mt-head__icon{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;}
+  .mt-head__icon svg{width:20px;height:20px;}
+  .mt-head h1{margin:0;font-size:19px;font-weight:700;color:var(--app-text,#0f172a);}
+  .mt-head__sub{font-size:12.5px;color:var(--app-text-muted,#94a3b8);}
+  .mt-filters{display:flex;gap:6px;}
+  .mt-filter{font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:999px;border:1px solid var(--app-border,#e2e8f0);background:var(--app-surface,#fff);color:var(--app-text-muted,#64748b);cursor:pointer;}
+  .mt-filter.is-active{background:#4f46e5;border-color:#4f46e5;color:#fff;}
+  .mt-status{margin-bottom:12px;font-size:13px;color:var(--danger,#ef4444);}
+  .mt-empty{color:var(--app-text-muted,#94a3b8);font-size:13px;padding:24px 0;text-align:center;}
+  .mt-card{display:flex;align-items:center;gap:14px;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 16px;margin-bottom:8px;background:var(--app-surface,#fff);transition:box-shadow .2s ease;}
+  .mt-card--done{opacity:.65;}
+  .mt-card--cancelled{opacity:.5;}
+  .mt-card--focus{box-shadow:0 0 0 2px #6366f1;animation:mtPulse 1.8s ease 1;}
+  @@keyframes mtPulse{0%{box-shadow:0 0 0 5px rgba(99,102,241,.45);}100%{box-shadow:0 0 0 2px #6366f1;}}
+  .mt-card__body{flex:1 1 auto;min-width:0;}
+  .mt-card__proj{font-size:11.5px;color:var(--app-text-muted,#94a3b8);margin-bottom:2px;}
+  .mt-card__proj a{color:#4f46e5;text-decoration:none;}
+  .mt-card__proj a:hover{text-decoration:underline;}
+  .mt-card__title{font-size:14px;font-weight:600;color:var(--app-text,#0f172a);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .mt-card__meta{font-size:12px;color:var(--app-text-muted,#94a3b8);margin-top:3px;}
+  .mt-chip{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;}
+  .mt-chip--open{background:rgba(59,130,246,.14);color:#2563eb;}
+  .mt-chip--blocked{background:rgba(148,163,184,.18);color:var(--app-text-muted,#64748b);}
+  .mt-chip--done{background:rgba(16,185,129,.15);color:#10b981;}
+  .mt-chip--cancelled{background:rgba(239,68,68,.12);color:#ef4444;}
+  .mt-late{color:#ef4444;font-weight:600;}
+  .mt-complete{font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:8px;border:1px solid rgba(16,185,129,.4);background:rgba(16,185,129,.1);color:#0e9f6e;cursor:pointer;white-space:nowrap;}
+  .mt-complete:hover{background:rgba(16,185,129,.18);}
+  .mt-complete:disabled{opacity:.5;cursor:not-allowed;}
+  body.app-theme-dark .mt-filter{background:var(--app-surface,#1e293b);}
+  body.app-theme-dark .mt-filter.is-active{background:#6366f1;border-color:#6366f1;}
+  body.app-theme-dark .mt-card__proj a{color:#818cf8;}
+</style>
+
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    var listEl = document.getElementById('mt-list');
+    var countEl = document.getElementById('mt-count');
+    var focusId = parseInt(new URLSearchParams(location.search).get('focus'), 10) || 0;
+    var filter = 'open';
+    var all = [];
+
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function statusMsg(msg) {
+        var el = document.getElementById('mt-status');
+        if (msg) { el.textContent = msg; el.style.display = ''; } else el.style.display = 'none';
+    }
+    function fmtDate(s) {
+        if (!s) return '';
+        var d = new Date(s);
+        return isNaN(d) ? '' : d.toLocaleDateString('tr-TR');
+    }
+
+    document.querySelectorAll('.mt-filter').forEach(function (b) {
+        b.addEventListener('click', function () {
+            filter = b.getAttribute('data-filter');
+            document.querySelectorAll('.mt-filter').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+            render();
+        });
+    });
+
+    function render() {
+        var items = filter === 'open' ? all.filter(function (t) { return t.status === 0; }) : all;
+        var openCount = all.filter(function (t) { return t.status === 0; }).length;
+        countEl.textContent = openCount + ' açık görev · toplam ' + all.length;
+        if (!items.length) {
+            listEl.innerHTML = '<div class="mt-empty">' + (filter === 'open' ? 'Açık göreviniz yok. 🎉' : 'Size atanmış görev bulunmuyor.') + '</div>';
+            return;
+        }
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        listEl.innerHTML = items.map(function (t) {
+            var cardCls = t.status === 1 ? ' mt-card--done' : (t.status === 2 ? ' mt-card--cancelled' : '');
+            if (t.taskId === focusId) cardCls += ' mt-card--focus';
+            var st;
+            if (t.status === 1) st = '<span class="mt-chip mt-chip--done">✓ Tamamlandı</span>';
+            else if (t.status === 2) st = '<span class="mt-chip mt-chip--cancelled">İptal</span>';
+            else if (t.isBlocked) st = '<span class="mt-chip mt-chip--blocked">⏳ Sırada Bekliyor</span>';
+            else st = '<span class="mt-chip mt-chip--open">Açık</span>';
+            var tgtDate = t.targetDate ? new Date(t.targetDate) : null;
+            var late = tgtDate && t.status === 0 && tgtDate < today;
+            var meta = [];
+            if (t.targetDate) meta.push('<span class="' + (late ? 'mt-late' : '') + '">Hedef: ' + fmtDate(t.targetDate) + (late ? ' (gecikti)' : '') + '</span>');
+            if (t.description) meta.push(esc(t.description));
+            var btn = '';
+            if (t.status === 0) {
+                btn = '<button type="button" class="mt-complete" data-id="' + t.taskId + '"' +
+                    (t.isBlocked ? ' disabled title="Sıralı ilerleme: önce sıradaki görevler tamamlanmalı"' : '') + '>✓ Tamamla</button>';
+            }
+            return '<div class="mt-card' + cardCls + '" id="mt-task-' + t.taskId + '">' +
+                '<div class="mt-card__body">' +
+                    '<div class="mt-card__proj"><a href="/Arge/ProjectEdit?id=' + t.projectId + '">' + esc(t.documentNumber) + ' · ' + esc(t.projectName) + '</a></div>' +
+                    '<div class="mt-card__title">' + esc(t.title) + ' ' + st + '</div>' +
+                    (meta.length ? '<div class="mt-card__meta">' + meta.join(' &nbsp;·&nbsp; ') + '</div>' : '') +
+                '</div>' + btn +
+            '</div>';
+        }).join('');
+
+        if (focusId) {
+            var el = document.getElementById('mt-task-' + focusId);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            focusId = 0; // tek seferlik highlight
+        }
+    }
+
+    listEl.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('button.mt-complete') : null;
+        if (!btn || btn.disabled) return;
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        btn.disabled = true;
+        statusMsg('');
+        fetch('/ProjectTask/ChangeStatus', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() }, credentials: 'same-origin', body: JSON.stringify({ taskId: id, newStatus: 1 }) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) load();
+                else { btn.disabled = false; statusMsg((d && d.error) || 'İşlem başarısız.'); }
+            })
+            .catch(function () { btn.disabled = false; statusMsg('Bağlantı hatası.'); });
+    });
+
+    function load() {
+        fetch('/ProjectTask/MyTasksData', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+            .then(function (list) {
+                all = list || [];
+                // Odaklanılan görev tamamlanmış/iptal olabilir — "Açık" filtresinde görünmezse Tümü'ne geç.
+                if (focusId && all.some(function (t) { return t.taskId === focusId && t.status !== 0; })) {
+                    filter = 'all';
+                    document.querySelectorAll('.mt-filter').forEach(function (x) { x.classList.toggle('is-active', x.getAttribute('data-filter') === 'all'); });
+                }
+                render();
+            })
+            .catch(function () { listEl.innerHTML = '<div class="mt-empty">Görevler yüklenemedi.</div>'; });
+    }
+    load();
+})();
+</script>
