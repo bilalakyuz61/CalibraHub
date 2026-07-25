@@ -21,6 +21,9 @@ public sealed class ProjectTaskTemplateLine
     [Description("Uygulama sırası — projeye kopyalanırken görev OrderNo'su bu sıradan türetilir.")]
     public int OrderNo { get; set; }
 
+    [Description("Varsayılan atanan kullanıcı — şablondan uygulanınca görev bu kullanıcıya atanmış gelir (opsiyonel). FK -> Users.Id.")]
+    public int? DefaultAssignedUserId { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public int? CreatedById { get; init; }

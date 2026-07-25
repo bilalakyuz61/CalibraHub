@@ -45,8 +45,11 @@ public interface IProjectTaskRepository
     /// <summary>Projedeki aktif görevlerin en büyük OrderNo'su (yoksa 0).</summary>
     Task<int> GetMaxOrderNoAsync(int projectId, CancellationToken ct);
 
-    /// <summary>Görev setini tek transaction'da ekler (şablondan uygula). Eklenen sayıyı döner.</summary>
-    Task<int> InsertBatchAsync(IReadOnlyList<ProjectTask> tasks, CancellationToken ct);
+    /// <summary>
+    /// Görev setini tek transaction'da ekler (şablondan uygula). Eklenen görevlerin Id'lerini
+    /// giriş sırasıyla döner (atama bildirimi deep-link'i için).
+    /// </summary>
+    Task<IReadOnlyList<int>> InsertBatchAsync(IReadOnlyList<ProjectTask> tasks, CancellationToken ct);
 
     /// <summary>Kullanıcıya atanmış aktif görevler (proje adı/numarası + IsBlocked ile).</summary>
     Task<IReadOnlyCollection<MyProjectTaskItem>> ListMineAsync(int userId, CancellationToken ct);

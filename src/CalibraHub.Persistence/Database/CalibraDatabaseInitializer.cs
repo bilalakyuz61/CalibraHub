@@ -10060,21 +10060,30 @@ END;";
             BEGIN
                 CREATE TABLE [{s}].[ProjectTaskTemplateLine]
                 (
-                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ProjectTaskTemplateLine] PRIMARY KEY,
-                    [TemplateId]  INT NOT NULL,
-                    [Title]       NVARCHAR(200) NOT NULL,
-                    [Description] NVARCHAR(1000) NULL,
-                    [OrderNo]     INT NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_OrderNo] DEFAULT(0),
-                    [IsActive]    BIT NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_IsActive] DEFAULT(1),
-                    [CreatedById] INT NULL,
-                    [Created]     DATETIME NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_Created] DEFAULT SYSUTCDATETIME(),
-                    [UpdatedById] INT NULL,
-                    [Updated]     DATETIME NULL,
+                    [Id]                    INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ProjectTaskTemplateLine] PRIMARY KEY,
+                    [TemplateId]            INT NOT NULL,
+                    [Title]                 NVARCHAR(200) NOT NULL,
+                    [Description]           NVARCHAR(1000) NULL,
+                    [OrderNo]               INT NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_OrderNo] DEFAULT(0),
+                    [DefaultAssignedUserId] INT NULL,
+                    [IsActive]              BIT NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_IsActive] DEFAULT(1),
+                    [CreatedById]           INT NULL,
+                    [Created]               DATETIME NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]           INT NULL,
+                    [Updated]               DATETIME NULL,
                     CONSTRAINT [FK_ProjectTaskTemplateLine_ProjectTaskTemplate] FOREIGN KEY ([TemplateId])
-                        REFERENCES [{s}].[ProjectTaskTemplate]([Id])
+                        REFERENCES [{s}].[ProjectTaskTemplate]([Id]),
+                    CONSTRAINT [FK_ProjectTaskTemplateLine_Users] FOREIGN KEY ([DefaultAssignedUserId])
+                        REFERENCES [{s}].[Users]([Id])
                 );
                 CREATE INDEX [IX_ProjectTaskTemplateLine_Template] ON [{s}].[ProjectTaskTemplateLine]([TemplateId], [OrderNo]);
             END;
+
+            -- ProjectTaskTemplateLine.DefaultAssignedUserId (2026-07-26 — sablon satirina varsayilan
+            -- atanan; mevcut DB'ler icin idempotent ALTER, FK'siz — WorkOrder.ArgeProjectId emsali)
+            IF OBJECT_ID(N'[{s}].[ProjectTaskTemplateLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[ProjectTaskTemplateLine]', N'DefaultAssignedUserId') IS NULL
+                ALTER TABLE [{s}].[ProjectTaskTemplateLine] ADD [DefaultAssignedUserId] INT NULL;
 
             -- ProjectTask: proje görevi (WBS satiri). LinkedEntityKind/Id Faz 2 bagli-kayit
             -- otomasyonu icin bilincli-bastan; TemplateLineId bilincli FK'siz (sablon satiri

@@ -291,9 +291,10 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         return Convert.ToInt32(result);
     }
 
-    public async Task<int> InsertBatchAsync(IReadOnlyList<ProjectTask> tasks, CancellationToken ct)
+    public async Task<IReadOnlyList<int>> InsertBatchAsync(IReadOnlyList<ProjectTask> tasks, CancellationToken ct)
     {
-        if (tasks.Count == 0) return 0;
+        if (tasks.Count == 0) return Array.Empty<int>();
+        var ids = new List<int>(tasks.Count);
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
@@ -304,6 +305,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                      [LinkedEntityKind],[LinkedEntityId],[TemplateLineId],[CreatedById],[Created])
                 VALUES
                     (@P,@Title,@Desc,@Order,@Status,@Assigned,@Target,@LinkKind,@LinkId,@TplLine,@Cre,SYSUTCDATETIME());
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
             foreach (var task in tasks)
             {
@@ -312,10 +314,11 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 cmd.CommandText = sql;
                 AddTaskParams(cmd, task);
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)task.CreatedById ?? DBNull.Value));
-                await cmd.ExecuteNonQueryAsync(ct);
+                var newId = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+                ids.Add(newId);
             }
             await tx.CommitAsync(ct);
-            return tasks.Count;
+            return ids;
         }
         catch
         {
@@ -443,9 +446,11 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         var sql = $"""
             SELECT [Id],[Name],[Description],[IsSequentialDefault] FROM {_tplTable}
             WHERE [IsActive]=1 ORDER BY [Name];
-            SELECT l.[Id], l.[TemplateId], l.[Title], l.[Description], l.[OrderNo]
+            SELECT l.[Id], l.[TemplateId], l.[Title], l.[Description], l.[OrderNo],
+                   l.[DefaultAssignedUserId], u.[FullName] AS [DefaultAssignedUserName]
             FROM {_tplLineTable} l
             INNER JOIN {_tplTable} t ON t.[Id] = l.[TemplateId] AND t.[IsActive] = 1
+            LEFT JOIN {_usersTable} u ON u.[Id] = l.[DefaultAssignedUserId]
             WHERE l.[IsActive]=1 ORDER BY l.[TemplateId], l.[OrderNo], l.[Id];
             """;
         var heads = new List<(int Id, string Name, string? Desc, bool Seq)>();
@@ -471,7 +476,9 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 Id: r.GetInt32(0),
                 Title: r.GetString(2),
                 Description: r.IsDBNull(3) ? null : r.GetString(3),
-                OrderNo: r.GetInt32(4)));
+                OrderNo: r.GetInt32(4),
+                DefaultAssignedUserId: r.IsDBNull(5) ? null : r.GetInt32(5),
+                DefaultAssignedUserName: r.IsDBNull(6) ? null : r.GetString(6)));
         }
         return heads
             .Select(h => new ProjectTaskTemplateDto(h.Id, h.Name, h.Desc, h.Seq,
@@ -537,13 +544,14 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = $"""
-                    INSERT INTO {_tplLineTable} ([TemplateId],[Title],[Description],[OrderNo],[CreatedById],[Created])
-                    VALUES (@Tpl,@Title,@Desc,@Order,@Cre,SYSUTCDATETIME());
+                    INSERT INTO {_tplLineTable} ([TemplateId],[Title],[Description],[OrderNo],[DefaultAssignedUserId],[CreatedById],[Created])
+                    VALUES (@Tpl,@Title,@Desc,@Order,@DefAssigned,@Cre,SYSUTCDATETIME());
                     """;
                 cmd.Parameters.Add(new SqlParameter("@Tpl", templateId));
                 cmd.Parameters.Add(new SqlParameter("@Title", line.Title));
                 cmd.Parameters.Add(new SqlParameter("@Desc", (object?)line.Description ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Order", line.OrderNo));
+                cmd.Parameters.Add(new SqlParameter("@DefAssigned", (object?)line.DefaultAssignedUserId ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)line.CreatedById ?? DBNull.Value));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
