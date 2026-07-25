@@ -18,8 +18,13 @@ namespace CalibraHub.Web.Controllers;
 public sealed class ArgeController : Controller
 {
     private readonly IArgeProjectService _arge;
+    private readonly IProjectTaskService _tasks;
 
-    public ArgeController(IArgeProjectService arge) => _arge = arge;
+    public ArgeController(IArgeProjectService arge, IProjectTaskService tasks)
+    {
+        _arge = arge;
+        _tasks = tasks;
+    }
 
     // GET /Arge/Projects → "Komuta Güvertesi" bespoke board (view: Views/Arge/Projects.cshtml)
     [HttpGet]
@@ -42,6 +47,10 @@ public sealed class ArgeController : Controller
     {
         if (request is null) return Json(new { ok = false, error = "Geçersiz istek." });
         var (ok, error, id) = await _arge.SaveAsync(request, CurrentUserId(), ct);
+        // Görevli projede ilerleme tek otorite görev-hesabıdır: manuel gönderilen % görev
+        // varken burada geri yazılır (görevsiz projede no-op — eski davranış birebir korunur).
+        if (ok && id > 0)
+            await _tasks.ReassertComputedProgressAsync(id, CurrentUserId(), ct);
         return Json(new { ok, error, id });
     }
 

@@ -53,6 +53,10 @@
         <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
         <span>Prototipler</span>
       </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="tasks">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <span>Görevler</span>
+      </button>
       }
       @if (!isNew)
       {
@@ -209,6 +213,65 @@
         <div id="proto-status" style="display:none;" class="ux-edit-hint"></div>
         <div id="proto-list"><div style="color:var(--app-text-muted,#94a3b8);font-size:13px;">Yükleniyor…</div></div>
       </div>
+      <div class="ux-edit-pane" data-tab="tasks">
+        <h2>Görevler</h2>
+        <div class="ux-edit-hint">Proje görev listesi (WBS). <strong>Sıralı İlerleme</strong> açıkken görevler sırayla tamamlanır; bir görev kapanınca sıradaki görevin sorumlusuna bildirim gider. İlerleme yüzdesi görevlerden otomatik hesaplanır.</div>
+
+        <div class="at-toolbar">
+          <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="at-new-btn">+ Yeni Görev</button>
+          <div class="at-tpl">
+            <select id="at-tpl-select"><option value="">— Şablon seçiniz —</option></select>
+            <button type="button" class="ux-edit-bar__btn" id="at-tpl-apply">Şablondan Uygula</button>
+          </div>
+          <div class="at-spacer"></div>
+          <label class="at-switch" title="Açıkken önceki görev tamamlanmadan sonraki kapatılamaz">
+            <input type="checkbox" id="at-seq-toggle" />
+            <span class="at-switch__track"><span class="at-switch__thumb"></span></span>
+            <span class="at-switch__label">Sıralı İlerleme</span>
+          </label>
+        </div>
+
+        <div class="at-progress" id="at-progress-wrap" style="display:none;">
+          <div class="at-progress__bar"><div class="at-progress__fill" id="at-progress-fill"></div></div>
+          <span class="at-progress__pct" id="at-progress-pct">%0</span>
+        </div>
+
+        <div id="at-form" style="display:none;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:14px;margin-bottom:16px;background:var(--app-surface-2,rgba(99,102,241,0.04));">
+          <input type="hidden" id="at-edit-id" value="" />
+          <div class="ux-row2">
+            <div class="ux-field">
+              <label for="at-title">Görev Başlığı *</label>
+              <input id="at-title" type="text" maxlength="200" placeholder="örn. Numune üretimi" />
+            </div>
+            <div class="ux-field">
+              <label for="at-order">Sıra</label>
+              <input id="at-order" type="number" min="1" step="1" placeholder="otomatik" />
+            </div>
+          </div>
+          <div class="ux-row2">
+            <div class="ux-field">
+              <label for="at-assignee">Atanan Kullanıcı</label>
+              <select id="at-assignee"><option value="">— Atanmadı —</option></select>
+            </div>
+            <div class="ux-field">
+              <label for="at-target">Hedef Tarih</label>
+              <input id="at-target" type="date" />
+            </div>
+          </div>
+          <div class="ux-field ux-field--wide">
+            <label for="at-desc">Açıklama</label>
+            <textarea id="at-desc" maxlength="1000" placeholder="Görev notu…"></textarea>
+          </div>
+          <div id="at-form-err" style="display:none;" class="ux-err"></div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="at-save">Kaydet</button>
+            <button type="button" class="ux-edit-bar__btn" id="at-cancel">Vazgeç</button>
+          </div>
+        </div>
+
+        <div id="at-status" style="display:none;" class="ux-edit-hint"></div>
+        <div id="at-list"><div style="color:var(--app-text-muted,#94a3b8);font-size:13px;">Yükleniyor…</div></div>
+      </div>
       }
 
       @if (!isNew)
@@ -313,6 +376,20 @@
       </div>
     </div>
   </div>
+
+  <div id="at-del-modal" class="ux-modal-backdrop" style="display:none;" onclick="atCloseDelModal()">
+    <div class="ux-modal" onclick="event.stopPropagation()">
+      <div class="ux-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+      </div>
+      <div class="ux-modal-title">Görevi Sil</div>
+      <div class="ux-modal-msg" id="at-del-msg"></div>
+      <div class="ux-modal-actions">
+        <button class="ux-modal-cancel" onclick="atCloseDelModal()">Vazgeç</button>
+        <button class="ux-modal-del" id="at-del-confirm">Sil</button>
+      </div>
+    </div>
+  </div>
 }
 
 <style>
@@ -342,6 +419,41 @@
   body.app-theme-dark .apc-section{background:var(--app-surface,#1e293b);}
   body.app-theme-dark .apc-val--hi,body.app-theme-dark .apc-total{color:#818cf8;}
   body.app-theme-dark .apc-total{background:rgba(99,102,241,.15);}
+
+  /* ── Görevler sekmesi (at- prefix) ── */
+  .at-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .at-tpl{display:flex;align-items:center;gap:6px;}
+  .at-tpl select{font-size:13px;padding:6px 8px;border:1px solid var(--app-border,#e2e8f0);border-radius:7px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);max-width:220px;}
+  .at-spacer{flex:1 1 auto;}
+  .at-switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
+  .at-switch input{position:absolute;opacity:0;width:0;height:0;}
+  .at-switch__track{position:relative;width:36px;height:20px;border-radius:999px;background:var(--app-border,#cbd5e1);transition:background .15s ease;flex-shrink:0;}
+  .at-switch__thumb{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s ease;}
+  .at-switch input:checked + .at-switch__track{background:#4f46e5;}
+  .at-switch input:checked + .at-switch__track .at-switch__thumb{transform:translateX(16px);}
+  .at-switch input:focus-visible + .at-switch__track{outline:2px solid #6366f1;outline-offset:2px;}
+  .at-switch__label{font-size:13px;font-weight:600;color:var(--app-text,#0f172a);}
+  .at-progress{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .at-progress__bar{flex:1 1 auto;height:8px;border-radius:999px;background:var(--app-surface-2,rgba(99,102,241,.1));overflow:hidden;}
+  .at-progress__fill{height:100%;border-radius:999px;background:#4f46e5;width:0;transition:width .3s ease;}
+  .at-progress__pct{font-size:12.5px;font-weight:700;color:#4f46e5;font-variant-numeric:tabular-nums;min-width:44px;text-align:right;}
+  .at-card{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--app-surface,#fff);}
+  .at-card--done{opacity:.72;}
+  .at-card--cancelled{opacity:.55;}
+  .at-card__head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .at-card__no{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:7px;background:var(--app-surface-2,rgba(99,102,241,.08));color:#4f46e5;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .at-card__meta{font-size:12px;color:var(--app-text-muted,#94a3b8);margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .at-card__acts{display:flex;gap:6px;flex-wrap:wrap;}
+  .at-chip{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;}
+  .at-chip--open{background:rgba(59,130,246,.14);color:#2563eb;}
+  .at-chip--blocked{background:rgba(148,163,184,.18);color:var(--app-text-muted,#64748b);}
+  .at-chip--done{background:rgba(16,185,129,.15);color:#10b981;}
+  .at-chip--cancelled{background:rgba(239,68,68,.12);color:#ef4444;}
+  .at-late{color:#ef4444;font-weight:600;}
+  body.app-theme-dark .at-tpl select{background:var(--app-surface,#1e293b);}
+  body.app-theme-dark .at-progress__pct{color:#818cf8;}
+  body.app-theme-dark .at-progress__fill{background:#6366f1;}
+  body.app-theme-dark .at-card__no{color:#818cf8;}
 </style>
 
 @Html.AntiForgeryToken()
