@@ -391,6 +391,12 @@ public sealed class ProductionController : Controller
             var id = await _service.CreateAsync(req, ct);
             return Json(new { ok = true, id });
         }
+        catch (ArgumentException ex)
+        {
+            // Doğrulama mesajları (miktar/mamul zorunlu, Malzeme Belge Kilidi vb.) — kullanıcıya
+            // aynen gösterilir; jenerik catch bu mesajı gizlerdi (2026-07-25 fix).
+            return Json(new { ok = false, error = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[WorkOrder.Create] iş emri oluşturulamadı. ItemId={ItemId}", req?.ItemId);
@@ -458,6 +464,13 @@ public sealed class ProductionController : Controller
         {
             var id = await _service.CreateFromSalesLineAsync(req, ct);
             return Json(new { ok = true, id });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // İş kuralı mesajları (kaynak satır/kalan miktar/mamul eşleşmesi, Malzeme Belge
+            // Kilidi vb.) — kullanıcıya aynen gösterilir; jenerik catch bu mesajı gizlerdi
+            // (2026-07-25 fix).
+            return Json(new { ok = false, error = ex.Message });
         }
         catch (Exception ex)
         {

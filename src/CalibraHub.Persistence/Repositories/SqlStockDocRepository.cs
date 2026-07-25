@@ -2131,6 +2131,21 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             var decreases = new HashSet<(int ItemId, int LocationId)>();
             var lotDecreases = new HashSet<(int ItemId, int LotId, int LocationId)>();
 
+            // Malzeme Belge Kilitleri ("depo_cikis") — bu ekranın grid'i (WorkOrderEdit →
+            // BuildLineGridConfig("STOCK_OUT")) zaten /Warehouse/GetMaterialsJson?docType=depo_cikis
+            // uzerinden bu kilide bagli lookup kullanir (2026-07-10 STOCK_OUT reuse karari).
+            // Burasi ayni kilidin SUNUCU TARAFI zorunlu kapisidir — istemci lookup'i atlayip
+            // dogrudan ItemId/MaterialCode POST ederse de kilitli malzeme sarf edilemez.
+            var lockedForConsumption = new HashSet<int>();
+            await using (var lockCmd = conn.CreateCommand())
+            {
+                lockCmd.Transaction = tx;
+                lockCmd.CommandText = $"SELECT [ItemId] FROM {T("ItemDocumentLock")} WHERE [DocType] = @DocType;";
+                lockCmd.Parameters.AddWithValue("@DocType", "depo_cikis");
+                await using var lockReader = await lockCmd.ExecuteReaderAsync(ct);
+                while (await lockReader.ReadAsync(ct)) lockedForConsumption.Add(lockReader.GetInt32(0));
+            }
+
             foreach (var line in request.Lines)
             {
                 var itemId = line.ItemId;
@@ -2139,6 +2154,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if (!itemId.HasValue || itemId.Value <= 0) continue;
                 // Qty<=0 satırlar metot başında (transaction açılmadan önce) reddedildi —
                 // buraya yalnızca Qty>0 satırlar ulaşır.
+                if (lockedForConsumption.Contains(itemId.Value))
+                {
+                    var label = string.IsNullOrWhiteSpace(line.MaterialCode) ? $"#{itemId}" : line.MaterialCode!;
+                    throw new InvalidOperationException(
+                        $"'{label}' malzemesi ambar çıkışı / üretim sarfı için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+                }
 
                 var fromLoc = line.FromLocationId ?? woLocationId;
                 if (fromLoc is not > 0)

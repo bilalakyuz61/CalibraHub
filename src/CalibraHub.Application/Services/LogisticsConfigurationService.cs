@@ -3273,6 +3273,29 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim()));
         }
 
+        // Malzeme Belge Kilitleri ("recete") — BOMEdit.cshtml malzeme araması paylaşımlı
+        // StockLookup uctan gecer (docType farkindaligi yok, custom-lookup bypass sinifi),
+        // yani UI seviyesinde filtrelenemez. Header (hedef mamul) + tum bilesen satirlari
+        // ID'ye cozuldukten SONRA (bu nokta) tek sorguyla kontrol edilir — gercek kapi burasi.
+        var lockedForRecipe = await _repository.GetLockedItemIdsByDocTypeAsync(
+            ItemDocumentLockTypes.RecipeCode, cancellationToken);
+        if (lockedForRecipe.Count > 0)
+        {
+            if (lockedForRecipe.Contains(parentItemId))
+            {
+                var label = activeById.TryGetValue(parentItemId, out var pItem) ? pItem.Code : $"#{parentItemId}";
+                throw new ArgumentException(
+                    $"'{label}' malzemesi reçetede (BOM) seçim için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+            }
+            var lockedLine = resolvedLines.FirstOrDefault(l => lockedForRecipe.Contains(l.ItemId));
+            if (lockedLine.ItemId > 0)
+            {
+                var label = activeById.TryGetValue(lockedLine.ItemId, out var lItem) ? lItem.Code : $"#{lockedLine.ItemId}";
+                throw new ArgumentException(
+                    $"'{label}' bileşeni reçetede (BOM) seçim için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+            }
+        }
+
         byte[]? imageData = null;
         string? imageMimeType = null;
         if (!string.IsNullOrWhiteSpace(request.ImageBase64))

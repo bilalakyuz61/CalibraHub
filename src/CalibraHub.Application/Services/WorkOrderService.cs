@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Auditing;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -115,6 +116,22 @@ public sealed class WorkOrderService : IWorkOrderService
             throw new ArgumentException("Mamul (ItemId) zorunlu.", nameof(request.ItemId));
         if (_documentTypeRepo is null)
             throw new InvalidOperationException("Belge tipi deposu (IDocumentTypeRepository) kayitli degil.");
+
+        // Malzeme Belge Kilitleri ("is_emri") — WorkOrderEdit "Mamul Kodu" alanı standart
+        // rehber (ITEMS_FINISHED guide) kullanır; rehber lookup'ta bu kilit filtrelenemez
+        // (custom Guide bypass — SalesController/WarehouseController'daki lookup-time NOT IN
+        // deseni burada uygulanamıyor). Bu yüzden gerçek kapı save anındadır.
+        var lockedForWorkOrder = await _logisticsConfig.GetLockedItemIdsByDocTypeAsync(
+            ItemDocumentLockTypes.WorkOrderCode, ct);
+        if (lockedForWorkOrder.Contains(request.ItemId))
+        {
+            var lockedItem = (await _logisticsConfig.GetItemsByIdsAsync(new[] { request.ItemId }, ct))
+                .FirstOrDefault();
+            var label = lockedItem?.Code ?? $"#{request.ItemId}";
+            throw new ArgumentException(
+                $"'{label}' malzemesi İş Emri / Üretim için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.",
+                nameof(request.ItemId));
+        }
 
         var orderDate = DateTime.UtcNow;
         var orderNumber = await ResolveOrderNumberAsync(orderDate, ct);
@@ -339,6 +356,19 @@ public sealed class WorkOrderService : IWorkOrderService
 
         var line = await GetSalesLineAsync(request.SourceDocumentId, request.SourceLineId, ct)
             ?? throw new InvalidOperationException("Kaynak sipariş satırı bulunamadı.");
+
+        // Malzeme Belge Kilitleri ("is_emri") — satış satırından otomatik iş emri açma da
+        // aynı kapıya tabi (CreateAsync'teki manuel WorkOrderEdit yolu ile aynı kural).
+        var lockedForWorkOrder = await _logisticsConfig.GetLockedItemIdsByDocTypeAsync(
+            ItemDocumentLockTypes.WorkOrderCode, ct);
+        if (lockedForWorkOrder.Contains(line.ItemId))
+        {
+            var lockedItem = (await _logisticsConfig.GetItemsByIdsAsync(new[] { line.ItemId }, ct))
+                .FirstOrDefault();
+            var label = lockedItem?.Code ?? $"#{line.ItemId}";
+            throw new InvalidOperationException(
+                $"'{label}' malzemesi İş Emri / Üretim için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+        }
 
         var allocated = await _workOrders.GetAllocatedQuantityForLineAsync(request.SourceLineId, ct);
         var remaining = line.Quantity - allocated;

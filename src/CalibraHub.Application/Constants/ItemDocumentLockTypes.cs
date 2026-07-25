@@ -17,10 +17,30 @@ namespace CalibraHub.Application.Constants;
 /// etiketleri farklıdır (ör. "alis_talebi" → "Alış Talebi"). Bu dosya o ekranı otomatik
 /// güncellemez (CLAUDE.md kısıtı: MaterialCardEdit.cshtml bu görev kapsamında değiştirilmedi) —
 /// frontend/özet ajanı MaterialCardEdit'i bu kataloğa göre senkronize etmeli.
+///
+/// ÜRETİM GENİŞLEMESİ (2026-07-25, backlog Seq 30 devamı — bkz. rapor): <see cref="WorkOrderCode"/>
+/// ve <see cref="RecipeCode"/> eklendi. İkisi de "belge" üretmez (WorkOrder kendi Document'ını
+/// taşır ama malzeme seçimi anında depo hareketi doğurmaz; BOM salt tanım tablosudur) — bu yüzden
+/// <c>dbo.DocumentType</c>'a YENİ kayıt GEREKMEDİ (DocType kolonu FK değil, serbest NVARCHAR(50),
+/// bkz. ItemDocumentLock DDL). "is_emri" kodu DocumentType'ta zaten var (WorkOrder numaralama
+/// kuralı için, WorkOrderService.WorkOrderTypeCode) — aynı kod bilinçli olarak yeniden kullanıldı.
+/// Enforcement: <see cref="WorkOrderCode"/> → WorkOrderService.CreateAsync/CreateFromSalesLineAsync
+/// (server-side hard gate — "Mamul Kodu" alanı standart rehber/ITEMS_FINISHED kullandığı için
+/// lookup filtrelenemiyor, rehber-bypass). <see cref="RecipeCode"/> → LogisticsConfigurationService.
+/// SaveBOMAsync (header + satır ItemId'leri, server-side hard gate — BOMEdit.cshtml malzeme araması
+/// StockLookup paylaşımlı/docType'sız uç, aynı bypass). Üretim sarfı (WorkOrderEdit "Üretim Sarfı"
+/// modalı, IssueConsumptionJson) AYRI kod almadı — depo_cikis'i reuse eder (BuildLineGridConfig
+/// "STOCK_OUT" zaten bu kilide bağlı, 2026-07-10'dan beri).
 /// </summary>
 public static class ItemDocumentLockTypes
 {
     public sealed record LockType(string Code, string Label, int SortOrder);
+
+    /// <summary>İş Emri (WorkOrder) "Mamul Kodu" — DocumentType.Code ile aynı değer, kasıtlı.</summary>
+    public const string WorkOrderCode = "is_emri";
+
+    /// <summary>Reçete (BOM) — hem hedef mamul hem bileşen satırları için tek kod.</summary>
+    public const string RecipeCode = "recete";
 
     public static readonly IReadOnlyList<LockType> All = new List<LockType>
     {
@@ -36,6 +56,8 @@ public static class ItemDocumentLockTypes
         new("depo_cikis",        "Ambar Çıkış",            100),
         new("depo_transfer",     "Depolar Arası Transfer", 110),
         new("sayim",             "Sayım",                  120),
+        new(WorkOrderCode,       "İş Emri / Üretim",       130),
+        new(RecipeCode,          "Reçete (BOM)",           140),
     }.AsReadOnly();
 
     private static readonly IReadOnlyDictionary<string, string> _labelByCode =
