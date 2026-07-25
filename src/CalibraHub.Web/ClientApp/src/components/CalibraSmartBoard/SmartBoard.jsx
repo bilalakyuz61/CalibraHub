@@ -41,6 +41,22 @@ function loadInitialFilters(boardKey) {
   } catch (e) { return [] }
 }
 
+// ── Cok alanli gruplama zinciri kaliciligi (2026-07-25, PageComment Seq 36) ──
+// Filtre kaliciligiyla AYNI hafif desen: boardKey scope'lu localStorage, ayri
+// prefix. Backend'e yazilmaz (sutun ayarlarinin aksine) — gruplama gecici bir
+// gorunum tercihi (filtre gibi), kullanicidan kullaniciya/cihazdan cihaza
+// tasinmasi gerekmez; mevcut filtre altyapisiyla birebir tutarli.
+var GROUPBY_STORAGE_PREFIX = 'cb-sb-groupby:'
+function loadInitialGroupBy(boardKey) {
+  if (!boardKey || typeof window === 'undefined') return []
+  try {
+    var raw = window.localStorage.getItem(GROUPBY_STORAGE_PREFIX + boardKey)
+    if (!raw) return []
+    var arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr.filter(function (x) { return typeof x === 'string' }) : []
+  } catch (e) { return [] }
+}
+
 // ── Tablo modu kimlik sentezi ─────────────────────────────────────────────
 // Kart-liste board'lari kimligini (isim/kod) entity.title / entity.subtitle ile
 // tasir; SmartTable ise SADECE widget sutunlarini render eder (entity.title/
@@ -136,6 +152,20 @@ export default function SmartBoard(props) {
   // localStorage'dan initial yukleme — sayfa arasi tercih korunur (boardKey scope)
   var [filterOpen, setFilterOpen] = useState(false)
   var [filters, setFilters] = useState(function () { return loadInitialFilters(boardKey) })
+
+  // ── Gruplama state (yalnizca tablo modu — asagida isTableMode ile kosullu
+  //    render/derive). setGroupBy: state + localStorage kaliciligi (filtre
+  //    setFilters kaliciligiyla ayni desen). ──
+  var [groupOpen, setGroupOpen] = useState(false)
+  var [groupBy, setGroupByState] = useState(function () { return loadInitialGroupBy(boardKey) })
+  var setGroupBy = useCallback(function (next) {
+    var arr = Array.isArray(next) ? next.filter(function (x) { return typeof x === 'string' }) : []
+    setGroupByState(arr)
+    try {
+      if (arr.length === 0) window.localStorage.removeItem(GROUPBY_STORAGE_PREFIX + boardKey)
+      else window.localStorage.setItem(GROUPBY_STORAGE_PREFIX + boardKey, JSON.stringify(arr))
+    } catch (e) { /* quota/private — sessiz gec */ }
+  }, [boardKey])
 
   // formCode — props'tan gelmezse body'nin data-form-code attribute'undan oku.
   // _Layout.cshtml ViewData["FormCode"]'u body'ye yazar; tum SmartBoard sayfalari
@@ -688,6 +718,36 @@ export default function SmartBoard(props) {
     return filteredEntities.map(function (e) { return synthesizeEntityIdentity(e, tableIdentity.wantName, tableIdentity.wantCode) })
   }, [filteredEntities, tableIdentity])
 
+  // ── Gruplanabilir alan listesi (Grupla paneli) ──
+  // Kaynak: tableMasterWidgets (kimlik-sentezli TAM master set — gorunur olsun/
+  // olmasin her alan gruplanabilir). Sayisal-olmayanlar ONCE (kullanici genelde
+  // metin/durum alanina gore gruplar), sayisal aile (numeric/currency/percent)
+  // sona — her iki grup icinde master sirasi korunur. Kart modunda [] (buton
+  // zaten render edilmez).
+  var groupFields = useMemo(function () {
+    if (!isTableMode) return []
+    var nonNum = []
+    var num = []
+    tableMasterWidgets.forEach(function (w) {
+      if (!w || !w.id) return
+      var dt = String(w.dataType || '').toLowerCase()
+      var item = { id: w.id, label: w.label || w.id, dataType: w.dataType, icon: w.icon, color: w.color }
+      if (dt === 'numeric' || dt === 'currency' || dt === 'percent') num.push(item)
+      else nonNum.push(item)
+    })
+    return nonNum.concat(num)
+  }, [isTableMode, tableMasterWidgets])
+
+  // Kayitli zincirdeki stale id'leri (artik master'da olmayan alan) ele —
+  // panel numaralandirmasi ile SmartTable render'i tutarli kalsin.
+  var effectiveGroupBy = useMemo(function () {
+    if (groupBy.length === 0) return groupBy
+    var idSet = {}
+    groupFields.forEach(function (f) { idSet[f.id] = true })
+    var clean = groupBy.filter(function (id) { return idSet[id] })
+    return clean.length === groupBy.length ? groupBy : clean
+  }, [groupBy, groupFields])
+
   var meshStyle = isDark
     ? {
         backgroundColor: '#0a0d17',
@@ -845,6 +905,44 @@ export default function SmartBoard(props) {
           }
         </button>
 
+        {/* Grupla — YALNIZCA tablo modu. Layers ikonu + aktif rozet (Filtre
+            butonuyla ayni hayalet-mod + sayaç badge deseni). Panel butonun
+            altina acilir (sarmalayici .relative, SmartGroupPanel absolute). */}
+        {isTableMode && (
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={function () { setGroupOpen(function (o) { return !o }) }}
+              className={'relative p-2.5 rounded-xl border-[1px] transition-all group flex-shrink-0 ' +
+                (effectiveGroupBy.length > 0
+                  ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-400/30'
+                  : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06]')
+              }
+              title={effectiveGroupBy.length > 0 ? (effectiveGroupBy.length + ' alana göre gruplandı') : 'Gruplama'}
+            >
+              <Layers size={15} className={effectiveGroupBy.length > 0
+                ? 'text-indigo-600 dark:text-indigo-400'
+                : 'text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors'
+              } />
+              {effectiveGroupBy.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold bg-indigo-500 text-white/100 flex items-center justify-center"
+                  style={{ boxShadow: '0 0 0 2px rgba(15,23,42,0.6)' }}
+                >
+                  {effectiveGroupBy.length}
+                </span>
+              )}
+            </button>
+            <SmartGroupPanel
+              isOpen={groupOpen}
+              onClose={function () { setGroupOpen(false) }}
+              fields={groupFields}
+              groupBy={effectiveGroupBy}
+              onChange={function (next) { setGroupBy(next) }}
+              isDark={isDark}
+            />
+          </div>
+        )}
+
         {/* Tablo modunda (viewMode:'table') Sutun Ayarlari (SmartColumnSettings)
             acilir; kart modunda AYNEN eskisi gibi Widget Ayarlari (SmartBoardConfigPanel).
             Regresyonsuz: viewMode!=='table' oldugunda bu dal hicbir zaman calismaz. */}
@@ -961,6 +1059,7 @@ export default function SmartBoard(props) {
               order={order}
               columnConfig={tableColumnFormats}
               tableFormat={tableGeneralFormat}
+              groupBy={effectiveGroupBy}
               onRefresh={refreshUrl ? refreshBoard : undefined}
               recentIds={recentIds}
               isDark={isDark}

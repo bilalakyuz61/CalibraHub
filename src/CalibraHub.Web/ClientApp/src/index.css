@@ -3916,6 +3916,15 @@ body.app-theme-dark .nw-card-del:hover { color: #f87171; background: rgba(248,11
   --cst-highlight-border:     rgba(99, 102, 241, 0.55);
   --cst-link-bg:              rgba(99, 102, 241, 0.06);
   --cst-link-border:          rgba(99, 102, 241, 0.2);
+  /* Gruplama (cok alanli) — grup baslik satiri tonlari (light default). */
+  --cst-group-bg:             #eef1f6;
+  --cst-group-hover-bg:       #e5e9f2;
+  --cst-group-label:          #475569;
+  --cst-group-value:          #4338ca;
+  --cst-group-value-empty:    #94a3b8;
+  --cst-group-chevron:        #64748b;
+  --cst-group-count-bg:       rgba(99, 102, 241, 0.12);
+  --cst-group-count-text:     #4338ca;
   min-width: 0;
 }
 body.app-theme-dark .cst-root {
@@ -3934,6 +3943,15 @@ body.app-theme-dark .cst-root {
   --cst-highlight-border:     rgba(99, 102, 241, 0.6);
   --cst-link-bg:              rgba(99, 102, 241, 0.1);
   --cst-link-border:          rgba(99, 102, 241, 0.28);
+  /* Gruplama — grup baslik satiri tonlari (dark override). */
+  --cst-group-bg:             #141b2e;
+  --cst-group-hover-bg:       #1b2338;
+  --cst-group-label:          rgba(255, 255, 255, 0.7);
+  --cst-group-value:          #a5b4fc;
+  --cst-group-value-empty:    rgba(255, 255, 255, 0.35);
+  --cst-group-chevron:        rgba(255, 255, 255, 0.5);
+  --cst-group-count-bg:       rgba(99, 102, 241, 0.2);
+  --cst-group-count-text:     #c7d2fe;
 }
 
 .cst-wrap {
@@ -4113,6 +4131,67 @@ body.app-theme-dark .cst-root {
 }
 .cst-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cst-link:hover { filter: brightness(1.08); }
+
+/* ── Cok alanli gruplama — grup baslik satiri (SmartTable.GroupHeaderRow) ──
+   Tum sutunlari kaplayan tek hucre (colSpan); ic icerik (.cst-group-inner)
+   position:sticky ile sol kenarda sabit kalir → yatay kaydirmada "Alan: Deger"
+   her zaman gorunur. Girinti derinlige gore inline paddingLeft ile verilir.
+   Hafif: sade div + tek renk zemin (birkac bin satirda yuk getirmez). Light
+   default + dark override (--cst-group-* degiskenleri, bkz. .cst-root). */
+.cst-group-cell {
+  padding: 0;
+  background-color: var(--cst-group-bg);
+  border-top: 1px solid var(--cst-row-border);
+}
+.cst-group-inner {
+  position: sticky;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  padding-right: 14px;
+  /* padding-left inline (girinti) — bkz. GroupHeaderRow */
+  background-color: var(--cst-group-bg);
+  cursor: pointer;
+  user-select: none;
+  max-width: 100%;
+  transition: background-color 0.12s ease;
+}
+.cst-group-inner:hover { background-color: var(--cst-group-hover-bg); }
+.cst-group__chevron {
+  flex-shrink: 0;
+  color: var(--cst-group-chevron);
+  transition: transform 160ms ease;
+}
+.cst-group__chevron--collapsed { transform: rotate(-90deg); }
+.cst-group__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cst-group-label);
+  white-space: nowrap;
+}
+.cst-group__value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cst-group-value);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 380px;
+}
+.cst-group__value--empty { color: var(--cst-group-value-empty); font-style: italic; }
+.cst-group__count {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background-color: var(--cst-group-count-bg);
+  color: var(--cst-group-count-text);
+  white-space: nowrap;
+}
 
 /* ══════════════════════════════════════════════════════════════════════
    SmartColumnSettings.jsx — Sutun Ayarlari paneli (tablo modu Settings2
