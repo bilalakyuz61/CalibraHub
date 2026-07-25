@@ -143,6 +143,10 @@ public static class MenuDefinition
                     new("logistics.materials",     isEn ? "Material Cards"          : "Malzeme Kartları",          "Boxes",   "/Logistics/MaterialCards",         null,
                         MatchPath: "/Logistics/MaterialCard",
                         PermissionFormCode: FormCodes.MaterialCardEdit),
+                    // 2026-07-25 — Malzeme Belge Kilitleri: MaterialCardEdit'ten bağımsız grantable form.
+                    new("logistics.itemdocumentlocks", isEn ? "Document Locks" : "Malzeme Belge Kilitleri", "Lock", "/Logistics/ItemDocumentLocks", null,
+                        MatchPath: "/Logistics/ItemDocumentLocks",
+                        PermissionFormCode: FormCodes.ItemDocumentLock),
                     new("logistics.configuration", isEn ? "Features & Combinations" : "Özellik ve Kombinasyon",    "Sliders", "/Logistics/ProductConfiguration",  null,
                         PermissionFormCode: FormCodes.ProductConfig),
                     new("logistics.combinations",  isEn ? "Defined Combinations"    : "Tanımlı Kombinasyonlar",    "Grid3X3", "/Logistics/Combinations",          null,

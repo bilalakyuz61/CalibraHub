@@ -1,0 +1,561 @@
+@model CalibraHub.Web.Models.Logistics.ItemDocumentLocksViewModel
+@using System.Text.Json
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@{
+    ViewData["Title"] = "Malzeme Belge Kilitleri";
+    ViewData["FormCode"] = "ITEM_DOCUMENT_LOCK";
+    ViewData["BodyClass"] = "page-item-document-locks";
+    ViewData["DbInfo"] =
+        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>ItemDocumentLock</td><td style='padding:6px 8px;'>Malzeme × belge tipi kilit satırları (ItemId, DocType — UNIQUE)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Items</td><td style='padding:6px 8px;'>Malzeme kartları (Kod/Ad/Grup gösterimi)</td></tr>"
+        + "</table>";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
+}
+
+<style>
+    .page-item-document-locks .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-item-document-locks .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-item-document-locks .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-item-document-locks .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    .idl-root {
+        color-scheme: light;
+        --idl-bg: #ffffff;
+        --idl-border: #e2e8f0;
+        --idl-text: #0f172a;
+        --idl-text-muted: #64748b;
+        --idl-chip-bg: #f1f5f9;
+        --idl-chip-border: #e2e8f0;
+        --idl-chip-active-bg: #fff1f2;
+        --idl-chip-active-border: #fda4af;
+        --idl-chip-active-text: #be123c;
+        --idl-backdrop: rgba(15, 23, 42, 0.45);
+        display: flex; flex-direction: column; height: 100%; min-height: 0;
+    }
+    body.app-theme-dark .idl-root {
+        color-scheme: dark;
+        --idl-bg: #111827;
+        --idl-border: #263042;
+        --idl-text: #e2e8f0;
+        --idl-text-muted: #94a3b8;
+        --idl-chip-bg: #1a2332;
+        --idl-chip-border: #2b3648;
+        --idl-chip-active-bg: #3f1622;
+        --idl-chip-active-border: #9f1239;
+        --idl-chip-active-text: #fda4af;
+        --idl-backdrop: rgba(2, 6, 15, 0.65);
+    }
+
+    .idl-toolbar-row {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--idl-border);
+        background: var(--idl-bg);
+    }
+    .idl-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .idl-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 5px 12px; border-radius: 999px; border: 1px solid var(--idl-chip-border);
+        background: var(--idl-chip-bg); color: var(--idl-text); font-size: 12.5px; font-weight: 500;
+        cursor: pointer; transition: all .12s ease; white-space: nowrap;
+    }
+    .idl-chip:hover { filter: brightness(0.97); }
+    body.app-theme-dark .idl-chip:hover { filter: brightness(1.15); }
+    .idl-chip--active {
+        background: var(--idl-chip-active-bg); border-color: var(--idl-chip-active-border);
+        color: var(--idl-chip-active-text); font-weight: 600;
+    }
+    .idl-chip-count {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+        background: rgba(100, 116, 139, 0.18); font-size: 11px; font-weight: 600;
+    }
+    .idl-chip--active .idl-chip-count { background: rgba(190, 18, 60, 0.16); }
+
+    .idl-bulk-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border-radius: 8px; border: 1px solid var(--idl-border);
+        background: var(--idl-chip-bg); color: var(--idl-text); font-size: 13px; font-weight: 600;
+        cursor: pointer;
+    }
+    .idl-bulk-btn:hover { filter: brightness(0.97); }
+    body.app-theme-dark .idl-bulk-btn:hover { filter: brightness(1.15); }
+
+    .idl-board-host { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+    /* ── Modallar ─────────────────────────────────────────────── */
+    .idl-modal-backdrop {
+        position: fixed; inset: 0; z-index: 2000;
+        background: var(--idl-backdrop); backdrop-filter: blur(2px);
+        display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .idl-modal-backdrop[hidden] { display: none; }
+    .idl-modal-card {
+        color-scheme: light;
+        --idl-bg: #ffffff; --idl-border: #e2e8f0; --idl-text: #0f172a; --idl-text-muted: #64748b;
+        width: 420px; max-width: 100%; max-height: 84vh; display: flex; flex-direction: column;
+        background: var(--idl-bg); color: var(--idl-text); border: 1px solid var(--idl-border);
+        border-radius: 14px; box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28); overflow: hidden;
+    }
+    body.app-theme-dark .idl-modal-card {
+        color-scheme: dark;
+        --idl-bg: #151e2e; --idl-border: #2b3648; --idl-text: #e2e8f0; --idl-text-muted: #94a3b8;
+    }
+    .idl-modal-card--wide { width: 720px; }
+    .idl-modal-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 18px; border-bottom: 1px solid var(--idl-border);
+    }
+    .idl-modal-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--idl-text); }
+    .idl-modal-close {
+        border: none; background: transparent; color: var(--idl-text-muted); font-size: 18px;
+        cursor: pointer; line-height: 1; padding: 4px 8px; border-radius: 6px;
+    }
+    .idl-modal-close:hover { background: rgba(100, 116, 139, 0.15); }
+    .idl-modal-body { padding: 14px 18px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+    .idl-modal-actions {
+        display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+        padding: 14px 18px; border-top: 1px solid var(--idl-border);
+    }
+    .idl-btn {
+        padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+    }
+    .idl-btn-ghost { background: transparent; border-color: var(--idl-border); color: var(--idl-text); }
+    .idl-btn-ghost:hover { background: rgba(100, 116, 139, 0.12); }
+    .idl-btn-primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+    .idl-btn-primary:hover { background: #4338ca; }
+    .idl-btn-primary:disabled { opacity: .6; cursor: default; }
+    .idl-btn-lock { background: #be123c; border-color: #be123c; color: #fff; }
+    .idl-btn-lock:hover { background: #9f1239; }
+    .idl-btn-unlock { background: #059669; border-color: #059669; color: #fff; }
+    .idl-btn-unlock:hover { background: #047857; }
+
+    .idl-switch-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 8px 2px; border-bottom: 1px solid var(--idl-border);
+    }
+    .idl-switch-row:last-child { border-bottom: none; }
+    .idl-switch-label { font-size: 13.5px; color: var(--idl-text); }
+    .idl-loading, .idl-error, .idl-empty-hint { padding: 18px 4px; color: var(--idl-text-muted); font-size: 13px; }
+    .idl-error { color: #dc2626; }
+
+    .idl-bulk-grid { display: flex; gap: 18px; }
+    .idl-bulk-col { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; }
+    .idl-bulk-col h4 { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--idl-text-muted); text-transform: none; }
+    .idl-bulk-search {
+        width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--idl-border);
+        background: var(--idl-bg); color: var(--idl-text); font-size: 13px; margin-bottom: 8px;
+    }
+    .idl-pick-list { max-height: 160px; overflow-y: auto; border: 1px solid var(--idl-border); border-radius: 8px; }
+    .idl-pick-row {
+        display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12.5px;
+        cursor: pointer; border-bottom: 1px solid var(--idl-border);
+    }
+    .idl-pick-row:last-child { border-bottom: none; }
+    .idl-pick-row:hover { background: rgba(100, 116, 139, 0.10); }
+    .idl-pick-row--picked { background: rgba(79, 70, 229, 0.08); }
+    .idl-pick-name { flex: 1 1 auto; color: var(--idl-text); }
+    .idl-pick-code { color: var(--idl-text-muted); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
+    .idl-selected-wrap { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; max-height: 90px; overflow-y: auto; }
+    .idl-pill {
+        display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px;
+        border-radius: 999px; background: rgba(79, 70, 229, 0.12); color: var(--idl-text); font-size: 11.5px;
+    }
+    .idl-pill-x {
+        border: none; background: transparent; color: var(--idl-text-muted); cursor: pointer;
+        font-size: 13px; line-height: 1; padding: 2px 4px;
+    }
+    .idl-selected-count { font-size: 11.5px; color: var(--idl-text-muted); margin-top: 6px; }
+</style>
+
+<div class="idl-root">
+    <div class="idl-toolbar-row">
+        <div class="idl-chips" id="idlChips"></div>
+        <button type="button" class="idl-bulk-btn" id="idlBulkBtn">Toplu İşlem</button>
+    </div>
+    <div class="idl-board-host">
+        <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+            <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+        </section>
+    </div>
+</div>
+
+<!-- Tekil kilit düzenleme paneli -->
+<div id="idlEditBackdrop" class="idl-modal-backdrop" hidden>
+    <div class="idl-modal-card" role="dialog" aria-modal="true" aria-labelledby="idlEditTitle">
+        <div class="idl-modal-head">
+            <h3 id="idlEditTitle">Kilitleri Düzenle</h3>
+            <button type="button" class="idl-modal-close" id="idlEditClose" aria-label="Kapat">&times;</button>
+        </div>
+        <div class="idl-modal-body" id="idlEditBody"></div>
+        <div class="idl-modal-actions">
+            <button type="button" class="idl-btn idl-btn-ghost" id="idlEditCancel">Vazgeç</button>
+            <button type="button" class="idl-btn idl-btn-primary" id="idlEditSave">Kaydet</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toplu işlem paneli -->
+<div id="idlBulkBackdrop" class="idl-modal-backdrop" hidden>
+    <div class="idl-modal-card idl-modal-card--wide" role="dialog" aria-modal="true" aria-labelledby="idlBulkTitle">
+        <div class="idl-modal-head">
+            <h3 id="idlBulkTitle">Toplu Belge Kilidi İşlemi</h3>
+            <button type="button" class="idl-modal-close" id="idlBulkClose" aria-label="Kapat">&times;</button>
+        </div>
+        <div class="idl-modal-body">
+            <div class="idl-bulk-grid">
+                <div class="idl-bulk-col">
+                    <h4>Malzeme Seç</h4>
+                    <input type="text" class="idl-bulk-search" id="idlBulkSearch" placeholder="Kod veya ad ile ara..." autocomplete="off">
+                    <div class="idl-pick-list" id="idlBulkResults"></div>
+                    <div class="idl-selected-count" id="idlBulkSelectedCount">0 malzeme seçildi</div>
+                    <div class="idl-selected-wrap" id="idlBulkSelected"></div>
+                </div>
+                <div class="idl-bulk-col">
+                    <h4>Belge Tipleri</h4>
+                    <div id="idlBulkDocTypes"></div>
+                </div>
+            </div>
+        </div>
+        <div class="idl-modal-actions">
+            <button type="button" class="idl-btn idl-btn-ghost" id="idlBulkCancel">Vazgeç</button>
+            <button type="button" class="idl-btn idl-btn-unlock" id="idlBulkUnlock">Kilidi Kaldır</button>
+            <button type="button" class="idl-btn idl-btn-lock" id="idlBulkLock">Kilitle</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[ItemDocumentLocks] Mount elementi yok'); return; }
+
+    var mountHandle = null;
+    var activeLockedType = (BOARD_CONFIG && BOARD_CONFIG.activeLockedDocType) || '';
+    var DOC_TYPES = (BOARD_CONFIG && BOARD_CONFIG.docTypeCatalog)
+        ? BOARD_CONFIG.docTypeCatalog.map(function (t) { return { code: t.code, label: t.label }; })
+        : [];
+
+    function showError(msg) {
+        el.innerHTML = '<div class="cb-mount-error">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()">Sayfayı Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount(config) {
+        if (!config) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard mount fonksiyonu bulunamadı'); return; }
+        try {
+            mountHandle = window.CalibraHub.mountSmartBoard(el, config);
+        } catch (ex) {
+            console.error('[ItemDocumentLocks] Mount exception:', ex);
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-idl-sb]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-idl-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        if (document.querySelector('script[data-idl-sb]')) { cb(); return; }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-idl-sb', '1');
+        script.onload  = function () { setTimeout(cb, 0); };
+        script.onerror = function () { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(script);
+    }
+
+    // ── CSRF + fetch yardımcıları ────────────────────────────────
+    function csrfToken() {
+        var elTok = document.querySelector('input[name="__RequestVerificationToken"]');
+        return elTok ? elTok.value : '';
+    }
+    function getJson(url) {
+        return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); });
+    }
+    function postJson(url, payload) {
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'RequestVerificationToken': csrfToken()
+            },
+            body: JSON.stringify(payload)
+        }).then(function (r) { return r.json(); });
+    }
+    function notify(msg, kind) {
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, kind === 'err' ? 'err' : 'ok');
+        else if (kind === 'err') alert(msg);
+    }
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // ── Hızlı filtre çipleri ──────────────────────────────────────
+    function renderChips(config) {
+        var wrap = document.getElementById('idlChips');
+        if (!wrap || !config) return;
+        var html = '<button type="button" class="idl-chip' + (!config.activeLockedDocType ? ' idl-chip--active' : '') + '" data-doctype="">Tümü</button>';
+        (config.docTypeCatalog || []).forEach(function (t) {
+            var active = config.activeLockedDocType === t.code;
+            html += '<button type="button" class="idl-chip' + (active ? ' idl-chip--active' : '') + '" data-doctype="' + t.code + '">'
+                + escapeHtml(t.label) + ' <span class="idl-chip-count">' + t.count + '</span></button>';
+        });
+        wrap.innerHTML = html;
+        Array.prototype.forEach.call(wrap.querySelectorAll('.idl-chip'), function (btn) {
+            btn.addEventListener('click', function () { switchFilter(btn.getAttribute('data-doctype') || ''); });
+        });
+    }
+
+    function switchFilter(code) {
+        activeLockedType = code || '';
+        var url = '/Logistics/ItemDocumentLocksBoardConfig' + (code ? ('?lockedDocType=' + encodeURIComponent(code)) : '');
+        getJson(url).then(function (config) {
+            if (!config || config.error) { notify('Filtre uygulanamadı.', 'err'); return; }
+            if (mountHandle) mountHandle.refresh(config);
+            renderChips(config);
+        }).catch(function () { notify('Bağlantı hatası.', 'err'); });
+    }
+
+    function reloadBoard() { switchFilter(activeLockedType); }
+
+    // ── Ortak switch listesi (tekil + toplu panel paylaşır) ───────
+    function buildSwitchListHtml(idPrefix, checkedCodes) {
+        var html = '';
+        DOC_TYPES.forEach(function (t) {
+            var checked = checkedCodes.indexOf(t.code) !== -1;
+            html += '<label class="idl-switch-row">'
+                + '<span class="idl-switch-label">' + escapeHtml(t.label) + '</span>'
+                + '<span class="form-check form-switch" style="margin:0;">'
+                + '<input class="form-check-input" type="checkbox" role="switch" data-doctype="' + t.code + '" id="' + idPrefix + '-' + t.code + '"' + (checked ? ' checked' : '') + '>'
+                + '</span>'
+                + '</label>';
+        });
+        return html;
+    }
+    function readCheckedDocTypes(container) {
+        var result = [];
+        Array.prototype.forEach.call(container.querySelectorAll('input[data-doctype]:checked'), function (inp) {
+            result.push(inp.getAttribute('data-doctype'));
+        });
+        return result;
+    }
+
+    // ── Tekil düzenleme paneli ─────────────────────────────────────
+    var editBackdrop = document.getElementById('idlEditBackdrop');
+    var editBody = document.getElementById('idlEditBody');
+    var editSaveBtn = document.getElementById('idlEditSave');
+    var editCurrentItemId = null;
+
+    function onEditKeydown(e) { if (e.key === 'Escape') closeEditModal(); }
+
+    function openEditModal(itemId) {
+        editCurrentItemId = itemId;
+        editBody.innerHTML = '<div class="idl-loading">Yükleniyor…</div>';
+        editBackdrop.hidden = false;
+        document.addEventListener('keydown', onEditKeydown);
+        getJson('/Logistics/ItemDocumentLockGet?itemId=' + itemId).then(function (data) {
+            if (!data || data.error) { editBody.innerHTML = '<div class="idl-error">Yüklenemedi.</div>'; return; }
+            editBody.innerHTML = buildSwitchListHtml('idl-edit', data.docTypes || []);
+        }).catch(function () { editBody.innerHTML = '<div class="idl-error">Bağlantı hatası.</div>'; });
+    }
+    function closeEditModal() {
+        editBackdrop.hidden = true;
+        editCurrentItemId = null;
+        document.removeEventListener('keydown', onEditKeydown);
+    }
+    document.getElementById('idlEditCancel').addEventListener('click', closeEditModal);
+    document.getElementById('idlEditClose').addEventListener('click', closeEditModal);
+    editBackdrop.addEventListener('click', function (e) { if (e.target === editBackdrop) closeEditModal(); });
+    editSaveBtn.addEventListener('click', function () {
+        if (!editCurrentItemId) return;
+        var docTypes = readCheckedDocTypes(editBody);
+        editSaveBtn.disabled = true;
+        postJson('/Logistics/ItemDocumentLockSave', { itemId: editCurrentItemId, docTypes: docTypes })
+            .then(function (res) {
+                editSaveBtn.disabled = false;
+                if (!res || res.success === false) { notify((res && res.message) || 'Kaydedilemedi.', 'err'); return; }
+                notify('Kilitler kaydedildi.', 'ok');
+                closeEditModal();
+                reloadBoard();
+            })
+            .catch(function (err) { editSaveBtn.disabled = false; notify('Bağlantı hatası: ' + err.message, 'err'); });
+    });
+
+    // Kart/satır tıklaması → primaryAction.url = '#idl-{id}' (hash-tetikli, workspace
+    // iframe navigasyonunu bozmaz — sayfa değişmez, yalnız hashchange olayı tetiklenir).
+    function handleHash() {
+        var m = /^#idl-(\d+)$/.exec(window.location.hash || '');
+        if (!m) return;
+        var itemId = parseInt(m[1], 10);
+        try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) { /* ignore */ }
+        if (itemId > 0) openEditModal(itemId);
+    }
+    window.addEventListener('hashchange', handleHash);
+
+    // ── Toplu işlem paneli ─────────────────────────────────────────
+    var bulkBackdrop = document.getElementById('idlBulkBackdrop');
+    var bulkDocTypesBody = document.getElementById('idlBulkDocTypes');
+    var bulkSearchInput = document.getElementById('idlBulkSearch');
+    var bulkResultsEl = document.getElementById('idlBulkResults');
+    var bulkSelectedEl = document.getElementById('idlBulkSelected');
+    var bulkSelectedCountEl = document.getElementById('idlBulkSelectedCount');
+    var bulkSelectedItems = {};
+    var bulkSearchTimer = null;
+
+    function onBulkKeydown(e) { if (e.key === 'Escape') closeBulkModal(); }
+
+    function openBulkModal() {
+        bulkSelectedItems = {};
+        bulkSearchInput.value = '';
+        bulkResultsEl.innerHTML = '<div class="idl-empty-hint">Aramak için yazın…</div>';
+        renderBulkSelected();
+        bulkDocTypesBody.innerHTML = buildSwitchListHtml('idl-bulk', []);
+        bulkBackdrop.hidden = false;
+        document.addEventListener('keydown', onBulkKeydown);
+    }
+    function closeBulkModal() {
+        bulkBackdrop.hidden = true;
+        document.removeEventListener('keydown', onBulkKeydown);
+    }
+    document.getElementById('idlBulkBtn').addEventListener('click', openBulkModal);
+    document.getElementById('idlBulkCancel').addEventListener('click', closeBulkModal);
+    document.getElementById('idlBulkClose').addEventListener('click', closeBulkModal);
+    bulkBackdrop.addEventListener('click', function (e) { if (e.target === bulkBackdrop) closeBulkModal(); });
+
+    bulkSearchInput.addEventListener('input', function () {
+        clearTimeout(bulkSearchTimer);
+        var q = bulkSearchInput.value;
+        bulkSearchTimer = setTimeout(function () { runBulkSearch(q); }, 350);
+    });
+
+    function runBulkSearch(q) {
+        if (!q || q.trim().length === 0) { bulkResultsEl.innerHTML = '<div class="idl-empty-hint">Aramak için yazın…</div>'; return; }
+        getJson('/Logistics/ItemDocumentLockSearchItems?search=' + encodeURIComponent(q) + '&pageSize=20')
+            .then(function (data) {
+                if (!data || data.error) { bulkResultsEl.innerHTML = '<div class="idl-error">Arama başarısız.</div>'; return; }
+                renderBulkResults(data.items || []);
+            })
+            .catch(function () { bulkResultsEl.innerHTML = '<div class="idl-error">Bağlantı hatası.</div>'; });
+    }
+
+    function renderBulkResults(items) {
+        if (items.length === 0) { bulkResultsEl.innerHTML = '<div class="idl-empty-hint">Sonuç yok.</div>'; return; }
+        var html = '';
+        items.forEach(function (it) {
+            var picked = !!bulkSelectedItems[it.id];
+            html += '<label class="idl-pick-row' + (picked ? ' idl-pick-row--picked' : '') + '">'
+                + '<input type="checkbox" data-item-id="' + it.id + '" data-item-code="' + escapeHtml(it.code) + '" data-item-name="' + escapeHtml(it.name) + '"' + (picked ? ' checked' : '') + '>'
+                + '<span class="idl-pick-name">' + escapeHtml(it.name) + '</span>'
+                + '<span class="idl-pick-code">' + escapeHtml(it.code) + '</span>'
+                + '</label>';
+        });
+        bulkResultsEl.innerHTML = html;
+        Array.prototype.forEach.call(bulkResultsEl.querySelectorAll('input[type="checkbox"]'), function (cb) {
+            cb.addEventListener('change', function () {
+                var id = cb.getAttribute('data-item-id');
+                if (cb.checked) bulkSelectedItems[id] = { code: cb.getAttribute('data-item-code'), name: cb.getAttribute('data-item-name') };
+                else delete bulkSelectedItems[id];
+                renderBulkSelected();
+            });
+        });
+    }
+
+    function renderBulkSelected() {
+        var ids = Object.keys(bulkSelectedItems);
+        bulkSelectedCountEl.textContent = ids.length + ' malzeme seçildi';
+        var html = '';
+        ids.forEach(function (id) {
+            var it = bulkSelectedItems[id];
+            html += '<span class="idl-pill">' + escapeHtml(it.name) + '<button type="button" class="idl-pill-x" data-remove-id="' + id + '" aria-label="Kaldır">&times;</button></span>';
+        });
+        bulkSelectedEl.innerHTML = html;
+        Array.prototype.forEach.call(bulkSelectedEl.querySelectorAll('[data-remove-id]'), function (btn) {
+            btn.addEventListener('click', function () {
+                var rid = btn.getAttribute('data-remove-id');
+                delete bulkSelectedItems[rid];
+                renderBulkSelected();
+                var cb = bulkResultsEl.querySelector('input[data-item-id="' + rid + '"]');
+                if (cb) cb.checked = false;
+            });
+        });
+    }
+
+    function runBulkAction(mode) {
+        var itemIds = Object.keys(bulkSelectedItems).map(function (x) { return parseInt(x, 10); });
+        var docTypes = readCheckedDocTypes(bulkDocTypesBody);
+        if (itemIds.length === 0) { notify('En az bir malzeme seçilmeli.', 'err'); return; }
+        if (docTypes.length === 0) { notify('En az bir belge tipi seçilmeli.', 'err'); return; }
+
+        var verb = mode === 'unlock' ? 'kaldırılacak' : 'uygulanacak';
+        var msg = itemIds.length + ' malzemeye, seçili ' + docTypes.length + ' belge tipi kilidi ' + verb + '. Devam edilsin mi?';
+        window.showConfirm({
+            title: mode === 'unlock' ? 'Kilit Kaldırma Onayı' : 'Toplu Kilitleme Onayı',
+            message: msg,
+            okLabel: 'Evet, Uygula',
+            danger: mode === 'unlock'
+        }).then(function (ok) {
+            if (!ok) return;
+            postJson('/Logistics/ItemDocumentLockBulkSave', { itemIds: itemIds, docTypes: docTypes, mode: mode })
+                .then(function (res) {
+                    if (!res || res.success === false) { notify((res && res.message) || 'İşlem başarısız.', 'err'); return; }
+                    notify(res.updatedItemCount + ' malzeme güncellendi.', 'ok');
+                    closeBulkModal();
+                    reloadBoard();
+                })
+                .catch(function (err) { notify('Bağlantı hatası: ' + err.message, 'err'); });
+        });
+    }
+    document.getElementById('idlBulkLock').addEventListener('click', function () { runBulkAction('lock'); });
+    document.getElementById('idlBulkUnlock').addEventListener('click', function () { runBulkAction('unlock'); });
+
+    // ── Başlat ──────────────────────────────────────────────────
+    renderChips(BOARD_CONFIG);
+    if (window.location.hash) handleHash();
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount(BOARD_CONFIG);
+    else loadScript(function () { doMount(BOARD_CONFIG); });
+})();
+</script>
+}
