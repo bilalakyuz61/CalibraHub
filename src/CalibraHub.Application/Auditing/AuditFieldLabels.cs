@@ -47,6 +47,8 @@ public static class AuditFieldLabels
             ["ApprovalFlow"]   = "Onay Akışı",
             ["Asset"]          = "Varlık",
             ["Session"]        = "Oturum",
+            ["ProjectTask"]         = "Proje Görevi",
+            ["ProjectTaskTemplate"] = "Görev Şablonu",
         };
 
     /// <summary>Aksiyon kodu → Türkçe etiket.</summary>
@@ -140,6 +142,15 @@ public static class AuditFieldLabels
             ["SerialNumber"] = "Seri No",
             ["UnitCost"] = "Birim Maliyet",
             ["ArgeProjectId"] = "AR-GE Projesi",
+            // Proje görevi alanları (ProjectTask)
+            ["OrderNo"] = "Sıra",
+            ["AssignedUserId"] = "Atanan Kullanıcı",
+            ["TargetDate"] = "Hedef Tarih",
+            ["CompletedAt"] = "Tamamlanma Zamanı",
+            ["CompletedByUserId"] = "Tamamlayan",
+            ["SequentialTasks"] = "Sıralı İlerleme",
+            ["IsSequentialDefault"] = "Varsayılan Sıralı",
+            ["TemplateLineId"] = "Şablon Satırı",
             // Kart alanları
             ["Email"] = "E-posta",
             ["Phone"] = "Telefon",

@@ -766,6 +766,7 @@ END;";
             await EnsureAddressDefinitionTablesAsync(connection, cancellationToken);
             await EnsureLocationSectionTablesAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
+            await EnsureProjectTaskTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
             await EnsureScheduledTasksTableAsync(connection, cancellationToken);
@@ -10017,6 +10018,104 @@ END;";
     }
 
     /// <summary>
+    /// Proje görev katmani (ProjectTask + görev sablonlari). ProjectTask, ArgePrototype ile ayni
+    /// child konumundadir: ProjectId -> Document([id]) ('arge_proje' belgesi). Atama login
+    /// kullanicisina yapilir (AssignedUserId -> Users([Id])).
+    /// "Sirada Bekliyor" durumu SAKLANMAZ — runtime'da turetilir (drift riski sifir).
+    /// ArgeProject.SequentialTasks: proje-seviye sirali-ilerleme anahtari — kontrollu tek
+    /// idempotent ALTER (ayni tabloda Description/ProjectType emsalleri, satir 9934-9942).
+    /// Idempotent: CREATE IF NOT EXISTS + COL_LENGTH guard'li ALTER.
+    /// </summary>
+    private async Task EnsureProjectTaskTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            -- ArgeProject.SequentialTasks: sirali ilerleme anahtari (görev katmani icin; sonradan
+            -- eklendi — mevcut DB'ler icin idempotent ALTER, mevcut satirlar DEFAULT(0) ile dolar)
+            IF OBJECT_ID(N'[{s}].[ArgeProject]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[ArgeProject]', N'SequentialTasks') IS NULL
+                ALTER TABLE [{s}].[ArgeProject] ADD [SequentialTasks] BIT NOT NULL
+                    CONSTRAINT [DF_ArgeProject_SequentialTasks] DEFAULT(0);
+
+            -- ProjectTaskTemplate: görev sablonu basligi
+            IF OBJECT_ID(N'[{s}].[ProjectTaskTemplate]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ProjectTaskTemplate]
+                (
+                    [Id]                  INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ProjectTaskTemplate] PRIMARY KEY,
+                    [Name]                NVARCHAR(200) NOT NULL,
+                    [Description]         NVARCHAR(1000) NULL,
+                    [IsSequentialDefault] BIT NOT NULL CONSTRAINT [DF_ProjectTaskTemplate_IsSequentialDefault] DEFAULT(0),
+                    [IsActive]            BIT NOT NULL CONSTRAINT [DF_ProjectTaskTemplate_IsActive] DEFAULT(1),
+                    [CreatedById]         INT NULL,
+                    [Created]             DATETIME NOT NULL CONSTRAINT [DF_ProjectTaskTemplate_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]         INT NULL,
+                    [Updated]             DATETIME NULL
+                );
+                CREATE UNIQUE INDEX [UX_ProjectTaskTemplate_Name] ON [{s}].[ProjectTaskTemplate]([Name]) WHERE [IsActive] = 1;
+            END;
+
+            -- ProjectTaskTemplateLine: sablon satirlari (parent save'de DELETE+INSERT yasar)
+            IF OBJECT_ID(N'[{s}].[ProjectTaskTemplateLine]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ProjectTaskTemplateLine]
+                (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ProjectTaskTemplateLine] PRIMARY KEY,
+                    [TemplateId]  INT NOT NULL,
+                    [Title]       NVARCHAR(200) NOT NULL,
+                    [Description] NVARCHAR(1000) NULL,
+                    [OrderNo]     INT NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_OrderNo] DEFAULT(0),
+                    [IsActive]    BIT NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_IsActive] DEFAULT(1),
+                    [CreatedById] INT NULL,
+                    [Created]     DATETIME NOT NULL CONSTRAINT [DF_ProjectTaskTemplateLine_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT NULL,
+                    [Updated]     DATETIME NULL,
+                    CONSTRAINT [FK_ProjectTaskTemplateLine_ProjectTaskTemplate] FOREIGN KEY ([TemplateId])
+                        REFERENCES [{s}].[ProjectTaskTemplate]([Id])
+                );
+                CREATE INDEX [IX_ProjectTaskTemplateLine_Template] ON [{s}].[ProjectTaskTemplateLine]([TemplateId], [OrderNo]);
+            END;
+
+            -- ProjectTask: proje görevi (WBS satiri). LinkedEntityKind/Id Faz 2 bagli-kayit
+            -- otomasyonu icin bilincli-bastan; TemplateLineId bilincli FK'siz (sablon satiri
+            -- delete-reinsert ile silinebilir, izlenebilirlik alani).
+            IF OBJECT_ID(N'[{s}].[ProjectTask]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ProjectTask]
+                (
+                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ProjectTask] PRIMARY KEY,
+                    [ProjectId]         INT NOT NULL,
+                    [Title]             NVARCHAR(200) NOT NULL,
+                    [Description]       NVARCHAR(1000) NULL,
+                    [OrderNo]           INT NOT NULL CONSTRAINT [DF_ProjectTask_OrderNo] DEFAULT(0),
+                    [Status]            TINYINT NOT NULL CONSTRAINT [DF_ProjectTask_Status] DEFAULT(0),
+                    [AssignedUserId]    INT NULL,
+                    [TargetDate]        DATETIME NULL,
+                    [CompletedAt]       DATETIME NULL,
+                    [CompletedByUserId] INT NULL,
+                    [LinkedEntityKind]  NVARCHAR(50) NULL,
+                    [LinkedEntityId]    INT NULL,
+                    [TemplateLineId]    INT NULL,
+                    [IsActive]          BIT NOT NULL CONSTRAINT [DF_ProjectTask_IsActive] DEFAULT(1),
+                    [CreatedById]       INT NULL,
+                    [Created]           DATETIME NOT NULL CONSTRAINT [DF_ProjectTask_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]       INT NULL,
+                    [Updated]           DATETIME NULL,
+                    CONSTRAINT [FK_ProjectTask_Document] FOREIGN KEY ([ProjectId])
+                        REFERENCES [{s}].[Document]([id]),
+                    CONSTRAINT [FK_ProjectTask_Users] FOREIGN KEY ([AssignedUserId])
+                        REFERENCES [{s}].[Users]([Id])
+                );
+                CREATE INDEX [IX_ProjectTask_Project]  ON [{s}].[ProjectTask]([ProjectId], [OrderNo]);
+                CREATE INDEX [IX_ProjectTask_Assigned] ON [{s}].[ProjectTask]([AssignedUserId]) WHERE [AssignedUserId] IS NOT NULL;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// AR-GE proje numara kurali (PRJ-yyyy######, yillik reset). Idempotent — kural yoksa ekler.
     /// Seed edilmezse AR-GE belgeleri TKL... fallback'ine duser ve satis sayac havuzuna karisir.
     /// Not: numara motoru segmentler arasi literal ayraci desteklemez; uretilen format PRJ-2026000001.
@@ -12481,6 +12580,9 @@ END;";
             ("SHIFT_EDIT",          "Düzenleme",                        "Üretim",               "Vardiyalar",               555,  true),
             ("ACTIVITY_REASONS",    "Aktivite Sebepleri",               "Üretim",               "Aktivite Sebepleri",       560,  true),  // SmartBoard liste
             ("ACTIVITY_REASON_EDIT","Düzenleme",                        "Üretim",               "Aktivite Sebepleri",       565,  true),
+
+            // ── AR-GE ────────────────────────────────────────────────────────
+            ("PROJECT_TASK",        "Proje Görevleri",                  "AR-GE",                null,                       590,  false), // ProjectTaskController (Görevler sekmesi + Görevlerim + şablonlar)
 
             // ── Finans ───────────────────────────────────────────────────────
             // 2026-06-13 — CONTACT_EDIT, CONTACTS ile birleştirildi (liste + düzenleme tek FormCode).

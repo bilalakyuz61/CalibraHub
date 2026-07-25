@@ -137,6 +137,14 @@ public static class FormCodes
     public const string ActivityReasonEdit = "ACTIVITY_REASON_EDIT";
 
     // ═══════════════════════════════════════════════════
+    // AR-GE
+    // ═══════════════════════════════════════════════════
+    // Not: AR-GE proje ekranı legacy "ARGE_PROJECT_EDIT" string literal'i ile korunur
+    // (FormCodes'a/seed'e bilinçli eklenmedi — davranış değişikliği riski). Görev katmanı
+    // yeni ve grantable PROJECT_TASK kodu altındadır.
+    public const string ProjectTask = "PROJECT_TASK";
+
+    // ═══════════════════════════════════════════════════
     // FİNANS
     // ═══════════════════════════════════════════════════
     public const string Contacts    = "CONTACTS";
