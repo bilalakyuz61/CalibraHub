@@ -12400,6 +12400,9 @@ END;";
             // NOT: "ITEMS" burada kasıtlı yok — sadece widget/rehber kodu; PermissionScope("ITEMS") kullanan
             // controller action yoktur. SortOrder 300 → MATERIAL_CARD_EDIT'e devredildi.
             ("MATERIAL_CARD_EDIT",  "Malzeme Kartları",                 "Lojistik",             "Malzeme Kartları",         300,  true),
+            // 2026-07-25 (PageComment Seq 30): Malzeme Belge Kilitleri ayrı grantable ekran —
+            // MaterialCardEdit yetkisinden bağımsız (ItemDocumentLockController class-scope).
+            ("ITEM_DOCUMENT_LOCK",  "Malzeme Belge Kilitleri",          "Lojistik",             "Malzeme Kartları",         301,  false),
             ("PRODUCT_CONFIG",      "Özellik ve Kombinasyon",           "Lojistik",             "Ürün Konfigürasyonu",      310,  true),
             ("PRODUCT_FEATURE_EDIT","Özellik Düzenleme",                "Lojistik",             "Ürün Konfigürasyonu",      315,  true),
             ("PRODUCT_COMBINATIONS","Kombinasyon Üretici",              "Lojistik",             "Ürün Konfigürasyonu",      320,  true),
