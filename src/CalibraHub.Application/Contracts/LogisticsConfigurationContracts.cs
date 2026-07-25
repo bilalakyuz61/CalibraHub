@@ -75,6 +75,12 @@ public sealed record ItemDto(
     bool AutoSerial = false,
     string? Barcode = null);
 
+/// <summary>Toplu belge kilidi işlemi (Kilitle/Kaldır) sonucu — Malzeme Belge Kilitleri ekranı.</summary>
+public sealed record BulkItemDocumentLockResultDto(
+    int RequestedItemCount,
+    int UpdatedItemCount,
+    IReadOnlyCollection<string> AppliedDocTypes);
+
 public sealed record FeatureDto(
     int Id,
     string Name,

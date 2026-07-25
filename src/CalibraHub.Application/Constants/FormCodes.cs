@@ -44,6 +44,10 @@ public static class FormCodes
     public const string ProductConfig       = "PRODUCT_CONFIG";
     public const string ProductFeatureEdit  = "PRODUCT_FEATURE_EDIT";
     public const string ProductCombinations = "PRODUCT_COMBINATIONS";
+    // 2026-07-25 — Malzeme Belge Kilitleri: MaterialCardEdit'ten BAĞIMSIZ grantable form.
+    // ItemDocumentLockController bu kodla korunur. DB seed (SeedFormsAsync, Forms tablosu)
+    // ayrıca gerekir — bkz. CalibraDatabaseInitializer.cs (db uzmanı sahası, bu görevde eklenmedi).
+    public const string ItemDocumentLock    = "ITEM_DOCUMENT_LOCK";
 
     // ═══════════════════════════════════════════════════
     // LOJİSTİK — Depo
