@@ -247,6 +247,83 @@ body.app-theme-dark .ap-tab.is-active::before {
 }
 .ap-fc-warn.is-visible { display: block; }
 
+/* ── Karşılama Deposu — açılır çoklu-seçim combobox (PageComment Seq 35) ── */
+.ap-fc-combo { position: relative; }
+.ap-fc-combo-box {
+    display: flex; align-items: center; gap: 6px;
+    min-height: 34px; padding: 5px 34px 5px 8px;
+    border: 1px solid var(--ap-border); border-radius: 8px;
+    background: var(--ap-input-bg); cursor: pointer;
+    position: relative; transition: border-color .12s, box-shadow .12s;
+}
+.ap-fc-combo-box:hover { border-color: var(--ap-accent); }
+.ap-fc-combo-box:focus-visible {
+    outline: none; border-color: var(--ap-accent);
+    box-shadow: 0 0 0 3px var(--ap-accent-soft);
+}
+.ap-fc-combo.is-open .ap-fc-combo-box {
+    border-color: var(--ap-accent);
+    box-shadow: 0 0 0 3px var(--ap-accent-soft);
+}
+.ap-fc-pills { display: flex; flex-wrap: wrap; gap: 5px; flex: 1 1 auto; min-width: 0; }
+.ap-fc-placeholder { font-size: 12.5px; color: var(--ap-text-muted); padding: 2px 0; }
+.ap-fc-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 6px 3px 9px; border-radius: 6px;
+    background: var(--ap-accent-soft); color: var(--ap-text);
+    font-size: 12px; font-weight: 500; line-height: 1.5; white-space: nowrap;
+}
+.ap-fc-pill-remove {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0;
+    border: none; background: transparent; color: var(--ap-text-muted);
+    cursor: pointer; padding: 0; font-size: 13px; line-height: 1;
+    transition: background .12s, color .12s;
+}
+.ap-fc-pill-remove:hover { background: var(--ap-toast-er-bg); color: var(--ap-toast-er-tx); }
+.ap-fc-add { font-size: 11.5px; font-weight: 600; color: var(--ap-accent); white-space: nowrap; padding: 2px 0; }
+.ap-fc-chevron {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--ap-text-muted); pointer-events: none; transition: transform .15s;
+}
+.ap-fc-combo.is-open .ap-fc-chevron { transform: translateY(-50%) rotate(180deg); }
+.ap-fc-summary { font-size: 11px; color: var(--ap-text-muted); margin-top: 5px; }
+
+.ap-fc-panel {
+    display: none;
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 40;
+    background: var(--ap-surface); border: 1px solid var(--ap-border); border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(0,0,0,.18);
+    padding: 10px; min-width: 260px;
+}
+.ap-fc-panel.is-open { display: block; }
+.ap-fc-panel-search input {
+    width: 100%; padding: 7px 10px; font-size: 12.5px; box-sizing: border-box;
+    border: 1px solid var(--ap-border); border-radius: 7px;
+    background: var(--ap-input-bg); color: var(--ap-text); margin-bottom: 8px;
+}
+.ap-fc-panel-search input:focus { outline: none; border-color: var(--ap-accent); }
+.ap-fc-panel-list {
+    display: flex; flex-direction: column; gap: 1px;
+    max-height: 220px; overflow-y: auto;
+    border: 1px solid var(--ap-border-light); border-radius: 8px;
+    padding: 4px; background: var(--ap-input-bg);
+}
+.ap-fc-panel-empty { display: block; color: var(--ap-text-muted); font-size: 12px; font-style: italic; padding: 6px 4px; }
+.ap-fc-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 6px; cursor: pointer;
+    font-size: 12.5px; color: var(--ap-text);
+}
+.ap-fc-option:hover { background: var(--ap-accent-soft); }
+.ap-fc-option input[type="checkbox"] { accent-color: var(--ap-accent); flex-shrink: 0; }
+.ap-fc-panel-footer {
+    display: flex; justify-content: flex-end;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--ap-border-light);
+}
+.ap-fc-panel-footer a { font-size: 11.5px; color: var(--ap-text-muted); text-decoration: none; }
+.ap-fc-panel-footer a:hover { color: var(--ap-accent); }
+
 /* ── Pane'ler ── */
 .ap-pane { display:none; }
 .ap-pane.is-active { display:block; }
@@ -585,22 +662,31 @@ body.app-theme-dark .ap-tab.is-active::before {
                         <div id="apFcLocWarning" class="ap-fc-warn"></div>
                     </div>
                     <div class="ap-row-control" style="min-width:280px;max-width:380px;">
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                            <input type="text" id="apFcLocSearch" placeholder="Depo ara…"
-                                   style="flex:1 1 auto;min-width:0;padding:6px 10px;font-size:12.5px;
-                                          border:1px solid var(--ap-border);border-radius:7px;
-                                          background:var(--ap-input-bg);color:var(--ap-text);" />
-                            <a href="#" id="apFcLocClearAll" title="Tüm seçimi kaldır"
-                               style="font-size:11.5px;color:var(--ap-text-muted);white-space:nowrap;text-decoration:none;">Temizle</a>
+                        <div class="ap-fc-combo" id="apFcLocCombo">
+                            <div class="ap-fc-combo-box" id="apFcLocTrigger" role="button" tabindex="0"
+                                 aria-haspopup="listbox" aria-expanded="false">
+                                <div class="ap-fc-pills" id="apFcLocPills">
+                                    <span class="ap-fc-placeholder">Depo seçilmedi</span>
+                                </div>
+                                <span class="ap-fc-add">+ Depo Seç</span>
+                                <svg class="ap-fc-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </div>
+                            <div id="apFcLocCount" class="ap-fc-summary">0 depo seçili</div>
+
+                            <div class="ap-fc-panel" id="apFcLocPanel">
+                                <div class="ap-fc-panel-search">
+                                    <input type="text" id="apFcLocSearch" placeholder="Depo ara…" autocomplete="off" />
+                                </div>
+                                <div id="apFcLocList" class="ap-fc-panel-list">
+                                    <span id="apFcLocLoading" class="ap-fc-panel-empty">Yükleniyor…</span>
+                                </div>
+                                <div class="ap-fc-panel-footer">
+                                    <a href="#" id="apFcLocClearAll" title="Tüm seçimi kaldır">Temizle</a>
+                                </div>
+                            </div>
                         </div>
-                        <div id="apFcLocList"
-                             style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;
-                                    max-height:220px;overflow-y:auto;
-                                    border:1px solid var(--ap-border);border-radius:8px;min-height:40px;
-                                    background:var(--ap-input-bg);">
-                            <span id="apFcLocLoading" style="color:var(--ap-text-muted);font-size:12px;font-style:italic;">Yükleniyor…</span>
-                        </div>
-                        <div id="apFcLocCount" style="font-size:11px;color:var(--ap-text-muted);margin-top:5px;">0 depo seçili</div>
                     </div>
                 </div>
             </section>
@@ -1211,7 +1297,7 @@ body.app-theme-dark .ap-tab.is-active::before {
         }
     });
 
-    // ── İhtiyaç Kayıtları: depo listesi yönetimi ──────────────────
+    // ── İhtiyaç Kayıtları: depo listesi yönetimi (açılır çoklu-seçim, PageComment Seq 35) ──
     var _fcLocsLoaded = false;
     var _fcLocs       = [];
     var _fcCheckedIds = [];
@@ -1222,26 +1308,31 @@ body.app-theme-dark .ap-tab.is-active::before {
         if (row) row.style.display = (mode === 'SPECIFIC') ? '' : 'none';
     }
 
+    function fcEscapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+        });
+    }
+
     function fcRenderLocList() {
         var el = document.getElementById('apFcLocList');
         if (!el) return;
         if (_fcLocs.length === 0) {
-            el.innerHTML = '<span style="color:var(--ap-text-muted);font-size:12px;font-style:italic;">Aktif depo bulunamadı.</span>';
-            fcUpdateCount();
+            el.innerHTML = '<span class="ap-fc-panel-empty">Aktif depo bulunamadı.</span>';
+            fcOnSelectionChange();
             return;
         }
         el.innerHTML = _fcLocs.map(function(l) {
             var checked = _fcCheckedIds.indexOf(l.id) !== -1;
             var label = l.locationName || l.locationCode || ('Depo ' + l.id);
-            return '<label data-loc-search="' + label.toLowerCase() + '" style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;'
-                 + 'padding:3px 8px 3px 6px;border-radius:6px;cursor:pointer;'
-                 + 'background:var(--ap-surface2);border:1px solid var(--ap-border);white-space:nowrap;">'
-                 + '<input type="checkbox" value="' + l.id + '"' + (checked ? ' checked' : '') + ' style="accent-color:var(--ap-accent);">'
-                 + label
+            return '<label class="ap-fc-option" data-loc-search="' + fcEscapeHtml(label.toLowerCase()) + '">'
+                 + '<input type="checkbox" value="' + l.id + '"' + (checked ? ' checked' : '') + '>'
+                 + fcEscapeHtml(label)
                  + '</label>';
         }).join('');
         fcFilterLocList();  // arama kutusunda zaten yazılmış bir terim varsa yeni render'a uygula
-        fcUpdateCount();
+        fcOnSelectionChange();
     }
 
     // Depo sayısı çok olabileceğinden aranabilir liste — DOM node'ları YENİDEN OLUŞTURMAZ
@@ -1257,6 +1348,34 @@ body.app-theme-dark .ap-tab.is-active::before {
         var n = document.querySelectorAll('#apFcLocList input[type="checkbox"]:checked').length;
         var el = document.getElementById('apFcLocCount');
         if (el) el.textContent = n + ' depo seçili';
+    }
+
+    // Kapalı durumda gösterilen kaldırılabilir pill listesi — tek doğruluk kaynağı DOM'daki
+    // checkbox işaretli durumu (ayrı bir state kopyası tutulmaz, senkron kayması riski olmaz).
+    function fcRenderPills() {
+        var wrap = document.getElementById('apFcLocPills');
+        if (!wrap) return;
+        var checkedIds = [];
+        document.querySelectorAll('#apFcLocList input[type="checkbox"]:checked').forEach(function(cb) {
+            checkedIds.push(parseInt(cb.value, 10));
+        });
+        if (checkedIds.length === 0) {
+            wrap.innerHTML = '<span class="ap-fc-placeholder">Depo seçilmedi</span>';
+            return;
+        }
+        wrap.innerHTML = checkedIds.map(function(id) {
+            var loc = _fcLocs.find(function(l) { return l.id === id; });
+            var label = loc ? (loc.locationName || loc.locationCode || ('Depo ' + id)) : ('Depo ' + id);
+            return '<span class="ap-fc-pill">' + fcEscapeHtml(label)
+                 + '<button type="button" class="ap-fc-pill-remove" data-id="' + id + '" title="Kaldır" aria-label="' + fcEscapeHtml(label) + ' kaldır">&times;</button>'
+                 + '</span>';
+        }).join('');
+    }
+
+    // Panel açıkken yapılan HER seçim değişikliğinde: sayaç + kapalı-durum pill listesi birlikte güncellenir.
+    function fcOnSelectionChange() {
+        fcUpdateCount();
+        fcRenderPills();
     }
 
     // Kayıtlı seçimde artık geçersiz (raf/hücre tipine dönmüş, pasifleşmiş veya silinmiş) id
@@ -1313,9 +1432,61 @@ body.app-theme-dark .ap-tab.is-active::before {
             fcRenderLocList();
         } catch(e) {
             var el = document.getElementById('apFcLocList');
-            if (el) el.innerHTML = '<span style="color:var(--ap-text-muted);font-size:12px;">Yüklenirken hata oluştu.</span>';
+            if (el) el.innerHTML = '<span class="ap-fc-panel-empty">Yüklenirken hata oluştu.</span>';
         }
     }
+
+    // ── Açılır panel yaşam döngüsü (PageComment Seq 35: checkbox-chip listesi → dropdown) ──
+    var fcCombo   = document.getElementById('apFcLocCombo');
+    var fcTrigger = document.getElementById('apFcLocTrigger');
+    var fcPanel   = document.getElementById('apFcLocPanel');
+
+    function fcOpenPanel() {
+        if (!fcCombo || !fcPanel || fcPanel.classList.contains('is-open')) return;
+        fcCombo.classList.add('is-open');
+        fcPanel.classList.add('is-open');
+        fcTrigger.setAttribute('aria-expanded', 'true');
+        var search = document.getElementById('apFcLocSearch');
+        if (search) search.focus();
+    }
+    function fcClosePanel() {
+        if (!fcCombo || !fcPanel || !fcPanel.classList.contains('is-open')) return;
+        fcCombo.classList.remove('is-open');
+        fcPanel.classList.remove('is-open');
+        fcTrigger.setAttribute('aria-expanded', 'false');
+        // Kapanışta arama terimini temizle — bir sonraki açılışta filtrelenmemiş liste görünsün.
+        var search = document.getElementById('apFcLocSearch');
+        if (search && search.value) { search.value = ''; fcFilterLocList(); }
+    }
+    function fcTogglePanel() {
+        if (fcPanel && fcPanel.classList.contains('is-open')) fcClosePanel(); else fcOpenPanel();
+    }
+
+    if (fcTrigger) {
+        fcTrigger.addEventListener('click', function(ev) {
+            // Pill'in "x" kaldır butonuna tıklandıysa yalnızca o depo kaldırılır, panel aç/kapa tetiklenmez.
+            var removeBtn = ev.target.closest('.ap-fc-pill-remove');
+            if (removeBtn) {
+                ev.stopPropagation();
+                var id = parseInt(removeBtn.dataset.id, 10);
+                var cb = document.querySelector('#apFcLocList input[type="checkbox"][value="' + id + '"]');
+                if (cb) { cb.checked = false; fcOnSelectionChange(); }
+                return;
+            }
+            fcTogglePanel();
+        });
+        fcTrigger.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); fcTogglePanel(); }
+        });
+    }
+    // Panel dışına tıklama → kapat (arama kutusu/seçenek listesi/Temizle panel içinde olduğundan etkilenmez)
+    document.addEventListener('click', function(ev) {
+        if (fcCombo && !fcCombo.contains(ev.target)) fcClosePanel();
+    });
+    // Esc → kapat (odak arama kutusundayken de çalışır, event bubbling engellenmiyor)
+    document.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Escape') fcClosePanel();
+    });
 
     // Radio değişiklik olayları
     document.querySelectorAll('input[name="apFcLocMode"]').forEach(function(r) {
@@ -1329,12 +1500,12 @@ body.app-theme-dark .ap-tab.is-active::before {
     document.getElementById('apFcLocClearAll')?.addEventListener('click', function(ev) {
         ev.preventDefault();
         document.querySelectorAll('#apFcLocList input[type="checkbox"]:checked').forEach(function(cb) { cb.checked = false; });
-        fcUpdateCount();
+        fcOnSelectionChange();
     });
 
-    // Seçili sayaç — checkbox değişince güncelle (event delegation, dinamik render sonrası da çalışır)
+    // Seçim değişince: sayaç + kapalı-durum pill listesi (event delegation, dinamik render sonrası da çalışır)
     document.getElementById('apFcLocList')?.addEventListener('change', function(ev) {
-        if (ev.target && ev.target.type === 'checkbox') fcUpdateCount();
+        if (ev.target && ev.target.type === 'checkbox') fcOnSelectionChange();
     });
 
     // Tab tıklamasında config'i yükle

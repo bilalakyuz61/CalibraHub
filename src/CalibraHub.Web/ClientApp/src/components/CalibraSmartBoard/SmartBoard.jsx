@@ -18,11 +18,12 @@
  *   }
  */
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw } from 'lucide-react'
+import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download, FileSpreadsheet, RefreshCw, Layers } from 'lucide-react'
 import SmartCard from './SmartCard'
 import SmartTable from './SmartTable'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
 import SmartColumnSettings from './SmartColumnSettings'
+import SmartGroupPanel from './SmartGroupPanel'
 import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
 import { loadWidgetConfig } from '../../services/widgetConfigService'
