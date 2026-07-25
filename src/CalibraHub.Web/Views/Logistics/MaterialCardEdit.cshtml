@@ -1,8 +1,17 @@
+@using CalibraHub.Application.Constants
 @{
     ViewData["Title"] = "Malzeme Karti Duzenle";
     ViewData["FormCode"] = "ITEM_EDIT";
     ViewData["BodyClass"] = "page-material-card-edit workspace-frame-body";
     var editId = (int)(ViewData["MaterialCardEditId"] ?? 0);
+
+    // Belge Kilitleri özet kartı (Seq 30, 2026-07-25): kod→etiket eşlemesi TEK KAYNAK
+    // ItemDocumentLockTypes kataloğundan (CalibraHub.Application.Constants) JS'e taşınır —
+    // eski 9 kodluk elle-kopya liste (_mceDocLockTypes) kaldırıldı. Katalogda olmayan kod
+    // gelirse JS tarafı ham kodu gösterir (bkz. mceDocLockRenderSummary).
+    var docLockLabelMap = new Dictionary<string, string>();
+    foreach (var lockType in ItemDocumentLockTypes.All) { docLockLabelMap[lockType.Code] = lockType.Label; }
+    var docLockCatalogJson = System.Text.Json.JsonSerializer.Serialize(docLockLabelMap);
 }
 
 @section Styles {
@@ -1897,12 +1906,33 @@
                     <span style="font-size:.72rem;color:var(--mce-t40, rgba(255,255,255,.4));flex:1 1 200px;">Ana birim cinsinden. Depo bazında ayrı bir asgari stok girilmezse bu değer geçerlidir.</span>
                 </div>
 
-                <!-- Belge Kilitleri -->
+                <!-- Belge Kilitleri — salt-okunur özet. Düzenleme merkezi ekrana taşındı:
+                     /Logistics/ItemDocumentLocks (Seq 30, 2026-07-25). Eski switch-grid +
+                     mceDocLockSave() kaldırıldı; bu kart artık yalnızca GET ile okuyup
+                     özetler (mceDocLockLoad kalır, render'ı değişti). -->
+                <style>
+                    /* Light default → dark override (CLAUDE.md kuralı) — aynı renk değerleri,
+                       yalnızca sınıf tabanlı seçici yönü doğru: body.app-theme-dark override eder. */
+                    .mce-doclock-chip {
+                        display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px;
+                        font-size:.72rem; font-weight:600; white-space:nowrap;
+                        background:rgba(220,38,38,.08); color:#dc2626; border:1px solid rgba(220,38,38,.22);
+                    }
+                    body.app-theme-dark .mce-doclock-chip { background:rgba(239,68,68,.14); color:#f87171; border-color:rgba(239,68,68,.28); }
+                    .mce-doclock-link { color:#4f46e5; text-decoration:none; }
+                    .mce-doclock-link:hover { color:#4338ca; text-decoration:underline; }
+                    body.app-theme-dark .mce-doclock-link { color:#a5b4fc; }
+                    body.app-theme-dark .mce-doclock-link:hover { color:#c7d2fe; }
+                </style>
                 <p class="mce-card-title" style="font-size:.9rem;margin-bottom:6px;">Belge Kilitleri</p>
                 <div style="font-size:.78rem;color:var(--mce-t45, rgba(255,255,255,.45));margin-bottom:12px;">
                     Kilitlenen belge tiplerinde bu malzeme kalem olarak <strong>seçilemez</strong>. Örneğin satış teklifinde kullanılmasını istemiyorsanız kilitleyin.
                 </div>
-                <div id="mceDocLockGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;"></div>
+                <div id="mceDocLockSummary" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border-radius:10px;background:var(--mce-panel-bg, rgba(255,255,255,0.04));border:1px solid var(--mce-panel-border, rgba(255,255,255,0.08));">
+                    <span id="mceDocLockSummaryText" style="font-size:.8rem;color:var(--mce-t70, rgba(255,255,255,.7));">Yükleniyor…</span>
+                    <div id="mceDocLockChips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                    <a href="/Logistics/ItemDocumentLocks" id="mceDocLockEditLink" class="mce-doclock-link" onclick="return mceDocLockOpenEdit(event)" style="margin-left:auto;font-size:.78rem;font-weight:600;white-space:nowrap;">Belge Kilitlerini Düzenle →</a>
+                </div>
                 <div id="mceDocLockError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
 
                 <!-- Depolar ve Asgari Stok -->
@@ -3287,13 +3317,11 @@
                 }).catch(function(err) { console.warn('[MCE] location save hatasi:', err); });
             }
 
-            // ── Belge kilitlerini (planlama) de ayni save akisinda kaydet ──
-            if (typeof window.mceDocLockSave === 'function' && currentId > 0) {
-                window.mceDocLockSave().then(function(res) {
-                    if (res && res.success === false && !res.skipped) {
-                        console.warn('[MCE] belge kilidi kaydi basarisiz:', res.message);
-                    }
-                }).catch(function(err) { console.warn('[MCE] doc-lock save hatasi:', err); });
+            // ── Belge kilitleri artik bu ekrandan DUZENLENMIYOR (salt-okunur ozet,
+            // Seq 30) — mceDocLockSave() kaldirildi, kaydedilecek bir sey yok. Kayit
+            // sonrasi ozet metnini guncel Id ile tazelemek icin sadece reload cagirilir.
+            if (currentId > 0 && typeof window.mceDocLockLoad === 'function') {
+                try { window.mceDocLockLoad(); } catch (e) { console.warn('[MCE] doc-lock ozet yenileme hatasi:', e); }
             }
 
             // ── Ozellik eslestirmelerini de ayni save akisinda kaydet ──
@@ -3657,7 +3685,7 @@
                 setActive(navLocations);
                 activateSection('locations');
                 if (currentId > 0) mceLocLoad();
-                mceDocLockLoad(); // yeni kartta da toggle grid render olsun (kayıt sonrası persist)
+                mceDocLockLoad(); // salt-okunur özeti tazele (yeni kartta "kaydedilmeden yönetilemez" mesajını gösterir)
             });
         }
 
@@ -4804,29 +4832,22 @@
         _mceLocLinks[idx].minStock = (isNaN(n) || n < 0) ? 0 : n;
     };
 
-    // ── Belge Kilitleri (planlama) ─────────────────────────────────
-    var _mceDocLockTypes = [
-        { code: 'satis_teklifi',  label: 'Satış Teklifi' },
-        { code: 'satis_siparisi', label: 'Satış Siparişi' },
-        { code: 'alis_talebi',    label: 'Alış Talebi' },
-        { code: 'alis_teklifi',   label: 'Alış Teklifi' },
-        { code: 'alis_siparisi',  label: 'Alış Siparişi' },
-        { code: 'depo_giris',     label: 'Depo Giriş' },
-        { code: 'depo_cikis',     label: 'Depo Çıkış' },
-        { code: 'depo_transfer',  label: 'Depo Transfer' },
-        { code: 'sayim',          label: 'Sayım' }
-    ];
-    var _mceDocLocks = {};
+    // ── Belge Kilitleri (planlama) — SALT-OKUNUR ÖZET ────────────────
+    // Düzenleme merkezi ekrana taşındı: /Logistics/ItemDocumentLocks (Seq 30,
+    // 2026-07-25). Kod→etiket eşlemesi Razor'dan (ItemDocumentLockTypes kataloğu,
+    // CalibraHub.Application.Constants — TEK KAYNAK) enjekte edilir; JS'te elle
+    // ikinci bir kod listesi TUTULMAZ (eski 9 kodluk _mceDocLockTypes kopyası
+    // senkron borcu üretiyordu, kaldırıldı).
+    var _mceDocLockLabels = @Html.Raw(docLockCatalogJson);
+    var _mceDocLocks = [];
 
     window.mceDocLockLoad = function() {
-        if (!currentId || currentId <= 0) { _mceDocLocks = {}; mceDocLockRender(); return; }
+        if (!currentId || currentId <= 0) { _mceDocLocks = []; mceDocLockRenderSummary(); return; }
         fetch('/Logistics/GetItemDocumentLocks?itemId=' + currentId, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                _mceDocLocks = {};
-                var arr = (data && data.docTypes) ? data.docTypes : [];
-                arr.forEach(function(c) { _mceDocLocks[c] = true; });
-                mceDocLockRender();
+                _mceDocLocks = (data && data.docTypes) ? data.docTypes : [];
+                mceDocLockRenderSummary();
             })
             .catch(function(e) {
                 var err = document.getElementById('mceDocLockError');
@@ -4834,38 +4855,57 @@
             });
     };
 
-    function mceDocLockRender() {
-        var grid = document.getElementById('mceDocLockGrid');
-        if (!grid) return;
-        grid.innerHTML = _mceDocLockTypes.map(function(t) {
-            var on = !!_mceDocLocks[t.code];
-            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-radius:8px;background:var(--mce-panel-bg, rgba(255,255,255,0.04));border:1px solid var(--mce-panel-border, rgba(255,255,255,0.08));">' +
-                '<span style="font-size:.8rem;color:var(--mce-t88, rgba(226,232,240,.9));">' + t.label + '</span>' +
-                '<label class="mce-switch">' +
-                    '<input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="mceDocLockToggle(\'' + t.code + '\', this.checked)" />' +
-                    '<span class="mce-switch-track"></span>' +
-                '</label>' +
-            '</div>';
-        }).join('');
+    function mceDocLockRenderSummary() {
+        var textEl = document.getElementById('mceDocLockSummaryText');
+        var chipsEl = document.getElementById('mceDocLockChips');
+        var linkEl = document.getElementById('mceDocLockEditLink');
+        if (!textEl || !chipsEl) return;
+
+        // Yeni kayit (henuz kaydedilmedi) — bu ekrandan kilit yonetimi yok, link gizli.
+        if (!currentId || currentId <= 0) {
+            textEl.textContent = 'Belge kilitleri, kart kaydedildikten sonra yönetilebilir.';
+            chipsEl.innerHTML = '';
+            if (linkEl) linkEl.style.display = 'none';
+            return;
+        }
+
+        if (linkEl) linkEl.style.display = '';
+
+        if (!_mceDocLocks.length) {
+            textEl.textContent = 'Bu malzemede belge kilidi yok.';
+            chipsEl.innerHTML = '';
+            return;
+        }
+
+        textEl.textContent = _mceDocLocks.length + ' belge tipinde kilitli:';
+        chipsEl.innerHTML = '';
+        _mceDocLocks.forEach(function(code) {
+            // Katalogda olmayan (bilinmeyen) kod gelirse ham kodu goster — gizleme.
+            var label = _mceDocLockLabels[code] || code;
+            var chip = document.createElement('span');
+            chip.className = 'mce-doclock-chip';
+            chip.textContent = label; // textContent → HTML-escape gerekmez
+            chipsEl.appendChild(chip);
+        });
     }
 
-    window.mceDocLockToggle = function(code, checked) {
-        if (checked) _mceDocLocks[code] = true;
-        else delete _mceDocLocks[code];
-    };
-
-    window.mceDocLockSave = function() {
-        if (!currentId || currentId <= 0) return Promise.resolve({ success: true, skipped: true });
-        var codes = Object.keys(_mceDocLocks).filter(function(c) { return _mceDocLocks[c]; });
-        return fetch('/Logistics/SaveItemDocumentLocks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ itemId: currentId, docTypes: codes })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { return d || { success: false }; })
-        .catch(function(e) { return { success: false, message: e.message }; });
+    // "Belge Kilitlerini Düzenle →" — merkezi yönetim ekranını workspace tab'da açar
+    // (_AuditTrailHost / smvOpenDoc ile aynı desen). Shell erişilemezse (cross-origin/
+    // yoksa) normal <a href> navigasyonu devam eder (return true → preventDefault yok).
+    window.mceDocLockOpenEdit = function(ev) {
+        try {
+            var topWin = window.top || window;
+            if (topWin && topWin.CalibraHub && typeof topWin.CalibraHub.openWorkspaceTab === 'function') {
+                if (ev && ev.preventDefault) ev.preventDefault();
+                topWin.CalibraHub.openWorkspaceTab({
+                    url: '/Logistics/ItemDocumentLocks',
+                    title: 'Malzeme Belge Kilitleri',
+                    matchPath: '/Logistics/ItemDocumentLocks'
+                });
+                return false;
+            }
+        } catch (e) { /* cross-origin — shell'e erişilemedi, normal href'e düş */ }
+        return true;
     };
 
     /**
