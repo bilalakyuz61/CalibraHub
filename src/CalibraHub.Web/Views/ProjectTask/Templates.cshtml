@@ -17,6 +17,20 @@
     <button type="button" class="tt-btn tt-btn--primary" id="tt-new-btn">+ Yeni Şablon</button>
   </div>
 
+  <div class="tt-info">
+    <span class="tt-info__icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 11v5"/><circle cx="12" cy="8" r=".5" fill="currentColor"/></svg>
+    </span>
+    <div class="tt-info__body">
+      <strong>Görev şablonları ne işe yarar?</strong>
+      Tekrar eden proje akışlarını (numune süreci, APQP adımları, devreye alma kontrol listesi gibi) bir kez tanımlayıp
+      her yeni projede tek tıkla uygularsınız. Şablon, AR-GE projesindeki <em>Görevler</em> sekmesinden
+      "Şablondan Uygula" ile seçilir; satırlar sırasıyla görev listesine eklenir. Satırda <em>Atanan Kullanıcı</em>
+      seçiliyse görev o kişiye atanmış açılır ve kendisine bildirim gider. <em>Varsayılan Sıralı</em> işaretliyse
+      projede sıralı ilerleme otomatik açılır — önceki görev tamamlanmadan sonraki kapatılamaz.
+    </div>
+  </div>
+
   <div id="tt-form" class="tt-form" style="display:none;">
     <input type="hidden" id="tt-edit-id" value="" />
     <div class="tt-form__row">
@@ -80,6 +94,15 @@
   .tt-btn--primary:hover{background:#4338ca;}
   .tt-btn--sm{font-size:12px;padding:5px 10px;}
   .tt-btn:disabled{opacity:.55;cursor:not-allowed;}
+  .tt-info{display:flex;gap:12px;align-items:flex-start;border:1px solid rgba(99,102,241,.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;background:rgba(99,102,241,.06);}
+  .tt-info__icon{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;color:#4f46e5;flex-shrink:0;margin-top:1px;}
+  .tt-info__icon svg{width:20px;height:20px;}
+  .tt-info__body{font-size:12.5px;line-height:1.65;color:var(--app-text-muted,#475569);}
+  .tt-info__body strong{display:block;font-size:13px;color:var(--app-text,#0f172a);margin-bottom:2px;}
+  .tt-info__body em{font-style:normal;font-weight:600;color:#4f46e5;}
+  body.app-theme-dark .tt-info{background:rgba(99,102,241,.12);border-color:rgba(129,140,248,.3);}
+  body.app-theme-dark .tt-info__icon{color:#818cf8;}
+  body.app-theme-dark .tt-info__body em{color:#818cf8;}
   .tt-form{border:1px solid var(--app-border,#e2e8f0);border-radius:12px;padding:16px;margin-bottom:18px;background:var(--app-surface-2,rgba(99,102,241,.04));}
   .tt-form__row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:10px;}
   .tt-field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
