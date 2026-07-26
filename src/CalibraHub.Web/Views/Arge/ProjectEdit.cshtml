@@ -65,10 +65,6 @@
         <span>Maliyet</span>
       </button>
       }
-      <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="apNavWidgets" style="display:none;">
-        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-        <span>Ek Alanlar</span>
-      </button>
     </aside>
 
     <section class="ux-edit-content">
@@ -133,6 +129,21 @@
         </div>
 
         <div id="ap-err" style="display:none;" class="ux-err"></div>
+
+        @* Üst-bilgi özel alanları (ARGE_PROJECT_EDIT) — belge üst-bilgisi gibi Genel Bilgiler'in
+           içine inline gelir. Alan tanımlıysa görünür; yoksa gizli kalır. *@
+        <div id="apWidgetsSection" class="ap-widgets-inline" style="display:none;">
+          <div class="ap-widgets-inline__head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z"/></svg>
+            <span>Ek Alanlar</span>
+          </div>
+          <div class="ux-dyn-widgets">
+            <div id="apDynamicWidgets"
+                 data-form-code="ARGE_PROJECT_EDIT"
+                 data-record-id="@(Model?.DocumentId.ToString() ?? "")">
+            </div>
+          </div>
+        </div>
       </div>
 
       @if (!isNew)
@@ -262,6 +273,19 @@
             <label for="at-desc">Açıklama</label>
             <textarea id="at-desc" maxlength="1000" placeholder="Görev notu…"></textarea>
           </div>
+
+          @* Görev-kalem özel alanları (PROJECT_TASK) — belge kalemi gibi her görevin kendi
+             ek alanları. Alan tanımlıysa görünür; yoksa gizli. Görev id alındıktan sonra kaydolur. *@
+          <div id="atWidgetsSection" class="ap-widgets-inline" style="display:none;">
+            <div class="ap-widgets-inline__head">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z"/></svg>
+              <span>Ek Alanlar</span>
+            </div>
+            <div class="ux-dyn-widgets">
+              <div id="atDynamicWidgets" data-form-code="PROJECT_TASK" data-record-id=""></div>
+            </div>
+          </div>
+
           <div id="at-form-err" style="display:none;" class="ux-err"></div>
           <div style="display:flex;gap:8px;">
             <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="at-save">Kaydet</button>
@@ -333,16 +357,6 @@
       </div>
       }
 
-      <div class="ux-edit-pane" data-tab="widgets">
-        <h2>Ek Alanlar</h2>
-        <div class="ux-edit-hint">Admin → Widget Tanımları → ARGE_PROJECT_EDIT'te tanımlanan ek alanlar.</div>
-        <div class="ux-dyn-widgets">
-          <div id="apDynamicWidgets"
-               data-form-code="ARGE_PROJECT_EDIT"
-               data-record-id="@(Model?.DocumentId.ToString() ?? "")">
-          </div>
-        </div>
-      </div>
     </section>
   </div>
 </div>
@@ -454,6 +468,12 @@
   body.app-theme-dark .at-progress__pct{color:#818cf8;}
   body.app-theme-dark .at-progress__fill{background:#6366f1;}
   body.app-theme-dark .at-card__no{color:#818cf8;}
+
+  /* ── Inline widget bölümü (üst-bilgi + görev-kalem özel alanları) ── */
+  .ap-widgets-inline{margin-top:18px;padding-top:16px;border-top:1px dashed var(--app-border,#e2e8f0);}
+  .ap-widgets-inline__head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--app-text,#0f172a);margin-bottom:12px;}
+  .ap-widgets-inline__head svg{width:16px;height:16px;color:#4f46e5;flex-shrink:0;}
+  body.app-theme-dark .ap-widgets-inline__head svg{color:#818cf8;}
 </style>
 
 @Html.AntiForgeryToken()

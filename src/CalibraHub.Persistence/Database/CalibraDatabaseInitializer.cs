@@ -12591,7 +12591,10 @@ END;";
             ("ACTIVITY_REASON_EDIT","Düzenleme",                        "Üretim",               "Aktivite Sebepleri",       565,  true),
 
             // ── AR-GE ────────────────────────────────────────────────────────
-            ("PROJECT_TASK",        "Proje Görevleri",                  "AR-GE",                null,                       590,  false), // ProjectTaskController (Görevler sekmesi + Görevlerim + şablonlar)
+            // IsWidgetForm=true: PROJECT_TASK hem controller yetki kodu HEM görev-kalem widget formu
+            // (SALES_QUOTE'un hem yetki hem header widget formu olması gibi). Görev başına özel
+            // alanlar Widget Tanımları → "Proje Görevleri" altında tanımlanır (recordId = görev Id).
+            ("PROJECT_TASK",        "Proje Görevleri",                  "AR-GE",                null,                       590,  true), // ProjectTaskController + görev-kalem widget formu
 
             // ── Finans ───────────────────────────────────────────────────────
             // 2026-06-13 — CONTACT_EDIT, CONTACTS ile birleştirildi (liste + düzenleme tek FormCode).
