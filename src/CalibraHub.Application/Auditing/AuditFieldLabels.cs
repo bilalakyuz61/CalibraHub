@@ -150,7 +150,6 @@ public static class AuditFieldLabels
             ["CompletedByUserId"] = "Tamamlayan",
             ["SequentialTasks"] = "Sıralı İlerleme",
             ["IsSequentialDefault"] = "Varsayılan Sıralı",
-            ["DefaultAssignedUserId"] = "Varsayılan Atanan",
             ["TemplateLineId"] = "Şablon Satırı",
             // Kart alanları
             ["Email"] = "E-posta",

@@ -122,9 +122,8 @@
   .tt-line{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;}
   .tt-line__no{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:34px;border-radius:8px;background:var(--app-surface,#fff);border:1px solid var(--app-border,#e2e8f0);color:#4f46e5;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;}
   .tt-line input{flex:1 1 auto;font-size:13px;padding:8px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:8px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);}
-  .tt-line input.tt-line__title{flex:2 1 160px;}
-  .tt-line input.tt-line__desc{flex:3 1 180px;}
-  .tt-line select.tt-line__assignee{flex:1 1 130px;min-width:110px;font-size:12.5px;padding:8px 6px;border:1px solid var(--app-border,#e2e8f0);border-radius:8px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);}
+  .tt-line input.tt-line__title{flex:2 1 180px;}
+  .tt-line input.tt-line__desc{flex:3 1 220px;}
   .tt-line__rm{width:34px;height:34px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:var(--app-surface,#fff);color:var(--danger,#ef4444);cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;}
   .tt-line__rm:hover{background:rgba(239,68,68,.1);}
   .tt-form__acts{display:flex;gap:8px;margin-top:12px;}
@@ -145,7 +144,7 @@
   .tt-act--del:hover{background:rgba(239,68,68,.1);}
   body.app-theme-dark .tt-btn{background:var(--app-surface,#1e293b);}
   body.app-theme-dark .tt-btn--primary{background:#6366f1;border-color:#6366f1;}
-  body.app-theme-dark .tt-line__no,body.app-theme-dark .tt-line input,body.app-theme-dark .tt-line select,body.app-theme-dark .tt-field input,body.app-theme-dark .tt-field textarea,body.app-theme-dark .tt-line__rm,body.app-theme-dark .tt-act{background:var(--app-surface,#1e293b);}
+  body.app-theme-dark .tt-line__no,body.app-theme-dark .tt-line input,body.app-theme-dark .tt-field input,body.app-theme-dark .tt-field textarea,body.app-theme-dark .tt-line__rm,body.app-theme-dark .tt-act{background:var(--app-surface,#1e293b);}
 </style>
 
 @Html.AntiForgeryToken()
@@ -163,28 +162,6 @@ window.ttCloseDelModal = function () {
     var formEl = document.getElementById('tt-form');
     var linesEl = document.getElementById('tt-lines');
     var map = {};
-    var users = [];
-
-    // Atanabilir kullanıcılar — satır dropdown'ları için bir kez yüklenir; geç gelirse
-    // ekrandaki mevcut select'ler de doldurulur (data-current korunur).
-    fetch('/ProjectTask/UsersLookup', { credentials: 'same-origin' })
-        .then(function (r) { return r.ok ? r.json() : []; })
-        .then(function (list) {
-            users = list || [];
-            Array.prototype.forEach.call(linesEl.querySelectorAll('.tt-line__assignee'), fillAssignee);
-        })
-        .catch(function () { });
-
-    function fillAssignee(sel) {
-        var current = sel.getAttribute('data-current') || sel.value || '';
-        sel.innerHTML = '<option value="">— Atanmadı —</option>';
-        users.forEach(function (u) {
-            var o = document.createElement('option');
-            o.value = u.id; o.textContent = u.name;
-            if (String(u.id) === String(current)) o.selected = true;
-            sel.appendChild(o);
-        });
-    }
 
     function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
     function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -204,10 +181,8 @@ window.ttCloseDelModal = function () {
             '<span class="tt-line__no"></span>' +
             '<input type="text" class="tt-line__title" maxlength="200" placeholder="Görev başlığı *" value="' + esc(line ? line.title : '') + '" />' +
             '<input type="text" class="tt-line__desc" maxlength="1000" placeholder="Açıklama (opsiyonel)" value="' + esc(line ? (line.description || '') : '') + '" />' +
-            '<select class="tt-line__assignee" title="Atanan Kullanıcı" data-current="' + (line && line.defaultAssignedUserId ? line.defaultAssignedUserId : '') + '"></select>' +
             '<button type="button" class="tt-line__rm" title="Satırı kaldır">×</button>';
         row.querySelector('.tt-line__rm').addEventListener('click', function () { row.remove(); renumber(); });
-        fillAssignee(row.querySelector('.tt-line__assignee'));
         linesEl.appendChild(row);
         renumber();
         return row;
@@ -250,8 +225,7 @@ window.ttCloseDelModal = function () {
                 id: 0,
                 title: title,
                 description: (row.querySelector('.tt-line__desc').value || '').trim() || null,
-                orderNo: i + 1,
-                defaultAssignedUserId: parseInt(row.querySelector('.tt-line__assignee').value) || null
+                orderNo: i + 1
             });
         });
         if (!lines.length) { errEl.textContent = 'En az bir görev satırı girilmelidir.'; errEl.style.display = ''; return; }
@@ -313,10 +287,7 @@ window.ttCloseDelModal = function () {
             map[t.id] = t;
             var chips = '<span class="tt-chip tt-chip--count">' + t.lines.length + ' görev</span>' +
                 (t.isSequentialDefault ? '<span class="tt-chip tt-chip--seq">Sıralı</span>' : '');
-            var lineTxt = t.lines.map(function (l, i) {
-                var who = l.defaultAssignedUserName ? ' <em>(' + esc(l.defaultAssignedUserName) + ')</em>' : '';
-                return (i + 1) + '. ' + esc(l.title) + who;
-            }).join(' &nbsp;→&nbsp; ');
+            var lineTxt = t.lines.map(function (l, i) { return (i + 1) + '. ' + esc(l.title); }).join(' &nbsp;→&nbsp; ');
             return '<div class="tt-card">' +
                 '<div class="tt-card__head"><strong>' + esc(t.name) + '</strong>' + chips + '</div>' +
                 (t.description ? '<div class="tt-card__desc">' + esc(t.description) + '</div>' : '') +

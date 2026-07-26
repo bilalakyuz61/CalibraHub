@@ -118,7 +118,7 @@ public sealed class ProjectTaskController : Controller
         if (request is null) return Json(new { ok = false, error = "Geçersiz istek." });
         try
         {
-            var (ok, error, created, sequentialEnabled) = await _tasks.ApplyTemplateAsync(request, CurrentUserId(), CurrentCompanyId(), ct);
+            var (ok, error, created, sequentialEnabled) = await _tasks.ApplyTemplateAsync(request, CurrentUserId(), ct);
             return Json(new { ok, error, created, sequentialEnabled });
         }
         catch (Exception ex)
@@ -162,7 +162,7 @@ public sealed class ProjectTaskController : Controller
         if (request is null) return Json(new { ok = false, error = "Geçersiz istek." });
         try
         {
-            var (ok, error, id) = await _tasks.SaveTemplateAsync(request, CurrentUserId(), CurrentCompanyId(), ct);
+            var (ok, error, id) = await _tasks.SaveTemplateAsync(request, CurrentUserId(), ct);
             return Json(new { ok, error, id });
         }
         catch (Exception ex)

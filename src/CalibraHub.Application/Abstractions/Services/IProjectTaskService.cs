@@ -45,14 +45,14 @@ public interface IProjectTaskService
 
     Task<IReadOnlyCollection<ProjectTaskTemplateDto>> ListTemplatesAsync(CancellationToken ct);
 
-    Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct);
+    Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, CancellationToken ct);
 
     Task<(bool Ok, string? Error)> DeleteTemplateAsync(int templateId, int? userId, CancellationToken ct);
 
     /// <summary>
-    /// Şablon satırlarını projeye görev olarak uygular (mevcut görevlerin arkasına).
-    /// Şablon IsSequentialDefault ise ve projede kapalıysa sıralı mod açılır
-    /// (SequentialEnabled=true döner — UI kullanıcıya söyler, sessiz yan etki yok).
+    /// Şablon satırlarını projeye ATANMAMIŞ görev olarak uygular (mevcut görevlerin arkasına).
+    /// Kişi ataması projede görev bazında yapılır. Şablon IsSequentialDefault ise ve projede
+    /// kapalıysa sıralı mod açılır (SequentialEnabled=true döner — UI kullanıcıya söyler).
     /// </summary>
-    Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct);
+    Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, CancellationToken ct);
 }

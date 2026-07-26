@@ -363,7 +363,7 @@ public sealed class ProjectTaskService : IProjectTaskService
     public Task<IReadOnlyCollection<ProjectTaskTemplateDto>> ListTemplatesAsync(CancellationToken ct)
         => _tasks.ListTemplatesAsync(ct);
 
-    public async Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct)
+    public async Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, CancellationToken ct)
     {
         var name = request.Name?.Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -384,18 +384,8 @@ public sealed class ProjectTaskService : IProjectTaskService
         if (all.Any(t => t.Id != request.Id && string.Equals(t.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)))
             return (false, $"Aynı isimde başka bir şablon zaten tanımlı: '{name}'", 0);
 
-        // Satır atamaları: yalnız oturum şirketinin aktif kullanıcılarına izin ver
-        // (tek sorgu ile doğrula — çapraz-şirket ataması yasak)
-        var assignedIds = lines.Where(l => l.DefaultAssignedUserId is > 0)
-            .Select(l => l.DefaultAssignedUserId!.Value).Distinct().ToList();
-        if (assignedIds.Count > 0)
-        {
-            var validUsers = (await GetAssignableUsersAsync(companyId, ct)).Select(u => u.Id).ToHashSet();
-            var invalid = assignedIds.FirstOrDefault(id => !validUsers.Contains(id));
-            if (invalid != 0)
-                return (false, "Şablon satırındaki atanan kullanıcı bulunamadı veya bu şirkete ait değil.", 0);
-        }
-
+        // NOT: Şablon satırında atanan kullanıcı YOK — şablon tekrar kullanılabilir kalıptır;
+        // kişi ataması projeye özgüdür ve görev bazında (Görevler sekmesi) yapılır.
         var template = new ProjectTaskTemplate
         {
             Id = request.Id,
@@ -413,7 +403,6 @@ public sealed class ProjectTaskService : IProjectTaskService
                 Title = l.Title.Trim(),
                 Description = NormalizeDescription(l.Description),
                 OrderNo = i + 1,
-                DefaultAssignedUserId = l.DefaultAssignedUserId is > 0 ? l.DefaultAssignedUserId : null,
                 CreatedById = userId,
             })
             .ToList();
@@ -442,7 +431,7 @@ public sealed class ProjectTaskService : IProjectTaskService
         return (true, null);
     }
 
-    public async Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct)
+    public async Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, CancellationToken ct)
     {
         var project = await _argeProjects.GetByDocumentIdAsync(request.ProjectId, ct);
         if (project is null)
@@ -454,7 +443,7 @@ public sealed class ProjectTaskService : IProjectTaskService
             return (false, "Şablonda uygulanacak görev satırı yok.", 0, false);
 
         // Mevcut görevlerin ARKASINA eklenir — mükerrer uygulamada sıra çakışmaz.
-        // Satırda varsayılan atanan varsa görev atanmış doğar (Daysil 3.3.8.2.3).
+        // Görevler ATANMAMIŞ doğar; kişi ataması projede görev bazında yapılır (şablon jeneriktir).
         var baseOrder = await _tasks.GetMaxOrderNoAsync(request.ProjectId, ct);
         var tasks = template.Lines
             .OrderBy(l => l.OrderNo)
@@ -464,32 +453,13 @@ public sealed class ProjectTaskService : IProjectTaskService
                 Title = l.Title,
                 Description = l.Description,
                 OrderNo = baseOrder + i + 1,
-                AssignedUserId = l.DefaultAssignedUserId,
                 TemplateLineId = l.Id,
                 CreatedById = userId,
             })
             .ToList();
 
-        var insertedIds = await _tasks.InsertBatchAsync(tasks, ct);
-        var created = insertedIds.Count;
+        var created = (await _tasks.InsertBatchAsync(tasks, ct)).Count;
         await _tasks.RecalcProjectProgressAsync(request.ProjectId, userId, ct);
-
-        // Atanmış doğan görevler için bildirim (kişi başına görev başına; kendine-atama atlanır).
-        // Kullanıcı kayıtları tek tek çekilir ama önbelleklenir (şablonlar küçük).
-        var userCache = new Dictionary<int, UserProfile?>();
-        for (var i = 0; i < tasks.Count; i++)
-        {
-            var task = tasks[i];
-            if (task.AssignedUserId is not int uid) continue;
-            if (!userCache.TryGetValue(uid, out var assignee))
-            {
-                assignee = await _users.GetByIdAsync(uid, ct);
-                userCache[uid] = assignee;
-            }
-            // Şirket dışı/pasif atanan (eski şablon kaydı olabilir) → bildirim atlanır
-            if (assignee is null || !assignee.IsActive || assignee.CompanyId != companyId) continue;
-            await NotifyAssignmentAsync(assignee, insertedIds[i], task.Title, project.Name, task.TargetDate, userId, ct);
-        }
 
         // Şablon sıralı-varsayılan ise ve projede kapalıysa aç — cevapta bildirilir (sessiz yan etki yok).
         var sequentialEnabled = false;

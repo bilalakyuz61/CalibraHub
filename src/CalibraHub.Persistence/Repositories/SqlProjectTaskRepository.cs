@@ -449,11 +449,9 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         var sql = $"""
             SELECT [Id],[Name],[Description],[IsSequentialDefault] FROM {_tplTable}
             WHERE [IsActive]=1 ORDER BY [Name];
-            SELECT l.[Id], l.[TemplateId], l.[Title], l.[Description], l.[OrderNo],
-                   l.[DefaultAssignedUserId], u.[FullName] AS [DefaultAssignedUserName]
+            SELECT l.[Id], l.[TemplateId], l.[Title], l.[Description], l.[OrderNo]
             FROM {_tplLineTable} l
             INNER JOIN {_tplTable} t ON t.[Id] = l.[TemplateId] AND t.[IsActive] = 1
-            LEFT JOIN {_usersTable} u ON u.[Id] = l.[DefaultAssignedUserId]
             WHERE l.[IsActive]=1 ORDER BY l.[TemplateId], l.[OrderNo], l.[Id];
             """;
         var heads = new List<(int Id, string Name, string? Desc, bool Seq)>();
@@ -479,9 +477,7 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 Id: r.GetInt32(0),
                 Title: r.GetString(2),
                 Description: r.IsDBNull(3) ? null : r.GetString(3),
-                OrderNo: r.GetInt32(4),
-                DefaultAssignedUserId: r.IsDBNull(5) ? null : r.GetInt32(5),
-                DefaultAssignedUserName: r.IsDBNull(6) ? null : r.GetString(6)));
+                OrderNo: r.GetInt32(4)));
         }
         return heads
             .Select(h => new ProjectTaskTemplateDto(h.Id, h.Name, h.Desc, h.Seq,
@@ -547,14 +543,13 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = $"""
-                    INSERT INTO {_tplLineTable} ([TemplateId],[Title],[Description],[OrderNo],[DefaultAssignedUserId],[CreatedById],[Created])
-                    VALUES (@Tpl,@Title,@Desc,@Order,@DefAssigned,@Cre,SYSUTCDATETIME());
+                    INSERT INTO {_tplLineTable} ([TemplateId],[Title],[Description],[OrderNo],[CreatedById],[Created])
+                    VALUES (@Tpl,@Title,@Desc,@Order,@Cre,SYSUTCDATETIME());
                     """;
                 cmd.Parameters.Add(new SqlParameter("@Tpl", templateId));
                 cmd.Parameters.Add(new SqlParameter("@Title", line.Title));
                 cmd.Parameters.Add(new SqlParameter("@Desc", (object?)line.Description ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Order", line.OrderNo));
-                cmd.Parameters.Add(new SqlParameter("@DefAssigned", (object?)line.DefaultAssignedUserId ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)line.CreatedById ?? DBNull.Value));
                 await cmd.ExecuteNonQueryAsync(ct);
             }

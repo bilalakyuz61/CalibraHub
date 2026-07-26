@@ -61,17 +61,8 @@ public sealed record MyProjectTaskItem(
 /// <summary>Atanabilir kullanıcı dropdown seçeneği.</summary>
 public sealed record ProjectTaskUserOption(int Id, string Name);
 
-/// <summary>
-/// Görev şablonu satırı. DefaultAssignedUserId: şablondan uygulanınca görev bu kullanıcıya
-/// atanmış gelir (opsiyonel); DefaultAssignedUserName yalnız okuma/gösterim içindir.
-/// </summary>
-public sealed record ProjectTaskTemplateLineDto(
-    int Id,
-    string Title,
-    string? Description,
-    int OrderNo,
-    int? DefaultAssignedUserId = null,
-    string? DefaultAssignedUserName = null);
+/// <summary>Görev şablonu satırı. Şablon jeneriktir — kişi ataması taşımaz (projede görev bazında yapılır).</summary>
+public sealed record ProjectTaskTemplateLineDto(int Id, string Title, string? Description, int OrderNo);
 
 /// <summary>Görev şablonu (satırlarıyla).</summary>
 public sealed record ProjectTaskTemplateDto(
