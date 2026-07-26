@@ -3,14 +3,24 @@ using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
 
-[Description("Operasyon × Makine bazlı üretim süresi. Bir operasyon farklı makinelerde farklı sürede tamamlanabilir. ItemId opsiyonel: dolu ise sadece o ürün için özel süre; boş ise genel makine-operasyon süresi.")]
+[Description("Operasyon × Makine (veya makine grubu) bazlı üretim süresi. Bir operasyon farklı makinelerde/gruplarda farklı sürede tamamlanabilir. RoutingId opsiyonel: boş ise tüm rotalarda ortak, dolu ise yalnız o rotaya özel. MachineId XOR MachineGroupId (biri zorunlu, ikisi birden olmaz). ItemId/ItemGroupId opsiyonel ve karşılıklı dışlayıcı: dolu ise sadece o ürün/ürün grubu için özel süre; boş ise genel süre. UnitId yalnız ItemId doluyken geçerli (ürünün birim setinden bir birim).")]
 public sealed class OperationMachineTime
 {
     public int Id { get; init; }
     public int CompanyId { get; init; }
     public int OperationId { get; init; }
-    public int MachineId { get; init; }
+    /// <summary>Boş = tüm rotalarda ortak; dolu = yalnız bu rotaya özel süre.</summary>
+    public int? RoutingId { get; init; }
+    /// <summary>MachineGroupId ile karşılıklı dışlayıcı (XOR). Makine grubu seçildiyse null.</summary>
+    public int? MachineId { get; init; }
+    /// <summary>CardGroup (CardType=3) referansı. MachineId ile karşılıklı dışlayıcı (XOR).</summary>
+    public int? MachineGroupId { get; init; }
+    /// <summary>ItemGroupId ile karşılıklı dışlayıcı. Dolu ise ürüne özel süre.</summary>
     public int? ItemId { get; init; }
+    /// <summary>CardGroup (CardType=1) referansı. ItemId ile karşılıklı dışlayıcı.</summary>
+    public int? ItemGroupId { get; init; }
+    /// <summary>Ürünün birim setinden (Items.UnitId veya ItemUnits) bir birim. Yalnız ItemId doluyken anlamlı.</summary>
+    public int? UnitId { get; init; }
     /// <summary>Batch miktar — "Şu kadar birim için" (DurationPerUnit bu miktar için süre).</summary>
     public decimal Quantity { get; init; } = 1m;
     /// <summary>Quantity birimi için toplam süre. Birim/dakika hesabı: DurationPerUnit / Quantity.</summary>

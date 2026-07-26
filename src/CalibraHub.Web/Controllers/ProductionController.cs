@@ -1102,9 +1102,10 @@ public sealed class ProductionController : Controller
     // çağrılır → çoklu-kapsam: iki formdan HERHANGİ BİRİNDE grant'lı kullanıcı geçer (Seq 41).
     [HttpGet]
     [CalibraHub.Web.Authorization.PermissionScopeAny(FormCodes.OperationEdit, FormCodes.RoutingEdit)]
-    public async Task<IActionResult> OperationMachineTimes(int operationId, CancellationToken ct)
+    public async Task<IActionResult> OperationMachineTimes(int operationId, int? routingId, CancellationToken ct)
     {
-        var list = await _machineTimes.ListByOperationAsync(operationId, ct);
+        // routingId null → yalnız rota-bağımsız (ortak) satırlar; dolu → ortak + o rotaya özel satırlar.
+        var list = await _machineTimes.ListByOperationAsync(operationId, routingId, ct);
         return Json(list);
     }
 
