@@ -10640,6 +10640,75 @@ body.app-theme-dark .ux-modal-cancel {
 .ux-modal-del:hover:not(:disabled) { filter: brightness(1.08); }
 .ux-modal-del:disabled { opacity: .5; cursor: not-allowed; }
 
+/* ── Arama/seçim modalı (ortak) — PickerModal: düz, aranabilir liste ──
+   Backdrop olarak yukarıdaki .ux-modal-backdrop paylaşılır (aynı overlay/tema);
+   burada yalnızca daha geniş kart + liste satırları tanımlanır. Referans kullanım:
+   Views/Logistics/MachineEdit.cshtml (Makine → Lokasyon eşleştirme, sadece
+   Makine Parkuru lokasyonları, hiyerarşi göstermez). */
+.ux-picker-modal {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 14px; width: min(560px, 92vw); max-height: 76vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,.35);
+}
+body.app-theme-dark .ux-picker-modal {
+  background: #0d1323; border-color: rgba(255,255,255,0.1);
+}
+.ux-picker-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid #e2e8f0;
+}
+body.app-theme-dark .ux-picker-head { border-color: rgba(255,255,255,0.1); }
+.ux-picker-title { font-size: 14px; font-weight: 700; color: #0f172a; flex: 0 0 auto; }
+body.app-theme-dark .ux-picker-title { color: #f1f5f9; }
+.ux-picker-search {
+  flex: 1 1 auto; min-width: 0;
+  padding: 8px 12px; border-radius: 8px;
+  border: 1px solid #e2e8f0; background: #fff; color: #0f172a;
+  outline: none; font-size: 13px;
+}
+.ux-picker-search:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+body.app-theme-dark .ux-picker-search {
+  background: rgba(255,255,255,0.05); color: #e2e8f0; border-color: rgba(255,255,255,0.12);
+}
+.ux-picker-close {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 6px;
+  border: none; background: none; color: #64748b; cursor: pointer;
+  font-size: 18px; display: inline-flex; align-items: center; justify-content: center;
+}
+.ux-picker-close:hover { background: #f1f5f9; color: #0f172a; }
+body.app-theme-dark .ux-picker-close { color: #94a3b8; }
+body.app-theme-dark .ux-picker-close:hover { background: rgba(255,255,255,0.08); color: #e2e8f0; }
+.ux-picker-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+.ux-picker-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 16px; cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+}
+body.app-theme-dark .ux-picker-row { border-color: rgba(255,255,255,0.05); }
+.ux-picker-row:hover { background: rgba(99,102,241,.08); }
+.ux-picker-row-name { font-size: 13px; font-weight: 600; color: #0f172a; }
+body.app-theme-dark .ux-picker-row-name { color: #e2e8f0; }
+.ux-picker-row-meta { font-size: 11px; color: #64748b; flex: 0 0 auto; }
+body.app-theme-dark .ux-picker-row-meta { color: #94a3b8; }
+.ux-picker-empty {
+  padding: 28px; text-align: center; color: #94a3b8; font-size: 13px;
+}
+
+/* Picker tetikleyici alan (readonly input + ikon buton) — .ux-field içinde kullanılır */
+.ux-edit-pane .ux-picker-group { display: flex; gap: 8px; align-items: stretch; }
+.ux-edit-pane .ux-picker-group input[type="text"] { flex: 1 1 auto; cursor: pointer; }
+.ux-edit-pane .ux-picker-btn {
+  flex: 0 0 auto; width: 40px; border-radius: 8px;
+  border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.ux-edit-pane .ux-picker-btn:hover { background: #f1f5f9; color: #0f172a; }
+body.app-theme-dark .ux-edit-pane .ux-picker-btn {
+  background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); color: #cbd5e1;
+}
+body.app-theme-dark .ux-edit-pane .ux-picker-btn:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+
 /* Flash bildirim (genel) */
 .ux-flash {
   position: fixed; top: 16px; right: 16px; z-index: 9999;

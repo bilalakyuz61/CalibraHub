@@ -53,9 +53,15 @@
 
         <div class="ux-field ux-field--wide">
           <label for="me-location">Lokasyon *</label>
-          <select id="me-location">
-            <option value="">— Lokasyon seçiniz —</option>
-          </select>
+          <div class="ux-picker-group">
+            <input type="text" id="me-location" readonly autocomplete="off"
+                   placeholder="Lokasyon seçmek için tıklayın…" />
+            <input type="hidden" id="me-location-id" value="" />
+            <button type="button" class="ux-picker-btn" id="me-location-pick" title="Lokasyon seç" aria-label="Lokasyon seç">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+          </div>
+          <div class="ux-hint">Yalnızca Makine Parkuru olarak işaretli lokasyonlar listelenir.</div>
         </div>
 
         <div class="ux-field ux-field--wide">
@@ -165,76 +171,122 @@
         });
     }
 
-    // ── Load dropdowns ──
+    // ── Lokasyon seçici (PickerModal): düz, aranabilir liste — yalnızca AKTIF +
+    // Makine Parkuru (IsMachinePark=1) lokasyonlar seçilebilir. Hiyerarşi/seviye
+    // gösterimi kaldırıldı (PageComment Seq 42, 2026-07-26): kullanıcı doğrudan
+    // lokasyon adı/kodu yazıp arayıp eşleştirir. /Logistics/GetAllLocations
+    // paylaşımlı endpoint'i DEĞİŞMEDEN kullanılır — filtre burada client-side yapılır.
+    var meAllLocations = [];   // aktif lokasyonlar — mevcut atamayı çözümlemek için (filtre dışı olsa da)
+
+    function meLocationLabel(l) {
+        if (!l) return '';
+        return (l.locationCode || '') + (l.locationName ? ' · ' + l.locationName : '');
+    }
+    function meSetLocation(loc) {
+        var id = loc ? loc.id : null;
+        document.getElementById('me-location-id').value = id || '';
+        document.getElementById('me-location').value = loc ? meLocationLabel(loc) : '';
+    }
+
     async function loadLocations() {
         var r = await fetch('/Logistics/GetAllLocations', { credentials: 'same-origin' });
         var all = r.ok ? await r.json() : [];
-        var active = (all || []).filter(function (l) { return l.isActive; });
+        meAllLocations = (all || []).filter(function (l) { return l.isActive; });
 
-        var byId = {};
-        active.forEach(function (l) { byId[l.id] = l; });
+        if (!initLocId) return;
+        var current = meAllLocations.find(function (l) { return l.id === initLocId; });
+        if (current) { meSetLocation(current); return; }
 
-        var hasMpCache = {};
-        function hasMachineParkInSubtree(nodeId) {
-            if (hasMpCache[nodeId] !== undefined) return hasMpCache[nodeId];
-            var node = byId[nodeId];
-            if (node && node.isMachinePark === true) { hasMpCache[nodeId] = true; return true; }
-            var children = active.filter(function (l) { return l.parentId === nodeId; });
-            for (var i = 0; i < children.length; i++) {
-                if (hasMachineParkInSubtree(children[i].id)) { hasMpCache[nodeId] = true; return true; }
+        // Kayıtlı lokasyon aktif listede yok (sonradan pasif/Makine Parkuru-dışı yapılmış
+        // olabilir) — FK'yi BOZMADAN koru, etiketi tekil kayıttan ayrıca çek.
+        document.getElementById('me-location-id').value = initLocId;
+        try {
+            var rr = await fetch('/Logistics/GetLocation?id=' + initLocId, { credentials: 'same-origin' });
+            if (rr.ok) {
+                var one = await rr.json();
+                document.getElementById('me-location').value =
+                    meLocationLabel({ locationCode: one.locationCode, locationName: one.locationName });
             }
-            hasMpCache[nodeId] = false;
-            return false;
-        }
-
-        var visible = active.filter(function (l) { return hasMachineParkInSubtree(l.id); });
-        if (visible.length === 0) {
-            var sel0 = document.getElementById('me-location');
-            sel0.innerHTML = '<option value="">— Makine parkuru lokasyonu yok —</option>';
-            return;
-        }
-
-        var byParent = {};
-        visible.forEach(function (l) {
-            var p = l.parentId == null ? 0 : l.parentId;
-            if (!byParent[p]) byParent[p] = [];
-            byParent[p].push(l);
-        });
-        Object.keys(byParent).forEach(function (k) {
-            byParent[k].sort(function (a, b) {
-                if ((a.sortOrder || 0) !== (b.sortOrder || 0)) return (a.sortOrder || 0) - (b.sortOrder || 0);
-                return (a.locationCode || '').localeCompare(b.locationCode || '');
-            });
-        });
-
-        var BAR = "│  ";
-        var TEE = "├─ ";
-        var ELL = "└─ ";
-        var SPC = "   ";
-
-        var ordered = [];
-        function walk(pid, depth, ancestorHasMore) {
-            var siblings = byParent[pid] || [];
-            siblings.forEach(function (node, idx) {
-                var isLast = idx === siblings.length - 1;
-                var prefix = '';
-                for (var i = 0; i < depth - 1; i++) prefix += ancestorHasMore[i] ? BAR : SPC;
-                if (depth > 0) prefix += isLast ? ELL : TEE;
-                var label = prefix + (node.locationCode || '') + (node.locationName ? ' - ' + node.locationName : '');
-                ordered.push({ id: node.id, label: label, selectable: node.isMachinePark === true });
-                walk(node.id, depth + 1, ancestorHasMore.concat(!isLast));
-            });
-        }
-        walk(0, 0, []);
-
-        var sel = document.getElementById('me-location');
-        sel.innerHTML = '<option value="">— Lokasyon seçiniz —</option>' +
-            ordered.map(function (x) {
-                var disAttr = x.selectable ? '' : ' disabled';
-                return '<option value="' + x.id + '"' + disAttr + '>' + x.label + '</option>';
-            }).join('');
-        if (initLocId) sel.value = initLocId;
+        } catch (e) { /* sessizce devam — id zaten korunuyor, sadece etiket eksik kalır */ }
     }
+
+    function meEscHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function meCloseLocationPicker() {
+        var bd = document.getElementById('me-location-picker-bd');
+        if (bd && bd.parentNode) bd.parentNode.removeChild(bd);
+        document.removeEventListener('keydown', meLocationPickerKeydown);
+    }
+    function meLocationPickerKeydown(e) {
+        if (e.key === 'Escape') meCloseLocationPicker();
+    }
+    function openLocationPicker() {
+        // Sadece Makine Parkuru lokasyonları listelenir.
+        var options = meAllLocations.filter(function (l) { return l.isMachinePark === true; });
+
+        var bd = document.createElement('div');
+        bd.id = 'me-location-picker-bd';
+        bd.className = 'ux-modal-backdrop';
+        bd.innerHTML =
+            '<div class="ux-picker-modal">' +
+              '<div class="ux-picker-head">' +
+                '<span class="ux-picker-title">Lokasyon Seç</span>' +
+                '<input type="text" class="ux-picker-search" placeholder="Ara… (kod, ad)" autocomplete="off" />' +
+                '<button type="button" class="ux-picker-close" title="Kapat (Esc)">&times;</button>' +
+              '</div>' +
+              '<div class="ux-picker-list"></div>' +
+            '</div>';
+
+        function render(items) {
+            var list = bd.querySelector('.ux-picker-list');
+            if (!items.length) {
+                list.innerHTML = '<div class="ux-picker-empty">Makine parkuru lokasyonu bulunamadı.</div>';
+                return;
+            }
+            list.innerHTML = items.map(function (l, i) {
+                return '<div class="ux-picker-row" data-idx="' + i + '">' +
+                         '<span class="ux-picker-row-name">' + meEscHtml(l.locationCode || '') +
+                            (l.locationName ? ' — ' + meEscHtml(l.locationName) : '') + '</span>' +
+                         (l.locationTypeDisplayName ? '<span class="ux-picker-row-meta">' + meEscHtml(l.locationTypeDisplayName) + '</span>' : '') +
+                       '</div>';
+            }).join('');
+            list.querySelectorAll('.ux-picker-row').forEach(function (row) {
+                row.addEventListener('click', function () {
+                    var idx = parseInt(row.getAttribute('data-idx'), 10);
+                    meSetLocation(items[idx]);
+                    meCloseLocationPicker();
+                });
+            });
+        }
+
+        bd.addEventListener('click', function (e) { if (e.target === bd) meCloseLocationPicker(); });
+        document.body.appendChild(bd);
+        render(options);
+
+        var search = bd.querySelector('.ux-picker-search');
+        search.addEventListener('input', function () {
+            var q = (search.value || '').trim().toLowerCase();
+            if (!q) { render(options); return; }
+            render(options.filter(function (l) {
+                return (l.locationCode || '').toLowerCase().indexOf(q) !== -1 ||
+                       (l.locationName || '').toLowerCase().indexOf(q) !== -1;
+            }));
+        });
+        bd.querySelector('.ux-picker-close').addEventListener('click', meCloseLocationPicker);
+        document.addEventListener('keydown', meLocationPickerKeydown);
+        setTimeout(function () { search.focus(); }, 30);
+    }
+
+    var meLocationInput = document.getElementById('me-location');
+    var meLocationBtn   = document.getElementById('me-location-pick');
+    if (meLocationInput) {
+        meLocationInput.addEventListener('click', openLocationPicker);
+        meLocationInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLocationPicker(); }
+        });
+    }
+    if (meLocationBtn) meLocationBtn.addEventListener('click', openLocationPicker);
 
     loadLocations();
 
@@ -242,7 +294,7 @@
     var saveBtn = document.getElementById('me-save');
     if (saveBtn) {
         saveBtn.addEventListener('click', function () {
-            var locId = parseInt(document.getElementById('me-location').value) || 0;
+            var locId = parseInt(document.getElementById('me-location-id').value, 10) || 0;
             var name  = (document.getElementById('me-name').value || '').trim();
             var invalid = false;
             if (!locId) { shake('me-location'); invalid = true; }
