@@ -27,11 +27,13 @@ namespace CalibraHub.Web.Helpers;
 ///   2) Her satır için: BuildRowActions(buttons, recordId) — adım 1 sonucunu o kaydın GERÇEK
 ///      id'siyle satır aksiyon nesnelerine çevirir (senkron, DB'ye gitmez, ucuz).
 ///
-/// Yetki mantığı IntegrationsController.ByFormApi (form ekranının aynı "aktif entegrasyonları
-/// listele" endpoint'i) ile BİREBİR aynı: PermissionDef yoksa/pasifse serbest (geriye
-/// uyumluluk), SystemAdmin her zaman geçer, DepartmentManager bypass'ı zaten
-/// PermissionService.CheckAsync içinde merkezi olarak uygulanıyor (SetupDefinitions hariç
-/// tüm formlar) — burada ayrıca özel durum kodu YOK.
+/// Yetki mantığı üç çağıranda (bu helper, IntegrationsController.ByFormApi,
+/// IntegrationController.Run) TEK paylaşılan kurala bağlıdır: <see cref="CanRunManualButtonAsync"/>.
+/// Kural (2026-07-26 sıkılaştırma): SystemAdmin her zaman geçer; PermissionDef VAR+aktif ise
+/// PermissionService.CheckAsync grant kontrolü (DepartmentManager bypass'ı CheckAsync içinde
+/// merkezî — SetupDefinitions hariç izinli); PermissionDef YOK/pasif ise YALNIZ SystemAdmin +
+/// DepartmentManager (eski "tanım yoksa herkese serbest" geriye-uyumluluğu KALDIRILDI — fail-safe:
+/// tanımsız buton dünyaya açık kalmaz, yönetici-only olur).
 ///
 /// Üretilen aksiyon nesnesi TABLO görünümü (SmartTableRow.jsx) sözleşmesini hedefler:
 /// {label, icon, color, apiUrl, apiMethod}. SmartTableRow.dispatchMenuAction yalnızca
@@ -54,8 +56,8 @@ public static class IntegrationButtonActionHelper
 {
     /// <summary>
     /// Verilen FormCode için aktif + Manual tetikleyicili entegrasyon butonlarını getirir,
-    /// kullanıcının BUTTON:INT_{id} yetkisi olmayanları eler. Board request başına BİR KEZ
-    /// çağrılır (per-row değil).
+    /// kullanıcının çalıştırma yetkisi olmayanları eler (ortak kural: <see cref="CanRunManualButtonAsync"/>).
+    /// Board request başına BİR KEZ çağrılır (per-row değil).
     /// </summary>
     public static async Task<IReadOnlyCollection<IntegrationManualButtonInfo>> GetAuthorizedManualButtonsAsync(
         string formCode,
@@ -75,7 +77,7 @@ public static class IntegrationButtonActionHelper
         var roleStr = user.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
         UserAuthorizationCatalog.TryParseRole(roleStr, out var role);
         if (role == UserRole.SystemAdmin)
-            return buttons;
+            return buttons; // kısa yol: per-buton DB sorgusu gerekmez
 
         var userId = int.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? (int?)uid : null;
         int? deptId = int.TryParse(user.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
@@ -83,19 +85,46 @@ public static class IntegrationButtonActionHelper
         var authorized = new List<IntegrationManualButtonInfo>();
         foreach (var btn in buttons)
         {
-            // PermissionDef yoksa/pasifse → serbest (IntegrationsController.ByFormApi ile aynı
-            // geriye uyumluluk kuralı).
-            var actionCode = PermissionDefDiscoveryService.BuildIntegrationButtonActionCode(btn.Id);
-            var def = await permDefRepo.GetByFormAndActionAsync(btn.SourceFormCode, actionCode, ct);
-            if (def is { IsActive: true })
-            {
-                if (userId is null) continue;
-                var canRun = await permService.CheckAsync(userId.Value, role, deptId, btn.SourceFormCode, actionCode, ct);
-                if (!canRun) continue;
-            }
-            authorized.Add(btn);
+            if (await CanRunManualButtonAsync(role, userId, deptId, btn.SourceFormCode, btn.Id, permDefRepo, permService, ct))
+                authorized.Add(btn);
         }
         return authorized;
+    }
+
+    /// <summary>
+    /// Bir manuel entegrasyon butonunun (BUTTON:INT_{id}) belirli kullanıcı için çalıştırılabilir
+    /// olup olmadığına dair TEK yetki kuralı — üç çağıran (bu helper'ın
+    /// <see cref="GetAuthorizedManualButtonsAsync"/>'i, IntegrationsController.ByFormApi,
+    /// IntegrationController.Run) buna bağlanır.
+    ///
+    /// Kural (2026-07-26 sıkılaştırma):
+    ///   • SystemAdmin → her zaman izinli (DB sorgusu yok).
+    ///   • PermissionDef VAR + aktif → IPermissionService.CheckAsync grant kontrolü
+    ///     (DepartmentManager bypass'ı CheckAsync içinde merkezî — SetupDefinitions hariç izinli).
+    ///   • PermissionDef YOK/pasif → YALNIZ SystemAdmin + DepartmentManager (fail-safe;
+    ///     eski "tanım yoksa herkese serbest" geriye-uyumluluğu kaldırıldı).
+    /// </summary>
+    public static async Task<bool> CanRunManualButtonAsync(
+        UserRole role, int? userId, int? departmentId,
+        string sourceFormCode, int integrationId,
+        IPermissionDefRepository permDefRepo,
+        IPermissionService permService,
+        CancellationToken ct)
+    {
+        if (role == UserRole.SystemAdmin) return true;
+
+        var actionCode = PermissionDefDiscoveryService.BuildIntegrationButtonActionCode(integrationId);
+        var def = await permDefRepo.GetByFormAndActionAsync(sourceFormCode, actionCode, ct);
+
+        if (def is { IsActive: true })
+        {
+            // Tanım var → normal grant kontrolü (DepartmentManager bypass CheckAsync içinde).
+            if (userId is null || userId <= 0) return false;
+            return await permService.CheckAsync(userId.Value, role, departmentId, sourceFormCode, actionCode, ct);
+        }
+
+        // Tanım yok/pasif → yalnız yönetici rolleri (SystemAdmin yukarıda döndü).
+        return role == UserRole.DepartmentManager;
     }
 
     /// <summary>

@@ -242,6 +242,10 @@ public sealed class DefinitionsController : Controller
 
     // ── Card-group entity mappings ────────────────────────────────────────────
 
+    // NOT (2026-07-26): Bu okuma ucu BİLİNÇLİ olarak yalnız [Authorize] (kapsam yok) bırakıldı.
+    // Yazma ucu (SaveCardGroupMappings) çoklu-kapsamla korunuyor; okuma, host kartların (Malzeme/
+    // Cari/Makine) zaten kendi form yetkisiyle açıldığı düşük-hassasiyetli referans veridir.
+    // Sıkılaştırmak istenirse SaveCardGroupMappings ile aynı PermissionScopeAny seti uygulanabilir.
     [HttpGet]
     public async Task<IActionResult> GetCardGroupMappings(int entityType, string entityId, CancellationToken ct)
     {
@@ -259,7 +263,14 @@ public sealed class DefinitionsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
+    // Bu uç üç host karttan çağrılır: Malzeme (entityType=1, MATERIAL_CARD_EDIT),
+    // Cari (entityType=2, CONTACTS), Makine (entityType=3, MACHINES) + Kart Grupları ekranı
+    // (CARD_GROUPS). Çoklu-kapsam: bu formlardan HERHANGİ BİRİNDE grant'lı kullanıcı geçer (Seq 43).
+    [CalibraHub.Web.Authorization.PermissionScopeAny(
+        CalibraHub.Application.Constants.FormCodes.CardGroups,
+        CalibraHub.Application.Constants.FormCodes.MaterialCardEdit,
+        CalibraHub.Application.Constants.FormCodes.ContactEdit,
+        CalibraHub.Application.Constants.FormCodes.Machines)]
     public async Task<IActionResult> SaveCardGroupMappings([FromBody] SaveCardGroupMappingsRequest req, CancellationToken ct)
     {
         if (req.EntityType is not (1 or 2 or 3) || string.IsNullOrWhiteSpace(req.EntityId))

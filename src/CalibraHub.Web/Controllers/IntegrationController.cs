@@ -2,8 +2,8 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Security;
-using CalibraHub.Application.Services.Security;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,6 +34,10 @@ public sealed class IntegrationController : Controller
     /// butonu da bu endpoint'i cagiracak.
     /// </summary>
     [HttpPost("/Integration/Run/{integrationId:int}")]
+    // Sınıf-seviyesi [PermissionScope(Integrations)] bu action'da BİLİNÇLİ OLARAK muaf tutuldu:
+    // gerçek yetki, butonun kendi SourceFormCode'u + BUTTON:INT_{id} tanımı üzerinden aşağıda
+    // (IntegrationButtonActionHelper.CanRunManualButtonAsync) uygulanır. [Authorize] (cookie) korunur.
+    [CalibraHub.Web.Authorization.PermissionAction]
     public async Task<IActionResult> Run(
         int integrationId,
         [FromQuery] string? recordId,
@@ -48,27 +52,25 @@ public sealed class IntegrationController : Controller
 
         try
         {
-            // Per-button permission check (PermissionDef varsa zorunlu, yoksa serbest)
+            // Per-buton yetki kontrolü — ortak kural (IntegrationButtonActionHelper). Sınıf kapısı
+            // bu action'da muaf; gerçek yetki butonun SourceFormCode'u + BUTTON:INT_{id} üzerinden.
             var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
             UserAuthorizationCatalog.TryParseRole(roleStr, out var role);
             if (role != UserRole.SystemAdmin)
             {
-                // Integration'ın SourceFormCode'unu bul
+                // Butonun SourceFormCode'u için Integration kaydını çöz (varlık kontrolü de burada).
                 var integration = await integrationRepo.GetByIdAsync(integrationId, ct);
                 if (integration is null)
                     return Json(new { success = false, error = "Entegrasyon bulunamadı." });
 
-                var actionCode = PermissionDefDiscoveryService.BuildIntegrationButtonActionCode(integrationId);
-                var def = await permDefRepo.GetByFormAndActionAsync(integration.SourceFormCode, actionCode, ct);
-                if (def is { IsActive: true })
-                {
-                    if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) || userId <= 0)
-                        return Json(new { success = false, error = "Yetki yetersiz." });
-                    int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
-                    var canRun = await permService.CheckAsync(userId, role, deptId, integration.SourceFormCode, actionCode, ct);
-                    if (!canRun)
-                        return Json(new { success = false, error = "Bu entegrasyonu çalıştırma yetkiniz bulunmuyor." });
-                }
+                int? userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) && uid > 0 ? uid : null;
+                int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
+
+                var canRun = await IntegrationButtonActionHelper.CanRunManualButtonAsync(
+                    role, userId, deptId, integration.SourceFormCode, integrationId,
+                    permDefRepo, permService, ct);
+                if (!canRun)
+                    return Json(new { success = false, error = "Bu entegrasyonu çalıştırma yetkiniz bulunmuyor." });
             }
 
             var userName = User?.Identity?.Name ?? "system";

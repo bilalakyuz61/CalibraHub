@@ -6,6 +6,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Application.Services.Security;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -1177,6 +1178,10 @@ public sealed class IntegrationsController : Controller
     // donen liste icin her birine "Sim. Calistir" buton render eder.
 
     [HttpGet("/Integrations/api/by-form/{formCode}")]
+    // Sınıf-seviyesi [PermissionScope(Integrations)] bu action'da BİLİNÇLİ OLARAK muaf tutuldu:
+    // form ekranı butonlarını listeler; gerçek yetki her buton için aşağıda per-buton
+    // (IntegrationButtonActionHelper.CanRunManualButtonAsync) uygulanır. [Authorize] (cookie) korunur.
+    [CalibraHub.Web.Authorization.PermissionAction]
     public async Task<IActionResult> ByFormApi(string formCode, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(formCode))
@@ -1194,19 +1199,11 @@ public sealed class IntegrationsController : Controller
             var items = new List<object>();
             foreach (var btn in buttons)
             {
-                // PermissionDef yoksa → serbest (geriye uyumluluk).
-                // Varsa → kullanıcı yetkisi kontrol et (SystemAdmin daima geçer).
-                if (role != UserRole.SystemAdmin)
-                {
-                    var actionCode = PermissionDefDiscoveryService.BuildIntegrationButtonActionCode(btn.Id);
-                    var def = await _permDefRepo.GetByFormAndActionAsync(btn.SourceFormCode, actionCode, ct);
-                    if (def is { IsActive: true })
-                    {
-                        if (userId is null) continue;
-                        var canRun = await _permService.CheckAsync(userId.Value, role, deptId, btn.SourceFormCode, actionCode, ct);
-                        if (!canRun) continue;
-                    }
-                }
+                // Ortak per-buton yetki kuralı (IntegrationButtonActionHelper): tanım yoksa/pasifse
+                // yalnız SystemAdmin + DepartmentManager, tanım varsa grant kontrolü.
+                var canRun = await IntegrationButtonActionHelper.CanRunManualButtonAsync(
+                    role, userId, deptId, btn.SourceFormCode, btn.Id, _permDefRepo, _permService, ct);
+                if (!canRun) continue;
 
                 var ep = btn.TargetEndpointId is > 0
                     ? await _repo.GetEndpointByIdAsync(btn.TargetEndpointId.Value, ct)

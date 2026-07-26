@@ -16,7 +16,10 @@ namespace CalibraHub.Web.Authorization;
 ///
 /// **Algoritma:**
 /// 1. [AllowAnonymous] varsa → atla.
-/// 2. PermissionScope attribute (action öncelikli, sonra controller) bul. Yoksa → atla.
+/// 2. Kapsam attribute'u bul: <see cref="PermissionScopeAnyAttribute"/> (çoklu FormCode,
+///    yalnız action-level) TEKİL <see cref="PermissionScopeAttribute"/> (action/controller)
+///    ÖNÜNDE gelir. İkisi de yoksa → atla. Çoklu kapsamda aday FormCode listesi genişler;
+///    action kodu çözümü (adım 5/6) DEĞİŞMEZ.
 /// 3. SystemAdmin → izin ver.
 /// 4. [PermissionAction] AÇIK kod verilmişse onu kullan (isim tahminini atla).
 /// 5. Aksi halde HTTP method + action name → adayActionCodes listesi:
@@ -61,10 +64,18 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
         if (context.ActionDescriptor.EndpointMetadata.OfType<AllowAnonymousAttribute>().Any())
             return;
 
-        // 2) PermissionScope attribute (önce action, sonra controller)
+        // 2) Kapsam çözümü — çoklu-form (PermissionScopeAny, yalnız action-level) TEKİL
+        //    PermissionScope (action/controller) ÖNÜNDE gelir. Çoklu yoksa tekil FormCode
+        //    kullanılır → davranış birebir eski hâliyle aynı (tek elemanlı liste).
+        var anyScopeAttr = context.ActionDescriptor.EndpointMetadata
+            .OfType<PermissionScopeAnyAttribute>().FirstOrDefault();
         var scopeAttr = context.ActionDescriptor.EndpointMetadata
             .OfType<PermissionScopeAttribute>().FirstOrDefault();
-        if (scopeAttr is null) return; // Opt-out: scope yoksa filter geçer
+        if (anyScopeAttr is null && scopeAttr is null) return; // Opt-out: kapsam yoksa filter geçer
+
+        var formCodes = anyScopeAttr is not null
+            ? anyScopeAttr.FormCodes
+            : new[] { scopeAttr!.FormCode };
 
         // 3) Auth gerekli
         var user = context.HttpContext.User;
@@ -103,13 +114,21 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
         // açıkça muaf tutulmuş). Ada uymayan POST'lar artık BURAYA DÜŞMEZ — fail-closed.
         if (actionCodes.Length == 0) return;
 
-        // 7) Check
+        // 7) Check — aday FormCode'lardan HERHANGİ BİRİ (resolved action kodları için) izin
+        //    veriyorsa geç. Tekil kapsamda liste tek elemanlı → eski davranışla birebir aynı.
         var ct = context.HttpContext.RequestAborted;
-        var allowed = await _permService.CheckAnyAsync(
-            userId, role, departmentId, scopeAttr.FormCode, actionCodes, ct);
+        var allowed = false;
+        foreach (var formCode in formCodes)
+        {
+            if (await _permService.CheckAnyAsync(userId, role, departmentId, formCode, actionCodes, ct))
+            {
+                allowed = true;
+                break;
+            }
+        }
 
         if (!allowed)
-            context.Result = MakeForbidResult(context, scopeAttr.FormCode, actionCodes);
+            context.Result = MakeForbidResult(context, string.Join('|', formCodes), actionCodes);
     }
 
     private static string[] ResolveActionCodes(AuthorizationFilterContext context)

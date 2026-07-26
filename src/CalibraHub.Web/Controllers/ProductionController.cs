@@ -1098,7 +1098,10 @@ public sealed class ProductionController : Controller
     }
 
     // ── Operation × Machine süre eşleştirmeleri ───────────────────────────────
+    // Bu üç uç hem Operasyon Düzenleme (OPERATION_EDIT) hem Rota (ROUTING_EDIT) ekranından
+    // çağrılır → çoklu-kapsam: iki formdan HERHANGİ BİRİNDE grant'lı kullanıcı geçer (Seq 41).
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScopeAny(FormCodes.OperationEdit, FormCodes.RoutingEdit)]
     public async Task<IActionResult> OperationMachineTimes(int operationId, CancellationToken ct)
     {
         var list = await _machineTimes.ListByOperationAsync(operationId, ct);
@@ -1107,7 +1110,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.OperationEdit)]
+    [CalibraHub.Web.Authorization.PermissionScopeAny(FormCodes.OperationEdit, FormCodes.RoutingEdit)]
     public async Task<IActionResult> SaveOperationMachineTime([FromBody] SaveOperationMachineTimeRequest req, CancellationToken ct)
     {
         try
@@ -1124,7 +1127,7 @@ public sealed class ProductionController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.OperationEdit)]
+    [CalibraHub.Web.Authorization.PermissionScopeAny(FormCodes.OperationEdit, FormCodes.RoutingEdit)]
     public async Task<IActionResult> DeleteOperationMachineTime(int id, CancellationToken ct)
     {
         try
