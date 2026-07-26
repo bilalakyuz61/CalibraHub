@@ -19,8 +19,8 @@ public sealed record SaveCardGroupRequest(
 
 public sealed record DeleteCardGroupRequest(int Id);
 
-// ── Card-group mappings (per entity: Item or Contact) ──
-// entityType: 1 = Item (GUID), 2 = Contact (int)
+// ── Card-group mappings (per entity: Item, Contact veya Machine) ──
+// entityType: 1 = Item (GUID), 2 = Contact (int), 3 = Machine (int) — EntityId her durumda string'e cevrilip tasinir.
 public sealed record CardGroupMappingDto(int Level, int CardGroupId, string Code, string? Description);
 
 public sealed record SaveCardGroupMappingsRequest(

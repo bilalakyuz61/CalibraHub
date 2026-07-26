@@ -3,7 +3,7 @@ namespace CalibraHub.Domain.Entities;
 public sealed class CardGroup
 {
     public int Id { get; init; }
-    /// <summary>1 = Malzeme, 2 = Cari</summary>
+    /// <summary>1 = Malzeme, 2 = Cari, 3 = Makine</summary>
     public int CardType { get; init; }
     /// <summary>1–5</summary>
     public int Level { get; init; }

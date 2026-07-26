@@ -30,12 +30,13 @@ public sealed class DefinitionsController : Controller
     private async Task<object> BuildCardGroupsTreeConfigAsync(CancellationToken ct)
     {
         var all = new List<CardGroup>();
-        for (var cardType = 1; cardType <= 2; cardType++)
+        for (var cardType = 1; cardType <= 3; cardType++)
             for (var level = 1; level <= 5; level++)
                 all.AddRange(await _repo.GetByLevelAsync(cardType, level, null, ct));
 
         var malzeme = all.Where(g => g.CardType == 1).ToList();
         var cari    = all.Where(g => g.CardType == 2).ToList();
+        var makine  = all.Where(g => g.CardType == 3).ToList();
 
         return new
         {
@@ -43,6 +44,7 @@ public sealed class DefinitionsController : Controller
             {
                 new { id = 1, name = "Malzeme", icon = "Package",   color = "indigo", roots = BuildTreeNodes(malzeme, null) },
                 new { id = 2, name = "Cari",    icon = "Building2", color = "teal",   roots = BuildTreeNodes(cari,    null) },
+                new { id = 3, name = "Makine",  icon = "Cog",       color = "amber",  roots = BuildTreeNodes(makine,  null) },
             },
             newUrl       = "/Definitions/CardGroupEdit",
             deleteApiUrl = "/Definitions/DeleteCardGroupById/",
@@ -127,7 +129,7 @@ public sealed class DefinitionsController : Controller
     [HttpGet]
     public async Task<IActionResult> GetAllCardGroups(int cardType, CancellationToken ct)
     {
-        if (cardType is not (1 or 2)) return BadRequest();
+        if (cardType is not (1 or 2 or 3)) return BadRequest();
         var all = new List<CardGroupDto>();
         for (int level = 1; level <= 5; level++)
         {
@@ -142,7 +144,7 @@ public sealed class DefinitionsController : Controller
     public async Task<IActionResult> GetCardGroups(
         int cardType, int level, int? parentId, CancellationToken ct)
     {
-        if (cardType is not (1 or 2) || level is < 1 or > 5)
+        if (cardType is not (1 or 2 or 3) || level is < 1 or > 5)
             return BadRequest();
 
         var groups = await _repo.GetByLevelAsync(cardType, level, parentId, ct);
@@ -165,7 +167,7 @@ public sealed class DefinitionsController : Controller
     [HttpGet]
     public async Task<IActionResult> GetParentCandidates(int cardType, int level, CancellationToken ct)
     {
-        if (cardType is not (1 or 2) || level is < 2 or > 5)
+        if (cardType is not (1 or 2 or 3) || level is < 2 or > 5)
             return BadRequest();
 
         var parents = await _repo.GetByLevelAsync(cardType, level - 1, null, ct);
@@ -177,7 +179,7 @@ public sealed class DefinitionsController : Controller
     [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> SaveCardGroup([FromBody] SaveCardGroupRequest req, CancellationToken ct)
     {
-        if (req.CardType is not (1 or 2)) return BadRequest(new { error = "Geçersiz kart tipi." });
+        if (req.CardType is not (1 or 2 or 3)) return BadRequest(new { error = "Geçersiz kart tipi." });
         if (req.Level is < 1 or > 5)     return BadRequest(new { error = "Seviye 1–5 arasında olmalıdır." });
         if (req.ParentId is null && req.Level != 1) return BadRequest(new { error = "Kök grup seviyesi 1 olmalıdır." });
         if (req.ParentId is not null && req.Level < 2) return BadRequest(new { error = "Alt grup seviyesi en az 2 olmalıdır." });
@@ -243,7 +245,7 @@ public sealed class DefinitionsController : Controller
     [HttpGet]
     public async Task<IActionResult> GetCardGroupMappings(int entityType, string entityId, CancellationToken ct)
     {
-        if (entityType is not (1 or 2) || string.IsNullOrWhiteSpace(entityId))
+        if (entityType is not (1 or 2 or 3) || string.IsNullOrWhiteSpace(entityId))
             return BadRequest();
         var rows = await _repo.GetEntityMappingsAsync(entityType, entityId, ct);
         return Json(rows.Select(r => new
@@ -260,7 +262,7 @@ public sealed class DefinitionsController : Controller
     [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> SaveCardGroupMappings([FromBody] SaveCardGroupMappingsRequest req, CancellationToken ct)
     {
-        if (req.EntityType is not (1 or 2) || string.IsNullOrWhiteSpace(req.EntityId))
+        if (req.EntityType is not (1 or 2 or 3) || string.IsNullOrWhiteSpace(req.EntityId))
             return BadRequest(new { error = "Geçersiz parametre." });
 
         var levels = req.Levels
