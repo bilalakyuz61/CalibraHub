@@ -12591,6 +12591,12 @@ END;";
             ("ACTIVITY_REASON_EDIT","Düzenleme",                        "Üretim",               "Aktivite Sebepleri",       565,  true),
 
             // ── AR-GE ────────────────────────────────────────────────────────
+            // 2026-07-26: ARGE_PROJECT_EDIT artık seed'li + IsWidgetForm=true. Önceki "hiç seed etme"
+            // anti-pattern'i bilinçli tersine çevrildi — belge master-detail widget paritesi için
+            // proje ÜST-BİLGİ (header) özel alanlarının Widget Tanımları'nda tanımlanabilmesi gerekir.
+            // Yetki-güvenli: şu an perm-def yok → non-admin zaten 403; seed sonrası grant yoksa yine 403
+            // (davranış değişmez), bypass rolleri (SystemAdmin/DeptManager) etkilenmez, Arge grantable olur.
+            ("ARGE_PROJECT_EDIT",   "AR-GE Projesi",                    "AR-GE",                null,                       585,  true), // proje header widget formu + Arge ekranı yetki kodu
             // IsWidgetForm=true: PROJECT_TASK hem controller yetki kodu HEM görev-kalem widget formu
             // (SALES_QUOTE'un hem yetki hem header widget formu olması gibi). Görev başına özel
             // alanlar Widget Tanımları → "Proje Görevleri" altında tanımlanır (recordId = görev Id).

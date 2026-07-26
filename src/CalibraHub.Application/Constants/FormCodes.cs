@@ -139,10 +139,10 @@ public static class FormCodes
     // ═══════════════════════════════════════════════════
     // AR-GE
     // ═══════════════════════════════════════════════════
-    // Not: AR-GE proje ekranı legacy "ARGE_PROJECT_EDIT" string literal'i ile korunur
-    // (FormCodes'a/seed'e bilinçli eklenmedi — davranış değişikliği riski). Görev katmanı
-    // yeni ve grantable PROJECT_TASK kodu altındadır.
-    public const string ProjectTask = "PROJECT_TASK";
+    // 2026-07-26: ARGE_PROJECT_EDIT artık SeedFormsAsync'te + IsWidgetForm=true (proje header
+    // özel alanları için). Görev-kalem özel alanları PROJECT_TASK altındadır (hem yetki hem widget).
+    public const string ArgeProjectEdit = "ARGE_PROJECT_EDIT";
+    public const string ProjectTask     = "PROJECT_TASK";
 
     // ═══════════════════════════════════════════════════
     // FİNANS
