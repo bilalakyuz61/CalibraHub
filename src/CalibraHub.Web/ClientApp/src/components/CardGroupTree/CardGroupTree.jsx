@@ -3,11 +3,15 @@ import {
   Package, Building2, Search,
   Edit2, Trash2, ChevronRight, ChevronDown, ChevronsDown, Minus,
   AlertTriangle, Layers, Plus, PlusCircle, Check, X,
-  GitBranch, Target,
+  GitBranch, Target, Cog,
 } from 'lucide-react'
 import './CardGroupTree.css'
 
-const ICON_MAP = { Package, Building2, Layers }
+// cardType.icon config'ten gelir (bkz. DefinitionsController.BuildCardGroupsTreeConfigAsync).
+// Makine (CardType=3) "Cog" kullanır — Makineler listesindeki SmartBoard ikonuyla
+// tutarlı (MachineController.WithIcon("Cog", "indigo")). Haritada olmayan bir isim
+// gelirse Layers'a sessizce düşer (aşağıdaki ICON_MAP[ct.icon] || Layers).
+const ICON_MAP = { Package, Building2, Layers, Cog }
 
 function getCsrf() {
   const el = document.querySelector('input[name="__RequestVerificationToken"]')
@@ -225,7 +229,7 @@ function TreeNode({ node, cardType, activeColor, depth, search, handlers, recent
           <div
             className={[
               'cgt-card',
-              isMatch  ? (activeColor === 'teal' ? 'cgt-card-match-teal' : 'cgt-card-match') : '',
+              isMatch  ? `cgt-card-match-${activeColor}` : '',
               isPinned ? 'cgt-card-pinned' : '',
             ].filter(Boolean).join(' ')}
           >

@@ -37,6 +37,10 @@
         <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path stroke-linecap="round" d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
         <span>Genel Bilgiler</span>
       </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="groups">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>Gruplar</span>
+      </button>
       <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="meNavWidgets" style="display:none;">
         <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
         <span>Ek Alanlar</span>
@@ -88,6 +92,19 @@
         </div>
 
         <div id="me-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="groups">
+        <h2>Gruplar</h2>
+        <div class="ux-edit-hint">Makineyi bir makine grubuna atayın. Gruplar; makine listesinde filtreleme ve organizasyon amacıyla kullanılır.</div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="me-group">Makine Grubu</label>
+          <select id="me-group">
+            <option value="">Seçiniz</option>
+          </select>
+          <div class="ux-hint">Bir makine yalnızca tek bir gruba atanabilir.</div>
+        </div>
       </div>
 
       <div class="ux-edit-pane" data-tab="widgets">
@@ -290,6 +307,87 @@
 
     loadLocations();
 
+    // ── Gruplar (tek seviye: CardType=3 Makine, yalnızca Level 1) ──
+    // Bir makine TEK bir makine grubuna atanabilir (PageComment Seq 43 kullanıcı
+    // kararı). CardGroup altyapısı 5 seviyeli olsa da burada yalnızca Level 1
+    // kullanılır — MaterialCardEdit'teki 5'li cascade'in aksine tek dropdown.
+    // Kontrat (DefinitionsController, backend ile koordineli doğrulandı):
+    //   GET  /Definitions/GetCardGroups?cardType=3&level=1
+    //   GET  /Definitions/GetCardGroupMappings?entityType=3&entityId={machineId}
+    //   POST /Definitions/SaveCardGroupMappings { entityType:3, entityId, levels:[{level:1, cardGroupId}] }
+    //   (boş seçim → levels:[] gönderilir, mapping temizlenir)
+    var meGroupSelEl = document.getElementById('me-group');
+    var _meGroupsReady = null;
+
+    function meGroupBuildOptions(items) {
+        if (!meGroupSelEl) return;
+        var prevValue = meGroupSelEl.value;
+        var opts = '<option value="">Seçiniz</option>';
+        (items || []).forEach(function (g) {
+            opts += '<option value="' + g.id + '">' + (g.code || '') + (g.description ? ' — ' + g.description : '') + '</option>';
+        });
+        meGroupSelEl.innerHTML = opts;
+        if (prevValue && Array.prototype.some.call(meGroupSelEl.options, function (o) { return o.value === prevValue; })) {
+            meGroupSelEl.value = prevValue;
+        }
+    }
+
+    function meGroupFetchOptions() {
+        return fetch('/Definitions/GetCardGroups?cardType=3&level=1', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (data) {
+                var items = Array.isArray(data) ? data : (data.items || []);
+                meGroupBuildOptions(items);
+                return items;
+            })
+            .catch(function (e) { console.error('[ME] grup listesi yuklenemedi:', e); return []; });
+    }
+
+    function meGroupLoadExistingMapping() {
+        if (!idVal) return Promise.resolve();
+        return fetch('/Definitions/GetCardGroupMappings?entityType=3&entityId=' + idVal, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (data) {
+                var mappings = Array.isArray(data) ? data : (data.items || data.mappings || []);
+                var lvl1 = mappings.find(function (m) { return m.level === 1; });
+                if (meGroupSelEl && lvl1 && lvl1.cardGroupId) meGroupSelEl.value = String(lvl1.cardGroupId);
+            })
+            .catch(function (e) { console.error('[ME] grup atamasi yuklenemedi:', e); });
+    }
+
+    // Sayfa acilisinda hemen yuklenir (tab tiklanmasini beklemez — MaterialCardEdit'in
+    // aksine tek dropdown oldugu icin lazy-load'a gerek yok). meGroupsSave da ayni
+    // promise'i bekler; Kaydet erken tiklansa bile guncel secim uzerinden gonderilir
+    // (yaris durumu / mevcut atamanin sessizce silinmesi riski yok).
+    function meGroupsEnsureLoaded() {
+        if (!_meGroupsReady) {
+            _meGroupsReady = meGroupFetchOptions().then(function () {
+                return meGroupLoadExistingMapping();
+            });
+        }
+        return _meGroupsReady;
+    }
+    meGroupsEnsureLoaded();
+
+    window.meGroupsSave = function (machineIdOverride) {
+        var entityId = machineIdOverride || (idVal ? parseInt(idVal, 10) : 0);
+        if (!entityId) return Promise.resolve({ success: true, skipped: true });
+        return meGroupsEnsureLoaded().then(function () {
+            var v = meGroupSelEl ? meGroupSelEl.value : '';
+            var levels = v ? [{ level: 1, cardGroupId: parseInt(v, 10) }] : [];
+            var payload = { entityType: 3, entityId: String(entityId), levels: levels };
+            return fetch('/Definitions/SaveCardGroupMappings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+            }).then(function (r) { return r.json().catch(function () { return { success: r.ok }; }); });
+        }).catch(function (e) {
+            console.error('[ME] grup kaydi hata:', e);
+            return { success: false, message: e.message };
+        });
+    };
+
     // ── Save ──
     var saveBtn = document.getElementById('me-save');
     if (saveBtn) {
@@ -329,7 +427,19 @@
                                 .catch(function (err) { console.warn('[ME] widget save hata:', err); });
                         } catch (e) { console.warn('[ME] widget save catch:', e); }
                     }
-                    widgetSavePromise.then(function () {
+                    // ── Grup eslestirmesini de ayni save akisinda kaydet ──
+                    // Not: basarisizlik "success:false" ile gelmeyebilir — 400 BadRequest
+                    // {error:...} doner, 403 (yetki yok) {ok:false,message:...} doner
+                    // (PermissionEnforcementFilter.MakeForbidResult). Bu yuzden basari
+                    // yalnizca res.success === true ile teyit edilir, diger her durum loglanir.
+                    var groupSavePromise = (typeof window.meGroupsSave === 'function' && newId > 0)
+                        ? window.meGroupsSave(newId).then(function (res) {
+                              if (res && !res.skipped && res.success !== true) {
+                                  console.warn('[ME] grup eslestirme kaydi basarisiz:', (res.message || res.error || 'Bilinmeyen hata'));
+                              }
+                          }).catch(function (err) { console.warn('[ME] group save hatasi:', err); })
+                        : Promise.resolve();
+                    Promise.all([widgetSavePromise, groupSavePromise]).then(function () {
                         window.location.href = '/Logistics/Machines';
                     });
                 } else {

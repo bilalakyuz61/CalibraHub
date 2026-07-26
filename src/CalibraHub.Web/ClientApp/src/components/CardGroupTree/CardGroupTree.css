@@ -24,6 +24,10 @@
   --cgt-teal-bg:      rgba(13,148,136,.1);
   --cgt-teal-color:   #0d9488;
   --cgt-teal-bdr:     rgba(13,148,136,.25);
+  /* Makine (CardType=3) sekmesi — backend kontratı: color="amber" */
+  --cgt-amber-bg:     rgba(245,158,11,.1);
+  --cgt-amber-color:  #b45309;
+  --cgt-amber-bdr:    rgba(245,158,11,.25);
 }
 body.app-theme-dark .cgt-root {
   color-scheme: dark;
@@ -36,6 +40,7 @@ body.app-theme-dark .cgt-root {
   --cgt-hover:        #111827;
   --cgt-del-bg:       rgba(239,68,68,.12);
   --cgt-del-color:    #f87171;
+  --cgt-amber-color:  #fbbf24;
 }
 
 /* ── Toolbar ── */
@@ -58,6 +63,9 @@ body.app-theme-dark .cgt-root {
 }
 .cgt-tab.tab-active-teal {
   background: var(--cgt-teal-bg); color: var(--cgt-teal-color); border-color: var(--cgt-teal-bdr);
+}
+.cgt-tab.tab-active-amber {
+  background: var(--cgt-amber-bg); color: var(--cgt-amber-color); border-color: var(--cgt-amber-bdr);
 }
 .cgt-spacer { flex: 1; min-width: 8px; }
 .cgt-search-wrap { position: relative; }
@@ -142,8 +150,9 @@ body.app-theme-dark .cgt-root {
   transition: border-color .12s, background .12s;
 }
 .cgt-card:hover { background: var(--cgt-hover); }
-.cgt-card.cgt-card-match { border-color: var(--cgt-indigo-color) !important; }
-.cgt-card.cgt-card-match-teal { border-color: var(--cgt-teal-color) !important; }
+.cgt-card.cgt-card-match-indigo { border-color: var(--cgt-indigo-color) !important; }
+.cgt-card.cgt-card-match-teal   { border-color: var(--cgt-teal-color)   !important; }
+.cgt-card.cgt-card-match-amber  { border-color: var(--cgt-amber-color)  !important; }
 
 .cgt-toggle {
   flex-shrink: 0; width: 20px; height: 20px;
@@ -167,6 +176,7 @@ body.app-theme-dark .cgt-root {
 }
 .cgt-badge-indigo { background: var(--cgt-indigo-bg); color: var(--cgt-indigo-color); }
 .cgt-badge-teal   { background: var(--cgt-teal-bg);   color: var(--cgt-teal-color); }
+.cgt-badge-amber  { background: var(--cgt-amber-bg);  color: var(--cgt-amber-color); }
 
 .cgt-actions { display: flex; gap: 3px; flex-shrink: 0; }
 .cgt-action-btn {
