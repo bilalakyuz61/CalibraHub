@@ -557,13 +557,21 @@
             })
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                if (d && d.ok) {
-                    if (!idVal && d.id) { location.href = '/Arge/ProjectEdit?id=' + d.id; }
-                    else { location.href = '/Arge/Projects'; }
-                } else {
-                    setErr((d && d.error) || 'Kayıt başarısız.');
-                    saveBtn.disabled = false;
-                }
+                if (!d || !d.ok) { setErr((d && d.error) || 'Kayıt başarısız.'); saveBtn.disabled = false; return; }
+                // Yeni proje: id ile edit ekranına dön — üst-bilgi ek alanları orada doldurulup kaydedilir
+                // (yeni kayıtta recordId henüz yoktu).
+                if (!idVal && d.id) { location.href = '/Arge/ProjectEdit?id=' + d.id; return; }
+                // Mevcut proje: üst-bilgi ek alanlarını da proje id'siyle kaydet, sonra listeye dön.
+                var r = window._apDynRenderer;
+                var done = function () { location.href = '/Arge/Projects'; };
+                if (idVal && r && r.getHasWidgets && r.getHasWidgets() && typeof r.save === 'function') {
+                    r.save({ recordId: idVal })
+                        .then(function (res) {
+                            if (res && res.success === false) { setErr('Ek alanlar: ' + (res.message || 'kaydedilemedi')); saveBtn.disabled = false; return; }
+                            done();
+                        })
+                        .catch(function () { done(); }); // widget hatası projeyi bozmasın
+                } else { done(); }
             })
             .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
         });
@@ -673,11 +681,50 @@ function apCloseModal() {
     }
 })();
 
-// ── DynamicWidgetRenderer mount (Ek Alanlar) ──
+// ── Widget bundle ready helper (header + görev renderer'ları paylaşır) ──
+window.__apWhenWidgetsReady = function (cb) {
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) { cb(); return; }
+    if (!document.querySelector('link[data-ap-bundle]')) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = '/react/calibrahub-widgets.css';
+        link.setAttribute('data-ap-bundle', '1');
+        document.head.appendChild(link);
+    }
+    var existing = document.querySelector('script[data-ap-bundle]');
+    if (existing) {
+        existing.addEventListener('load', function () { setTimeout(cb, 0); });
+        return;
+    }
+    var script = document.createElement('script');
+    script.src = '/react/calibrahub-widgets.js';
+    script.setAttribute('data-ap-bundle', '1');
+    script.onload  = function () { setTimeout(cb, 0); };
+    script.onerror = function () { console.error('[AP] Widget bundle yuklenemedi'); };
+    document.head.appendChild(script);
+};
+
+// getHasWidgets() polling ile bir bölümü görünür yap (mount hemen bilmeyebilir)
+function apRevealWhenHasWidgets(handle, sectionId) {
+    var attempts = 0;
+    var iv = setInterval(function () {
+        attempts++;
+        try {
+            if (handle && typeof handle.getHasWidgets === 'function' && handle.getHasWidgets()) {
+                var sec = document.getElementById(sectionId);
+                if (sec) sec.style.display = '';
+                clearInterval(iv);
+                return;
+            }
+        } catch (_) { }
+        if (attempts > 25) clearInterval(iv);
+    }, 200);
+}
+
+// ── Üst-bilgi özel alanları (ARGE_PROJECT_EDIT) — Genel Bilgiler içinde inline ──
 (function () {
     var el = document.getElementById('apDynamicWidgets');
     if (!el) return;
-    function doMount() {
+    window.__apWhenWidgetsReady(function () {
         if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
         try {
             window._apDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
@@ -685,44 +732,10 @@ function apCloseModal() {
                 recordId:    el.getAttribute('data-record-id') || '',
                 classPrefix: 'ap',
                 layout:      'stacked',
-                onMounted:   function (handle) {
-                    var attempts = 0;
-                    var iv = setInterval(function () {
-                        attempts++;
-                        try {
-                            if (handle && typeof handle.getHasWidgets === 'function' && handle.getHasWidgets()) {
-                                var nav = document.getElementById('apNavWidgets');
-                                if (nav) nav.style.display = '';
-                                clearInterval(iv);
-                                return;
-                            }
-                        } catch (_) { }
-                        if (attempts > 25) clearInterval(iv);
-                    }, 200);
-                }
+                onMounted:   function (handle) { apRevealWhenHasWidgets(handle, 'apWidgetsSection'); }
             });
-        } catch (e) { console.warn('[AP] mountDynamicWidgetRenderer hatasi:', e); }
-    }
-    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
-        doMount();
-    } else {
-        var cssUrl = '/react/calibrahub-widgets.css';
-        var jsUrl  = '/react/calibrahub-widgets.js';
-        if (!document.querySelector('link[data-ap-bundle]')) {
-            var link = document.createElement('link');
-            link.rel = 'stylesheet'; link.href = cssUrl;
-            link.setAttribute('data-ap-bundle', '1');
-            document.head.appendChild(link);
-        }
-        if (!document.querySelector('script[data-ap-bundle]')) {
-            var script = document.createElement('script');
-            script.src = jsUrl;
-            script.setAttribute('data-ap-bundle', '1');
-            script.onload  = function () { setTimeout(doMount, 0); };
-            script.onerror = function () { console.error('[AP] Bundle yuklenemedi'); };
-            document.head.appendChild(script);
-        }
-    }
+        } catch (e) { console.warn('[AP] header widget mount hatasi:', e); }
+    });
 })();
 
 function protoCloseDelModal() {
@@ -895,6 +908,22 @@ window.atCloseDelModal = function () {
     var seqOn = false;
     var usersLoaded = false;
 
+    // ── Görev-kalem özel alanları (PROJECT_TASK) — inline form içinde tek renderer,
+    //    her açılışta reload({recordId}) ile o göreve göre yüklenir. ──
+    var taskWidgetHandle = null;
+    (function mountTaskWidgets() {
+        var wel = document.getElementById('atDynamicWidgets');
+        if (!wel || !window.__apWhenWidgetsReady) return;
+        window.__apWhenWidgetsReady(function () {
+            if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+            try {
+                taskWidgetHandle = window.CalibraHub.mountDynamicWidgetRenderer(wel, {
+                    formCode: 'PROJECT_TASK', recordId: '', classPrefix: 'at', layout: 'stacked'
+                });
+            } catch (e) { console.warn('[AT] görev widget mount hatasi:', e); }
+        });
+    })();
+
     function csrfT() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
     function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function statusMsg(msg, isErr) {
@@ -990,6 +1019,16 @@ window.atCloseDelModal = function () {
             document.getElementById('at-desc').value = t ? (t.description || '') : '';
             document.getElementById('at-form-err').style.display = 'none';
             formEl.style.display = '';
+            // Görev-kalem ek alanları: bu göreve göre yükle (yeni görevde boş)
+            if (taskWidgetHandle) {
+                try { taskWidgetHandle.reload({ recordId: t ? String(t.id) : '' }); } catch (_) { }
+                if (taskWidgetHandle.getHasWidgets && taskWidgetHandle.getHasWidgets()) {
+                    var sec = document.getElementById('atWidgetsSection');
+                    if (sec) sec.style.display = '';
+                } else {
+                    apRevealWhenHasWidgets(taskWidgetHandle, 'atWidgetsSection');
+                }
+            }
             document.getElementById('at-title').focus();
         });
     }
@@ -1018,7 +1057,20 @@ window.atCloseDelModal = function () {
         saveBtn.disabled = true;
         fetch('/ProjectTask/Save', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfT() }, credentials: 'same-origin', body: JSON.stringify(payload) })
             .then(function (r) { return r.json(); })
-            .then(function (d) { saveBtn.disabled = false; if (d && d.ok) { closeForm(); load(); } else { errEl.textContent = (d && d.error) || 'Kayıt başarısız.'; errEl.style.display = ''; } })
+            .then(function (d) {
+                if (!d || !d.ok) { saveBtn.disabled = false; errEl.textContent = (d && d.error) || 'Kayıt başarısız.'; errEl.style.display = ''; return; }
+                var finish = function () { saveBtn.disabled = false; closeForm(); load(); };
+                // Görev-kalem ek alanlarını görev id'siyle kaydet (tanımlıysa)
+                var tid = d.id || payload.id;
+                if (tid && taskWidgetHandle && taskWidgetHandle.getHasWidgets && taskWidgetHandle.getHasWidgets() && typeof taskWidgetHandle.save === 'function') {
+                    taskWidgetHandle.save({ recordId: String(tid) })
+                        .then(function (res) {
+                            if (res && res.success === false) { saveBtn.disabled = false; errEl.textContent = 'Ek alanlar: ' + (res.message || 'kaydedilemedi'); errEl.style.display = ''; return; }
+                            finish();
+                        })
+                        .catch(function () { finish(); }); // widget hatası görevi bozmasın
+                } else { finish(); }
+            })
             .catch(function () { saveBtn.disabled = false; errEl.textContent = 'Bağlantı hatası.'; errEl.style.display = ''; });
     });
 
