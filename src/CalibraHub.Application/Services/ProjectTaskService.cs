@@ -63,7 +63,7 @@ public sealed class ProjectTaskService : IProjectTaskService
         return Math.Round(100m * done / denom, 2);
     }
 
-    public async Task<(bool Ok, string? Error, int Id)> SaveAsync(SaveProjectTaskRequest request, int? userId, CancellationToken ct)
+    public async Task<(bool Ok, string? Error, int Id)> SaveAsync(SaveProjectTaskRequest request, int? userId, int companyId, CancellationToken ct)
     {
         var title = request.Title?.Trim();
         if (string.IsNullOrWhiteSpace(title))
@@ -75,13 +75,14 @@ public sealed class ProjectTaskService : IProjectTaskService
         if (project is null)
             return (false, "Proje bulunamadı.", 0);
 
-        // Atanan kullanıcı doğrulaması (bildirim + FK güvenliği)
+        // Atanan kullanıcı doğrulaması (bildirim + FK güvenliği + şirket izolasyonu —
+        // Users çok-şirketli, başka şirketin kullanıcısına atama yasak)
         UserProfile? assignee = null;
         if (request.AssignedUserId is > 0)
         {
             assignee = await _users.GetByIdAsync(request.AssignedUserId.Value, ct);
-            if (assignee is null || !assignee.IsActive)
-                return (false, "Atanan kullanıcı bulunamadı veya pasif.", 0);
+            if (assignee is null || !assignee.IsActive || assignee.CompanyId != companyId)
+                return (false, "Atanan kullanıcı bulunamadı veya bu şirkete ait değil.", 0);
         }
 
         if (request.Id > 0)
@@ -352,15 +353,17 @@ public sealed class ProjectTaskService : IProjectTaskService
     public Task<IReadOnlyCollection<MyProjectTaskItem>> ListMineAsync(int userId, CancellationToken ct)
         => _tasks.ListMineAsync(userId, ct);
 
-    public Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(CancellationToken ct)
-        => _tasks.GetAssignableUsersAsync(ct);
+    public Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(int companyId, CancellationToken ct)
+        => companyId > 0
+            ? _tasks.GetAssignableUsersAsync(companyId, ct)
+            : Task.FromResult<IReadOnlyCollection<ProjectTaskUserOption>>(Array.Empty<ProjectTaskUserOption>()); // şirket claim'i yoksa fail-safe: boş liste
 
     // ── Şablonlar ───────────────────────────────────────────────────────────
 
     public Task<IReadOnlyCollection<ProjectTaskTemplateDto>> ListTemplatesAsync(CancellationToken ct)
         => _tasks.ListTemplatesAsync(ct);
 
-    public async Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, CancellationToken ct)
+    public async Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct)
     {
         var name = request.Name?.Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -381,15 +384,16 @@ public sealed class ProjectTaskService : IProjectTaskService
         if (all.Any(t => t.Id != request.Id && string.Equals(t.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)))
             return (false, $"Aynı isimde başka bir şablon zaten tanımlı: '{name}'", 0);
 
-        // Satır atamaları: yalnız aktif kullanıcılara izin ver (tek sorgu ile doğrula)
+        // Satır atamaları: yalnız oturum şirketinin aktif kullanıcılarına izin ver
+        // (tek sorgu ile doğrula — çapraz-şirket ataması yasak)
         var assignedIds = lines.Where(l => l.DefaultAssignedUserId is > 0)
             .Select(l => l.DefaultAssignedUserId!.Value).Distinct().ToList();
         if (assignedIds.Count > 0)
         {
-            var validUsers = (await _tasks.GetAssignableUsersAsync(ct)).Select(u => u.Id).ToHashSet();
+            var validUsers = (await GetAssignableUsersAsync(companyId, ct)).Select(u => u.Id).ToHashSet();
             var invalid = assignedIds.FirstOrDefault(id => !validUsers.Contains(id));
             if (invalid != 0)
-                return (false, "Şablon satırındaki atanan kullanıcı bulunamadı veya pasif.", 0);
+                return (false, "Şablon satırındaki atanan kullanıcı bulunamadı veya bu şirkete ait değil.", 0);
         }
 
         var template = new ProjectTaskTemplate
@@ -438,7 +442,7 @@ public sealed class ProjectTaskService : IProjectTaskService
         return (true, null);
     }
 
-    public async Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, CancellationToken ct)
+    public async Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct)
     {
         var project = await _argeProjects.GetByDocumentIdAsync(request.ProjectId, ct);
         if (project is null)
@@ -482,7 +486,8 @@ public sealed class ProjectTaskService : IProjectTaskService
                 assignee = await _users.GetByIdAsync(uid, ct);
                 userCache[uid] = assignee;
             }
-            if (assignee is null || !assignee.IsActive) continue;
+            // Şirket dışı/pasif atanan (eski şablon kaydı olabilir) → bildirim atlanır
+            if (assignee is null || !assignee.IsActive || assignee.CompanyId != companyId) continue;
             await NotifyAssignmentAsync(assignee, insertedIds[i], task.Title, project.Name, task.TargetDate, userId, ct);
         }
 

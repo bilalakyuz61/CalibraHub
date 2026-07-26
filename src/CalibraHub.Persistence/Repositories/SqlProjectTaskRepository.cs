@@ -368,13 +368,16 @@ public sealed class SqlProjectTaskRepository : IProjectTaskRepository
         return list;
     }
 
-    public async Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(CancellationToken ct)
+    public async Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(int companyId, CancellationToken ct)
     {
-        var sql = $"SELECT [Id],[FullName] FROM {_usersTable} WHERE [IsActive]=1 ORDER BY [FullName];";
+        // Users çok-şirketli (UX_Users_Comp_Email bileşik) — şirket filtresi ZORUNLU,
+        // yoksa dropdown'a diğer şirketlerin kullanıcıları sızar.
+        var sql = $"SELECT [Id],[FullName] FROM {_usersTable} WHERE [IsActive]=1 AND [CompanyId]=@C ORDER BY [FullName];";
         var list = new List<ProjectTaskUserOption>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@C", companyId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {

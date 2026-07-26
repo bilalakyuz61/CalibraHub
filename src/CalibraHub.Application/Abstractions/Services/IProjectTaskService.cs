@@ -11,8 +11,11 @@ public interface IProjectTaskService
     /// <summary>Projenin görevleri (sıra modu + hesaplanan ilerleme ile).</summary>
     Task<ProjectTaskListResult> ListAsync(int projectId, CancellationToken ct);
 
-    /// <summary>Görev ekle/güncelle. Atama yeni/değiştiyse atanana bildirim düşer.</summary>
-    Task<(bool Ok, string? Error, int Id)> SaveAsync(SaveProjectTaskRequest request, int? userId, CancellationToken ct);
+    /// <summary>
+    /// Görev ekle/güncelle. Atama yeni/değiştiyse atanana bildirim düşer.
+    /// companyId: oturum şirketi — atanan kullanıcı bu şirkete ait olmalı (çapraz-şirket yasak).
+    /// </summary>
+    Task<(bool Ok, string? Error, int Id)> SaveAsync(SaveProjectTaskRequest request, int? userId, int companyId, CancellationToken ct);
 
     /// <summary>
     /// Durum geçişi. restrictToAssignee=true iken yalnız görevin atananı işlem yapabilir
@@ -35,14 +38,14 @@ public interface IProjectTaskService
     /// <summary>Kullanıcıya atanmış aktif görevler ("Görevlerim").</summary>
     Task<IReadOnlyCollection<MyProjectTaskItem>> ListMineAsync(int userId, CancellationToken ct);
 
-    /// <summary>Atanabilir kullanıcılar (dropdown).</summary>
-    Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(CancellationToken ct);
+    /// <summary>Atanabilir kullanıcılar (dropdown) — yalnız oturum şirketinin aktif kullanıcıları.</summary>
+    Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(int companyId, CancellationToken ct);
 
     // ── Şablonlar ───────────────────────────────────────────────────────────
 
     Task<IReadOnlyCollection<ProjectTaskTemplateDto>> ListTemplatesAsync(CancellationToken ct);
 
-    Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, CancellationToken ct);
+    Task<(bool Ok, string? Error, int Id)> SaveTemplateAsync(SaveProjectTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct);
 
     Task<(bool Ok, string? Error)> DeleteTemplateAsync(int templateId, int? userId, CancellationToken ct);
 
@@ -51,5 +54,5 @@ public interface IProjectTaskService
     /// Şablon IsSequentialDefault ise ve projede kapalıysa sıralı mod açılır
     /// (SequentialEnabled=true döner — UI kullanıcıya söyler, sessiz yan etki yok).
     /// </summary>
-    Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, CancellationToken ct);
+    Task<(bool Ok, string? Error, int Created, bool SequentialEnabled)> ApplyTemplateAsync(ApplyTaskTemplateRequest request, int? userId, int companyId, CancellationToken ct);
 }

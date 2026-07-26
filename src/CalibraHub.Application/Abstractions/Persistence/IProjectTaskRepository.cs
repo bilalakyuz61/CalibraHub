@@ -54,8 +54,11 @@ public interface IProjectTaskRepository
     /// <summary>Kullanıcıya atanmış aktif görevler (proje adı/numarası + IsBlocked ile).</summary>
     Task<IReadOnlyCollection<MyProjectTaskItem>> ListMineAsync(int userId, CancellationToken ct);
 
-    /// <summary>Aktif kullanıcılar — atanan dropdown'u.</summary>
-    Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(CancellationToken ct);
+    /// <summary>
+    /// Atanabilir kullanıcılar — atanan dropdown'u. Users tablosu çok-şirketlidir;
+    /// yalnız verilen şirketin aktif kullanıcıları döner (çapraz-şirket sızıntısı yasak).
+    /// </summary>
+    Task<IReadOnlyCollection<ProjectTaskUserOption>> GetAssignableUsersAsync(int companyId, CancellationToken ct);
 
     // ── ArgeProject görev-sahası (SequentialTasks / ProgressPercent) ────────
 

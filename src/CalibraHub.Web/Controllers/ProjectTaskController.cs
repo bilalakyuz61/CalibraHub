@@ -46,7 +46,7 @@ public sealed class ProjectTaskController : Controller
         if (request is null) return Json(new { ok = false, error = "Geçersiz istek." });
         try
         {
-            var (ok, error, id) = await _tasks.SaveAsync(request, CurrentUserId(), ct);
+            var (ok, error, id) = await _tasks.SaveAsync(request, CurrentUserId(), CurrentCompanyId(), ct);
             return Json(new { ok, error, id });
         }
         catch (Exception ex)
@@ -118,7 +118,7 @@ public sealed class ProjectTaskController : Controller
         if (request is null) return Json(new { ok = false, error = "Geçersiz istek." });
         try
         {
-            var (ok, error, created, sequentialEnabled) = await _tasks.ApplyTemplateAsync(request, CurrentUserId(), ct);
+            var (ok, error, created, sequentialEnabled) = await _tasks.ApplyTemplateAsync(request, CurrentUserId(), CurrentCompanyId(), ct);
             return Json(new { ok, error, created, sequentialEnabled });
         }
         catch (Exception ex)
@@ -162,7 +162,7 @@ public sealed class ProjectTaskController : Controller
         if (request is null) return Json(new { ok = false, error = "Geçersiz istek." });
         try
         {
-            var (ok, error, id) = await _tasks.SaveTemplateAsync(request, CurrentUserId(), ct);
+            var (ok, error, id) = await _tasks.SaveTemplateAsync(request, CurrentUserId(), CurrentCompanyId(), ct);
             return Json(new { ok, error, id });
         }
         catch (Exception ex)
@@ -191,10 +191,10 @@ public sealed class ProjectTaskController : Controller
 
     // ── Lookup uçları (cross-form muaf — dropdown besleme) ──────────────────
 
-    // GET /ProjectTask/UsersLookup → atanabilir kullanıcılar
+    // GET /ProjectTask/UsersLookup → atanabilir kullanıcılar (yalnız oturum şirketi)
     [HttpGet]
     public async Task<IActionResult> UsersLookup(CancellationToken ct)
-        => Json(await _tasks.GetAssignableUsersAsync(ct));
+        => Json(await _tasks.GetAssignableUsersAsync(CurrentCompanyId(), ct));
 
     // GET /ProjectTask/TemplatesLookup → şablon dropdown'u { id, label, lineCount }
     [HttpGet]
@@ -208,6 +208,10 @@ public sealed class ProjectTaskController : Controller
 
     private int? CurrentUserId()
         => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    /// <summary>Oturum şirketi (login'de yazılan "company_id" claim'i). 0 = bilinmiyor → fail-safe boş liste.</summary>
+    private int CurrentCompanyId()
+        => int.TryParse(User.FindFirstValue("company_id"), out var id) && id > 0 ? id : 0;
 
     /// <summary>
     /// EDIT erişim kapsamı "All" değilse kullanıcı yalnız kendisine atanmış görevlerin
