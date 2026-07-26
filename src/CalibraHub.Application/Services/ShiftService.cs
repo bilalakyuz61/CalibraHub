@@ -40,17 +40,26 @@ public sealed class ShiftService : IShiftService
         if (dupName is not null)
             throw new ArgumentException($"Aynı isimde başka bir vardiya zaten tanımlı: '{name}'");
 
-        // Code DB'de var ama UI gostermez — auto-turetilir (mevcut record'sa onun kodunu koru)
+        // Code/ColorHex/SortOrder DB'de var ama UI GOSTERMEZ (Code hiç, ColorHex+SortOrder
+        // 2026-07-26 PageComment Seq 44 ile kaldırıldı). UI bu alanları artık POST'lamadığı için
+        // request'ten okumak update'te mevcut değeri sessizce null/0'a ezerdi (CLAUDE.md "sessiz
+        // kırık" veri kaybı) — mevcut kaydı çekip ÜÇÜNÜ de koruyoruz.
         string code;
+        string? colorHex;
+        int sortOrder;
         if (id > 0)
         {
             var current = existing.FirstOrDefault(x => x.Id == id)
                           ?? await _repo.GetAsync(id, ct);
-            code = !string.IsNullOrWhiteSpace(current?.Code) ? current!.Code : DeriveCode(name);
+            code      = !string.IsNullOrWhiteSpace(current?.Code) ? current!.Code : DeriveCode(name);
+            colorHex  = current?.ColorHex;
+            sortOrder = current?.SortOrder ?? 0;
         }
         else
         {
-            code = DeriveCode(name);
+            code      = DeriveCode(name);
+            colorHex  = null;
+            sortOrder = 0;
         }
 
         var entity = new Shift
@@ -61,8 +70,8 @@ public sealed class ShiftService : IShiftService
             StartTime   = start,
             EndTime     = end,
             IsOvernight = overnight,
-            ColorHex    = string.IsNullOrWhiteSpace(request.ColorHex) ? null : request.ColorHex.Trim(),
-            SortOrder   = request.SortOrder,
+            ColorHex    = colorHex,
+            SortOrder   = sortOrder,
             IsActive    = request.IsActive,
             CreatedById = userId,
             UpdatedById = userId,
