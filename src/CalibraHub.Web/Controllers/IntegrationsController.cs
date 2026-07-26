@@ -1192,7 +1192,8 @@ public sealed class IntegrationsController : Controller
 
             // Kullanıcı bilgileri — per-button permission check için
             var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-            UserAuthorizationCatalog.TryParseRole(roleStr, out var role);
+            if (!UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
+                role = UserRole.Operator;
             var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? (int?)uid : null;
             int? deptId = int.TryParse(User.FindFirstValue("department_id"), out var d) && d > 0 ? d : null;
 

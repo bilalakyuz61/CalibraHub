@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Security;
 using CalibraHub.Application.Services.Security;
 using CalibraHub.Domain.Enums;
@@ -75,7 +76,8 @@ public static class IntegrationButtonActionHelper
             return buttons;
 
         var roleStr = user.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-        UserAuthorizationCatalog.TryParseRole(roleStr, out var role);
+        if (!UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
+            role = UserRole.Operator;
         if (role == UserRole.SystemAdmin)
             return buttons; // kısa yol: per-buton DB sorgusu gerekmez
 
@@ -97,12 +99,14 @@ public static class IntegrationButtonActionHelper
     /// <see cref="GetAuthorizedManualButtonsAsync"/>'i, IntegrationsController.ByFormApi,
     /// IntegrationController.Run) buna bağlanır.
     ///
-    /// Kural (2026-07-26 sıkılaştırma):
+    /// Kural (2026-07-26 sıkılaştırma; 2026-07-26 adversarial review BULGU 3 düzeltmesi):
     ///   • SystemAdmin → her zaman izinli (DB sorgusu yok).
     ///   • PermissionDef VAR + aktif → IPermissionService.CheckAsync grant kontrolü
     ///     (DepartmentManager bypass'ı CheckAsync içinde merkezî — SetupDefinitions hariç izinli).
-    ///   • PermissionDef YOK/pasif → YALNIZ SystemAdmin + DepartmentManager (fail-safe;
-    ///     eski "tanım yoksa herkese serbest" geriye-uyumluluğu kaldırıldı).
+    ///   • PermissionDef YOK/pasif → YALNIZ SystemAdmin + DepartmentManager, VE sourceFormCode
+    ///     SetupDefinitions İSE DepartmentManager de reddedilir (fail-safe fallback yolu, aktif-def
+    ///     yolundaki CheckAsync'in SetupDefinitions'ı DeptManager'a reddetme kuralıyla TUTARLI
+    ///     olsun diye — eski "tanım yoksa herkese serbest" geriye-uyumluluğu zaten kaldırılmıştı).
     /// </summary>
     public static async Task<bool> CanRunManualButtonAsync(
         UserRole role, int? userId, int? departmentId,
@@ -123,8 +127,11 @@ public static class IntegrationButtonActionHelper
             return await permService.CheckAsync(userId.Value, role, departmentId, sourceFormCode, actionCode, ct);
         }
 
-        // Tanım yok/pasif → yalnız yönetici rolleri (SystemAdmin yukarıda döndü).
-        return role == UserRole.DepartmentManager;
+        // Tanım yok/pasif → yalnız yönetici rolleri (SystemAdmin yukarıda döndü), ANCAK
+        // SetupDefinitions'ta DepartmentManager de reddedilir — aktif-def yolunda CheckAsync
+        // zaten bu formu DeptManager'a kapatıyor; fallback yolu aynı istisnayı atlamamalı.
+        return role == UserRole.DepartmentManager
+            && !string.Equals(sourceFormCode, FormCodes.SetupDefinitions, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

@@ -55,7 +55,8 @@ public sealed class IntegrationController : Controller
             // Per-buton yetki kontrolü — ortak kural (IntegrationButtonActionHelper). Sınıf kapısı
             // bu action'da muaf; gerçek yetki butonun SourceFormCode'u + BUTTON:INT_{id} üzerinden.
             var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-            UserAuthorizationCatalog.TryParseRole(roleStr, out var role);
+            if (!UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
+                role = UserRole.Operator;
             if (role != UserRole.SystemAdmin)
             {
                 // Butonun SourceFormCode'u için Integration kaydını çöz (varlık kontrolü de burada).

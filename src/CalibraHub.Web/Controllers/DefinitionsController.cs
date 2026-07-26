@@ -1,6 +1,10 @@
+using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
 using CalibraHub.Domain.Entities;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Models.Definitions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,10 +15,12 @@ namespace CalibraHub.Web.Controllers;
 public sealed class DefinitionsController : Controller
 {
     private readonly ICardGroupRepository _repo;
+    private readonly IPermissionService _permService;
 
-    public DefinitionsController(ICardGroupRepository repo)
+    public DefinitionsController(ICardGroupRepository repo, IPermissionService permService)
     {
         _repo = repo;
+        _permService = permService;
     }
 
     // ── CardGroups list (C-Grid / SmartBoard) ────────────────────────────────
@@ -266,6 +272,10 @@ public sealed class DefinitionsController : Controller
     // Bu uç üç host karttan çağrılır: Malzeme (entityType=1, MATERIAL_CARD_EDIT),
     // Cari (entityType=2, CONTACTS), Makine (entityType=3, MACHINES) + Kart Grupları ekranı
     // (CARD_GROUPS). Çoklu-kapsam: bu formlardan HERHANGİ BİRİNDE grant'lı kullanıcı geçer (Seq 43).
+    // COARSE gate — yalnız "kullanıcı bu 4 formdan birinde yazma yetkisine sahip mi" garantisi
+    // verir, req.EntityType'a bakmaz. 2026-07-26 adversarial review BULGU 1: coarse-only iken
+    // yalnız MACHINES yetkisi olan kullanıcı gövdeye EntityType=1 (Malzeme) koyup çapraz-entity
+    // yazabiliyordu. Asıl entityType↔form bağlama kontrolü AŞAĞIDA gövde bazlı yapılır.
     [CalibraHub.Web.Authorization.PermissionScopeAny(
         CalibraHub.Application.Constants.FormCodes.CardGroups,
         CalibraHub.Application.Constants.FormCodes.MaterialCardEdit,
@@ -275,6 +285,45 @@ public sealed class DefinitionsController : Controller
     {
         if (req.EntityType is not (1 or 2 or 3) || string.IsNullOrWhiteSpace(req.EntityId))
             return BadRequest(new { error = "Geçersiz parametre." });
+
+        // FINE gate (BULGU 1 fix) — req.EntityType'ın gerektirdiği GERÇEK host forma bağla.
+        // Yalnız CardGroups grant'ı da yeterli sayılır (bilinçli genel-yetki yolu — Kart
+        // Grupları ekranından tüm entity tiplerini yönetebilen kullanıcı için).
+        var requiredForm = req.EntityType switch
+        {
+            1 => CalibraHub.Application.Constants.FormCodes.MaterialCardEdit,
+            2 => CalibraHub.Application.Constants.FormCodes.ContactEdit,
+            _ => CalibraHub.Application.Constants.FormCodes.Machines, // 3 — yukarıda 1/2/3 dışı zaten elendi
+        };
+
+        // Claim çözümü — PermissionEnforcementFilter'daki ile AYNI desen (TryParseRole
+        // başarısızsa Operator'a düşer, deptId yalnız pozitifse dolar).
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int.TryParse(userIdStr, out var userId);
+        var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        if (!UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
+            role = UserRole.Operator;
+        var deptStr = User.FindFirstValue("department_id");
+        int? deptId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
+
+        var writeActions = new[]
+        {
+            PermissionDef.StandardActions.Create,
+            PermissionDef.StandardActions.EditOwn,
+            PermissionDef.StandardActions.EditAll,
+        };
+        // DepartmentManager/SystemAdmin bypass CheckAnyAsync → CheckAsync içinde merkezî
+        // olarak zaten uygulanıyor (SetupDefinitions hariç) — burada ayrıca ele alınmaz.
+        var allowed = await _permService.CheckAnyAsync(userId, role, deptId, requiredForm, writeActions, ct)
+            || await _permService.CheckAnyAsync(userId, role, deptId, CalibraHub.Application.Constants.FormCodes.CardGroups, writeActions, ct);
+        if (!allowed)
+            return StatusCode(403, new
+            {
+                success = false,
+                ok      = false,
+                message = "Bu işlemi yapmak için yetkiniz yok.",
+                error   = "Bu işlemi yapmak için yetkiniz yok.",
+            });
 
         var levels = req.Levels
             .Select(l => (l.Level, l.CardGroupId))
