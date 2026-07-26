@@ -15539,7 +15539,10 @@ END;";
                 CREATE INDEX [ix_RIM_Item] ON [{schemaForSql}].[RoutingItemMap]([ItemId]);
             END;
 
-            -- ===== OperationMachineTime (operasyon × makine × urun bazli sure) =====
+            -- ===== OperationMachineTime (operasyon × makine/makine-grubu × urun/urun-grubu × rota bazli sure) =====
+            -- Seq 45+46 (2026-07-27): hibrit kimlik. Makine XOR makine-grubu; urun XOR urun-grubu;
+            -- RoutingId NULL = tum rotalarda ortak (Seq 41 davranisi) / dolu = o rotaya ozel;
+            -- UnitId opsiyonel (yalniz ItemId dolayken anlamli).
             IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{schemaForSql}].[OperationMachineTime]
@@ -15547,23 +15550,35 @@ END;";
                     [Id]              INT NOT NULL IDENTITY(1,1) CONSTRAINT [PK_OpMachineTime] PRIMARY KEY,
                     [CompanyId]       INT NOT NULL,
                     [OperationId]     INT NOT NULL,
-                    [MachineId]       INT NOT NULL,
+                    [RoutingId]       INT NULL,
+                    [MachineId]       INT NULL,
+                    [MachineGroupId]  INT NULL,
                     [ItemId]          INT NULL,
+                    [ItemGroupId]     INT NULL,
+                    [UnitId]          INT NULL,
                     [Quantity]        DECIMAL(18,4) NOT NULL CONSTRAINT [df_OpMT_Quantity] DEFAULT(1),
                     [DurationPerUnit] DECIMAL(10,4) NOT NULL,
                     [DurationUnit]    TINYINT NOT NULL CONSTRAINT [df_OpMT_DurUnit]   DEFAULT(1),
                     [IsActive]        BIT NOT NULL    CONSTRAINT [df_OpMT_IsActive]  DEFAULT(1),
                     [Created]         DATETIME NOT NULL CONSTRAINT [df_OpMT_Created] DEFAULT(GETUTCDATE()),
                     [Updated]         DATETIME NULL,
-                    CONSTRAINT [CK_OpMT_DurationUnit] CHECK ([DurationUnit] IN (1, 2))
+                    CONSTRAINT [CK_OpMT_DurationUnit] CHECK ([DurationUnit] IN (1, 2)),
+                    -- Makine XOR makine-grubu: her satirda tam biri dolu.
+                    CONSTRAINT [CK_OpMT_MachineXor] CHECK (
+                        ([MachineId] IS NOT NULL AND [MachineGroupId] IS NULL)
+                        OR ([MachineId] IS NULL AND [MachineGroupId] IS NOT NULL)),
+                    -- Urun ve urun-grubu ayni anda dolu olamaz (ikisi de NULL olabilir = genel).
+                    CONSTRAINT [CK_OpMT_ItemXor] CHECK (
+                        NOT ([ItemId] IS NOT NULL AND [ItemGroupId] IS NOT NULL)),
+                    -- Birim yalniz belirli bir urun icin anlamli.
+                    CONSTRAINT [CK_OpMT_UnitNeedsItem] CHECK (
+                        [UnitId] IS NULL OR [ItemId] IS NOT NULL)
                 );
-                -- Filtered indexler: ItemId dolu (urune ozel) ve NULL (genel) durumlari ayri unique olur.
-                CREATE UNIQUE INDEX [ux_OpMT_Op_Machine_Item]
-                    ON [{schemaForSql}].[OperationMachineTime]([CompanyId], [OperationId], [MachineId], [ItemId])
-                    WHERE [ItemId] IS NOT NULL;
-                CREATE UNIQUE INDEX [ux_OpMT_Op_Machine_Generic]
-                    ON [{schemaForSql}].[OperationMachineTime]([CompanyId], [OperationId], [MachineId])
-                    WHERE [ItemId] IS NULL;
+                -- Tek bilesik kimlik: makine tarafi XOR CHECK ile her satirda tam bir non-null olur;
+                -- RoutingId NULL/dolu ayri anahtar sayilir (SQL Server unique index'te NULL'lar esittir).
+                -- UnitId anahtara GIRMEZ — ayni urun icin tek satir, birim opsiyonel bilgidir.
+                CREATE UNIQUE INDEX [ux_OpMT_Identity]
+                    ON [{schemaForSql}].[OperationMachineTime]([CompanyId], [OperationId], [RoutingId], [MachineId], [MachineGroupId], [ItemId], [ItemGroupId]);
                 CREATE INDEX [ix_OpMT_Operation]
                     ON [{schemaForSql}].[OperationMachineTime]([OperationId]);
             END;
