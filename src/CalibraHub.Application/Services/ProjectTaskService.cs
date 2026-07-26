@@ -458,7 +458,7 @@ public sealed class ProjectTaskService : IProjectTaskService
             })
             .ToList();
 
-        var created = (await _tasks.InsertBatchAsync(tasks, ct)).Count;
+        var created = await _tasks.InsertBatchAsync(tasks, ct);
         await _tasks.RecalcProjectProgressAsync(request.ProjectId, userId, ct);
 
         // Şablon sıralı-varsayılan ise ve projede kapalıysa aç — cevapta bildirilir (sessiz yan etki yok).
