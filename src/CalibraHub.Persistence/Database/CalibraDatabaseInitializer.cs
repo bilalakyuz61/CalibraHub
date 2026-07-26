@@ -15591,6 +15591,131 @@ END;";
                     ADD [Quantity] DECIMAL(18,4) NOT NULL CONSTRAINT [df_OpMT_Quantity] DEFAULT(1);
             END;
 
+            -- ===== OperationMachineTime genisletme (Seq 45+46, 2026-07-27) — idempotent migration =====
+            -- Sira ZORUNLU: (1) eski 2 filtered unique index DROP -> (2) MachineId NULL'a cevir ->
+            -- (3) 4 yeni kolon ADD -> (4) yeni tek bilesik unique index CREATE -> (5) XOR/Unit CHECK'ler ->
+            -- (6) 4 FK. Yeni kolonlara referans veren TUM ifadeler EXEC(N'...') ile sarmalanir: ADD COLUMN
+            -- ile ayni batch'te compile-time "Invalid column name" hatasini onler (bkz. BELGE_TIPI deseni).
+            -- Mevcut satirlar (MachineId dolu + yeni kolonlar NULL) uc CHECK'i de saglar => WITH CHECK guvenli.
+
+            -- (1) Eski filtered unique index'leri dusur (MachineId'yi iceriyorlar; ALTER COLUMN oncesi zorunlu).
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE [name] = N'ux_OpMT_Op_Machine_Item'
+                             AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'DROP INDEX [ux_OpMT_Op_Machine_Item] ON [{schemaForSql}].[OperationMachineTime];');
+
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE [name] = N'ux_OpMT_Op_Machine_Generic'
+                             AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'DROP INDEX [ux_OpMT_Op_Machine_Generic] ON [{schemaForSql}].[OperationMachineTime];');
+
+            -- (2) MachineId NOT NULL -> NULL (makine XOR makine-grubu icin). Index'ler dusuruldu, guvenli.
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND EXISTS (SELECT 1 FROM sys.columns
+                           WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]')
+                             AND [name] = N'MachineId' AND [is_nullable] = 0)
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] ALTER COLUMN [MachineId] INT NULL;');
+
+            -- (3) 4 yeni kolon (hepsi NULL, default yok -> mevcut satirlar NULL alir; her biri ayri guard).
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'RoutingId') IS NULL
+                ALTER TABLE [{schemaForSql}].[OperationMachineTime] ADD [RoutingId] INT NULL;
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'MachineGroupId') IS NULL
+                ALTER TABLE [{schemaForSql}].[OperationMachineTime] ADD [MachineGroupId] INT NULL;
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'ItemGroupId') IS NULL
+                ALTER TABLE [{schemaForSql}].[OperationMachineTime] ADD [ItemGroupId] INT NULL;
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'UnitId') IS NULL
+                ALTER TABLE [{schemaForSql}].[OperationMachineTime] ADD [UnitId] INT NULL;
+
+            -- (4) Yeni tek bilesik unique kimlik index'i. Mevcut veri eski iki index'i sagliyorsa
+            --     (yeni kolonlar tumu NULL => anahtar (Company,Op,Machine,Item)'a indirgenir) bunu da saglar.
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'RoutingId') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'MachineGroupId') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'ItemGroupId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE [name] = N'ux_OpMT_Identity'
+                                 AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'CREATE UNIQUE INDEX [ux_OpMT_Identity]
+                    ON [{schemaForSql}].[OperationMachineTime]([CompanyId], [OperationId], [RoutingId], [MachineId], [MachineGroupId], [ItemId], [ItemGroupId]);');
+
+            -- (5) CHECK kisitlari (WITH CHECK — mevcut satirlar hepsini saglar, dogrulandi).
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'MachineGroupId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.check_constraints
+                               WHERE [name] = N'CK_OpMT_MachineXor'
+                                 AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] WITH CHECK
+                    ADD CONSTRAINT [CK_OpMT_MachineXor] CHECK (
+                        ([MachineId] IS NOT NULL AND [MachineGroupId] IS NULL)
+                        OR ([MachineId] IS NULL AND [MachineGroupId] IS NOT NULL));');
+
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'ItemGroupId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.check_constraints
+                               WHERE [name] = N'CK_OpMT_ItemXor'
+                                 AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] WITH CHECK
+                    ADD CONSTRAINT [CK_OpMT_ItemXor] CHECK (
+                        NOT ([ItemId] IS NOT NULL AND [ItemGroupId] IS NOT NULL));');
+
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'UnitId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.check_constraints
+                               WHERE [name] = N'CK_OpMT_UnitNeedsItem'
+                                 AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] WITH CHECK
+                    ADD CONSTRAINT [CK_OpMT_UnitNeedsItem] CHECK (
+                        [UnitId] IS NULL OR [ItemId] IS NOT NULL);');
+
+            -- (6) FK'ler (ON DELETE yok; mevcut satirlarda tum FK kolonlari NULL => WITH CHECK guvenli).
+            --     Referans tablolar (Routing/CardGroup/Unit) bu noktada zaten kurulu (zincir sirasi garanti).
+            --     Bu bloklar sifirdan-kurulumda da calisir: CREATE TABLE FK'siz kurar, FK'ler burada eklenir.
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[Routing]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'RoutingId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                               WHERE [name] = N'FK_OpMachineTime_Routing'
+                                 AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] WITH CHECK
+                    ADD CONSTRAINT [FK_OpMachineTime_Routing] FOREIGN KEY ([RoutingId])
+                        REFERENCES [{schemaForSql}].[Routing]([Id]);');
+
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[CardGroup]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'MachineGroupId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                               WHERE [name] = N'FK_OpMachineTime_MachineGroup'
+                                 AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] WITH CHECK
+                    ADD CONSTRAINT [FK_OpMachineTime_MachineGroup] FOREIGN KEY ([MachineGroupId])
+                        REFERENCES [{schemaForSql}].[CardGroup]([Id]);');
+
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[CardGroup]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'ItemGroupId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                               WHERE [name] = N'FK_OpMachineTime_ItemGroup'
+                                 AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] WITH CHECK
+                    ADD CONSTRAINT [FK_OpMachineTime_ItemGroup] FOREIGN KEY ([ItemGroupId])
+                        REFERENCES [{schemaForSql}].[CardGroup]([Id]);');
+
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[Unit]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'UnitId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                               WHERE [name] = N'FK_OpMachineTime_Unit'
+                                 AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]'))
+                EXEC(N'ALTER TABLE [{schemaForSql}].[OperationMachineTime] WITH CHECK
+                    ADD CONSTRAINT [FK_OpMachineTime_Unit] FOREIGN KEY ([UnitId])
+                        REFERENCES [{schemaForSql}].[Unit]([Id]);');
+
             -- ===== Faz 3a (revize): Personnel tablosu — uretim personneli =====
             -- User'dan ayri tablo. PIN/NFC, vardiya, departman ve operator flag burada.
             -- Sistem kullanicisi olan personnellerde UserId baglar; kullanicisi olmayan
