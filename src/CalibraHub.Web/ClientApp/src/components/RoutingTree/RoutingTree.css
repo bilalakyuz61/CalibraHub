@@ -660,6 +660,11 @@
   border-color: rgba(6,182,212,0.4);
   color: #67e8f9;
 }
+.rt-act--times:hover {
+  background: rgba(139,92,246,0.14);
+  border-color: rgba(139,92,246,0.4);
+  color: #c4b5fd;
+}
 .rt-ops__head {
   display: flex;
   align-items: center;
@@ -835,6 +840,108 @@
 .rt-del-modal__label { font-size: 12px; color: #64748b; margin-top: 2px; }
 .rt-del-modal__body  { font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.6; }
 .rt-del-modal__foot  { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Makine Süreleri modal — operasyon x makine (x opsiyonel ürün) süre eşleştirme ── */
+.rt-mt-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.rt-mt-modal {
+  background: #111827;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  width: 720px; max-width: 100%;
+  max-height: 86vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  overflow: hidden;
+}
+.rt-mt-modal__head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 16px 12px 20px;
+  flex-shrink: 0;
+}
+.rt-mt-modal__icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(99,102,241,0.15) 100%);
+  border: 1px solid rgba(139,92,246,0.35);
+  display: flex; align-items: center; justify-content: center;
+  color: #c4b5fd;
+  flex-shrink: 0;
+}
+.rt-mt-modal__id { flex: 1; min-width: 0; }
+.rt-mt-modal__title { font-size: 15px; font-weight: 700; color: #f1f5f9; line-height: 1.2; }
+.rt-mt-modal__sub {
+  font-size: 11.5px; color: #64748b; margin-top: 2px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.rt-mt-modal__hint {
+  font-size: 11.5px;
+  color: #64748b;
+  padding: 0 20px 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+.rt-mt-modal__body {
+  flex: 1; overflow-y: auto;
+  padding: 10px 20px 16px;
+}
+.rt-mt-modal__foot {
+  display: flex; justify-content: flex-end;
+  gap: 8px; padding: 12px 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
+.rt-mt-list { display: flex; flex-direction: column; gap: 6px; }
+.rt-mt-empty {
+  padding: 28px 12px; text-align: center;
+  font-size: 12.5px; color: #374151; font-style: italic;
+}
+
+.rt-mt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  flex-wrap: wrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+.rt-mt-row:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.1);
+}
+.rt-mt-row__spacer { flex: 1 1 auto; }
+
+.rt-mt-form-row {
+  padding: 8px 10px;
+  background: rgba(139,92,246,0.08);
+  border: 1px dashed rgba(139,92,246,0.32);
+  border-radius: 10px;
+}
+.rt-mt-form {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.rt-mt-fi--machine, .rt-mt-fi--item { flex: 1 1 170px; min-width: 140px; position: relative; }
+.rt-mt-fi--qty  { width: 76px; flex-shrink: 0; }
+.rt-mt-fi--dur  { width: 76px; flex-shrink: 0; }
+.rt-mt-fi--unit { width: 92px; flex-shrink: 0; }
+.rt-mt-fi__clear {
+  background: none; border: none; cursor: pointer; color: #64748b;
+  display: inline-flex; align-items: center; padding: 2px; border-radius: 4px; flex-shrink: 0;
+}
+.rt-mt-fi__clear:hover { color: #f87171; background: rgba(239,68,68,0.12); }
+.rt-mt-add-btn { align-self: flex-start; margin-top: 2px; }
 
 /* ════════════════════════════════════════════════════════════════════════
    LIGHT THEME — body.app-theme-light scope
@@ -1206,3 +1313,53 @@ body.app-theme-light .rt-del-modal__icon {
 body.app-theme-light .rt-del-modal__title { color: #0f172a; }
 body.app-theme-light .rt-del-modal__label { color: #94a3b8; }
 body.app-theme-light .rt-del-modal__body  { color: #475569; }
+
+/* ── Aksiyon butonu (Makine Süreleri) ── */
+body.app-theme-light .rt-act--times:hover {
+  background: rgba(139,92,246,0.12);
+  border-color: rgba(139,92,246,0.4);
+  color: #7c3aed;
+}
+
+/* ── Makine Süreleri modal ── */
+body.app-theme-light .rt-mt-backdrop {
+  background: rgba(15,23,42,0.4);
+}
+body.app-theme-light .rt-mt-modal {
+  background: #ffffff;
+  border-color: rgba(15,23,42,0.1);
+  box-shadow: 0 20px 60px rgba(15,23,42,0.25);
+}
+body.app-theme-light .rt-mt-modal__icon {
+  background: linear-gradient(135deg, rgba(139,92,246,0.14) 0%, rgba(99,102,241,0.08) 100%);
+  border-color: rgba(139,92,246,0.3);
+  color: #7c3aed;
+}
+body.app-theme-light .rt-mt-modal__title { color: #0f172a; }
+body.app-theme-light .rt-mt-modal__sub   { color: #94a3b8; }
+body.app-theme-light .rt-mt-modal__hint {
+  color: #64748b;
+  border-bottom-color: rgba(15,23,42,0.07);
+}
+body.app-theme-light .rt-mt-modal__foot {
+  border-top-color: rgba(15,23,42,0.07);
+}
+
+body.app-theme-light .rt-mt-empty { color: #94a3b8; }
+body.app-theme-light .rt-mt-row {
+  background: rgba(15,23,42,0.02);
+  border-color: rgba(15,23,42,0.07);
+}
+body.app-theme-light .rt-mt-row:hover {
+  background: #ffffff;
+  border-color: rgba(15,23,42,0.14);
+}
+body.app-theme-light .rt-mt-form-row {
+  background: rgba(139,92,246,0.05);
+  border-color: rgba(139,92,246,0.3);
+}
+body.app-theme-light .rt-mt-fi__clear { color: #94a3b8; }
+body.app-theme-light .rt-mt-fi__clear:hover {
+  color: #dc2626;
+  background: rgba(239,68,68,0.1);
+}
