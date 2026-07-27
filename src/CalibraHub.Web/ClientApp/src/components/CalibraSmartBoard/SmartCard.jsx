@@ -610,7 +610,17 @@ export default function SmartCard(props) {
         // Cariler eslestirme modali — payload: { groupId, groupCode, groupName }
         ch.openPriceGroupContactsModal(Object.assign({}, action.payload || {}))
       } else {
-        console.warn('[SmartCard] Unknown trigger:', triggerName)
+        // Generic fallback — header-level action.trigger (bkz. SmartBoard.jsx handleActionClick)
+        // ile ayni desen: window.CalibraHub[trigger](payload) yoksa window[trigger](payload).
+        // Sayfaya ozgu tek-seferlik trigger'lar (ornegin custom Duzenle modali) icin, ozel bir
+        // hardcoded dal eklemeye gerek kalmadan kullanilabilir.
+        var fn = (ch && typeof ch[triggerName] === 'function')
+          ? ch[triggerName]
+          : (typeof window !== 'undefined' && typeof window[triggerName] === 'function')
+            ? window[triggerName]
+            : null
+        if (fn) fn(action.payload || {})
+        else console.warn('[SmartCard] Unknown trigger:', triggerName)
       }
       return
     }
