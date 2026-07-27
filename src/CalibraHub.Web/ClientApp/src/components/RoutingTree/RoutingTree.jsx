@@ -131,11 +131,14 @@ function DeleteModal({ target, onConfirm, onCancel }) {
   )
 }
 
-// ── Generic seçici modal (operasyon / makine / stok) ───────────────────────
-function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryParam }) {
+// ── Generic seçici modal (operasyon / makine / stok / kart grubu) ──────────
+//   filterIds verilirse (Set<number>) liste o id'lerle sınırlanır (ör. rota ürünleri, Seq 46) —
+//   kullanıcı "Tümünü Göster" ile filtreyi o oturumluk bypass edebilir.
+function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryParam, filterIds, filterHint }) {
   var [list, setList]       = useState([])
   var [search, setSearch]   = useState('')
   var [loading, setLoading] = useState(true)
+  var [showAll, setShowAll] = useState(false)
 
   // Server-side ararken queryParam var (ornek StockLookup ?q=)
   useEffect(() => {
@@ -150,22 +153,29 @@ function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryPa
     return () => document.removeEventListener('keydown', onKey)
   }, [lookupUrl, onClose, queryParam, search])
 
+  // Id bazli kapsam filtresi (ör. rota ürünleri) — showAll ile bypass edilebilir.
+  var scoped = useMemo(() => {
+    if (!filterIds || showAll) return list
+    return list.filter(it => filterIds.has(it.id))
+  }, [list, filterIds, showAll])
+
   // Server-side query yoksa client-side filter
   var filtered = useMemo(() => {
-    if (queryParam || !search) return list
+    if (queryParam || !search) return scoped
     var q = search.toLowerCase()
-    return list.filter(it => (it.code || '').toLowerCase().includes(q) ||
+    return scoped.filter(it => (it.code || '').toLowerCase().includes(q) ||
       (it.name || '').toLowerCase().includes(q) ||
       (it.machineCode || '').toLowerCase().includes(q) ||
-      (it.machineName || '').toLowerCase().includes(q))
-  }, [list, search, queryParam])
+      (it.machineName || '').toLowerCase().includes(q) ||
+      (it.description || '').toLowerCase().includes(q))
+  }, [scoped, search, queryParam])
 
-  // Field normalize — code/name unified
+  // Field normalize — code/name unified (CardGroupDto icin "name" yerine "description" gelir)
   function fieldsOf(it) {
     return {
       id:   it.id,
       code: it.code || it.machineCode || '',
-      name: it.name || it.machineName || '',
+      name: it.name || it.machineName || it.description || '',
     }
   }
 
@@ -178,6 +188,12 @@ function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryPa
             onChange={e => setSearch(e.target.value)} placeholder={placeholder || 'Ara...'} />
           <button className="rt-picker__close" onClick={onClose}><X size={15} /></button>
         </div>
+        {filterIds && !showAll && (
+          <div className="rt-picker__filter-hint">
+            <span>{filterHint || 'Kapsam sınırlı'}</span>
+            <button type="button" onClick={() => setShowAll(true)}>Tümünü Göster</button>
+          </div>
+        )}
         <div className="rt-picker__list">
           {loading && <div className="rt-picker__info">Yükleniyor...</div>}
           {!loading && filtered.length === 0 && <div className="rt-picker__info">{title || 'Kayıt'} bulunamadı</div>}
