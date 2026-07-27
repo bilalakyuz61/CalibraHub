@@ -123,7 +123,13 @@ public sealed class DocumentCategoryController : Controller
             .WithRefreshUrl("/DocumentCategory/BoardConfig")
             .WithSearchPlaceholder("Kategori veya tip ara…")
             .WithEmptyText("Henüz kategori tanımlanmamış.")
-            .AddHeaderAction("new", "Yeni Kategori", "Plus", "#")
+            // "url" yerine "trigger" — bu ekranda ayrı bir Edit sayfası yok, frontend kendi
+            // create/edit modalını bu id'yi dinleyerek açar (DocumentManagementController'daki
+            // "dmOpenUpload" trigger deseniyle aynı yaklaşım).
+            .WithExtra("actions", new object[]
+            {
+                new { id = "new", label = "Yeni Kategori", icon = "Plus", variant = "primary", trigger = "dcOpenCreate" },
+            })
             .MapEntities(x =>
             {
                 var isL1 = !x.ParentId.HasValue;

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -11,16 +12,16 @@ namespace CalibraHub.Web.Controllers;
 /// <summary>
 /// Merkezi Döküman Yönetimi — master DB Attachment tablosu (FormId=DocMgr ve diğer modüller).
 /// SmartBoard C-Grid standardında kart listesi; extraActions ile 4 aksiyon (İndir/Düzenle/Revize/Geçmiş/Sil).
+/// Kategori/Tip dropdown'ları 2026-07-27'den itibaren DocumentCategory tablosundan (IDocumentCategoryService)
+/// okunur — eski sabit AllowedCategories listesi kaldırıldı (PageComment Seq 47).
 /// </summary>
 [Authorize]
 [CalibraHub.Web.Authorization.PermissionScope(FormCodes.DocumentManagement)]
 public sealed class DocumentManagementController : Controller
 {
     private readonly IAttachmentRepository _attachments;
+    private readonly IDocumentCategoryService _categories;
     private const long MaxFileBytes = 50L * 1024 * 1024; // 50 MB
-
-    private static readonly string[] AllowedCategories =
-        ["Kalite", "Teknik", "İdari", "Mali", "Hukuki", "Diğer"];
 
     private static readonly Dictionary<int, string> FormLabels = new()
     {
@@ -37,18 +38,21 @@ public sealed class DocumentManagementController : Controller
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
-    public DocumentManagementController(IAttachmentRepository attachments)
+    public DocumentManagementController(IAttachmentRepository attachments, IDocumentCategoryService categories)
     {
         _attachments = attachments;
+        _categories  = categories;
     }
 
     // ── Index ────────────────────────────────────────────────────────────────────
+    // NOT: Kategori (L1) / Tip (L2) dropdown'ları view tarafında GET /DocumentCategory/Categories
+    // ve /DocumentCategory/Types?parentId= uçlarından client-side fetch edilir (bkz.
+    // Views/DocumentManagement/Index.cshtml) — burada ayrıca ViewBag doldurmaya gerek yok.
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken ct)
     {
         var config = await BuildBoardConfigAsync(ct);
         ViewBag.BoardConfigJson = JsonSerializer.Serialize(config, JsonOpts);
-        ViewBag.Categories = AllowedCategories;
         return View();
     }
 
@@ -72,13 +76,15 @@ public sealed class DocumentManagementController : Controller
     }
 
     // ── EditPartial (fetch-modal içeriği) ────────────────────────────────────────
+    // NOT: Kategori/Tip prefill'i partial içindeki JS tarafından Model.DocumentCategoryId +
+    // GET /DocumentCategory/Categories + /DocumentCategory/Types?parentId= ile client-side
+    // çözülür (bkz. _EditPartial.cshtml) — sunucu tarafında ayrıca hesaplamaya gerek yok.
     [HttpGet]
     public async Task<IActionResult> EditPartial(int id, CancellationToken ct)
     {
         var att = await _attachments.GetByIdAsync(id, ct);
         if (att is null || !att.IsActive) return NotFound();
         ViewBag.Attachment = att;
-        ViewBag.Categories = AllowedCategories;
         return PartialView("_EditPartial", att);
     }
 
@@ -105,7 +111,7 @@ public sealed class DocumentManagementController : Controller
     [RequestSizeLimit(50 * 1024 * 1024 + 65536)]
     public async Task<IActionResult> Upload(
         IFormFile file, string? title, string? description,
-        string? category, string? tags, CancellationToken ct)
+        string? category, string? tags, int? documentCategoryId, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
             return Json(new { ok = false, error = "Dosya boş olamaz." });
@@ -119,19 +125,27 @@ public sealed class DocumentManagementController : Controller
             bytes = ms.ToArray();
         }
 
+        // documentCategoryId verilmişse legacy Category (string) alanı seçilen düğümün adından
+        // türetilir — eski w_category filtre widget'ı bu sayede değişiklik istemeden çalışmaya
+        // devam eder. Verilmemişse (eski çağrı / geçiş dönemi) serbest metin `category` kullanılır.
+        var resolvedCategoryName = documentCategoryId.HasValue
+            ? await ResolveCategoryNameAsync(documentCategoryId.Value, ct)
+            : Trim(category);
+
         var att = new Attachment
         {
-            FormId        = AttachmentFormIds.DocMgr,
-            RefId         = 0,
-            Title         = Trim(title),
-            Category      = Trim(category),
-            Tags          = Trim(tags),
-            FileName      = Path.GetFileName(file.FileName),
-            ContentType   = file.ContentType,
-            FileSize      = file.Length,
-            Description   = Trim(description),
-            BinaryContent = bytes,
-            CreatedById   = GetUserId(),
+            FormId             = AttachmentFormIds.DocMgr,
+            RefId              = 0,
+            Title              = Trim(title),
+            Category           = resolvedCategoryName,
+            DocumentCategoryId = documentCategoryId,
+            Tags               = Trim(tags),
+            FileName           = Path.GetFileName(file.FileName),
+            ContentType        = file.ContentType,
+            FileSize           = file.Length,
+            Description        = Trim(description),
+            BinaryContent      = bytes,
+            CreatedById        = GetUserId(),
         };
         await _attachments.AddAsync(att, ct);
         return Json(new { ok = true });
@@ -142,13 +156,18 @@ public sealed class DocumentManagementController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateMeta(
         int id, string? title, string? description,
-        string? category, string? tags, CancellationToken ct)
+        string? category, string? tags, int? documentCategoryId, CancellationToken ct)
     {
         var att = await _attachments.GetByIdAsync(id, ct);
         if (att is null || !att.IsActive)
             return Json(new { ok = false, error = "Dosya bulunamadı." });
 
-        await _attachments.UpdateMetaAsync(id, Trim(title), Trim(description), Trim(category), Trim(tags), GetUserId(), ct);
+        var resolvedCategoryName = documentCategoryId.HasValue
+            ? await ResolveCategoryNameAsync(documentCategoryId.Value, ct)
+            : Trim(category);
+
+        await _attachments.UpdateMetaAsync(id, Trim(title), Trim(description), resolvedCategoryName, Trim(tags),
+            documentCategoryId, GetUserId(), ct);
         return Json(new { ok = true });
     }
 
@@ -182,8 +201,9 @@ public sealed class DocumentManagementController : Controller
         {
             FormId         = original.FormId,
             RefId          = original.RefId,
-            Title          = original.Title,
-            Category       = original.Category,
+            Title              = original.Title,
+            Category           = original.Category,
+            DocumentCategoryId = original.DocumentCategoryId,
             Tags           = original.Tags,
             FileName       = Path.GetFileName(file.FileName),
             ContentType    = file.ContentType,
@@ -331,6 +351,17 @@ public sealed class DocumentManagementController : Controller
 
     private static string? Trim(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>
+    /// Legacy Category (string) alanını seçilen DocumentCategory düğümünün adından türetir —
+    /// w_category filtre widget'ı (BuildWidgets) DocumentCategory'den habersiz, string üzerinden
+    /// çalışmaya devam eder. Düğüm bulunamazsa (silinmiş/geçersiz id) null döner.
+    /// </summary>
+    private async Task<string?> ResolveCategoryNameAsync(int documentCategoryId, CancellationToken ct)
+    {
+        var node = await _categories.GetByIdAsync(documentCategoryId, ct);
+        return node?.Name;
+    }
 
     private int? GetUserId()
     {

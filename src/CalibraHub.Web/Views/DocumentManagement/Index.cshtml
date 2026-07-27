@@ -136,10 +136,12 @@ body.app-theme-dark .dm-btn--secondary:hover { background:#334155; }
             <label class="dm-f-label">Kategori</label>
             <select id="dm-category" class="dm-f-input">
                 <option value="">— Seçiniz —</option>
-                @foreach (var c in (string[])ViewBag.Categories)
-                {
-                    <option value="@c">@c</option>
-                }
+            </select>
+        </div>
+        <div class="dm-f-row">
+            <label class="dm-f-label">Tip</label>
+            <select id="dm-doctype" class="dm-f-input" disabled>
+                <option value="">— Önce kategori seçin —</option>
             </select>
         </div>
         <div class="dm-f-row">
@@ -175,12 +177,65 @@ body.app-theme-dark .dm-btn--secondary:hover { background:#334155; }
     // ── Upload Modal ─────────────────────────────────────────────────────────
     var modal = document.getElementById('dm-upload-modal');
 
+    // ── Kategori (L1) > Tip (L2) kaskad — DocumentCategory kontratı ───────────
+    // Uç noktalar: GET /DocumentCategory/Categories, GET /DocumentCategory/Types?parentId=
+    // Backend farklı route ismi kurarsa bu iki sabiti güncelle.
+    var DOC_CAT_CATEGORIES_URL = '/DocumentCategory/Categories';
+    var DOC_CAT_TYPES_URL      = '/DocumentCategory/Types';
+
+    function dmFillSelect(select, items, placeholder) {
+        select.innerHTML = '';
+        var ph = document.createElement('option');
+        ph.value = ''; ph.textContent = placeholder;
+        select.appendChild(ph);
+        (items || []).forEach(function(it) {
+            var opt = document.createElement('option');
+            opt.value = it.id; opt.textContent = it.name;
+            select.appendChild(opt);
+        });
+    }
+
+    function dmLoadCategories() {
+        var catSelect = document.getElementById('dm-category');
+        fetch(DOC_CAT_CATEGORIES_URL, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var list = Array.isArray(data) ? data : (data.categories || data.items || []);
+                dmFillSelect(catSelect, list, '— Seçiniz —');
+            })
+            .catch(function() { console.error('[DocMgmt] Kategori listesi yüklenemedi'); });
+    }
+
+    document.getElementById('dm-category').addEventListener('change', function() {
+        var typeSelect = document.getElementById('dm-doctype');
+        var catId = this.value;
+        if (!catId) {
+            dmFillSelect(typeSelect, [], '— Önce kategori seçin —');
+            typeSelect.disabled = true;
+            return;
+        }
+        typeSelect.disabled = true;
+        dmFillSelect(typeSelect, [], 'Yükleniyor…');
+        fetch(DOC_CAT_TYPES_URL + '?parentId=' + encodeURIComponent(catId), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var list = Array.isArray(data) ? data : (data.types || data.items || []);
+                dmFillSelect(typeSelect, list, list.length ? '— Seçiniz (opsiyonel) —' : '— Bu kategoride tip yok —');
+                typeSelect.disabled = false;
+            })
+            .catch(function() {
+                dmFillSelect(typeSelect, [], '— Tip listesi yüklenemedi —');
+            });
+    });
+
     // SmartBoard trigger: board config'te trigger:"dmOpenUpload"
     window.dmOpenUpload = function() {
         document.getElementById('dm-file-input').value = '';
         document.getElementById('dm-filename-display').textContent = '';
         document.getElementById('dm-title').value = '';
         document.getElementById('dm-category').value = '';
+        dmFillSelect(document.getElementById('dm-doctype'), [], '— Önce kategori seçin —');
+        document.getElementById('dm-doctype').disabled = true;
         document.getElementById('dm-tags').value = '';
         document.getElementById('dm-description').value = '';
         document.getElementById('dm-upload-btn').disabled = true;
@@ -188,6 +243,7 @@ body.app-theme-dark .dm-btn--secondary:hover { background:#334155; }
         document.getElementById('dm-status').className = 'dm-status';
         document.getElementById('dm-progress-wrap').classList.remove('visible');
         modal.classList.add('open');
+        dmLoadCategories();
         setTimeout(function() { document.getElementById('dm-title').focus(); }, 80);
     };
 
@@ -239,10 +295,15 @@ body.app-theme-dark .dm-btn--secondary:hover { background:#334155; }
         statusEl.textContent = '';
         statusEl.className = 'dm-status';
 
+        // documentCategoryId: Tip (L2) seçiliyse o, değilse Kategori (L1) id'si — Tip opsiyonel.
+        var dmCatVal  = document.getElementById('dm-category').value;
+        var dmTypeVal = document.getElementById('dm-doctype').value;
+        var docCategoryId = dmTypeVal || dmCatVal || '';
+
         var form = new FormData();
-        form.append('file',        fileInput.files[0]);
-        form.append('title',       document.getElementById('dm-title').value);
-        form.append('category',    document.getElementById('dm-category').value);
+        form.append('file',               fileInput.files[0]);
+        form.append('title',              document.getElementById('dm-title').value);
+        form.append('documentCategoryId', docCategoryId);
         form.append('tags',        document.getElementById('dm-tags').value);
         form.append('description', document.getElementById('dm-description').value);
         form.append('__RequestVerificationToken', CSRF_TOKEN);

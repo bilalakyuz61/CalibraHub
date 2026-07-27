@@ -19,7 +19,7 @@ public sealed class SqlAttachmentRepository : IAttachmentRepository
     private const string SelectCols = """
         [Id],[FormId],[RefId],[Title],[Category],[Tags],[FileName],
         [ContentType],[FileSize],[Description],[RevisionNumber],[OriginalId],
-        [IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
+        [IsActive],[CreatedById],[Created],[UpdatedById],[Updated],[DocumentCategoryId]
         """;
 
     public SqlAttachmentRepository(SqlServerConnectionFactory connectionFactory)
@@ -88,12 +88,12 @@ public sealed class SqlAttachmentRepository : IAttachmentRepository
                 ([FormId],[RefId],[Title],[Category],[Tags],[FileName],
                  [ContentType],[FileSize],[Description],
                  [RevisionNumber],[OriginalId],[IsActive],
-                 [CreatedById],[Created],[BinaryContent])
+                 [CreatedById],[Created],[BinaryContent],[DocumentCategoryId])
             VALUES
                 (@FormId,@RefId,@Title,@Category,@Tags,@FileName,
                  @ContentType,@FileSize,@Description,
                  @RevisionNumber,@OriginalId,1,
-                 @CreatedById,@Created,@BinaryContent);
+                 @CreatedById,@Created,@BinaryContent,@DocumentCategoryId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         cmd.Parameters.Add(new SqlParameter("@FormId",         attachment.FormId));
@@ -102,6 +102,7 @@ public sealed class SqlAttachmentRepository : IAttachmentRepository
         cmd.Parameters.Add(new SqlParameter("@Category",       (object?)attachment.Category       ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Tags",           (object?)attachment.Tags           ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@FileName",       attachment.FileName));
+        cmd.Parameters.Add(new SqlParameter("@DocumentCategoryId", (object?)attachment.DocumentCategoryId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ContentType",    (object?)attachment.ContentType    ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@FileSize",       attachment.FileSize));
         cmd.Parameters.Add(new SqlParameter("@Description",    (object?)attachment.Description    ?? DBNull.Value));
@@ -161,26 +162,29 @@ public sealed class SqlAttachmentRepository : IAttachmentRepository
         return list;
     }
 
-    public async Task UpdateMetaAsync(int id, string? title, string? description, string? category, string? tags, int? updatedById, CancellationToken ct)
+    public async Task UpdateMetaAsync(int id, string? title, string? description, string? category, string? tags,
+        int? documentCategoryId, int? updatedById, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {Table}
-            SET [Title]       = @Title,
-                [Description] = @Description,
-                [Category]    = @Category,
-                [Tags]        = @Tags,
-                [UpdatedById] = @UpdatedById,
-                [Updated]     = SYSUTCDATETIME()
+            SET [Title]              = @Title,
+                [Description]        = @Description,
+                [Category]           = @Category,
+                [Tags]               = @Tags,
+                [DocumentCategoryId] = @DocumentCategoryId,
+                [UpdatedById]        = @UpdatedById,
+                [Updated]            = SYSUTCDATETIME()
             WHERE [Id] = @Id;
             """;
-        cmd.Parameters.Add(new SqlParameter("@Title",       (object?)title       ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@Description", (object?)description ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@Category",    (object?)category    ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@Tags",        (object?)tags        ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)updatedById ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@Id",          id));
+        cmd.Parameters.Add(new SqlParameter("@Title",              (object?)title              ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Description",        (object?)description        ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Category",           (object?)category           ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Tags",               (object?)tags               ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@DocumentCategoryId", (object?)documentCategoryId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById",        (object?)updatedById        ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Id",                 id));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -210,25 +214,26 @@ public sealed class SqlAttachmentRepository : IAttachmentRepository
 
     // ordinal: 0=Id, 1=FormId, 2=RefId, 3=Title, 4=Category, 5=Tags, 6=FileName,
     //          7=ContentType, 8=FileSize, 9=Description, 10=RevisionNumber, 11=OriginalId,
-    //          12=IsActive, 13=CreatedById, 14=Created, 15=UpdatedById, 16=Updated
+    //          12=IsActive, 13=CreatedById, 14=Created, 15=UpdatedById, 16=Updated, 17=DocumentCategoryId
     private static Attachment MapRow(SqlDataReader r) => new()
     {
-        Id             = r.GetInt32(0),
-        FormId         = r.GetInt32(1),
-        RefId          = r.GetInt32(2),
-        Title          = r.IsDBNull(3)  ? null : r.GetString(3),
-        Category       = r.IsDBNull(4)  ? null : r.GetString(4),
-        Tags           = r.IsDBNull(5)  ? null : r.GetString(5),
-        FileName       = r.GetString(6),
-        ContentType    = r.IsDBNull(7)  ? null : r.GetString(7),
-        FileSize       = r.GetInt64(8),
-        Description    = r.IsDBNull(9)  ? null : r.GetString(9),
-        RevisionNumber = r.GetInt16(10),
-        OriginalId     = r.IsDBNull(11) ? null : r.GetInt32(11),
-        IsActive       = r.GetBoolean(12),
-        CreatedById    = r.IsDBNull(13) ? null : r.GetInt32(13),
-        Created        = r.GetDateTime(14),
-        UpdatedById    = r.IsDBNull(15) ? null : r.GetInt32(15),
-        Updated        = r.IsDBNull(16) ? null : r.GetDateTime(16),
+        Id                 = r.GetInt32(0),
+        FormId             = r.GetInt32(1),
+        RefId              = r.GetInt32(2),
+        Title              = r.IsDBNull(3)  ? null : r.GetString(3),
+        Category           = r.IsDBNull(4)  ? null : r.GetString(4),
+        Tags               = r.IsDBNull(5)  ? null : r.GetString(5),
+        FileName           = r.GetString(6),
+        ContentType        = r.IsDBNull(7)  ? null : r.GetString(7),
+        FileSize           = r.GetInt64(8),
+        Description        = r.IsDBNull(9)  ? null : r.GetString(9),
+        RevisionNumber     = r.GetInt16(10),
+        OriginalId         = r.IsDBNull(11) ? null : r.GetInt32(11),
+        IsActive           = r.GetBoolean(12),
+        CreatedById        = r.IsDBNull(13) ? null : r.GetInt32(13),
+        Created            = r.GetDateTime(14),
+        UpdatedById        = r.IsDBNull(15) ? null : r.GetInt32(15),
+        Updated            = r.IsDBNull(16) ? null : r.GetDateTime(16),
+        DocumentCategoryId = r.IsDBNull(17) ? null : r.GetInt32(17),
     };
 }

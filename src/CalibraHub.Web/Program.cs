@@ -375,6 +375,8 @@ builder.Services.AddScoped<ISalesRepresentativeRepository, SqlSalesRepresentativ
 builder.Services.AddScoped<ISalesRepresentativeService, SalesRepresentativeService>();
 builder.Services.AddScoped<ICariGroupRepository, SqlCariGroupRepository>();
 builder.Services.AddScoped<ICariGroupService, CariGroupService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDocumentCategoryService,
+                           CalibraHub.Application.Services.DocumentCategoryService>();
 builder.Services.AddScoped<IIntegrationRepository, SqlIntegrationRepository>();
 builder.Services.AddScoped<IBodyTemplateRepository, SqlBodyTemplateRepository>();
 builder.Services.AddScoped<IFormLinesRepository, SqlFormLinesRepository>();
@@ -744,6 +746,8 @@ if (useInMemoryPersistence)
     builder.Services.AddScoped<CalibraHub.Application.Workflow.BpmFormContextBuilder>();
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAttachmentRepository,
                                CalibraHub.Persistence.Repositories.SqlAttachmentRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDocumentCategoryRepository,
+                               CalibraHub.Persistence.Repositories.SqlDocumentCategoryRepository>();
 }
 else
 {
@@ -785,6 +789,8 @@ else
     builder.Services.AddScoped<CalibraHub.Application.Workflow.BpmFormContextBuilder>();
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAttachmentRepository,
                                CalibraHub.Persistence.Repositories.SqlAttachmentRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDocumentCategoryRepository,
+                               CalibraHub.Persistence.Repositories.SqlDocumentCategoryRepository>();
 }
 
 builder.Services.AddAntiforgery(options =>

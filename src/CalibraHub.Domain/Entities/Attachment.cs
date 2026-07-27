@@ -12,6 +12,13 @@ public sealed class Attachment
     public int RefId             { get; init; }
     public string? Title         { get; set; }
     public string? Category      { get; set; }
+    /// <summary>
+    /// Seçilen en spesifik DocumentCategory düğümü (Tip seçildiyse Tip, yoksa Kategori).
+    /// FK -> DocumentCategory.Id. Legacy <see cref="Category"/> string alanı (eski w_category
+    /// filtre widget'ı için) backward-compat olarak dolu tutulmaya devam eder — bkz.
+    /// DocumentManagementController.Upload/UpdateMeta.
+    /// </summary>
+    public int? DocumentCategoryId { get; set; }
     public string? Tags          { get; set; }
     public required string FileName   { get; init; }
     public string? ContentType   { get; init; }

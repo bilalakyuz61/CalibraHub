@@ -33,6 +33,8 @@ import WhatsAppMessenger from './components/WhatsAppMessenger/WhatsAppMessenger'
 import './components/WhatsAppMessenger/WhatsAppMessenger.css'
 import CardGroupTree from './components/CardGroupTree/CardGroupTree'
 import './components/CardGroupTree/CardGroupTree.css'
+import DocumentCategoryManager from './components/DocumentCategory/DocumentCategoryManager'
+import './components/DocumentCategory/DocumentCategoryManager.css'
 import LocationTree from './components/LocationTree/LocationTree'
 import './components/LocationTree/LocationTree.css'
 import IntegrationsList from './components/IntegrationWizard/IntegrationsList'
@@ -1337,6 +1339,30 @@ function mountCardGroupTree(element, treeConfig) {
   }
 }
 window.CalibraHub.mountCardGroupTree = mountCardGroupTree
+
+/**
+ * DocumentCategoryManager mount — Doküman Kategori/Tip yönetimi (iki seviye, master-detail).
+ * @param {HTMLElement} element
+ * @param {object} config - { categories?, categoriesUrl, typesUrl, saveUrl, deleteUrl }
+ */
+function mountDocumentCategory(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(DocumentCategoryManager, { config: config })
+    )
+  )
+  return {
+    unmount: function() { root.unmount(); mountedRoots.delete(element) }
+  }
+}
+window.CalibraHub.mountDocumentCategory = mountDocumentCategory
 
 /**
  * DocDesigner mount — band-layout dokuman tasarimcisi (editor).

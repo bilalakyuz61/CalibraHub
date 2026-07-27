@@ -1,9 +1,9 @@
 @model CalibraHub.Domain.Entities.Attachment
 @{
-    var cats = (string[])ViewBag.Categories;
     var antiforgery = ViewContext.HttpContext.RequestServices
         .GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
     var tokens = antiforgery.GetAndStoreTokens(ViewContext.HttpContext);
+    var existingCategoryId = Model.DocumentCategoryId;
 }
 <style>
 .dm-ep { font-family: inherit; }
@@ -43,17 +43,12 @@ body.app-theme-dark .dm-ep .dm-ep-btn--secondary { background:#1e293b; color:#e2
         <label class="dm-ep-label">Kategori</label>
         <select id="dmep-category" class="dm-ep-input">
             <option value="">— Seçiniz —</option>
-            @foreach (var c in cats)
-            {
-                if (Model.Category == c)
-                {
-                    <option value="@c" selected="selected">@c</option>
-                }
-                else
-                {
-                    <option value="@c">@c</option>
-                }
-            }
+        </select>
+    </div>
+    <div class="dm-ep-row">
+        <label class="dm-ep-label">Tip</label>
+        <select id="dmep-doctype" class="dm-ep-input" disabled>
+            <option value="">— Önce kategori seçin —</option>
         </select>
     </div>
     <div class="dm-ep-row">
@@ -72,13 +67,100 @@ body.app-theme-dark .dm-ep .dm-ep-btn--secondary { background:#1e293b; color:#e2
 </div>
 
 <script>
+(function() {
+    // ── Kategori (L1) > Tip (L2) kaskad — DocumentCategory kontratı ────────
+    // Uç noktalar: GET /DocumentCategory/Categories, GET /DocumentCategory/Types?parentId=
+    var CATEGORIES_URL = '/DocumentCategory/Categories';
+    var TYPES_URL       = '/DocumentCategory/Types';
+    var existingId = @Html.Raw(existingCategoryId.HasValue ? existingCategoryId.Value.ToString() : "null");
+
+    function fillSelect(select, items, placeholder) {
+        select.innerHTML = '';
+        var ph = document.createElement('option');
+        ph.value = ''; ph.textContent = placeholder;
+        select.appendChild(ph);
+        (items || []).forEach(function(it) {
+            var opt = document.createElement('option');
+            opt.value = it.id; opt.textContent = it.name;
+            select.appendChild(opt);
+        });
+    }
+
+    function loadTypesForCategory(catId, preselectTypeId) {
+        var typeSelect = document.getElementById('dmep-doctype');
+        if (!catId) {
+            fillSelect(typeSelect, [], '— Önce kategori seçin —');
+            typeSelect.disabled = true;
+            return;
+        }
+        typeSelect.disabled = true;
+        fillSelect(typeSelect, [], 'Yükleniyor…');
+        fetch(TYPES_URL + '?parentId=' + encodeURIComponent(catId), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var list = Array.isArray(data) ? data : (data.types || data.items || []);
+                fillSelect(typeSelect, list, list.length ? '— Seçiniz (opsiyonel) —' : '— Bu kategoride tip yok —');
+                typeSelect.disabled = false;
+                if (preselectTypeId != null) typeSelect.value = String(preselectTypeId);
+            })
+            .catch(function() { fillSelect(typeSelect, [], '— Tip listesi yüklenemedi —'); });
+    }
+
+    document.getElementById('dmep-category').addEventListener('change', function() {
+        loadTypesForCategory(this.value || null, null);
+    });
+
+    // Mevcut kaydın documentCategoryId'si ya bir Kategori(L1) ya da bir Tip(L2) olabilir.
+    // Önce L1 listesinde eşleşme arar; yoksa her kategori için Tip listesini kontrol eder.
+    fetch(CATEGORIES_URL, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var cats = Array.isArray(data) ? data : (data.categories || data.items || []);
+            var catSelect = document.getElementById('dmep-category');
+            fillSelect(catSelect, cats, '— Seçiniz —');
+
+            if (existingId == null) return;
+
+            var directMatch = cats.filter(function(c) { return String(c.id) === String(existingId); })[0];
+            if (directMatch) {
+                catSelect.value = String(existingId);
+                loadTypesForCategory(existingId, null);
+                return;
+            }
+
+            // Tip (L2) olarak dene — sırayla her kategorinin tiplerini kontrol et
+            var idx = 0;
+            function tryNextCategory() {
+                if (idx >= cats.length) return; // eşleşme yok — eski/silinmiş kayıt olabilir
+                var cat = cats[idx++];
+                fetch(TYPES_URL + '?parentId=' + encodeURIComponent(cat.id), { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(td) {
+                        var types = Array.isArray(td) ? td : (td.types || td.items || []);
+                        var found = types.filter(function(t) { return String(t.id) === String(existingId); })[0];
+                        if (found) {
+                            catSelect.value = String(cat.id);
+                            loadTypesForCategory(cat.id, existingId);
+                        } else {
+                            tryNextCategory();
+                        }
+                    })
+                    .catch(tryNextCategory);
+            }
+            tryNextCategory();
+        })
+        .catch(function() { console.error('[DocMgmt] Kategori listesi yüklenemedi'); });
+})();
+
 function dmepSave(id) {
+    var dmepCatVal  = document.getElementById('dmep-category').value;
+    var dmepTypeVal = document.getElementById('dmep-doctype').value;
     var form = new FormData();
-    form.append('id',          id);
-    form.append('title',       document.getElementById('dmep-title').value);
-    form.append('category',    document.getElementById('dmep-category').value);
-    form.append('tags',        document.getElementById('dmep-tags').value);
-    form.append('description', document.getElementById('dmep-desc').value);
+    form.append('id',                id);
+    form.append('title',             document.getElementById('dmep-title').value);
+    form.append('documentCategoryId', dmepTypeVal || dmepCatVal || '');
+    form.append('tags',              document.getElementById('dmep-tags').value);
+    form.append('description',       document.getElementById('dmep-desc').value);
     form.append('__RequestVerificationToken', '@tokens.RequestToken');
     var statusEl = document.getElementById('dmep-status');
     fetch('/DocumentManagement/UpdateMeta', { method:'POST', body:form, credentials:'same-origin' })

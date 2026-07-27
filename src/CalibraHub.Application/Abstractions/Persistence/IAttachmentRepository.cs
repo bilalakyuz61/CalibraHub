@@ -24,8 +24,9 @@ public interface IAttachmentRepository
     /// <summary>Aktif (IsActive=1) tüm ekleri döner. formIdFilter=null → tüm modüller.</summary>
     Task<IReadOnlyCollection<Attachment>> GetAllActiveAsync(int? formIdFilter, CancellationToken ct);
 
-    /// <summary>Başlık, açıklama, kategori ve etiketleri günceller.</summary>
-    Task UpdateMetaAsync(int id, string? title, string? description, string? category, string? tags, int? updatedById, CancellationToken ct);
+    /// <summary>Başlık, açıklama, kategori (legacy string), etiketler ve DocumentCategoryId'yi günceller.</summary>
+    Task UpdateMetaAsync(int id, string? title, string? description, string? category, string? tags,
+        int? documentCategoryId, int? updatedById, CancellationToken ct);
 
     /// <summary>Bir belgenin tüm revizyon geçmişini döner (aktif + pasif, yeniden eskiye sıralı).</summary>
     Task<IReadOnlyCollection<Attachment>> GetVersionHistoryAsync(int id, CancellationToken ct);
