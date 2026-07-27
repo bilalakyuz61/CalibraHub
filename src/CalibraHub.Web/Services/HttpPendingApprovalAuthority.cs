@@ -70,14 +70,13 @@ public sealed class HttpPendingApprovalAuthority : IPendingApprovalAuthority
         if (!int.TryParse(userIdStr, out var userId) || userId <= 0)
             return (0, CalibraHub.Domain.Enums.UserRole.Operator, null);
 
+        // Rol claim'i legacy/Türkçe etiket olabilir → kanonik parse ZORUNLU. Ham switch ile
+        // ("SystemAdmin" vb.) eşleşmeyince herkes Operator'a düşüyordu → kapsam hep "mine"a
+        // daralıyor, Departman/Tümü hiç açılmıyordu (2026-07-26 fix; AccountController.GetMenuItems deseni).
         var roleStr = user.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-        var role = roleStr switch
-        {
-            "SystemAdmin"       => CalibraHub.Domain.Enums.UserRole.SystemAdmin,
-            "DepartmentManager" => CalibraHub.Domain.Enums.UserRole.DepartmentManager,
-            "Approver"          => CalibraHub.Domain.Enums.UserRole.Approver,
-            _                   => CalibraHub.Domain.Enums.UserRole.Operator,
-        };
+        var role = CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(roleStr, out var parsedRole)
+            ? parsedRole
+            : CalibraHub.Domain.Enums.UserRole.Operator;
 
         var deptStr = user.FindFirstValue("department_id");
         int? deptId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;

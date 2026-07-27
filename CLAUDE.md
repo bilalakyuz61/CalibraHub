@@ -1,5 +1,54 @@
 # CalibraHub – Agent Çalışma Kuralları
 
+## "Sessiz kırık" hata sınıfları — KAÇINILMASI ZORUNLU (2026-07-20)
+
+Aynı günde dört bug'ın kökü aynıydı: **derleme temiz, kod "doğru" görünüyor, ama
+runtime'da sessizce kırık** — ancak izini sürünce çıktı. Derleyici bunları
+yakalamaz. Yeni kod yazarken bu dört kurala uy; deploy öncesi `preflight/`
+tarayıcılarını çalıştır (bkz. `preflight/README.md`).
+
+1. **Inline SQL kolon/tablo adı — şemadan doğrula.** C# derleyicisi SQL string'ini
+   denetlemez. `MaterialCode`/`MaterialName` FİZİKSEL kolon DEĞİL, yalnız alias
+   (`i.[Code] AS [MaterialCode]`); Items'ın gerçek kolonları `Code`/`Name`.
+   Uydurma tablo (`MeasureUnits` yok, doğrusu `Unit`) de aynı sınıf. Yeni sorgu
+   yazınca kolon/tablo adlarını `INFORMATION_SCHEMA`'dan teyit et. Bunlar runtime'da
+   "Invalid column/object name" verir ve genelde sessiz catch'te kaybolur.
+   (Örnekler: FulfillmentLedger + PurchaseController.AllOpenRequestLines, ikisi de fix'lendi.)
+
+2. **`catch`'te exception'ı yutma — logla.** `catch (Exception ex) { return jenerik }`
+   kalıbı gerçek hatayı hem loglardan hem kullanıcıdan gizler → teşhis imkansızlaşır
+   (iş emri kaydetme bug'ında tam bu oldu). Mutasyon (kaydet/sil/güncelle)
+   endpoint'lerinde exception'ı **server'a logla** (`_logger.LogError(ex, ...)`),
+   istemciye jenerik mesaj dön. `ex`'i hiç kullanmayan boş `catch {}` yasak.
+   Karşıt hata da yasak: `ex.Message`'ı istemciye döndürüp iç detay sızdırma.
+
+3. **Bir satırı/kaydı sessiz `continue` ile atlama.** Toplu kaydetme/işleme
+   döngüsünde `if (qty <= 0) continue;` gibi bir öğeyi "atlandı" demeden geçmek →
+   kullanıcının girdiği veri sessizce kaybolur (depo + üretim sarfında oldu).
+   Ya açıkça reddet (mesajla) ya da atlanan öğeyi kullanıcıya bildir.
+
+4. **iframe-embed ekranlarında navigasyon query'sini koru.** `_DesignRulesTabs`
+   deseni (sabit şerit host + iç `?embed=1` iframe) kullanan ekranlarda,
+   `window.location.href` redirect'leri ve board action url'leri gerekli parametreyi
+   (`embed=1`, `entity=...`) DÜŞÜRMEMELİ — yoksa iç iframe host modunu yükler ve
+   şerit çiftlenir (Tasarım Kuralları çift-şerit bug'ı).
+
+## Sadelik kuralları (KISS · YAGNI · DRY damıtımı)
+
+- **En basit çözümü tercih et.** Bir işi daha az katman/soyutlama ile yazabiliyorsan öyle yaz;
+  genel-amaçlı motor/framework inşa etme (bkz. ENGINE kararı — rafa kalktı).
+- **İhtiyaç yoksa yazma.** "Belki ileride lazım olur" diye özellik, parametre, konfigürasyon
+  ekleme. **İstisna:** geriye dönük eklemesi pahalı altyapı (audit dörtlüsü, INT PK/FK,
+  `CreatedById`) bilinçli olarak baştan eklenir — bu YAGNI ihlali değildir.
+- **Tekrarlanan mantığı tek kaynağa çek.** Aynı JS/CSS/SQL bloğunu ikinci kez kopyalayacaksan
+  partial/helper/service'e çıkar. `_DynamicWidgetHost` ve `_AuditTrailHost` bu yüzden var —
+  her ekranın ~40 satır JS kopyalaması gerçek bug üretti.
+- **Tek sorumluluk + net isim.** Fonksiyon/sınıf tek iş yapar; isimler yorum gerektirmeyecek
+  kadar açık olur. Yorum yalnızca koddan okunamayan kısıtı belirtmek için yazılır.
+- **Hiyerarşi:** Bu kurallar sadeleştirme yönünde rehberdir; projenin zorunlu kurallarını
+  (audit trail, preflight, widget host partial'ı, silme onay modalı vb.) **esnetmez**.
+  "Basitlik" gerekçesiyle zorunlu adım atlanmaz.
+
 ## Build & run sorumluluğu
 
 Tüm geliştirme akışı Claude üzerinden yürür. Kod değişikliği yaptığında **build alıp gerekirse sunucuyu yeniden başlatmak senin işin** — kullanıcıdan bunu istemene gerek yok.
