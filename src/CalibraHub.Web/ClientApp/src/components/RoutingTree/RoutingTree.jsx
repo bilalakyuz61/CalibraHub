@@ -593,38 +593,61 @@ function MachineTimeRowForm({ initial, urls, routingId, allowedItemIds, onSave, 
   )
 }
 
-// ── Makine Süreleri modal — operasyon × makine (× opsiyonel ürün) süre eşleştirme ──
-//   Kilitli karar (Seq 41): mevcut OperationMachineTime altyapısına bağlanır, şema/backend
-//   değişikliği yok. op.operationId (master Operation.Id) kullanılır — op.id (RoutingOperation
-//   satır id'si) DEĞİL; OperationMachineTime.OperationId bu tabloya FK'lidir ve rota-bağımsızdır
-//   (aynı operasyon farklı rotalarda kullanılsa bile makine süreleri tektir).
-function MachineTimesModal({ op, urls, onClose }) {
+// ── Makine Süreleri modal — operasyon × makine/makine grubu (× opsiyonel ürün/ürün grubu)
+//   süre eşleştirme ── Kilitli karar (Seq 41): mevcut OperationMachineTime altyapısına bağlanır.
+//   op.operationId (master Operation.Id) kullanılır — op.id (RoutingOperation satır id'si) DEĞİL;
+//   OperationMachineTime.OperationId bu tabloya FK'lidir ve rota-bağımsızdır (aynı operasyon farklı
+//   rotalarda kullanılsa bile makine süreleri tektir) — ancak SATIR bazında artık hibrit kapsam var
+//   (Seq 45/46): RoutingId boşsa satır tüm rotalarda ortak, doluysa yalnız o rotada geçerlidir.
+function MachineTimesModal({ op, routing, urls, onClose }) {
   var [rows, setRows]         = useState([])
   var [loading, setLoading]   = useState(true)
   var [formOpen, setFormOpen] = useState(false)   // false | true (yeni satır) | <rowId> (düzenle)
   var [saving, setSaving]     = useState(false)
   var [delRow, setDelRow]     = useState(null)
 
+  // Seq 46 — spesifik stok seçicisi rota ürünleriyle sınırlanır: ana mamul (routing.itemId) ∪
+  // RoutingItemMaps(routingId). İkisi de boşsa (şablon rota) filtre uygulanmaz (null = tümü).
+  var [allowedItemIds, setAllowedItemIds] = useState(null)
+
   var load = useCallback(async () => {
     setLoading(true)
     try {
-      var list = await apiGet('/Production/OperationMachineTimes?operationId=' + op.operationId)
+      var list = await apiGet('/Production/OperationMachineTimes?operationId=' + op.operationId + '&routingId=' + routing.id)
       var arr = Array.isArray(list) ? list : []
-      // Backend DTO alanlari makine icin duz "code"/"name" doner (Items ile karismasin diye
-      // burada aciktan machineCode/machineName'e tasiyoruz).
       setRows(arr.map(r => ({
         id: r.id,
-        machineId: r.machineId, machineCode: r.code || '', machineName: r.name || '',
+        routingId: r.routingId ?? null,
+        machineId: r.machineId || null,
+        machineCode: r.machineCode || r.code || '', machineName: r.machineName || r.name || '',
+        machineGroupId: r.machineGroupId || null, machineGroupCode: r.machineGroupCode || '',
         itemId: r.itemId || null, itemCode: r.itemCode || '', itemName: r.itemName || '',
+        itemGroupId: r.itemGroupId || null, itemGroupCode: r.itemGroupCode || '',
+        unitId: r.unitId || null, unitCode: r.unitCode || '', unitName: r.unitName || '',
         quantity: r.quantity, durationPerUnit: r.durationPerUnit,
         durationUnit: normalizeDurationUnit(r.durationUnit),
         isActive: r.isActive,
       })))
     } catch { /* sessiz — bos liste kalir, kullanici tekrar acinca yeniden dener */ }
     finally { setLoading(false) }
-  }, [op.operationId])
+  }, [op.operationId, routing.id])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    var cancelled = false
+    async function loadAllowedItems() {
+      var ids = new Set()
+      if (routing.itemId) ids.add(routing.itemId)
+      try {
+        var maps = await apiGet('/Production/RoutingItemMaps?routingId=' + routing.id)
+        if (Array.isArray(maps)) maps.forEach(m => { if (m && m.itemId) ids.add(m.itemId) })
+      } catch { /* sessiz — filtre uygulanamazsa tumu gosterilir (asagida size 0 ise zaten null olur) */ }
+      if (!cancelled) setAllowedItemIds(ids.size > 0 ? ids : null)
+    }
+    loadAllowedItems()
+    return () => { cancelled = true }
+  }, [routing.id, routing.itemId])
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape' && !formOpen && !delRow) onClose() }
@@ -636,8 +659,9 @@ function MachineTimesModal({ op, urls, onClose }) {
     setSaving(true)
     try {
       var res = await apiPost('/Production/SaveOperationMachineTime', {
-        id: data.id, operationId: op.operationId,
-        machineId: data.machineId, itemId: data.itemId,
+        id: data.id, operationId: op.operationId, routingId: data.routingId,
+        machineId: data.machineId, machineGroupId: data.machineGroupId,
+        itemId: data.itemId, itemGroupId: data.itemGroupId, unitId: data.unitId,
         quantity: data.quantity, durationPerUnit: data.durationPerUnit,
         durationUnit: data.durationUnit, isActive: data.isActive,
       })
@@ -659,8 +683,9 @@ function MachineTimesModal({ op, urls, onClose }) {
     setSaving(true)
     try {
       var res = await apiPost('/Production/SaveOperationMachineTime', {
-        id: row.id, operationId: op.operationId,
-        machineId: row.machineId, itemId: row.itemId || null,
+        id: row.id, operationId: op.operationId, routingId: row.routingId ?? null,
+        machineId: row.machineId || null, machineGroupId: row.machineGroupId || null,
+        itemId: row.itemId || null, itemGroupId: row.itemGroupId || null, unitId: row.unitId || null,
         quantity: row.quantity, durationPerUnit: row.durationPerUnit,
         durationUnit: row.durationUnit, isActive: !row.isActive,
       })
@@ -677,15 +702,16 @@ function MachineTimesModal({ op, urls, onClose }) {
           <div className="rt-mt-modal__icon"><Timer size={18} /></div>
           <div className="rt-mt-modal__id">
             <div className="rt-mt-modal__title">Makine Süreleri</div>
-            <div className="rt-mt-modal__sub">{op.operationCode} — {op.operationName || '—'}</div>
+            <div className="rt-mt-modal__sub">{op.operationCode} — {op.operationName || '—'} · {routing.code}</div>
           </div>
           <button className="rt-picker__close" onClick={onClose}><X size={16} /></button>
         </div>
 
         <div className="rt-mt-modal__hint">
-          Bu operasyonun farklı makinelerde — istenirse belirli bir ürün için — aldığı süreyi
-          tanımlayın. Aynı operasyon birden çok makinede alternatif sürelerle tanımlanabilir.
-          Süre, girilen miktar içindir (örn. "100 adet için 45 dakika").
+          Bu operasyonun farklı makinelerde (veya makine gruplarında) — istenirse belirli bir ürün
+          ya da ürün grubu için — aldığı süreyi tanımlayın. Süre, girilen miktar içindir (örn. "100
+          adet için 45 dakika"). Kapsamı "Bu Rota" olan satırlar yalnızca burada, "Tüm Rotalar"
+          olanlar bu operasyonun kullanıldığı her rotada geçerli olur.
         </div>
 
         <div className="rt-mt-modal__body">
@@ -701,15 +727,29 @@ function MachineTimesModal({ op, urls, onClose }) {
                 formOpen === row.id ? (
                   <div className="rt-mt-form-row" key={row.id}>
                     <MachineTimeRowForm initial={row} urls={urls} saving={saving}
+                      routingId={routing.id} allowedItemIds={allowedItemIds}
                       onSave={handleSaveRow} onCancel={() => setFormOpen(false)} />
                   </div>
                 ) : (
                   <div className="rt-mt-row" key={row.id}>
-                    <div className="rt-tile rt-tile--cyan" title={row.machineName || ''}>
-                      <span className="rt-tile__label">Makine</span>
-                      <span className="rt-tile__value">{row.machineCode}</span>
-                    </div>
-                    {row.itemId ? (
+                    {row.machineGroupId ? (
+                      <div className="rt-tile rt-tile--cyan" title="Makine Grubu">
+                        <span className="rt-tile__label">Makine Grubu</span>
+                        <span className="rt-tile__value">{row.machineGroupCode}</span>
+                      </div>
+                    ) : (
+                      <div className="rt-tile rt-tile--cyan" title={row.machineName || ''}>
+                        <span className="rt-tile__label">Makine</span>
+                        <span className="rt-tile__value">{row.machineCode || row.machineName || '—'}</span>
+                      </div>
+                    )}
+
+                    {row.itemGroupId ? (
+                      <div className="rt-tile rt-tile--blue" title="Stok Grubu">
+                        <span className="rt-tile__label">Stok Grubu</span>
+                        <span className="rt-tile__value">{row.itemGroupCode}</span>
+                      </div>
+                    ) : row.itemId ? (
                       <div className="rt-tile rt-tile--blue" title={row.itemName || ''}>
                         <span className="rt-tile__label">Ürün</span>
                         <span className="rt-tile__value">{row.itemCode}</span>
@@ -717,9 +757,17 @@ function MachineTimesModal({ op, urls, onClose }) {
                     ) : (
                       <div className="rt-tile rt-tile--muted">
                         <span className="rt-tile__label">Ürün</span>
-                        <span className="rt-tile__value rt-tile__value--muted">Genel</span>
+                        <span className="rt-tile__value rt-tile__value--muted">Yok</span>
                       </div>
                     )}
+
+                    {row.unitId ? (
+                      <div className="rt-tile">
+                        <span className="rt-tile__label">Ölçü Birimi</span>
+                        <span className="rt-tile__value">{row.unitCode || row.unitName}</span>
+                      </div>
+                    ) : null}
+
                     <div className="rt-tile">
                       <span className="rt-tile__label">Miktar</span>
                       <span className="rt-tile__value">{fmtDec(row.quantity)}</span>
@@ -731,6 +779,10 @@ function MachineTimesModal({ op, urls, onClose }) {
                         <span className="rt-tile__detail">{DURATION_UNIT_LABEL[row.durationUnit] || ''}</span>
                       </span>
                     </div>
+
+                    <span className={'rt-mt-scope rt-mt-scope--' + (row.routingId ? 'this' : 'all')}>
+                      {row.routingId ? 'Bu Rota' : 'Tüm Rotalar'}
+                    </span>
 
                     <div className="rt-mt-row__spacer" />
 
@@ -755,6 +807,7 @@ function MachineTimesModal({ op, urls, onClose }) {
               {formOpen === true && (
                 <div className="rt-mt-form-row">
                   <MachineTimeRowForm urls={urls} saving={saving}
+                    routingId={routing.id} allowedItemIds={allowedItemIds}
                     onSave={handleSaveRow} onCancel={() => setFormOpen(false)} />
                 </div>
               )}
@@ -777,7 +830,7 @@ function MachineTimesModal({ op, urls, onClose }) {
         <DeleteModal
           target={{
             type: 'machineTime',
-            label: `${delRow.machineCode || 'Makine'} — ${fmtDec(delRow.quantity)} adet / ${fmtDec(delRow.durationPerUnit)} ${DURATION_UNIT_LABEL[delRow.durationUnit] || ''}`,
+            label: `${delRow.machineGroupId ? (delRow.machineGroupCode + ' (Grup)') : (delRow.machineCode || delRow.machineName || 'Makine')} — ${fmtDec(delRow.quantity)} adet / ${fmtDec(delRow.durationPerUnit)} ${DURATION_UNIT_LABEL[delRow.durationUnit] || ''}`,
           }}
           onCancel={() => setDelRow(null)}
           onConfirm={() => handleDeleteRow(delRow)}
@@ -1390,10 +1443,11 @@ export default function RoutingTree({ config }) {
         />
       )}
 
-      {/* ── Makine Süreleri modal (operasyon × makine × opsiyonel ürün süre eşleştirme) ── */}
+      {/* ── Makine Süreleri modal (operasyon × makine/grup × opsiyonel ürün/grup süre eşleştirme) ── */}
       {machineTimesFor && (
         <MachineTimesModal
           op={machineTimesFor.op}
+          routing={machineTimesFor.routing}
           urls={urls}
           onClose={() => setMachineTimesFor(null)}
         />

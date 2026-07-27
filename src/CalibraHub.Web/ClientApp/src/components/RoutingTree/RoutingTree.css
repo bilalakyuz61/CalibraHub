@@ -926,22 +926,109 @@
   border: 1px dashed rgba(139,92,246,0.32);
   border-radius: 10px;
 }
+/* Seq 45/46: satır formu artık coklu-satirli (makine / stok / miktar-sure-kapsam) — her biri
+   .rt-mt-form__row icinde wrap'lenir, aksiyon butonlari en altta ayri satirda saga yaslanir. */
 .rt-mt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rt-mt-form__row {
   display: flex;
   align-items: center;
   gap: 7px;
   flex-wrap: wrap;
 }
+.rt-mt-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
 .rt-mt-fi--machine, .rt-mt-fi--item { flex: 1 1 170px; min-width: 140px; position: relative; }
-.rt-mt-fi--qty  { width: 76px; flex-shrink: 0; }
-.rt-mt-fi--dur  { width: 76px; flex-shrink: 0; }
-.rt-mt-fi--unit { width: 92px; flex-shrink: 0; }
+.rt-mt-fi--qty      { width: 76px; flex-shrink: 0; }
+.rt-mt-fi--dur       { width: 76px; flex-shrink: 0; }
+.rt-mt-fi--unit      { width: 92px; flex-shrink: 0; }
+.rt-mt-fi--itemunit  { width: 150px; flex-shrink: 0; }
 .rt-mt-fi__clear {
   background: none; border: none; cursor: pointer; color: #64748b;
   display: inline-flex; align-items: center; padding: 2px; border-radius: 4px; flex-shrink: 0;
 }
 .rt-mt-fi__clear:hover { color: #f87171; background: rgba(239,68,68,0.12); }
 .rt-mt-add-btn { align-self: flex-start; margin-top: 2px; }
+
+/* ── Segmentli tip-toggle (Makine/Makine Grubu, Yok/Stok/Stok Grubu, Bu Rota/Tüm Rotalar) ──
+   switchkey'in cok-secenekli karsiligi — bkz CLAUDE.md "boolean girisler switch" (2+ secenekte
+   segment kullanilir, tek switch yetmez). */
+.rt-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.rt-seg__btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.rt-seg__btn:hover { color: #94a3b8; }
+.rt-seg__btn--active {
+  background: rgba(99,102,241,0.22);
+  color: #c7d2fe;
+}
+.rt-seg--sm .rt-seg__btn { padding: 4px 8px; font-size: 10.5px; }
+
+/* ── Kapsam rozeti (satır listesinde "Bu Rota" / "Tüm Rotalar") ── */
+.rt-mt-scope {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.rt-mt-scope--this {
+  background: rgba(100,116,139,0.12);
+  color: #94a3b8;
+  border-color: rgba(100,116,139,0.28);
+}
+.rt-mt-scope--all {
+  background: rgba(139,92,246,0.14);
+  color: #c4b5fd;
+  border-color: rgba(139,92,246,0.35);
+}
+
+/* ── Picker "kapsam sınırlı" ipucu (Seq 46 — rota ürünleriyle filtreli stok listesi) ── */
+.rt-picker__filter-hint {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 14px;
+  font-size: 11px;
+  color: #64748b;
+  background: rgba(99,102,241,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.rt-picker__filter-hint button {
+  background: none; border: none; cursor: pointer;
+  color: #818cf8; font-size: 11px; font-weight: 600;
+  text-decoration: underline; padding: 0;
+  flex-shrink: 0;
+}
+.rt-picker__filter-hint button:hover { color: #a5b4fc; }
 
 /* ════════════════════════════════════════════════════════════════════════
    LIGHT THEME — body.app-theme-light scope
@@ -1363,3 +1450,36 @@ body.app-theme-light .rt-mt-fi__clear:hover {
   color: #dc2626;
   background: rgba(239,68,68,0.1);
 }
+
+/* ── Segmentli tip-toggle (Makine/Makine Grubu, Yok/Stok/Stok Grubu, Bu Rota/Tüm Rotalar) ── */
+body.app-theme-light .rt-seg {
+  background: rgba(255,255,255,0.75);
+  border-color: rgba(15,23,42,0.1);
+}
+body.app-theme-light .rt-seg__btn { color: #64748b; }
+body.app-theme-light .rt-seg__btn:hover { color: #334155; }
+body.app-theme-light .rt-seg__btn--active {
+  background: rgba(99,102,241,0.14);
+  color: #4338ca;
+}
+
+/* ── Kapsam rozeti ── */
+body.app-theme-light .rt-mt-scope--this {
+  background: rgba(100,116,139,0.1);
+  color: #64748b;
+  border-color: rgba(100,116,139,0.28);
+}
+body.app-theme-light .rt-mt-scope--all {
+  background: rgba(139,92,246,0.1);
+  color: #7c3aed;
+  border-color: rgba(139,92,246,0.32);
+}
+
+/* ── Picker "kapsam sınırlı" ipucu ── */
+body.app-theme-light .rt-picker__filter-hint {
+  color: #64748b;
+  background: rgba(99,102,241,0.05);
+  border-bottom-color: rgba(15,23,42,0.06);
+}
+body.app-theme-light .rt-picker__filter-hint button { color: #4f46e5; }
+body.app-theme-light .rt-picker__filter-hint button:hover { color: #4338ca; }
