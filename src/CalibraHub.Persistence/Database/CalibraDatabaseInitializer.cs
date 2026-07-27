@@ -15595,7 +15595,7 @@ END;";
             -- Sira ZORUNLU: (1) eski 2 filtered unique index DROP -> (2) MachineId NULL'a cevir ->
             -- (3) 4 yeni kolon ADD -> (4) yeni tek bilesik unique index CREATE -> (5) XOR/Unit CHECK'ler ->
             -- (6) 4 FK. Yeni kolonlara referans veren TUM ifadeler EXEC(N'...') ile sarmalanir: ADD COLUMN
-            -- ile ayni batch'te compile-time "Invalid column name" hatasini onler (bkz. BELGE_TIPI deseni).
+            -- ile ayni batch'te compile-time ""Invalid column name"" hatasini onler (bkz. BELGE_TIPI deseni).
             -- Mevcut satirlar (MachineId dolu + yeni kolonlar NULL) uc CHECK'i de saglar => WITH CHECK guvenli.
 
             -- (1) Eski filtered unique index'leri dusur (MachineId'yi iceriyorlar; ALTER COLUMN oncesi zorunlu).
