@@ -886,49 +886,13 @@
         gap: 14px;
     }
 
-    /* ────────────────────────────────────────────────────────────────
-       Textbox gorunumu: kutu (outlined) yerine alt-cizili (underline).
-       Kullanici talebi (2026-07-18) — SADECE bu ekran. widgetField.css
-       (tek nokta tasarim sistemi) tum diger ekranlarda .mce-/.wf-/.sqe-/
-       .ca-input icin kutu (border+radius+bg) veriyor; classPrefix:'mce'
-       SADECE bu sayfada kullanildigindan (bkz. mountDynamicWidgetRenderer
-       cagrisi) asagidaki override baska hicbir ekrani etkilemez — hem
-       sabit Razor alanlari (Malzeme Kodu/Adi/Barkod/KDV vb.) hem Ek
-       Alanlar (DynamicWidgetRenderer, ayni prefix) kapsanir. !important
-       kullanimi bilincli: widgetField.css bundle'i bu sayfaya JS ile
-       (workspace-frame modunda) sayfa yuklendikten SONRA enjekte
-       edilebiliyor — kaynak sirasina guvenilmez, deterministik ezme
-       gerekir (mevcut is-invalid bloğu da ayni sebeple !important kullanir). */
-    .mce-input, .mce-select, .mce-textarea {
-        border: none !important;
-        border-bottom: 1px solid var(--wf-border, #e2e8f0) !important;
-        border-radius: 0 !important;
-        background: transparent !important;
-        box-shadow: none !important;
-    }
-    .mce-input:hover:not(:focus):not(:disabled),
-    .mce-select:hover:not(:focus):not(:disabled),
-    .mce-textarea:hover:not(:focus):not(:disabled) {
-        border-bottom-color: var(--wf-border-hover, #c7d2fe) !important;
-    }
-    /* Focus vurgusu: renk degisimi + ikinci 1px cizgi (box-shadow) ile
-       kalinlik hissi — border-width degistirmiyoruz ki satir yuksekligi
-       kaymasin (layout-shift yok, sadece gorunum). */
-    .mce-input:focus, .mce-select:focus, .mce-textarea:focus {
-        border-bottom-color: var(--wf-border-focus, #6366f1) !important;
-        background: transparent !important;
-        box-shadow: 0 1px 0 0 var(--wf-border-focus, #6366f1) !important;
-    }
-
-    /* Invalid field — kirmizi alt-cizgi (kutu ring degil) + shake */
-    .mce-input.is-invalid,
-    .mce-select.is-invalid,
-    .mce-textarea.is-invalid {
-        border-bottom-color: var(--wf-error-color, #ef4444) !important;
-        background: transparent !important;
-        box-shadow: 0 1px 0 0 var(--wf-error-color, #ef4444) !important;
-        animation: mceShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
-    }
+    /* Textbox underline gorunumu artik widgetField.css'te proje-geneli
+       standart (2026-07-27) — hem .mce-* (sabit Razor alanlari) hem .wf-*
+       (DynamicWidgetRenderer Ek Alanlar) ayni kaynaktan underline alir.
+       Sayfa-lokal .mce-* ezmesi kaldirildi; onceki ic tutarsizlik (statik
+       alanlar underline / dinamik Ek Alanlar kutu) bu sayede giderildi.
+       Invalid durum da widgetField.css'in .mce-input.is-invalid blogundan
+       (wf-shake) gelir. */
 
     /* Coklu secim (multi-select) zorunlu alan hatasi */
     .mce-multicheck.is-invalid {

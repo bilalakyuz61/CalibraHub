@@ -10500,6 +10500,10 @@ body.app-theme-dark .ux-edit-pane .ux-field > label { color: #94a3b8; }
 .ux-edit-pane .ux-row3 {
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; max-width: 900px;
 }
+/* Alt-cizili (underline) gorunum — proje geneli textbox/combobox standardi
+   (2026-07-27, widgetField.css .wf-/.mce-* ile ayni). Kutu yerine yalniz
+   border-bottom; radius 0, transparent zemin. Sadece tip-spesifik input'lar
+   (checkbox/radio HARIC → switchkey toggle'lari etkilenmez). */
 .ux-edit-pane input[type="text"],
 .ux-edit-pane input[type="number"],
 .ux-edit-pane input[type="email"],
@@ -10507,22 +10511,27 @@ body.app-theme-dark .ux-edit-pane .ux-field > label { color: #94a3b8; }
 .ux-edit-pane input[type="color"],
 .ux-edit-pane textarea,
 .ux-edit-pane select {
-  padding: 9px 12px; border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #fff; color: #0f172a;
+  padding: 9px 12px; border-radius: 0;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  background: transparent; color: #0f172a;
   font-size: 13.5px; outline: none; font-family: inherit;
   transition: border-color .15s, box-shadow .15s;
   width: 100%;
 }
 .ux-edit-pane textarea { min-height: 72px; resize: vertical; }
-.ux-edit-pane input:focus,
+.ux-edit-pane input[type="text"]:focus,
+.ux-edit-pane input[type="number"]:focus,
+.ux-edit-pane input[type="email"]:focus,
+.ux-edit-pane input[type="time"]:focus,
+.ux-edit-pane input[type="color"]:focus,
 .ux-edit-pane textarea:focus,
 .ux-edit-pane select:focus {
-  border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+  border-bottom-color: #6366f1; box-shadow: 0 1px 0 0 #6366f1;
 }
 .ux-edit-pane .is-invalid {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important;
+  border-bottom-color: #ef4444 !important;
+  box-shadow: 0 1px 0 0 #ef4444 !important;
 }
 body.app-theme-dark .ux-edit-pane input[type="text"],
 body.app-theme-dark .ux-edit-pane input[type="number"],
@@ -10530,8 +10539,8 @@ body.app-theme-dark .ux-edit-pane input[type="email"],
 body.app-theme-dark .ux-edit-pane input[type="time"],
 body.app-theme-dark .ux-edit-pane textarea,
 body.app-theme-dark .ux-edit-pane select {
-  background: rgba(255,255,255,0.05); color: #e2e8f0;
-  border-color: rgba(255,255,255,0.12);
+  background: transparent; color: #e2e8f0;
+  border-bottom-color: rgba(255,255,255,0.12);
 }
 body.app-theme-dark .ux-edit-pane select { color-scheme: dark; }
 body.app-theme-dark .ux-edit-pane select > * { background: #0d1323; color: #e2e8f0; }

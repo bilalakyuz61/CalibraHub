@@ -25,32 +25,273 @@
     .workspace-frame-body.page-doc-category .integrator-dashboard {
         flex: 1 1 auto; min-height: 0; height: 100%;
     }
+
+    /* ── Kategori/Tip ekle-düzenle modalı (dc-*) ─────────────────────────── */
+    .dc-modal-backdrop {
+        display:none; position:fixed; inset:0; z-index:9999;
+        background:rgba(15,23,42,.55); backdrop-filter:blur(3px);
+        align-items:center; justify-content:center;
+    }
+    .dc-modal-backdrop.open { display:flex; }
+    .dc-modal-card {
+        background:var(--app-surface,#fff); border-radius:14px; width:420px; max-width:95vw;
+        padding:24px 24px 20px; box-shadow:0 20px 60px rgba(0,0,0,.25);
+        border:1px solid var(--app-border,#e2e8f0);
+    }
+    .dc-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+    .dc-modal-icon {
+        width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+        background:linear-gradient(135deg,#6366f1,#4f46e5); flex-shrink:0;
+    }
+    .dc-modal-icon svg { width:18px; height:18px; stroke:#fff; fill:none; stroke-width:2; stroke-linecap:round; }
+    .dc-modal-title { font-size:1.02rem; font-weight:700; color:var(--bs-body-color,#0f172a); }
+    .dc-modal-close {
+        margin-left:auto; width:30px; height:30px; border-radius:6px; border:none; cursor:pointer;
+        background:transparent; color:var(--bs-secondary-color,#64748b); font-size:1.2rem; line-height:1;
+        display:flex; align-items:center; justify-content:center;
+    }
+    .dc-modal-close:hover { background:var(--app-surface-2,#f1f5f9); }
+    .dc-f-label { display:block; font-size:0.78rem; font-weight:600; color:var(--bs-secondary-color,#6c757d); margin-bottom:4px; }
+    .dc-f-row { margin-bottom:14px; }
+    .dc-f-input {
+        width:100%; padding:8px 11px; border-radius:7px; font-size:0.88rem;
+        border:1px solid var(--app-border,#e2e8f0); background:var(--app-input-bg,#fff);
+        color:var(--bs-body-color,#0f172a); outline:none; box-sizing:border-box; transition:border-color .15s;
+        font-family:inherit;
+    }
+    .dc-f-input:focus { border-color:#6366f1; box-shadow:0 0 0 2px rgba(99,102,241,.12); }
+    .dc-f-hint { font-size:0.74rem; color:var(--bs-secondary-color,#94a3b8); margin-top:3px; }
+    /* Aktif switch — track + sliding thumb */
+    .dc-switch-row { display:flex; align-items:center; gap:10px; }
+    .dc-switch-wrap { display:inline-flex; align-items:center; cursor:pointer; color-scheme: light; }
+    .dc-switch-input { display:none; }
+    .dc-switch-track {
+        width:34px; height:19px; border-radius:999px; position:relative;
+        background:var(--app-border,#e2e8f0); transition:background .15s; flex-shrink:0;
+    }
+    .dc-switch-track.is-on { background:#6366f1; }
+    .dc-switch-thumb {
+        position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%;
+        background:#fff; transition:transform .15s; box-shadow:0 1px 2px rgba(0,0,0,.25);
+    }
+    .dc-switch-track.is-on .dc-switch-thumb { transform:translateX(15px); }
+    .dc-switch-label { font-size:0.86rem; font-weight:500; color:var(--bs-body-color,#0f172a); }
+    .dc-modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+    .dc-btn {
+        padding:8px 20px; border-radius:7px; font-size:0.88rem; font-weight:600;
+        border:none; cursor:pointer; transition:background .15s; font-family:inherit;
+    }
+    .dc-btn--primary { background:#6366f1; color:#fff; }
+    .dc-btn--primary:hover { background:#4f46e5; }
+    .dc-btn--primary:disabled { opacity:.5; cursor:default; }
+    .dc-btn--secondary { background:var(--app-surface-2,#f1f5f9); color:var(--bs-body-color,#0f172a); }
+    .dc-btn--secondary:hover { background:var(--app-border,#e2e8f0); }
+    .dc-status { font-size:0.8rem; margin-top:8px; min-height:18px; text-align:center; }
+    .dc-status--err { color:#ef4444; }
+    body.app-theme-dark .dc-modal-card  { background:#0b1220; border-color:#1e293b; }
+    body.app-theme-dark .dc-modal-close:hover { background:#1e293b; }
+    body.app-theme-dark .dc-f-input     { background:#1e293b; border-color:#334155; color:#e2e8f0; }
+    body.app-theme-dark .dc-btn--secondary { background:#1e293b; color:#e2e8f0; }
+    body.app-theme-dark .dc-switch-wrap { color-scheme: dark; }
+    body.app-theme-dark .dc-switch-track { background:#334155; }
 </style>
 }
 
+<!-- ── Kategori/Tip ekle-düzenle modalı ─────────────────────────────────── -->
+<div class="dc-modal-backdrop" id="dc-edit-modal" role="dialog" aria-modal="true" aria-labelledby="dc-modal-title">
+    <div class="dc-modal-card">
+        <div class="dc-modal-header">
+            <div class="dc-modal-icon">
+                <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <span class="dc-modal-title" id="dc-modal-title">Kategori / Tip Ekle</span>
+            <button class="dc-modal-close" onclick="dcCloseModal()" aria-label="Kapat">×</button>
+        </div>
+
+        <div class="dc-f-row">
+            <label class="dc-f-label">Üst Kategori</label>
+            <select id="dc-parent" class="dc-f-input">
+                <option value="">— Yok (Ana Kategori) —</option>
+            </select>
+            <div class="dc-f-hint">Boş bırakılırsa yeni bir ana Kategori (L1) oluşturulur; bir kategori seçilirse onun altında Tip (L2) oluşturulur.</div>
+        </div>
+        <div class="dc-f-row">
+            <label class="dc-f-label">Ad</label>
+            <input id="dc-name" class="dc-f-input" type="text" placeholder="Örn. Kalite, Teknik, Sözleşme…" maxlength="200">
+        </div>
+        <div class="dc-f-row dc-switch-row">
+            <label class="dc-switch-wrap">
+                <input type="checkbox" id="dc-active" class="dc-switch-input" checked>
+                <span class="dc-switch-track is-on" id="dc-active-track"><span class="dc-switch-thumb"></span></span>
+            </label>
+            <span class="dc-switch-label">Aktif</span>
+        </div>
+
+        <div class="dc-modal-actions">
+            <button class="dc-btn dc-btn--secondary" onclick="dcCloseModal()">Vazgeç</button>
+            <button id="dc-save-btn" class="dc-btn dc-btn--primary" onclick="dcSave()">Kaydet</button>
+        </div>
+        <div id="dc-status" class="dc-status"></div>
+    </div>
+</div>
+
+<!-- ── SmartBoard mount ──────────────────────────────────────────────────── -->
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
     <div id="reactDocCategory" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </section>
-@* CSRF token — DocumentCategoryManager.jsx getCsrf() tarafından okunur *@
 @Html.AntiForgeryToken()
 
 @section Scripts {
 <script>
 (function() {
-    // Uç nokta adları — DocumentCategory kontratı (backend): GET Categories (L1),
-    // GET Types?parentId= (L2), POST Save {id,parentId,name,sortOrder,isActive}, POST Delete?id=.
-    // Backend farklı route ismi kurarsa burayı güncelle.
-    var CONFIG = {
-        categoriesUrl: '/DocumentCategory/Categories',
-        typesUrl:      '/DocumentCategory/Types',
-        saveUrl:       '/DocumentCategory/Save',
-        deleteUrl:     '/DocumentCategory/Delete',
-    };
     var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
     var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var BOARD_URL  = '/DocumentCategory/BoardConfig';
 
+    function getCsrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    // ── Kategori/Tip ekle-düzenle modalı ────────────────────────────────────
+    var modal = document.getElementById('dc-edit-modal');
+    var editingId = null;
+
+    function dcFillParentSelect(selectEl, categories, excludeId) {
+        selectEl.innerHTML = '';
+        var ph = document.createElement('option');
+        ph.value = ''; ph.textContent = '— Yok (Ana Kategori) —';
+        selectEl.appendChild(ph);
+        (categories || []).forEach(function(c) {
+            if (excludeId != null && String(c.id) === String(excludeId)) return;
+            var opt = document.createElement('option');
+            opt.value = c.id; opt.textContent = c.name;
+            selectEl.appendChild(opt);
+        });
+    }
+
+    function dcLoadParentOptions(excludeId, cb) {
+        fetch('/DocumentCategory/Categories', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var list = Array.isArray(data) ? data : (data.categories || data.items || []);
+                dcFillParentSelect(document.getElementById('dc-parent'), list, excludeId);
+                if (cb) cb();
+            })
+            .catch(function() { console.error('[DocCategory] Kategori listesi yüklenemedi'); if (cb) cb(); });
+    }
+
+    document.getElementById('dc-active').addEventListener('change', function() {
+        var track = document.getElementById('dc-active-track');
+        track.classList.toggle('is-on', this.checked);
+    });
+
+    function dcResetForm() {
+        document.getElementById('dc-name').value = '';
+        document.getElementById('dc-parent').value = '';
+        document.getElementById('dc-active').checked = true;
+        document.getElementById('dc-active-track').classList.add('is-on');
+        document.getElementById('dc-status').textContent = '';
+        document.getElementById('dc-status').className = 'dc-status';
+        document.getElementById('dc-save-btn').disabled = false;
+    }
+
+    // Header aksiyonu: "+ Yeni Kategori" (board config'te trigger:"dcOpenCreate")
+    window.dcOpenCreate = function() {
+        editingId = null;
+        document.getElementById('dc-modal-title').textContent = 'Kategori / Tip Ekle';
+        dcResetForm();
+        dcLoadParentOptions(null, function() {
+            modal.classList.add('open');
+            setTimeout(function() { document.getElementById('dc-name').focus(); }, 80);
+        });
+    };
+
+    // Kart üzerinde "Düzenle" (client-side eklenen extraAction, bkz. dcAugmentEntities)
+    window.dcOpenEdit = function(payload) {
+        var id = payload && payload.id;
+        if (id == null) return;
+        editingId = id;
+        document.getElementById('dc-modal-title').textContent = 'Kategori / Tip Düzenle';
+        dcResetForm();
+        document.getElementById('dc-save-btn').disabled = true;
+        dcLoadParentOptions(id, function() {
+            fetch('/DocumentCategory/Get?id=' + encodeURIComponent(id), { credentials: 'same-origin' })
+                .then(function(r) { if (!r.ok) throw new Error('Kayıt bulunamadı'); return r.json(); })
+                .then(function(item) {
+                    document.getElementById('dc-name').value = item.name || '';
+                    document.getElementById('dc-parent').value = item.parentId != null ? String(item.parentId) : '';
+                    document.getElementById('dc-active').checked = !!item.isActive;
+                    document.getElementById('dc-active-track').classList.toggle('is-on', !!item.isActive);
+                    document.getElementById('dc-save-btn').disabled = false;
+                    modal.classList.add('open');
+                    setTimeout(function() { document.getElementById('dc-name').focus(); }, 80);
+                })
+                .catch(function() {
+                    if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Kayıt yüklenemedi.', 'err');
+                });
+        });
+    };
+
+    window.dcCloseModal = function() { modal.classList.remove('open'); };
+    modal.addEventListener('click', function(e) { if (e.target === modal) window.dcCloseModal(); });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('open')) window.dcCloseModal();
+    });
+
+    window.dcSave = function() {
+        var name = document.getElementById('dc-name').value.trim();
+        var statusEl = document.getElementById('dc-status');
+        if (!name) {
+            statusEl.className = 'dc-status dc-status--err';
+            statusEl.textContent = 'Ad boş olamaz.';
+            return;
+        }
+        var parentRaw = document.getElementById('dc-parent').value;
+        var payload = {
+            id: editingId || 0,
+            parentId: parentRaw ? parseInt(parentRaw, 10) : null,
+            name: name,
+            sortOrder: 0,
+            isActive: document.getElementById('dc-active').checked,
+        };
+        var btn = document.getElementById('dc-save-btn');
+        btn.disabled = true;
+        statusEl.textContent = '';
+        statusEl.className = 'dc-status';
+
+        fetch('/DocumentCategory/Save', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', RequestVerificationToken: getCsrf() },
+            body: JSON.stringify(payload),
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success === false) {
+                    btn.disabled = false;
+                    statusEl.className = 'dc-status dc-status--err';
+                    statusEl.textContent = d.message || 'Kaydetme başarısız.';
+                    return;
+                }
+                window.dcCloseModal();
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Kaydedildi.', 'ok');
+                if (window._dcBoardRefresh) window._dcBoardRefresh();
+            })
+            .catch(function() {
+                btn.disabled = false;
+                statusEl.className = 'dc-status dc-status--err';
+                statusEl.textContent = 'Bağlantı hatası.';
+            });
+    };
+
+    // ── SmartBoard mount ─────────────────────────────────────────────────────
+    // Backend board config'i düz liste döner (Kategori+Tip birlikte, statusBadge ile ayrım).
+    // "Düzenle" aksiyonu backend tarafında yok — burada client-side her entity'ye eklenir
+    // (type:'trigger', trigger:'dcOpenEdit') ve SmartCard.jsx generic trigger fallback'i ile
+    // window.dcOpenEdit(payload) çağrılır.
     var el = document.getElementById('reactDocCategory');
-    if (!el) { console.error('[DocumentCategory] Mount element yok'); return; }
+    if (!el) { console.error('[DocCategory] Mount element yok'); return; }
 
     function showError(msg) {
         el.innerHTML = '<div class="cb-mount-error">'
@@ -59,17 +300,43 @@
             + '</div>';
     }
 
-    function doMount() {
-        if (!window.CalibraHub || !window.CalibraHub.mountDocumentCategory) {
-            showError('DocumentCategoryManager mount fonksiyonu bulunamadı'); return;
+    function dcAugmentEntities(config) {
+        (config.entities || []).forEach(function(ent) {
+            var extra = Array.isArray(ent.extraActions) ? ent.extraActions.slice() : [];
+            extra.unshift({
+                label: 'Düzenle', icon: 'Edit2', color: 'amber',
+                type: 'trigger', trigger: 'dcOpenEdit', payload: { id: ent.id },
+            });
+            ent.extraActions = extra;
+        });
+        return config;
+    }
+
+    function doMount(config) {
+        if (!config) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadı'); return;
         }
         try {
-            window.CalibraHub.mountDocumentCategory(el, CONFIG);
-            console.log('[DocumentCategory] mounted');
+            window.CalibraHub.mountSmartBoard(el, dcAugmentEntities(config));
+            window._dcBoardRefresh = function() {
+                fetch(BOARD_URL, { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) { window.CalibraHub.mountSmartBoard(el, dcAugmentEntities(data)); })
+                    .catch(function() { window.location.reload(); });
+            };
+            console.log('[DocCategory] SmartBoard mounted,', (config.entities || []).length, 'kayıt');
         } catch (ex) {
-            console.error('[DocumentCategory] Mount exception:', ex);
+            console.error('[DocCategory] Mount exception:', ex);
             showError('Mount hatası: ' + (ex.message || ex));
         }
+    }
+
+    function fetchAndMount() {
+        fetch(BOARD_URL, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { doMount(data); })
+            .catch(function() { showError('Board config yüklenemedi'); });
     }
 
     function loadCss() {
@@ -91,8 +358,8 @@
     }
 
     loadCss();
-    if (window.CalibraHub && window.CalibraHub.mountDocumentCategory) doMount();
-    else loadScript(doMount);
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) fetchAndMount();
+    else loadScript(fetchAndMount);
 })();
 </script>
 }

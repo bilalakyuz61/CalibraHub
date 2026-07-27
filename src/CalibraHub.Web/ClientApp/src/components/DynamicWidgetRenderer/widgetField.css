@@ -100,6 +100,11 @@ body.app-theme-light {
    2) Input shell — text/number/date/select/textarea
        width:100% — overlap bug'inin kok cozumu
    ═══════════════════════════════════════════════════ */
+/* Gorunum: kutu (outlined) yerine alt-cizili (underline) — proje geneli
+   standart (kullanici talebi 2026-07-27; onceden yalniz Malzeme Kartlari'na
+   ozeldi). border yok + border-bottom, radius 0, transparent zemin. Tum
+   prefix'ler (.wf/.mce/.sqe/.ca) ayni gorunumu paylasir; height/padding
+   korunur (hizalama kaymaz). */
 .wf-input,  .wf-select,  .wf-textarea,
 .mce-input, .mce-select, .mce-textarea,
 .sqe-input, .sqe-select, .sqe-textarea,
@@ -107,9 +112,10 @@ body.app-theme-light {
   width: 100%;
   height: var(--wf-input-h);
   padding: 0 var(--wf-px);
-  border-radius: var(--wf-radius);
-  background: var(--wf-bg);
-  border: 1px solid var(--wf-border);
+  border: none;
+  border-bottom: 1px solid var(--wf-border);
+  border-radius: 0;
+  background: transparent;
   color: var(--wf-text);
   font-size: 0.875rem;
   font-weight: 500;
@@ -124,7 +130,7 @@ body.app-theme-light .wf-input,  body.app-theme-light .wf-select,  body.app-them
 body.app-theme-light .mce-input, body.app-theme-light .mce-select, body.app-theme-light .mce-textarea,
 body.app-theme-light .sqe-input, body.app-theme-light .sqe-select, body.app-theme-light .sqe-textarea,
 body.app-theme-light .ca-input,  body.app-theme-light .ca-select,  body.app-theme-light .ca-textarea {
-  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+  box-shadow: none; /* underline stilinde kutu golgesi yok */
 }
 
 /* Hover */
@@ -140,7 +146,7 @@ body.app-theme-light .ca-input,  body.app-theme-light .ca-select,  body.app-them
 .ca-input:hover:not(:focus):not(:disabled),
 .ca-select:hover:not(:focus):not(:disabled),
 .ca-textarea:hover:not(:focus):not(:disabled) {
-  border-color: var(--wf-border-hover);
+  border-bottom-color: var(--wf-border-hover);
 }
 
 /* Focus */
@@ -149,9 +155,9 @@ body.app-theme-light .ca-input,  body.app-theme-light .ca-select,  body.app-them
 .sqe-input:focus, .sqe-select:focus, .sqe-textarea:focus,
 .ca-input:focus,  .ca-select:focus,  .ca-textarea:focus {
   outline: none;
-  border-color: var(--wf-border-focus);
-  background: var(--wf-bg-focus);
-  box-shadow: var(--wf-focus-ring);
+  border-bottom-color: var(--wf-border-focus);
+  background: transparent;
+  box-shadow: 0 1px 0 0 var(--wf-border-focus); /* ikinci 1px cizgi — layout-shift yok */
 }
 
 /* Placeholder */
@@ -167,9 +173,9 @@ body.app-theme-light .ca-input,  body.app-theme-light .ca-select,  body.app-them
 .mce-input.is-invalid, .mce-select.is-invalid, .mce-textarea.is-invalid,
 .sqe-input.is-invalid, .sqe-select.is-invalid, .sqe-textarea.is-invalid,
 .ca-input.is-invalid,  .ca-select.is-invalid,  .ca-textarea.is-invalid {
-  border-color: var(--wf-error-color) !important;
-  box-shadow: var(--wf-error-ring) !important;
-  background: var(--wf-error-bg) !important;
+  border-bottom-color: var(--wf-error-color) !important;
+  box-shadow: 0 1px 0 0 var(--wf-error-color) !important;
+  background: transparent !important;
   animation: wf-shake 0.42s cubic-bezier(.36,.07,.19,.97);
 }
 
