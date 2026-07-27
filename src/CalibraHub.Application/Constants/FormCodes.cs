@@ -172,6 +172,9 @@ public static class FormCodes
     // DÖKÜMAN YÖNETİMİ
     // ═══════════════════════════════════════════════════
     public const string DocumentManagement = "DOC_MANAGEMENT";
+    // Doküman kategori/tip tanımlama ekranı (/DocumentCategory) — PageComment Seq 47.
+    // DB seed (SeedFormsAsync, "DOC_CATEGORY" string'iyle) db uzmanı sahasında ayrıca eklenir.
+    public const string DocumentCategory = "DOC_CATEGORY";
 
     // ═══════════════════════════════════════════════════
     // VARLIK YÖNETİMİ

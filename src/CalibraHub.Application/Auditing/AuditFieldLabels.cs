@@ -49,6 +49,8 @@ public static class AuditFieldLabels
             ["Session"]        = "Oturum",
             ["ProjectTask"]         = "Proje Görevi",
             ["ProjectTaskTemplate"] = "Görev Şablonu",
+            ["DocumentCategory"]     = "Doküman Kategorisi",
+            ["DocumentCategoryType"] = "Doküman Tipi",
         };
 
     /// <summary>Aksiyon kodu → Türkçe etiket.</summary>

@@ -825,6 +825,10 @@ END;";
             await EnsureApprovalSqlQueryTablesAsync(connection, cancellationToken);
             await EnsureWorkflowTablesAsync(connection, cancellationToken);
             await EnsureWorkflowInstanceTablesAsync(connection, cancellationToken);
+            // DocumentCategory, Attachment'tan ÖNCE ensure edilir: Attachment.DocumentCategoryId
+            // FK'si bu tabloyu referans eder (ikisi de MASTER DB / dbo). Sıralama fresh-DB'de FK'nin
+            // "Invalid object name (DocumentCategory)" ile patlamasını önler.
+            await EnsureDocumentCategoryTableAsync(cancellationToken);
             await EnsureAttachmentTableAsync(cancellationToken);
             await EnsurePermissionTablesAsync(connection, cancellationToken);
             await EnsurePermissionGroupTablesAsync(connection, cancellationToken);
@@ -12192,6 +12196,23 @@ END;";
                 [MenuGroupSortOrder] = ISNULL([MenuGroupSortOrder], 9),
                 [MenuSortOrder]      = ISNULL([MenuSortOrder],      60)
              WHERE [FormCode] = N'PERMISSION_MGMT';
+
+            -- DOC_CATEGORY → Tanımlamalar > Doküman Kategorileri
+            -- MenuService yalnız IsMenuItem=1 + MenuKey satırlarını menüye alır → sidebar'da
+            -- görünmesi için açık kayıt ŞART (DOC_MANAGEMENT'ta bu blok yok, o başka mekanizma).
+            -- generaldefs grubu (LOCATIONS/CARD_GROUPS ile aynı "Tanımlamalar" bucket'ı).
+            UPDATE dbo.Forms SET
+                [IsMenuItem]         = 1,
+                [MenuKey]            = ISNULL([MenuKey],            N'gendef.doccategory'),
+                [MenuLabel]          = ISNULL([MenuLabel],          N'Doküman Kategorileri'),
+                [MenuLabelEn]        = ISNULL([MenuLabelEn],        N'Document Categories'),
+                [MenuGroupKey]       = ISNULL([MenuGroupKey],       N'generaldefs'),
+                [MenuGroupName]      = ISNULL([MenuGroupName],      N'Tanımlamalar'),
+                [MenuGroupIcon]      = ISNULL([MenuGroupIcon],      N'Settings2'),
+                [MenuGroupSortOrder] = ISNULL([MenuGroupSortOrder], 7),
+                [MenuSortOrder]      = ISNULL([MenuSortOrder],      70),
+                [MenuMatchPath]      = ISNULL([MenuMatchPath],      N'/DocumentCategory')
+             WHERE [FormCode] = N'DOC_CATEGORY';
             """;
         await using (var seedCmd = connection.CreateCommand())
         {
@@ -12622,6 +12643,9 @@ END;";
 
             // ── Döküman Yönetimi ──────────────────────────────────────────────
             ("DOC_MANAGEMENT",      "Döküman Yönetimi",                 "Döküman Yönetimi",     null,                       785,  true),
+            // 2026-07-27 (PageComment Seq 47): Doküman kategori/tip tanımlama ekranı (grantable,
+            // widget hedefi değil). ITEM_DOCUMENT_LOCK emsali (IsWidgetForm=false yönetim ekranı).
+            ("DOC_CATEGORY",        "Doküman Kategorileri",             "Genel Tanımlamalar",   null,                       786,  false),
 
             // ── Tasarım ──────────────────────────────────────────────────────
             ("DOC_TEMPLATES",       "Belge Şablonları",                 "Tasarım",              null,                       800,  true),
@@ -17901,6 +17925,7 @@ END;";
                     [RevisionNumber] SMALLINT         NOT NULL CONSTRAINT [DF_Attachment_RevisionNumber] DEFAULT 1,
                     [OriginalId]     INT              NULL,
                     [BinaryContent]  VARBINARY(MAX)   NULL,
+                    [DocumentCategoryId] INT          NULL,
                     [IsActive]       BIT              NOT NULL CONSTRAINT [DF_Attachment_IsActive]       DEFAULT 1,
                     [CreatedById]    INT              NULL,
                     [Created]        DATETIME         NOT NULL CONSTRAINT [DF_Attachment_Created]        DEFAULT SYSUTCDATETIME(),
@@ -18007,8 +18032,88 @@ END;";
 
             IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[Attachment]') AND name = N'Tags')
                 ALTER TABLE [dbo].[Attachment] ADD [Tags] NVARCHAR(500) NULL;
+
+            -- 2026-07-27 (PageComment Seq 47): DocumentCategoryId — iki-seviyeli kategori/tip
+            -- referansi (dbo.DocumentCategory; en spesifik dugum: Tip varsa Tip, yoksa Kategori).
+            -- Mevcut string [Category] KALIR (legacy/display; dokunulmaz).
+            IF COL_LENGTH(N'[dbo].[Attachment]', N'DocumentCategoryId') IS NULL
+                ALTER TABLE [dbo].[Attachment] ADD [DocumentCategoryId] INT NULL;
+
+            -- FK ayri statement + EXEC: yeni kolona referans veren DDL, ayni batch'te parse-time
+            -- "Invalid column name" riski tasir → EXEC ile runtime'a ertelenir. DocumentCategory
+            -- tablosu master zincirde Attachment'tan ONCE ensure edilir, yine de OBJECT_ID guard'i.
+            IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                           WHERE name = N'FK_Attachment_DocumentCategory'
+                             AND parent_object_id = OBJECT_ID(N'[dbo].[Attachment]'))
+               AND OBJECT_ID(N'[dbo].[DocumentCategory]', N'U') IS NOT NULL
+                EXEC(N'ALTER TABLE [dbo].[Attachment] WITH CHECK ADD CONSTRAINT [FK_Attachment_DocumentCategory] FOREIGN KEY ([DocumentCategoryId]) REFERENCES [dbo].[DocumentCategory]([Id]);');
             """;
         await migCmd2.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 2026-07-27 (PageComment Seq 47) — Doküman kategori/tip tanımlama tablosu.
+    /// İKİ SEVİYE: ParentId NULL = Kategori (Seviye-1), ParentId dolu = Tip (Seviye-2, self-FK).
+    /// MASTER DB'de (dbo, cross-company) — Attachment ile aynı yerde; per-company DB mimarisine
+    /// GİRMEZ (CompanyId YOK). "Kod alanı yok" kuralı → yalnız Name; uniqueness ad üzerinden.
+    /// EnsureAttachmentTableAsync gibi kendi sistem bağlantısını açar (EnsureFullSchemaAsync
+    /// per-company da çağrılsa hep master'a yazar; idempotent → tekrar çağrı no-op).
+    /// Idempotent guard'lar: OBJECT_ID / sys.indexes / NOT EXISTS.
+    /// </summary>
+    private async Task EnsureDocumentCategoryTableAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
+
+        // Komut 1: CREATE TABLE + self-FK + filtered unique index.
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            IF OBJECT_ID(N'[dbo].[DocumentCategory]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[DocumentCategory]
+                (
+                    [Id]          INT IDENTITY(1,1) NOT NULL
+                                      CONSTRAINT [PK_DocumentCategory] PRIMARY KEY,
+                    [ParentId]    INT            NULL,
+                    [Name]        NVARCHAR(200)  NOT NULL,
+                    [SortOrder]   INT            NOT NULL CONSTRAINT [DF_DocumentCategory_SortOrder] DEFAULT 0,
+                    [IsActive]    BIT            NOT NULL CONSTRAINT [DF_DocumentCategory_IsActive]  DEFAULT 1,
+                    [CreatedById] INT            NULL,
+                    [Created]     DATETIME       NOT NULL CONSTRAINT [DF_DocumentCategory_Created]   DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT            NULL,
+                    [Updated]     DATETIME       NULL,
+                    CONSTRAINT [FK_DocumentCategory_Parent]
+                        FOREIGN KEY ([ParentId]) REFERENCES [dbo].[DocumentCategory]([Id])
+                );
+            END;
+
+            -- Filtered unique: ayni kategori altinda ayni isim tekrarlamasin. SQL Server unique
+            -- index NULL'lari esit sayar → kok kategoriler (ParentId NULL) de tekillesir.
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE name = N'UX_DocumentCategory_Parent_Name'
+                             AND object_id = OBJECT_ID(N'[dbo].[DocumentCategory]'))
+                CREATE UNIQUE INDEX [UX_DocumentCategory_Parent_Name]
+                    ON [dbo].[DocumentCategory] ([ParentId], [Name]) WHERE [IsActive] = 1;
+            """;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Komut 2: SEED — mevcut 6 hardcoded kategori Seviye-1 (ParentId NULL) olarak.
+        // Idempotent: yalniz ayni isimde kok kategori YOKSA ekle. Tip (Seviye-2) seed edilmez
+        // (kullanici tanimlar). Attachment.Category string kolonundaki eski degerlerle ayni etiketler.
+        await using var seedCmd = connection.CreateCommand();
+        seedCmd.CommandText = """
+            DECLARE @cats TABLE ([Name] NVARCHAR(200), [Sort] INT);
+            INSERT INTO @cats ([Name], [Sort]) VALUES
+                (N'Kalite', 10), (N'Teknik', 20), (N'İdari', 30),
+                (N'Mali', 40), (N'Hukuki', 50), (N'Diğer', 60);
+            INSERT INTO [dbo].[DocumentCategory] ([ParentId], [Name], [SortOrder], [IsActive])
+            SELECT NULL, c.[Name], c.[Sort], 1
+            FROM @cats c
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [dbo].[DocumentCategory] d
+                WHERE d.[ParentId] IS NULL AND d.[Name] = c.[Name]
+            );
+            """;
+        await seedCmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
