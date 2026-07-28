@@ -1,0 +1,902 @@
+@*
+    ShipmentPlanningCenter — Yükleme Planlama Merkezi (Faz 1, 2026-07-28).
+    İhtiyaç Karşılama Merkezi'nin (Views/Purchase/FulfillmentCenter.cshtml, prefix fc3-) satış-tarafı
+    analoğu. Prefix: sp- (shipment planning). Faz 1 kapsamı SADE tutulur:
+      1) Açık satış sipariş kalemlerini listele + "Depodan Rezerve Et" (mantıksal rezervasyon).
+      2) Mevcut rezervasyonları (satır detayında) göster + iptal et.
+    "Yükle / İrsaliye" aksiyonu Faz 2 — burada YOK (buton bile eklenmedi).
+    Sunucu tarafı render etmez; tüm veri client-side fetch ile GET /Sales/OpenOrderLinesForReservation,
+    GET /Sales/OrderReservations, POST /Sales/CreateReservation, POST /Sales/CancelReservation üzerinden
+    gelir (kesin sözleşme — bkz. SalesController.cs ilgili action'lar).
+*@
+@{
+    ViewData["Title"]     = "Yükleme Planlama";
+    ViewData["BodyClass"] = "page-sp";
+}
+
+@section Styles {
+<style>
+    /* ── Sayfa kap (FulfillmentCenter fc3-outer ile aynı iskelet) ── */
+    .page-sp .integrator-dashboard {
+        padding:0!important; background:transparent!important;
+        box-shadow:none!important; border:none!important; max-width:none!important;
+    }
+    .page-sp .integrator-dashboard__content { width:100%!important; max-width:none!important; padding:0!important; }
+
+    .sp-outer {
+        display:flex; flex-direction:column;
+        height: calc(100vh - 56px);
+        padding: 16px 20px 0;
+        overflow:hidden;
+    }
+
+    /* ── Başlık ── */
+    .sp-hd { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-shrink:0; }
+    .sp-back {
+        display:inline-flex; align-items:center; gap:5px;
+        padding:5px 11px; border-radius:7px;
+        background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
+        color:#94a3b8; font-size:.79rem; text-decoration:none; transition:all .13s;
+    }
+    .sp-back:hover { background:rgba(255,255,255,.08); color:#e2e8f0; }
+    .sp-title-icon {
+        width:34px; height:34px; border-radius:8px; flex-shrink:0;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:flex; align-items:center; justify-content:center;
+    }
+    .sp-title-tx  { font-size:1rem; font-weight:700; color:#e2e8f0; }
+    .sp-title-sub { font-size:.75rem; color:#475569; }
+
+    .sp-qs-wrap { width:280px; flex-shrink:0; position:relative; display:flex; align-items:center; }
+    .sp-qs-icon { position:absolute; left:9px; color:#475569; pointer-events:none; flex-shrink:0; }
+    .sp-qs-input {
+        width:100%; height:32px; padding:0 8px 0 30px;
+        border:1px solid rgba(255,255,255,.09); border-radius:8px;
+        background:rgba(255,255,255,.04); font-size:.8rem;
+        color:#e2e8f0; outline:none; transition:border-color .13s;
+    }
+    .sp-qs-input::placeholder { color:#334155; }
+    .sp-qs-input:focus { border-color:rgba(99,102,241,.45); }
+    .sp-qs-input::-webkit-search-cancel-button { cursor:pointer; }
+
+    .sp-hd-icon-btn {
+        display:inline-flex; align-items:center; justify-content:center;
+        width:32px; height:32px; border-radius:8px; padding:0; flex-shrink:0;
+        background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
+        color:#94a3b8; cursor:pointer; transition:all .13s;
+    }
+    .sp-hd-icon-btn:hover { background:rgba(255,255,255,.08); color:#e2e8f0; }
+    @@keyframes spspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .sp-hd-icon-btn.sp-spin svg { animation: spspin .8s linear infinite; }
+
+    /* ── Liste ── */
+    .sp-body { flex:1; min-height:0; display:flex; flex-direction:column; }
+    .sp-left {
+        flex:1; min-height:0; display:flex; flex-direction:column;
+        background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.07);
+        border-radius:12px; overflow:hidden;
+    }
+    .sp-list-bar { flex-shrink:0; display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .sp-count-all { margin-left:auto; font-size:.75rem; color:#475569; }
+    .sp-count-sel { font-size:.79rem; font-weight:700; color:#a5b4fc; display:none; }
+    .sp-count-sel.show { display:inline; }
+
+    .sp-flat-hdr {
+        display:grid;
+        grid-template-columns: 26px 130px 1fr 76px 76px 76px 76px 110px 46px 26px;
+        align-items:center; gap:8px;
+        padding:6px 16px 6px 14px; flex-shrink:0;
+        font-size:.68rem; font-weight:700; letter-spacing:.04em; text-transform:none;
+        color:#475569; border-bottom:1px solid rgba(255,255,255,.06);
+        background:rgba(255,255,255,.02);
+    }
+    .sp-flat-hdr > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sp-fhdr__qty { text-align:right; }
+
+    .sp-list { flex:1; overflow-y:auto; scrollbar-gutter:stable; }
+    .sp-list::-webkit-scrollbar { width:4px; }
+    .sp-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,.09); border-radius:2px; }
+    .sp-empty-list { padding:32px 14px; text-align:center; color:#475569; font-size:.82rem; }
+
+    .sp-row-wrap { border-bottom:1px solid rgba(255,255,255,.04); }
+    .sp-flat-row {
+        display:grid;
+        grid-template-columns: 26px 130px 1fr 76px 76px 76px 76px 110px 46px 26px;
+        align-items:center; gap:8px;
+        padding:8px 14px; font-size:.79rem; transition:background .1s;
+    }
+    .sp-flat-row:hover { background:rgba(255,255,255,.025); }
+    .sp-flat-row.sel   { background:rgba(99,102,241,.09); }
+    .sp-flat-row.is-kit { opacity:.72; }
+    .sp-cb { accent-color:#6366f1; width:15px; height:15px; cursor:pointer; margin:0; }
+    .sp-cb:disabled { opacity:.35; cursor:not-allowed; }
+    .sp-flat-num { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.79rem; font-weight:700; color:#818cf8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:none; border:none; padding:0; text-align:left; cursor:pointer; }
+    .sp-flat-num:hover { color:#a5b4fc; text-decoration:underline; }
+    .sp-flat-mat { min-width:0; overflow:hidden; }
+    .sp-flat-mat-name { color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+    .sp-flat-mat-code { color:#475569; font-size:.7rem; font-family:ui-monospace, Menlo, Consolas, monospace; }
+    .sp-kit-badge {
+        display:inline-flex; align-items:center; gap:3px; margin-left:6px;
+        padding:1px 6px; border-radius:999px; font-size:.63rem; font-weight:700;
+        background:rgba(139,92,246,.16); color:#c4b5fd; white-space:nowrap;
+    }
+    .sp-qty  { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; color:#cbd5e1; text-align:right; }
+    .sp-qty--open { color:#e2e8f0; font-weight:700; }
+    .sp-stock { text-align:right; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; padding:1px 6px; border-radius:6px; }
+    .sp-stock--ok   { color:#34d399; }
+    .sp-stock--warn { color:#fbbf24; }
+    .sp-stock--none { color:#f87171; }
+    .sp-unit { color:#64748b; font-size:.75rem; }
+    .sp-exp-btn {
+        justify-self:end; width:20px; height:20px; border-radius:5px; padding:0;
+        background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09);
+        color:#64748b; cursor:pointer; display:flex; align-items:center; justify-content:center;
+        transition:all .12s; line-height:1;
+    }
+    .sp-exp-btn:hover { background:rgba(99,102,241,.15); border-color:rgba(99,102,241,.3); color:#a5b4fc; }
+    .sp-exp-btn.active { background:rgba(99,102,241,.14); border-color:rgba(99,102,241,.28); color:#818cf8; }
+    .sp-exp-btn svg { transition:transform .15s; }
+    .sp-exp-btn.active svg { transform:rotate(180deg); }
+
+    /* ── Rezervasyon detay bloğu ── */
+    .sp-sub { background:rgba(99,102,241,.025); border-top:1px solid rgba(99,102,241,.1); }
+    .sp-sub-loading, .sp-sub-empty { padding:8px 14px 8px 48px; font-size:.76rem; color:#475569; font-style:italic; }
+    .sp-sub-row {
+        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+        padding:6px 14px 6px 48px; border-bottom:1px solid rgba(255,255,255,.03); font-size:.76rem;
+    }
+    .sp-sub-row:last-child { border-bottom:none; }
+    .sp-sub-loc  { color:#94a3b8; min-width:120px; }
+    .sp-sub-qty  { color:#e2e8f0; font-weight:600; font-family:ui-monospace, Menlo, Consolas, monospace; min-width:70px; }
+    .sp-sub-date { color:#64748b; min-width:80px; }
+    .sp-sub-notes { color:#64748b; flex:1; min-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sp-sub-cancel {
+        margin-left:auto; display:inline-flex; align-items:center; gap:4px;
+        padding:3px 9px; border-radius:6px; font-size:.72rem; font-weight:600; cursor:pointer;
+        background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.28); color:#fca5a5; transition:all .12s;
+    }
+    .sp-sub-cancel:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.4); }
+
+    /* ── Seçim aksiyon bar ── */
+    .sp-selbar {
+        position:fixed; left:50%; bottom:18px; transform:translate(-50%, 120%);
+        display:flex; align-items:center; gap:14px; z-index:60;
+        padding:9px 12px 9px 16px; border-radius:12px;
+        background:rgba(13,18,34,.96); border:1px solid rgba(255,255,255,.09);
+        box-shadow:0 16px 40px rgba(0,0,0,.35);
+        transition:transform .18s ease;
+    }
+    .sp-selbar.show { transform:translate(-50%, 0); }
+    .sp-sb-cnt { font-size:.83rem; font-weight:700; color:#a5b4fc; white-space:nowrap; }
+    .sp-sb-right { display:flex; align-items:center; gap:8px; }
+    .sp-fb-cancel { background:none; border:none; color:#64748b; font-size:.78rem; cursor:pointer; padding:5px 4px; }
+    .sp-fb-cancel:hover { color:#94a3b8; }
+
+    .sp-btn { display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:8px; font-size:.8rem; font-weight:600; cursor:pointer; border:none; transition:all .13s; }
+    .sp-btn--p { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; }
+    .sp-btn--p:hover { opacity:.88; }
+    .sp-btn--p:disabled { opacity:.4; cursor:not-allowed; }
+    .sp-btn--g { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); color:#94a3b8; }
+    .sp-btn--g:hover { background:rgba(255,255,255,.09); color:#e2e8f0; }
+
+    /* ── Rezervasyon modalı (silme onay standardı ile aynı iskelet: backdrop + ortalanmış kart) ── */
+    .sp-modal-backdrop {
+        position:fixed; inset:0; z-index:9980;
+        background:rgba(6,9,20,.55); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+        display:flex; align-items:center; justify-content:center;
+        opacity:0; pointer-events:none; transition:opacity .12s;
+    }
+    .sp-modal-backdrop.open { opacity:1; pointer-events:auto; }
+    .sp-modal {
+        width:min(620px, 94vw); max-height:86vh; display:flex; flex-direction:column;
+        background:#0d1222; border:1px solid rgba(255,255,255,.09); border-radius:14px;
+        box-shadow:0 32px 80px rgba(0,0,0,.5);
+        transform:translateY(10px) scale(.98); opacity:0; transition:transform .16s, opacity .16s;
+    }
+    .sp-modal-backdrop.open .sp-modal { transform:translateY(0) scale(1); opacity:1; }
+    .sp-modal-hd { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.07); flex-shrink:0; }
+    .sp-modal-hd-icon {
+        width:34px; height:34px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff;
+    }
+    .sp-modal-hd-tx { flex:1; min-width:0; }
+    .sp-modal-hd-tx strong { display:block; font-size:.92rem; font-weight:700; color:#e2e8f0; }
+    .sp-modal-hd-tx small  { font-size:.73rem; color:#64748b; }
+    .sp-modal-close {
+        padding:5px; border-radius:7px; background:none; border:1px solid rgba(255,255,255,.07);
+        color:#64748b; cursor:pointer; display:flex; align-items:center; transition:all .12s;
+    }
+    .sp-modal-close:hover { background:rgba(255,255,255,.07); color:#e2e8f0; }
+    .sp-modal-body { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+    .sp-modal-body::-webkit-scrollbar { width:5px; }
+    .sp-modal-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:3px; }
+
+    .sp-field-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .sp-field { flex:1; min-width:180px; }
+    .sp-field label { display:block; font-size:.72rem; font-weight:600; color:#64748b; margin-bottom:4px; }
+    .sp-ti, .sp-ts {
+        width:100%; padding:6px 8px;
+        background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09);
+        border-radius:6px; color:#e2e8f0; font-size:.81rem; outline:none; color-scheme:dark;
+    }
+    .sp-ti:focus, .sp-ts:focus { border-color:rgba(99,102,241,.45); }
+    .sp-ts option { background:#1e293b; }
+    textarea.sp-ti { resize:vertical; }
+
+    .sp-modal-tablewrap { border:1px solid rgba(255,255,255,.07); border-radius:10px; overflow:hidden; }
+    .sp-modal-tbl { width:100%; border-collapse:collapse; font-size:.8rem; }
+    .sp-modal-tbl thead th {
+        text-align:left; padding:6px 8px; font-size:.68rem; font-weight:700; color:#64748b;
+        background:rgba(255,255,255,.03); border-bottom:1px solid rgba(255,255,255,.07); white-space:nowrap;
+    }
+    .sp-modal-tbl tbody td { padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:middle; }
+    .sp-modal-tbl tbody tr:last-child td { border-bottom:none; }
+    .sp-modal-mat { color:#cbd5e1; font-size:.79rem; }
+    .sp-modal-mat small { display:block; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.68rem; color:#818cf8; margin-top:1px; }
+    .sp-modal-qty-input {
+        width:88px; padding:4px 6px; text-align:right;
+        background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1);
+        border-radius:6px; color:#e2e8f0; font-size:.8rem; outline:none;
+        font-family:ui-monospace, Menlo, Consolas, monospace;
+    }
+    .sp-modal-qty-input:focus { border-color:rgba(99,102,241,.5); }
+    .sp-modal-qty-input.sp-qty-warn { border-color:rgba(245,158,11,.55); color:#fbbf24; }
+    .sp-modal-hint { font-size:.67rem; color:#475569; white-space:nowrap; }
+    .sp-modal-rm {
+        width:24px; height:24px; padding:0; border-radius:6px;
+        background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25); color:#f87171;
+        cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .12s;
+    }
+    .sp-modal-rm:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.4); color:#fca5a5; }
+
+    .sp-modal-ft { display:flex; align-items:center; gap:10px; padding:12px 16px; border-top:1px solid rgba(255,255,255,.07); flex-shrink:0; }
+    .sp-res { display:none; flex:1; padding:6px 10px; border-radius:6px; font-size:.78rem; font-weight:600; }
+    .sp-res--ok  { background:rgba(16,185,129,.12); border:1px solid rgba(16,185,129,.3); color:#6ee7b7; }
+    .sp-res--err { background:rgba(239,68,68,.1);   border:1px solid rgba(239,68,68,.3);  color:#fca5a5; }
+    .sp-res--info { background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.3); color:#a5b4fc; }
+    .sp-modal-ft-btns { display:flex; gap:8px; flex-shrink:0; margin-left:auto; }
+
+    /* Sonuç dökümü (created/skipped) */
+    .sp-result-list { display:flex; flex-direction:column; gap:4px; }
+    .sp-result-item { display:flex; align-items:center; gap:8px; font-size:.78rem; padding:4px 8px; border-radius:6px; }
+    .sp-result-item--ok  { background:rgba(16,185,129,.08); color:#6ee7b7; }
+    .sp-result-item--bad { background:rgba(239,68,68,.08);  color:#fca5a5; }
+
+    /* ── Light tema override — fc3 deseniyle tutarlı (dark default, light override) ── */
+    body.app-theme-light .sp-back { background:#f1f5f9; border-color:#e2e8f0; color:#475569; }
+    body.app-theme-light .sp-back:hover { background:#e2e8f0; color:#0f172a; }
+    body.app-theme-light .sp-title-tx  { color:#0f172a; }
+    body.app-theme-light .sp-title-sub { color:#64748b; }
+    body.app-theme-light .sp-qs-input { background:#f8fafc; border-color:#e2e8f0; color:#0f172a; color-scheme:light; }
+    body.app-theme-light .sp-qs-input::placeholder { color:#94a3b8; }
+    body.app-theme-light .sp-qs-icon { color:#94a3b8; }
+    body.app-theme-light .sp-hd-icon-btn { background:#f1f5f9; border-color:#e2e8f0; color:#64748b; }
+    body.app-theme-light .sp-hd-icon-btn:hover { background:#e2e8f0; color:#0f172a; }
+
+    body.app-theme-light .sp-left { background:#ffffff; border-color:#e2e8f0; }
+    body.app-theme-light .sp-list-bar { border-bottom-color:#e2e8f0; }
+    body.app-theme-light .sp-count-all { color:#64748b; }
+    body.app-theme-light .sp-count-sel { color:#4338ca; }
+    body.app-theme-light .sp-flat-hdr { color:#94a3b8; border-bottom-color:#f1f5f9; background:#f8fafc; }
+    body.app-theme-light .sp-list::-webkit-scrollbar-thumb { background:#cbd5e1; }
+    body.app-theme-light .sp-row-wrap { border-bottom-color:#f1f5f9; }
+    body.app-theme-light .sp-flat-row:hover { background:#f8fafc; }
+    body.app-theme-light .sp-flat-row.sel { background:rgba(99,102,241,.08); }
+    body.app-theme-light .sp-flat-num { color:#4338ca; }
+    body.app-theme-light .sp-flat-mat-name { color:#0f172a; }
+    body.app-theme-light .sp-flat-mat-code { color:#94a3b8; }
+    body.app-theme-light .sp-qty { color:#334155; }
+    body.app-theme-light .sp-qty--open { color:#0f172a; }
+    body.app-theme-light .sp-unit { color:#94a3b8; }
+    body.app-theme-light .sp-exp-btn { background:#f1f5f9; border-color:#e2e8f0; color:#64748b; }
+    body.app-theme-light .sp-exp-btn:hover, body.app-theme-light .sp-exp-btn.active { background:#e0e7ff; border-color:#c7d2fe; color:#4338ca; }
+    body.app-theme-light .sp-empty-list { color:#64748b; }
+
+    body.app-theme-light .sp-sub { background:#f8fafc; border-top-color:#e0e7ff; }
+    body.app-theme-light .sp-sub-row { border-bottom-color:#f1f5f9; }
+    body.app-theme-light .sp-sub-loc, body.app-theme-light .sp-sub-date, body.app-theme-light .sp-sub-notes { color:#64748b; }
+    body.app-theme-light .sp-sub-qty { color:#0f172a; }
+    body.app-theme-light .sp-sub-loading, body.app-theme-light .sp-sub-empty { color:#94a3b8; }
+
+    body.app-theme-light .sp-selbar { background:#ffffff; border-color:#e2e8f0; box-shadow:0 16px 40px rgba(15,23,42,.14); }
+    body.app-theme-light .sp-sb-cnt { color:#4338ca; }
+    body.app-theme-light .sp-fb-cancel { color:#94a3b8; }
+    body.app-theme-light .sp-fb-cancel:hover { color:#334155; }
+    body.app-theme-light .sp-btn--g { background:#f1f5f9; border-color:#e2e8f0; color:#475569; }
+    body.app-theme-light .sp-btn--g:hover { background:#e2e8f0; color:#0f172a; }
+
+    body.app-theme-light .sp-modal-backdrop { background:rgba(15,23,42,.32); }
+    body.app-theme-light .sp-modal { background:#ffffff; border-color:#e2e8f0; box-shadow:0 32px 80px rgba(15,23,42,.2); }
+    body.app-theme-light .sp-modal-hd { border-bottom-color:#e2e8f0; }
+    body.app-theme-light .sp-modal-hd-tx strong { color:#0f172a; }
+    body.app-theme-light .sp-modal-hd-tx small  { color:#64748b; }
+    body.app-theme-light .sp-modal-close { border-color:#e2e8f0; color:#64748b; }
+    body.app-theme-light .sp-modal-close:hover { background:#f1f5f9; color:#0f172a; }
+    body.app-theme-light .sp-modal-body::-webkit-scrollbar-thumb { background:#cbd5e1; }
+    body.app-theme-light .sp-field label { color:#475569; }
+    body.app-theme-light .sp-ti, body.app-theme-light .sp-ts {
+        background:#ffffff; border-color:#e2e8f0; color:#0f172a; color-scheme:light;
+    }
+    body.app-theme-light .sp-ts option { background:#ffffff; color:#0f172a; }
+    body.app-theme-light .sp-modal-tablewrap { border-color:#e2e8f0; }
+    body.app-theme-light .sp-modal-tbl thead th { color:#64748b; background:#f8fafc; border-bottom-color:#e2e8f0; }
+    body.app-theme-light .sp-modal-tbl tbody td { border-bottom-color:#f1f5f9; }
+    body.app-theme-light .sp-modal-mat { color:#334155; }
+    body.app-theme-light .sp-modal-qty-input { background:#ffffff; border-color:#e2e8f0; color:#0f172a; }
+    body.app-theme-light .sp-modal-hint { color:#94a3b8; }
+    body.app-theme-light .sp-modal-rm { background:rgba(239,68,68,.06); border-color:rgba(239,68,68,.22); color:#dc2626; }
+    body.app-theme-light .sp-modal-rm:hover { background:rgba(239,68,68,.12); }
+    body.app-theme-light .sp-modal-ft { border-top-color:#e2e8f0; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard__content">
+<div class="sp-outer" id="spOuter">
+
+    @* ── Başlık ── *@
+    <div class="sp-hd">
+        <a href="/Sales/Orders" class="sp-back" title="Satış Siparişleri">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </a>
+        <div class="sp-title-icon">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M3 16v5h5"/><path d="M21 16v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/>
+            </svg>
+        </div>
+        <div style="flex:1">
+            <div class="sp-title-tx">Yükleme Planlama</div>
+            <div class="sp-title-sub" id="spSubtitle">Açık sipariş kalemlerini depodan rezerve edin</div>
+        </div>
+        <div class="sp-qs-wrap">
+            <svg class="sp-qs-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="spQuickSearch" class="sp-qs-input" placeholder="Malzeme kodu/adı veya sipariş no…" autocomplete="off">
+        </div>
+        <button type="button" class="sp-hd-icon-btn" id="spRefreshBtn" onclick="spRefreshClicked(this)" title="Yenile">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+    </div>
+
+    @* ── Liste ── *@
+    <div class="sp-body">
+        <div class="sp-left">
+            <div class="sp-list-bar">
+                <span id="spSelCnt" class="sp-count-sel"></span>
+                <span id="spAllCnt" class="sp-count-all"></span>
+            </div>
+            <div class="sp-flat-hdr">
+                <span></span>
+                <span>Sipariş No</span>
+                <span>Malzeme</span>
+                <span class="sp-fhdr__qty">Sipariş</span>
+                <span class="sp-fhdr__qty">Teslim</span>
+                <span class="sp-fhdr__qty">Rezerve</span>
+                <span class="sp-fhdr__qty">Açık</span>
+                <span class="sp-fhdr__qty">Kull. Stok</span>
+                <span>Br.</span>
+                <span></span>
+            </div>
+            <div class="sp-list" id="spList">
+                <div class="sp-empty-list">Yükleniyor…</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</section>
+
+@* ── Seçim aksiyon bar ── *@
+<div class="sp-selbar" id="spSelBar">
+    <span class="sp-sb-cnt" id="spSbCnt"></span>
+    <div class="sp-sb-right">
+        <button type="button" class="sp-btn sp-btn--p" id="spReserveBtn" onclick="spOpenReserveModal()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Depodan Rezerve Et
+        </button>
+        <button type="button" class="sp-fb-cancel" onclick="spClearSelection()">İptal</button>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@* ── Rezervasyon modalı ── *@
+<div class="sp-modal-backdrop" id="spModalBackdrop" onclick="spModalBackdropClick(event)">
+    <div class="sp-modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+        <div class="sp-modal-hd">
+            <div class="sp-modal-hd-icon">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <div class="sp-modal-hd-tx">
+                <strong>Depodan Rezerve Et</strong>
+                <small>Seçili sipariş kalemleri için mantıksal stok rezervasyonu oluşturur</small>
+            </div>
+            <button type="button" class="sp-modal-close" onclick="spCloseReserveModal()" title="Kapat (Esc)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="sp-modal-body">
+            <div class="sp-field-row">
+                <div class="sp-field">
+                    <label>Depo</label>
+                    <select id="spResLocation" class="sp-ts">
+                        <option value="">— Otomatik (kalemin deposu) —</option>
+                    </select>
+                </div>
+                <div class="sp-field">
+                    <label>Planlı Sevk Tarihi</label>
+                    <input type="date" id="spResShipDate" class="sp-ti">
+                </div>
+            </div>
+
+            <div class="sp-modal-tablewrap">
+                <table class="sp-modal-tbl">
+                    <thead>
+                    <tr>
+                        <th></th>
+                        <th>Malzeme</th>
+                        <th style="text-align:right;">Açık</th>
+                        <th style="text-align:right;">Miktar</th>
+                        <th>Br.</th>
+                    </tr>
+                    </thead>
+                    <tbody id="spResTbody"></tbody>
+                </table>
+            </div>
+
+            <div class="sp-field">
+                <label>Not</label>
+                <textarea id="spResNotes" class="sp-ti" rows="2" placeholder="Opsiyonel…"></textarea>
+            </div>
+
+            <div id="spResResultWrap" style="display:none;">
+                <div class="sp-result-list" id="spResResultList"></div>
+            </div>
+        </div>
+        <div class="sp-modal-ft">
+            <span class="sp-res" id="spResMsg"></span>
+            <div class="sp-modal-ft-btns">
+                <button type="button" class="sp-btn sp-btn--g" id="spResCancelBtn" onclick="spCloseReserveModal()">Vazgeç</button>
+                <button type="button" class="sp-btn sp-btn--p" id="spResOkBtn" onclick="spSubmitReservation()">Rezerve Et</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    'use strict';
+
+    // ── Durum ────────────────────────────────────────────────────────────────
+    var LINES = [];            // en son yüklenen açık sipariş kalemleri (server'dan geldiği gibi)
+    var SELECTED = {};         // lineId -> line objesi (yalnız kit-dışı, seçili kalemler)
+    var LOCATIONS = null;      // /Purchase/FulfillmentLocationOptions cache (lazy)
+    var EXPANDED = {};         // lineId -> bool (rezervasyon detay paneli açık mı)
+    var searchTimer = null;
+
+    function esc(s) {
+        return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmtN(n) {
+        return parseFloat(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtDate(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        return d.getDate().toString().padStart(2,'0') + '.' + (d.getMonth()+1).toString().padStart(2,'0') + '.' + d.getFullYear();
+    }
+    function spCsrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    // ── Liste yükleme (in-place; window.location.reload YOK) ──────────────────
+    // NOT: backend materialSearch VE orderNumber'ı AND ile birleştirir (ikisi de dolu gönderilirse
+    // "malzeme eşleşir VE sipariş no eşleşir" ister — tek arama kutusuna aynı metni iki alana da
+    // yazarsak sipariş no yazıldığında sonuç sessizce boş dönerdi). Tek kutuda "malzeme VEYA sipariş
+    // no" davranışı için iki paralel istek atılır (materialSearch=q, orderNumber=q ayrı ayrı) ve
+    // sonuçlar lineId'ye göre birleştirilir.
+    window.spLoadLines = function() {
+        var q = (document.getElementById('spQuickSearch').value || '').trim();
+        var urls = q
+            ? [
+                '/Sales/OpenOrderLinesForReservation?materialSearch=' + encodeURIComponent(q) + '&orderNumber=',
+                '/Sales/OpenOrderLinesForReservation?materialSearch=&orderNumber=' + encodeURIComponent(q),
+              ]
+            : ['/Sales/OpenOrderLinesForReservation?materialSearch=&orderNumber='];
+        var listEl = document.getElementById('spList');
+        listEl.innerHTML = '<div class="sp-empty-list">Yükleniyor…</div>';
+        Promise.all(urls.map(function(u) {
+            return fetch(u, { headers: { 'Accept': 'application/json' } }).then(function(r) { return r.json(); });
+        }))
+            .then(function(results) {
+                var merged = {};
+                var errorMsg = null;
+                var anyArray = false;
+                results.forEach(function(data) {
+                    if (!Array.isArray(data)) { errorMsg = (data && data.error) || 'Kalemler yüklenemedi.'; return; }
+                    anyArray = true;
+                    data.forEach(function(l) { merged[l.lineId] = l; });
+                });
+                if (!anyArray) {
+                    LINES = [];
+                    listEl.innerHTML = '<div class="sp-empty-list">' + esc(errorMsg || 'Kalemler yüklenemedi.') + '</div>';
+                    spUpdateCounts();
+                    return;
+                }
+                LINES = Object.values(merged).sort(function(a, b) {
+                    var da = new Date(a.orderDate).getTime(), db = new Date(b.orderDate).getTime();
+                    if (db !== da) return db - da;
+                    return (a.orderNumber || '').localeCompare(b.orderNumber || '');
+                });
+                // Artık listede olmayan / açığı 0'a düşen kalemleri seçimden düş.
+                var stillOpen = {};
+                LINES.forEach(function(l) { stillOpen[l.lineId] = l; });
+                Object.keys(SELECTED).forEach(function(id) {
+                    if (!stillOpen[id]) delete SELECTED[id];
+                });
+                spRenderList();
+                spUpdateSelBar();
+            })
+            .catch(function() {
+                LINES = [];
+                listEl.innerHTML = '<div class="sp-empty-list">Bağlantı hatası — kalemler yüklenemedi.</div>';
+                spUpdateCounts();
+            });
+    };
+
+    window.spRefreshClicked = function(btn) {
+        btn.classList.add('sp-spin');
+        spLoadLines();
+        setTimeout(function() { btn.classList.remove('sp-spin'); }, 500);
+    };
+
+    function spUpdateCounts() {
+        document.getElementById('spAllCnt').textContent = LINES.length + ' kalem';
+        var selCnt = document.getElementById('spSelCnt');
+        var n = Object.keys(SELECTED).length;
+        if (n > 0) { selCnt.textContent = n + ' seçili'; selCnt.classList.add('show'); }
+        else { selCnt.classList.remove('show'); }
+    }
+
+    function spStockClass(line) {
+        if (line.availableStock <= 0) return 'sp-stock--none';
+        if (line.availableStock < line.openQty) return 'sp-stock--warn';
+        return 'sp-stock--ok';
+    }
+
+    // ── Liste render (flat — grup yok, Faz 1 sade) ─────────────────────────────
+    function spRenderList() {
+        var listEl = document.getElementById('spList');
+        spUpdateCounts();
+        if (!LINES.length) {
+            listEl.innerHTML = '<div class="sp-empty-list">Açık sipariş kalemi bulunamadı.</div>';
+            return;
+        }
+        var html = LINES.map(function(l) {
+            var checked = !!SELECTED[l.lineId];
+            var disabled = l.isKit;
+            var kitBadge = l.isKit ? '<span class="sp-kit-badge" title="Kit satırları Faz 1\'de rezerve edilemez">Kit — sonraki faz</span>' : '';
+            var expOpen = !!EXPANDED[l.lineId];
+            return ''
+                + '<div class="sp-row-wrap" data-line-id="' + l.lineId + '">'
+                +   '<div class="sp-flat-row' + (checked ? ' sel' : '') + (l.isKit ? ' is-kit' : '') + '">'
+                +     '<input type="checkbox" class="sp-cb" data-line-id="' + l.lineId + '"'
+                +       (checked ? ' checked' : '') + (disabled ? ' disabled title="Kit satırı rezerve edilemez"' : '')
+                +       ' onchange="spToggleLine(' + l.lineId + ', this.checked)">'
+                +     '<button type="button" class="sp-flat-num" onclick="spOpenOrderTab(event, ' + l.orderDocumentId + ')" title="Siparişi aç">' + esc(l.orderNumber) + '</button>'
+                +     '<div class="sp-flat-mat">'
+                +       '<span class="sp-flat-mat-name">' + esc(l.materialName || l.materialCode || ('#' + l.itemId)) + kitBadge + '</span>'
+                +       '<span class="sp-flat-mat-code">' + esc(l.materialCode || '') + '</span>'
+                +     '</div>'
+                +     '<span class="sp-qty">' + fmtN(l.orderQty) + '</span>'
+                +     '<span class="sp-qty">' + fmtN(l.deliveredQty) + '</span>'
+                +     '<span class="sp-qty">' + fmtN(l.reservedQty) + '</span>'
+                +     '<span class="sp-qty sp-qty--open">' + fmtN(l.openQty) + '</span>'
+                +     '<span class="sp-stock ' + spStockClass(l) + '">' + fmtN(l.availableStock) + '</span>'
+                +     '<span class="sp-unit">' + esc(l.unitCode || '') + '</span>'
+                +     '<button type="button" class="sp-exp-btn' + (expOpen ? ' active' : '') + '" onclick="spToggleDetail(' + l.lineId + ')" title="Rezervasyonlar">'
+                +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+                +     '</button>'
+                +   '</div>'
+                +   '<div class="sp-sub" id="spSub-' + l.lineId + '" style="display:' + (expOpen ? 'block' : 'none') + ';">'
+                +     (expOpen ? '<div class="sp-sub-loading">Yükleniyor…</div>' : '')
+                +   '</div>'
+                + '</div>';
+        }).join('');
+        listEl.innerHTML = html;
+        Object.keys(EXPANDED).forEach(function(id) {
+            if (EXPANDED[id]) spLoadDetail(parseInt(id, 10));
+        });
+    }
+
+    // Sipariş numarasına tıklanınca parent shell'de workspace sekmesi açar (fc3 deseniyle aynı).
+    window.spOpenOrderTab = function(event, orderDocumentId) {
+        event.preventDefault();
+        event.stopPropagation();
+        var url = '/Sales/DocumentEdit?id=' + orderDocumentId;
+        var p = window.parent;
+        if (p && p !== window && typeof p.calibraOpenWorkspaceTab === 'function') {
+            p.calibraOpenWorkspaceTab(url, 'Satış Siparişi');
+        } else {
+            window.location.href = url;
+        }
+    };
+
+    // ── Seçim ────────────────────────────────────────────────────────────────
+    window.spToggleLine = function(lineId, checked) {
+        var line = LINES.find(function(l) { return l.lineId === lineId; });
+        if (!line || line.isKit) return;
+        if (checked) SELECTED[lineId] = line; else delete SELECTED[lineId];
+        spUpdateCounts();
+        spUpdateSelBar();
+        var row = document.querySelector('.sp-row-wrap[data-line-id="' + lineId + '"] .sp-flat-row');
+        if (row) row.classList.toggle('sel', checked);
+    };
+
+    window.spClearSelection = function() {
+        SELECTED = {};
+        document.querySelectorAll('.sp-cb').forEach(function(cb) { cb.checked = false; });
+        document.querySelectorAll('.sp-flat-row.sel').forEach(function(r) { r.classList.remove('sel'); });
+        spUpdateCounts();
+        spUpdateSelBar();
+    };
+
+    function spUpdateSelBar() {
+        var bar = document.getElementById('spSelBar');
+        var n = Object.keys(SELECTED).length;
+        document.getElementById('spSbCnt').textContent = n + ' kalem seçili';
+        bar.classList.toggle('show', n > 0);
+    }
+
+    // ── Rezervasyon detay paneli (expand) ───────────────────────────────────────
+    window.spToggleDetail = function(lineId) {
+        EXPANDED[lineId] = !EXPANDED[lineId];
+        var sub = document.getElementById('spSub-' + lineId);
+        var btn = document.querySelector('.sp-row-wrap[data-line-id="' + lineId + '"] .sp-exp-btn');
+        if (!sub) return;
+        var open = EXPANDED[lineId];
+        sub.style.display = open ? 'block' : 'none';
+        if (btn) btn.classList.toggle('active', open);
+        if (open) {
+            sub.innerHTML = '<div class="sp-sub-loading">Yükleniyor…</div>';
+            spLoadDetail(lineId);
+        }
+    };
+
+    function spLoadDetail(lineId) {
+        var sub = document.getElementById('spSub-' + lineId);
+        if (!sub) return;
+        fetch('/Sales/OrderReservations?orderLineId=' + lineId, { headers: { 'Accept': 'application/json' } })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!Array.isArray(data)) {
+                    sub.innerHTML = '<div class="sp-sub-empty">' + esc((data && data.error) || 'Rezervasyonlar yüklenemedi.') + '</div>';
+                    return;
+                }
+                if (!data.length) {
+                    sub.innerHTML = '<div class="sp-sub-empty">Bu kalem için aktif rezervasyon yok.</div>';
+                    return;
+                }
+                sub.innerHTML = data.map(function(r) {
+                    return ''
+                        + '<div class="sp-sub-row" data-res-id="' + r.id + '">'
+                        +   '<span class="sp-sub-loc">' + esc(r.locationName || ('#' + r.locationId)) + '</span>'
+                        +   '<span class="sp-sub-qty">' + fmtN(r.quantity) + '</span>'
+                        +   '<span class="sp-sub-date">' + (r.plannedShipDate ? fmtDate(r.plannedShipDate) : '—') + '</span>'
+                        +   '<span class="sp-sub-notes">' + esc(r.notes || '') + '</span>'
+                        +   '<button type="button" class="sp-sub-cancel" onclick="spCancelReservation(' + r.id + ', ' + lineId + ')">'
+                        +     '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
+                        +     'İptal'
+                        +   '</button>'
+                        + '</div>';
+                }).join('');
+            })
+            .catch(function() {
+                sub.innerHTML = '<div class="sp-sub-empty">Bağlantı hatası.</div>';
+            });
+    }
+
+    // Silme onay standardı (CLAUDE.md): ekran-ortası custom modal, native confirm() YASAK.
+    // showConfirm/CalibraAlert global helper _Layout.cshtml'de zaten yüklü (wwwroot/js/confirm-modal.js).
+    window.spCancelReservation = function(reservationId, lineId) {
+        showConfirm({
+            title: 'Rezervasyon İptali',
+            message: 'Bu rezervasyon iptal edilecek. Kullanılabilir stok tekrar serbest kalır. Devam edilsin mi?',
+            okLabel: 'Evet, İptal Et',
+            cancelLabel: 'Vazgeç',
+            danger: true
+        }).then(function(ok) {
+            if (!ok) return;
+            fetch('/Sales/CancelReservation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
+                body: JSON.stringify({ reservationIds: [reservationId] }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.ok) {
+                    CalibraAlert.show('Rezervasyon iptal edildi.', { type: 'success', autoDismissMs: 2000 });
+                    spLoadDetail(lineId);
+                    spLoadLines(); // in-place refresh — reservedQty/openQty/availableStock değişti
+                } else {
+                    CalibraAlert.show(d.error || 'Rezervasyon iptal edilemedi.', { type: 'error' });
+                }
+            })
+            .catch(function() {
+                CalibraAlert.show('Bağlantı hatası — rezervasyon iptal edilemedi.', { type: 'error' });
+            });
+        });
+    };
+
+    // ── Depo dropdown (lazy, cache) ─────────────────────────────────────────────
+    function spEnsureLocations(cb) {
+        if (LOCATIONS) { cb(LOCATIONS); return; }
+        fetch('/Purchase/FulfillmentLocationOptions', { headers: { 'Accept': 'application/json' } })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                LOCATIONS = Array.isArray(data) ? data : [];
+                cb(LOCATIONS);
+            })
+            .catch(function() { LOCATIONS = []; cb(LOCATIONS); });
+    }
+
+    // ── Rezervasyon modalı ──────────────────────────────────────────────────────
+    window.spOpenReserveModal = function() {
+        var lines = Object.values(SELECTED);
+        if (!lines.length) return;
+        spEnsureLocations(function(locs) {
+            var sel = document.getElementById('spResLocation');
+            sel.innerHTML = '<option value="">— Otomatik (kalemin deposu) —</option>'
+                + locs.map(function(l) { return '<option value="' + l.id + '">' + esc(l.locationName || l.locationCode) + '</option>'; }).join('');
+        });
+        var tbody = document.getElementById('spResTbody');
+        tbody.innerHTML = lines.map(function(l) {
+            var warn = l.availableStock < l.openQty;
+            return ''
+                + '<tr data-line-id="' + l.lineId + '">'
+                +   '<td><button type="button" class="sp-modal-rm" onclick="spModalRemoveRow(' + l.lineId + ')" title="Bu kalemi çıkar">'
+                +     '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+                +   '</button></td>'
+                +   '<td class="sp-modal-mat">' + esc(l.materialName || l.materialCode || ('#' + l.itemId)) + '<small>' + esc(l.orderNumber || '') + '</small></td>'
+                +   '<td style="text-align:right;">' + fmtN(l.openQty) + '</td>'
+                +   '<td style="text-align:right;">'
+                +     '<input type="text" class="sp-modal-qty-input' + (warn ? ' sp-qty-warn' : '') + '" data-line-id="' + l.lineId + '" value="' + fmtN(l.openQty) + '"'
+                +     ' title="' + (warn ? 'Kullanılabilir stok (' + fmtN(l.availableStock) + ') açık miktardan az — sunucu yetersiz kısmı atlayabilir' : '') + '">'
+                +   '</td>'
+                +   '<td>' + esc(l.unitCode || '') + '</td>'
+                + '</tr>';
+        }).join('');
+        document.getElementById('spResShipDate').value = '';
+        document.getElementById('spResNotes').value = '';
+        document.getElementById('spResResultWrap').style.display = 'none';
+        document.getElementById('spResResultList').innerHTML = '';
+        spModalShowMsg('', '');
+        document.getElementById('spResOkBtn').disabled = false;
+        document.getElementById('spResOkBtn').style.display = '';
+        document.getElementById('spResCancelBtn').textContent = 'Vazgeç';
+        document.getElementById('spModalBackdrop').classList.add('open');
+        document.addEventListener('keydown', spModalEscHandler);
+    };
+
+    window.spModalRemoveRow = function(lineId) {
+        delete SELECTED[lineId];
+        var row = document.querySelector('#spResTbody tr[data-line-id="' + lineId + '"]');
+        if (row) row.remove();
+        var cb = document.querySelector('.sp-cb[data-line-id="' + lineId + '"]');
+        if (cb) cb.checked = false;
+        var fr = document.querySelector('.sp-row-wrap[data-line-id="' + lineId + '"] .sp-flat-row');
+        if (fr) fr.classList.remove('sel');
+        spUpdateCounts();
+        spUpdateSelBar();
+        if (!Object.keys(SELECTED).length) spCloseReserveModal();
+    };
+
+    window.spCloseReserveModal = function() {
+        document.getElementById('spModalBackdrop').classList.remove('open');
+        document.removeEventListener('keydown', spModalEscHandler);
+    };
+
+    window.spModalBackdropClick = function(event) {
+        if (event.target && event.target.id === 'spModalBackdrop') spCloseReserveModal();
+    };
+
+    function spModalEscHandler(e) {
+        if (e.key === 'Escape') spCloseReserveModal();
+    }
+
+    function spModalShowMsg(text, kind) {
+        var el = document.getElementById('spResMsg');
+        if (!text) { el.style.display = 'none'; el.textContent = ''; el.className = 'sp-res'; return; }
+        el.textContent = text;
+        el.className = 'sp-res ' + (kind === 'ok' ? 'sp-res--ok' : (kind === 'info' ? 'sp-res--info' : 'sp-res--err'));
+        el.style.display = 'block';
+    }
+
+    // POST /Sales/CreateReservation — body { lines:[{orderLineId,qty}], locationId?, plannedShipDate?, notes? }
+    // yanıt { ok, created:[{orderLineId,reserved,reason}], skipped:[{orderLineId,reason}] }
+    window.spSubmitReservation = function() {
+        var rows = document.querySelectorAll('#spResTbody tr');
+        var lines = [];
+        rows.forEach(function(tr) {
+            var lineId = parseInt(tr.getAttribute('data-line-id'), 10);
+            var inp = tr.querySelector('.sp-modal-qty-input');
+            var q = inp ? parseFloat((inp.value || '0').replace(',', '.')) : 0;
+            if (q > 0) lines.push({ orderLineId: lineId, qty: q });
+        });
+        if (!lines.length) { spModalShowMsg('Lütfen en az bir kalem için miktar girin.', 'err'); return; }
+
+        var locSel = document.getElementById('spResLocation');
+        var locationId = locSel && locSel.value ? parseInt(locSel.value, 10) : null;
+        var shipDateInp = document.getElementById('spResShipDate').value;
+        var plannedShipDate = shipDateInp ? shipDateInp : null;
+        var notes = document.getElementById('spResNotes').value || null;
+
+        var okBtn = document.getElementById('spResOkBtn');
+        var cnBtn = document.getElementById('spResCancelBtn');
+        okBtn.disabled = true; cnBtn.disabled = true;
+        spModalShowMsg('', '');
+
+        fetch('/Sales/CreateReservation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
+            body: JSON.stringify({ lines: lines, locationId: locationId, plannedShipDate: plannedShipDate, notes: notes }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            okBtn.disabled = false; cnBtn.disabled = false;
+            if (!d.ok) {
+                spModalShowMsg(d.error || 'Rezervasyon oluşturulamadı.', 'err');
+                return;
+            }
+            var created = d.created || [];
+            var skipped = d.skipped || [];
+            var resultEl = document.getElementById('spResResultList');
+            var html = created.map(function(c) {
+                var line = LINES.find(function(l) { return l.lineId === c.orderLineId; });
+                var label = line ? (line.materialName || line.materialCode || ('#' + c.orderLineId)) : ('#' + c.orderLineId);
+                return '<div class="sp-result-item sp-result-item--ok">✓ ' + esc(label) + ' — ' + fmtN(c.reserved) + ' rezerve edildi' + (c.reason ? ' (' + esc(c.reason) + ')' : '') + '</div>';
+            }).concat(skipped.map(function(s) {
+                var line = LINES.find(function(l) { return l.lineId === s.orderLineId; });
+                var label = line ? (line.materialName || line.materialCode || ('#' + s.orderLineId)) : ('#' + s.orderLineId);
+                return '<div class="sp-result-item sp-result-item--bad">✕ ' + esc(label) + ' — ' + esc(s.reason || 'Atlandı') + '</div>';
+            })).join('');
+            resultEl.innerHTML = html;
+            document.getElementById('spResResultWrap').style.display = html ? 'block' : 'none';
+
+            if (created.length && !skipped.length) {
+                spModalShowMsg('✔ ' + created.length + ' kalem rezerve edildi.', 'ok');
+            } else if (created.length && skipped.length) {
+                spModalShowMsg('⚠ ' + created.length + ' kalem rezerve edildi, ' + skipped.length + ' kalem atlandı — aşağıya bakın.', 'info');
+            } else {
+                spModalShowMsg('✖ Hiçbir kalem rezerve edilemedi — aşağıya bakın.', 'err');
+            }
+
+            // Başarıyla rezerve edilen kalemleri seçimden düş; atlananlar tekrar denenebilsin diye kalır.
+            created.forEach(function(c) { delete SELECTED[c.orderLineId]; });
+            okBtn.style.display = 'none';
+            cnBtn.textContent = 'Kapat';
+            spUpdateCounts();
+            spUpdateSelBar();
+            spLoadLines(); // in-place refresh — window.location.reload YOK
+            if (CalibraAlert && created.length) {
+                CalibraAlert.show(created.length + ' kalem rezerve edildi.', { type: 'success', autoDismissMs: 2500 });
+            }
+        })
+        .catch(function() {
+            okBtn.disabled = false; cnBtn.disabled = false;
+            spModalShowMsg('Bağlantı hatası — rezervasyon oluşturulamadı.', 'err');
+        });
+    };
+
+    // ── Arama (debounce) ────────────────────────────────────────────────────────
+    document.getElementById('spQuickSearch').addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(spLoadLines, 320);
+    });
+
+    // ── İlk yükleme ──────────────────────────────────────────────────────────────
+    spLoadLines();
+})();
+</script>
+}
