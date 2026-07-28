@@ -341,12 +341,11 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                                     ELSE 0 END), 0)
             FROM {T("DocumentLine")} sm
             INNER JOIN {T("Document")} smd ON smd.[Id] = sm.[DocumentId]
-            WHERE sm.[ItemId] = @ItemId AND smd.[CompanyId] = @Cid AND smd.[IsActive] = 1
+            WHERE sm.[ItemId] = @ItemId AND smd.[IsActive] = 1
               AND sm.[MovementType] IN (1,2,3,4)
               AND (sm.[LocationId] = @L OR sm.[FromLocationId] = @L);
             """;
         cmd.Parameters.AddWithValue("@ItemId", itemId);
-        cmd.Parameters.AddWithValue("@Cid", companyId);
         cmd.Parameters.AddWithValue("@L", locationId);
         var v = await cmd.ExecuteScalarAsync(ct);
         return v is null or DBNull ? 0m : Convert.ToDecimal(v);
