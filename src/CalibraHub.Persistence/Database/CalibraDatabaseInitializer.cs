@@ -767,6 +767,7 @@ END;";
             await EnsureLocationSectionTablesAsync(connection, cancellationToken);
             await EnsureArgeTablesAsync(connection, cancellationToken);
             await EnsureProjectTaskTablesAsync(connection, cancellationToken);
+            await EnsureQualityTablesAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
             await EnsureScheduledTasksTableAsync(connection, cancellationToken);
@@ -775,6 +776,7 @@ END;";
             await EnsureWhatsAppConfigTableAsync(connection, cancellationToken);
             await SeedDocumentTypesAsync(connection, cancellationToken);
             await SeedArgeNumberRuleAsync(connection, cancellationToken);
+            await SeedQualityNumberRuleAsync(connection, cancellationToken);
             await EnsureCurrencyTablesAsync(connection, cancellationToken);
             await SeedCurrenciesAsync(connection, cancellationToken);
             await EnsureReportDataViewsAsync(connection, cancellationToken);
@@ -10149,6 +10151,176 @@ END;";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Kalite muayene belgesi numara kurali (MUY-yyyy######, yillik reset). Idempotent.
+    /// SeedArgeNumberRuleAsync kalibi — DocumentType.Code='muayene' id'sini bulur, kural yoksa ekler.
+    /// </summary>
+    private async Task SeedQualityNumberRuleAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            DECLARE @muyTypeId INT =
+                (SELECT TOP 1 [Id] FROM [{s}].[DocumentType] WHERE [Code] = 'muayene');
+            IF @muyTypeId IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM [{s}].[DocumentNumberRule] WHERE [DocumentTypeId] = @muyTypeId)
+            BEGIN
+                INSERT INTO [{s}].[DocumentNumberRule]
+                    ([Name], [DocumentTypeId], [Prefix], [YearFormat], [MonthFormat],
+                     [CounterLength], [CounterStart], [ResetPeriod], [Weight], [IsActive], [Created])
+                VALUES
+                    (N'Muayene Numarasi', @muyTypeId, N'MUY-', N'yyyy', NULL,
+                     6, 1, 1, 0, 1, SYSUTCDATETIME());
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Kalite Yonetimi modulu tablolari (Faz 1 — Muayene + NCR). Stok/depoya SIFIR dokunus.
+    /// - QualityDefectCode: hata kodu katalogu (ActivityReason muadili).
+    /// - QualityInspectionPlan(+Line): muayene plani + karakteristikler.
+    /// - QualityInspection: muayene kaydi companion (Document 'muayene' ile 1-1, DocumentId UNIQUE).
+    /// - QualityInspectionLine: olcum satiri (native; tolerans karsi otomatik uygun/uygunsuz).
+    /// Idempotent: CREATE IF NOT EXISTS. Document PK kucuk harf [id]; yeni tablolar [Id].
+    /// </summary>
+    private async Task EnsureQualityTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            -- Hata kodu katalogu
+            IF OBJECT_ID(N'[{s}].[QualityDefectCode]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[QualityDefectCode]
+                (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_QualityDefectCode] PRIMARY KEY,
+                    [Category]    TINYINT NOT NULL CONSTRAINT [DF_QualityDefectCode_Category] DEFAULT(5),
+                    [Code]        NVARCHAR(50) NOT NULL,
+                    [Name]        NVARCHAR(200) NOT NULL,
+                    [Description] NVARCHAR(1000) NULL,
+                    [ColorHex]    NVARCHAR(9) NULL,
+                    [SortOrder]   INT NOT NULL CONSTRAINT [DF_QualityDefectCode_SortOrder] DEFAULT(0),
+                    [IsActive]    BIT NOT NULL CONSTRAINT [DF_QualityDefectCode_IsActive] DEFAULT(1),
+                    [CreatedById] INT NULL,
+                    [Created]     DATETIME NOT NULL CONSTRAINT [DF_QualityDefectCode_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT NULL,
+                    [Updated]     DATETIME NULL
+                );
+                CREATE UNIQUE INDEX [UX_QualityDefectCode_Name] ON [{s}].[QualityDefectCode]([Name]) WHERE [IsActive] = 1;
+            END;
+
+            -- Muayene plani basligi
+            IF OBJECT_ID(N'[{s}].[QualityInspectionPlan]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[QualityInspectionPlan]
+                (
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_QualityInspectionPlan] PRIMARY KEY,
+                    [ItemId]          INT NULL,
+                    [MaterialGroupId] INT NULL,
+                    [InspectionType]  TINYINT NOT NULL CONSTRAINT [DF_QualityInspectionPlan_Type] DEFAULT(1),
+                    [Name]            NVARCHAR(200) NOT NULL,
+                    [IsActive]        BIT NOT NULL CONSTRAINT [DF_QualityInspectionPlan_IsActive] DEFAULT(1),
+                    [CreatedById]     INT NULL,
+                    [Created]         DATETIME NOT NULL CONSTRAINT [DF_QualityInspectionPlan_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]     INT NULL,
+                    [Updated]         DATETIME NULL
+                );
+                CREATE INDEX [IX_QualityInspectionPlan_Item] ON [{s}].[QualityInspectionPlan]([ItemId], [InspectionType]);
+            END;
+
+            -- Muayene plani karakteristik satirlari
+            IF OBJECT_ID(N'[{s}].[QualityInspectionPlanLine]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[QualityInspectionPlanLine]
+                (
+                    [Id]                 INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_QualityInspectionPlanLine] PRIMARY KEY,
+                    [PlanId]             INT NOT NULL,
+                    [CharacteristicName] NVARCHAR(200) NOT NULL,
+                    [Nominal]            DECIMAL(18,4) NULL,
+                    [LowerTol]           DECIMAL(18,4) NULL,
+                    [UpperTol]           DECIMAL(18,4) NULL,
+                    [UnitId]             INT NULL,
+                    [Method]             NVARCHAR(200) NULL,
+                    [GaugeName]          NVARCHAR(200) NULL,
+                    [IsNumeric]          BIT NOT NULL CONSTRAINT [DF_QualityInspectionPlanLine_IsNumeric] DEFAULT(1),
+                    [OrderNo]            INT NOT NULL CONSTRAINT [DF_QualityInspectionPlanLine_OrderNo] DEFAULT(0),
+                    [CreatedById]        INT NULL,
+                    [Created]            DATETIME NOT NULL CONSTRAINT [DF_QualityInspectionPlanLine_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]        INT NULL,
+                    [Updated]            DATETIME NULL,
+                    CONSTRAINT [FK_QualityInspectionPlanLine_Plan] FOREIGN KEY ([PlanId])
+                        REFERENCES [{s}].[QualityInspectionPlan]([Id])
+                );
+                CREATE INDEX [IX_QualityInspectionPlanLine_Plan] ON [{s}].[QualityInspectionPlanLine]([PlanId], [OrderNo]);
+            END;
+
+            -- Muayene kaydi companion (Document 'muayene' ile 1-1)
+            IF OBJECT_ID(N'[{s}].[QualityInspection]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[QualityInspection]
+                (
+                    [Id]                     INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_QualityInspection] PRIMARY KEY,
+                    [DocumentId]             INT NOT NULL,
+                    [PlanId]                 INT NULL,
+                    [ItemId]                 INT NULL,
+                    [InspectionType]         TINYINT NOT NULL CONSTRAINT [DF_QualityInspection_Type] DEFAULT(1),
+                    [Status]                 TINYINT NOT NULL CONSTRAINT [DF_QualityInspection_Status] DEFAULT(0),
+                    [Verdict]                TINYINT NULL,
+                    [Disposition]            TINYINT NULL,
+                    [SourceKind]             NVARCHAR(50) NULL,
+                    [SourceId]               INT NULL,
+                    [Quantity]               DECIMAL(18,4) NULL,
+                    [InspectedByPersonnelId] INT NULL,
+                    [InspectedAt]            DATETIME NULL,
+                    [Notes]                  NVARCHAR(MAX) NULL,
+                    [CreatedById]            INT NULL,
+                    [Created]                DATETIME NOT NULL CONSTRAINT [DF_QualityInspection_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]            INT NULL,
+                    [Updated]                DATETIME NULL,
+                    CONSTRAINT [FK_QualityInspection_Document] FOREIGN KEY ([DocumentId])
+                        REFERENCES [{s}].[Document]([id]),
+                    CONSTRAINT [UX_QualityInspection_Document] UNIQUE ([DocumentId])
+                );
+                CREATE INDEX [IX_QualityInspection_Status] ON [{s}].[QualityInspection]([Status]);
+                CREATE INDEX [IX_QualityInspection_Item]   ON [{s}].[QualityInspection]([ItemId]);
+            END;
+
+            -- Muayene olcum satirlari (native)
+            IF OBJECT_ID(N'[{s}].[QualityInspectionLine]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[QualityInspectionLine]
+                (
+                    [Id]                 INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_QualityInspectionLine] PRIMARY KEY,
+                    [InspectionId]       INT NOT NULL,
+                    [PlanLineId]         INT NULL,
+                    [CharacteristicName] NVARCHAR(200) NOT NULL,
+                    [Nominal]            DECIMAL(18,4) NULL,
+                    [LowerTol]           DECIMAL(18,4) NULL,
+                    [UpperTol]           DECIMAL(18,4) NULL,
+                    [Measured]           DECIMAL(18,4) NULL,
+                    [IsNumeric]          BIT NOT NULL CONSTRAINT [DF_QualityInspectionLine_IsNumeric] DEFAULT(1),
+                    [Result]             TINYINT NOT NULL CONSTRAINT [DF_QualityInspectionLine_Result] DEFAULT(0),
+                    [DefectCodeId]       INT NULL,
+                    [OrderNo]            INT NOT NULL CONSTRAINT [DF_QualityInspectionLine_OrderNo] DEFAULT(0),
+                    [Notes]              NVARCHAR(1000) NULL,
+                    [CreatedById]        INT NULL,
+                    [Created]            DATETIME NOT NULL CONSTRAINT [DF_QualityInspectionLine_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]        INT NULL,
+                    [Updated]            DATETIME NULL,
+                    CONSTRAINT [FK_QualityInspectionLine_Inspection] FOREIGN KEY ([InspectionId])
+                        REFERENCES [{s}].[QualityInspection]([Id]),
+                    CONSTRAINT [FK_QualityInspectionLine_DefectCode] FOREIGN KEY ([DefectCodeId])
+                        REFERENCES [{s}].[QualityDefectCode]([Id])
+                );
+                CREATE INDEX [IX_QualityInspectionLine_Inspection] ON [{s}].[QualityInspectionLine]([InspectionId], [OrderNo]);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private async Task EnsureReportTemplatesTableAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
@@ -10894,6 +11066,10 @@ END;";
         ("depo_giris",    "Depo Giris Fisi",    null, "BelgeId", "Depoya dogrudan stok girisi"),
         ("depo_cikis",    "Depo Cikis Fisi",    null, "BelgeId", "Depodan dogrudan stok cikisi (AR-GE malzeme tuketimi dahil)"),
         ("sayim",         "Sayim Fisi",         null, "BelgeId", "Envanter sayim belgesi — InventoryCount companion, taslak/yansit akisi"),
+        // 2026-07-27: Kalite muayene kaydi — Document tabanli (companion QualityInspection ile 1-1).
+        // Numara kurali SeedQualityNumberRuleAsync ile seed edilir (MUY-yyyy######). COA/print
+        // ileride vw_Quality_COA ile eklenince SqlViewName doldurulur.
+        ("muayene",       "Muayene / Kontrol",  null, "BelgeId", "Gelen/proses/final/lab muayene kaydi"),
     ];
 
     private async Task SeedDocumentTypesAsync(SqlConnection connection, CancellationToken cancellationToken)
@@ -12616,6 +12792,11 @@ END;";
             // (SALES_QUOTE'un hem yetki hem header widget formu olması gibi). Görev başına özel
             // alanlar Widget Tanımları → "Proje Görevleri" altında tanımlanır (recordId = görev Id).
             ("PROJECT_TASK",        "Proje Görevleri",                  "AR-GE",                null,                       590,  true), // ProjectTaskController + görev-kalem widget formu
+
+            // ── Kalite Yönetimi (2026-07-27, baştan seed'li) ──────────────────
+            ("QUALITY_DEFECT_CODE",     "Hata Kodları",     "Kalite Yönetimi", null, 596, false),
+            ("QUALITY_INSPECTION_PLAN", "Muayene Planları", "Kalite Yönetimi", null, 597, false),
+            ("QUALITY_INSPECTION_EDIT", "Muayeneler",       "Kalite Yönetimi", null, 598, true),  // muayene kaydı + ek alan widget formu
 
             // ── Finans ───────────────────────────────────────────────────────
             // 2026-06-13 — CONTACT_EDIT, CONTACTS ile birleştirildi (liste + düzenleme tek FormCode).

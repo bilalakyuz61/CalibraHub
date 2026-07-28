@@ -1,0 +1,167 @@
+@using System.ComponentModel
+@using System.Reflection
+@using CalibraHub.Domain.Enums
+@model CalibraHub.Application.Contracts.QualityInspectionPlanDetail?
+@{
+    ViewData["Title"] = Model is null ? "Yeni Muayene Planı" : $"Muayene Planı: {Model.Name}";
+    ViewData["BodyClass"] = "page-quality-plan-edit workspace-frame-body";
+    ViewData["FormCode"] = "QUALITY_INSPECTION_PLAN";
+    var isNew = Model is null;
+    string TypeLabel(InspectionType t)
+    {
+        var m = typeof(InspectionType).GetMember(t.ToString()).FirstOrDefault();
+        return m?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? t.ToString();
+    }
+    var linesJson = System.Text.Json.JsonSerializer.Serialize(Model?.Lines ?? new List<CalibraHub.Application.Contracts.QualityInspectionPlanLineDto>(),
+        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+}
+
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Muayene Planı" : ((Model!.Name ?? "Plan") + (Model!.IsActive ? "" : " (Pasif)")),
+      ["ListUrl"]     = "/Quality/InspectionPlans",
+      ["NewUrl"]      = "/Quality/InspectionPlanEdit",
+      ["SaveBtnId"]   = "pl-save",
+      ["DeleteBtnId"] = "pl-delete",
+      ["ShowDelete"]  = !isNew,
+  })
+
+  <div class="ux-edit-body">
+    <aside class="ux-edit-nav" id="plNav">
+      <button type="button" class="ux-edit-nav__tab is-active" data-tab="general">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <span>Genel Bilgiler</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="chars">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <span>Karakteristikler</span>
+      </button>
+    </aside>
+
+    <section class="ux-edit-content">
+      <div class="ux-edit-pane is-active" data-tab="general">
+        <h2>Genel Bilgiler</h2>
+        <div class="ux-edit-hint">Bir malzeme için belirli muayene tipinde kontrol edilecek karakteristikleri ve toleransları tanımlar.</div>
+
+        <input type="hidden" id="f-id" value="@(Model?.Id ?? 0)" />
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-name">Plan Adı *</label>
+          <input type="text" id="f-name" maxlength="200" value="@Model?.Name" placeholder="Örn: Hammadde Girdi Muayenesi" />
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="f-type">Muayene Tipi *</label>
+            <select id="f-type" data-current="@(Model?.InspectionType ?? 1)">
+              @foreach (var t in Enum.GetValues<InspectionType>())
+              {
+                <option value="@((byte)t)">@TypeLabel(t)</option>
+              }
+            </select>
+          </div>
+          <div class="ux-field">
+            <label for="f-item">Malzeme</label>
+            <select id="f-item" data-current="@(Model?.ItemId)"><option value="">— Malzeme seçiniz (opsiyonel) —</option></select>
+          </div>
+        </div>
+
+        <div class="ux-field">
+          <label>Durum</label>
+          <div class="ux-switch-row">
+            <label class="ux-switch"><input type="checkbox" id="f-active" @(Model?.IsActive ?? true ? "checked" : "") /><span class="ux-switch-track"></span></label>
+            <span class="ux-switch-label" id="f-active-label">@(Model?.IsActive ?? true ? "Aktif" : "Pasif")</span>
+          </div>
+        </div>
+
+        <div id="pl-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="chars">
+        <h2>Karakteristikler</h2>
+        <div class="ux-edit-hint">Her satır bir kontrol karakteristiği. <strong>Sayısal</strong> satırlarda ölçülen değer alt/üst toleransa göre otomatik değerlendirilir; <strong>görsel</strong> satırlarda operatör uygun/uygunsuz seçer.</div>
+        <div style="margin-bottom:10px;"><button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="pl-add">+ Karakteristik Ekle</button></div>
+        <div id="pl-lines"></div>
+        <div id="pl-lines-empty" class="ux-edit-hint" style="display:none;">Henüz karakteristik yok. "+ Karakteristik Ekle" ile başlayın.</div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<style>
+  .plc{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.4fr auto;gap:8px;align-items:end;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--app-surface,#fff);}
+  .plc__f{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .plc__f label{font-size:11px;font-weight:600;color:var(--app-text-muted,#64748b);}
+  .plc input,.plc select{font-size:13px;padding:7px 8px;border:1px solid var(--app-border,#e2e8f0);border-radius:7px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);width:100%;}
+  .plc__num{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--app-text-muted,#64748b);white-space:nowrap;padding-bottom:7px;}
+  .plc__rm{width:34px;height:34px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:var(--app-surface,#fff);color:var(--danger,#ef4444);cursor:pointer;font-size:16px;}
+  .plc__rm:hover{background:rgba(239,68,68,.1);}
+  .plc--visual .plc__tol{opacity:.4;pointer-events:none;}
+  body.app-theme-dark .plc,body.app-theme-dark .plc input,body.app-theme-dark .plc select,body.app-theme-dark .plc__rm{background:var(--app-surface,#1e293b);}
+</style>
+
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    var INITIAL_LINES = @Html.Raw(linesJson);
+    function token() { return document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''; }
+    function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+    function notify(text, ok){var el=document.getElementById('pl-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color=ok?'#059669':'#dc2626';activateTab(ok?null:'general');}
+
+    function activateTab(key){if(!key)return;document.querySelectorAll('#plNav .ux-edit-nav__tab').forEach(function(b){b.classList.toggle('is-active',b.dataset.tab===key);});document.querySelectorAll('.ux-edit-pane').forEach(function(p){p.classList.toggle('is-active',p.dataset.tab===key);});}
+    document.querySelectorAll('#plNav .ux-edit-nav__tab').forEach(function(b){b.addEventListener('click',function(){activateTab(b.dataset.tab);});});
+
+    var typeEl=document.getElementById('f-type'); if(typeEl.getAttribute('data-current'))typeEl.value=typeEl.getAttribute('data-current');
+    var activeEl=document.getElementById('f-active'),activeLabel=document.getElementById('f-active-label');
+    activeEl.addEventListener('change',function(){activeLabel.textContent=activeEl.checked?'Aktif':'Pasif';});
+
+    // Malzeme dropdown
+    (function(){var sel=document.getElementById('f-item');var cur=sel.getAttribute('data-current')||'';
+      fetch('/Quality/ItemsLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
+        (list||[]).forEach(function(it){var o=document.createElement('option');o.value=it.id;o.textContent=it.code+' · '+it.name;if(String(it.id)===String(cur))o.selected=true;sel.appendChild(o);});
+      }).catch(function(){});
+    })();
+
+    // ── Karakteristik satır editörü ──
+    var linesEl=document.getElementById('pl-lines'),emptyEl=document.getElementById('pl-lines-empty');
+    function refreshEmpty(){emptyEl.style.display=linesEl.children.length?'none':'';}
+    function addLine(l){
+      var row=document.createElement('div');row.className='plc'+(l&&l.isNumeric===false?' plc--visual':'');
+      row.innerHTML=
+        '<div class="plc__f"><label>Karakteristik *</label><input class="plc-name" maxlength="200" value="'+esc(l?l.characteristicName:'')+'" placeholder="Örn: Dış çap" /></div>'+
+        '<div class="plc__f"><label>Nominal</label><input class="plc-nom" type="number" step="any" value="'+(l&&l.nominal!=null?l.nominal:'')+'" /></div>'+
+        '<div class="plc__f plc__tol"><label>Alt Tol.</label><input class="plc-low" type="number" step="any" value="'+(l&&l.lowerTol!=null?l.lowerTol:'')+'" /></div>'+
+        '<div class="plc__f plc__tol"><label>Üst Tol.</label><input class="plc-up" type="number" step="any" value="'+(l&&l.upperTol!=null?l.upperTol:'')+'" /></div>'+
+        '<div class="plc__f"><label>Yöntem / Alet</label><input class="plc-method" maxlength="200" value="'+esc(l?(l.method||''):'')+'" placeholder="Kumpas…" /></div>'+
+        '<div style="display:flex;flex-direction:column;gap:4px;align-items:center;"><label class="plc__num"><input type="checkbox" class="plc-num" '+(!l||l.isNumeric!==false?'checked':'')+' /> Sayısal</label><button type="button" class="plc__rm" title="Kaldır">×</button></div>';
+      row.querySelector('.plc__rm').addEventListener('click',function(){row.remove();refreshEmpty();});
+      row.querySelector('.plc-num').addEventListener('change',function(e){row.classList.toggle('plc--visual',!e.target.checked);});
+      linesEl.appendChild(row);refreshEmpty();
+    }
+    document.getElementById('pl-add').addEventListener('click',function(){addLine(null);row_focus();});
+    function row_focus(){var last=linesEl.lastElementChild;if(last)last.querySelector('.plc-name').focus();}
+    (INITIAL_LINES||[]).forEach(addLine); refreshEmpty();
+
+    document.getElementById('pl-save').addEventListener('click',async function(){
+      var name=document.getElementById('f-name').value.trim();
+      if(!name){notify('Plan adı zorunlu.',false);return;}
+      var lines=[];Array.prototype.forEach.call(linesEl.querySelectorAll('.plc'),function(row,i){
+        var cn=row.querySelector('.plc-name').value.trim();if(!cn)return;
+        function num(sel){var v=row.querySelector(sel).value.trim();return v===''?null:parseFloat(v);}
+        lines.push({id:0,characteristicName:cn,nominal:num('.plc-nom'),lowerTol:num('.plc-low'),upperTol:num('.plc-up'),unitId:null,method:row.querySelector('.plc-method').value.trim()||null,gaugeName:null,isNumeric:row.querySelector('.plc-num').checked,orderNo:i+1});
+      });
+      if(!lines.length){notify('En az bir karakteristik girilmelidir.',false);activateTab('chars');return;}
+      var payload={id:parseInt(document.getElementById('f-id').value,10)||0,itemId:parseInt(document.getElementById('f-item').value,10)||null,materialGroupId:null,inspectionType:parseInt(typeEl.value,10),name:name,isActive:activeEl.checked,lines:lines};
+      try{var r=await fetch('/Quality/SavePlan',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify(payload)});var d=await r.json();if(!d.ok){notify(d.error||'Kaydedilemedi.',false);return;}location.href='/Quality/InspectionPlans';}catch(e){notify('Hata: '+e.message,false);}
+    });
+
+    var btnDel=document.getElementById('pl-delete');
+    if(btnDel)btnDel.addEventListener('click',async function(){
+      var ok=(typeof showConfirm==='function')?await showConfirm({title:'Plan Sil',message:'Bu muayene planını silmek istediğinize emin misiniz?',okLabel:'Sil'}):confirm('Silmek istediğinize emin misiniz?');
+      if(!ok)return;var id=parseInt(document.getElementById('f-id').value,10);
+      try{var r=await fetch('/Quality/DeletePlanJson?id='+id,{method:'POST',credentials:'same-origin',headers:{'RequestVerificationToken':token()}});var d=await r.json();if(!d.ok){notify(d.error||'Silinemedi.',false);return;}location.href='/Quality/InspectionPlans';}catch(e){notify('Hata: '+e.message,false);}
+    });
+})();
+</script>

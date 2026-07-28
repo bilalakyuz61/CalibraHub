@@ -145,6 +145,13 @@ public static class FormCodes
     public const string ProjectTask     = "PROJECT_TASK";
 
     // ═══════════════════════════════════════════════════
+    // KALİTE YÖNETİMİ
+    // ═══════════════════════════════════════════════════
+    public const string QualityDefectCode     = "QUALITY_DEFECT_CODE";
+    public const string QualityInspectionPlan = "QUALITY_INSPECTION_PLAN";
+    public const string QualityInspectionEdit = "QUALITY_INSPECTION_EDIT";
+
+    // ═══════════════════════════════════════════════════
     // FİNANS
     // ═══════════════════════════════════════════════════
     public const string Contacts    = "CONTACTS";

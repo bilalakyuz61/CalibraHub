@@ -370,6 +370,8 @@ builder.Services.AddScoped<IDocumentRepository, SqlDocumentRepository>();
 builder.Services.AddScoped<IDocumentSourceRepository, SqlDocumentSourceRepository>();
 builder.Services.AddScoped<IArgeProjectRepository, SqlArgeProjectRepository>();
 builder.Services.AddScoped<IProjectTaskRepository, SqlProjectTaskRepository>();
+builder.Services.AddScoped<IQualityDefectCodeRepository, SqlQualityDefectCodeRepository>();
+builder.Services.AddScoped<IQualityRepository, SqlQualityRepository>();
 builder.Services.AddScoped<IUserSettingRepository, SqlUserSettingRepository>();
 builder.Services.AddScoped<ISalesRepresentativeRepository, SqlSalesRepresentativeRepository>();
 builder.Services.AddScoped<ISalesRepresentativeService, SalesRepresentativeService>();
@@ -469,6 +471,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IDocumentNumberService, SqlDocumentNumberService>();
 builder.Services.AddScoped<IArgeProjectService, ArgeProjectService>();
 builder.Services.AddScoped<IProjectTaskService, ProjectTaskService>();
+builder.Services.AddScoped<IQualityDefectCodeService, QualityDefectCodeService>();
+builder.Services.AddScoped<IQualityService, QualityService>();
 builder.Services.AddScoped<IDocumentNumberRuleRepository, SqlDocumentNumberRuleRepository>();
 // CodeRule — Cari/Stok kod türetme kuralları (Tasarım Kuralları altında 2 yeni tab)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ICodeRuleRepository,

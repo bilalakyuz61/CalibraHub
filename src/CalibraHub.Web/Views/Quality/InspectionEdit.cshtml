@@ -1,0 +1,344 @@
+@using System.ComponentModel
+@using System.Reflection
+@using CalibraHub.Domain.Enums
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@model CalibraHub.Application.Contracts.QualityInspectionDetail?
+@{
+    ViewData["Title"] = Model is null ? "Yeni Muayene" : $"Muayene: {Model.DocumentNumber}";
+    ViewData["BodyClass"] = "page-quality-inspection-edit workspace-frame-body";
+    ViewData["FormCode"] = "QUALITY_INSPECTION_EDIT";
+    var isNew = Model is null;
+    string TypeLabel(InspectionType t) { var m = typeof(InspectionType).GetMember(t.ToString()).FirstOrDefault(); return m?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? t.ToString(); }
+    var linesJson = System.Text.Json.JsonSerializer.Serialize(Model?.Lines ?? new List<CalibraHub.Application.Contracts.QualityInspectionLineDto>(),
+        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+}
+
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni Muayene" : (Model!.DocumentNumber ?? "Muayene"),
+      ["ListUrl"]     = "/Quality/Inspections",
+      ["NewUrl"]      = "/Quality/InspectionEdit",
+      ["SaveBtnId"]   = "in-save",
+      ["DeleteBtnId"] = "in-delete",
+      ["ShowDelete"]  = !isNew,
+  })
+
+  <div class="ux-edit-body">
+    <aside class="ux-edit-nav" id="inNav">
+      <button type="button" class="ux-edit-nav__tab is-active" data-tab="general">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <span>Genel Bilgiler</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="measure">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        <span>Ölçümler</span>
+      </button>
+      @if (!isNew)
+      {
+      <button type="button" class="ux-edit-nav__tab" data-tab="verdict">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Karar</span>
+      </button>
+      }
+      <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="inNavWidgets" style="display:none;">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"/></svg>
+        <span>Ek Alanlar</span>
+      </button>
+    </aside>
+
+    <section class="ux-edit-content">
+      <div class="ux-edit-pane is-active" data-tab="general">
+        <h2>Genel Bilgiler</h2>
+        <div class="ux-edit-hint">Muayene tipi ve malzemeyi seçip <strong>Plandan Yükle</strong> ile tanımlı karakteristikleri Ölçümler sekmesine getirin; sonra ölçülen değerleri girin.</div>
+
+        <input type="hidden" id="f-id" value="@(Model?.DocumentId ?? 0)" />
+        <input type="hidden" id="f-status" value="@(Model?.Status ?? 0)" />
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="f-type">Muayene Tipi *</label>
+            <select id="f-type" data-current="@(Model?.InspectionType ?? 1)">
+              @foreach (var t in Enum.GetValues<InspectionType>()) { <option value="@((byte)t)">@TypeLabel(t)</option> }
+            </select>
+          </div>
+          <div class="ux-field">
+            <label for="f-item">Malzeme</label>
+            <select id="f-item" data-current="@(Model?.ItemId)"><option value="">— Malzeme seçiniz —</option></select>
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="f-qty">Muayene Miktarı</label>
+            <input type="number" id="f-qty" step="any" value="@(Model?.Quantity)" placeholder="Opsiyonel" />
+          </div>
+          <div class="ux-field" style="display:flex;flex-direction:column;justify-content:flex-end;">
+            <label>&nbsp;</label>
+            <button type="button" class="ux-edit-bar__btn" id="in-loadplan">↧ Plandan Yükle</button>
+          </div>
+        </div>
+
+        <input type="hidden" id="f-planId" value="@(Model?.PlanId)" />
+        <div id="in-plan-info" class="ux-edit-hint" style="display:none;"></div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-notes">Notlar</label>
+          <textarea id="f-notes" maxlength="1000" placeholder="Muayene notu…">@Model?.Notes</textarea>
+        </div>
+
+        <div id="in-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="measure">
+        <h2>Ölçümler</h2>
+        <div class="ux-edit-hint">Sayısal satırda ölçülen değer alt/üst toleransa göre otomatik değerlendirilir. Uygunsuz satırda hata kodu zorunludur.</div>
+        <div class="in-verdict-bar">
+          <span>Genel Karar:</span> <span id="in-verdict" class="in-verdict-chip in-verdict-chip--none">—</span>
+          <span class="in-spacer"></span>
+          <button type="button" class="ux-edit-bar__btn" id="in-addline">+ Satır Ekle</button>
+        </div>
+        <div id="in-lines"></div>
+        <div id="in-lines-empty" class="ux-edit-hint" style="display:none;">Ölçüm satırı yok. "Plandan Yükle" veya "+ Satır Ekle" ile başlayın.</div>
+      </div>
+
+      @if (!isNew)
+      {
+      <div class="ux-edit-pane" data-tab="verdict">
+        <h2>Karar & Durum</h2>
+        <div class="ux-edit-hint">Muayene durumunu ilerletin. Uygunsuz muayenede tamamlamadan önce uygunsuzluk kararı verin. <strong>Not:</strong> karar yalnız kayıttır — stok bloke etmez (blokaj stok tarafının işidir).</div>
+        <div class="in-state">
+          <div class="in-state__row"><span>Genel Karar</span><span id="in-verdict2" class="in-verdict-chip in-verdict-chip--none">—</span></div>
+          <div class="in-state__row"><span>Durum</span><span id="in-status-label">—</span></div>
+        </div>
+        <div class="in-state__actions">
+          <button type="button" class="ux-edit-bar__btn" data-status="1">Kontrole Al</button>
+          <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" data-status="2">✓ Tamamla</button>
+          <button type="button" class="ux-edit-bar__btn" data-status="1" id="in-reopen" style="display:none;">Yeniden Aç</button>
+        </div>
+        <div id="in-disp-block" style="display:none;margin-top:16px;">
+          <h3 style="font-size:14px;margin:0 0 8px;">Uygunsuzluk Kararı (NCR)</h3>
+          <div class="in-disp-actions">
+            <button type="button" class="ux-edit-bar__btn" data-disp="1">Kabul</button>
+            <button type="button" class="ux-edit-bar__btn" data-disp="2">Ret</button>
+            <button type="button" class="ux-edit-bar__btn" data-disp="3">Yeniden İşlem</button>
+            <button type="button" class="ux-edit-bar__btn" data-disp="4">Sapma İzni</button>
+          </div>
+          <div id="in-disp-current" class="ux-edit-hint" style="margin-top:6px;"></div>
+        </div>
+        <div id="in-state-err" style="display:none;" class="ux-err" style="margin-top:10px;"></div>
+      </div>
+      }
+
+      <div class="ux-edit-pane" data-tab="widgets">
+        <h2>Ek Alanlar</h2>
+        <div class="ux-edit-hint">Admin → Widget Tanımları → QUALITY_INSPECTION_EDIT'te tanımlanan ek alanlar.</div>
+        <div class="ux-dyn-widgets"><div id="inDynamicWidgets" data-form-code="QUALITY_INSPECTION_EDIT" data-record-id="@(Model?.DocumentId.ToString() ?? "")"></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<style>
+  .in-verdict-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px;font-weight:600;}
+  .in-spacer{flex:1 1 auto;}
+  .in-verdict-chip{display:inline-flex;align-items:center;padding:2px 12px;border-radius:999px;font-size:12.5px;font-weight:700;}
+  .in-verdict-chip--none{background:var(--app-surface-2,rgba(148,163,184,.15));color:var(--app-text-muted,#64748b);}
+  .in-verdict-chip--ok{background:rgba(16,185,129,.15);color:#0e9f6e;}
+  .in-verdict-chip--bad{background:rgba(239,68,68,.14);color:#ef4444;}
+  .imc{display:grid;grid-template-columns:1.8fr .9fr .9fr .9fr .9fr auto 1.4fr auto;gap:8px;align-items:end;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--app-surface,#fff);}
+  .imc__f{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .imc__f label{font-size:11px;font-weight:600;color:var(--app-text-muted,#64748b);}
+  .imc input,.imc select{font-size:13px;padding:7px 8px;border:1px solid var(--app-border,#e2e8f0);border-radius:7px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);width:100%;}
+  .imc__res{display:inline-flex;align-items:center;justify-content:center;min-width:74px;height:34px;border-radius:8px;font-size:12px;font-weight:700;}
+  .imc__res--none{background:var(--app-surface-2,rgba(148,163,184,.15));color:var(--app-text-muted,#64748b);}
+  .imc__res--ok{background:rgba(16,185,129,.15);color:#0e9f6e;}
+  .imc__res--bad{background:rgba(239,68,68,.14);color:#ef4444;}
+  .imc__rm{width:34px;height:34px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:var(--app-surface,#fff);color:var(--danger,#ef4444);cursor:pointer;font-size:16px;}
+  .imc__defect{display:none;}
+  .imc--bad .imc__defect{display:flex;}
+  .imc--visual .imc__tol,.imc--visual .imc-meas{opacity:.4;pointer-events:none;}
+  .in-state{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 16px;margin-bottom:14px;background:var(--app-surface,#fff);}
+  .in-state__row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid var(--app-border,#e2e8f0);}
+  .in-state__row:last-child{border-bottom:none;}
+  .in-state__actions,.in-disp-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  body.app-theme-dark .imc,body.app-theme-dark .imc input,body.app-theme-dark .imc select,body.app-theme-dark .imc__rm,body.app-theme-dark .in-state{background:var(--app-surface,#1e293b);}
+</style>
+
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    var INITIAL_LINES = @Html.Raw(linesJson);
+    var STATUS_LABELS = { 0:'Taslak', 1:'Kontrolde', 2:'Tamamlandı' };
+    var VERDICT_MODEL = @(Model?.Verdict?.ToString() ?? "null");
+    var DISP_MODEL = @(Model?.Disposition?.ToString() ?? "null");
+    var DEFECT_OPTIONS = [];
+
+    function token(){return document.querySelector('input[name="__RequestVerificationToken"]')?.value||'';}
+    function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+    function notify(text,ok){var el=document.getElementById('in-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color=ok?'#059669':'#dc2626';}
+    function stateErr(text){var el=document.getElementById('in-state-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color='#dc2626';}
+
+    function activateTab(key){if(!key)return;document.querySelectorAll('#inNav .ux-edit-nav__tab').forEach(function(b){b.classList.toggle('is-active',b.dataset.tab===key);});document.querySelectorAll('.ux-edit-pane').forEach(function(p){p.classList.toggle('is-active',p.dataset.tab===key);});}
+    document.querySelectorAll('#inNav .ux-edit-nav__tab').forEach(function(b){b.addEventListener('click',function(){activateTab(b.dataset.tab);});});
+    window.__inActivateTab = activateTab;
+
+    var typeEl=document.getElementById('f-type'); if(typeEl.getAttribute('data-current'))typeEl.value=typeEl.getAttribute('data-current');
+
+    (function(){var sel=document.getElementById('f-item');var cur=sel.getAttribute('data-current')||'';
+      fetch('/Quality/ItemsLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
+        (list||[]).forEach(function(it){var o=document.createElement('option');o.value=it.id;o.textContent=it.code+' · '+it.name;if(String(it.id)===String(cur))o.selected=true;sel.appendChild(o);});
+      }).catch(function(){});
+    })();
+
+    // Hata kodu seçenekleri (uygunsuz satır için)
+    fetch('/Quality/DefectCodesLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){DEFECT_OPTIONS=list||[];refreshDefectSelects();}).catch(function(){});
+    function defectOptionsHtml(sel){var h='<option value="">— Hata kodu seçiniz —</option>';DEFECT_OPTIONS.forEach(function(d){h+='<option value="'+d.id+'"'+(String(d.id)===String(sel)?' selected':'')+'>'+esc(d.name)+'</option>';});return h;}
+    function refreshDefectSelects(){Array.prototype.forEach.call(document.querySelectorAll('.imc-defect'),function(s){var cur=s.getAttribute('data-current')||s.value||'';s.innerHTML=defectOptionsHtml(cur);});}
+
+    var linesEl=document.getElementById('in-lines'),emptyEl=document.getElementById('in-lines-empty');
+    function refreshEmpty(){emptyEl.style.display=linesEl.children.length?'none':'';}
+
+    function computeResult(row){
+      var numeric=row.querySelector('.imc-num').checked;
+      var resEl=row.querySelector('.imc__res');
+      if(numeric){
+        var mv=row.querySelector('.imc-meas').value.trim();
+        if(mv===''){setRes(resEl,0,row);return 0;}
+        var m=parseFloat(mv);
+        function num(sel){var v=row.querySelector(sel).value.trim();return v===''?null:parseFloat(v);}
+        var low=num('.imc-low'),up=num('.imc-up');
+        var ok=(low===null||m>=low)&&(up===null||m<=up);
+        setRes(resEl,ok?1:2,row);return ok?1:2;
+      } else {
+        var v=parseInt(row.querySelector('.imc-visual').value,10)||0;setRes(resEl,v,row);return v;
+      }
+    }
+    function setRes(resEl,r,row){
+      resEl.className='imc__res '+(r===1?'imc__res--ok':r===2?'imc__res--bad':'imc__res--none');
+      resEl.textContent=r===1?'Uygun':r===2?'Uygunsuz':'—';
+      row.classList.toggle('imc--bad',r===2);
+      row.setAttribute('data-result',r);
+      refreshVerdict();
+    }
+    function refreshVerdict(){
+      var any=false,anyBad=false,anyOk=false;
+      Array.prototype.forEach.call(linesEl.querySelectorAll('.imc'),function(row){any=true;var r=parseInt(row.getAttribute('data-result'),10)||0;if(r===2)anyBad=true;else if(r===1)anyOk=true;});
+      var chip=document.getElementById('in-verdict'),chip2=document.getElementById('in-verdict2');
+      var cls,txt;
+      if(anyBad){cls='in-verdict-chip in-verdict-chip--bad';txt='Uygunsuz';}
+      else if(anyOk){cls='in-verdict-chip in-verdict-chip--ok';txt='Uygun';}
+      else{cls='in-verdict-chip in-verdict-chip--none';txt='—';}
+      [chip,chip2].forEach(function(c){if(c){c.className=cls;c.textContent=txt;}});
+      // Karar sekmesi disposition bloğu (uygunsuzsa göster)
+      var db=document.getElementById('in-disp-block');if(db)db.style.display=anyBad?'':'none';
+    }
+
+    function addLine(l){
+      var row=document.createElement('div');
+      var numeric=!l||l.isNumeric!==false;
+      row.className='imc'+(numeric?'':' imc--visual');
+      row.innerHTML=
+        '<div class="imc__f"><label>Karakteristik *</label><input class="imc-name" maxlength="200" value="'+esc(l?l.characteristicName:'')+'" placeholder="Örn: Dış çap" /></div>'+
+        '<div class="imc__f"><label>Nominal</label><input class="imc-nom" type="number" step="any" value="'+(l&&l.nominal!=null?l.nominal:'')+'" /></div>'+
+        '<div class="imc__f imc__tol"><label>Alt Tol.</label><input class="imc-low" type="number" step="any" value="'+(l&&l.lowerTol!=null?l.lowerTol:'')+'" /></div>'+
+        '<div class="imc__f imc__tol"><label>Üst Tol.</label><input class="imc-up" type="number" step="any" value="'+(l&&l.upperTol!=null?l.upperTol:'')+'" /></div>'+
+        '<div class="imc__f imc-meas"><label>Ölçülen</label><input class="imc-meas" type="number" step="any" value="'+(l&&l.measured!=null?l.measured:'')+'" /></div>'+
+        '<div class="imc__f"><label>Sonuç</label><span class="imc__res imc__res--none">—</span></div>'+
+        '<div class="imc__f imc__defect"><label>Hata Kodu *</label><select class="imc-defect" data-current="'+(l&&l.defectCodeId?l.defectCodeId:'')+'"></select></div>'+
+        '<div style="display:flex;flex-direction:column;gap:4px;align-items:center;"><label style="font-size:11px;color:var(--app-text-muted,#64748b);"><input type="checkbox" class="imc-num" '+(numeric?'checked':'')+' /> Say.</label><select class="imc-visual" style="display:'+(numeric?'none':'')+';font-size:12px;"><option value="1">Uygun</option><option value="2">Uygunsuz</option></select><button type="button" class="imc__rm" title="Kaldır">×</button></div>';
+      linesEl.appendChild(row);
+      var vsel=row.querySelector('.imc-visual'); if(l&&l.isNumeric===false&&l.result)vsel.value=String(l.result);
+      row.querySelector('.imc-defect').innerHTML=defectOptionsHtml(l&&l.defectCodeId?l.defectCodeId:'');
+      row.querySelector('.imc__rm').addEventListener('click',function(){row.remove();refreshEmpty();refreshVerdict();});
+      row.querySelector('.imc-num').addEventListener('change',function(e){var n=e.target.checked;row.classList.toggle('imc--visual',!n);vsel.style.display=n?'none':'';computeResult(row);});
+      ['.imc-meas','.imc-low','.imc-up'].forEach(function(sel){row.querySelector(sel).addEventListener('input',function(){computeResult(row);});});
+      vsel.addEventListener('change',function(){computeResult(row);});
+      computeResult(row);refreshEmpty();
+    }
+    document.getElementById('in-addline').addEventListener('click',function(){addLine(null);var last=linesEl.lastElementChild;if(last)last.querySelector('.imc-name').focus();});
+    (INITIAL_LINES||[]).forEach(addLine); refreshEmpty(); refreshVerdict();
+
+    // Plandan yükle
+    document.getElementById('in-loadplan').addEventListener('click',async function(){
+      var itemId=parseInt(document.getElementById('f-item').value,10)||0;
+      var type=parseInt(typeEl.value,10);
+      if(!itemId){notify('Önce malzeme seçiniz.',false);return;}
+      try{
+        var r=await fetch('/Quality/PlanForItem?itemId='+itemId+'&inspectionType='+type,{credentials:'same-origin'});
+        var d=await r.json();
+        if(!d||!d.planId){notify('Bu malzeme + tip için tanımlı plan yok.',false);return;}
+        document.getElementById('f-planId').value=d.planId;
+        var info=document.getElementById('in-plan-info');info.style.display='';info.textContent='Plan: '+d.planName+' ('+(d.lines?d.lines.length:0)+' karakteristik)';
+        linesEl.innerHTML='';
+        (d.lines||[]).forEach(function(pl){addLine({characteristicName:pl.characteristicName,nominal:pl.nominal,lowerTol:pl.lowerTol,upperTol:pl.upperTol,measured:null,isNumeric:pl.isNumeric,planLineId:pl.id});});
+        refreshEmpty();refreshVerdict();activateTab('measure');notify('',true);
+      }catch(e){notify('Hata: '+e.message,false);}
+    });
+
+    // Kaydet
+    document.getElementById('in-save').addEventListener('click',async function(){
+      var lines=[];var bad=false;
+      Array.prototype.forEach.call(linesEl.querySelectorAll('.imc'),function(row,i){
+        var cn=row.querySelector('.imc-name').value.trim();if(!cn)return;
+        var numeric=row.querySelector('.imc-num').checked;
+        function num(sel){var v=row.querySelector(sel).value.trim();return v===''?null:parseFloat(v);}
+        var result=computeResult(row);
+        var defectId=parseInt(row.querySelector('.imc-defect').value,10)||null;
+        if(result===2&&!defectId)bad=true;
+        lines.push({id:0,planLineId:null,characteristicName:cn,nominal:num('.imc-nom'),lowerTol:num('.imc-low'),upperTol:num('.imc-up'),measured:numeric?num('.imc-meas'):null,isNumeric:numeric,result:result,defectCodeId:result===2?defectId:null,orderNo:i+1,notes:null});
+      });
+      if(!lines.length){notify('En az bir ölçüm satırı girilmelidir.',false);activateTab('measure');return;}
+      if(bad){notify('Uygunsuz satırlarda hata kodu seçilmelidir.',false);activateTab('measure');return;}
+      var payload={id:parseInt(document.getElementById('f-id').value,10)||0,planId:parseInt(document.getElementById('f-planId').value,10)||null,itemId:parseInt(document.getElementById('f-item').value,10)||null,inspectionType:parseInt(typeEl.value,10),sourceKind:null,sourceId:null,quantity:(function(){var v=document.getElementById('f-qty').value.trim();return v===''?null:parseFloat(v);})(),inspectedByPersonnelId:null,inspectedAt:null,notes:document.getElementById('f-notes').value.trim()||null,lines:lines};
+      try{var r=await fetch('/Quality/SaveInspection',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify(payload)});var d=await r.json();if(!d.ok){notify(d.error||'Kaydedilemedi.',false);return;}
+        if(!payload.id&&d.id){location.href='/Quality/InspectionEdit?id='+d.id;}else{location.href='/Quality/Inspections';}
+      }catch(e){notify('Hata: '+e.message,false);}
+    });
+
+    var btnDel=document.getElementById('in-delete');
+    if(btnDel)btnDel.addEventListener('click',async function(){
+      var ok=(typeof showConfirm==='function')?await showConfirm({title:'Muayene Sil',message:'Bu muayene kaydını silmek istediğinize emin misiniz?',okLabel:'Sil'}):confirm('Silmek istediğinize emin misiniz?');
+      if(!ok)return;var id=parseInt(document.getElementById('f-id').value,10);
+      try{var r=await fetch('/Quality/DeleteInspectionJson?id='+id,{method:'POST',credentials:'same-origin',headers:{'RequestVerificationToken':token()}});var d=await r.json();if(!d.ok){notify(d.error||'Silinemedi.',false);return;}location.href='/Quality/Inspections';}catch(e){notify('Hata: '+e.message,false);}
+    });
+
+    // ── Durum + Disposition (mevcut kayıt) ──
+    var idVal=parseInt(document.getElementById('f-id').value,10)||0;
+    if(idVal){
+      var st=parseInt(document.getElementById('f-status').value,10)||0;
+      var stLabelEl=document.getElementById('in-status-label');if(stLabelEl)stLabelEl.textContent=STATUS_LABELS[st]||'—';
+      var reopen=document.getElementById('in-reopen');if(reopen&&st===2)reopen.style.display='';
+      // disposition mevcut
+      var dispCur=document.getElementById('in-disp-current');
+      var DISP_LABELS={1:'Kabul',2:'Ret',3:'Yeniden İşlem',4:'Sapma İzni'};
+      if(dispCur&&DISP_MODEL!==null)dispCur.textContent='Mevcut karar: '+(DISP_LABELS[DISP_MODEL]||'—');
+      // verdict sekme2 chip
+      if(VERDICT_MODEL!==null){var c2=document.getElementById('in-verdict2');if(c2){c2.className='in-verdict-chip '+(VERDICT_MODEL===1?'in-verdict-chip--ok':VERDICT_MODEL===2?'in-verdict-chip--bad':'in-verdict-chip--none');c2.textContent=VERDICT_MODEL===1?'Uygun':VERDICT_MODEL===2?'Uygunsuz':'Şartlı';}}
+      document.querySelectorAll('.in-state__actions [data-status]').forEach(function(b){b.addEventListener('click',async function(){
+        stateErr('');var ns=parseInt(b.getAttribute('data-status'),10);
+        try{var r=await fetch('/Quality/ChangeInspectionStatus',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify({documentId:idVal,newStatus:ns})});var d=await r.json();if(!d.ok){stateErr(d.error||'İşlem başarısız.');return;}location.reload();}catch(e){stateErr('Hata: '+e.message);}
+      });});
+      document.querySelectorAll('.in-disp-actions [data-disp]').forEach(function(b){b.addEventListener('click',async function(){
+        stateErr('');var disp=parseInt(b.getAttribute('data-disp'),10);
+        try{var r=await fetch('/Quality/SetDisposition',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify({documentId:idVal,disposition:disp})});var d=await r.json();if(!d.ok){stateErr(d.error||'İşlem başarısız.');return;}location.reload();}catch(e){stateErr('Hata: '+e.message);}
+      });});
+    }
+})();
+
+// ── Widget host (Ek Alanlar) ──
+(function () {
+    var el = document.getElementById('inDynamicWidgets'); if (!el) return;
+    function doMount(){ if(!window.CalibraHub||!window.CalibraHub.mountDynamicWidgetRenderer)return;
+      try{ window._inDynRenderer=window.CalibraHub.mountDynamicWidgetRenderer(el,{formCode:'QUALITY_INSPECTION_EDIT',recordId:el.getAttribute('data-record-id')||'',classPrefix:'in',layout:'stacked',onMounted:function(handle){var a=0;var iv=setInterval(function(){a++;try{if(handle&&handle.getHasWidgets&&handle.getHasWidgets()){var nav=document.getElementById('inNavWidgets');if(nav)nav.style.display='';clearInterval(iv);return;}}catch(_){}if(a>25)clearInterval(iv);},200);}});}catch(e){console.warn('[IN] widget mount hatasi:',e);}
+    }
+    if(window.CalibraHub&&window.CalibraHub.mountDynamicWidgetRenderer){doMount();}
+    else{
+      var css='@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+      var js='@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+      if(!document.querySelector('link[data-in-bundle]')){var l=document.createElement('link');l.rel='stylesheet';l.href=css;l.setAttribute('data-in-bundle','1');document.head.appendChild(l);}
+      if(!document.querySelector('script[data-in-bundle]')){var s=document.createElement('script');s.src=js;s.setAttribute('data-in-bundle','1');s.onload=function(){setTimeout(doMount,0);};document.head.appendChild(s);}
+    }
+})();
+</script>

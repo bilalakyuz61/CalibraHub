@@ -221,6 +221,17 @@ public static class MenuDefinition
                     MatchPath: "/ProjectTask/Templates", PermissionFormCode: FormCodes.ProjectTask),
             }),
 
+            // ────────────── Kalite Yönetimi / Quality Management ──────────────
+            new("kalite", isEn ? "Quality Management" : "Kalite Yönetimi", "ShieldCheck", null, new List<MenuNode>
+            {
+                new("kalite.inspections", isEn ? "Inspections" : "Muayeneler", "ShieldCheck", "/Quality/Inspections", null,
+                    MatchPath: "/Quality/Inspection", PermissionFormCode: FormCodes.QualityInspectionEdit),
+                new("kalite.plans", isEn ? "Inspection Plans" : "Muayene Planları", "ClipboardCheck", "/Quality/InspectionPlans", null,
+                    MatchPath: "/Quality/InspectionPlan", PermissionFormCode: FormCodes.QualityInspectionPlan),
+                new("kalite.defectcodes", isEn ? "Defect Codes" : "Hata Kodları", "AlertTriangle", "/Quality/DefectCodes", null,
+                    MatchPath: "/Quality/DefectCode", PermissionFormCode: FormCodes.QualityDefectCode),
+            }),
+
             // ────────────── Varlık Yönetimi / Asset Management ──────────────
             new("assets", isEn ? "Asset Management" : "Varlık Yönetimi", "Boxes", null, new List<MenuNode>
             {

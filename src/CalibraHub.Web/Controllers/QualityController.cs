@@ -1,0 +1,319 @@
+using System.Security.Claims;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
+using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Authorization;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace CalibraHub.Web.Controllers;
+
+/// <summary>
+/// Kalite Yönetimi — Faz 1: Hata Kodu Kataloğu + Muayene Planı + Muayene Kaydı (NCR).
+/// Stok/depoya SIFIR dokunuş. Class-level yetki = QUALITY_INSPECTION_EDIT; katalog/plan
+/// action'ları kendi form koduyla override eder (ActivityReason deseni).
+/// </summary>
+[Authorize]
+[PermissionScope(FormCodes.QualityInspectionEdit)]
+public sealed class QualityController : Controller
+{
+    private readonly IQualityService _quality;
+    private readonly IQualityDefectCodeService _defectCodes;
+    private readonly ILogisticsConfigurationService _logistics;
+    private readonly ILogger<QualityController> _logger;
+
+    public QualityController(IQualityService quality, IQualityDefectCodeService defectCodes,
+        ILogisticsConfigurationService logistics, ILogger<QualityController> logger)
+    {
+        _quality = quality;
+        _defectCodes = defectCodes;
+        _logistics = logistics;
+        _logger = logger;
+    }
+
+    // GET /Quality/ItemsLookup → plan/muayene malzeme seçici (id, code, name)
+    [HttpGet]
+    public async Task<IActionResult> ItemsLookup(CancellationToken ct)
+    {
+        var items = await _logistics.GetItemsForLookupAsync(ct);
+        return Json(items.Where(i => i.IsActive).Select(i => new { id = i.Id, code = i.Code, name = i.Name }));
+    }
+
+    private int? CurrentUserId()
+        => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    // ════════════════════════════════════════════════════════════════
+    // Hata Kodu Kataloğu
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityDefectCode)]
+    public async Task<IActionResult> DefectCodes(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildDefectCodesBoardAsync(ct);
+        return View();
+    }
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityDefectCode)]
+    public async Task<IActionResult> DefectCodesBoardConfig(CancellationToken ct)
+        => Json(await BuildDefectCodesBoardAsync(ct));
+
+    private async Task<object> BuildDefectCodesBoardAsync(CancellationToken ct)
+    {
+        var codes = await _defectCodes.ListAsync(null, includeInactive: false, ct);
+        var entities = codes.Select(c => new
+        {
+            id = c.Id,
+            title = c.Name,
+            subtitle = c.CategoryLabel,
+            description = c.Description,
+            statusBadge = c.IsActive ? (object)new { label = "Aktif", color = "emerald" } : new { label = "Pasif", color = "slate" },
+            widgets = new object[]
+            {
+                new { id = "w_cat", type = "data", dataType = "options", label = "Kategori", value = c.CategoryLabel, color = "indigo" },
+            },
+            primaryAction = new { label = "Düzenle", icon = "Edit", color = "amber", url = $"/Quality/DefectCodeEdit?id={c.Id}", hideButton = true },
+            secondaryAction = new { label = "Sil", icon = "Trash2", apiUrl = $"/Quality/DeleteDefectCodeJson?id={c.Id}", apiMethod = "POST", confirm = $"Bu hata kodunu silmek istediğinize emin misiniz? ({c.Name})" },
+        }).ToArray();
+        return new
+        {
+            boardKey = "quality-defect-codes",
+            title = "Hata Kodları",
+            subtitle = $"{codes.Count} kod",
+            icon = "AlertTriangle",
+            iconColor = "rose",
+            refreshUrl = "/Quality/DefectCodesBoardConfig",
+            searchPlaceholder = "Hızlı ara…",
+            emptyText = "Henüz hata kodu tanımlanmamış. Uygunsuz ölçüm satırlarında seçilecek hata kodlarını burada tanımlarsınız.",
+            actions = new object[] { new { id = "new", label = "Yeni Hata Kodu", icon = "Plus", variant = "primary", url = "/Quality/DefectCodeEdit" } },
+            masterWidgets = new object[] { },
+            entities,
+        };
+    }
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityDefectCode)]
+    public async Task<IActionResult> DefectCodeEdit(int? id, CancellationToken ct)
+    {
+        QualityDefectCodeDto? dto = null;
+        if (id is > 0)
+        {
+            dto = await _defectCodes.GetAsync(id.Value, ct);
+            if (dto is null) return NotFound();
+        }
+        return View(dto);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.QualityDefectCode)]
+    public async Task<IActionResult> SaveDefectCode([FromBody] SaveQualityDefectCodeRequest? req, CancellationToken ct)
+    {
+        if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
+        try
+        {
+            var (ok, error, id) = await _defectCodes.SaveAsync(req, CurrentUserId(), ct);
+            return Json(new { ok, error, id });
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Hata kodu kaydetme hatası (id={Id})", req.Id); return Json(new { ok = false, error = "Kaydedilirken bir hata oluştu." }); }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.QualityDefectCode)]
+    public async Task<IActionResult> DeleteDefectCodeJson(int id, CancellationToken ct)
+    {
+        try { var (ok, error) = await _defectCodes.DeleteAsync(id, CurrentUserId(), ct); return Json(new { ok, error }); }
+        catch (Exception ex) { _logger.LogError(ex, "Hata kodu silme hatası (id={Id})", id); return Json(new { ok = false, error = "Silinirken bir hata oluştu." }); }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Muayene Planı
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityInspectionPlan)]
+    public async Task<IActionResult> InspectionPlans(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildPlansBoardAsync(ct);
+        return View();
+    }
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityInspectionPlan)]
+    public async Task<IActionResult> InspectionPlansBoardConfig(CancellationToken ct)
+        => Json(await BuildPlansBoardAsync(ct));
+
+    private async Task<object> BuildPlansBoardAsync(CancellationToken ct)
+    {
+        var plans = await _quality.ListPlansAsync(null, null, ct);
+        var entities = plans.Select(p => new
+        {
+            id = p.Id,
+            title = p.Name,
+            subtitle = p.InspectionTypeLabel,
+            description = p.ItemName ?? p.MaterialGroupName,
+            statusBadge = p.IsActive ? (object)new { label = "Aktif", color = "emerald" } : new { label = "Pasif", color = "slate" },
+            widgets = new object[]
+            {
+                new { id = "w_type", type = "data", dataType = "options", label = "Tip", value = p.InspectionTypeLabel, color = "indigo" },
+                new { id = "w_lines", type = "data", dataType = "numeric", label = "Karakteristik", value = p.LineCount.ToString(), detail = "adet", color = "slate" },
+            },
+            primaryAction = new { label = "Düzenle", icon = "Edit", color = "amber", url = $"/Quality/InspectionPlanEdit?id={p.Id}", hideButton = true },
+            secondaryAction = new { label = "Sil", icon = "Trash2", apiUrl = $"/Quality/DeletePlanJson?id={p.Id}", apiMethod = "POST", confirm = $"Bu muayene planını silmek istediğinize emin misiniz? ({p.Name})" },
+        }).ToArray();
+        return new
+        {
+            boardKey = "quality-inspection-plans",
+            title = "Muayene Planları",
+            subtitle = $"{plans.Count} plan",
+            icon = "ClipboardCheck",
+            iconColor = "indigo",
+            refreshUrl = "/Quality/InspectionPlansBoardConfig",
+            searchPlaceholder = "Hızlı ara… (plan, malzeme)",
+            emptyText = "Henüz muayene planı yok. Malzeme × muayene tipi için kontrol edilecek karakteristikleri ve toleransları tanımlayın.",
+            actions = new object[] { new { id = "new", label = "Yeni Plan", icon = "Plus", variant = "primary", url = "/Quality/InspectionPlanEdit" } },
+            masterWidgets = new object[] { },
+            entities,
+        };
+    }
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityInspectionPlan)]
+    public async Task<IActionResult> InspectionPlanEdit(int? id, CancellationToken ct)
+    {
+        QualityInspectionPlanDetail? model = id is > 0 ? await _quality.GetPlanAsync(id.Value, ct) : null;
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.QualityInspectionPlan)]
+    public async Task<IActionResult> SavePlan([FromBody] SaveQualityInspectionPlanRequest? req, CancellationToken ct)
+    {
+        if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
+        try { var (ok, error, id) = await _quality.SavePlanAsync(req, CurrentUserId(), ct); return Json(new { ok, error, id }); }
+        catch (Exception ex) { _logger.LogError(ex, "Muayene planı kaydetme hatası (id={Id})", req.Id); return Json(new { ok = false, error = "Kaydedilirken bir hata oluştu." }); }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.QualityInspectionPlan)]
+    public async Task<IActionResult> DeletePlanJson(int id, CancellationToken ct)
+    {
+        try { var (ok, error) = await _quality.DeletePlanAsync(id, CurrentUserId(), ct); return Json(new { ok, error }); }
+        catch (Exception ex) { _logger.LogError(ex, "Muayene planı silme hatası (id={Id})", id); return Json(new { ok = false, error = "Silinirken bir hata oluştu." }); }
+    }
+
+    // GET /Quality/PlanForItem?itemId=&inspectionType= → muayene açılışında satır türetme
+    [HttpGet]
+    public async Task<IActionResult> PlanForItem(int itemId, byte inspectionType, CancellationToken ct)
+        => Json(await _quality.FindPlanForItemAsync(itemId, inspectionType, ct));
+
+    // ════════════════════════════════════════════════════════════════
+    // Muayene Kaydı
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    public async Task<IActionResult> Inspections(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildInspectionsBoardAsync(ct);
+        return View();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> InspectionsBoardConfig(CancellationToken ct)
+        => Json(await BuildInspectionsBoardAsync(ct));
+
+    private async Task<object> BuildInspectionsBoardAsync(CancellationToken ct)
+    {
+        var items = await _quality.ListInspectionsAsync(null, null, null, ct);
+        var entities = items.Select(m =>
+        {
+            var badge = m.Verdict switch
+            {
+                1 => (object)new { label = m.VerdictLabel, color = "emerald" },
+                2 => new { label = m.VerdictLabel, color = "rose" },
+                3 => new { label = m.VerdictLabel, color = "amber" },
+                _ => new { label = m.StatusLabel, color = "slate" },
+            };
+            return new
+            {
+                id = m.DocumentId,
+                title = m.DocumentNumber,
+                subtitle = $"{m.InspectionTypeLabel}{(m.ItemName is { Length: > 0 } ? " · " + m.ItemName : "")}",
+                description = m.DispositionLabel is { Length: > 0 } ? "Karar: " + m.DispositionLabel : null,
+                statusBadge = badge,
+                widgets = new object[]
+                {
+                    new { id = "w_type", type = "data", dataType = "options", label = "Tip", value = m.InspectionTypeLabel, color = "indigo" },
+                    new { id = "w_status", type = "data", dataType = "options", label = "Durum", value = m.StatusLabel, color = "slate" },
+                },
+                primaryAction = new { label = "Aç", icon = "Edit", color = "amber", url = $"/Quality/InspectionEdit?id={m.DocumentId}", hideButton = true },
+                secondaryAction = new { label = "Sil", icon = "Trash2", apiUrl = $"/Quality/DeleteInspectionJson?id={m.DocumentId}", apiMethod = "POST", confirm = $"Bu muayene kaydını silmek istediğinize emin misiniz? ({m.DocumentNumber})" },
+            };
+        }).ToArray();
+        return new
+        {
+            boardKey = "quality-inspections",
+            title = "Muayeneler",
+            subtitle = $"{items.Count} muayene",
+            icon = "ShieldCheck",
+            iconColor = "emerald",
+            refreshUrl = "/Quality/InspectionsBoardConfig",
+            searchPlaceholder = "Hızlı ara… (belge no, malzeme)",
+            emptyText = "Henüz muayene kaydı yok. Gelen/proses/final/lab muayenelerini buradan açarsınız.",
+            actions = new object[] { new { id = "new", label = "Yeni Muayene", icon = "Plus", variant = "primary", url = "/Quality/InspectionEdit" } },
+            masterWidgets = new object[] { },
+            entities,
+        };
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> InspectionEdit(int? id, CancellationToken ct)
+    {
+        QualityInspectionDetail? model = id is > 0 ? await _quality.GetInspectionAsync(id.Value, ct) : null;
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveInspection([FromBody] SaveQualityInspectionRequest? req, CancellationToken ct)
+    {
+        if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
+        try { var (ok, error, docId) = await _quality.SaveInspectionAsync(req, CurrentUserId(), ct); return Json(new { ok, error, id = docId }); }
+        catch (Exception ex) { _logger.LogError(ex, "Muayene kaydetme hatası (id={Id})", req.Id); return Json(new { ok = false, error = "Kaydedilirken bir hata oluştu." }); }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangeInspectionStatus([FromBody] ChangeInspectionStatusRequest? req, CancellationToken ct)
+    {
+        if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
+        try { var (ok, error) = await _quality.ChangeInspectionStatusAsync(req, CurrentUserId(), ct); return Json(new { ok, error }); }
+        catch (Exception ex) { _logger.LogError(ex, "Muayene durum değişikliği hatası (id={Id})", req.DocumentId); return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." }); }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetDisposition([FromBody] SetInspectionDispositionRequest? req, CancellationToken ct)
+    {
+        if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
+        try { var (ok, error) = await _quality.SetInspectionDispositionAsync(req, CurrentUserId(), ct); return Json(new { ok, error }); }
+        catch (Exception ex) { _logger.LogError(ex, "Uygunsuzluk kararı hatası (id={Id})", req.DocumentId); return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." }); }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteInspectionJson(int id, CancellationToken ct)
+    {
+        try { var (ok, error) = await _quality.DeleteInspectionAsync(id, CurrentUserId(), ct); return Json(new { ok, error }); }
+        catch (Exception ex) { _logger.LogError(ex, "Muayene silme hatası (id={Id})", id); return Json(new { ok = false, error = "Silinirken bir hata oluştu." }); }
+    }
+
+    // GET /Quality/DefectCodesLookup → uygunsuz satır hata kodu dropdown'u
+    [HttpGet]
+    public async Task<IActionResult> DefectCodesLookup(CancellationToken ct)
+        => Json(await _quality.GetDefectCodeOptionsAsync(ct));
+}
