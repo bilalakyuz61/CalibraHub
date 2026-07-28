@@ -730,6 +730,7 @@ END;";
             await EnsureNoteExtensionsAsync(connection, cancellationToken);
             await EnsureBOMTablesAsync(connection, cancellationToken);
             await EnsureItemKitTablesAsync(connection, cancellationToken);
+            await EnsureStockReservationTablesAsync(connection, cancellationToken);
             await EnsureMaterialGroupTablesAsync(connection, cancellationToken);
             await EnsureFinanceTablesAsync(connection, cancellationToken);
             await EnsureAddressTablesAsync(connection, cancellationToken);
@@ -5759,6 +5760,77 @@ END;";
             IF NOT EXISTS (SELECT 1 FROM sys.indexes
                            WHERE object_id = OBJECT_ID(N'[{s}].[ItemKitLine]') AND name = N'IX_ItemKitLine_ItemKitId')
                 CREATE INDEX [IX_ItemKitLine_ItemKitId] ON [{s}].[ItemKitLine]([ItemKitId]);
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Yükleme Planlama / stok rezervasyonu tablosu — StockReservation (2026-07-27, Faz 1).
+    /// Bir satış siparişi kaleminin belirli bir depodaki stoktan MANTIKSAL rezerve miktarını
+    /// tutar (fiziksel stok azalmaz; kullanılabilir bakiye = fiziksel − Σ aktif rezervasyon).
+    /// Document/DocumentLine/Items/Location'a SOFT-referans (FK constraint YOK — LocationId /
+    /// ReservedForDocumentId ile aynı stil; Ensure-sıra bağımlılığı ve cascade karmaşası olmaz).
+    /// Status: 1=Active, 2=Shipped (irsaliyeye döndü), 3=Cancelled. Faz 1 kapsamı kit-DIŞI.
+    /// </summary>
+    private async Task EnsureStockReservationTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[StockReservation]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[StockReservation]
+                (
+                    [Id]                INT            NOT NULL IDENTITY(1,1) CONSTRAINT [PK_StockReservation] PRIMARY KEY,
+                    [OrderDocumentId]   INT            NOT NULL,
+                    [OrderLineId]       INT            NOT NULL,
+                    [ItemId]            INT            NOT NULL,
+                    [LocationId]        INT            NOT NULL,
+                    [CombinationId]     INT            NULL,
+                    [UnitId]            INT            NULL,
+                    [Quantity]          DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_StockReservation_Quantity] DEFAULT 0,
+                    [BaseQuantity]      DECIMAL(18,4)  NOT NULL CONSTRAINT [DF_StockReservation_BaseQuantity] DEFAULT 0,
+                    [Status]            TINYINT        NOT NULL CONSTRAINT [DF_StockReservation_Status] DEFAULT 1,
+                    [PlannedShipDate]   DATETIME       NULL,
+                    [ShippedDocumentId] INT            NULL,
+                    [Notes]             NVARCHAR(1000) NULL,
+                    [IsActive]          BIT            NOT NULL CONSTRAINT [DF_StockReservation_IsActive] DEFAULT 1,
+                    [CreatedById]       INT            NULL,
+                    [Created]           DATETIME       NOT NULL CONSTRAINT [DF_StockReservation_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]       INT            NULL,
+                    [Updated]           DATETIME       NULL,
+                    CONSTRAINT [CK_StockReservation_Status] CHECK ([Status] BETWEEN 1 AND 3)
+                );
+            END;
+
+            -- Available bakiye toplaması: aktif rezervasyon (Status=1) malzeme+depo bazında.
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[StockReservation]') AND name = N'IX_StockReservation_Item_Location_Status')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_StockReservation_Item_Location_Status]
+                        ON [{s}].[StockReservation]([ItemId],[LocationId],[Status])
+                        WHERE [IsActive] = 1;
+                ';
+
+            -- Sipariş kalemi bazlı listeleme + iptal.
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[StockReservation]') AND name = N'IX_StockReservation_OrderLine')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_StockReservation_OrderLine]
+                        ON [{s}].[StockReservation]([OrderLineId])
+                        WHERE [IsActive] = 1;
+                ';
+
+            -- Sipariş belgesi bazlı listeleme.
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[StockReservation]') AND name = N'IX_StockReservation_OrderDoc')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_StockReservation_OrderDoc]
+                        ON [{s}].[StockReservation]([OrderDocumentId])
+                        WHERE [IsActive] = 1;
+                ';
             """;
 
         await using var cmd = connection.CreateCommand();
