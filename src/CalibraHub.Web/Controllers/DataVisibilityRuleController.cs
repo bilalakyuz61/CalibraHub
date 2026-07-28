@@ -114,6 +114,7 @@ public sealed class DataVisibilityRuleController : Controller
         ["PURCHASE_DEMAND"]       = "Document",
         ["PURCHASE_DEMAND_EDIT"]  = "Document",
         ["PURCHASE_FULFILLMENT"]  = "Document",
+        ["SALES_SHIPMENT_PLANNING"] = "Document",
         ["MACHINES"]              = "Machine",
         ["MACHINE_TYPES"]         = "MachineType",
         ["OPERATIONS"]            = "Operation",

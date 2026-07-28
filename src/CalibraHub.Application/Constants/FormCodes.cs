@@ -110,6 +110,9 @@ public static class FormCodes
 
     public const string PurchaseFulfillment  = "PURCHASE_FULFILLMENT";
 
+    // Yükleme Planlama Merkezi + Stok Rezervasyonu (Faz 1, 2026-07-28) — Fulfillment Center'ın satış-tarafı analoğu.
+    public const string ShipmentPlanning = "SALES_SHIPMENT_PLANNING";
+
     // ═══════════════════════════════════════════════════
     // ÜRETİM
     // ═══════════════════════════════════════════════════

@@ -12803,6 +12803,8 @@ END;";
             ("SALES_DELIVERY_NEW",   "Yeni",                            "Satış",                "Satış İrsaliyesi",         441,  false), // navigasyon formu
             ("SALES_DELIVERY_EDIT",  "Üst Bilgi",                       "Satış",                "Satış İrsaliyesi",         442,  true),
             ("SALES_DELIVERY_LINES", "Kalem Bilgisi",                   "Satış",                "Satış İrsaliyesi",         443,  true),
+            // 2026-07-28: Yükleme Planlama Merkezi + Stok Rezervasyonu — Fulfillment Center'ın satış-tarafı analoğu.
+            ("SALES_SHIPMENT_PLANNING", "Yükleme Planlama",              "Satış",                "Yükleme Planlama",         444,  true),  // SmartBoard rezervasyon merkezi
 
             // ── Satın Alma (2026-05-22) — 3-asama akis, ayni dbo.Document tablosu ───
             ("PURCHASE_REQUEST",       "İhtiyaç Kaydı",                 "Satın Alma",           "İhtiyaç Kaydı",            450,  true),  // SmartBoard liste

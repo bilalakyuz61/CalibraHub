@@ -144,3 +144,20 @@ public static class FulfillmentParameters
     /// </summary>
     public const string ConsolidateLinesKey = "STOCK_DOC_CONSOLIDATE";
 }
+
+/// <summary>
+/// Yükleme Planlama Merkezi (Stok Rezervasyonu) parametre anahtarları (formCode =
+/// SALES_SHIPMENT_PLANNING). <see cref="FulfillmentParameters"/>'in satış-tarafı analoğu —
+/// Faz 1'de yalnız rezervasyon deposu modu/listesi tutulur (asgari stok/kümüleme YOK,
+/// Faz 1 kapsamı basit tutuldu).
+/// </summary>
+public static class ShipmentPlanningParameters
+{
+    public const string FormCode = "SALES_SHIPMENT_PLANNING";
+
+    /// <summary>"SPECIFIC" (belirli depolar) | "ALL" (tüm depolar rezervasyona açık).</summary>
+    public const string LocationModeKey = "SHIPMENT_LOCATION_MODE";
+
+    /// <summary>SPECIFIC modda kullanılacak virgülle ayrılmış Location Id listesi.</summary>
+    public const string LocationIdsKey = "SHIPMENT_LOCATION_IDS";
+}

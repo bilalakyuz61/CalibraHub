@@ -540,6 +540,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IInve
 // Lot takibi (Faz 1) — lot ana kayıtları; iş emri mamul girişinde otomatik lot çözümü kullanır.
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILotRepository,
                            CalibraHub.Persistence.Repositories.SqlLotRepository>();
+// Yükleme Planlama Merkezi + Stok Rezervasyonu (Faz 1, 2026-07-28) — Fulfillment Center'ın satış-tarafı analoğu.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IStockReservationRepository,
+                           CalibraHub.Persistence.Repositories.SqlStockReservationRepository>();
 
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();

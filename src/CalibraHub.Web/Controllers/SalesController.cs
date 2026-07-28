@@ -40,6 +40,7 @@ public sealed class SalesController : Controller
     private readonly IStockDocRepository _stockDocRepo;
     private readonly ICompanyParameterService _companyParams;
     private readonly IPriceListService _priceListService;
+    private readonly IStockReservationRepository _stockReservationRepo;
     private readonly ILogger<SalesController> _logger;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
@@ -75,6 +76,7 @@ public sealed class SalesController : Controller
         IStockDocRepository stockDocRepo,
         ICompanyParameterService companyParams,
         IPriceListService priceListService,
+        IStockReservationRepository stockReservationRepo,
         ILogger<SalesController> logger,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
@@ -97,6 +99,7 @@ public sealed class SalesController : Controller
         _stockDocRepo = stockDocRepo;
         _companyParams = companyParams;
         _priceListService = priceListService;
+        _stockReservationRepo = stockReservationRepo;
         _logger = logger;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
@@ -2444,6 +2447,230 @@ public sealed class SalesController : Controller
     }
 
     // NOT: GetDocumentAttachments + UploadDocumentAttachment + DownloadDocumentAttachment + DeleteDocumentAttachment DocumentAttachmentController'a tasindi (rapor 2.3 split).
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Yükleme Planlama Merkezi + Stok Rezervasyonu — Faz 1 (2026-07-28)
+    // İhtiyaç Karşılama Merkezi'nin (PurchaseController/FulfillmentCenter) satış-tarafı
+    // analoğu. Rezervasyon MANTIKSAL'dır (fiziksel stok azalmaz); fiziksel çıkış Faz 2'de
+    // "Yükle" aksiyonuyla üretilecek irsaliyede olur — bu fazda irsaliye YOK.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Yükleme Planlama Merkezi ekranı. Board/veri yükü frontend tarafından
+    /// GET /Sales/OpenOrderLinesForReservation ile ayrıca çekilir.
+    /// GET /Sales/ShipmentPlanningCenter
+    /// </summary>
+    [HttpGet("/Sales/ShipmentPlanningCenter")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public IActionResult ShipmentPlanningCenter()
+    {
+        ViewData["Title"] = "Yükleme Planlama";
+        return View();
+    }
+
+    /// <summary>
+    /// Açık satış siparişi kalemlerini (kit dahil, işaretli) + açık/rezerve/kullanılabilir
+    /// stok bilgisiyle döner. Kit satırları (isKit=true) listede görünür ama
+    /// CreateReservation'da rezerve edilemez (Faz 1 kapsam dışı).
+    /// GET /Sales/OpenOrderLinesForReservation?materialSearch=&amp;orderNumber=
+    /// </summary>
+    [HttpGet("/Sales/OpenOrderLinesForReservation")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public async Task<IActionResult> OpenOrderLinesForReservation(
+        string? materialSearch, string? orderNumber, CancellationToken ct)
+    {
+        try
+        {
+            var list = await _stockReservationRepo.GetOpenOrderLinesAsync(materialSearch, orderNumber, ct);
+            return Json(list);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Açık sipariş kalemleri listelenirken hata.");
+            return Json(new { ok = false, error = "Kalemler listelenemedi." });
+        }
+    }
+
+    /// <summary>
+    /// Seçilen sipariş kalemleri için stok rezervasyonu oluşturur. Kit satırı, açık miktarı
+    /// aşan talep veya yetersiz kullanılabilir stok içeren kalemler reddedilmez — TÜM istek
+    /// başarısız olmaz, ilgili kalem "skipped" listesine reason ile düşer (Fulfillment deseni).
+    /// POST /Sales/CreateReservation
+    /// Body: { lines:[{orderLineId,qty}], locationId?, plannedShipDate?, notes? }
+    /// Yanıt: { ok, created:[{orderLineId,reserved,reason}], skipped:[{orderLineId,reason}] }
+    /// </summary>
+    [HttpPost("/Sales/CreateReservation")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public async Task<IActionResult> CreateReservation(
+        [FromBody] CreateReservationRequest req, CancellationToken ct)
+    {
+        if (req?.Lines == null || req.Lines.Count == 0)
+            return Json(new { ok = false, error = "Rezerve edilecek kalem seçilmedi." });
+
+        try
+        {
+            var userId = GetUserId();
+            var result = await _stockReservationRepo.CreateReservationsAsync(
+                req, userId > 0 ? userId : null, ct);
+            return Json(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Rezervasyon oluşturulurken hata.");
+            return Json(new { ok = false, error = "Rezervasyon oluşturulamadı." });
+        }
+    }
+
+    /// <summary>
+    /// Aktif (Status=Active) rezervasyonları iptal eder (Status=Cancelled, IsActive=0).
+    /// Fiziksel stok bu aşamada zaten hiç azalmadığı için iptalde tersine bir stok
+    /// hareketi gerekmez — yalnız "kullanılabilir bakiye" tekrar serbest kalır.
+    /// POST /Sales/CancelReservation
+    /// Body: { reservationIds:[int] }
+    /// Yanıt: { ok, cancelled }
+    /// </summary>
+    [HttpPost("/Sales/CancelReservation")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public async Task<IActionResult> CancelReservation(
+        [FromBody] CancelReservationRequest req, CancellationToken ct)
+    {
+        if (req?.ReservationIds == null || req.ReservationIds.Count == 0)
+            return Json(new { ok = false, error = "İptal edilecek rezervasyon seçilmedi." });
+
+        try
+        {
+            var userId = GetUserId();
+            var cancelled = await _stockReservationRepo.CancelReservationsAsync(
+                req.ReservationIds, userId > 0 ? userId : null, ct);
+            return Json(new { ok = true, cancelled });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Rezervasyon iptal edilirken hata. Ids: {Ids}",
+                string.Join(",", req.ReservationIds));
+            return Json(new { ok = false, error = "Rezervasyon iptal edilemedi." });
+        }
+    }
+
+    /// <summary>
+    /// Bir siparişin veya sipariş kaleminin aktif rezervasyon listesi.
+    /// GET /Sales/OrderReservations?orderDocumentId=&amp;orderLineId=
+    /// </summary>
+    [HttpGet("/Sales/OrderReservations")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public async Task<IActionResult> OrderReservations(
+        int? orderDocumentId, int? orderLineId, CancellationToken ct)
+    {
+        try
+        {
+            var list = await _stockReservationRepo.GetReservationsAsync(orderDocumentId, orderLineId, ct);
+            return Json(list);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Rezervasyon listesi okunurken hata.");
+            return Json(new { ok = false, error = "Rezervasyon listesi okunamadı." });
+        }
+    }
+
+    // ── Rezervasyon deposu seçimi parametresi (ShipmentPlanningParameters) ──
+    // FulfillmentLocationConfig/SaveFulfillmentLocationConfig (PurchaseController) ile AYNI
+    // desen — Faz 1'de basit tutuldu (respectMinStock/consolidateLines YOK). Raf/Hücre tipli
+    // lokasyonlar seçilemez (PurchaseController.IsFulfillmentExcludedLocationType ile aynı
+    // gerekçe/liste; controller'lar arası paylaşım için ortak yer olmadığından kasıtlı kopya).
+    private static readonly HashSet<string> ShipmentExcludedLocationTypeCodes =
+        new(StringComparer.OrdinalIgnoreCase) { "SHELF", "BIN" };
+
+    private static bool IsShipmentExcludedLocationType(string? locationTypeCode) =>
+        !string.IsNullOrWhiteSpace(locationTypeCode) &&
+        ShipmentExcludedLocationTypeCodes.Contains(locationTypeCode.Trim());
+
+    /// <summary>
+    /// GET /Sales/ShipmentLocationConfig — mevcut rezervasyon deposu konfigürasyonunu döner.
+    /// invalidLocations: kayıtlı SHIPMENT_LOCATION_IDS içinde artık geçersiz (raf/hücre, pasif
+    /// veya silinmiş) id varsa burada listelenir; kayıtlı değer sessizce değiştirilmez.
+    /// </summary>
+    [HttpGet("/Sales/ShipmentLocationConfig")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.CompanySettings)]
+    public async Task<IActionResult> ShipmentLocationConfig(CancellationToken ct)
+    {
+        const string fc = ShipmentPlanningParameters.FormCode;
+        var mode   = await _companyParams.GetStringAsync(fc, ShipmentPlanningParameters.LocationModeKey, ct) ?? "ALL";
+        var idsRaw = await _companyParams.GetStringAsync(fc, ShipmentPlanningParameters.LocationIdsKey, ct) ?? "";
+        var ids    = idsRaw.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(s => s.Trim()).Where(s => int.TryParse(s, out _))
+                            .Select(int.Parse).ToList();
+
+        var invalidLocations = new List<object>();
+        if (ids.Count > 0)
+        {
+            var locations = await _logisticsService.GetLocationsAsync(ct);
+            var byId = locations.ToDictionary(l => l.Id);
+            foreach (var id in ids)
+            {
+                var isKnown = byId.TryGetValue(id, out var loc);
+                var isInvalid = !isKnown || !loc!.IsActive || IsShipmentExcludedLocationType(loc.LocationTypeCode);
+                if (isInvalid)
+                    invalidLocations.Add(new { id, label = isKnown ? (loc!.LocationName ?? loc.LocationCode) : $"#{id}" });
+            }
+        }
+
+        return Json(new { mode, locationIds = ids, invalidLocations });
+    }
+
+    /// <summary>
+    /// POST /Sales/SaveShipmentLocationConfig — "SPECIFIC" modda gönderilen id listesi
+    /// raf/hücre tipine ve aktiflik durumuna karşı doğrulanır; geçersiz id varsa TÜM istek
+    /// reddedilir (sessiz filtre/atlama YOK, CLAUDE.md kural #3).
+    /// Body: { mode: "SPECIFIC"|"ALL", locationIds: [int] }
+    /// </summary>
+    [HttpPost("/Sales/SaveShipmentLocationConfig")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.CompanySettings)]
+    public async Task<IActionResult> SaveShipmentLocationConfig(
+        [FromBody] SaveShipmentLocationConfigRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var mode = string.Equals(req?.Mode, "SPECIFIC", StringComparison.OrdinalIgnoreCase)
+                ? "SPECIFIC" : "ALL";
+            var ids = (req?.LocationIds ?? new List<int>()).Where(id => id > 0).Distinct().ToList();
+
+            if (mode == "SPECIFIC" && ids.Count > 0)
+            {
+                var locations = await _logisticsService.GetLocationsAsync(ct);
+                var byId = locations.ToDictionary(l => l.Id);
+                var invalidLabels = ids
+                    .Where(id => !byId.TryGetValue(id, out var loc) || !loc.IsActive || IsShipmentExcludedLocationType(loc.LocationTypeCode))
+                    .Select(id => byId.TryGetValue(id, out var l) ? (l.LocationName ?? l.LocationCode) : $"#{id}")
+                    .ToList();
+                if (invalidLabels.Count > 0)
+                {
+                    return Json(new
+                    {
+                        ok = false,
+                        error = "Raf/hücre tipinde veya artık geçersiz lokasyon seçilemez: "
+                            + string.Join(", ", invalidLabels) + ". Yalnızca depo seviyesi lokasyonlar seçilebilir.",
+                    });
+                }
+            }
+
+            const string fc = ShipmentPlanningParameters.FormCode;
+            await _companyParams.SetAsync(
+                new SetCompanyParameterRequest(fc, ShipmentPlanningParameters.LocationModeKey, mode, CompanyParameterDataType.String), ct);
+            await _companyParams.SetAsync(
+                new SetCompanyParameterRequest(fc, ShipmentPlanningParameters.LocationIdsKey, string.Join(",", ids), CompanyParameterDataType.String), ct);
+
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Rezervasyon deposu parametresi kaydedilirken hata.");
+            return Json(new { ok = false, error = "Kaydetme sırasında bir hata oluştu." });
+        }
+    }
 }
 
 public sealed record DeleteQuoteBody(int Id);
