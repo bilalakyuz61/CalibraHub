@@ -36,7 +36,9 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
     public async Task<IReadOnlyList<OpenOrderLineForReservationDto>> GetOpenOrderLinesAsync(
         string? materialSearch, string? orderNumber, CancellationToken ct)
     {
-        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        // Per-company DB: iş belgeleri kendi şirket DB'sinde; CompanyId FİLTRELENMEZ
+        // (Document.CompanyId DB-lokal sabit, oturum claim'i ile eşleşmeyebilir → yanlış eleme).
+        // Referans: PurchaseController.AllOpenRequestLines de CompanyId filtresi kullanmaz.
         var list = new List<OpenOrderLineForReservationDto>();
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -77,7 +79,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                                  ELSE 0 END) AS PhysicalBase
                 FROM {T("DocumentLine")} sm
                 INNER JOIN {T("Document")} smd ON smd.[Id] = sm.[DocumentId]
-                WHERE sm.[ItemId] = dl.[ItemId] AND smd.[CompanyId] = @Cid AND smd.[IsActive] = 1
+                WHERE sm.[ItemId] = dl.[ItemId] AND smd.[IsActive] = 1
                   AND sm.[MovementType] IN (1,2,3,4)
                   AND (sm.[LocationId] = ISNULL(dl.[LocationId], d.[LocationId]) OR sm.[FromLocationId] = ISNULL(dl.[LocationId], d.[LocationId]))
             ) bal
@@ -88,7 +90,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                   AND sr2.[Status] = 1 AND sr2.[IsActive] = 1
             ) rsvLoc
             WHERE dt.[Code] = N'satis_siparisi'
-              AND d.[CompanyId] = @Cid AND d.[IsActive] = 1
+              AND d.[IsActive] = 1
               AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
               AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
               AND (@MatSearch IS NULL OR i.[Code] LIKE @MatSearch OR i.[Name] LIKE @MatSearch)
@@ -96,7 +98,6 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
             ORDER BY d.[DocumentDate] DESC, d.[DocumentNumber], dl.[LineNo];
             """;
 
-        cmd.Parameters.AddWithValue("@Cid", companyId);
         cmd.Parameters.Add(new SqlParameter("@MatSearch",
             string.IsNullOrWhiteSpace(materialSearch) ? (object)DBNull.Value : $"%{materialSearch.Trim()}%"));
         cmd.Parameters.Add(new SqlParameter("@OrderNo",
@@ -168,7 +169,6 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
         if (lines.Count == 0)
             return new CreateReservationResult(true, created, skipped);
 
-        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         var lineIds = lines.Select(l => l.OrderLineId).Distinct().ToList();
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -200,10 +200,9 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                     ) rsvLine
                     WHERE dl.[Id] IN ({paramList})
                       AND dt.[Code] = N'satis_siparisi'
-                      AND d.[CompanyId] = @Cid AND d.[IsActive] = 1
+                      AND d.[IsActive] = 1
                       AND dl.[MovementType] IS NULL;
                     """;
-                fetch.Parameters.AddWithValue("@Cid", companyId);
                 for (var i = 0; i < lineIds.Count; i++)
                     fetch.Parameters.Add(new SqlParameter($"@lid{i}", lineIds[i]));
 
@@ -274,7 +273,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                 var locKey = (row.ItemId, targetLocationId.Value);
                 if (!balanceCache.TryGetValue(locKey, out var bal))
                 {
-                    var physical = await GetPhysicalBalanceAsync(conn, tx, companyId, row.ItemId, targetLocationId.Value, ct);
+                    var physical = await GetPhysicalBalanceAsync(conn, tx, row.ItemId, targetLocationId.Value, ct);
                     var existingReserved = await GetActiveReservedAsync(conn, tx, row.ItemId, targetLocationId.Value, ct);
                     bal = (physical, existingReserved);
                     balanceCache[locKey] = bal;
@@ -332,7 +331,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
     }
 
     private async Task<decimal> GetPhysicalBalanceAsync(
-        SqlConnection conn, SqlTransaction tx, int companyId, int itemId, int locationId, CancellationToken ct)
+        SqlConnection conn, SqlTransaction tx, int itemId, int locationId, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
