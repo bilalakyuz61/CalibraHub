@@ -254,8 +254,36 @@
     }
     .ms-combo__row:hover { background: var(--mc-surface-2); }
     .ms-combo__row.is-disabled { opacity: .45; }
+    /* Switchkey (toggle) — CLAUDE.md: boolean girişler switch olmalı.
+       Compose.cshtml JS bu satır için yalnızca <input type=checkbox> render
+       ediyor (ekstra track/thumb span yok, JS'e dokunulmadı) — bu yüzden
+       .cp-switch'in (bkz. asağıda ~satır 385) aynı ölçü/renk değerleri
+       appearance:none + ::after pseudo ile TEK elemana uygulanıyor.
+       Checkbox'un state/change mantığı aynen korunuyor, yalnız görünüm değişti. */
     .ms-combo__row input[type=checkbox] {
-        width: 14px; height: 14px; cursor: pointer; accent-color: var(--mc-accent);
+        appearance: none; -webkit-appearance: none;
+        position: relative;
+        width: 38px; height: 22px; flex: 0 0 auto;
+        margin: 0;
+        border-radius: 99px;
+        background: rgba(148,163,184,.4);
+        cursor: pointer;
+        transition: background .15s;
+    }
+    .ms-combo__row input[type=checkbox]::after {
+        content: '';
+        position: absolute;
+        top: 2px; left: 2px;
+        width: 18px; height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 2px 6px rgba(0,0,0,.18);
+        transition: transform .15s;
+    }
+    .ms-combo__row input[type=checkbox]:checked { background: var(--mc-emerald); }
+    .ms-combo__row input[type=checkbox]:checked::after { transform: translateX(16px); }
+    .ms-combo__row input[type=checkbox]:focus-visible {
+        outline: none; box-shadow: 0 0 0 3px var(--mc-accent-dim);
     }
     .ms-combo__row .name { flex: 1 1 auto; }
     .ms-combo__row .count {
