@@ -863,6 +863,17 @@
     .sqe-tab-pane.is-active input.form-control[type="date"] {
         padding-right: 8px;
     }
+    /* 2026-07-28 PageComment Seq 49: "Tarih" alani (sqQuoteDate) genel .sqe-hinput
+       flex:1 / max-width:280px form-hizalama kuralindan cikar — proje capindaki
+       standart tarih input genisligine (calibra-datepicker.css: 176px) don,
+       boylece deger genisligine sigan dar alan + sag kenarda takvim ikonu (buton)
+       gorunur. Flatpickr altInput orijinal input'un hemen ardina eklenir (bkz.
+       calibra-datepicker.js) — bu yuzden bitisik kardes secici kullanilir. */
+    #sqQuoteDate,
+    #sqQuoteDate + input.calibra-date-input {
+        flex: 0 0 176px;
+        max-width: 176px;
+    }
     .sqe-hinput.is-locked {
         background-color: rgba(148, 163, 184, 0.12) !important;
         cursor: not-allowed;
