@@ -1595,6 +1595,12 @@ public sealed class WarehouseController : Controller
         return new
         {
             schemaVersion = "v1",
+            // Ondalık: lineFormCode (STOCK_IN/OUT/TRANSFER_LINES) config'e taşınmazsa
+            // CalibraLineItemsGrid sessizce SALES_QUOTE_LINES ondalığına düşüyordu
+            // (kaydedilen Ambar Giriş/Çıkış/Transfer ondalık ayarı runtime'da yok
+            // sayılıyordu — "sessiz kırık"). InventoryEdit deseniyle aynı: kökü
+            // (NormalizeFormCode ile STOCK_IN/OUT/TRANSFER) çözecek şekilde açıkça ver.
+            decimalFormCode = lineFormCode,
             columns = locationCols.Concat(baseCols).ToArray(),
         };
     }

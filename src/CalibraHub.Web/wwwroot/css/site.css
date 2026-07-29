@@ -10520,6 +10520,20 @@ body.app-theme-dark .ux-edit-pane .ux-field > label { color: #94a3b8; }
   width: 100%;
 }
 .ux-edit-pane textarea { min-height: 72px; resize: vertical; }
+/* Native select chrome kaldir — appearance sifirlanmadan tarayici native
+   combobox kutusunu (esp. light temada) ciziyordu, input'lar underline
+   gorunse de select "eski gibi" kutu kaliyordu (2026-07-29). appearance:none
+   oku da kaldirdigi icin ozel chevron background-image ile geri eklenir. */
+.ux-edit-pane select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 28px;
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 .ux-edit-pane input[type="text"]:focus,
 .ux-edit-pane input[type="number"]:focus,
 .ux-edit-pane input[type="email"]:focus,
@@ -10544,6 +10558,9 @@ body.app-theme-dark .ux-edit-pane select {
 }
 body.app-theme-dark .ux-edit-pane select { color-scheme: dark; }
 body.app-theme-dark .ux-edit-pane select > * { background: #0d1323; color: #e2e8f0; }
+body.app-theme-dark .ux-edit-pane select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 
 .ux-edit-pane .ux-hint {
   font-size: 11px; color: #94a3b8; margin-top: 4px;
