@@ -281,8 +281,7 @@
             }
             var isDefault = r.formCode === '*';
             html += '<tr data-form="' + escAttr(r.formCode) + '"' + (isDefault ? ' class="dsx-row-default"' : '') + '>'
-                + '<td><div class="dsx-form-name">' + escHtml(r.formName) + '</div>'
-                + (isDefault ? '' : '<div class="dsx-form-code">' + escHtml(r.formCode) + '</div>') + '</td>'
+                + '<td><div class="dsx-form-name">' + escHtml(r.formName) + '</div></td>'
                 + '<td class="dsx-module">' + escHtml(r.module || (isDefault ? 'Tüm Formlar' : '—')) + '</td>'
                 + '<td class="num">' + selHtml(r.formCode, 'quantityDecimals', r.quantityDecimals) + '</td>'
                 + '<td class="num">' + selHtml(r.formCode, 'unitPriceDecimals', r.unitPriceDecimals) + '</td>'
