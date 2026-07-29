@@ -194,6 +194,7 @@ public sealed class QualityController : Controller
     {
         if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
         try { var (ok, error, id) = await _quality.SavePlanAsync(req, CurrentUserId(), ct); return Json(new { ok, error, id }); }
+        catch (ArgumentException ax) { return Json(new { ok = false, error = ax.Message }); }
         catch (Exception ex) { _logger.LogError(ex, "Muayene planı kaydetme hatası (id={Id})", req.Id); return Json(new { ok = false, error = "Kaydedilirken bir hata oluştu." }); }
     }
 

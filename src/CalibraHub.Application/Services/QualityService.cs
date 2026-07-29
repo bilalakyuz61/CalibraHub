@@ -53,11 +53,17 @@ public sealed class QualityService : IQualityService
     public Task<QualityPlanLookup?> FindPlanForItemAsync(int itemId, byte inspectionType, CancellationToken ct)
         => _repo.FindPlanForItemAsync(itemId, inspectionType, ct);
 
+    public Task<IReadOnlyCollection<MaterialGroupLookupItem>> ListMaterialGroupsAsync(CancellationToken ct)
+        => _repo.ListMaterialGroupsAsync(ct);
+
     public async Task<(bool Ok, string? Error, int Id)> SavePlanAsync(SaveQualityInspectionPlanRequest request, int? userId, CancellationToken ct)
     {
         var name = request.Name?.Trim();
         if (string.IsNullOrWhiteSpace(name)) return (false, "Plan adı zorunludur.", 0);
         if (!Enum.IsDefined(typeof(InspectionType), request.InspectionType)) return (false, "Geçersiz muayene tipi.", 0);
+        // ID tabanlı eşleştirme: plan ya belirli bir malzemeye ya da malzeme grubuna bağlanır, ikisi birden olamaz.
+        if (request.ItemId is > 0 && request.MaterialGroupId is > 0)
+            throw new ArgumentException("Bir plan ya malzeme ya da malzeme grubu için tanımlanabilir, ikisi birden olamaz.");
         var lines = (request.Lines ?? Array.Empty<QualityInspectionPlanLineDto>())
             .Where(l => !string.IsNullOrWhiteSpace(l.CharacteristicName)).ToList();
         if (lines.Count == 0) return (false, "Planda en az bir karakteristik satırı olmalıdır.", 0);
