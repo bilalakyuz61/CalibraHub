@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   ChevronRight, ChevronDown, Plus, PlusCircle, Edit2, Trash2,
   X, Check, Search, Workflow, Cpu, Settings2, Filter, Download, Loader2,
-  Package, Cog, Hash, GripVertical, Timer,
+  Package, Cog, Hash, GripVertical,
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -32,26 +32,6 @@ async function apiPost(url, body) {
 }
 async function apiGet(url) {
   return (await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })).json()
-}
-
-// ── DurationUnit enum normalize — API JsonStringEnumConverter ile string doner
-//   ("Minute"/"Hour"); React tarafinda integer olarak karsilastirilir (bkz. CLAUDE.md
-//   "React / Frontend — API'den Enum Yukleme Kurali"). Kaydetmede integer gonderilir,
-//   backend allowIntegerValues:true ile kabul eder.
-var DURATION_UNIT_NUM   = { Minute: 1, Hour: 2 }
-var DURATION_UNIT_LABEL = { 1: 'Dakika', 2: 'Saat' }
-function normalizeDurationUnit(v) {
-  if (typeof v === 'number') return v
-  if (typeof v === 'string' && v in DURATION_UNIT_NUM) return DURATION_UNIT_NUM[v]
-  var n = parseInt(v, 10)
-  return isNaN(n) ? 1 : n
-}
-// Decimal alanlari (Quantity/DurationPerUnit) DECIMAL(18,4)'ten geldigi icin "1.0000" gibi
-// artik sifirli gelebilir — Number() ile sadelestirilmis gosterim (ondalik-ayari altyapisi
-// bu ekranda kullanilmiyor; "sure" kategorisi zaten decimalKind setinde yok, bkz. rapor).
-function fmtDec(v) {
-  var n = Number(v)
-  return isNaN(n) ? v : n.toString()
 }
 
 // ── Widget chip — backend'den gelen dynamic widget'lari render eder ────────
@@ -105,9 +85,7 @@ function DeleteModal({ target, onConfirm, onCancel }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [onCancel])
 
-  var title = target.type === 'routing' ? 'Rotayı Sil'
-    : target.type === 'machineTime' ? 'Makine Süresini Sil'
-    : 'Operasyonu Kaldır'
+  var title = target.type === 'routing' ? 'Rotayı Sil' : 'Operasyonu Kaldır'
 
   return (
     <div className="rt-del-backdrop" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
@@ -132,13 +110,10 @@ function DeleteModal({ target, onConfirm, onCancel }) {
 }
 
 // ── Generic seçici modal (operasyon / makine / stok / kart grubu) ──────────
-//   filterIds verilirse (Set<number>) liste o id'lerle sınırlanır (ör. rota ürünleri, Seq 46) —
-//   kullanıcı "Tümünü Göster" ile filtreyi o oturumluk bypass edebilir.
-function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryParam, filterIds, filterHint }) {
+function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryParam }) {
   var [list, setList]       = useState([])
   var [search, setSearch]   = useState('')
   var [loading, setLoading] = useState(true)
-  var [showAll, setShowAll] = useState(false)
 
   // Server-side ararken queryParam var (ornek StockLookup ?q=)
   useEffect(() => {
@@ -153,22 +128,16 @@ function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryPa
     return () => document.removeEventListener('keydown', onKey)
   }, [lookupUrl, onClose, queryParam, search])
 
-  // Id bazli kapsam filtresi (ör. rota ürünleri) — showAll ile bypass edilebilir.
-  var scoped = useMemo(() => {
-    if (!filterIds || showAll) return list
-    return list.filter(it => filterIds.has(it.id))
-  }, [list, filterIds, showAll])
-
   // Server-side query yoksa client-side filter
   var filtered = useMemo(() => {
-    if (queryParam || !search) return scoped
+    if (queryParam || !search) return list
     var q = search.toLowerCase()
-    return scoped.filter(it => (it.code || '').toLowerCase().includes(q) ||
+    return list.filter(it => (it.code || '').toLowerCase().includes(q) ||
       (it.name || '').toLowerCase().includes(q) ||
       (it.machineCode || '').toLowerCase().includes(q) ||
       (it.machineName || '').toLowerCase().includes(q) ||
       (it.description || '').toLowerCase().includes(q))
-  }, [scoped, search, queryParam])
+  }, [list, search, queryParam])
 
   // Field normalize — code/name unified (CardGroupDto icin "name" yerine "description" gelir)
   function fieldsOf(it) {
@@ -188,12 +157,6 @@ function PickerModal({ lookupUrl, title, placeholder, onSelect, onClose, queryPa
             onChange={e => setSearch(e.target.value)} placeholder={placeholder || 'Ara...'} />
           <button className="rt-picker__close" onClick={onClose}><X size={15} /></button>
         </div>
-        {filterIds && !showAll && (
-          <div className="rt-picker__filter-hint">
-            <span>{filterHint || 'Kapsam sınırlı'}</span>
-            <button type="button" onClick={() => setShowAll(true)}>Tümünü Göster</button>
-          </div>
-        )}
         <div className="rt-picker__list">
           {loading && <div className="rt-picker__info">Yükleniyor...</div>}
           {!loading && filtered.length === 0 && <div className="rt-picker__info">{title || 'Kayıt'} bulunamadı</div>}
@@ -218,7 +181,7 @@ function OpPickerModal(props) {
 }
 
 // ── Sortable operasyon kartı ───────────────────────────────────────────────
-function SortableOpCard({ op, routing, opUserCfg, onDelete, onAssignMachine, onEditMachineTimes }) {
+function SortableOpCard({ op, routing, opUserCfg, onDelete, onAssignMachine }) {
   var sortable = useSortable({ id: op.id })
   var style = {
     transform: CSS.Transform.toString(sortable.transform),
@@ -276,10 +239,6 @@ function SortableOpCard({ op, routing, opUserCfg, onDelete, onAssignMachine, onE
           <button className="rt-act rt-act--machine" title="Makine Eşleştir"
             onClick={() => onAssignMachine(routing, op)}>
             <Cpu size={13} />
-          </button>
-          <button className="rt-act rt-act--times" title="Makine Süreleri"
-            onClick={() => onEditMachineTimes(routing, op)}>
-            <Timer size={13} />
           </button>
           <button className="rt-act rt-act--del" title="Sil"
             onClick={() => onDelete(routing, op)}>
@@ -368,478 +327,6 @@ function OpAddForm({ nextSeq, lookupUrl, onAdd, onCancel, saving }) {
   )
 }
 
-// ── Makine süresi satırı ekle/düzenle formu — inline (rt-mt-form-row içinde) ──
-//   Hibrit kapsam (Seq 45/46): satır RoutingId taşır — boş ise tüm rotalarda ortak, doluysa
-//   yalnızca açılan rotaya özeldir (varsayılan: Bu Rota). Makine tarafı spesifik makine YA DA
-//   makine grubu (XOR); stok tarafı yok / spesifik stok / stok grubu (üçlü). Ölçü birimi yalnız
-//   spesifik stok seçilince görünür ve opsiyoneldir (boş = ürünün baz birimi).
-function MachineTimeRowForm({ initial, urls, routingId, allowedItemIds, onSave, onCancel, saving }) {
-  var [machineType, setMachineType]           = useState(initial?.machineGroupId ? 'group' : 'machine')
-  var [machineId, setMachineId]               = useState(initial?.machineId || null)
-  var [machineCode, setMachineCode]           = useState(initial?.machineCode || '')
-  var [machineName, setMachineName]           = useState(initial?.machineName || '')
-  var [machineGroupId, setMachineGroupId]     = useState(initial?.machineGroupId || null)
-  var [machineGroupCode, setMachineGroupCode] = useState(initial?.machineGroupCode || '')
-  var [machineGroupDesc, setMachineGroupDesc] = useState('')
-
-  var [itemMode, setItemMode]           = useState(initial?.itemGroupId ? 'group' : (initial?.itemId ? 'item' : 'none'))
-  var [itemId, setItemId]               = useState(initial?.itemId || null)
-  var [itemCode, setItemCode]           = useState(initial?.itemCode || '')
-  var [itemName, setItemName]           = useState(initial?.itemName || '')
-  var [itemGroupId, setItemGroupId]     = useState(initial?.itemGroupId || null)
-  var [itemGroupCode, setItemGroupCode] = useState(initial?.itemGroupCode || '')
-  var [itemGroupDesc, setItemGroupDesc] = useState('')
-  var [unitId, setUnitId]               = useState(initial?.unitId || null)
-  var [unitOptions, setUnitOptions]     = useState([])
-
-  var [quantity, setQuantity]         = useState(initial?.quantity ?? 1)
-  var [duration, setDuration]         = useState(initial?.durationPerUnit ?? 0)
-  var [durationUnit, setDurationUnit] = useState(initial?.durationUnit || 1)
-  var [active, setActive]             = useState(initial?.isActive ?? true)
-  var [scope, setScope]               = useState(initial && initial.routingId == null ? 'all' : 'this')
-  var [pickerOpen, setPickerOpen]     = useState(null)   // null | 'machine' | 'machineGroup' | 'item' | 'itemGroup'
-
-  // Seçilen ürünün ölçü birimi seçenekleri — GetItemUnits ürünün kendi taban birim ID'sini
-  // dönmüyor (yalnız alternatiflerini + sistemdeki tüm birimleri), bu yüzden "Baz Birim" boş
-  // değer (unitId=null) ile temsil edilir; seçenekler yalnızca tanımlı alternatiflerden gelir.
-  useEffect(() => {
-    if (itemMode !== 'item' || !itemId) { setUnitOptions([]); return }
-    var cancelled = false
-    apiGet('/Logistics/GetItemUnits?itemId=' + itemId).then(d => {
-      if (cancelled) return
-      var avail = Array.isArray(d?.availableUnits) ? d.availableUnits : []
-      var byId = {}
-      avail.forEach(u => { byId[u.id] = u })
-      var conv = Array.isArray(d?.conversions) ? d.conversions : []
-      var opts = conv
-        .map(c => { var u = byId[c.unitId]; return { id: c.unitId, code: u?.unitCode || '', name: u?.unitName || '' } })
-        .filter(o => o.id)
-      setUnitOptions(opts)
-    }).catch(() => { if (!cancelled) setUnitOptions([]) })  // sessiz — birim listesi bos kalir, "Baz Birim" secili kalir (uc olmayan/erisilemeyen durumda derece bozulur ama form kullanilabilir kalir)
-    return () => { cancelled = true }
-  }, [itemMode, itemId])
-
-  function selectMachineType(t) {
-    setMachineType(t)
-    if (t === 'machine') { setMachineGroupId(null); setMachineGroupCode(''); setMachineGroupDesc('') }
-    else { setMachineId(null); setMachineCode(''); setMachineName('') }
-  }
-  function selectItemMode(m) {
-    setItemMode(m)
-    if (m !== 'item') { setItemId(null); setItemCode(''); setItemName(''); setUnitId(null) }
-    if (m !== 'group') { setItemGroupId(null); setItemGroupCode(''); setItemGroupDesc('') }
-  }
-
-  var canSubmit = (machineType === 'machine' ? !!machineId : !!machineGroupId) &&
-    (itemMode !== 'item' || !!itemId) && (itemMode !== 'group' || !!itemGroupId)
-
-  function submit(e) {
-    e.preventDefault()
-    if (!canSubmit) return
-    var qty = parseFloat(quantity)
-    if (!qty || qty <= 0) return
-    var dur = parseFloat(duration)
-    if (isNaN(dur) || dur < 0) return
-    onSave({
-      id: initial?.id || 0,
-      routingId: scope === 'all' ? null : routingId,
-      machineId: machineType === 'machine' ? machineId : null,
-      machineGroupId: machineType === 'group' ? machineGroupId : null,
-      itemId: itemMode === 'item' ? itemId : null,
-      itemGroupId: itemMode === 'group' ? itemGroupId : null,
-      unitId: itemMode === 'item' ? unitId : null,
-      quantity: qty, durationPerUnit: dur, durationUnit: durationUnit, isActive: active,
-    })
-  }
-
-  return (
-    <>
-      <form onSubmit={submit} className="rt-mt-form">
-
-        {/* Makine — spesifik makine YA DA makine grubu */}
-        <div className="rt-mt-form__row">
-          <div className="rt-seg rt-seg--sm">
-            <button type="button" className={'rt-seg__btn' + (machineType === 'machine' ? ' rt-seg__btn--active' : '')}
-              onClick={() => selectMachineType('machine')}>Makine</button>
-            <button type="button" className={'rt-seg__btn' + (machineType === 'group' ? ' rt-seg__btn--active' : '')}
-              onClick={() => selectMachineType('group')}>Makine Grubu</button>
-          </div>
-          {machineType === 'machine' ? (
-            <div className="rt-fi rt-fi--picker rt-mt-fi--machine" onClick={() => setPickerOpen('machine')}>
-              {machineId
-                ? <span><b style={{ color: '#67e8f9' }}>{machineCode}</b> {machineName}</span>
-                : <span style={{ color: '#64748b' }}>Makine seç... *</span>}
-              <Search size={12} style={{ color: '#64748b', flexShrink: 0 }} />
-            </div>
-          ) : (
-            <div className="rt-fi rt-fi--picker rt-mt-fi--machine" onClick={() => setPickerOpen('machineGroup')}>
-              {machineGroupId
-                ? <span><b style={{ color: '#67e8f9' }}>{machineGroupCode}</b> {machineGroupDesc}</span>
-                : <span style={{ color: '#64748b' }}>Makine grubu seç... *</span>}
-              <Search size={12} style={{ color: '#64748b', flexShrink: 0 }} />
-            </div>
-          )}
-        </div>
-
-        {/* Stok — yok / spesifik stok / stok grubu (+ olcu birimi yalniz spesifik stokta) */}
-        <div className="rt-mt-form__row">
-          <div className="rt-seg rt-seg--sm">
-            <button type="button" className={'rt-seg__btn' + (itemMode === 'none' ? ' rt-seg__btn--active' : '')}
-              onClick={() => selectItemMode('none')}>Yok</button>
-            <button type="button" className={'rt-seg__btn' + (itemMode === 'item' ? ' rt-seg__btn--active' : '')}
-              onClick={() => selectItemMode('item')}>Stok</button>
-            <button type="button" className={'rt-seg__btn' + (itemMode === 'group' ? ' rt-seg__btn--active' : '')}
-              onClick={() => selectItemMode('group')}>Stok Grubu</button>
-          </div>
-          {itemMode === 'item' && (
-            <div className="rt-fi rt-fi--picker rt-mt-fi--item" onClick={() => setPickerOpen('item')}>
-              {itemId
-                ? <span><b style={{ color: '#93c5fd' }}>{itemCode}</b> {itemName}</span>
-                : <span style={{ color: '#64748b' }}>Stok seç... *</span>}
-              <Search size={12} style={{ color: '#64748b', flexShrink: 0 }} />
-            </div>
-          )}
-          {itemMode === 'group' && (
-            <div className="rt-fi rt-fi--picker rt-mt-fi--item" onClick={() => setPickerOpen('itemGroup')}>
-              {itemGroupId
-                ? <span><b style={{ color: '#93c5fd' }}>{itemGroupCode}</b> {itemGroupDesc}</span>
-                : <span style={{ color: '#64748b' }}>Stok grubu seç... *</span>}
-              <Search size={12} style={{ color: '#64748b', flexShrink: 0 }} />
-            </div>
-          )}
-          {itemMode === 'item' && (
-            <select className="rt-fi rt-mt-fi--itemunit" value={unitId || ''}
-              onChange={e => setUnitId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              title="Ölçü birimi — boş = ürünün baz birimi">
-              <option value="">Baz Birim</option>
-              {unitOptions.map(o => (
-                <option key={o.id} value={o.id}>{o.code}{o.name ? ' — ' + o.name : ''}</option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* Miktar / süre / kapsam / aktif */}
-        <div className="rt-mt-form__row">
-          <input className="rt-fi rt-mt-fi--qty" type="number" min="0" step="any" value={quantity}
-            onChange={e => setQuantity(e.target.value)} title="Miktar — süre bu miktar içindir" placeholder="Miktar *" required />
-
-          <input className="rt-fi rt-mt-fi--dur" type="number" min="0" step="any" value={duration}
-            onChange={e => setDuration(e.target.value)} title="Süre" placeholder="Süre *" required />
-
-          <select className="rt-fi rt-mt-fi--unit" value={durationUnit}
-            onChange={e => setDurationUnit(parseInt(e.target.value, 10))} title="Süre birimi">
-            <option value={1}>Dakika</option>
-            <option value={2}>Saat</option>
-          </select>
-
-          <div className="rt-seg rt-seg--sm" title="Bu satır yalnızca bu rotada mı, yoksa operasyonun tüm rotalarında mı geçerli?">
-            <button type="button" className={'rt-seg__btn' + (scope === 'this' ? ' rt-seg__btn--active' : '')}
-              onClick={() => setScope('this')}>Bu Rota</button>
-            <button type="button" className={'rt-seg__btn' + (scope === 'all' ? ' rt-seg__btn--active' : '')}
-              onClick={() => setScope('all')}>Tüm Rotalar</button>
-          </div>
-
-          <label className="rt-toggle" title={active ? 'Aktif' : 'Pasif'}>
-            <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
-            <span className="rt-toggle__slider" />
-          </label>
-        </div>
-
-        <div className="rt-mt-form__actions">
-          <button type="submit" disabled={saving || !canSubmit} className="rt-act rt-act--save" title="Kaydet">
-            {saving ? '…' : <Check size={14} />}
-          </button>
-          <button type="button" onClick={onCancel} className="rt-act rt-act--cancel" title="Vazgeç">
-            <X size={14} />
-          </button>
-        </div>
-      </form>
-
-      {pickerOpen === 'machine' && (
-        <PickerModal
-          lookupUrl={urls.machinesLookup || '/Logistics/GetAllMachines'}
-          title="Makine" placeholder="Makine ara..."
-          onSelect={m => { setMachineId(m.id); setMachineCode(m.code); setMachineName(m.name); setPickerOpen(null) }}
-          onClose={() => setPickerOpen(null)}
-        />
-      )}
-      {pickerOpen === 'machineGroup' && (
-        <PickerModal
-          lookupUrl="/Definitions/GetAllCardGroups?cardType=3"
-          title="Makine Grubu" placeholder="Makine grubu ara..."
-          onSelect={g => { setMachineGroupId(g.id); setMachineGroupCode(g.code); setMachineGroupDesc(g.description || ''); setPickerOpen(null) }}
-          onClose={() => setPickerOpen(null)}
-        />
-      )}
-      {pickerOpen === 'item' && (
-        <PickerModal
-          lookupUrl={urls.itemsLookup || '/Logistics/StockLookup'}
-          title="Mamul / Stok" placeholder="Stok ara (kod, ad)..." queryParam="q"
-          filterIds={allowedItemIds} filterHint="Rota ürünleriyle sınırlı"
-          onSelect={it => { setItemId(it.id); setItemCode(it.code); setItemName(it.name); setUnitId(null); setPickerOpen(null) }}
-          onClose={() => setPickerOpen(null)}
-        />
-      )}
-      {pickerOpen === 'itemGroup' && (
-        <PickerModal
-          lookupUrl="/Definitions/GetAllCardGroups?cardType=1"
-          title="Stok Grubu" placeholder="Stok grubu ara..."
-          onSelect={g => { setItemGroupId(g.id); setItemGroupCode(g.code); setItemGroupDesc(g.description || ''); setPickerOpen(null) }}
-          onClose={() => setPickerOpen(null)}
-        />
-      )}
-    </>
-  )
-}
-
-// ── Makine Süreleri modal — operasyon × makine/makine grubu (× opsiyonel ürün/ürün grubu)
-//   süre eşleştirme ── Kilitli karar (Seq 41): mevcut OperationMachineTime altyapısına bağlanır.
-//   op.operationId (master Operation.Id) kullanılır — op.id (RoutingOperation satır id'si) DEĞİL;
-//   OperationMachineTime.OperationId bu tabloya FK'lidir ve rota-bağımsızdır (aynı operasyon farklı
-//   rotalarda kullanılsa bile makine süreleri tektir) — ancak SATIR bazında artık hibrit kapsam var
-//   (Seq 45/46): RoutingId boşsa satır tüm rotalarda ortak, doluysa yalnız o rotada geçerlidir.
-function MachineTimesModal({ op, routing, urls, onClose }) {
-  var [rows, setRows]         = useState([])
-  var [loading, setLoading]   = useState(true)
-  var [formOpen, setFormOpen] = useState(false)   // false | true (yeni satır) | <rowId> (düzenle)
-  var [saving, setSaving]     = useState(false)
-  var [delRow, setDelRow]     = useState(null)
-
-  // Seq 46 — spesifik stok seçicisi rota ürünleriyle sınırlanır: ana mamul (routing.itemId) ∪
-  // RoutingItemMaps(routingId). İkisi de boşsa (şablon rota) filtre uygulanmaz (null = tümü).
-  var [allowedItemIds, setAllowedItemIds] = useState(null)
-
-  var load = useCallback(async () => {
-    setLoading(true)
-    try {
-      var list = await apiGet('/Production/OperationMachineTimes?operationId=' + op.operationId + '&routingId=' + routing.id)
-      var arr = Array.isArray(list) ? list : []
-      setRows(arr.map(r => ({
-        id: r.id,
-        routingId: r.routingId ?? null,
-        machineId: r.machineId || null,
-        machineCode: r.machineCode || r.code || '', machineName: r.machineName || r.name || '',
-        machineGroupId: r.machineGroupId || null, machineGroupCode: r.machineGroupCode || '',
-        itemId: r.itemId || null, itemCode: r.itemCode || '', itemName: r.itemName || '',
-        itemGroupId: r.itemGroupId || null, itemGroupCode: r.itemGroupCode || '',
-        unitId: r.unitId || null, unitCode: r.unitCode || '', unitName: r.unitName || '',
-        quantity: r.quantity, durationPerUnit: r.durationPerUnit,
-        durationUnit: normalizeDurationUnit(r.durationUnit),
-        isActive: r.isActive,
-      })))
-    } catch { /* sessiz — bos liste kalir, kullanici tekrar acinca yeniden dener */ }
-    finally { setLoading(false) }
-  }, [op.operationId, routing.id])
-
-  useEffect(() => { load() }, [load])
-
-  useEffect(() => {
-    var cancelled = false
-    async function loadAllowedItems() {
-      var ids = new Set()
-      if (routing.itemId) ids.add(routing.itemId)
-      try {
-        var maps = await apiGet('/Production/RoutingItemMaps?routingId=' + routing.id)
-        if (Array.isArray(maps)) maps.forEach(m => { if (m && m.itemId) ids.add(m.itemId) })
-      } catch { /* sessiz — filtre uygulanamazsa tumu gosterilir (asagida size 0 ise zaten null olur) */ }
-      if (!cancelled) setAllowedItemIds(ids.size > 0 ? ids : null)
-    }
-    loadAllowedItems()
-    return () => { cancelled = true }
-  }, [routing.id, routing.itemId])
-
-  useEffect(() => {
-    function onKey(e) { if (e.key === 'Escape' && !formOpen && !delRow) onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose, formOpen, delRow])
-
-  async function handleSaveRow(data) {
-    setSaving(true)
-    try {
-      var res = await apiPost('/Production/SaveOperationMachineTime', {
-        id: data.id, operationId: op.operationId, routingId: data.routingId,
-        machineId: data.machineId, machineGroupId: data.machineGroupId,
-        itemId: data.itemId, itemGroupId: data.itemGroupId, unitId: data.unitId,
-        quantity: data.quantity, durationPerUnit: data.durationPerUnit,
-        durationUnit: data.durationUnit, isActive: data.isActive,
-      })
-      if (res.ok) { await load(); setFormOpen(false) }
-      else window.CalibraHub?.toast(res.error || 'Makine süresi kaydedilemedi', 'err')
-    } finally { setSaving(false) }
-  }
-
-  async function handleDeleteRow(row) {
-    setSaving(true)
-    try {
-      var res = await apiPost('/Production/DeleteOperationMachineTime?id=' + row.id, null)
-      if (res.ok) await load()
-      else window.CalibraHub?.toast(res.error || 'Makine süresi silinemedi', 'err')
-    } finally { setSaving(false); setDelRow(null) }
-  }
-
-  async function handleToggleRow(row) {
-    setSaving(true)
-    try {
-      var res = await apiPost('/Production/SaveOperationMachineTime', {
-        id: row.id, operationId: op.operationId, routingId: row.routingId ?? null,
-        machineId: row.machineId || null, machineGroupId: row.machineGroupId || null,
-        itemId: row.itemId || null, itemGroupId: row.itemGroupId || null, unitId: row.unitId || null,
-        quantity: row.quantity, durationPerUnit: row.durationPerUnit,
-        durationUnit: row.durationUnit, isActive: !row.isActive,
-      })
-      if (res.ok) await load()
-      else window.CalibraHub?.toast(res.error || 'Durum güncellenemedi', 'err')
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <div className="rt-mt-backdrop"
-      onClick={e => { if (e.target === e.currentTarget && !formOpen && !delRow) onClose() }}>
-      <div className="rt-mt-modal">
-        <div className="rt-mt-modal__head">
-          <div className="rt-mt-modal__icon"><Timer size={18} /></div>
-          <div className="rt-mt-modal__id">
-            <div className="rt-mt-modal__title">Makine Süreleri</div>
-            <div className="rt-mt-modal__sub">{op.operationCode} — {op.operationName || '—'} · {routing.code}</div>
-          </div>
-          <button className="rt-picker__close" onClick={onClose}><X size={16} /></button>
-        </div>
-
-        <div className="rt-mt-modal__hint">
-          Bu operasyonun farklı makinelerde (veya makine gruplarında) — istenirse belirli bir ürün
-          ya da ürün grubu için — aldığı süreyi tanımlayın. Süre, girilen miktar içindir (örn. "100
-          adet için 45 dakika"). Kapsamı "Bu Rota" olan satırlar yalnızca burada, "Tüm Rotalar"
-          olanlar bu operasyonun kullanıldığı her rotada geçerli olur.
-        </div>
-
-        <div className="rt-mt-modal__body">
-          {loading && <div className="rt-picker__info">Yükleniyor...</div>}
-
-          {!loading && (
-            <div className="rt-mt-list">
-              {rows.length === 0 && formOpen !== true && (
-                <div className="rt-mt-empty">Henüz makine süresi tanımlanmamış</div>
-              )}
-
-              {rows.map(row => (
-                formOpen === row.id ? (
-                  <div className="rt-mt-form-row" key={row.id}>
-                    <MachineTimeRowForm initial={row} urls={urls} saving={saving}
-                      routingId={routing.id} allowedItemIds={allowedItemIds}
-                      onSave={handleSaveRow} onCancel={() => setFormOpen(false)} />
-                  </div>
-                ) : (
-                  <div className="rt-mt-row" key={row.id}>
-                    {row.machineGroupId ? (
-                      <div className="rt-tile rt-tile--cyan" title="Makine Grubu">
-                        <span className="rt-tile__label">Makine Grubu</span>
-                        <span className="rt-tile__value">{row.machineGroupCode}</span>
-                      </div>
-                    ) : (
-                      <div className="rt-tile rt-tile--cyan" title={row.machineName || ''}>
-                        <span className="rt-tile__label">Makine</span>
-                        <span className="rt-tile__value">{row.machineCode || row.machineName || '—'}</span>
-                      </div>
-                    )}
-
-                    {row.itemGroupId ? (
-                      <div className="rt-tile rt-tile--blue" title="Stok Grubu">
-                        <span className="rt-tile__label">Stok Grubu</span>
-                        <span className="rt-tile__value">{row.itemGroupCode}</span>
-                      </div>
-                    ) : row.itemId ? (
-                      <div className="rt-tile rt-tile--blue" title={row.itemName || ''}>
-                        <span className="rt-tile__label">Ürün</span>
-                        <span className="rt-tile__value">{row.itemCode}</span>
-                      </div>
-                    ) : (
-                      <div className="rt-tile rt-tile--muted">
-                        <span className="rt-tile__label">Ürün</span>
-                        <span className="rt-tile__value rt-tile__value--muted">Yok</span>
-                      </div>
-                    )}
-
-                    {row.unitId ? (
-                      <div className="rt-tile">
-                        <span className="rt-tile__label">Ölçü Birimi</span>
-                        <span className="rt-tile__value">{row.unitCode || row.unitName}</span>
-                      </div>
-                    ) : null}
-
-                    <div className="rt-tile">
-                      <span className="rt-tile__label">Miktar</span>
-                      <span className="rt-tile__value">{fmtDec(row.quantity)}</span>
-                    </div>
-                    <div className="rt-tile rt-tile--indigo">
-                      <span className="rt-tile__label">Süre</span>
-                      <span className="rt-tile__value">
-                        {fmtDec(row.durationPerUnit)}
-                        <span className="rt-tile__detail">{DURATION_UNIT_LABEL[row.durationUnit] || ''}</span>
-                      </span>
-                    </div>
-
-                    <span className={'rt-mt-scope rt-mt-scope--' + (row.routingId ? 'this' : 'all')}>
-                      {row.routingId ? 'Bu Rota' : 'Tüm Rotalar'}
-                    </span>
-
-                    <div className="rt-mt-row__spacer" />
-
-                    <label className="rt-toggle" title={row.isActive ? 'Pasife Al' : 'Aktife Al'}
-                      onClick={() => handleToggleRow(row)}>
-                      <input type="checkbox" readOnly checked={row.isActive} />
-                      <span className="rt-toggle__slider" />
-                    </label>
-
-                    <div className="rt-row__actions">
-                      <button className="rt-act rt-act--edit" title="Düzenle" onClick={() => setFormOpen(row.id)}>
-                        <Edit2 size={13} />
-                      </button>
-                      <button className="rt-act rt-act--del" title="Sil" onClick={() => setDelRow(row)}>
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                )
-              ))}
-
-              {formOpen === true && (
-                <div className="rt-mt-form-row">
-                  <MachineTimeRowForm urls={urls} saving={saving}
-                    routingId={routing.id} allowedItemIds={allowedItemIds}
-                    onSave={handleSaveRow} onCancel={() => setFormOpen(false)} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {!loading && !formOpen && (
-            <button className="rt-ops__action-btn rt-mt-add-btn" onClick={() => setFormOpen(true)}>
-              <Plus size={13} /> Makine Süresi Ekle
-            </button>
-          )}
-        </div>
-
-        <div className="rt-mt-modal__foot">
-          <button className="rt-btn rt-btn--ghost" onClick={onClose}>Kapat</button>
-        </div>
-      </div>
-
-      {delRow && (
-        <DeleteModal
-          target={{
-            type: 'machineTime',
-            label: `${delRow.machineGroupId ? (delRow.machineGroupCode + ' (Grup)') : (delRow.machineCode || delRow.machineName || 'Makine')} — ${fmtDec(delRow.quantity)} adet / ${fmtDec(delRow.durationPerUnit)} ${DURATION_UNIT_LABEL[delRow.durationUnit] || ''}`,
-          }}
-          onCancel={() => setDelRow(null)}
-          onConfirm={() => handleDeleteRow(delRow)}
-        />
-      )}
-    </div>
-  )
-}
-
 // ── RoutingTree — ana bileşen ──────────────────────────────────────────────
 export default function RoutingTree({ config }) {
   var urls = config.urls || {}
@@ -890,7 +377,6 @@ export default function RoutingTree({ config }) {
   // Makine / stok eşleştirme — per-operation + per-routing
   var [machineAssignOpId, setMachineAssignOpId] = useState(null)   // { routing, op }
   var [itemAssignFor, setItemAssignFor]         = useState(null)   // routing
-  var [machineTimesFor, setMachineTimesFor]     = useState(null)   // { routing, op } — Makine Süreleri modalı
 
   // Routing → entity-like (filter panel master widgets icin uyumlu yapida)
   var routingsAsEntities = useMemo(() => routings.map(r => ({
@@ -1375,7 +861,6 @@ export default function RoutingTree({ config }) {
                             routing={routing}
                             opUserCfg={opUserCfg}
                             onAssignMachine={(r, o) => setMachineAssignOpId({ routing: r, op: o })}
-                            onEditMachineTimes={(r, o) => setMachineTimesFor({ routing: r, op: o })}
                             onDelete={(r, o) => setDeleteTarget({
                               type: 'op', label: `${o.operationCode} — ${o.operationName}`,
                               routing: r, opId: o.id,
@@ -1440,16 +925,6 @@ export default function RoutingTree({ config }) {
           placeholder="Makine ara..."
           onSelect={(m) => handleAssignMachine(machineAssignOpId.routing, machineAssignOpId.op.id, m.id)}
           onClose={() => setMachineAssignOpId(null)}
-        />
-      )}
-
-      {/* ── Makine Süreleri modal (operasyon × makine/grup × opsiyonel ürün/grup süre eşleştirme) ── */}
-      {machineTimesFor && (
-        <MachineTimesModal
-          op={machineTimesFor.op}
-          routing={machineTimesFor.routing}
-          urls={urls}
-          onClose={() => setMachineTimesFor(null)}
         />
       )}
 

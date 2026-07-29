@@ -6,6 +6,97 @@
     ViewData["BodyClass"] = "page-operation-edit workspace-frame-body";
 }
 
+@section Styles {
+<style>
+    /* ── Makine/Ürün Süreleri sekmesi — operasyon x makine/grup (x opsiyonel ürün/grup)
+       süre eşleştirme. Light default, dark override (CLAUDE.md tema kuralı). Input/select
+       underline stili .ux-edit-pane element selector'larından otomatik gelir; burada
+       yalnızca genişlik/yerleşim override edilir. */
+    .oe-mt-wrap { display: flex; flex-direction: column; gap: 14px; max-width: 920px; }
+    .oe-mt-add-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+
+    .oe-mt-empty {
+        padding: 24px; text-align: center; border: 1px dashed #e2e8f0; border-radius: 10px;
+        color: #94a3b8; font-size: 13px;
+    }
+    body.app-theme-dark .oe-mt-empty { border-color: rgba(255,255,255,0.1); }
+
+    .oe-mt-list { display: flex; flex-direction: column; gap: 8px; }
+    .oe-mt-row {
+        display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        padding: 10px 12px; border-radius: 10px;
+        background: #f8fafc; border: 1px solid #e2e8f0;
+    }
+    body.app-theme-dark .oe-mt-row { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); }
+
+    .oe-mt-tile { display: flex; flex-direction: column; gap: 2px; min-width: 84px; }
+    .oe-mt-tile__label { font-size: 10px; font-weight: 700; color: #94a3b8; letter-spacing: .02em; }
+    .oe-mt-tile__value { font-size: 12.5px; font-weight: 600; color: #0f172a; }
+    body.app-theme-dark .oe-mt-tile__value { color: #e2e8f0; }
+    .oe-mt-tile__value--muted { color: #94a3b8; font-style: italic; font-weight: 500; }
+    .oe-mt-tile__detail { font-size: 11px; font-weight: 500; color: #64748b; margin-left: 3px; }
+
+    .oe-mt-row__spacer { flex: 1 1 auto; }
+    .oe-mt-row__actions { display: flex; align-items: center; gap: 6px; }
+    .oe-mt-icon-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; border-radius: 7px;
+        border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer;
+    }
+    .oe-mt-icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+    .oe-mt-icon-btn--del:hover { background: rgba(239,68,68,0.1); color: #dc2626; border-color: rgba(239,68,68,0.3); }
+    body.app-theme-dark .oe-mt-icon-btn { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: #94a3b8; }
+    body.app-theme-dark .oe-mt-icon-btn:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    body.app-theme-dark .oe-mt-icon-btn--del:hover { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.4); }
+
+    /* Satır-içi mini switch (Aktif/Pasif) — CLAUDE.md switchkey kuralı */
+    .oe-mt-switch-mini { position: relative; width: 36px; height: 20px; display: inline-block; flex-shrink: 0; cursor: pointer; }
+    .oe-mt-switch-mini input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .oe-mt-switch-mini__track { position: absolute; inset: 0; border-radius: 20px; background: #e2e8f0; transition: background .2s; }
+    .oe-mt-switch-mini input:checked + .oe-mt-switch-mini__track { background: #10b981; }
+    body.app-theme-dark .oe-mt-switch-mini__track { background: rgba(255,255,255,0.14); }
+    body.app-theme-dark .oe-mt-switch-mini input:checked + .oe-mt-switch-mini__track { background: #059669; }
+    .oe-mt-switch-mini__track::before {
+        content: ''; position: absolute; height: 14px; width: 14px; left: 3px; top: 3px;
+        border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    }
+    .oe-mt-switch-mini input:checked + .oe-mt-switch-mini__track::before { transform: translateX(16px); }
+
+    /* Satır ekle/düzenle formu */
+    .oe-mt-form-card {
+        padding: 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px;
+        background: #eef2ff; border: 1px dashed #c7d2fe;
+    }
+    body.app-theme-dark .oe-mt-form-card { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.3); }
+    .oe-mt-form-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .oe-mt-form-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+
+    /* Segmentli tip-toggle (Makine/Makine Grubu, Yok/Ürün/Ürün Grubu) — switchkey'in
+       çok-seçenekli karşılığı (2+ seçenekte tek switch yetmez). */
+    .oe-mt-seg {
+        display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+        border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; flex-shrink: 0;
+    }
+    body.app-theme-dark .oe-mt-seg { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+    .oe-mt-seg__btn {
+        background: none; border: none; cursor: pointer; padding: 6px 10px;
+        font-size: 11.5px; font-weight: 600; color: #64748b; border-radius: 6px; white-space: nowrap;
+    }
+    .oe-mt-seg__btn:hover { color: #334155; }
+    body.app-theme-dark .oe-mt-seg__btn { color: #94a3b8; }
+    body.app-theme-dark .oe-mt-seg__btn:hover { color: #e2e8f0; }
+    .oe-mt-seg__btn.is-active { background: rgba(99,102,241,0.16); color: #4338ca; }
+    body.app-theme-dark .oe-mt-seg__btn.is-active { background: rgba(99,102,241,0.28); color: #c7d2fe; }
+
+    /* Form alan genişlikleri — .ux-edit-pane input/select'ten daha spesifik (override) */
+    .ux-edit-pane .oe-mt-form-row input.oe-mt-fi--picker { flex: 1 1 200px; min-width: 180px; width: auto; cursor: pointer; }
+    .ux-edit-pane .oe-mt-form-row input.oe-mt-fi--qty,
+    .ux-edit-pane .oe-mt-form-row input.oe-mt-fi--dur { width: 100px; flex: 0 0 100px; }
+    .ux-edit-pane .oe-mt-form-row select.oe-mt-fi--unit { width: 180px; flex: 0 0 180px; }
+    .ux-edit-pane .oe-mt-form-row select.oe-mt-fi--durunit { width: 130px; flex: 0 0 130px; }
+</style>
+}
+
 <partial name="_ProductionDefsTabs" model='"operations"' />
 
 @* PJAX wrapper *@
@@ -27,6 +118,10 @@
       <button type="button" class="ux-edit-nav__tab is-active" data-tab="general">
         <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         <span>Genel Bilgiler</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="machinetimes">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>
+        <span>Makine/Ürün Süreleri</span>
       </button>
       <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="oeNavWidgets" style="display:none;">
         <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
@@ -71,6 +166,79 @@
         </div>
 
         <div id="oe-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="machinetimes">
+        <h2>Makine / Ürün Süreleri</h2>
+        <div class="ux-edit-hint">
+          Bu operasyonun farklı makinelerde (veya makine gruplarında) — istenirse belirli bir ürün ya da
+          ürün grubu için — aldığı süreyi tanımlayın. Süre, girilen miktar içindir (örn. "100 adet için
+          45 dakika"). Tanımlar operasyona bağlıdır; bu operasyonun kullanıldığı tüm rotalarda ortak geçerlidir.
+        </div>
+
+        @if (isNew)
+        {
+          <div class="ux-hint">Bu sekmeyi kullanmak için önce operasyonu kaydedin.</div>
+        }
+        else
+        {
+          <div class="oe-mt-wrap">
+            <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary oe-mt-add-btn" id="oeMtAddBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Satır Ekle
+            </button>
+
+            <div id="oeMtFormCard" class="oe-mt-form-card" style="display:none;">
+              <input type="hidden" id="oeMtFRowId" value="0" />
+
+              <div class="oe-mt-form-row">
+                <div class="oe-mt-seg" id="oeMtMachineSeg">
+                  <button type="button" class="oe-mt-seg__btn is-active" data-val="machine">Makine</button>
+                  <button type="button" class="oe-mt-seg__btn" data-val="group">Makine Grubu</button>
+                </div>
+                <input type="text" readonly id="oeMtMachineLabel" class="oe-mt-fi--picker" placeholder="Makine seç... *" />
+                <input type="hidden" id="oeMtMachineId" value="" />
+                <input type="hidden" id="oeMtMachineGroupId" value="" />
+              </div>
+
+              <div class="oe-mt-form-row">
+                <div class="oe-mt-seg" id="oeMtItemSeg">
+                  <button type="button" class="oe-mt-seg__btn is-active" data-val="none">Yok</button>
+                  <button type="button" class="oe-mt-seg__btn" data-val="item">Ürün</button>
+                  <button type="button" class="oe-mt-seg__btn" data-val="group">Ürün Grubu</button>
+                </div>
+                <input type="text" readonly id="oeMtItemLabel" class="oe-mt-fi--picker" placeholder="Ürün seç..." style="display:none;" />
+                <input type="hidden" id="oeMtItemId" value="" />
+                <input type="hidden" id="oeMtItemGroupId" value="" />
+                <select id="oeMtUnitId" class="oe-mt-fi--unit" style="display:none;" title="Ölçü birimi — boş = ürünün baz birimi">
+                  <option value="">Baz Birim</option>
+                </select>
+              </div>
+
+              <div class="oe-mt-form-row">
+                <input type="number" id="oeMtQty" class="oe-mt-fi--qty" min="0" step="any" value="1" placeholder="Miktar *" title="Miktar — süre bu miktar içindir" />
+                <input type="number" id="oeMtDur" class="oe-mt-fi--dur" min="0" step="any" value="0" placeholder="Süre *" title="Süre" />
+                <select id="oeMtDurUnit" class="oe-mt-fi--durunit" title="Süre birimi">
+                  <option value="1">Dakika</option>
+                  <option value="2">Saat</option>
+                </select>
+                <label class="oe-mt-switch-mini" title="Aktif">
+                  <input type="checkbox" id="oeMtActive" checked />
+                  <span class="oe-mt-switch-mini__track"></span>
+                </label>
+              </div>
+
+              <div id="oeMtFormErr" style="display:none;" class="ux-err"></div>
+
+              <div class="oe-mt-form-actions">
+                <button type="button" class="ux-modal-cancel" id="oeMtFormCancel">Vazgeç</button>
+                <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="oeMtFormSave">Kaydet</button>
+              </div>
+            </div>
+
+            <div id="oeMtList" class="oe-mt-list"></div>
+          </div>
+        }
       </div>
 
       <div class="ux-edit-pane" data-tab="widgets">
@@ -227,6 +395,483 @@
                 .catch(function () { oeCloseModal(); setErr('Bağlantı hatası.'); });
             });
         }
+    }
+
+    // ── Makine / Ürün Süreleri sekmesi ────────────────────────────────────
+    // Operasyon-bazlı, rota-bağımsız (RoutingId hep null gönderilir — rota seçici
+    // UI yok, kullanıcı kararı). Önceden RoutingTree.jsx içindeki "Makine Süreleri"
+    // modal editörü ile yönetiliyordu; tek düzenleme yeri artık burasıdır (bkz. CLAUDE.md
+    // talebi). Endpoint'ler değişmedi: /Production/OperationMachineTimes(+Save/Delete).
+    if (idVal && document.getElementById('oeMtAddBtn')) {
+        var oeMtRows          = [];
+        var oeMtMachineMode    = 'machine';
+        var oeMtItemMode       = 'none';
+        var OE_MT_DUR_LABEL    = { 1: 'Dakika', 2: 'Saat' };
+
+        function oeMtEsc(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        function oeMtNum(v) {
+            var n = Number(v);
+            return isNaN(n) ? v : n.toString();
+        }
+        // DurationUnit API'den JsonStringEnumConverter ile string doner ("Minute"/"Hour") —
+        // integer'a normalize edilir (bkz. CLAUDE.md "React / Frontend — API'den Enum Yukleme
+        // Kurali"; burada vanilla JS olsa da ayni ilke gecerli). Kaydetmede integer gonderilir.
+        function oeMtNormalizeDurationUnit(v) {
+            if (typeof v === 'number') return v;
+            if (v === 'Hour') return 2;
+            if (v === 'Minute') return 1;
+            var n = parseInt(v, 10);
+            return isNaN(n) ? 1 : n;
+        }
+
+        var OE_MT_EDIT_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+        var OE_MT_DEL_ICON  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>';
+
+        function oeMtLoad() {
+            fetch('/Production/OperationMachineTimes?operationId=' + idVal, { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (list) {
+                    oeMtRows = (Array.isArray(list) ? list : []).map(function (r) {
+                        return {
+                            id: r.id,
+                            machineId: r.machineId || null, machineCode: r.code || '', machineName: r.name || '',
+                            machineGroupId: r.machineGroupId || null, machineGroupCode: r.machineGroupCode || '',
+                            itemId: r.itemId || null, itemCode: r.itemCode || '', itemName: r.itemName || '',
+                            itemGroupId: r.itemGroupId || null, itemGroupCode: r.itemGroupCode || '',
+                            unitId: r.unitId || null, unitCode: r.unitCode || '', unitName: r.unitName || '',
+                            quantity: r.quantity, durationPerUnit: r.durationPerUnit,
+                            durationUnit: oeMtNormalizeDurationUnit(r.durationUnit),
+                            isActive: r.isActive,
+                        };
+                    });
+                    oeMtRenderList();
+                })
+                .catch(function () { /* sessiz — liste bos kalir, sekmeye tekrar girince yeniden dener */ });
+        }
+
+        function oeMtRenderList() {
+            var wrap = document.getElementById('oeMtList');
+            if (!wrap) return;
+            if (oeMtRows.length === 0) {
+                wrap.innerHTML = '<div class="oe-mt-empty">Henüz makine/ürün süresi tanımlanmamış.</div>';
+                return;
+            }
+            wrap.innerHTML = oeMtRows.map(function (row) {
+                var machineTile = row.machineGroupId
+                    ? '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Makine Grubu</span><span class="oe-mt-tile__value">' + oeMtEsc(row.machineGroupCode) + '</span></div>'
+                    : '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Makine</span><span class="oe-mt-tile__value">' + oeMtEsc(row.machineCode || row.machineName || '—') + '</span></div>';
+                var itemTile = row.itemGroupId
+                    ? '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Ürün Grubu</span><span class="oe-mt-tile__value">' + oeMtEsc(row.itemGroupCode) + '</span></div>'
+                    : row.itemId
+                        ? '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Ürün</span><span class="oe-mt-tile__value">' + oeMtEsc(row.itemCode) + '</span></div>'
+                        : '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Ürün</span><span class="oe-mt-tile__value oe-mt-tile__value--muted">Yok</span></div>';
+                var unitTile = row.unitId
+                    ? '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Ölçü Birimi</span><span class="oe-mt-tile__value">' + oeMtEsc(row.unitCode || row.unitName || '') + '</span></div>'
+                    : '';
+                return '<div class="oe-mt-row" data-id="' + row.id + '">' +
+                    machineTile + itemTile + unitTile +
+                    '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Miktar</span><span class="oe-mt-tile__value">' + oeMtNum(row.quantity) + '</span></div>' +
+                    '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Süre</span><span class="oe-mt-tile__value">' + oeMtNum(row.durationPerUnit) + '<span class="oe-mt-tile__detail">' + (OE_MT_DUR_LABEL[row.durationUnit] || '') + '</span></span></div>' +
+                    '<div class="oe-mt-row__spacer"></div>' +
+                    '<label class="oe-mt-switch-mini" title="' + (row.isActive ? 'Pasife Al' : 'Aktife Al') + '">' +
+                    '<input type="checkbox" data-role="toggle" ' + (row.isActive ? 'checked' : '') + ' />' +
+                    '<span class="oe-mt-switch-mini__track"></span>' +
+                    '</label>' +
+                    '<div class="oe-mt-row__actions">' +
+                    '<button type="button" class="oe-mt-icon-btn" data-role="edit" title="Düzenle">' + OE_MT_EDIT_ICON + '</button>' +
+                    '<button type="button" class="oe-mt-icon-btn oe-mt-icon-btn--del" data-role="del" title="Sil">' + OE_MT_DEL_ICON + '</button>' +
+                    '</div>' +
+                    '</div>';
+            }).join('');
+
+            wrap.querySelectorAll('.oe-mt-row').forEach(function (rowEl) {
+                var id = parseInt(rowEl.getAttribute('data-id'), 10);
+                var row = oeMtRows.find(function (r) { return r.id === id; });
+                if (!row) return;
+                rowEl.querySelector('[data-role="edit"]').addEventListener('click', function () { oeMtOpenEdit(row); });
+                rowEl.querySelector('[data-role="del"]').addEventListener('click', function () { oeMtConfirmDelete(row); });
+                rowEl.querySelector('[data-role="toggle"]').addEventListener('change', function () { oeMtToggleActive(row); });
+            });
+        }
+
+        // ── Segmentli toggle yardımcıları ──
+        function oeMtSegSetActive(segId, val) {
+            var seg = document.getElementById(segId);
+            if (!seg) return;
+            seg.querySelectorAll('.oe-mt-seg__btn').forEach(function (b) {
+                b.classList.toggle('is-active', b.getAttribute('data-val') === val);
+            });
+        }
+        function oeMtWireSeg(segId, onChange) {
+            var seg = document.getElementById(segId);
+            if (!seg) return;
+            seg.querySelectorAll('.oe-mt-seg__btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    oeMtSegSetActive(segId, btn.getAttribute('data-val'));
+                    onChange(btn.getAttribute('data-val'));
+                });
+            });
+        }
+
+        // ── Makine / Makine Grubu seçimi (XOR) ──
+        var oeMtSelMachine = null, oeMtSelMachineGroup = null;
+        function oeMtSetMachine(sel) {
+            oeMtSelMachine = sel;
+            document.getElementById('oeMtMachineId').value = sel ? sel.id : '';
+            document.getElementById('oeMtMachineLabel').value = sel ? (sel.code + (sel.name ? ' — ' + sel.name : '')) : '';
+        }
+        function oeMtSetMachineGroup(sel) {
+            oeMtSelMachineGroup = sel;
+            document.getElementById('oeMtMachineGroupId').value = sel ? sel.id : '';
+            document.getElementById('oeMtMachineLabel').value = sel ? (sel.code + (sel.name ? ' — ' + sel.name : '')) : '';
+        }
+        oeMtWireSeg('oeMtMachineSeg', function (val) {
+            oeMtMachineMode = val;
+            document.getElementById('oeMtMachineLabel').placeholder = val === 'machine' ? 'Makine seç... *' : 'Makine grubu seç... *';
+            if (val === 'machine') { oeMtSetMachineGroup(null); oeMtSetMachine(oeMtSelMachine); }
+            else { oeMtSetMachine(null); oeMtSetMachineGroup(oeMtSelMachineGroup); }
+        });
+
+        // ── Ürün / Ürün Grubu seçimi (Yok / Ürün / Ürün Grubu) ──
+        var oeMtSelItem = null, oeMtSelItemGroup = null;
+        function oeMtLoadUnitOptions(itemId, presetUnitId) {
+            var sel = document.getElementById('oeMtUnitId');
+            sel.innerHTML = '<option value="">Baz Birim</option>';
+            if (!itemId) return;
+            fetch('/Logistics/GetItemUnits?itemId=' + itemId, { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : {}; })
+                .then(function (d) {
+                    var avail = Array.isArray(d.availableUnits) ? d.availableUnits : [];
+                    var byId = {}; avail.forEach(function (u) { byId[u.id] = u; });
+                    var conv = Array.isArray(d.conversions) ? d.conversions : [];
+                    conv.forEach(function (c) {
+                        var u = byId[c.unitId];
+                        var opt = document.createElement('option');
+                        opt.value = c.unitId;
+                        opt.textContent = (u ? u.unitCode : '') + (u && u.unitName ? ' — ' + u.unitName : '');
+                        sel.appendChild(opt);
+                    });
+                    if (presetUnitId && Array.prototype.some.call(sel.options, function (o) { return o.value === String(presetUnitId); })) {
+                        sel.value = String(presetUnitId);
+                    }
+                })
+                .catch(function () { /* sessiz — birim listesi bos kalir, "Baz Birim" secili kalir */ });
+        }
+        function oeMtSetItem(sel, presetUnitId) {
+            oeMtSelItem = sel;
+            document.getElementById('oeMtItemId').value = sel ? sel.id : '';
+            document.getElementById('oeMtItemLabel').value = sel ? (sel.code + (sel.name ? ' — ' + sel.name : '')) : '';
+            oeMtLoadUnitOptions(sel ? sel.id : null, presetUnitId);
+        }
+        function oeMtSetItemGroup(sel) {
+            oeMtSelItemGroup = sel;
+            document.getElementById('oeMtItemGroupId').value = sel ? sel.id : '';
+            document.getElementById('oeMtItemLabel').value = sel ? (sel.code + (sel.name ? ' — ' + sel.name : '')) : '';
+        }
+        // Görünürlük/placeholder yalnızca — seçim yan etkisi YOK (edit akışında doğru satır
+        // değerini set etmeden önce eski seçimle (oeMtSelItem) yarışan bir fetch tetiklenmesin
+        // diye ayrıştırıldı; bkz. oeMtOpenEdit).
+        function oeMtApplyItemVisibility(val) {
+            oeMtItemMode = val;
+            var pick = document.getElementById('oeMtItemLabel');
+            var unit = document.getElementById('oeMtUnitId');
+            if (val === 'none') { pick.style.display = 'none'; unit.style.display = 'none'; }
+            else if (val === 'item') { pick.style.display = ''; unit.style.display = ''; pick.placeholder = 'Ürün seç... *'; }
+            else { pick.style.display = ''; unit.style.display = 'none'; pick.placeholder = 'Ürün grubu seç... *'; }
+        }
+        // Kullanıcı segment butonuna tıklayınca çağrılır — görünürlük + önceki seçimi
+        // (varsa) korur/temizler.
+        function oeMtApplyItemMode(val) {
+            oeMtApplyItemVisibility(val);
+            if (val === 'none') { oeMtSetItem(null); oeMtSetItemGroup(null); }
+            else if (val === 'item') { oeMtSetItemGroup(null); oeMtSetItem(oeMtSelItem); }
+            else { oeMtSetItem(null); oeMtSetItemGroup(oeMtSelItemGroup); }
+        }
+        oeMtWireSeg('oeMtItemSeg', oeMtApplyItemMode);
+
+        // ── Picker modalı (Makine / Makine Grubu / Ürün / Ürün Grubu ortak) ──
+        function oeMtOpenPicker(opts) {
+            var bd = document.createElement('div');
+            bd.className = 'ux-modal-backdrop';
+            bd.innerHTML =
+                '<div class="ux-picker-modal">' +
+                '<div class="ux-picker-head">' +
+                '<span class="ux-picker-title">' + oeMtEsc(opts.title) + '</span>' +
+                '<input type="text" class="ux-picker-search" placeholder="Ara… (kod, ad)" autocomplete="off" />' +
+                '<button type="button" class="ux-picker-close" title="Kapat (Esc)">&times;</button>' +
+                '</div>' +
+                '<div class="ux-picker-list"></div>' +
+                '</div>';
+
+            var allItems = [];
+            function render(items) {
+                var list = bd.querySelector('.ux-picker-list');
+                if (!items.length) { list.innerHTML = '<div class="ux-picker-empty">Kayıt bulunamadı.</div>'; return; }
+                list.innerHTML = items.map(function (it, i) {
+                    var m = opts.mapItem(it);
+                    return '<div class="ux-picker-row" data-idx="' + i + '">' +
+                        '<span class="ux-picker-row-name"><b>' + oeMtEsc(m.code) + '</b>' + (m.name ? ' — ' + oeMtEsc(m.name) : '') + '</span>' +
+                        '</div>';
+                }).join('');
+                list.querySelectorAll('.ux-picker-row').forEach(function (row) {
+                    row.addEventListener('click', function () {
+                        var idx = parseInt(row.getAttribute('data-idx'), 10);
+                        opts.onSelect(items[idx]);
+                        closeIt();
+                    });
+                });
+            }
+            function closeIt() {
+                if (bd.parentNode) bd.parentNode.removeChild(bd);
+                document.removeEventListener('keydown', onKey);
+            }
+            function onKey(e) { if (e.key === 'Escape') closeIt(); }
+            function fetchAndRender(q) {
+                var url = opts.url;
+                if (opts.queryParam) url += (url.indexOf('?') > -1 ? '&' : '?') + opts.queryParam + '=' + encodeURIComponent(q || '');
+                fetch(url, { credentials: 'same-origin' })
+                    .then(function (r) { return r.ok ? r.json() : []; })
+                    .then(function (data) {
+                        allItems = Array.isArray(data) ? data : (data.items || []);
+                        render(allItems);
+                    })
+                    .catch(function () { render([]); });
+            }
+
+            bd.addEventListener('click', function (e) { if (e.target === bd) closeIt(); });
+            document.body.appendChild(bd);
+            fetchAndRender('');
+
+            var search = bd.querySelector('.ux-picker-search');
+            search.addEventListener('input', function () {
+                var q = (search.value || '').trim();
+                if (opts.queryParam) { fetchAndRender(q); return; }
+                var ql = q.toLowerCase();
+                if (!ql) { render(allItems); return; }
+                render(allItems.filter(function (it) {
+                    var m = opts.mapItem(it);
+                    return (m.code || '').toLowerCase().indexOf(ql) !== -1 || (m.name || '').toLowerCase().indexOf(ql) !== -1;
+                }));
+            });
+            bd.querySelector('.ux-picker-close').addEventListener('click', closeIt);
+            document.addEventListener('keydown', onKey);
+            setTimeout(function () { search.focus(); }, 30);
+        }
+
+        function oeMtOpenMachinePicker() {
+            if (oeMtMachineMode === 'machine') {
+                oeMtOpenPicker({
+                    url: '/Logistics/GetAllMachines', title: 'Makine Seç', queryParam: 'search',
+                    mapItem: function (it) { return { code: it.code || '', name: it.name || '' }; },
+                    onSelect: function (it) { oeMtSetMachine({ id: it.id, code: it.code, name: it.name }); },
+                });
+            } else {
+                oeMtOpenPicker({
+                    url: '/Definitions/GetAllCardGroups?cardType=3', title: 'Makine Grubu Seç',
+                    mapItem: function (it) { return { code: it.code || '', name: it.description || '' }; },
+                    onSelect: function (it) { oeMtSetMachineGroup({ id: it.id, code: it.code, name: it.description || '' }); },
+                });
+            }
+        }
+        function oeMtOpenItemPicker() {
+            if (oeMtItemMode === 'item') {
+                oeMtOpenPicker({
+                    url: '/Logistics/StockLookup', title: 'Ürün Seç', queryParam: 'q',
+                    mapItem: function (it) { return { code: it.code || '', name: it.name || '' }; },
+                    onSelect: function (it) { oeMtSetItem({ id: it.id, code: it.code, name: it.name }); },
+                });
+            } else if (oeMtItemMode === 'group') {
+                oeMtOpenPicker({
+                    url: '/Definitions/GetAllCardGroups?cardType=1', title: 'Ürün Grubu Seç',
+                    mapItem: function (it) { return { code: it.code || '', name: it.description || '' }; },
+                    onSelect: function (it) { oeMtSetItemGroup({ id: it.id, code: it.code, name: it.description || '' }); },
+                });
+            }
+        }
+        var mtMachineLabelEl = document.getElementById('oeMtMachineLabel');
+        mtMachineLabelEl.addEventListener('click', oeMtOpenMachinePicker);
+        mtMachineLabelEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); oeMtOpenMachinePicker(); } });
+        var mtItemLabelEl = document.getElementById('oeMtItemLabel');
+        mtItemLabelEl.addEventListener('click', oeMtOpenItemPicker);
+        mtItemLabelEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); oeMtOpenItemPicker(); } });
+
+        // ── Form aç/kapa (satır ekle / düzenle) ──
+        function oeMtSetFormErr(msg) {
+            var el = document.getElementById('oeMtFormErr');
+            if (!el) return;
+            if (msg) { el.textContent = msg; el.style.display = ''; } else el.style.display = 'none';
+        }
+        function oeMtCloseForm() {
+            document.getElementById('oeMtFormCard').style.display = 'none';
+            document.getElementById('oeMtAddBtn').style.display = '';
+        }
+        function oeMtResetForm() {
+            document.getElementById('oeMtFRowId').value = '0';
+            oeMtMachineMode = 'machine';
+            oeMtSegSetActive('oeMtMachineSeg', 'machine');
+            document.getElementById('oeMtMachineLabel').placeholder = 'Makine seç... *';
+            oeMtSetMachine(null); oeMtSetMachineGroup(null);
+            oeMtSegSetActive('oeMtItemSeg', 'none');
+            oeMtApplyItemMode('none');
+            document.getElementById('oeMtQty').value = '1';
+            document.getElementById('oeMtDur').value = '0';
+            document.getElementById('oeMtDurUnit').value = '1';
+            document.getElementById('oeMtActive').checked = true;
+            oeMtSetFormErr('');
+        }
+        function oeMtOpenAdd() {
+            oeMtResetForm();
+            document.getElementById('oeMtFormCard').style.display = '';
+            document.getElementById('oeMtAddBtn').style.display = 'none';
+        }
+        function oeMtOpenEdit(row) {
+            document.getElementById('oeMtFRowId').value = row.id;
+
+            var mMode = row.machineGroupId ? 'group' : 'machine';
+            oeMtMachineMode = mMode;
+            oeMtSegSetActive('oeMtMachineSeg', mMode);
+            document.getElementById('oeMtMachineLabel').placeholder = mMode === 'machine' ? 'Makine seç... *' : 'Makine grubu seç... *';
+            if (mMode === 'machine') { oeMtSetMachineGroup(null); oeMtSetMachine({ id: row.machineId, code: row.machineCode, name: row.machineName }); }
+            else { oeMtSetMachine(null); oeMtSetMachineGroup({ id: row.machineGroupId, code: row.machineGroupCode, name: '' }); }
+
+            var iMode = row.itemGroupId ? 'group' : (row.itemId ? 'item' : 'none');
+            oeMtSegSetActive('oeMtItemSeg', iMode);
+            oeMtApplyItemVisibility(iMode);
+            if (iMode === 'item') oeMtSetItem({ id: row.itemId, code: row.itemCode, name: row.itemName }, row.unitId);
+            else if (iMode === 'group') { oeMtSetItem(null); oeMtSetItemGroup({ id: row.itemGroupId, code: row.itemGroupCode, name: '' }); }
+            else { oeMtSetItem(null); oeMtSetItemGroup(null); }
+
+            document.getElementById('oeMtQty').value = oeMtNum(row.quantity);
+            document.getElementById('oeMtDur').value = oeMtNum(row.durationPerUnit);
+            document.getElementById('oeMtDurUnit').value = row.durationUnit;
+            document.getElementById('oeMtActive').checked = !!row.isActive;
+            oeMtSetFormErr('');
+
+            document.getElementById('oeMtFormCard').style.display = '';
+            document.getElementById('oeMtAddBtn').style.display = 'none';
+        }
+
+        document.getElementById('oeMtAddBtn').addEventListener('click', oeMtOpenAdd);
+        document.getElementById('oeMtFormCancel').addEventListener('click', oeMtCloseForm);
+        document.getElementById('oeMtFormSave').addEventListener('click', function () {
+            var machineId      = oeMtMachineMode === 'machine' ? (parseInt(document.getElementById('oeMtMachineId').value, 10) || null) : null;
+            var machineGroupId = oeMtMachineMode === 'group'   ? (parseInt(document.getElementById('oeMtMachineGroupId').value, 10) || null) : null;
+            if (!machineId && !machineGroupId) { oeMtSetFormErr('Makine veya makine grubu seçimi zorunludur.'); return; }
+
+            var itemId      = oeMtItemMode === 'item'  ? (parseInt(document.getElementById('oeMtItemId').value, 10) || null) : null;
+            var itemGroupId = oeMtItemMode === 'group' ? (parseInt(document.getElementById('oeMtItemGroupId').value, 10) || null) : null;
+            if (oeMtItemMode === 'item' && !itemId) { oeMtSetFormErr('Ürün seçimi zorunludur.'); return; }
+            if (oeMtItemMode === 'group' && !itemGroupId) { oeMtSetFormErr('Ürün grubu seçimi zorunludur.'); return; }
+
+            var unitId = oeMtItemMode === 'item' ? (parseInt(document.getElementById('oeMtUnitId').value, 10) || null) : null;
+
+            var qty = parseFloat(document.getElementById('oeMtQty').value);
+            if (!qty || qty <= 0) { oeMtSetFormErr('Miktar 0’dan büyük olmalıdır.'); return; }
+            var dur = parseFloat(document.getElementById('oeMtDur').value);
+            if (isNaN(dur) || dur < 0) { oeMtSetFormErr('Süre geçerli bir sayı olmalıdır.'); return; }
+
+            var rowId = parseInt(document.getElementById('oeMtFRowId').value, 10) || 0;
+            var payload = {
+                id: rowId, operationId: parseInt(idVal, 10), routingId: null,
+                machineId: machineId, machineGroupId: machineGroupId,
+                itemId: itemId, itemGroupId: itemGroupId, unitId: unitId,
+                quantity: qty, durationPerUnit: dur,
+                durationUnit: parseInt(document.getElementById('oeMtDurUnit').value, 10) || 1,
+                isActive: document.getElementById('oeMtActive').checked,
+            };
+
+            var saveBtnMt = document.getElementById('oeMtFormSave');
+            saveBtnMt.disabled = true;
+            oeMtSetFormErr('');
+            fetch('/Production/SaveOperationMachineTime', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    saveBtnMt.disabled = false;
+                    if (d && d.ok) { oeMtCloseForm(); oeMtLoad(); }
+                    else oeMtSetFormErr((d && d.error) || 'Kayıt başarısız.');
+                })
+                .catch(function () { saveBtnMt.disabled = false; oeMtSetFormErr('Bağlantı hatası.'); });
+        });
+
+        function oeMtToggleActive(row) {
+            var payload = {
+                id: row.id, operationId: parseInt(idVal, 10), routingId: null,
+                machineId: row.machineId, machineGroupId: row.machineGroupId,
+                itemId: row.itemId, itemGroupId: row.itemGroupId, unitId: row.unitId,
+                quantity: row.quantity, durationPerUnit: row.durationPerUnit,
+                durationUnit: row.durationUnit, isActive: !row.isActive,
+            };
+            fetch('/Production/SaveOperationMachineTime', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d || !d.ok) console.warn('[OE-MT] durum guncellenemedi:', d && d.error);
+                    oeMtLoad();
+                })
+                .catch(function (e) { console.warn('[OE-MT] durum guncelleme hatasi:', e); oeMtLoad(); });
+        }
+
+        // ── Silme onayı — ekran-ortası custom modal (CLAUDE.md silme onay standardı;
+        //   native confirm() kullanılmaz). .ux-modal-backdrop/.ux-modal ortak sınıflar. ──
+        function oeMtConfirmDelete(row) {
+            var label = (row.machineGroupId ? (row.machineGroupCode + ' (Grup)') : (row.machineCode || row.machineName || 'Makine')) +
+                ' — ' + oeMtNum(row.quantity) + ' adet / ' + oeMtNum(row.durationPerUnit) + ' ' + (OE_MT_DUR_LABEL[row.durationUnit] || '');
+
+            var bd = document.createElement('div');
+            bd.className = 'ux-modal-backdrop';
+            bd.innerHTML =
+                '<div class="ux-modal">' +
+                '<div class="ux-modal-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>' +
+                '<div class="ux-modal-title">Satırı Sil</div>' +
+                '<div class="ux-modal-msg">' + oeMtEsc(label) + ' satırını silmek istediğinize emin misiniz?</div>' +
+                '<div class="ux-modal-actions">' +
+                '<button type="button" class="ux-modal-cancel" id="oeMtDelCancel">Vazgeç</button>' +
+                '<button type="button" class="ux-modal-del" id="oeMtDelOk">Sil</button>' +
+                '</div>' +
+                '</div>';
+
+            function closeIt() {
+                if (bd.parentNode) bd.parentNode.removeChild(bd);
+                document.removeEventListener('keydown', onKey);
+            }
+            function doDelete() {
+                var okBtn = document.getElementById('oeMtDelOk');
+                okBtn.disabled = true; okBtn.textContent = 'Siliniyor…';
+                fetch('/Production/DeleteOperationMachineTime?id=' + row.id, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': csrf() },
+                    credentials: 'same-origin'
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        closeIt();
+                        if (d && d.ok) oeMtLoad();
+                        else oeMtSetFormErr((d && d.error) || 'Silinemedi.');
+                    })
+                    .catch(function () { closeIt(); oeMtSetFormErr('Bağlantı hatası.'); });
+            }
+            function onKey(e) { if (e.key === 'Escape') closeIt(); else if (e.key === 'Enter') doDelete(); }
+
+            bd.addEventListener('click', function (e) { if (e.target === bd) closeIt(); });
+            document.body.appendChild(bd);
+            document.getElementById('oeMtDelCancel').addEventListener('click', closeIt);
+            document.getElementById('oeMtDelOk').addEventListener('click', doDelete);
+            document.addEventListener('keydown', onKey);
+            setTimeout(function () { document.getElementById('oeMtDelOk').focus(); }, 30);
+        }
+
+        oeMtLoad();
     }
 
     document.addEventListener('keydown', function (e) {
