@@ -26,4 +26,5 @@ public interface IQualityService
 
     // ── Lookup ──
     Task<IReadOnlyCollection<QualityDefectCodeOption>> GetDefectCodeOptionsAsync(CancellationToken ct);
+    Task<IReadOnlyCollection<MaterialGroupLookupItem>> ListMaterialGroupsAsync(CancellationToken ct);
 }

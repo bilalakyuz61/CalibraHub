@@ -5,6 +5,7 @@ using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using Microsoft.Data.SqlClient;
+using System.Linq;
 
 namespace CalibraHub.Persistence.Repositories;
 
@@ -23,7 +24,8 @@ public sealed class SqlQualityRepository : IQualityRepository
     private readonly string _defectTable;
     private readonly string _docTable;
     private readonly string _itemsTable;
-    private readonly string _groupsTable;
+    private readonly string _cardGroupTable;
+    private readonly string _cardGroupMappingTable;
 
     public SqlQualityRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
     {
@@ -36,7 +38,10 @@ public sealed class SqlQualityRepository : IQualityRepository
         _defectTable = $"[{s}].[QualityDefectCode]";
         _docTable = $"[{s}].[Document]";
         _itemsTable = $"[{s}].[Items]";
-        _groupsTable = $"[{s}].[MaterialGroups]";
+        // Malzeme grubu artık legacy MaterialGroups DEĞİL — CardGroup (CardType=1) + CardGroupMapping (EntityType=1).
+        // Sebep: Item'ların gerçek grup ilişkisi CardGroupMapping ile kurulur; MaterialGroups hiç kullanılmıyordu (bkz. CLAUDE.md/Seq 54).
+        _cardGroupTable = $"[{s}].[CardGroup]";
+        _cardGroupMappingTable = $"[{s}].[CardGroupMapping]";
     }
 
     private static string Describe(Enum v) => SqlQualityDefectCodeRepository.Describe(v);
@@ -50,12 +55,12 @@ public sealed class SqlQualityRepository : IQualityRepository
         if (!string.IsNullOrWhiteSpace(search)) where += " AND (p.[Name] LIKE @S OR it.[Name] LIKE @S)";
         var sql = $"""
             SELECT p.[Id], p.[ItemId], it.[Name] AS ItemName, p.[MaterialGroupId],
-                   COALESCE(g.[GroupDescription], g.[GroupCode]) AS GroupName,
+                   COALESCE(NULLIF(g.[Description], ''), g.[Code]) AS GroupName,
                    p.[InspectionType], p.[Name], p.[IsActive], p.[Created],
                    (SELECT COUNT(*) FROM {_planLineTable} l WHERE l.[PlanId] = p.[Id]) AS LineCount
             FROM {_planTable} p
             LEFT JOIN {_itemsTable} it ON it.[Id] = p.[ItemId]
-            LEFT JOIN {_groupsTable} g ON g.[Id] = p.[MaterialGroupId]
+            LEFT JOIN {_cardGroupTable} g ON g.[Id] = p.[MaterialGroupId] AND g.[CardType] = 1
             WHERE {where}
             ORDER BY p.[Created] DESC;
             """;
@@ -196,9 +201,17 @@ public sealed class SqlQualityRepository : IQualityRepository
 
     public async Task<QualityPlanLookup?> FindPlanForItemAsync(int itemId, byte inspectionType, CancellationToken ct)
     {
+        // 1) Önce item-özel plan — bulunursa grup planını EZER (erken dön).
+        // 2) Yoksa item'ın CardGroup (CardType=1) üyeliklerine tanımlı grup planına düş.
         var sql = $"""
             SELECT TOP 1 [Id],[Name] FROM {_planTable}
             WHERE [IsActive]=1 AND [InspectionType]=@Type AND [ItemId]=@Item ORDER BY [Created] DESC;
+            SELECT TOP 1 [Id],[Name] FROM {_planTable}
+            WHERE [IsActive]=1 AND [InspectionType]=@Type AND [ItemId] IS NULL
+              AND [MaterialGroupId] IN (
+                  SELECT [CardGroupId] FROM {_cardGroupMappingTable}
+                  WHERE [EntityType]=1 AND [EntityId]=@ItemStr)
+            ORDER BY [Created] DESC;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         int planId; string planName;
@@ -207,9 +220,17 @@ public sealed class SqlQualityRepository : IQualityRepository
             cmd.CommandText = sql;
             cmd.Parameters.Add(new SqlParameter("@Type", inspectionType));
             cmd.Parameters.Add(new SqlParameter("@Item", itemId));
+            cmd.Parameters.Add(new SqlParameter("@ItemStr", itemId.ToString()));
             await using var r = await cmd.ExecuteReaderAsync(ct);
-            if (!await r.ReadAsync(ct)) return null;
-            planId = r.GetInt32(0); planName = r.GetString(1);
+            if (await r.ReadAsync(ct))
+            {
+                planId = r.GetInt32(0); planName = r.GetString(1);
+            }
+            else
+            {
+                if (!await r.NextResultAsync(ct) || !await r.ReadAsync(ct)) return null;
+                planId = r.GetInt32(0); planName = r.GetString(1);
+            }
         }
         var lines = new List<QualityInspectionPlanLineDto>();
         await using (var lcmd = conn.CreateCommand())
@@ -467,5 +488,43 @@ public sealed class SqlQualityRepository : IQualityRepository
         while (await r.ReadAsync(ct))
             list.Add(new QualityDefectCodeOption(r.GetInt32(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2)));
         return list;
+    }
+
+    public async Task<IReadOnlyCollection<MaterialGroupLookupItem>> ListMaterialGroupsAsync(CancellationToken ct)
+    {
+        // CardGroup (CardType=1) — düz liste hiyerarşi bilgisiyle (Id, ParentId, Level, Code, Description) çekilir,
+        // "Üst > Alt" yol etiketi C# tarafında ParentId zinciri yürünerek kurulur (recursive CTE'den kaçınmak için;
+        // grup ağacı küçük — tipik onlarca satır).
+        var rows = new List<(int Id, int? ParentId, byte Level, string Code, string? Description)>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [Id],[ParentId],[Level],[Code],[Description]
+            FROM {_cardGroupTable}
+            WHERE [CardType]=1
+            ORDER BY [Level],[Code];
+            """;
+        await using (var r = await cmd.ExecuteReaderAsync(ct))
+        {
+            while (await r.ReadAsync(ct))
+                rows.Add((r.GetInt32(0), r.IsDBNull(1) ? null : r.GetInt32(1), r.GetByte(2), r.GetString(3), r.IsDBNull(4) ? null : r.GetString(4)));
+        }
+        var byId = rows.ToDictionary(x => x.Id, x => x);
+        string Label((int Id, int? ParentId, byte Level, string Code, string? Description) g)
+        {
+            var self = string.IsNullOrWhiteSpace(g.Description) ? g.Code : $"{g.Code} — {g.Description}";
+            var path = new List<string> { self };
+            var parentId = g.ParentId;
+            var guard = 0;
+            while (parentId.HasValue && byId.TryGetValue(parentId.Value, out var parent) && guard++ < 20)
+            {
+                path.Insert(0, string.IsNullOrWhiteSpace(parent.Description) ? parent.Code : $"{parent.Code} — {parent.Description}");
+                parentId = parent.ParentId;
+            }
+            return string.Join(" > ", path);
+        }
+        return rows.OrderBy(g => g.Level).ThenBy(g => g.Code)
+            .Select(g => new MaterialGroupLookupItem(g.Id, Label(g)))
+            .ToList();
     }
 }

@@ -13460,6 +13460,28 @@ END;";
             await cmd3b.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // View 2b2: Tum Aktif Stok Rehberi (tip filtresiz) — STANDART kolonlar (Code/Name).
+        // Cari stok eslestirme (ContactEdit) stok KODU ile ID'ye resolve eder → ValueColumn=Code
+        // gerekir. cbv_Guide_Items (MaterialCode/MaterialName + ValueColumn=Id) bu resolve'a UYMAZ;
+        // cbv_Guide_Items_Finished ise TypeId=1 filtreli (mamul, WorkOrder icin) — tipi bos/mamul
+        // olmayan stoklar gelmez. Bu yuzden ContactEdit'e izole, tip-filtresiz + standart-kolonlu
+        // bu view verilir (2026-07-29 kullanici karari: cari eslestirme TUM aktif stoklari kapsar).
+        // Discovery bunu ITEMS_ALL rehberi olarak otomatik kaydeder (Code/Name → ValueColumn=Code).
+        var v2b2 = $"""
+            CREATE OR ALTER VIEW [{s}].[cbv_Guide_Items_All] AS
+            SELECT
+                [Id]                          AS [Id],
+                CAST([Code] AS NVARCHAR(100)) AS [Code],
+                CAST([Name] AS NVARCHAR(300)) AS [Name]
+            FROM [{s}].[Items]
+            WHERE [IsActive] = 1;
+            """;
+        await using (var cmd3b2 = connection.CreateCommand())
+        {
+            cmd3b2.CommandText = v2b2;
+            await cmd3b2.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         // View 2c: Rota Rehberi (Routing) — 2026-05-20: BOM tanimlama ekrani Rota alani
         // standart rehber pattern'ine baglandi (cbv_Guide_Routing, ValueColumn=Code,
         // DisplayColumn=Name). Code/Name + opsiyonel Description + bagli mamul kodu.

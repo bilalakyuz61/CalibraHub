@@ -69,3 +69,6 @@ public sealed record SetInspectionDispositionRequest(int DocumentId, byte Dispos
 
 /// <summary>Malzeme + tip için tanımlı plan (muayene açılışında satır türetme). Yoksa null.</summary>
 public sealed record QualityPlanLookup(int PlanId, string PlanName, IReadOnlyCollection<QualityInspectionPlanLineDto> Lines);
+
+/// <summary>Malzeme grubu seçici (plan formu) — CardGroup (CardType=1) hiyerarşi etiketi.</summary>
+public sealed record MaterialGroupLookupItem(int Id, string Name);

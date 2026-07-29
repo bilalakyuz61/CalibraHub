@@ -42,7 +42,7 @@
     <section class="ux-edit-content">
       <div class="ux-edit-pane is-active" data-tab="general">
         <h2>Genel Bilgiler</h2>
-        <div class="ux-edit-hint">Bir malzeme için belirli muayene tipinde kontrol edilecek karakteristikleri ve toleransları tanımlar.</div>
+        <div class="ux-edit-hint">Bir malzeme VEYA malzeme grubu için belirli muayene tipinde kontrol edilecek karakteristikleri ve toleransları tanımlar.</div>
 
         <input type="hidden" id="f-id" value="@(Model?.Id ?? 0)" />
 
@@ -62,8 +62,23 @@
             </select>
           </div>
           <div class="ux-field">
+            <label>Plan Hedefi</label>
+            <div class="pl-seg" id="f-scope">
+              <button type="button" class="pl-seg__btn" data-scope="item">Malzeme</button>
+              <button type="button" class="pl-seg__btn" data-scope="group">Malzeme Grubu</button>
+              <button type="button" class="pl-seg__btn" data-scope="none">Genel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field" id="f-item-wrap">
             <label for="f-item">Malzeme</label>
-            <select id="f-item" data-current="@(Model?.ItemId)"><option value="">— Malzeme seçiniz (opsiyonel) —</option></select>
+            <select id="f-item" data-current="@(Model?.ItemId)"><option value="">— Malzeme seçiniz —</option></select>
+          </div>
+          <div class="ux-field" id="f-group-wrap" style="display:none;">
+            <label for="f-group">Malzeme Grubu</label>
+            <select id="f-group" data-current="@(Model?.MaterialGroupId)"><option value="">— Grup seçiniz —</option></select>
           </div>
         </div>
 
@@ -99,6 +114,16 @@
   .plc__rm:hover{background:rgba(239,68,68,.1);}
   .plc--visual .plc__tol{opacity:.4;pointer-events:none;}
   body.app-theme-dark .plc,body.app-theme-dark .plc input,body.app-theme-dark .plc select,body.app-theme-dark .plc__rm{background:var(--app-surface,#1e293b);}
+
+  /* Plan Hedefi segment toggle (Malzeme / Malzeme Grubu / Genel) */
+  .pl-seg{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:var(--app-surface,#fff);border:1px solid var(--app-border,#e2e8f0);height:38px;box-sizing:border-box;}
+  .pl-seg__btn{background:none;border:none;cursor:pointer;padding:6px 12px;font-size:12.5px;font-weight:600;color:var(--app-text-muted,#64748b);border-radius:6px;white-space:nowrap;}
+  .pl-seg__btn:hover{color:var(--app-text,#334155);}
+  .pl-seg__btn.is-active{background:rgba(99,102,241,.16);color:#4338ca;}
+  body.app-theme-dark .pl-seg{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);}
+  body.app-theme-dark .pl-seg__btn{color:#94a3b8;}
+  body.app-theme-dark .pl-seg__btn:hover{color:#e2e8f0;}
+  body.app-theme-dark .pl-seg__btn.is-active{background:rgba(99,102,241,.28);color:#c7d2fe;}
 </style>
 
 @Html.AntiForgeryToken()
@@ -123,6 +148,29 @@
         (list||[]).forEach(function(it){var o=document.createElement('option');o.value=it.id;o.textContent=it.code+' · '+it.name;if(String(it.id)===String(cur))o.selected=true;sel.appendChild(o);});
       }).catch(function(){});
     })();
+
+    // Malzeme grubu dropdown
+    (function(){var sel=document.getElementById('f-group');var cur=sel.getAttribute('data-current')||'';
+      fetch('/Quality/MaterialGroupsLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
+        (list||[]).forEach(function(g){var o=document.createElement('option');o.value=g.id;o.textContent=g.name;if(String(g.id)===String(cur))o.selected=true;sel.appendChild(o);});
+      }).catch(function(){});
+    })();
+
+    // Plan Hedefi: Malzeme | Malzeme Grubu | Genel (XOR — hedef seçimi tek moddur)
+    var scopeEl=document.getElementById('f-scope'),itemWrap=document.getElementById('f-item-wrap'),groupWrap=document.getElementById('f-group-wrap');
+    var itemSel=document.getElementById('f-item'),groupSel=document.getElementById('f-group');
+    var currentScope='item';
+    function setScope(scope){
+      currentScope=scope;
+      scopeEl.querySelectorAll('.pl-seg__btn').forEach(function(b){b.classList.toggle('is-active',b.dataset.scope===scope);});
+      itemWrap.style.display=scope==='item'?'':'none';
+      groupWrap.style.display=scope==='group'?'':'none';
+      if(scope!=='item')itemSel.value='';
+      if(scope!=='group')groupSel.value='';
+    }
+    scopeEl.querySelectorAll('.pl-seg__btn').forEach(function(b){b.addEventListener('click',function(){setScope(b.dataset.scope);});});
+    var initialScope=(itemSel.getAttribute('data-current')||'')!==''?'item':(((groupSel.getAttribute('data-current')||'')!=='')?'group':'none');
+    setScope(initialScope);
 
     // ── Karakteristik satır editörü ──
     var linesEl=document.getElementById('pl-lines'),emptyEl=document.getElementById('pl-lines-empty');
@@ -153,7 +201,12 @@
         lines.push({id:0,characteristicName:cn,nominal:num('.plc-nom'),lowerTol:num('.plc-low'),upperTol:num('.plc-up'),unitId:null,method:row.querySelector('.plc-method').value.trim()||null,gaugeName:null,isNumeric:row.querySelector('.plc-num').checked,orderNo:i+1});
       });
       if(!lines.length){notify('En az bir karakteristik girilmelidir.',false);activateTab('chars');return;}
-      var payload={id:parseInt(document.getElementById('f-id').value,10)||0,itemId:parseInt(document.getElementById('f-item').value,10)||null,materialGroupId:null,inspectionType:parseInt(typeEl.value,10),name:name,isActive:activeEl.checked,lines:lines};
+      var payload={
+        id:parseInt(document.getElementById('f-id').value,10)||0,
+        itemId:currentScope==='item'?(parseInt(itemSel.value,10)||null):null,
+        materialGroupId:currentScope==='group'?(parseInt(groupSel.value,10)||null):null,
+        inspectionType:parseInt(typeEl.value,10),name:name,isActive:activeEl.checked,lines:lines
+      };
       try{var r=await fetch('/Quality/SavePlan',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify(payload)});var d=await r.json();if(!d.ok){notify(d.error||'Kaydedilemedi.',false);return;}location.href='/Quality/InspectionPlans';}catch(e){notify('Hata: '+e.message,false);}
     });
 

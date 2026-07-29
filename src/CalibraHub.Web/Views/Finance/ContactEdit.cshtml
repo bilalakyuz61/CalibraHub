@@ -2590,7 +2590,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
     // (qs/escapeHtml helper'lari adresler bolumunde tanimli — paylasilir.)
     // ══════════════════════════════════════════════════════════════
     var caItemContactId = parseInt(document.getElementById('caId').value || '0', 10) || 0;
-    var CA_ITEM_GUIDE_CODE = 'ITEMS_FINISHED'; // TypeId=1 mamul rehberi (kullanici karari: tip 1 rehber)
+    var CA_ITEM_GUIDE_CODE = 'ITEMS_ALL'; // Tum aktif stok rehberi (2026-07-29 kullanici karari: cari eslestirme tip-filtresiz tum stoklari kapsar; onceki ITEMS_FINISHED sadece TypeId=1 idi + view standart-disi kolonlu)
 
     function caItemEmptyToggle() {
         var rows = qs('caItemRows').children.length;

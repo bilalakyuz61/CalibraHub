@@ -28,4 +28,6 @@ public interface IQualityRepository
 
     // ── Lookup ────────────────────────────────────────────────────
     Task<IReadOnlyCollection<QualityDefectCodeOption>> GetDefectCodeOptionsAsync(CancellationToken ct);
+    /// <summary>Plan formu malzeme grubu seçici — CardGroup (CardType=1), hiyerarşi etiketiyle.</summary>
+    Task<IReadOnlyCollection<MaterialGroupLookupItem>> ListMaterialGroupsAsync(CancellationToken ct);
 }
