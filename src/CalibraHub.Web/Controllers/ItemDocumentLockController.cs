@@ -50,7 +50,10 @@ public sealed class ItemDocumentLockController : Controller
         ViewData["Title"] = "Malzeme Belge Kilitleri";
         ViewData["FormCode"] = FormCodes.ItemDocumentLock;
         var boardConfig = await BuildBoardConfigAsync(null, null, ct);
-        return View(new ItemDocumentLocksViewModel { BoardConfig = boardConfig });
+        // View dosyasi Views/Logistics/ altinda (route Logistics/[action]); controller adi
+        // ItemDocumentLock oldugundan konvansiyonel arama Views/ItemDocumentLock/'a bakar ve
+        // bulamaz → explicit yol ver.
+        return View("~/Views/Logistics/ItemDocumentLocks.cshtml", new ItemDocumentLocksViewModel { BoardConfig = boardConfig });
     }
 
     // GET /Logistics/ItemDocumentLocksBoardConfig?lockedDocType=&search=
