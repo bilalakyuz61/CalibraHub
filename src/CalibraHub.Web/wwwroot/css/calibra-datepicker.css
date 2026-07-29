@@ -24,6 +24,27 @@ body.app-theme-dark {
     --cdp-input-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E");
 }
 
+/* PageComment Seq 52 — "karanlık temada tarih seçici görünmüyor" kök neden:
+   site.css `html { color-scheme: dark light; }` OTOMATİK seçim yapar — iki
+   değer de listelenince tarayıcı OS'ün color-scheme tercihini esas alır,
+   uygulamanın body.app-theme-dark class'ını DEĞİL. OS light iken uygulama
+   dark temadaysa, henüz flatpickr'a çevrilmemiş / React'in yönettiği (bkz.
+   calibra-datepicker.js "kapsam dışı") native <input type="date"> alanları
+   tarayıcının kendi çizdiği takvim ikonunu (::-webkit-calendar-picker-
+   indicator) LIGHT varyantla (koyu ikon) çizer — koyu zeminde kaybolur.
+   Aşağıdaki kural tarih alanlarında color-scheme'i uygulama temasına göre
+   AÇIKÇA sabitler (flatpickr'ın kendi çizdiği SVG ikonu zaten yukarıdaki
+   --cdp-input-icon değişkeniyle tema-duyarlı; bu ek kural native/henüz
+   enhance edilmemiş alanlar için bir güvenlik ağıdır). */
+input.calibra-date-input,
+input[type="date"] {
+    color-scheme: light;
+}
+body.app-theme-dark input.calibra-date-input,
+body.app-theme-dark input[type="date"] {
+    color-scheme: dark;
+}
+
 /* ── 1) Standart tarih inputu (flatpickr altInput) ─────────────────── */
 input.calibra-date-input {
     /* Metin bölgesi serbest yazım (text); ikon bölgesinde JS "pointer"a
