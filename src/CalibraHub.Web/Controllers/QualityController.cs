@@ -39,6 +39,16 @@ public sealed class QualityController : Controller
         return Json(items.Where(i => i.IsActive).Select(i => new { id = i.Id, code = i.Code, name = i.Name }));
     }
 
+    // GET /Quality/MaterialGroupsLookup → plan formu malzeme grubu seçici, CardGroup (CardType=1).
+    // Döner: [{ id, name }] — name hiyerarşi yolu ("Üst > Alt Kod — Açıklama").
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityInspectionPlan)]
+    public async Task<IActionResult> MaterialGroupsLookup(CancellationToken ct)
+    {
+        var groups = await _quality.ListMaterialGroupsAsync(ct);
+        return Json(groups.Select(g => new { id = g.Id, name = g.Name }));
+    }
+
     private int? CurrentUserId()
         => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
