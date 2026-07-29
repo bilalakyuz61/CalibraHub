@@ -699,6 +699,7 @@
     .fc3-res { display:none; padding:6px 10px; border-radius:6px; font-size:.78rem; font-weight:600; }
     .fc3-res--ok  { background:rgba(16,185,129,.12); border:1px solid rgba(16,185,129,.3); color:#6ee7b7; }
     .fc3-res--err { background:rgba(239,68,68,.1);   border:1px solid rgba(239,68,68,.3);  color:#fca5a5; }
+    .fc3-res--warn { background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.32); color:#fbbf24; }
 
     /* Belge linkleri */
     .fc3-doc-links { padding:9px 12px; display:flex; flex-direction:column; gap:5px; }
@@ -884,6 +885,9 @@
     }
     body.app-theme-light .fc3-res--err {
         background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.35); color:#b91c1c;
+    }
+    body.app-theme-light .fc3-res--warn {
+        background:rgba(245,158,11,0.1); border-color:rgba(245,158,11,0.35); color:#92400e;
     }
 
     body.app-theme-light .fc3-doc-lbl { color:#475569; }
@@ -1252,13 +1256,17 @@
                deposu eşleşmeyen kalem reddi) AYNEN çalışır. Depo seçilirse TÜM seçili kalemler o
                depodan karşılanır ve eşleşme reddi bu çağrı için uygulanmaz — kaldırılan "Ambar
                Çıkış Fişi" aksiyonunun serbest depo seçimi yeteneğinin birebir karşılığı. Yalnız
-               'fulfill' aksiyonu açıkken görünür (bkz. fc3RenderModal). *@
+               'fulfill' aksiyonu açıkken görünür (bkz. fc3RenderModal).
+               PageComment Seq 48 (2026-07-29): depo seçilince "Durum" kolonu YALNIZ o depodaki
+               bakiyeyi baz alarak uyarır — yetersizse UYAR ama İZİN VER (kısmi karşılama serbest,
+               submit/buton hiçbir zaman bloklanmaz, bkz. fc3UpdateLocOverrideWarnings). *@
             <div class="fc3-pr-doctype-row" id="fc3ModalLocOverrideRow" style="display:none;">
                 <span class="fc3-pr-doctype-lbl">Kaynak Depo (opsiyonel)</span>
-                <select id="fc3ModalLocOverride" class="fc3-ts" style="max-width:220px;">
+                <select id="fc3ModalLocOverride" class="fc3-ts" style="max-width:220px;" onchange="fc3ModalLocOverrideChange(this)">
                     <option value="">— Otomatik (parametre) —</option>
                 </select>
             </div>
+            <div id="fc3ModalLocOverrideWarn" class="fc3-res fc3-res--warn" style="margin-bottom:9px;"></div>
 
             @* Depodan Karşıla — "Stokları Kümüle Et" (PageComment Seq 39, 2026-07-25): karşı fişte
                aynı malzeme/kaynak depo/kombinasyon/birime sahip kalemlerin tek satırda toplanıp
@@ -3056,6 +3064,8 @@
             locOvrSel.innerHTML = '<option value="">— Otomatik (parametre) —</option>' + ovrOpts;
             locOvrSel.value = '';
         }
+        var locOvrWarn = document.getElementById('fc3ModalLocOverrideWarn');
+        if (locOvrWarn) { locOvrWarn.style.display = 'none'; locOvrWarn.textContent = ''; }
 
         // "Stokları Kümüle Et" switch satırı (yalnız 'fulfill') — her açılışta varsayılan
         // _modalCumulateDefault'a (STOCK_DOC_CONSOLIDATE parametresi, fc3OpenModal'da önceden
@@ -3140,6 +3150,81 @@
         }).join('');
     }
 
+    // ── Kaynak Depo override — depo-bazlı stok uyarısı (PageComment Seq 48, 2026-07-29) ─────────
+    // Depo seçilince "sadece o depoyu baz al": her satırın Durum kolonu SEÇİLİ depodaki bakiyeye
+    // göre boyanır (yeterli/kısmi/yok). Bu SADECE görsel bir uyarıdır — submit/OK butonu HİÇBİR
+    // zaman kilitlenmez, kullanıcı yetersiz depoyla da kısmi karşılayabilir (kullanıcı kararı: UYAR
+    // ama İZİN VER, BLOKLAMA). _globalStockMap zaten sayfa yüklenirken tek sefer çekilmiştir — yeni
+    // fetch YOK, yalnız locationId'ye göre filtrelenir.
+    // Dönüş: null = bilinmiyor (map hiç yüklenmemiş VEYA bu item map'te hiç yok) — bu durumda
+    // "0 stok" varsayıp kırmızı basmayız, nötr geçeriz.
+    function fc3LocOverrideBalance(itemId, locId) {
+        var arr = _globalStockMap[itemId];
+        if (!arr) return null;
+        var sum = 0;
+        arr.forEach(function(s) { if (s.locationId === locId) sum += (s.balance || 0); });
+        return sum;
+    }
+    function fc3UpdateLocOverrideWarnings() {
+        var cfg = _modalAction;
+        var sel = document.getElementById('fc3ModalLocOverride');
+        var banner = document.getElementById('fc3ModalLocOverrideWarn');
+        if (!cfg || !cfg.hasLocOverride || !sel) return;
+        var locId = sel.value ? parseInt(sel.value, 10) : null;
+        var mapLoaded = Object.keys(_globalStockMap).length > 0;
+        var shortCount = 0;
+        _modalLines.forEach(function(l) {
+            var cell = document.getElementById('fc3ModalMatch_' + l.lineId);
+            if (!cell) return;
+            if (!locId || !mapLoaded) {
+                // Otomatik (parametre) seçili veya harita henüz yok → nötr varsayılana dön.
+                cell.className = 'fc3-sk fc3-sk--zero';
+                cell.textContent = 'bekliyor';
+                cell.title = '';
+                return;
+            }
+            var bal = fc3LocOverrideBalance(l.itemId, locId);
+            if (bal === null) {
+                // Bu item için hiç stok kaydı yok (bilinmiyor) — yanlış uyarmamak için nötr geç.
+                cell.className = 'fc3-sk fc3-sk--zero';
+                cell.textContent = 'bekliyor';
+                cell.title = 'Seçili depoda stok bilgisi yok';
+                return;
+            }
+            var inp = document.querySelector('.fc3-mod-qty[data-line-id="' + l.lineId + '"]');
+            var needed = inp ? parseFloat((inp.value || '0').replace(',', '.')) : NaN;
+            if (!(needed > 0)) needed = cfg.defaultQty(l);
+            if (bal >= needed && needed > 0) {
+                cell.className = 'fc3-sk fc3-sk--ok';
+                cell.textContent = '✓ Depoda ' + fmtN(bal);
+                cell.title = 'Seçili depoda yeterli stok var';
+            } else if (bal > 0) {
+                cell.className = 'fc3-sk fc3-sk--warn';
+                cell.textContent = 'Depoda ' + fmtN(bal) + ' / ' + fmtN(needed) + ' — kısmi';
+                cell.title = 'Seçili depoda ihtiyacı tam karşılamıyor; kısmi karşılanacak';
+                shortCount++;
+            } else {
+                cell.className = 'fc3-sk fc3-sk--none';
+                cell.textContent = '✕ Depoda stok yok (0 / ' + fmtN(needed) + ')';
+                cell.title = 'Seçili depoda bu malzemeden stok yok; kısmi/hiç karşılanamayabilir';
+                shortCount++;
+            }
+        });
+        if (!banner) return;
+        if (locId && mapLoaded && shortCount > 0) {
+            banner.textContent = '⚠ Seçili depoda ' + shortCount + ' kalem için stok yetersiz — kısmi karşılanacak, yine de devam edebilirsiniz.';
+            banner.style.display = 'block';
+        } else {
+            banner.textContent = '';
+            banner.style.display = 'none';
+        }
+    }
+    // Select'in onchange'i — "— Otomatik (parametre) —" seçilince uyarılar temizlenir, mevcut
+    // (parametre bazlı, depo-agnostik) davranışa geri döner.
+    window.fc3ModalLocOverrideChange = function(sel) {
+        fc3UpdateLocOverrideWarnings();
+    };
+
     function fc3RenderModalSimple() {
         var wrap = document.getElementById('fc3ModalSimpleText');
         if (!wrap) return;
@@ -3164,7 +3249,7 @@
         var subEl = document.getElementById('fc3ModalSub');
         if (subEl) subEl.textContent = _modalLines.length + ' kalem seçili';
         if (_modalAction && _modalAction.mode === 'simple') fc3RenderModalSimple();
-        else fc3RenderModalTable();
+        else { fc3RenderModalTable(); fc3UpdateLocOverrideWarnings(); }
     };
 
     // ── Belge Tipi (Talep/Sipariş) toggle — yalnız etiketleri günceller, tabloyu YENİDEN ÇİZMEZ
