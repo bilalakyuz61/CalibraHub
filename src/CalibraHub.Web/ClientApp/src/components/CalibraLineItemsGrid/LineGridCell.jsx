@@ -887,6 +887,7 @@ function GuideLookupCell(props) {
           satirin canli verisi ile replace edildi (resolvedConstraint). */}
       <GuideLookupModal
         guideCode={column.guideCode}
+        guideLabel={column.label}
         columnsAdapter={columnsAdapter}
         open={modalOpen}
         onClose={closeModal}

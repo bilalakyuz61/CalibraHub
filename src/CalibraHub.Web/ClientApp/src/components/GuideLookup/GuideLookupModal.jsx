@@ -286,9 +286,12 @@ export default function GuideLookupModal(props) {
   if (!open) return null
 
   var visibleColCount = Math.max(visibleColumns.length, 1)
-  var headerPlaceholder = guideLabel
-    ? ('Ara: ' + guideLabel)
-    : (schema ? ('Ara: ' + (schema.guideLabel || schema.guideCode)) : 'Ara...')
+  // NOT: schema.guideLabel/schema.guideCode buraya ASLA fallback edilmez — GuideMas
+  // kaldirildiktan sonra (PR 4) backend bu alanlari dogrudan teknik view adiyla
+  // dolduruyor (orn. 'cbv_Guide_Contacts'), kullaniciya SQL view ismi sizardi.
+  // guideLabel yalnizca caller'in acikca gecirdigi insancil etiketle kullanilir;
+  // yoksa jenerik placeholder gosterilir.
+  var headerPlaceholder = guideLabel ? ('Ara: ' + guideLabel) : 'Ara…'
 
   return createPortal(
     <div
