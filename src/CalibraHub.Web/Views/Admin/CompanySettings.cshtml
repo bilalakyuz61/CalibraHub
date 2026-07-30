@@ -423,7 +423,7 @@
         <button type="button" class="btn btn-primary integrator-btn-primary" onclick="csSave()">Kaydet</button>
     </div>
 
-    <form id="company-form" method="post" asp-action="CompanySettings" autocomplete="off" novalidate style="display:contents;">
+    <form id="company-form" method="post" asp-action="CompanySettings" autocomplete="off" novalidate style="display:contents;" class="cb-form-underline">
         @Html.AntiForgeryToken()
         <input asp-for="Input.Id" type="hidden" />
 

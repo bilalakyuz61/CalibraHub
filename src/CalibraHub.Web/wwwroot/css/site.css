@@ -10613,6 +10613,67 @@ body.app-theme-dark .ux-edit-pane .ux-dyn-empty {
   border-color: rgba(255,255,255,0.1);
 }
 
+/* Alt-cizili (underline) gorunum — Bootstrap .form-control/.form-select opt-in
+   sarmalayici (2026-07-31). .ux-edit-pane pattern'inin aynisi ama Bootstrap
+   sinifina hedeflenir; global degil, yalniz `cb-form-underline` sinifi verilen
+   konteyner icindeki form-control/form-select bundan etkilenir (arama/filtre/grid
+   kutulari bu sinifi almadigi icin kutu kalir). Bootstrap'in kendi border/box-shadow'unu
+   ezmek icin sadece o iki ozellikte !important kullanilir. */
+.cb-form-underline .form-control,
+.cb-form-underline .form-select,
+.cb-form-underline textarea.form-control {
+  padding: 9px 12px; border-radius: 0 !important;
+  border: none !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: transparent; color: #0f172a;
+  font-size: 13.5px; font-family: inherit;
+  box-shadow: none !important;
+  transition: border-color .15s, box-shadow .15s;
+}
+.cb-form-underline textarea.form-control { min-height: 72px; resize: vertical; }
+.cb-form-underline .form-control-sm,
+.cb-form-underline .form-select-sm {
+  padding: 6px 10px;
+}
+/* Native select chrome kaldir, .ux-edit-pane select ile ayni sebep (2026-07-29 dersi) */
+.cb-form-underline .form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 28px;
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.cb-form-underline .form-control:focus,
+.cb-form-underline .form-select:focus,
+.cb-form-underline textarea.form-control:focus {
+  border-bottom-color: #6366f1 !important;
+  box-shadow: 0 1px 0 0 #6366f1 !important;
+}
+.cb-form-underline .is-invalid {
+  border-bottom-color: #ef4444 !important;
+  box-shadow: 0 1px 0 0 #ef4444 !important;
+}
+body.app-theme-dark .cb-form-underline .form-control,
+body.app-theme-dark .cb-form-underline .form-select,
+body.app-theme-dark .cb-form-underline textarea.form-control {
+  background: transparent; color: #e2e8f0;
+  border-bottom-color: rgba(255,255,255,0.12) !important;
+}
+body.app-theme-dark .cb-form-underline .form-select { color-scheme: dark; }
+body.app-theme-dark .cb-form-underline .form-select > * { background: #0d1323; color: #e2e8f0; }
+body.app-theme-dark .cb-form-underline .form-select {
+  /* Ust satirdaki `background: transparent` shorthand'i repeat/position/size'i
+     sifirliyor — dark chevron'la birlikte bu uc ozelligi de tekrar bildirmek sart
+     (ayni bug .ux-edit-pane select'te 2026-07-30'da fix'lendi). */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+}
+
 /* Iframe (panel) modunda partial tab bar gizli, ux-edit-shell zaten full kaplar */
 .workspace-frame-body .ux-edit-shell { height: 100dvh; }
 

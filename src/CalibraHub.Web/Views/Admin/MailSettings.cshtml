@@ -52,7 +52,7 @@
                 }
             </div>
 
-            <form id="smtp-form" method="post" asp-action="SaveSmtpProfile" autocomplete="off">
+            <form id="smtp-form" method="post" asp-action="SaveSmtpProfile" autocomplete="off" class="cb-form-underline">
                 @Html.AntiForgeryToken()
                 <input asp-for="SmtpInput.Id" type="hidden" />
                 <input type="hidden" name="page" value="@listState.Page" />

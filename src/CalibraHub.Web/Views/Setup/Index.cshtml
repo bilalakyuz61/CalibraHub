@@ -24,7 +24,7 @@
             <h1>CalibraHub</h1>
             <p class="text-muted mb-4">Ilk kurulum — sirket ve yonetici bilgilerini girin.</p>
 
-            <form asp-action="Initialize" method="post" autocomplete="off">
+            <form asp-action="Initialize" method="post" autocomplete="off" class="cb-form-underline">
                 @Html.AntiForgeryToken()
 
                 <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"
