@@ -179,7 +179,7 @@ body.app-theme-light .ca-input,  body.app-theme-light .ca-select,  body.app-them
 .ca-input:focus,  .ca-select:focus,  .ca-textarea:focus {
   outline: none;
   border-bottom-color: var(--wf-border-focus);
-  background: transparent;
+  background-color: transparent; /* shorthand DEGIL — select chevron background-image'ini korur */
   box-shadow: 0 1px 0 0 var(--wf-border-focus); /* ikinci 1px cizgi — layout-shift yok */
 }
 
@@ -198,7 +198,7 @@ body.app-theme-light .ca-input,  body.app-theme-light .ca-select,  body.app-them
 .ca-input.is-invalid,  .ca-select.is-invalid,  .ca-textarea.is-invalid {
   border-bottom-color: var(--wf-error-color) !important;
   box-shadow: 0 1px 0 0 var(--wf-error-color) !important;
-  background: transparent !important;
+  background-color: transparent !important; /* shorthand DEGIL — chevron korunur */
   animation: wf-shake 0.42s cubic-bezier(.36,.07,.19,.97);
 }
 
