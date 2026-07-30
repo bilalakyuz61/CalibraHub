@@ -289,11 +289,190 @@ public sealed class QualityController : Controller
         };
     }
 
+    // sourceKind/sourceId/itemId/quantity: Karşılama Merkezi / İş Emri gibi ekranlardan
+    // "Muayene Aç" linkiyle yeni kayıt açılırken ön-doldurma. Var olan kayıt (id dolu) bu
+    // parametirleri YOK SAYAR — kayıtlı SourceKind/SourceId zaten QualityInspectionDetail'de gelir.
     [HttpGet]
-    public async Task<IActionResult> InspectionEdit(int? id, CancellationToken ct)
+    public async Task<IActionResult> InspectionEdit(int? id, string? sourceKind, int? sourceId, int? itemId, decimal? quantity, CancellationToken ct)
     {
         QualityInspectionDetail? model = id is > 0 ? await _quality.GetInspectionAsync(id.Value, ct) : null;
+        if (model is null)
+        {
+            // Yeni kayıt — view bu ViewData anahtarlarını okuyup hidden input + preselect için kullanır.
+            ViewData["PrefillSourceKind"] = sourceKind;
+            ViewData["PrefillSourceId"] = sourceId;
+            ViewData["PrefillItemId"] = itemId;
+            ViewData["PrefillQuantity"] = quantity;
+        }
         return View(model);
+    }
+
+    // GET /Quality/SourceDocumentsLookup?kind=alis_irsaliyesi|depo_giris|is_emri&search=
+    // → [{ sourceKind, sourceId, label, date }] — muayene formunda kaynak belge arama/seçici.
+    [HttpGet]
+    public async Task<IActionResult> SourceDocumentsLookup(string? kind, string? search, CancellationToken ct)
+    {
+        try
+        {
+            switch (kind)
+            {
+                case "alis_irsaliyesi":
+                {
+                    var docs = await _documents.GetByTypeAsync("alis_irsaliyesi", search, null, ct);
+                    return Json(docs.Select(d => new
+                    {
+                        sourceKind = "alis_irsaliyesi",
+                        sourceId = d.Id,
+                        label = d.DocumentNumber,
+                        date = (DateTime?)d.DocumentDate,
+                    }));
+                }
+                case "depo_giris":
+                {
+                    var docs = await _stockDocs.GetByTypeAsync("depo_giris", ct);
+                    var filtered = string.IsNullOrWhiteSpace(search)
+                        ? docs
+                        : docs.Where(d => d.DocNo.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+                    return Json(filtered.Select(d => new
+                    {
+                        sourceKind = "depo_giris",
+                        sourceId = d.Id,
+                        label = d.DocNo,
+                        date = (DateTime?)d.DocDate,
+                    }));
+                }
+                case "is_emri":
+                {
+                    var orders = await _workOrders.ListAsync(null, ct);
+                    var filtered = string.IsNullOrWhiteSpace(search)
+                        ? orders
+                        : orders.Where(w => w.OrderNumber.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+                    return Json(filtered.Select(w => new
+                    {
+                        sourceKind = "is_emri",
+                        sourceId = w.Id, // WorkOrder.Id (PK) — Document.Id DEĞİL.
+                        label = w.OrderNumber,
+                        date = (DateTime?)w.OrderDate,
+                    }));
+                }
+                default:
+                    return Json(Array.Empty<object>());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Kaynak belge arama hatası (kind={Kind}, search={Search})", kind, search);
+            return Json(Array.Empty<object>());
+        }
+    }
+
+    // GET /Quality/SourceDocumentLinesLookup?sourceKind=&sourceId=
+    // → [{ itemId, itemName, quantity, unitId, unitCode }] — seçilen kaynak belgenin kalemleri.
+    [HttpGet]
+    public async Task<IActionResult> SourceDocumentLinesLookup(string? sourceKind, int? sourceId, CancellationToken ct)
+    {
+        if (sourceId is not > 0) return Json(Array.Empty<object>());
+        try
+        {
+            switch (sourceKind)
+            {
+                case "alis_irsaliyesi":
+                {
+                    var lines = await _documents.GetLinesAsync(sourceId.Value, ct);
+                    return Json(lines.Where(l => l.ItemId > 0).Select(l => new
+                    {
+                        itemId = l.ItemId,
+                        itemName = l.MaterialName,
+                        quantity = l.Quantity,
+                        unitId = l.UnitId,
+                        unitCode = l.UnitCode,
+                    }));
+                }
+                case "depo_giris":
+                {
+                    var lines = await _stockDocs.GetLinesAsync(sourceId.Value, ct);
+                    return Json(lines.Where(l => l.ItemId > 0).Select(l => new
+                    {
+                        itemId = l.ItemId,
+                        itemName = l.MaterialName,
+                        quantity = l.Qty,
+                        unitId = l.UnitId,
+                        unitCode = l.UnitCode,
+                    }));
+                }
+                case "is_emri":
+                {
+                    var wo = await _workOrders.GetAsync(sourceId.Value, ct);
+                    if (wo is null || wo.ItemId <= 0) return Json(Array.Empty<object>());
+                    return Json(new[]
+                    {
+                        new
+                        {
+                            itemId = wo.ItemId,
+                            itemName = wo.ItemName,
+                            quantity = wo.PlannedQuantity,
+                            unitId = wo.UnitId,
+                            unitCode = wo.UnitCode,
+                        },
+                    });
+                }
+                default:
+                    return Json(Array.Empty<object>());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Kaynak belge kalemleri arama hatası (sourceKind={Kind}, sourceId={Id})", sourceKind, sourceId);
+            return Json(Array.Empty<object>());
+        }
+    }
+
+    // GET /Quality/SourceDocumentLabelLookup?sourceKind=&sourceId=
+    // → { label, url } — var olan muayenede kaynak belgeyi salt-okunur göstermek (numara + link).
+    [HttpGet]
+    public async Task<IActionResult> SourceDocumentLabelLookup(string? sourceKind, int? sourceId, CancellationToken ct)
+    {
+        if (sourceId is not > 0) return Json(new { label = (string?)null, url = (string?)null });
+        try
+        {
+            switch (sourceKind)
+            {
+                case "alis_irsaliyesi":
+                {
+                    var doc = await _documents.GetByIdAsync(sourceId.Value, ct);
+                    return Json(new
+                    {
+                        label = doc?.DocumentNumber,
+                        url = doc is null ? null : $"/Sales/DocumentEdit?id={sourceId.Value}",
+                    });
+                }
+                case "depo_giris":
+                {
+                    var doc = await _stockDocs.GetByIdAsync(sourceId.Value, ct);
+                    return Json(new
+                    {
+                        label = doc?.DocNo,
+                        url = doc is null ? null : $"/Warehouse/StockEntryEdit?id={sourceId.Value}",
+                    });
+                }
+                case "is_emri":
+                {
+                    var wo = await _workOrders.GetAsync(sourceId.Value, ct);
+                    return Json(new
+                    {
+                        label = wo?.OrderNumber,
+                        url = wo is null ? null : $"/Production/WorkOrderEdit?id={sourceId.Value}",
+                    });
+                }
+                default:
+                    return Json(new { label = (string?)null, url = (string?)null });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Kaynak belge etiket arama hatası (sourceKind={Kind}, sourceId={Id})", sourceKind, sourceId);
+            return Json(new { label = (string?)null, url = (string?)null });
+        }
     }
 
     [HttpPost]

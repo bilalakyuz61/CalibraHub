@@ -9,6 +9,9 @@
     // Satın alma zinciri dönüşüm kaynakları: talep→teklif, teklif→sipariş.
     var isPurchaseDemand = string.Equals(Model.DocumentTypeCode, "satin_alma_talebi", StringComparison.OrdinalIgnoreCase);
     var isPurchaseQuote  = string.Equals(Model.DocumentTypeCode, "alis_teklifi", StringComparison.OrdinalIgnoreCase);
+    // Kalite modülü "Muayene Oluştur" butonu — yalnız Alış İrsaliyesi tipinde (paylaşımlı
+    // ekran; diğer 4 belge tipinde bu buton görünmemeli).
+    var isPurchaseDelivery = string.Equals(Model.DocumentTypeCode, "alis_irsaliyesi", StringComparison.OrdinalIgnoreCase);
     // Cari Kod rehberi: purchase belgelerinde Tedarikci, sales/talep'te musteri.
     var customerGuideCode = isPurchase ? "SUPPLIERS" : "CUSTOMERS";
     // 2026-05-23: Satis tarafinda "Teklif/Siparis" labellari kullaniliyordu; satin alma
@@ -2233,6 +2236,20 @@
                     if (typeof CalibraAlert !== 'undefined') CalibraAlert.error('Dönüştürme hatası: ' + e);
                     if (btn) btn.disabled = false;
                 });
+            }
+            </script>
+        }
+        @if (isPurchaseDelivery && Model.DocumentId.HasValue)
+        {
+            <button type="button" class="pte-btn pte-btn--secondary pte-btn--icon" id="sqBtnInspect" data-collaboration-allow onclick="sqCreateInspection()" title="Bu belgeden muayene kaydı oluşturur" aria-label="Muayene Oluştur">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>
+                <span class="pte-btn__label">Muayene Oluştur</span>
+            </button>
+            <script>
+            function sqCreateInspection() {
+                var sid = @(Model.DocumentId ?? 0);
+                if (!sid) return;
+                window.location.href = '/Quality/InspectionEdit?sourceKind=alis_irsaliyesi&sourceId=' + sid;
             }
             </script>
         }

@@ -791,6 +791,10 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                  - Kapat / İptal: nadir kullanım — gerekirse ayrı bir "Yönetim" menüsünden açılır
                Revize: hâlâ yöneticilik aksiyonu olarak kalir. *@
             <button class="woe-btn woe-btn--warn" id="btn-revise" @(canRevise ? "" : "disabled")>Revize</button>
+            @* Kalite modülüne yönlendirme — yalnız kayıtlı iş emrinde görünür (id yoksa
+               muayene kaydı hangi kaynağa bağlanacağını bilemez). Kalem seçimi/ön-doldurma
+               Muayene ekranının işi; burada yalnız yönlendirme yapılır. *@
+            <button class="woe-btn" id="btn-inspect" type="button" title="Bu iş emrinden muayene kaydı oluşturur">Muayene Oluştur</button>
         }
         <span class="spacer"></span>
         <h1>@(isNew ? "Yeni İş Emri" : Model!.OrderNumber)@(Model is { RevisionNo: > 0 } ? $" • Rev {Model.RevisionNo}" : "")</h1>
@@ -1396,6 +1400,8 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
 (function () {
     const isNew = @(isNew ? "true" : "false");
     const id = @(Model?.Id ?? 0);
+    const woItemId = @(Model?.ItemId ?? 0);
+    const woPlannedQty = @Html.Raw((Model?.PlannedQuantity ?? 0m).ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     function token() {
         const el = document.querySelector('input[name="__RequestVerificationToken"]');

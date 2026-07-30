@@ -11,6 +11,20 @@
     string TypeLabel(InspectionType t) { var m = typeof(InspectionType).GetMember(t.ToString()).FirstOrDefault(); return m?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? t.ToString(); }
     var linesJson = System.Text.Json.JsonSerializer.Serialize(Model?.Lines ?? new List<CalibraHub.Application.Contracts.QualityInspectionLineDto>(),
         new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+
+    // Kaynak Belge ön-doldurma — Karşılama Merkezi / İş Emri gibi ekranlardan "Muayene Aç" linkiyle
+    // gelen query paramları. Yalnız yeni kayıtta kullanılır (var olan kayıtta Model.SourceKind/SourceId geçerli).
+    var qSourceKind = Context.Request.Query["sourceKind"].ToString();
+    var qSourceId = Context.Request.Query["sourceId"].ToString();
+    var qItemId = Context.Request.Query["itemId"].ToString();
+    var qQuantity = Context.Request.Query["quantity"].ToString();
+    var queryPrefillJson = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        sourceKind = string.IsNullOrWhiteSpace(qSourceKind) ? null : qSourceKind,
+        sourceId = string.IsNullOrWhiteSpace(qSourceId) ? null : qSourceId,
+        itemId = string.IsNullOrWhiteSpace(qItemId) ? null : qItemId,
+        quantity = string.IsNullOrWhiteSpace(qQuantity) ? null : qQuantity,
+    });
 }
 
 <div class="ux-edit-shell">
@@ -66,6 +80,37 @@
             <label for="f-item">Malzeme</label>
             <select id="f-item" data-current="@(Model?.ItemId)"><option value="">— Malzeme seçiniz —</option></select>
           </div>
+        </div>
+
+        <input type="hidden" id="f-source-kind-current" value="@(Model?.SourceKind ?? "")" />
+        <input type="hidden" id="f-source-id-current" value="@(Model?.SourceId?.ToString() ?? "")" />
+
+        <div class="ux-field ux-field--wide" id="in-source-new" style="@(isNew ? "" : "display:none;")">
+          <div style="font-size:12px;font-weight:600;color:var(--app-text-muted,#64748b);margin-bottom:6px;">Kaynak Belge <span style="font-weight:400;">(opsiyonel)</span></div>
+          <div class="ux-row2">
+            <div class="ux-field">
+              <label for="f-source-kind">Tür</label>
+              <select id="f-source-kind">
+                <option value="">— Yok —</option>
+                <option value="alis_irsaliyesi">Alış İrsaliyesi</option>
+                <option value="depo_giris">Depo Giriş Fişi</option>
+                <option value="is_emri">İş Emri</option>
+              </select>
+            </div>
+            <div class="ux-field">
+              <label for="f-source-doc">Belge</label>
+              <select id="f-source-doc" disabled><option value="">— Önce tür seçiniz —</option></select>
+            </div>
+          </div>
+          <div class="ux-field" id="in-source-line-wrap" style="display:none;margin-top:8px;">
+            <label for="f-source-line">Kalem</label>
+            <select id="f-source-line"></select>
+          </div>
+        </div>
+
+        <div class="ux-field ux-field--wide" id="in-source-existing" style="display:none;">
+          <label>Kaynak Belge</label>
+          <div class="ux-edit-hint" id="in-source-existing-text" style="margin:0;">—</div>
         </div>
 
         <div class="ux-row2">
@@ -174,6 +219,10 @@
     var VERDICT_MODEL = @(Model?.Verdict?.ToString() ?? "null");
     var DISP_MODEL = @(Model?.Disposition?.ToString() ?? "null");
     var DEFECT_OPTIONS = [];
+    var IS_NEW = @(isNew ? "true" : "false");
+    var QUERY_PREFILL = @Html.Raw(queryPrefillJson);
+    var SOURCE_KIND_CUR = document.getElementById('f-source-kind-current').value || null;
+    var SOURCE_ID_CUR = document.getElementById('f-source-id-current').value || null;
 
     function token(){return document.querySelector('input[name="__RequestVerificationToken"]')?.value||'';}
     function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -186,11 +235,116 @@
 
     var typeEl=document.getElementById('f-type'); if(typeEl.getAttribute('data-current'))typeEl.value=typeEl.getAttribute('data-current');
 
+    var ITEMS_LOADED=false, PENDING_ITEM_ID=null;
+    function trySetItem(id){
+      if(id===null||id===undefined||id==='')return;
+      var sel=document.getElementById('f-item');
+      var opt=sel.querySelector('option[value="'+id+'"]');
+      if(opt){sel.value=String(id);} else if(!ITEMS_LOADED){PENDING_ITEM_ID=id;}
+    }
     (function(){var sel=document.getElementById('f-item');var cur=sel.getAttribute('data-current')||'';
       fetch('/Quality/ItemsLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
         (list||[]).forEach(function(it){var o=document.createElement('option');o.value=it.id;o.textContent=it.code+' · '+it.name;if(String(it.id)===String(cur))o.selected=true;sel.appendChild(o);});
-      }).catch(function(){});
+        ITEMS_LOADED=true;
+        if(PENDING_ITEM_ID){trySetItem(PENDING_ITEM_ID);PENDING_ITEM_ID=null;}
+      }).catch(function(){ITEMS_LOADED=true;});
     })();
+
+    // ── Kaynak Belge (Alış İrsaliyesi / Depo Giriş Fişi / İş Emri) ──
+    var srcKindEl=document.getElementById('f-source-kind');
+    var srcDocEl=document.getElementById('f-source-doc');
+    var srcLineWrap=document.getElementById('in-source-line-wrap');
+    var srcLineEl=document.getElementById('f-source-line');
+    var srcNewBlock=document.getElementById('in-source-new');
+    var srcExistingBlock=document.getElementById('in-source-existing');
+    var srcExistingText=document.getElementById('in-source-existing-text');
+
+    function loadSourceDocs(kind,selectId){
+      if(!srcDocEl)return Promise.resolve();
+      if(!kind){srcDocEl.innerHTML='<option value="">— Önce tür seçiniz —</option>';srcDocEl.disabled=true;return Promise.resolve();}
+      srcDocEl.innerHTML='<option value="">Yükleniyor…</option>';srcDocEl.disabled=true;
+      return fetch('/Quality/SourceDocumentsLookup?kind='+encodeURIComponent(kind),{credentials:'same-origin'})
+        .then(function(r){return r.ok?r.json():[];})
+        .then(function(list){
+          srcDocEl.innerHTML='<option value="">— Belge seçiniz —</option>';
+          (list||[]).forEach(function(d){
+            var o=document.createElement('option');o.value=d.sourceId;
+            var dt=d.date?(' · '+String(d.date).substring(0,10)):'';
+            o.textContent=d.label+dt;
+            if(selectId&&String(d.sourceId)===String(selectId))o.selected=true;
+            srcDocEl.appendChild(o);
+          });
+          srcDocEl.disabled=false;
+        }).catch(function(){srcDocEl.innerHTML='<option value="">— Belge listesi alınamadı —</option>';});
+    }
+
+    function applySourceLine(ln){
+      if(!ln)return;
+      if(ln.itemId!=null)trySetItem(ln.itemId);
+      if(ln.quantity!=null)document.getElementById('f-qty').value=ln.quantity;
+    }
+
+    function loadSourceLines(kind,sourceId,presetItemId){
+      if(!srcLineWrap)return Promise.resolve();
+      srcLineWrap.style.display='none';srcLineEl.innerHTML='';
+      if(!kind||!sourceId)return Promise.resolve();
+      return fetch('/Quality/SourceDocumentLinesLookup?sourceKind='+encodeURIComponent(kind)+'&sourceId='+encodeURIComponent(sourceId),{credentials:'same-origin'})
+        .then(function(r){return r.ok?r.json():[];})
+        .then(function(lines){
+          lines=lines||[];
+          if(lines.length===1){applySourceLine(lines[0]);}
+          else if(lines.length>1){
+            srcLineWrap.style.display='';
+            srcLineEl.innerHTML='<option value="">— Kalem seçiniz —</option>';
+            lines.forEach(function(ln,i){
+              var o=document.createElement('option');o.value=String(i);
+              o.textContent=ln.itemName+' — '+ln.quantity+(ln.unitCode?(' '+ln.unitCode):'');
+              srcLineEl.appendChild(o);
+            });
+            srcLineEl.onchange=function(){var idx=parseInt(srcLineEl.value,10);if(!isNaN(idx)&&lines[idx])applySourceLine(lines[idx]);};
+            var presetIdx=presetItemId?lines.findIndex(function(ln){return String(ln.itemId)===String(presetItemId);}):-1;
+            if(presetIdx>=0){srcLineEl.value=String(presetIdx);applySourceLine(lines[presetIdx]);}
+          }
+        }).catch(function(){});
+    }
+
+    if(srcKindEl)srcKindEl.addEventListener('change',function(){loadSourceDocs(srcKindEl.value,null);if(srcLineWrap){srcLineWrap.style.display='none';srcLineEl.innerHTML='';}});
+    if(srcDocEl)srcDocEl.addEventListener('change',function(){loadSourceLines(srcKindEl.value,srcDocEl.value||null,null);});
+
+    function showExistingSource(kind,id){
+      if(!srcExistingBlock)return;
+      if(!kind||!id){srcNewBlock.style.display='none';srcExistingBlock.style.display='none';return;}
+      srcNewBlock.style.display='none';srcExistingBlock.style.display='';
+      srcExistingText.textContent='Yükleniyor…';
+      fetch('/Quality/SourceDocumentLabelLookup?sourceKind='+encodeURIComponent(kind)+'&sourceId='+encodeURIComponent(id),{credentials:'same-origin'})
+        .then(function(r){return r.ok?r.json():null;})
+        .then(function(d){
+          if(!d||!d.label){srcExistingText.textContent='Kaynak belge bilgisi alınamadı.';return;}
+          srcExistingText.innerHTML=esc(d.label)+(d.url?' <a href="'+esc(d.url)+'" target="_blank" rel="noopener">Aç ↗</a>':'');
+        }).catch(function(){srcExistingText.textContent='Kaynak belge bilgisi alınamadı.';});
+    }
+
+    if(!IS_NEW&&SOURCE_KIND_CUR){
+      showExistingSource(SOURCE_KIND_CUR,SOURCE_ID_CUR);
+    } else if(IS_NEW&&srcNewBlock){
+      srcNewBlock.style.display='';
+      if(srcExistingBlock)srcExistingBlock.style.display='none';
+      if(QUERY_PREFILL&&QUERY_PREFILL.sourceKind){
+        srcKindEl.value=QUERY_PREFILL.sourceKind;
+        loadSourceDocs(QUERY_PREFILL.sourceKind,QUERY_PREFILL.sourceId).then(function(){
+          if(QUERY_PREFILL.sourceId)loadSourceLines(QUERY_PREFILL.sourceKind,QUERY_PREFILL.sourceId,QUERY_PREFILL.itemId);
+          // Query'de doğrudan itemId/quantity verilmişse kalem seçiminin üzerine yazar (öncelikli).
+          if(QUERY_PREFILL.itemId)trySetItem(QUERY_PREFILL.itemId);
+          if(QUERY_PREFILL.quantity)document.getElementById('f-qty').value=QUERY_PREFILL.quantity;
+        });
+      } else if(QUERY_PREFILL&&QUERY_PREFILL.itemId){
+        trySetItem(QUERY_PREFILL.itemId);
+        if(QUERY_PREFILL.quantity)document.getElementById('f-qty').value=QUERY_PREFILL.quantity;
+      }
+    }
+
+    function currentSourceKind(){ if(!IS_NEW&&SOURCE_KIND_CUR)return SOURCE_KIND_CUR; return (srcKindEl&&srcKindEl.value)?srcKindEl.value:null; }
+    function currentSourceId(){ if(!IS_NEW&&SOURCE_KIND_CUR)return SOURCE_ID_CUR?parseInt(SOURCE_ID_CUR,10):null; return (srcDocEl&&srcDocEl.value)?parseInt(srcDocEl.value,10):null; }
 
     // Hata kodu seçenekleri (uygunsuz satır için)
     fetch('/Quality/DefectCodesLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){DEFECT_OPTIONS=list||[];refreshDefectSelects();}).catch(function(){});
@@ -291,7 +445,7 @@
       });
       if(!lines.length){notify('En az bir ölçüm satırı girilmelidir.',false);activateTab('measure');return;}
       if(bad){notify('Uygunsuz satırlarda hata kodu seçilmelidir.',false);activateTab('measure');return;}
-      var payload={id:parseInt(document.getElementById('f-id').value,10)||0,planId:parseInt(document.getElementById('f-planId').value,10)||null,itemId:parseInt(document.getElementById('f-item').value,10)||null,inspectionType:parseInt(typeEl.value,10),sourceKind:null,sourceId:null,quantity:(function(){var v=document.getElementById('f-qty').value.trim();return v===''?null:parseFloat(v);})(),inspectedByPersonnelId:null,inspectedAt:null,notes:document.getElementById('f-notes').value.trim()||null,lines:lines};
+      var payload={id:parseInt(document.getElementById('f-id').value,10)||0,planId:parseInt(document.getElementById('f-planId').value,10)||null,itemId:parseInt(document.getElementById('f-item').value,10)||null,inspectionType:parseInt(typeEl.value,10),sourceKind:currentSourceKind(),sourceId:currentSourceId(),quantity:(function(){var v=document.getElementById('f-qty').value.trim();return v===''?null:parseFloat(v);})(),inspectedByPersonnelId:null,inspectedAt:null,notes:document.getElementById('f-notes').value.trim()||null,lines:lines};
       try{var r=await fetch('/Quality/SaveInspection',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify(payload)});var d=await r.json();if(!d.ok){notify(d.error||'Kaydedilemedi.',false);return;}
         if(!payload.id&&d.id){location.href='/Quality/InspectionEdit?id='+d.id;}else{location.href='/Quality/Inspections';}
       }catch(e){notify('Hata: '+e.message,false);}
