@@ -2451,7 +2451,7 @@
                        talep anlik bir is olusumudur, "kac gun gecerli" anlami yok.
                        Teklif (satis_teklifi / alis_teklifi) icin bos kalir, kullanici girer. *@
                     <div class="sqe-hrow">
-                        <label class="sqe-hlabel">Gecerlilik Gun/Tarih</label>
+                        <label class="sqe-hlabel">@(isPurchaseDelivery ? "Vade Gun/Tarih" : "Gecerlilik Gun/Tarih")</label>
                         <div class="sqe-hcombo">
                             <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="@(isPurchaseRequest ? "0" : "")" oninput="sqRecalcValidFromDays()" />
                             <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
