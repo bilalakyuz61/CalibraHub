@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
@@ -20,14 +21,21 @@ public sealed class QualityController : Controller
     private readonly IQualityService _quality;
     private readonly IQualityDefectCodeService _defectCodes;
     private readonly ILogisticsConfigurationService _logistics;
+    private readonly IDocumentRepository _documents;
+    private readonly IStockDocRepository _stockDocs;
+    private readonly IWorkOrderRepository _workOrders;
     private readonly ILogger<QualityController> _logger;
 
     public QualityController(IQualityService quality, IQualityDefectCodeService defectCodes,
-        ILogisticsConfigurationService logistics, ILogger<QualityController> logger)
+        ILogisticsConfigurationService logistics, IDocumentRepository documents,
+        IStockDocRepository stockDocs, IWorkOrderRepository workOrders, ILogger<QualityController> logger)
     {
         _quality = quality;
         _defectCodes = defectCodes;
         _logistics = logistics;
+        _documents = documents;
+        _stockDocs = stockDocs;
+        _workOrders = workOrders;
         _logger = logger;
     }
 
