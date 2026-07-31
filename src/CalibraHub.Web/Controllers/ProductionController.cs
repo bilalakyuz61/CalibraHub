@@ -1413,7 +1413,7 @@ public sealed class ProductionController : Controller
     /// Bir bileşenin planlı sarf lokasyonunu (FromLocationId) günceller — ExplodeBom'un
     /// item-default önerisini kullanıcı burada override eder (2026-07-31).
     /// </summary>
-    [HttpPost]
+    [HttpPost("Production/WorkOrder/UpdateComponentLocationJson")]
     [ValidateAntiForgeryToken]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
     public async Task<IActionResult> UpdateComponentLocationJson([FromBody] UpdateComponentLocationRequest req, CancellationToken ct)
