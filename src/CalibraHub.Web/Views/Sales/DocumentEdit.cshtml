@@ -12,6 +12,8 @@
     // Kalite modülü "Muayene Oluştur" butonu — yalnız Alış İrsaliyesi tipinde (paylaşımlı
     // ekran; diğer 4 belge tipinde bu buton görünmemeli).
     var isPurchaseDelivery = string.Equals(Model.DocumentTypeCode, "alis_irsaliyesi", StringComparison.OrdinalIgnoreCase);
+    // Irsaliye (alis + satis): gun/tarih alani "Gecerlilik" degil "Vade" gosterir.
+    var isDelivery = isPurchaseDelivery || string.Equals(Model.DocumentTypeCode, "satis_irsaliyesi", StringComparison.OrdinalIgnoreCase);
     // Cari Kod rehberi: purchase belgelerinde Tedarikci, sales/talep'te musteri.
     var customerGuideCode = isPurchase ? "SUPPLIERS" : "CUSTOMERS";
     // 2026-05-23: Satis tarafinda "Teklif/Siparis" labellari kullaniliyordu; satin alma
@@ -2469,7 +2471,7 @@
                        talep anlik bir is olusumudur, "kac gun gecerli" anlami yok.
                        Teklif (satis_teklifi / alis_teklifi) icin bos kalir, kullanici girer. *@
                     <div class="sqe-hrow">
-                        <label class="sqe-hlabel">@(isPurchaseDelivery ? "Vade Gun/Tarih" : "Gecerlilik Gun/Tarih")</label>
+                        <label class="sqe-hlabel">@(isDelivery ? "Vade Gun/Tarih" : "Gecerlilik Gun/Tarih")</label>
                         <div class="sqe-hcombo">
                             <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="@(isPurchaseRequest ? "0" : "")" oninput="sqRecalcValidFromDays()" />
                             <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
