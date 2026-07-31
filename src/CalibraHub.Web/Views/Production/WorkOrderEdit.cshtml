@@ -244,25 +244,45 @@ body.app-theme-dark .woe-nav-count { color: #a5b4fc; }
     color: var(--woe-accent);
     text-decoration-color: var(--woe-accent);
 }
+/* Alt-cizili (underline) gorunum — proje geneli textbox/combobox standardi
+   (2026-07-27 site.css .ux-edit-pane / 2026-07-31 StockDocEdit .sqe-hform ile
+   ayni pattern). Kutu yerine yalniz border-bottom; radius 0, transparent zemin.
+   Kapsam yalnizca Genel Bilgiler + Planlama Bilgileri sekmeleri — .woe-row bu
+   iki sekmenin disinda kullanilmiyor (Rota/Recete/Kaynak/Widget tab'lari kendi
+   ayri class'larini tasir, dokunulmadi). Switchkey checkbox .woe-switch-inline
+   input[type="checkbox"] kurali daha yuksek specificity ile ayrica ezer. */
 .woe-row input, .woe-row select, .woe-row textarea {
-    padding: 7px 10px; border-radius: 6px;
-    border: 1px solid var(--woe-border);
-    background: var(--woe-input-bg); color: var(--woe-text);
+    padding: 8px 4px; border-radius: 0;
+    border: none; border-bottom: 1px solid var(--woe-border);
+    background: transparent; color: var(--woe-text);
     font-size: 13px; font-family: inherit;
     outline: none; transition: border-color .12s, box-shadow .12s;
 }
 .woe-row input::placeholder, .woe-row textarea::placeholder { color: var(--woe-text-muted); opacity: .65; }
 .woe-row input:focus, .woe-row select:focus, .woe-row textarea:focus {
-    border-color: var(--woe-accent);
-    box-shadow: 0 0 0 2px rgba(99,102,241,.18);
+    border-bottom-color: var(--woe-accent);
+    box-shadow: 0 1px 0 0 var(--woe-accent);
 }
 .woe-row input[readonly], .woe-row input:disabled,
 .woe-row select:disabled, .woe-row textarea[readonly] {
-    background: var(--woe-input-disabled);
+    background: transparent;
     color: var(--woe-text-muted);
+    border-bottom-color: var(--woe-border-light);
 }
 body.app-theme-dark .woe-row select { color-scheme: dark; }
 body.app-theme-dark .woe-row input[type="datetime-local"] { color-scheme: dark; }
+/* Native select chrome kaldir — appearance sifirlanmadan tarayici kendi kutu/oku
+   ciziyor (site.css .ux-edit-pane select ile ayni gerekce, 2026-07-29 dersi).
+   appearance:none oku da kaldirdigi icin ozel chevron background-image ile
+   geri eklenir. */
+.woe-row select {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    padding-right: 20px;
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 10px 6px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 /* select > * = option/optgroup (Razor parser "option" kelimesini OptionTagHelper
    olarak yorumladığı için universal child selector kullanılıyor). */
 .woe-row select > * {
@@ -272,6 +292,15 @@ body.app-theme-dark .woe-row input[type="datetime-local"] { color-scheme: dark; 
 body.app-theme-dark .woe-row select > * {
     background-color: #0d1323;
     color: #e2e8f0;
+}
+/* Dark chevron — yukaridaki `.woe-row select` background-image'i ayni specificity
+   ile SONRA gelen bu kural ezer; `background:` SHORTHAND kullanilmiyor (CLAUDE.md
+   dersi: shorthand repeat/position/size'i sifirlayip SVG'yi doseyebilir). */
+body.app-theme-dark .woe-row select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 10px 6px;
 }
 .woe-row textarea { min-height: 60px; resize: vertical; }
 /* 2026-05-22: split eski 140 1fr 60 100 idi (sag input dar kaliyordu); esit 1fr/1fr yapildi.
@@ -324,6 +353,17 @@ body.app-theme-dark .woe-row select > * {
     min-width: 0;
 }
 .woe-input--code { max-width: 240px; flex: 0 0 240px; }
+/* PageComment Seq 1052 — Is Emri Tarihi (f-orderDate) proje tarih standardina gore dar
+   (176px, calibra-datepicker.css degeri) kalsin; .woe-input--code'un 240px flex-basis'i
+   .woe-inline-fields (display:flex) icinde width'i ezdigi icin flex-basis'i de override
+   etmek gerekiyor (Sales/DocumentEdit sqQuoteDate Seq 49 ile ayni gerekce). flatpickr
+   orijinal input'u type=hidden yapip class'lari (woe-input--code dahil) alt input'a
+   kopyaladigi icin id'siz kardes secici kullaniliyor. */
+#f-orderDate,
+#f-orderDate + input.calibra-date-input {
+    flex: 0 0 176px;
+    max-width: 176px;
+}
 .woe-input--qty  {
     max-width: 130px; flex: 0 0 130px;
     text-align: right;
@@ -852,10 +892,17 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                 <h2>Genel Bilgiler</h2>
                 <div class="pane-hint">İş emri kimlik, plan, mamul ve sorumlu bilgileri.</div>
 
-                @* 2026-05-22: Numara + İş Emri Tarihi alanları Mamul Kodu input genişliği ile
-                   uyumlu (max-width:240px → woe-input--code ile aynı). Numara'ya WORK_ORDER
-                   rehberi baglandi — kullanici mevcut bir is emrini secip hizli navigate yapabilir.
-                   Tarih artik saat olmadan (dd.MM.yyyy). *@
+                @* 2026-05-22: Numara alani Mamul Kodu input genisligiyle uyumlu (woe-input--code,
+                   max-width:240px). Numara'ya WORK_ORDER rehberi baglandi — kullanici mevcut bir
+                   is emrini secip hizli navigate yapabilir.
+                   PageComment Seq 1052: Is Emri Tarihi artik proje tarih standardina (type="date"
+                   + global calibra-datepicker.js enhancer) uyuyor — deger ISO (yyyy-MM-dd), gorunum
+                   flatpickr altInput uzerinden gg.aa.yyyy + sag kenarda takvim ikonu. Dar genislik
+                   (176px) icin #f-orderDate + input.calibra-date-input CSS override'i asagida
+                   (bkz. .woe-input--code max-width:240px'i ezer — Sales/DocumentEdit sqQuoteDate
+                   Seq 49 ile ayni pattern). Alan halen salt-okunur (bu ekranda duzenlenmiyor,
+                   yalniz olusturma tarihini gosterir) — takvim ikonu gorsel/secim icin acilir ama
+                   deger kaydetme payload'ina hic girmiyor (JS'de f-orderDate okunmuyor). *@
                 <div class="woe-row">
                     <label>Numara</label>
                     <div class="woe-inline-fields">
@@ -869,8 +916,8 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                 <div class="woe-row">
                     <label>İş Emri Tarihi</label>
                     <div class="woe-inline-fields">
-                        <input type="text" id="f-orderDate" class="woe-input--code"
-                               value="@(Model?.OrderDate.ToLocalTime().ToString("dd.MM.yyyy") ?? DateTime.Now.ToString("dd.MM.yyyy"))"
+                        <input type="date" id="f-orderDate" class="woe-input--code"
+                               value="@(Model?.OrderDate.ToLocalTime().ToString("yyyy-MM-dd") ?? DateTime.Now.ToString("yyyy-MM-dd"))"
                                readonly />
                     </div>
                 </div>
