@@ -3,6 +3,7 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +21,7 @@ public sealed class QualityController : Controller
 {
     private readonly IQualityService _quality;
     private readonly IQualityDefectCodeService _defectCodes;
+    private readonly ICapaService _capa;
     private readonly ILogisticsConfigurationService _logistics;
     private readonly IDocumentRepository _documents;
     private readonly IStockDocRepository _stockDocs;
@@ -27,11 +29,12 @@ public sealed class QualityController : Controller
     private readonly ILogger<QualityController> _logger;
 
     public QualityController(IQualityService quality, IQualityDefectCodeService defectCodes,
-        ILogisticsConfigurationService logistics, IDocumentRepository documents,
+        ICapaService capa, ILogisticsConfigurationService logistics, IDocumentRepository documents,
         IStockDocRepository stockDocs, IWorkOrderRepository workOrders, ILogger<QualityController> logger)
     {
         _quality = quality;
         _defectCodes = defectCodes;
+        _capa = capa;
         _logistics = logistics;
         _documents = documents;
         _stockDocs = stockDocs;
@@ -514,4 +517,163 @@ public sealed class QualityController : Controller
     [HttpGet]
     public async Task<IActionResult> DefectCodesLookup(CancellationToken ct)
         => Json(await _quality.GetDefectCodeOptionsAsync(ct));
+
+    // ════════════════════════════════════════════════════════════════
+    // DÖF (Düzeltici/Önleyici Faaliyet — CAPA)
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> Capas(CancellationToken ct)
+    {
+        ViewBag.BoardConfig = await BuildCapasBoardAsync(ct);
+        return View();
+    }
+
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> CapasBoardConfig(CancellationToken ct)
+        => Json(await BuildCapasBoardAsync(ct));
+
+    private async Task<object> BuildCapasBoardAsync(CancellationToken ct)
+    {
+        var items = await _capa.ListAsync(null, null, ct);
+        var now = DateTime.Now;
+        var entities = items.Select(m =>
+        {
+            var badge = (CapaStatus)m.Status switch
+            {
+                CapaStatus.Acik => (object)new { label = m.StatusLabel, color = "amber" },
+                CapaStatus.KokNedenAnaliz => new { label = m.StatusLabel, color = "indigo" },
+                CapaStatus.Aksiyonda => new { label = m.StatusLabel, color = "blue" },
+                CapaStatus.DogrulamaBekliyor => new { label = m.StatusLabel, color = "violet" },
+                CapaStatus.Kapali => new { label = m.StatusLabel, color = "emerald" },
+                _ => new { label = m.StatusLabel, color = "slate" },
+            };
+            var overdue = m.DueDate.HasValue && m.DueDate.Value.Date < now.Date &&
+                          (CapaStatus)m.Status is not (CapaStatus.Kapali or CapaStatus.Iptal);
+            return new
+            {
+                id = m.DocumentId,
+                title = m.DocumentNumber,
+                subtitle = m.Title,
+                description = m.ResponsibleName is { Length: > 0 } ? "Sorumlu: " + m.ResponsibleName : null,
+                statusBadge = badge,
+                widgets = new object[]
+                {
+                    new { id = "w_type", type = "data", dataType = "options", label = "Tip", value = m.CapaTypeLabel, color = "indigo" },
+                    new { id = "w_severity", type = "data", dataType = "options", label = "Önem", value = m.SeverityLabel, color = "amber" },
+                    new { id = "w_responsible", type = "data", dataType = "text", label = "Sorumlu", value = m.ResponsibleName ?? "-", color = "slate" },
+                    new { id = "w_due", type = "data", dataType = "text", label = "Termin", value = m.DueDate?.ToString("dd.MM.yyyy") ?? "-", color = overdue ? "rose" : "slate" },
+                },
+                primaryAction = new { label = "Aç", icon = "Edit", color = "amber", url = $"/Quality/CapaEdit?id={m.DocumentId}", hideButton = true },
+                secondaryAction = new { label = "Sil", icon = "Trash2", apiUrl = $"/Quality/DeleteCapaJson?id={m.DocumentId}", apiMethod = "POST", confirm = $"Bu DÖF kaydını silmek istediğinize emin misiniz? ({m.DocumentNumber})" },
+            };
+        }).ToArray();
+        return new
+        {
+            boardKey = "quality-capas",
+            title = "Düzeltici/Önleyici Faaliyetler (DÖF)",
+            subtitle = $"{items.Count} DÖF",
+            icon = "Wrench",
+            iconColor = "rose",
+            refreshUrl = "/Quality/CapasBoardConfig",
+            searchPlaceholder = "Hızlı ara… (belge no, konu)",
+            emptyText = "Henüz DÖF kaydı yok. Uygunsuzluk/şikayet kaynaklı düzeltici-önleyici faaliyetleri buradan açarsınız.",
+            actions = new object[] { new { id = "new", label = "Yeni DÖF", icon = "Plus", variant = "primary", url = "/Quality/CapaEdit" } },
+            masterWidgets = new object[] { },
+            entities,
+        };
+    }
+
+    // sourceKind/sourceId: Muayene (uygunsuzluk) gibi ekranlardan "DÖF Aç" linkiyle yeni kayıt
+    // açılırken ön-doldurma. Var olan kayıt (id dolu) bu parametreleri YOK SAYAR — kayıtlı
+    // SourceKind/SourceId zaten CapaDetailDto'da gelir.
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> CapaEdit(int? id, string? sourceKind, int? sourceId, CancellationToken ct)
+    {
+        CapaDetailDto? model = id is > 0 ? await _capa.GetAsync(id.Value, ct) : null;
+        if (model is null)
+        {
+            // Yeni kayıt — view bu ViewData anahtarlarını okuyup hidden input + preselect için kullanır.
+            ViewData["PrefillSourceKind"] = sourceKind;
+            ViewData["PrefillSourceId"] = sourceId;
+        }
+        return View(model);
+    }
+
+    // GET /Quality/CapaPersonnelLookup → sorumlu/doğrulayan personel seçici (id, name)
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> CapaPersonnelLookup(CancellationToken ct)
+        => Json(await _capa.GetPersonnelOptionsAsync(ct));
+
+    // GET /Quality/CapaSourceLookup?kind=QualityInspection&search= → [{ sourceKind, sourceId, label, date }]
+    // DÖF formunda kaynak kayıt arama/seçici. Bugün tek kind desteklenir: muayene (uygunsuzları öne alır).
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> CapaSourceLookup(string? kind, string? search, CancellationToken ct)
+    {
+        try
+        {
+            switch (kind)
+            {
+                case "QualityInspection":
+                {
+                    var inspections = await _quality.ListInspectionsAsync(search, null, null, ct);
+                    var ordered = inspections
+                        .OrderByDescending(i => i.Verdict == (byte)InspectionVerdict.NonConforming)
+                        .ThenByDescending(i => i.Created);
+                    return Json(ordered.Select(i => new
+                    {
+                        sourceKind = "QualityInspection",
+                        sourceId = i.DocumentId,
+                        label = i.DocumentNumber + (i.VerdictLabel is { Length: > 0 } ? " · " + i.VerdictLabel : ""),
+                        date = (DateTime?)i.InspectedAt ?? i.Created,
+                    }));
+                }
+                default:
+                    return Json(Array.Empty<object>());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DÖF kaynak kayıt arama hatası (kind={Kind}, search={Search})", kind, search);
+            return Json(Array.Empty<object>());
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> SaveCapa([FromBody] SaveCapaRequest? req, CancellationToken ct)
+    {
+        if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
+        try
+        {
+            var (ok, error, docId) = await _capa.SaveAsync(req, CurrentUserId(), ct);
+            return Json(new { ok, error, id = docId });
+        }
+        catch (Exception ex) { _logger.LogError(ex, "DÖF kaydetme hatası (id={Id})", req.Id); return Json(new { ok = false, error = "Kaydedilirken bir hata oluştu." }); }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> ChangeCapaStatus([FromBody] ChangeCapaStatusRequest? req, CancellationToken ct)
+    {
+        if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
+        try { var (ok, error) = await _capa.ChangeStatusAsync(req, CurrentUserId(), ct); return Json(new { ok, error }); }
+        catch (Exception ex) { _logger.LogError(ex, "DÖF durum değişikliği hatası (id={Id})", req.Id); return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." }); }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> DeleteCapaJson(int id, CancellationToken ct)
+    {
+        try { var (ok, error) = await _capa.DeleteAsync(id, CurrentUserId(), ct); return Json(new { ok, error }); }
+        catch (Exception ex) { _logger.LogError(ex, "DÖF silme hatası (id={Id})", id); return Json(new { ok = false, error = "Silinirken bir hata oluştu." }); }
+    }
 }

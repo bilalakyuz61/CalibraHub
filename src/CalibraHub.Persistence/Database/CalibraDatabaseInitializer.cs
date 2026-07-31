@@ -778,6 +778,7 @@ END;";
             await SeedDocumentTypesAsync(connection, cancellationToken);
             await SeedArgeNumberRuleAsync(connection, cancellationToken);
             await SeedQualityNumberRuleAsync(connection, cancellationToken);
+            await SeedCapaNumberRuleAsync(connection, cancellationToken);
             await EnsureCurrencyTablesAsync(connection, cancellationToken);
             await SeedCurrenciesAsync(connection, cancellationToken);
             await EnsureReportDataViewsAsync(connection, cancellationToken);
@@ -10258,6 +10259,32 @@ END;";
     }
 
     /// <summary>
+    /// DÖF (CAPA) belgesi numara kurali (DÖF-yyyy######, yillik reset). Idempotent.
+    /// SeedQualityNumberRuleAsync kalibi — DocumentType.Code='dof' id'sini bulur, kural yoksa ekler.
+    /// </summary>
+    private async Task SeedCapaNumberRuleAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            DECLARE @dofTypeId INT =
+                (SELECT TOP 1 [Id] FROM [{s}].[DocumentType] WHERE [Code] = 'dof');
+            IF @dofTypeId IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM [{s}].[DocumentNumberRule] WHERE [DocumentTypeId] = @dofTypeId)
+            BEGIN
+                INSERT INTO [{s}].[DocumentNumberRule]
+                    ([Name], [DocumentTypeId], [Prefix], [YearFormat], [MonthFormat],
+                     [CounterLength], [CounterStart], [ResetPeriod], [Weight], [IsActive], [Created])
+                VALUES
+                    (N'DÖF Numarası', @dofTypeId, N'DÖF-', N'yyyy', NULL,
+                     6, 1, 1, 0, 1, SYSUTCDATETIME());
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Kalite Yonetimi modulu tablolari (Faz 1 — Muayene + NCR). Stok/depoya SIFIR dokunus.
     /// - QualityDefectCode: hata kodu katalogu (ActivityReason muadili).
     /// - QualityInspectionPlan(+Line): muayene plani + karakteristikler.
@@ -10394,6 +10421,69 @@ END;";
                         REFERENCES [{s}].[QualityDefectCode]([Id])
                 );
                 CREATE INDEX [IX_QualityInspectionLine_Inspection] ON [{s}].[QualityInspectionLine]([InspectionId], [OrderNo]);
+            END;
+
+            -- DÖF (CAPA) kaydi companion (Document 'dof' ile 1-1) — Faz 1 (2026-07-31)
+            IF OBJECT_ID(N'[{s}].[Capa]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[Capa]
+                (
+                    [Id]                     INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_Capa] PRIMARY KEY,
+                    [DocumentId]             INT NOT NULL,
+                    [CapaType]               TINYINT NOT NULL CONSTRAINT [DF_Capa_CapaType] DEFAULT(1),
+                    [SourceKind]             NVARCHAR(50) NULL,
+                    [SourceId]               INT NULL,
+                    [Title]                  NVARCHAR(200) NOT NULL,
+                    [ProblemDescription]     NVARCHAR(MAX) NULL,
+                    [DefectCodeId]           INT NULL,
+                    [Severity]               TINYINT NOT NULL CONSTRAINT [DF_Capa_Severity] DEFAULT(2),
+                    [RootCauseMethod]        TINYINT NULL,
+                    [RootCause]              NVARCHAR(MAX) NULL,
+                    [ResponsiblePersonnelId] INT NULL,
+                    [DueDate]                DATETIME NULL,
+                    [Status]                 TINYINT NOT NULL CONSTRAINT [DF_Capa_Status] DEFAULT(0),
+                    [EffectivenessVerified]  BIT NOT NULL CONSTRAINT [DF_Capa_EffectivenessVerified] DEFAULT(0),
+                    [VerifiedByPersonnelId]  INT NULL,
+                    [VerifiedAt]             DATETIME NULL,
+                    [EffectivenessNote]      NVARCHAR(MAX) NULL,
+                    [ClosedAt]               DATETIME NULL,
+                    [CreatedById]            INT NULL,
+                    [Created]                DATETIME NOT NULL CONSTRAINT [DF_Capa_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]            INT NULL,
+                    [Updated]                DATETIME NULL,
+                    CONSTRAINT [FK_Capa_Document] FOREIGN KEY ([DocumentId])
+                        REFERENCES [{s}].[Document]([id]),
+                    CONSTRAINT [UX_Capa_Document] UNIQUE ([DocumentId]),
+                    CONSTRAINT [FK_Capa_DefectCode] FOREIGN KEY ([DefectCodeId])
+                        REFERENCES [{s}].[QualityDefectCode]([Id])
+                );
+                CREATE INDEX [IX_Capa_Status]      ON [{s}].[Capa]([Status]);
+                CREATE INDEX [IX_Capa_Source]      ON [{s}].[Capa]([SourceKind], [SourceId]);
+                CREATE INDEX [IX_Capa_Responsible] ON [{s}].[Capa]([ResponsiblePersonnelId]);
+            END;
+
+            -- DÖF aksiyon satirlari (native)
+            IF OBJECT_ID(N'[{s}].[CapaAction]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[CapaAction]
+                (
+                    [Id]                     INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_CapaAction] PRIMARY KEY,
+                    [CapaId]                 INT NOT NULL,
+                    [ActionType]             TINYINT NOT NULL CONSTRAINT [DF_CapaAction_ActionType] DEFAULT(2),
+                    [Description]            NVARCHAR(1000) NOT NULL,
+                    [ResponsiblePersonnelId] INT NULL,
+                    [DueDate]                DATETIME NULL,
+                    [Status]                 TINYINT NOT NULL CONSTRAINT [DF_CapaAction_Status] DEFAULT(0),
+                    [CompletedAt]            DATETIME NULL,
+                    [OrderNo]                INT NOT NULL CONSTRAINT [DF_CapaAction_OrderNo] DEFAULT(0),
+                    [CreatedById]            INT NULL,
+                    [Created]                DATETIME NOT NULL CONSTRAINT [DF_CapaAction_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]            INT NULL,
+                    [Updated]                DATETIME NULL,
+                    CONSTRAINT [FK_CapaAction_Capa] FOREIGN KEY ([CapaId])
+                        REFERENCES [{s}].[Capa]([Id])
+                );
+                CREATE INDEX [IX_CapaAction_Capa] ON [{s}].[CapaAction]([CapaId], [OrderNo]);
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -11150,6 +11240,10 @@ END;";
         // Numara kurali SeedQualityNumberRuleAsync ile seed edilir (MUY-yyyy######). COA/print
         // ileride vw_Quality_COA ile eklenince SqlViewName doldurulur.
         ("muayene",       "Muayene / Kontrol",  null, "BelgeId", "Gelen/proses/final/lab muayene kaydi"),
+        // 2026-07-31: DÖF (Düzeltici/Önleyici Faaliyet — CAPA) — Document tabanli (companion Capa ile 1-1).
+        // Numara kurali SeedCapaNumberRuleAsync ile seed edilir (DÖF-yyyy######). Print view'i
+        // ileride eklenince SqlViewName doldurulur.
+        ("dof",           "DÖF / Düzeltici-Önleyici Faaliyet", null, "BelgeId", "Düzeltici ve önleyici faaliyet kaydı"),
     ];
 
     private async Task SeedDocumentTypesAsync(SqlConnection connection, CancellationToken cancellationToken)
@@ -12879,6 +12973,8 @@ END;";
             ("QUALITY_DEFECT_CODE",     "Hata Kodları",     "Kalite Yönetimi", null, 596, false),
             ("QUALITY_INSPECTION_PLAN", "Muayene Planları", "Kalite Yönetimi", null, 597, false),
             ("QUALITY_INSPECTION_EDIT", "Muayeneler",       "Kalite Yönetimi", null, 598, true),  // muayene kaydı + ek alan widget formu
+            // 2026-07-31: DÖF (CAPA) — muayene ile aynı desen, ek alanları kendi form kodu altında.
+            ("QUALITY_CAPA",             "DÖF (Düzeltici/Önleyici)", "Kalite Yönetimi", null, 599, true),
 
             // ── Finans ───────────────────────────────────────────────────────
             // 2026-06-13 — CONTACT_EDIT, CONTACTS ile birleştirildi (liste + düzenleme tek FormCode).

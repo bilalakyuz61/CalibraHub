@@ -153,6 +153,7 @@ public static class FormCodes
     public const string QualityDefectCode     = "QUALITY_DEFECT_CODE";
     public const string QualityInspectionPlan = "QUALITY_INSPECTION_PLAN";
     public const string QualityInspectionEdit = "QUALITY_INSPECTION_EDIT";
+    public const string QualityCapa            = "QUALITY_CAPA";
 
     // ═══════════════════════════════════════════════════
     // FİNANS

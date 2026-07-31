@@ -233,6 +233,8 @@ public static class MenuDefinition
                     MatchPath: "/Quality/InspectionPlan", PermissionFormCode: FormCodes.QualityInspectionPlan),
                 new("kalite.defectcodes", isEn ? "Defect Codes" : "Hata Kodları", "AlertTriangle", "/Quality/DefectCodes", null,
                     MatchPath: "/Quality/DefectCode", PermissionFormCode: FormCodes.QualityDefectCode),
+                new("kalite.capa", isEn ? "CAPA" : "DÖF (Düzeltici/Önleyici)", "Wrench", "/Quality/Capas", null,
+                    MatchPath: "/Quality/Capa", PermissionFormCode: FormCodes.QualityCapa),
             }),
 
             // ────────────── Varlık Yönetimi / Asset Management ──────────────
