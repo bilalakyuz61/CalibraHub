@@ -1109,6 +1109,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     //   • Kit BAŞLIK satırı: MovementType=NULL (stok etkisiz), orantılı fiyat, SourceLineId=sipariş kit satırı.
                     //   • Her bileşen: gerçek stok-hareketli satır (fiyat 0), KitParentLineId=başlık satırı.
                     //   Set bütünlüğü (KATI): yalnız TAM set teslim edilir; seti bölen kısmi giriş reddedilir.
+
+                    // Kit satış tarafına özgü phantom bundle'dır; satın alma mal kabulünde patlatma yapılmaz
+                    // (bileşenleri ayrı kalem olarak almak gerekir → sürpriz stok girişi engellenir).
+                    if (isPurchase)
+                        throw new InvalidOperationException(
+                            "Kit ürünü satın alma irsaliyesinde (mal kabul) desteklenmiyor; kit yalnız satış teslimatında patlatılır. Bileşenleri ayrı kalem olarak alın.");
+
                     decimal setsRaw     = deliverQty;
                     decimal setsRounded = Math.Round(setsRaw, 0, MidpointRounding.AwayFromZero);
                     if (Math.Abs(setsRaw - setsRounded) > 0.0001m || setsRounded <= 0m)
@@ -1118,7 +1125,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
                     if (!kitComps.TryGetValue(o.LineId, out var comps) || comps.Count == 0)
                         throw new InvalidOperationException(
-                            "Kit içeriği (snapshot) bulunamadı; siparişi yeniden kaydedip tekrar deneyin.");
+                            "Kit içeriği bulunamadı (snapshot yok). Kit tanımı aktif değilse siparişi düzenleyip kit satırını yeniden ekleyin/güncelleyin.");
 
                     // Faz 1 kapsamı: seri/lot takipli bileşen için bileşen bazında elle seçim gerekir
                     // (sonraki fazda eklenecek). Sessiz kırık yerine net hata — kit bütünlüğü korunur.
@@ -1163,7 +1170,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     foreach (var c in comps)
                     {
                         decimal compBase = Math.Round(sets * c.PerKit, 4);
-                        if (compBase <= 0m) continue;   // kit tanımı PerKit>0 garanti eder; koruma
+                        if (compBase <= 0m)   // PerKit>0 olmalı; 0/negatif → sessiz atlama YERİNE net hata
+                            throw new InvalidOperationException(
+                                $"Kit bileşeninin ({c.CompName ?? ("#" + c.CompItemId)}) kit-başına miktarı geçersiz (0 veya negatif); kit tanımını düzeltin.");
                         await using (var cl = conn.CreateCommand())
                         {
                             cl.Transaction = tx;
