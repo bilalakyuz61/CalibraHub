@@ -229,6 +229,35 @@
     function notify(text,ok){var el=document.getElementById('in-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color=ok?'#059669':'#dc2626';}
     function stateErr(text){var el=document.getElementById('in-state-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color='#dc2626';}
 
+    // ── Ondalık ayarları — yalnız "Muayene Miktarı" (#f-qty). Ölçüm alanları
+    // (imc-nom/low/up/meas) karakteristik ölçümüdür, serbest hassasiyette kalır. ──
+    var _inDec = { quantity: 2 };
+    var qtyEl = document.getElementById('f-qty');
+    function applyInQtyStep(){
+      if(!qtyEl)return;
+      qtyEl.step = _inDec.quantity>0 ? (1/Math.pow(10,_inDec.quantity)).toString() : '1';
+    }
+    function formatInQtyValue(){
+      if(!qtyEl)return;
+      var v=qtyEl.value.trim();if(v==='')return;
+      var n=parseFloat(v.replace(',','.'));if(isNaN(n))return;
+      var rounded=(window.CalibraHub&&window.CalibraHub.decimals&&typeof window.CalibraHub.decimals.roundTo==='function')?window.CalibraHub.decimals.roundTo(n,_inDec.quantity):n;
+      qtyEl.value=rounded.toFixed(_inDec.quantity);
+    }
+    (function loadInDecimals(){
+      if(window.CalibraHub&&window.CalibraHub.decimals&&typeof window.CalibraHub.decimals.load==='function'){
+        window.CalibraHub.decimals.load('QUALITY_INSPECTION_EDIT').then(function(dec){
+          _inDec=dec||_inDec;applyInQtyStep();formatInQtyValue();
+        }).catch(function(){applyInQtyStep();});
+      } else {
+        fetch('/Decimals/Effective?formCode=QUALITY_INSPECTION_EDIT',{credentials:'same-origin'})
+          .then(function(r){return r.ok?r.json():null;})
+          .then(function(d){if(d&&d.ok)_inDec={quantity:d.quantity};applyInQtyStep();formatInQtyValue();})
+          .catch(function(){applyInQtyStep();});
+      }
+    })();
+    if(qtyEl)qtyEl.addEventListener('blur',formatInQtyValue);
+
     function activateTab(key){if(!key)return;document.querySelectorAll('#inNav .ux-edit-nav__tab').forEach(function(b){b.classList.toggle('is-active',b.dataset.tab===key);});document.querySelectorAll('.ux-edit-pane').forEach(function(p){p.classList.toggle('is-active',p.dataset.tab===key);});}
     document.querySelectorAll('#inNav .ux-edit-nav__tab').forEach(function(b){b.addEventListener('click',function(){activateTab(b.dataset.tab);});});
     window.__inActivateTab = activateTab;
