@@ -792,28 +792,37 @@
     .sqe-hinput {
         flex: 1; max-width: 280px;
     }
-    /* ── Yumusak hat alani: form-control-sm / form-select-sm Bootstrap defaultlarini
-       sadece bu sayfaya ozgu olarak premium hisse cevirir (LookupCard ile uyumlu) ── */
+    /* ── Alt-cizili (underline) baslik alani — kanonik .ux-edit-pane/.cb-form-underline
+       standardi (2026-07-31 kullanici karari, eski "yumusak kutu" tasarimindan gecis).
+       Kapsam ONCEKI ile ayni: sadece .sqe-hform (ust bilgi) + .sqe-tab-pane.is-active
+       icindeki input/select/textarea — kalem grid'i (#reactDocumentLineGrid, sqe-total-input)
+       bu seciciye hic girmiyor, bu yuzden kutu kaliyor. ── */
     .sqe-hform .form-control,
     .sqe-hform .form-select,
     .sqe-tab-pane.is-active input.form-control,
     .sqe-tab-pane.is-active select.form-select,
     .sqe-tab-pane.is-active textarea.form-control {
-        height: 38px;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        background-color: #ffffff;
-        box-shadow: 0 1px 2px rgba(15,23,42,.04);
-        padding: 0 12px;
+        height: auto;
+        border-radius: 0;
+        border: none;
+        border-bottom: 1px solid #e2e8f0;
+        background-color: transparent;
+        box-shadow: none;
+        padding: 9px 12px;
         font-size: 0.875rem;
         font-weight: 500;
         color: #0f172a;
-        transition: border-color .12s, box-shadow .12s, background-color .12s;
+        transition: border-color .12s, box-shadow .12s;
     }
-    /* select icin Bootstrap'in ok ikonu padding'ini koru */
+    /* select icin ozel chevron — appearance:none olmadan native kutu kaliyordu */
     .sqe-hform .form-select,
     .sqe-tab-pane.is-active select.form-select {
-        padding-right: 2.25rem;
+        appearance: none; -webkit-appearance: none; -moz-appearance: none;
+        padding-right: 28px;
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        background-size: 10px 6px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     }
     .sqe-tab-pane.is-active textarea.form-control {
         height: auto;
@@ -821,20 +830,13 @@
         padding: 10px 12px;
         line-height: 1.45;
     }
-    .sqe-hform .form-control:hover:not(:disabled):not([readonly]),
-    .sqe-hform .form-select:hover:not(:disabled),
-    .sqe-tab-pane.is-active input.form-control:hover:not(:disabled):not([readonly]),
-    .sqe-tab-pane.is-active select.form-select:hover:not(:disabled),
-    .sqe-tab-pane.is-active textarea.form-control:hover:not(:disabled):not([readonly]) {
-        border-color: #c7d2fe;
-    }
     .sqe-hform .form-control:focus,
     .sqe-hform .form-select:focus,
     .sqe-tab-pane.is-active input.form-control:focus,
     .sqe-tab-pane.is-active select.form-select:focus,
     .sqe-tab-pane.is-active textarea.form-control:focus {
-        border-color: #6366f1;
-        box-shadow: 0 0 0 3px rgba(99,102,241,.18);
+        border-bottom-color: #6366f1;
+        box-shadow: 0 1px 0 0 #6366f1;
         outline: none;
     }
     body.app-theme-dark .sqe-hform .form-control,
@@ -842,26 +844,35 @@
     body.app-theme-dark .sqe-tab-pane.is-active input.form-control,
     body.app-theme-dark .sqe-tab-pane.is-active select.form-select,
     body.app-theme-dark .sqe-tab-pane.is-active textarea.form-control {
-        background-color: rgba(255,255,255,.04);
-        border-color: rgba(255,255,255,.08);
+        background-color: transparent;
+        border-bottom-color: rgba(255,255,255,.12);
         color: #f1f5f9;
         box-shadow: none;
-    }
-    body.app-theme-dark .sqe-hform .form-control:hover:not(:disabled):not([readonly]),
-    body.app-theme-dark .sqe-tab-pane.is-active input.form-control:hover:not(:disabled):not([readonly]),
-    body.app-theme-dark .sqe-tab-pane.is-active select.form-select:hover:not(:disabled),
-    body.app-theme-dark .sqe-tab-pane.is-active textarea.form-control:hover:not(:disabled):not([readonly]) {
-        border-color: rgba(165,180,252,.35);
+        color-scheme: dark;
     }
     body.app-theme-dark .sqe-hform .form-control:focus,
     body.app-theme-dark .sqe-tab-pane.is-active input.form-control:focus,
     body.app-theme-dark .sqe-tab-pane.is-active select.form-select:focus,
     body.app-theme-dark .sqe-tab-pane.is-active textarea.form-control:focus {
-        border-color: #a5b4fc;
-        box-shadow: 0 0 0 3px rgba(99,102,241,.25);
-        background-color: rgba(255,255,255,.06);
+        border-bottom-color: #a5b4fc;
+        box-shadow: 0 1px 0 0 #a5b4fc;
+        background-color: transparent;
     }
-    /* Date input takvim ikonu: yumusak hat icinde nefes alabilsin */
+    /* Dark select — ust satirdaki `background-color:transparent` repeat/position/size'i
+       etkilemiyor (background-color != background shorthand) ama chevron'u dark tona
+       gecirmek icin ayrica bildiriyoruz (bkz. site.css .cb-form-underline ayni dersi). */
+    body.app-theme-dark .sqe-hform .form-select,
+    body.app-theme-dark .sqe-tab-pane.is-active select.form-select {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        background-size: 10px 6px;
+    }
+    body.app-theme-dark .sqe-hform .form-select option,
+    body.app-theme-dark .sqe-tab-pane.is-active select.form-select option {
+        background: #0d1323; color: #e2e8f0;
+    }
+    /* Date input takvim ikonu: cizgi alanda nefes alabilsin */
     .sqe-hform .form-control[type="date"],
     .sqe-tab-pane.is-active input.form-control[type="date"] {
         padding-right: 8px;
@@ -1174,7 +1185,10 @@
         font-weight: 600;
         font-size: 0.75rem;
     }
-    /* Tum form input/select/textarea'lar — glass effect */
+    /* Tum form input/select/textarea'lar — alt-cizili (underline), kutu bloguyla
+       (yukarida .sqe-hform/.sqe-tab-pane.is-active) ayni gecis, 2026-07-31.
+       !important korunuyor: bu kural once gelen box kuralindan daha gec render
+       edilirse bile (dosya sirasi) kutuyu geri getirmesin diye. */
     body.app-theme-dark .sqe-card input.form-control,
     body.app-theme-dark .sqe-tab-pane input.form-control,
     body.app-theme-dark .sqe-card select.form-select,
@@ -1182,10 +1196,13 @@
     body.app-theme-dark .sqe-card textarea.form-control,
     body.app-theme-dark .sqe-tab-pane textarea.form-control,
     body.app-theme-dark .entity-form-toolbar select.form-select {
-        background: rgba(255, 255, 255, 0.04) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 0 !important;
         color: rgba(255, 255, 255, 0.9) !important;
-        transition: all 0.18s ease;
+        color-scheme: dark;
+        transition: border-color .15s, box-shadow .15s;
     }
     body.app-theme-dark .sqe-card input.form-control::placeholder,
     body.app-theme-dark .sqe-tab-pane input.form-control::placeholder,
@@ -1199,22 +1216,23 @@
     body.app-theme-dark .sqe-tab-pane select.form-select:focus,
     body.app-theme-dark .sqe-card textarea.form-control:focus,
     body.app-theme-dark .sqe-tab-pane textarea.form-control:focus {
-        background: rgba(255, 255, 255, 0.07) !important;
-        border-color: rgba(99, 102, 241, 0.55) !important;
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+        background: transparent !important;
+        border-bottom-color: #a5b4fc !important;
+        box-shadow: 0 1px 0 0 #a5b4fc !important;
         color: #fff !important;
         outline: none;
     }
     /* Readonly inputs (Teklif No gibi) — daha sonuk */
     body.app-theme-dark .sqe-card input.form-control[readonly],
     body.app-theme-dark .sqe-tab-pane input.form-control[readonly] {
-        background: rgba(255, 255, 255, 0.02) !important;
+        background: transparent !important;
         color: rgba(255, 255, 255, 0.45) !important;
         cursor: default;
     }
     /* Native select dropdown oklarini beyaz yap */
     body.app-theme-dark .sqe-card select.form-select,
     body.app-theme-dark .sqe-tab-pane select.form-select {
+        appearance: none !important; -webkit-appearance: none !important; -moz-appearance: none !important;
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff80' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
         background-repeat: no-repeat !important;
         background-position: right 0.5rem center !important;
