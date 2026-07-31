@@ -927,17 +927,22 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             //    Fiyat alanları irsaliye satırına kopyalanır (irsaliye değerli görünsün). FullBase +
             //    Qty (gösterim) birlikte tutulur → birim çevrim faktörü = FullBase / Qty (kısmi hesap).
             var open = new List<(int LineId, int ItemId, int? CombId, int? LocId, decimal OpenBase, decimal FullBase,
-                                 int? UnitId, decimal Qty, decimal UnitPrice, decimal DiscRate, decimal LineTotal)>();
+                                 int? UnitId, decimal Qty, decimal UnitPrice, decimal DiscRate, decimal LineTotal,
+                                 int ItemTypeId)>();
             await using (var sel = conn.CreateCommand())
             {
                 sel.Transaction = tx;
+                // i.[TypeId] eklendi: kit satırını (ItemType.Kit=10) tespit edip patlatma dalına
+                // ayırmak için. Kit dışı satırlarda 0/normal tip → mevcut davranış korunur.
                 sel.CommandText = $"""
                     SELECT dl.[Id], dl.[ItemId], dl.[CombinationId],
                            ISNULL(dl.[LocationId], doc.[LocationId]) AS LocId,
                            (dl.[BaseQuantity] - dl.[DeliveredQuantity]) AS OpenBase, dl.[BaseQuantity] AS FullBase,
-                           dl.[UnitId], dl.[Quantity], dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal]
+                           dl.[UnitId], dl.[Quantity], dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal],
+                           ISNULL(i.[TypeId], 0) AS ItemTypeId
                     FROM {T("DocumentLine")} dl
                     INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
+                    LEFT JOIN {T("Items")} i ON i.[Id] = dl.[ItemId]
                     WHERE dl.[DocumentId] = @OrderId AND doc.[CompanyId] = @Cid
                       AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
                       AND dl.[BaseQuantity] > dl.[DeliveredQuantity];
@@ -951,7 +956,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                              r.IsDBNull(3) ? null : r.GetInt32(3),
                              r.GetDecimal(4), r.GetDecimal(5),
                              r.IsDBNull(6) ? null : r.GetInt32(6),
-                             r.GetDecimal(7), r.GetDecimal(8), r.GetDecimal(9), r.GetDecimal(10)));
+                             r.GetDecimal(7), r.GetDecimal(8), r.GetDecimal(9), r.GetDecimal(10),
+                             r.GetInt32(11)));
             }
             if (open.Count == 0)
                 throw new InvalidOperationException(isPurchase
@@ -960,6 +966,40 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             foreach (var o in open)
                 if (!o.LocId.HasValue)
                     throw new InvalidOperationException("Bazı sipariş kalemlerinde depo tanımlı değil; irsaliye için kalem veya belge deposu gerekli.");
+
+            // 1b) Kit satırları (ItemType.Kit=10) için DONMUŞ bileşen snapshot'ını aynı tx'te yükle.
+            //     Her bileşen: ComponentItemId, ConfigId, 1-kit-için oran (PerKit), bileşenin ana birimi,
+            //     takip tipi (Serial/Lot/None → Faz 1'de seri/lot bileşen elle seçim gerektirir).
+            var kitLineIds = open.Where(o => o.ItemTypeId == 10).Select(o => o.LineId).Distinct().ToList();
+            var kitComps = new Dictionary<int, List<(int CompItemId, int? ConfigId, decimal PerKit, int? BaseUnitId, string Tracking, string? CompName)>>();
+            if (kitLineIds.Count > 0)
+            {
+                await using var kc = conn.CreateCommand();
+                kc.Transaction = tx;
+                var pn = kitLineIds.Select((_, i) => "@kl" + i).ToArray();
+                kc.CommandText = $"""
+                    SELECT s.[DocumentLineId], s.[ComponentItemId], s.[ConfigId], s.[Quantity],
+                           ci.[UnitId], ISNULL(ci.[TrackingType], N'None') AS Tracking, ci.[Name]
+                    FROM {T("DocumentLineKitComponent")} s
+                    LEFT JOIN {T("Items")} ci ON ci.[Id] = s.[ComponentItemId]
+                    WHERE s.[DocumentLineId] IN ({string.Join(",", pn)})
+                    ORDER BY s.[DocumentLineId], s.[Id];
+                    """;
+                for (var i = 0; i < kitLineIds.Count; i++)
+                    kc.Parameters.AddWithValue(pn[i], kitLineIds[i]);
+                await using var kr = await kc.ExecuteReaderAsync(ct);
+                while (await kr.ReadAsync(ct))
+                {
+                    var lid = kr.GetInt32(0);
+                    if (!kitComps.TryGetValue(lid, out var lst)) { lst = new(); kitComps[lid] = lst; }
+                    lst.Add((kr.GetInt32(1),
+                             kr.IsDBNull(2) ? null : kr.GetInt32(2),
+                             kr.GetDecimal(3),
+                             kr.IsDBNull(4) ? null : kr.GetInt32(4),
+                             kr.IsDBNull(5) ? "None" : kr.GetString(5),
+                             kr.IsDBNull(6) ? null : kr.GetString(6)));
+                }
+            }
 
             // 2) Yeni İRSALİYE belgesi — siparişe ParentDocumentId ile bağlı, cari/tutarlar kopyalı
             var docNo = await ResolveDocNoByCodeAsync(conn, tx, targetType, prefix, createdById, DateTime.Today, ct);
@@ -1028,40 +1068,137 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 anyDelivered = true;
                 deliveredSubTotal += lineTotal;
 
-                await using (var li = conn.CreateCommand())
+                bool isKit = o.ItemTypeId == 10;   // ItemType.Kit — phantom bundle, stok bileşende
+                if (!isKit)
                 {
-                    li.Transaction = tx;
-                    // Satış=çıkış → FromLocationId; Satın alma=giriş → LocationId. MovementType yönü belirler.
-                    li.CommandText = $"""
-                        INSERT INTO {T("DocumentLine")}
-                            ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                             [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
-                        VALUES
-                            (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
-                             @CombId,@FromLoc,@ToLoc,@Mt,@SourceLineId,@Notes);
-                        """;
-                    li.Parameters.AddWithValue("@DocId", docId);
-                    li.Parameters.AddWithValue("@LineNo", lineNo++);
-                    li.Parameters.AddWithValue("@ItemId", o.ItemId);
-                    li.Parameters.AddWithValue("@UnitId", (object?)o.UnitId ?? DBNull.Value);
-                    li.Parameters.AddWithValue("@Qty", deliverQty);
-                    li.Parameters.AddWithValue("@BaseQty", deliverBase);
-                    li.Parameters.AddWithValue("@UnitPrice", o.UnitPrice);
-                    li.Parameters.AddWithValue("@DiscRate", o.DiscRate);
-                    li.Parameters.AddWithValue("@LineTotal", lineTotal);
-                    li.Parameters.AddWithValue("@CombId", (object?)o.CombId ?? DBNull.Value);
-                    li.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : o.LocId!.Value);
-                    li.Parameters.AddWithValue("@ToLoc",   isPurchase ? o.LocId!.Value : (object)DBNull.Value);
-                    li.Parameters.AddWithValue("@Mt", movementType);
-                    li.Parameters.AddWithValue("@SourceLineId", o.LineId);
-                    li.Parameters.AddWithValue("@Notes", $"Sipariş #{orderId} → irsaliye");
-                    await li.ExecuteNonQueryAsync(ct);
+                    // ── Normal (kit olmayan) satır — mevcut davranış: tek stok-hareketli satır ──
+                    await using (var li = conn.CreateCommand())
+                    {
+                        li.Transaction = tx;
+                        // Satış=çıkış → FromLocationId; Satın alma=giriş → LocationId. MovementType yönü belirler.
+                        li.CommandText = $"""
+                            INSERT INTO {T("DocumentLine")}
+                                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
+                            VALUES
+                                (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
+                                 @CombId,@FromLoc,@ToLoc,@Mt,@SourceLineId,@Notes);
+                            """;
+                        li.Parameters.AddWithValue("@DocId", docId);
+                        li.Parameters.AddWithValue("@LineNo", lineNo++);
+                        li.Parameters.AddWithValue("@ItemId", o.ItemId);
+                        li.Parameters.AddWithValue("@UnitId", (object?)o.UnitId ?? DBNull.Value);
+                        li.Parameters.AddWithValue("@Qty", deliverQty);
+                        li.Parameters.AddWithValue("@BaseQty", deliverBase);
+                        li.Parameters.AddWithValue("@UnitPrice", o.UnitPrice);
+                        li.Parameters.AddWithValue("@DiscRate", o.DiscRate);
+                        li.Parameters.AddWithValue("@LineTotal", lineTotal);
+                        li.Parameters.AddWithValue("@CombId", (object?)o.CombId ?? DBNull.Value);
+                        li.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : o.LocId!.Value);
+                        li.Parameters.AddWithValue("@ToLoc",   isPurchase ? o.LocId!.Value : (object)DBNull.Value);
+                        li.Parameters.AddWithValue("@Mt", movementType);
+                        li.Parameters.AddWithValue("@SourceLineId", o.LineId);
+                        li.Parameters.AddWithValue("@Notes", $"Sipariş #{orderId} → irsaliye");
+                        await li.ExecuteNonQueryAsync(ct);
+                    }
+                    if (!isPurchase) decreases.Add((o.ItemId, o.LocId!.Value));
                 }
+                else
+                {
+                    // ── KİT tam-set patlatma (geç patlatma) ──
+                    //   • Kit BAŞLIK satırı: MovementType=NULL (stok etkisiz), orantılı fiyat, SourceLineId=sipariş kit satırı.
+                    //   • Her bileşen: gerçek stok-hareketli satır (fiyat 0), KitParentLineId=başlık satırı.
+                    //   Set bütünlüğü (KATI): yalnız TAM set teslim edilir; seti bölen kısmi giriş reddedilir.
+                    decimal setsRaw     = deliverQty;
+                    decimal setsRounded = Math.Round(setsRaw, 0, MidpointRounding.AwayFromZero);
+                    if (Math.Abs(setsRaw - setsRounded) > 0.0001m || setsRounded <= 0m)
+                        throw new InvalidOperationException(
+                            $"Kit yalnız tam set olarak teslim edilebilir (girilen: {setsRaw:0.####}). Lütfen tam sayı set girin.");
+                    int sets = (int)setsRounded;
+
+                    if (!kitComps.TryGetValue(o.LineId, out var comps) || comps.Count == 0)
+                        throw new InvalidOperationException(
+                            "Kit içeriği (snapshot) bulunamadı; siparişi yeniden kaydedip tekrar deneyin.");
+
+                    // Faz 1 kapsamı: seri/lot takipli bileşen için bileşen bazında elle seçim gerekir
+                    // (sonraki fazda eklenecek). Sessiz kırık yerine net hata — kit bütünlüğü korunur.
+                    var trackedComps = comps
+                        .Where(c => string.Equals(c.Tracking, "Serial", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(c.Tracking, "Lot", StringComparison.OrdinalIgnoreCase))
+                        .Select(c => c.CompName ?? ("#" + c.CompItemId)).ToList();
+                    if (trackedComps.Count > 0)
+                        throw new InvalidOperationException(
+                            $"Seri/lot takipli bileşen içeren kit için bileşen seri/lot seçimi gerekir (sonraki fazda eklenecek): {string.Join(", ", trackedComps)}.");
+
+                    // Kit BAŞLIK satırı (stok etkisiz, fiyatlı). SCOPE_IDENTITY ile bileşenlere parent id.
+                    int headerLineId;
+                    await using (var hk = conn.CreateCommand())
+                    {
+                        hk.Transaction = tx;
+                        hk.CommandText = $"""
+                            INSERT INTO {T("DocumentLine")}
+                                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                 [CombinationId],[MovementType],[SourceLineId],[Notes])
+                            VALUES
+                                (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
+                                 @CombId,NULL,@SourceLineId,@Notes);
+                            SELECT CAST(SCOPE_IDENTITY() AS INT);
+                            """;
+                        hk.Parameters.AddWithValue("@DocId", docId);
+                        hk.Parameters.AddWithValue("@LineNo", lineNo++);
+                        hk.Parameters.AddWithValue("@ItemId", o.ItemId);
+                        hk.Parameters.AddWithValue("@UnitId", (object?)o.UnitId ?? DBNull.Value);
+                        hk.Parameters.AddWithValue("@Qty", deliverQty);
+                        hk.Parameters.AddWithValue("@BaseQty", deliverBase);
+                        hk.Parameters.AddWithValue("@UnitPrice", o.UnitPrice);
+                        hk.Parameters.AddWithValue("@DiscRate", o.DiscRate);
+                        hk.Parameters.AddWithValue("@LineTotal", lineTotal);
+                        hk.Parameters.AddWithValue("@CombId", (object?)o.CombId ?? DBNull.Value);
+                        hk.Parameters.AddWithValue("@SourceLineId", o.LineId);
+                        hk.Parameters.AddWithValue("@Notes", $"Kit teslimatı ({sets} set) — Sipariş #{orderId}");
+                        headerLineId = Convert.ToInt32(await hk.ExecuteScalarAsync(ct));
+                    }
+
+                    // Bileşen satırları — gerçek stok hareketi (fiyat 0), KitParentLineId=başlık satırı.
+                    foreach (var c in comps)
+                    {
+                        decimal compBase = Math.Round(sets * c.PerKit, 4);
+                        if (compBase <= 0m) continue;   // kit tanımı PerKit>0 garanti eder; koruma
+                        await using (var cl = conn.CreateCommand())
+                        {
+                            cl.Transaction = tx;
+                            cl.CommandText = $"""
+                                INSERT INTO {T("DocumentLine")}
+                                    ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                     [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[KitParentLineId],[Notes])
+                                VALUES
+                                    (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,0,0,0,
+                                     @CombId,@FromLoc,@ToLoc,@Mt,NULL,@KitParent,@Notes);
+                                """;
+                            cl.Parameters.AddWithValue("@DocId", docId);
+                            cl.Parameters.AddWithValue("@LineNo", lineNo++);
+                            cl.Parameters.AddWithValue("@ItemId", c.CompItemId);
+                            cl.Parameters.AddWithValue("@UnitId", (object?)c.BaseUnitId ?? DBNull.Value);
+                            cl.Parameters.AddWithValue("@Qty", compBase);
+                            cl.Parameters.AddWithValue("@BaseQty", compBase);
+                            cl.Parameters.AddWithValue("@CombId", (object?)c.ConfigId ?? DBNull.Value);
+                            cl.Parameters.AddWithValue("@FromLoc", isPurchase ? DBNull.Value : o.LocId!.Value);
+                            cl.Parameters.AddWithValue("@ToLoc",   isPurchase ? o.LocId!.Value : (object)DBNull.Value);
+                            cl.Parameters.AddWithValue("@Mt", movementType);
+                            cl.Parameters.AddWithValue("@KitParent", headerLineId);
+                            cl.Parameters.AddWithValue("@Notes", $"Kit bileşeni ({sets}×{c.PerKit:0.####}) — Sipariş #{orderId}");
+                            await cl.ExecuteNonQueryAsync(ct);
+                        }
+                        if (!isPurchase) decreases.Add((c.CompItemId, o.LocId!.Value));
+                    }
+                }
+
                 await using (var upd = conn.CreateCommand())
                 {
                     upd.Transaction = tx;
                     // Tam teslimat → BaseQuantity'ye birebir eşitle (yuvarlama artığı bırakmadan kapat);
                     // kısmi → mevcut DeliveredQuantity üzerine teslim edilen ana-birim miktarı ekle.
+                    // Kit satırında miktar birimi = set → DeliveredQuantity "teslim edilen set" olarak izlenir.
                     upd.CommandText = closes
                         ? $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [BaseQuantity] WHERE [Id] = @LineId;"
                         : $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [DeliveredQuantity] + @Add WHERE [Id] = @LineId;";
@@ -1069,7 +1206,6 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     if (!closes) upd.Parameters.AddWithValue("@Add", deliverBase);
                     await upd.ExecuteNonQueryAsync(ct);
                 }
-                if (!isPurchase) decreases.Add((o.ItemId, o.LocId!.Value));
             }
             if (!anyDelivered)
                 throw new InvalidOperationException(isPurchase
@@ -1446,6 +1582,19 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             var resultLines = new List<MobileDeliveryLineResult>();
             foreach (var p in plan)
             {
+                // Kit ürünleri phantom stoktur; mobil FIFO patlatma bu fazda desteklenmez → net hata
+                // (sessiz phantom stok hareketi yerine web teslimatına yönlendir; kit satırı buraya normalde düşmez).
+                await using (var kchk = conn.CreateCommand())
+                {
+                    kchk.Transaction = tx;
+                    kchk.CommandText = $"SELECT ISNULL([TypeId],0) FROM {T("Items")} WHERE [Id]=@Id;";
+                    kchk.Parameters.AddWithValue("@Id", p.ItemId);
+                    var tt = await kchk.ExecuteScalarAsync(ct);
+                    if (tt != null && tt != DBNull.Value && Convert.ToInt32(tt) == 10)
+                        throw new InvalidOperationException(
+                            $"Kit ürünü ({p.Name ?? ("#" + p.ItemId)}) mobil teslimatta desteklenmiyor; web üzerinden 'Teslim Et' ile gönderin.");
+                }
+
                 var linkSummary = new List<MobileDeliveryLineLink>();
 
                 // 4.0) Takip tipi DB'den çözülür — GetItemsByIdsAsync projeksiyonu TrackingType/AutoSerial

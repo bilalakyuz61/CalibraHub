@@ -55,6 +55,9 @@ public sealed class DocumentLine
     [Description("Kalem bazli kaynak iz — bu satır hangi kaynak satirdan turetildi? Tekliften siparise donustururken her sipariş satirinin hangi teklif satirindan geldigini gosterir. NULL ise orijinal/manuel girilmis. FK -> DocumentLine.Id (self-referencing).")]
     public int? SourceLineId { get; set; }
 
+    [Description("İrsaliye kit patlatması: bu bileşen satırı hangi kit BAŞLIK satırından (AYNI belgede) türedi? NULL ise kit bileşeni değil. FK -> DocumentLine.Id (self-referencing, aynı belge). Kit tam-set kısmi teslimatında kit başlık satırı (MovementType=NULL, stok-etkisiz, fiyatlı) altındaki gerçek stok-hareketli bileşen satırlarını gruplar.")]
+    public int? KitParentLineId { get; set; }
+
     // ── İhtiyaç Kaydı karşılama takip alanları (alis_talebi satırları için) ──
     // Diğer belge tiplerinde 0 kalır. DB'de FulfilledFromStock/ByPurchase/FulfillmentStatus kolonları.
     /// <summary>Stoktan depo transferi ile karşılanan miktar (alis_talebi). Diğer belge tiplerinde 0.</summary>

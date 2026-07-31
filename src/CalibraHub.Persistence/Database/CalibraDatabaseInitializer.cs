@@ -8316,6 +8316,14 @@ END;";
                 ALTER TABLE [{s}].[DocumentLine] ADD [DeliveredQuantity] DECIMAL(18,4) NOT NULL
                     CONSTRAINT [DF_DocumentLine_DeliveredQuantity] DEFAULT(0);
 
+            -- 2026-07-31: Kit tam-set kısmi teslimat — irsaliye patlatmasında kit BAŞLIK satırı
+            -- (MovementType=NULL, stok-etkisiz, orantılı fiyat) altındaki gerçek stok-hareketli
+            -- bileşen satırlarını gruplamak için self-referans. NULL = kit bileşeni değil.
+            -- Additive; mevcut satırlar NULL kalır (davranış değişmez).
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'KitParentLineId') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [KitParentLineId] INT NULL;
+
             -- 2026-07-02: Stok hareketi konsolidasyonu — DocumentLine artik fiilen stok
             -- hareketi yaratan satirlari da tasir (StockMovementType enum reuse: 1=Issue,
             -- 2=Receipt, 3=Transfer, 4=Adjust; NULL = ticari/stok-etkilemez satir).
