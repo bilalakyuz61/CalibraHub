@@ -79,3 +79,25 @@ public sealed record CreateReservationResult(
     IReadOnlyList<CreateReservationSkippedItem> Skipped);
 
 public sealed record CancelReservationRequest(List<int> ReservationIds);
+
+/// <summary>
+/// Yükleme Planlama Merkezi — Faz 2 (2026-07-31), "Yükle" aksiyonu. Seçilen aktif
+/// (Status=Active) rezervasyonları TAM olarak (kısmi yok) satış irsaliyesine dönüştürür.
+/// Cari başına TEK irsaliye üretilir (bkz. IStockReservationRepository.ShipReservationsAsync).
+/// </summary>
+public sealed record ShipReservationsRequest(List<int> ReservationIds);
+
+/// <summary>Üretilen bir irsaliye özeti (birden çok cari seçiliyse birden çok kayıt döner).</summary>
+public sealed record ShipReservationsDeliveryDto(
+    int DocumentId,
+    string DocNo,
+    int ContactId,
+    string? ContactName,
+    int LineCount);
+
+public sealed record ShipReservationsSkippedItem(int ReservationId, string Reason);
+
+public sealed record ShipReservationsResult(
+    bool Ok,
+    IReadOnlyList<ShipReservationsDeliveryDto> Deliveries,
+    IReadOnlyList<ShipReservationsSkippedItem> Skipped);

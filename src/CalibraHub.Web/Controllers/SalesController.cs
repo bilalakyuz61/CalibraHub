@@ -2575,6 +2575,93 @@ public sealed class SalesController : Controller
         }
     }
 
+    /// <summary>
+    /// Faz 2 (2026-07-31) — "Yükle": seçilen aktif rezervasyonların TAMAMINI (kısmi yok) satış
+    /// irsaliyesine dönüştürür. Cari başına TEK irsaliyede toplanır; çıkış deposu rezervasyonun
+    /// kendi LocationId'sidir. Her üretilen irsaliye için aktif bir onay akışı varsa otomatik başlatılır
+    /// (bkz. TryAutoStartApprovalAsync) — hata belge kaydını bozmaz, yalnız approvalStarted false kalır.
+    /// POST /Sales/ShipReservations
+    /// Body: { reservationIds:[int] }
+    /// Yanıt: { ok, deliveries:[{documentId,docNo,contactId,contactName,lineCount}], skipped:[{reservationId,reason}], approvalStarted }
+    /// </summary>
+    [HttpPost("/Sales/ShipReservations")]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ShipmentPlanning)]
+    public async Task<IActionResult> ShipReservations(
+        [FromBody] ShipReservationsRequest req, CancellationToken ct)
+    {
+        if (req?.ReservationIds == null || req.ReservationIds.Count == 0)
+            return Json(new { ok = false, error = "Yüklenecek rezervasyon seçilmedi." });
+
+        try
+        {
+            var userId = GetUserId();
+            var result = await _stockReservationRepo.ShipReservationsAsync(
+                req.ReservationIds, userId > 0 ? userId : null, ct);
+
+            var approvalStarted = false;
+            foreach (var delivery in result.Deliveries)
+            {
+                var started = await TryAutoStartApprovalAsync(delivery.DocumentId, "satis_irsaliyesi", ct);
+                approvalStarted = approvalStarted || started;
+            }
+
+            return Json(new
+            {
+                ok = result.Ok,
+                deliveries = result.Deliveries,
+                skipped = result.Skipped,
+                approvalStarted,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShipmentPlanning] Yukle hatasi. Ids: {Ids}",
+                string.Join(",", req.ReservationIds));
+            return Json(new { ok = false, error = "Yükleme sırasında bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Yeni üretilen belge için aktif bir onay akışı varsa otomatik başlatır. PurchaseController.
+    /// TryAutoStartApprovalAsync (:181) ile AYNI desen — hata belge kaydını asla bozmaz (belge zaten
+    /// kaydedildi), yalnız loglanır (CLAUDE.md kural #2: sessizce yutma yasak).
+    /// </summary>
+    private async Task<bool> TryAutoStartApprovalAsync(int documentId, string documentTypeCode, CancellationToken ct)
+    {
+        try
+        {
+            var kind = CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.ResolveKind(documentTypeCode);
+
+            var approvalEnabled = true;
+            if (kind != CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.WildcardKind)
+            {
+                approvalEnabled = await _companyParams.GetBoolAsync(
+                    ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
+            }
+            if (!approvalEnabled) return false;
+
+            var flow = await _approvalFlowService.MatchFlowAsync(kind, null, null, null, ct);
+            if (flow is null) return false;
+
+            var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+            await _approvalFlowService.StartAsync(
+                new StartApprovalRequest(
+                    DocumentId:      documentId,
+                    FlowId:          flow.Id,
+                    StartedBy:       userName,
+                    StartedByUserId: GetUserId() > 0 ? GetUserId() : null),
+                ct);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Akış başlatma hatası belge kaydını iptal etmez — belge zaten kaydedildi.
+            _logger.LogWarning(ex, "[ShipmentPlanning] Yukle auto-start onay baslatilamadi: Document {DocumentId}, tip {TypeCode}", documentId, documentTypeCode);
+            return false;
+        }
+    }
+
     // ── Rezervasyon deposu seçimi parametresi (ShipmentPlanningParameters) ──
     // FulfillmentLocationConfig/SaveFulfillmentLocationConfig (PurchaseController) ile AYNI
     // desen — Faz 1'de basit tutuldu (respectMinStock/consolidateLines YOK). Raf/Hücre tipli

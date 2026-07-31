@@ -28,4 +28,15 @@ public interface IStockReservationRepository
     /// <summary>Aktif rezervasyon listesi — orderDocumentId ve/veya orderLineId ile filtrelenebilir (ikisi de null ise tüm aktif rezervasyonlar).</summary>
     Task<IReadOnlyList<StockReservationDto>> GetReservationsAsync(
         int? orderDocumentId, int? orderLineId, CancellationToken ct);
+
+    /// <summary>
+    /// Faz 2 (2026-07-31) — "Yükle": seçilen aktif rezervasyonların TAMAMINI satış irsaliyesine
+    /// dönüştürür (kısmi yükleme yok). Cari (Document.ContactId) başına TEK irsaliyede toplanır;
+    /// çıkış deposu rezervasyonun kendi LocationId'sidir (sipariş kaleminin deposu DEĞİL). Rezervasyon
+    /// bulunamaz/zaten yüklenmiş/iptal edilmişse o rezervasyon Skipped listesine reason ile düşer —
+    /// diğer geçerli rezervasyonlar yine de işlenir (Fulfillment deseni, tüm istek reddedilmez).
+    /// Tek transaction (tüm cari grupları dahil); hata → tam rollback.
+    /// </summary>
+    Task<ShipReservationsResult> ShipReservationsAsync(
+        IReadOnlyList<int> reservationIds, int? userId, CancellationToken ct);
 }

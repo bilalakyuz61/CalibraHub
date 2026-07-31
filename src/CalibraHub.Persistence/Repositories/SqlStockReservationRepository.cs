@@ -1,5 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -21,13 +23,16 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlStockReservationRepository : IStockReservationRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IDocumentNumberService _numberService;
     private readonly string _schema;
 
     public SqlStockReservationRepository(
         SqlServerConnectionFactory connectionFactory,
+        IDocumentNumberService numberService,
         CalibraDatabaseOptions options)
     {
         _connectionFactory = connectionFactory;
+        _numberService = numberService;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
     }
 
@@ -428,5 +433,291 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                 Created: r.GetDateTime(13)));
         }
         return list;
+    }
+
+    // ── Faz 2 (2026-07-31) — "Yükle": rezervasyon → satış irsaliyesi ──────────────────────────
+    // Referans: SqlStockDocRepository.ConvertOrderToDeliveryAsync (:875) — aynı irsaliye satırı
+    // yazım deseni (MovementType=1 çıkış, FromLocationId, SourceLineId, DeliveredQuantity artışı,
+    // NegativeBalanceGuard) buraya BİREBİR uyarlandı. Farklar: (1) kaynak StockReservation satırları
+    // (sipariş kaleminin TÜM açığı değil, yalnız o rezervasyonun miktarı) — TAM yükleme, kısmi yok;
+    // (2) cari (Document.ContactId) başına TEK irsaliyede toplama (çok-sipariş olabilir) — SaveDeliveryFifoAsync
+    // (:1420) ile aynı "tek kaynak sipariş → ParentDocumentId, çoklu → null" kuralı; (3) kit/seri
+    // KAPSAM DIŞI (Faz 1 rezervasyonlar zaten kit-dışı, seri Faz 3) — DocumentLineLink dual-write ve
+    // ResolveOrderSerialsToIssuedAsync bilinçli olarak YAPILMADI (bu akış onlara dokunmuyor).
+
+    private sealed record ShipReservationRow(
+        int ReservationId, int OrderDocumentId, int OrderLineId, int ItemId, int LocationId,
+        int? CombinationId, int? UnitId, decimal Qty, decimal BaseQty,
+        decimal OrderQty, decimal UnitPrice, decimal DiscRate, decimal OrderLineTotal,
+        int ContactId, string? ContactName);
+
+    public async Task<ShipReservationsResult> ShipReservationsAsync(
+        IReadOnlyList<int> reservationIds, int? userId, CancellationToken ct)
+    {
+        var ids = (reservationIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct().ToList();
+        var skipped = new List<ShipReservationsSkippedItem>();
+        var deliveries = new List<ShipReservationsDeliveryDto>();
+        if (ids.Count == 0)
+            return new ShipReservationsResult(true, deliveries, skipped);
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            var companyId = _connectionFactory.ResolveCurrentCompanyId();
+
+            // 1) Durum ön-kontrolü — bulunamayan / zaten yüklenmiş / iptal edilmiş rezervasyonlar
+            //    net reason ile atlanır (sessiz atlama YOK, CLAUDE.md kural #3).
+            var statusById = new Dictionary<int, (byte Status, bool IsActive)>();
+            await using (var st = conn.CreateCommand())
+            {
+                st.Transaction = tx;
+                var pn = ids.Select((_, i) => "@id" + i).ToArray();
+                st.CommandText = $"SELECT [Id],[Status],[IsActive] FROM {T("StockReservation")} WHERE [Id] IN ({string.Join(",", pn)});";
+                for (var i = 0; i < ids.Count; i++) st.Parameters.AddWithValue(pn[i], ids[i]);
+                await using var r = await st.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                    statusById[r.GetInt32(0)] = (r.GetByte(1), r.GetBoolean(2));
+            }
+
+            var eligibleIds = new List<int>();
+            foreach (var id in ids)
+            {
+                if (!statusById.TryGetValue(id, out var s))
+                { skipped.Add(new ShipReservationsSkippedItem(id, "Rezervasyon bulunamadı.")); continue; }
+                if (s.Status == (byte)StockReservationStatus.Shipped)
+                { skipped.Add(new ShipReservationsSkippedItem(id, "Rezervasyon zaten yüklenmiş.")); continue; }
+                if (s.Status == (byte)StockReservationStatus.Cancelled || !s.IsActive)
+                { skipped.Add(new ShipReservationsSkippedItem(id, "Rezervasyon iptal edilmiş.")); continue; }
+                eligibleIds.Add(id);
+            }
+
+            if (eligibleIds.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return new ShipReservationsResult(true, deliveries, skipped);
+            }
+
+            // 2) Detay + sipariş kalemi fiyat/cari bilgisi (yalnız hâlâ geçerli satis_siparisi kalemi).
+            var rows = new List<ShipReservationRow>();
+            await using (var d = conn.CreateCommand())
+            {
+                d.Transaction = tx;
+                var pn = eligibleIds.Select((_, i) => "@rid" + i).ToArray();
+                d.CommandText = $"""
+                    SELECT sr.[Id], sr.[OrderDocumentId], sr.[OrderLineId], sr.[ItemId], sr.[LocationId],
+                           sr.[CombinationId], sr.[UnitId], sr.[Quantity], sr.[BaseQuantity],
+                           dl.[Quantity] AS OrderQty, dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal] AS OrderLineTotal,
+                           ISNULL(d.[ContactId], 0) AS ContactId, ca.[AccountTitle] AS ContactName
+                    FROM {T("StockReservation")} sr
+                    INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = sr.[OrderLineId]
+                    INNER JOIN {T("Document")} d       ON d.[Id]  = sr.[OrderDocumentId]
+                    INNER JOIN {T("DocumentType")} dt  ON dt.[Id] = d.[DocumentTypeId]
+                    LEFT JOIN {T("Contact")} ca         ON ca.[Id] = d.[ContactId]
+                    WHERE sr.[Id] IN ({string.Join(",", pn)})
+                      AND dt.[Code] = N'satis_siparisi' AND d.[IsActive] = 1;
+                    """;
+                for (var i = 0; i < eligibleIds.Count; i++) d.Parameters.AddWithValue(pn[i], eligibleIds[i]);
+                await using var r = await d.ExecuteReaderAsync(ct);
+                while (await r.ReadAsync(ct))
+                {
+                    rows.Add(new ShipReservationRow(
+                        ReservationId: r.GetInt32(0),
+                        OrderDocumentId: r.GetInt32(1),
+                        OrderLineId: r.GetInt32(2),
+                        ItemId: r.GetInt32(3),
+                        LocationId: r.GetInt32(4),
+                        CombinationId: r.IsDBNull(5) ? null : r.GetInt32(5),
+                        UnitId: r.IsDBNull(6) ? null : r.GetInt32(6),
+                        Qty: r.GetDecimal(7),
+                        BaseQty: r.GetDecimal(8),
+                        OrderQty: r.GetDecimal(9),
+                        UnitPrice: r.GetDecimal(10),
+                        DiscRate: r.GetDecimal(11),
+                        OrderLineTotal: r.GetDecimal(12),
+                        ContactId: r.GetInt32(13),
+                        ContactName: r.IsDBNull(14) ? null : r.GetString(14)));
+                }
+            }
+
+            var foundIds = rows.Select(x => x.ReservationId).ToHashSet();
+            foreach (var id in eligibleIds)
+                if (!foundIds.Contains(id))
+                    skipped.Add(new ShipReservationsSkippedItem(id, "Sipariş kalemi veya siparişi artık geçerli değil."));
+
+            var validRows = new List<ShipReservationRow>();
+            foreach (var row in rows)
+            {
+                if (row.ContactId <= 0)
+                    skipped.Add(new ShipReservationsSkippedItem(row.ReservationId, "Siparişte cari tanımlı değil; irsaliye oluşturulamadı."));
+                else
+                    validRows.Add(row);
+            }
+
+            if (validRows.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return new ShipReservationsResult(true, deliveries, skipped);
+            }
+
+            // 3) Cari (Document.ContactId) başına grupla → grup başına TEK irsaliye.
+            foreach (var group in validRows.GroupBy(x => x.ContactId))
+            {
+                var contactId = group.Key;
+                var groupRows = group.ToList();
+                var distinctOrderIds = groupRows.Select(x => x.OrderDocumentId).Distinct().ToList();
+                int? parentDocumentId = distinctOrderIds.Count == 1 ? distinctOrderIds[0] : null;
+
+                var docNo = await ResolveDocNoAsync(conn, tx, contactId, userId, DateTime.Today, ct);
+
+                var lineTotals = new decimal[groupRows.Count];
+                decimal subTotal = 0m;
+                for (var i = 0; i < groupRows.Count; i++)
+                {
+                    var row = groupRows[i];
+                    var lineTotal = row.OrderQty != 0m
+                        ? Math.Round(row.OrderLineTotal * row.Qty / row.OrderQty, 4)
+                        : row.OrderLineTotal;
+                    lineTotals[i] = lineTotal;
+                    subTotal += lineTotal;
+                }
+                subTotal = Math.Round(subTotal, 4);
+
+                int docId;
+                await using (var ins = conn.CreateCommand())
+                {
+                    ins.Transaction = tx;
+                    // ContactName Document'ta KOLON DEĞİL (ContactId JOIN'iyle çözülür) — yazılmaz.
+                    ins.CommandText = $"""
+                        INSERT INTO {T("Document")}
+                            ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[LocationId],
+                             [ContactId],[SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
+                             [Notes],[Status],[CreatedById],[Created],[IsActive],[ParentDocumentId])
+                        SELECT @CompanyId, @DocNo, dt.[Id], @DocDate, NULL,
+                               @ContactId, @SubTotal, 0, 0, 0, 0, @SubTotal,
+                               @Notes, N'Draft', @CreatedById, SYSUTCDATETIME(), 1, @ParentId
+                        FROM {T("DocumentType")} dt WHERE dt.[Code] = N'satis_irsaliyesi';
+                        SELECT CAST(SCOPE_IDENTITY() AS INT);
+                        """;
+                    ins.Parameters.AddWithValue("@CompanyId", companyId);
+                    ins.Parameters.AddWithValue("@DocNo", docNo);
+                    ins.Parameters.AddWithValue("@DocDate", DateTime.Today);
+                    ins.Parameters.AddWithValue("@ContactId", contactId);
+                    ins.Parameters.AddWithValue("@SubTotal", subTotal);
+                    ins.Parameters.AddWithValue("@Notes", "Yükleme planı → irsaliye");
+                    ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+                    ins.Parameters.Add(new SqlParameter("@ParentId", (object?)parentDocumentId ?? DBNull.Value));
+                    docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
+                }
+
+                var lineNo = 1;
+                var decreases = new HashSet<(int ItemId, int LocId)>();
+                for (var i = 0; i < groupRows.Count; i++)
+                {
+                    var row = groupRows[i];
+                    await using (var li = conn.CreateCommand())
+                    {
+                        li.Transaction = tx;
+                        li.CommandText = $"""
+                            INSERT INTO {T("DocumentLine")}
+                                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                 [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[Notes])
+                            VALUES
+                                (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
+                                 @CombId,@FromLoc,NULL,1,@SourceLineId,@Notes);
+                            """;
+                        li.Parameters.AddWithValue("@DocId", docId);
+                        li.Parameters.AddWithValue("@LineNo", lineNo++);
+                        li.Parameters.AddWithValue("@ItemId", row.ItemId);
+                        li.Parameters.Add(new SqlParameter("@UnitId", (object?)row.UnitId ?? DBNull.Value));
+                        li.Parameters.AddWithValue("@Qty", row.Qty);
+                        li.Parameters.AddWithValue("@BaseQty", row.BaseQty);
+                        li.Parameters.AddWithValue("@UnitPrice", row.UnitPrice);
+                        li.Parameters.AddWithValue("@DiscRate", row.DiscRate);
+                        li.Parameters.AddWithValue("@LineTotal", lineTotals[i]);
+                        li.Parameters.Add(new SqlParameter("@CombId", (object?)row.CombinationId ?? DBNull.Value));
+                        li.Parameters.AddWithValue("@FromLoc", row.LocationId);
+                        li.Parameters.AddWithValue("@SourceLineId", row.OrderLineId);
+                        li.Parameters.AddWithValue("@Notes", "Yükleme planı → irsaliye");
+                        await li.ExecuteNonQueryAsync(ct);
+                    }
+
+                    await using (var upd = conn.CreateCommand())
+                    {
+                        upd.Transaction = tx;
+                        upd.CommandText = $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [DeliveredQuantity] + @Add WHERE [Id] = @LineId;";
+                        upd.Parameters.AddWithValue("@Add", row.BaseQty);
+                        upd.Parameters.AddWithValue("@LineId", row.OrderLineId);
+                        await upd.ExecuteNonQueryAsync(ct);
+                    }
+
+                    await using (var rup = conn.CreateCommand())
+                    {
+                        rup.Transaction = tx;
+                        rup.CommandText = $"""
+                            UPDATE {T("StockReservation")}
+                            SET [Status] = 2, [ShippedDocumentId] = @DocId, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+                            WHERE [Id] = @Id;
+                            """;
+                        rup.Parameters.AddWithValue("@DocId", docId);
+                        rup.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+                        rup.Parameters.AddWithValue("@Id", row.ReservationId);
+                        await rup.ExecuteNonQueryAsync(ct);
+                    }
+
+                    decreases.Add((row.ItemId, row.LocationId));
+                }
+
+                // 4) Eksi bakiye kontrolü — çıkış (satış irsaliyesi), ConvertOrderToDeliveryAsync ile aynı guard.
+                foreach (var (it, loc) in decreases)
+                    await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, it, loc, DateTime.Today, ct);
+
+                var contactName = groupRows.Select(x => x.ContactName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
+                deliveries.Add(new ShipReservationsDeliveryDto(docId, docNo, contactId, contactName, groupRows.Count));
+            }
+
+            await tx.CommitAsync(ct);
+            return new ShipReservationsResult(true, deliveries, skipped);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    /// <summary>Belge numarasını DocumentType.Code üzerinden çözer (kural motoru → yoksa SIR-YYYY-NNNN).
+    /// SqlStockDocRepository.ResolveDocNoByCodeAsync ile aynı desen (kod tekrarı — iki repo arasında
+    /// paylaşılan yer yok, ConvertOrderToDeliveryAsync'teki private helper'a erişilemiyor).</summary>
+    private async Task<string> ResolveDocNoAsync(
+        SqlConnection conn, SqlTransaction tx, int? contactId, int? createdById, DateTime docDate, CancellationToken ct)
+    {
+        const string typeCode = "satis_irsaliyesi";
+        const string prefix = "SIR";
+        await using (var typeCmd = conn.CreateCommand())
+        {
+            typeCmd.Transaction = tx;
+            typeCmd.CommandText = $"SELECT [Id] FROM {T("DocumentType")} WHERE [Code] = @Code;";
+            typeCmd.Parameters.AddWithValue("@Code", typeCode);
+            var typeIdObj = await typeCmd.ExecuteScalarAsync(ct);
+            if (typeIdObj is int typeId)
+            {
+                var ruleNo = await _numberService.GenerateNextAsync(
+                    new DocumentNumberContext(typeId, contactId, null, createdById, null, docDate), ct);
+                if (!string.IsNullOrWhiteSpace(ruleNo)) return ruleNo;
+            }
+        }
+        var year = docDate.Year;
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT ISNULL(MAX(TRY_CAST(SUBSTRING([DocumentNumber], LEN(@Prefix) + 7, 10) AS INT)), 0) + 1
+            FROM {T("Document")}
+            WHERE [DocumentNumber] LIKE @Prefix + '-' + CAST(@Year AS NVARCHAR(4)) + '-%';
+            """;
+        cmd.Parameters.AddWithValue("@Prefix", prefix);
+        cmd.Parameters.AddWithValue("@Year", year);
+        var seq = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        return $"{prefix}-{year}-{seq:D4}";
     }
 }
