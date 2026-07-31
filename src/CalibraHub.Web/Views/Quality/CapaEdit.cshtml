@@ -1,0 +1,462 @@
+@using System.ComponentModel
+@using System.Linq
+@using System.Reflection
+@using CalibraHub.Domain.Enums
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@model CalibraHub.Application.Contracts.CapaDetailDto?
+@{
+    ViewData["Title"] = Model is null ? "Yeni DÖF" : $"DÖF: {Model.DocumentNumber}";
+    ViewData["BodyClass"] = "page-quality-capa-edit workspace-frame-body";
+    ViewData["FormCode"] = "QUALITY_CAPA";
+    var isNew = Model is null;
+
+    string Label(Enum e)
+    {
+        var m = e.GetType().GetMember(e.ToString()).FirstOrDefault();
+        return m?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? e.ToString();
+    }
+
+    string SourceKindLabel(string? kind) => kind switch
+    {
+        "QualityInspection" => "Muayene",
+        _ => kind ?? "",
+    };
+
+    var actionsJson = System.Text.Json.JsonSerializer.Serialize(
+        Model?.Actions ?? new List<CalibraHub.Application.Contracts.CapaActionDto>(),
+        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+
+    // Aksiyon satırı Tip/Durum select seçeneklerini sabit HTML olarak üret — JS tarafında
+    // her satır eklendiğinde Razor foreach tekrar tekrar çalıştırılmasın diye tek seferde.
+    var actionTypeOptionsHtml = string.Join("", Enum.GetValues<CapaActionType>().Select(t => $"<option value=\"{(byte)t}\">{Label(t)}</option>"));
+    var actionStatusOptionsHtml = string.Join("", Enum.GetValues<CapaActionStatus>().Select(s => $"<option value=\"{(byte)s}\">{Label(s)}</option>"));
+
+    // Kaynak Belge ön-doldurma — Muayene ekranından "DÖF Aç" linkiyle gelen query paramları.
+    // Yalnız yeni kayıtta kullanılır (var olan kayıtta Model.SourceKind/SourceId geçerli, değiştirilemez).
+    var prefillSourceKind = ViewData["PrefillSourceKind"] as string;
+    var prefillSourceId = ViewData["PrefillSourceId"] as int?;
+}
+
+<div class="ux-edit-shell">
+  @await Html.PartialAsync("_CalibraActionBar", new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+  {
+      ["Title"]       = isNew ? "Yeni DÖF" : (Model!.DocumentNumber ?? "DÖF"),
+      ["ListUrl"]     = "/Quality/Capas",
+      ["NewUrl"]      = "/Quality/CapaEdit",
+      ["SaveBtnId"]   = "capa-save",
+      ["DeleteBtnId"] = "capa-delete",
+      ["ShowDelete"]  = !isNew,
+  })
+
+  <div class="ux-edit-body">
+    <aside class="ux-edit-nav" id="capaNav">
+      <button type="button" class="ux-edit-nav__tab is-active" data-tab="general"><span>Genel</span></button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="rootcause"><span>Kök Neden</span></button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="actions"><span>Aksiyonlar</span></button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="closure"><span>Doğrulama &amp; Kapanış</span></button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="widgets"><span>Ek Alanlar</span></button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="audit"><span>Değişiklik Geçmişi</span></button>
+    </aside>
+
+    <section class="ux-edit-content">
+
+      <!-- ══════════ Genel ══════════ -->
+      <div class="ux-edit-pane is-active" data-tab="general">
+        <h2>Genel Bilgiler</h2>
+        <div class="ux-edit-hint">Uygunsuzluk/şikayet kaynaklı düzeltici veya önleyici faaliyetin konusunu, türünü ve sorumlusunu tanımlayın.</div>
+
+        <input type="hidden" id="f-id" value="@(Model?.DocumentId ?? 0)" />
+        <input type="hidden" id="f-status" value="@(Model?.Status ?? 0)" />
+        <input type="hidden" id="f-source-kind-current" value="@(Model?.SourceKind ?? "")" />
+        <input type="hidden" id="f-source-id-current" value="@(Model?.SourceId?.ToString() ?? "")" />
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-title">Konu *</label>
+          <input type="text" id="f-title" maxlength="250" value="@Model?.Title" placeholder="Örn: Girdi muayenesinde tekrarlayan boyut uygunsuzluğu" />
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-problem">Problem Tanımı</label>
+          <textarea id="f-problem" maxlength="2000" placeholder="Problemi kısaca tarif edin…">@Model?.ProblemDescription</textarea>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="f-type">Tip *</label>
+            <select id="f-type" data-current="@(Model?.CapaType ?? (byte)CapaType.Duzeltici)">
+              @foreach (var t in Enum.GetValues<CapaType>()) { <option value="@((byte)t)">@Label(t)</option> }
+            </select>
+          </div>
+          <div class="ux-field">
+            <label for="f-severity">Önem *</label>
+            <select id="f-severity" data-current="@(Model?.Severity ?? (byte)CapaSeverity.Orta)">
+              @foreach (var s in Enum.GetValues<CapaSeverity>()) { <option value="@((byte)s)">@Label(s)</option> }
+            </select>
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="f-defect">Hata Kodu</label>
+            <select id="f-defect" data-current="@(Model?.DefectCodeId)"><option value="">— Yok —</option></select>
+          </div>
+          <div class="ux-field">
+            <label for="f-responsible">Sorumlu</label>
+            <select id="f-responsible" data-current="@(Model?.ResponsiblePersonnelId)"><option value="">— Seçiniz —</option></select>
+          </div>
+        </div>
+
+        <div class="ux-field">
+          <label for="f-due">Termin</label>
+          <input type="date" id="f-due" value="@(Model?.DueDate?.ToString("yyyy-MM-dd"))" />
+        </div>
+
+        <!-- Kaynak — yeni kayıtta seçilebilir; mevcut kayıtta salt görüntüleme (değiştirilemez). -->
+        <div class="ux-field ux-field--wide" id="capa-source-new" style="@(isNew ? "" : "display:none;")">
+          <label for="f-source">Kaynak Muayene <span style="font-weight:400;">(opsiyonel)</span></label>
+          <select id="f-source"><option value="">— Yok —</option></select>
+          <div class="ux-hint">Uygunsuzluk kararı verilmiş bir muayeneden DÖF açıyorsanız burada seçin.</div>
+        </div>
+        <div class="ux-field ux-field--wide" id="capa-source-existing" style="@(!isNew && Model?.SourceKind is { Length: > 0 } ? "" : "display:none;")">
+          <label>Kaynak</label>
+          <div class="ux-edit-hint" style="margin:0;">Kaynak: @(SourceKindLabel(Model?.SourceKind)) #@(Model?.SourceId)</div>
+        </div>
+
+        <div id="capa-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <!-- ══════════ Kök Neden ══════════ -->
+      <div class="ux-edit-pane" data-tab="rootcause">
+        <h2>Kök Neden Analizi</h2>
+        <div class="ux-edit-hint">Kullanılan analiz yöntemini seçip bulguları aşağıya yazın.</div>
+
+        <div class="ux-field">
+          <label for="f-rcmethod">Yöntem</label>
+          <select id="f-rcmethod" data-current="@(Model?.RootCauseMethod)">
+            <option value="">— Seçiniz —</option>
+            @foreach (var m in Enum.GetValues<RootCauseMethod>()) { <option value="@((byte)m)">@Label(m)</option> }
+          </select>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-rootcause">Analiz</label>
+          <textarea id="f-rootcause" maxlength="4000" style="min-height:180px;" placeholder="Kök neden bulgularını yazın…">@Model?.RootCause</textarea>
+        </div>
+      </div>
+
+      <!-- ══════════ Aksiyonlar ══════════ -->
+      <div class="ux-edit-pane" data-tab="actions">
+        <h2>Aksiyonlar</h2>
+        <div class="ux-edit-hint">Acil sınırlama, düzeltici ve önleyici aksiyon satırlarını buradan yönetin. Kapanış için tüm satırların Tamamlandı veya İptal olması gerekir.</div>
+        <div style="margin-bottom:10px;"><button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="cae-add">+ Aksiyon Ekle</button></div>
+        <div id="cae-rows"></div>
+        <div id="cae-rows-empty" class="ux-edit-hint" style="display:none;">Henüz aksiyon yok. "+ Aksiyon Ekle" ile başlayın.</div>
+      </div>
+
+      <!-- ══════════ Doğrulama & Kapanış ══════════ -->
+      <div class="ux-edit-pane" data-tab="closure">
+        <h2>Etkinlik Doğrulama &amp; Kapanış</h2>
+        <div class="ux-edit-hint">Tüm aksiyonlar tamamlanıp etkinlik doğrulandıktan sonra DÖF kapatılabilir.</div>
+
+        <div class="ux-field">
+          <label>Etkinlik Doğrulandı</label>
+          <div class="ux-switch-row">
+            <label class="ux-switch"><input type="checkbox" id="f-effverified" @(Model?.EffectivenessVerified == true ? "checked" : "") /><span class="ux-switch-track"></span></label>
+            <span class="ux-switch-label" id="f-effverified-label">@(Model?.EffectivenessVerified == true ? "Evet" : "Hayır")</span>
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="f-verifiedby">Doğrulayan</label>
+            <select id="f-verifiedby" data-current="@(Model?.VerifiedByPersonnelId)"><option value="">— Seçiniz —</option></select>
+          </div>
+          <div class="ux-field">
+            <label for="f-verifiedat">Doğrulama Tarihi</label>
+            <input type="date" id="f-verifiedat" value="@(Model?.VerifiedAt?.ToString("yyyy-MM-dd"))" />
+          </div>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-effnote">Not</label>
+          <textarea id="f-effnote" maxlength="2000" placeholder="Doğrulama notu…">@Model?.EffectivenessNote</textarea>
+        </div>
+
+        @if (!isNew)
+        {
+          <div class="cae-state">
+            <div class="cae-state__row"><span>Durum</span><span id="cae-status-badge" class="cae-badge">—</span></div>
+          </div>
+          <div class="cae-state__actions" id="cae-transitions"></div>
+          <div id="cae-state-err" style="display:none;" class="ux-err"></div>
+        }
+        else
+        {
+          <div class="ux-edit-hint">Durum işlemleri (Kök Neden Analizine Al, Kapat vb.) kayıt oluşturulduktan sonra kullanılabilir.</div>
+        }
+      </div>
+
+      <!-- ══════════ Ek Alanlar ══════════ -->
+      <div class="ux-edit-pane" data-tab="widgets">
+        <h2>Ek Alanlar</h2>
+        <div class="ux-edit-hint">Admin → Widget Tanımları → QUALITY_CAPA'da tanımlanan ek alanlar.</div>
+        @await Html.PartialAsync("_DynamicWidgetHost", new CalibraHub.Web.Models.Shared.DynamicWidgetHostModel
+        {
+            FormCode = "QUALITY_CAPA",
+            HostId   = "capaWidgets",
+            RecordId = Model?.DocumentId.ToString(),
+        })
+      </div>
+
+      <!-- ══════════ Değişiklik Geçmişi ══════════ -->
+      <div class="ux-edit-pane" data-tab="audit">
+        <h2>Değişiklik Geçmişi</h2>
+        @await Html.PartialAsync("_AuditTrailHost", new CalibraHub.Web.Models.Shared.AuditTrailHostModel
+        {
+            Entity         = "Capa",
+            RecordId       = Model?.DocumentId.ToString(),
+            WidgetFormCode = "QUALITY_CAPA",
+            HostId         = "capaAudit",
+        })
+      </div>
+
+    </section>
+  </div>
+</div>
+
+<style>
+  /* Aksiyon satırı grid — plc/imc (InspectionPlanEdit/InspectionEdit) ile aynı desen. */
+  .cae-row{display:grid;grid-template-columns:2fr 1fr 1.2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--app-surface,#fff);}
+  .cae-f{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .cae-f label{font-size:11px;font-weight:600;color:var(--app-text-muted,#64748b);}
+  .cae-row input,.cae-row select{font-size:13px;padding:7px 8px;border:1px solid var(--app-border,#e2e8f0);border-radius:7px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);width:100%;}
+  .cae-rm{width:34px;height:34px;border-radius:8px;border:1px solid rgba(239,68,68,.35);background:var(--app-surface,#fff);color:var(--danger,#ef4444);cursor:pointer;font-size:16px;}
+  .cae-rm:hover{background:rgba(239,68,68,.1);}
+  body.app-theme-dark .cae-row,body.app-theme-dark .cae-row input,body.app-theme-dark .cae-row select,body.app-theme-dark .cae-rm{background:var(--app-surface,#1e293b);}
+
+  /* Durum rozeti + geçiş butonları */
+  .cae-state{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 16px;margin:14px 0;background:var(--app-surface,#fff);max-width:560px;}
+  .cae-state__row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
+  .cae-state__actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .cae-badge{display:inline-flex;align-items:center;padding:2px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:var(--app-surface-2,rgba(148,163,184,.15));color:var(--app-text-muted,#64748b);}
+  body.app-theme-dark .cae-state{background:var(--app-surface,#1e293b);}
+</style>
+
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    var INITIAL_ACTIONS = @Html.Raw(actionsJson);
+    var IS_NEW = @(isNew ? "true" : "false");
+    var STATUS_LABELS = { 0:'Açık', 1:'Kök Neden Analizi', 2:'Aksiyonda', 3:'Doğrulama Bekliyor', 4:'Kapalı', 5:'İptal' };
+    // ValidateTransition (CapaService) ile birebir aynı geçiş haritası — sadece UI için ayna.
+    var TRANSITIONS = {
+        0: [ {s:1, label:'Kök Neden Analizine Al'}, {s:5, label:'İptal Et'} ],
+        1: [ {s:2, label:'Aksiyona Al'}, {s:0, label:'Açığa Dön'}, {s:5, label:'İptal Et'} ],
+        2: [ {s:3, label:'Doğrulamaya Gönder'}, {s:1, label:'Kök Neden Analizine Dön'}, {s:5, label:'İptal Et'} ],
+        3: [ {s:4, label:'Kapat'}, {s:2, label:'Aksiyona Dön'}, {s:5, label:'İptal Et'} ],
+        4: [ {s:3, label:'Yeniden Aç'} ],
+        5: [],
+    };
+    var PREFILL_SOURCE_KIND = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(prefillSourceKind));
+    var PREFILL_SOURCE_ID = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(prefillSourceId));
+    var ACTION_TYPE_OPTIONS_HTML = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(actionTypeOptionsHtml));
+    var ACTION_STATUS_OPTIONS_HTML = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(actionStatusOptionsHtml));
+
+    function token(){return document.querySelector('input[name="__RequestVerificationToken"]')?.value||'';}
+    function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+    function notify(text,ok){var el=document.getElementById('capa-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color=ok?'#059669':'#dc2626';}
+    function stateErr(text){var el=document.getElementById('cae-state-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';}
+
+    // ── Sekme geçişi ──
+    function activateTab(key){if(!key)return;document.querySelectorAll('#capaNav .ux-edit-nav__tab').forEach(function(b){b.classList.toggle('is-active',b.dataset.tab===key);});document.querySelectorAll('.ux-edit-pane').forEach(function(p){p.classList.toggle('is-active',p.dataset.tab===key);});}
+    document.querySelectorAll('#capaNav .ux-edit-nav__tab').forEach(function(b){b.addEventListener('click',function(){activateTab(b.dataset.tab);});});
+
+    var typeEl=document.getElementById('f-type'); if(typeEl.getAttribute('data-current'))typeEl.value=typeEl.getAttribute('data-current');
+    var sevEl=document.getElementById('f-severity'); if(sevEl.getAttribute('data-current'))sevEl.value=sevEl.getAttribute('data-current');
+    var rcEl=document.getElementById('f-rcmethod'); if(rcEl.getAttribute('data-current'))rcEl.value=rcEl.getAttribute('data-current');
+
+    var effEl=document.getElementById('f-effverified'), effLabel=document.getElementById('f-effverified-label');
+    effEl.addEventListener('change',function(){effLabel.textContent=effEl.checked?'Evet':'Hayır';updateCloseGuard();});
+
+    // ── Hata kodu / personel lookup'ları (bir kez fetch, tüm select'lere uygulanır) ──
+    var DEFECT_OPTIONS=[], PERSONNEL_OPTIONS=[];
+    function defectOptionsHtml(sel){var h='<option value="">— Yok —</option>';DEFECT_OPTIONS.forEach(function(d){h+='<option value="'+d.id+'"'+(String(d.id)===String(sel)?' selected':'')+'>'+esc(d.name)+'</option>';});return h;}
+    function personnelOptionsHtml(sel){var h='<option value="">— Seçiniz —</option>';PERSONNEL_OPTIONS.forEach(function(p){h+='<option value="'+p.id+'"'+(String(p.id)===String(sel)?' selected':'')+'>'+esc(p.name)+'</option>';});return h;}
+
+    fetch('/Quality/DefectCodesLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
+        DEFECT_OPTIONS=list||[];
+        var sel=document.getElementById('f-defect');var cur=sel.getAttribute('data-current')||'';sel.innerHTML=defectOptionsHtml(cur);
+    }).catch(function(){});
+
+    fetch('/Quality/CapaPersonnelLookup',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
+        PERSONNEL_OPTIONS=list||[];
+        ['f-responsible','f-verifiedby'].forEach(function(id){var sel=document.getElementById(id);var cur=sel.getAttribute('data-current')||'';sel.innerHTML=personnelOptionsHtml(cur);});
+        // Aksiyon satırlarındaki sorumlu select'leri de doldur (satırlar bu fetch'ten önce render edilmiş olabilir).
+        document.querySelectorAll('.cae-resp').forEach(function(sel){var cur=sel.getAttribute('data-current')||'';sel.innerHTML=personnelOptionsHtml(cur);});
+    }).catch(function(){});
+
+    // ── Kaynak Muayene (yeni kayıt) ──
+    var srcSel=document.getElementById('f-source');
+    if(IS_NEW && srcSel){
+        function loadSources(){
+            fetch('/Quality/CapaSourceLookup?kind=QualityInspection&search=',{credentials:'same-origin'})
+                .then(function(r){return r.ok?r.json():[];})
+                .then(function(list){
+                    srcSel.innerHTML='<option value="">— Yok —</option>';
+                    (list||[]).forEach(function(it){
+                        var o=document.createElement('option');o.value=it.sourceId;o.textContent=it.label+(it.date?(' · '+String(it.date).substring(0,10)):'');
+                        srcSel.appendChild(o);
+                    });
+                    if(PREFILL_SOURCE_KIND==='QualityInspection'&&PREFILL_SOURCE_ID){
+                        var opt=srcSel.querySelector('option[value="'+PREFILL_SOURCE_ID+'"]');
+                        if(opt)srcSel.value=String(PREFILL_SOURCE_ID);
+                    }
+                }).catch(function(){});
+        }
+        loadSources();
+    }
+    function currentSourceKind(){ if(!IS_NEW)return document.getElementById('f-source-kind-current').value||null; return (srcSel&&srcSel.value)?'QualityInspection':null; }
+    function currentSourceId(){ if(!IS_NEW){var v=document.getElementById('f-source-id-current').value;return v?parseInt(v,10):null;} return (srcSel&&srcSel.value)?parseInt(srcSel.value,10):null; }
+
+    // ── Aksiyon satırları ──
+    var rowsEl=document.getElementById('cae-rows'), emptyEl=document.getElementById('cae-rows-empty');
+    function refreshEmpty(){emptyEl.style.display=rowsEl.children.length?'none':'';}
+    function addRow(a){
+        var row=document.createElement('div');row.className='cae-row';
+        row.setAttribute('data-id', a&&a.id?String(a.id):'0');
+        row.innerHTML=
+            '<div class="cae-f"><label>Aksiyon *</label><input class="cae-desc" maxlength="500" value="'+esc(a?a.description:'')+'" placeholder="Yapılacak aksiyon…" /></div>'+
+            '<div class="cae-f"><label>Tip</label><select class="cae-type"></select></div>'+
+            '<div class="cae-f"><label>Sorumlu</label><select class="cae-resp" data-current="'+(a&&a.responsiblePersonnelId?a.responsiblePersonnelId:'')+'"></select></div>'+
+            '<div class="cae-f"><label>Termin</label><input type="date" class="cae-due" value="'+(a&&a.dueDate?String(a.dueDate).substring(0,10):'')+'" /></div>'+
+            '<div class="cae-f"><label>Durum</label><select class="cae-status"></select></div>'+
+            '<div class="cae-f"><label>Tamamlanma</label><input type="date" class="cae-completed" value="'+(a&&a.completedAt?String(a.completedAt).substring(0,10):'')+'" /></div>'+
+            '<button type="button" class="cae-rm" title="Kaldır">×</button>';
+        rowsEl.appendChild(row);
+
+        var typeSel=row.querySelector('.cae-type');
+        typeSel.innerHTML = ACTION_TYPE_OPTIONS_HTML;
+        typeSel.value = a&&a.actionType ? String(a.actionType) : '2';
+
+        var statusSel=row.querySelector('.cae-status');
+        statusSel.innerHTML = ACTION_STATUS_OPTIONS_HTML;
+        statusSel.value = a&&a.status!=null ? String(a.status) : '0';
+        statusSel.addEventListener('change', function(){
+            if(statusSel.value==='2'){ var c=row.querySelector('.cae-completed'); if(!c.value){ c.value = new Date().toISOString().substring(0,10); } }
+            updateCloseGuard();
+        });
+
+        var respSel=row.querySelector('.cae-resp');
+        respSel.innerHTML = personnelOptionsHtml(a&&a.responsiblePersonnelId?a.responsiblePersonnelId:'');
+
+        row.querySelector('.cae-rm').addEventListener('click',function(){row.remove();refreshEmpty();updateCloseGuard();});
+        refreshEmpty();updateCloseGuard();
+    }
+    document.getElementById('cae-add').addEventListener('click',function(){addRow(null);var last=rowsEl.lastElementChild;if(last)last.querySelector('.cae-desc').focus();});
+    (INITIAL_ACTIONS||[]).forEach(addRow); refreshEmpty();
+
+    function collectActions(){
+        var out=[];var i=0;
+        Array.prototype.forEach.call(rowsEl.querySelectorAll('.cae-row'),function(row){
+            var desc=row.querySelector('.cae-desc').value.trim();
+            if(!desc)return; // boş satır gönderilmez
+            i++;
+            out.push({
+                id: parseInt(row.getAttribute('data-id'),10)||0,
+                actionType: parseInt(row.querySelector('.cae-type').value,10),
+                description: desc,
+                responsiblePersonnelId: parseInt(row.querySelector('.cae-resp').value,10)||null,
+                dueDate: row.querySelector('.cae-due').value||null,
+                status: parseInt(row.querySelector('.cae-status').value,10),
+                completedAt: row.querySelector('.cae-completed').value||null,
+                orderNo: i,
+            });
+        });
+        return out;
+    }
+
+    // ── Kapanış guard'ı (client-side ayna — gerçek guard server'da) ──
+    function updateCloseGuard(){
+        var btn=document.querySelector('#cae-transitions [data-status="4"]');
+        if(!btn)return;
+        var allDone=true;
+        Array.prototype.forEach.call(rowsEl.querySelectorAll('.cae-row'),function(row){
+            var desc=row.querySelector('.cae-desc').value.trim(); if(!desc)return;
+            var st=row.querySelector('.cae-status').value;
+            if(st!=='2'&&st!=='3')allDone=false;
+        });
+        var canClose = allDone && effEl.checked;
+        btn.disabled=!canClose;
+        btn.title = canClose ? '' : 'Kapatmak için tüm aksiyonlar Tamamlandı/İptal olmalı ve etkinlik doğrulanmalı.';
+    }
+
+    // ── Durum rozeti + geçiş butonları (mevcut kayıt) ──
+    var idVal=parseInt(document.getElementById('f-id').value,10)||0;
+    if(!IS_NEW && idVal){
+        var st=parseInt(document.getElementById('f-status').value,10)||0;
+        var badge=document.getElementById('cae-status-badge'); if(badge)badge.textContent=STATUS_LABELS[st]||'—';
+        var wrap=document.getElementById('cae-transitions');
+        (TRANSITIONS[st]||[]).forEach(function(tr){
+            var b=document.createElement('button');
+            b.type='button'; b.className='ux-edit-bar__btn'+(tr.s===4?' ux-edit-bar__btn--primary':'');
+            b.textContent=tr.label; b.setAttribute('data-status',String(tr.s));
+            b.addEventListener('click',async function(){
+                stateErr('');
+                try{
+                    var r=await fetch('/Quality/ChangeCapaStatus',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify({id:idVal,newStatus:tr.s})});
+                    var d=await r.json();
+                    if(!d.ok){stateErr(d.error||'İşlem başarısız.');return;}
+                    location.reload();
+                }catch(e){stateErr('Hata: '+e.message);}
+            });
+            wrap.appendChild(b);
+        });
+        updateCloseGuard();
+    }
+
+    // ── Kaydet ──
+    document.getElementById('capa-save').addEventListener('click',async function(){
+        var title=document.getElementById('f-title').value.trim();
+        if(!title){notify('Konu zorunludur.',false);activateTab('general');return;}
+        var payload={
+            id: idVal,
+            capaType: parseInt(typeEl.value,10),
+            sourceKind: currentSourceKind(),
+            sourceId: currentSourceId(),
+            title: title,
+            problemDescription: document.getElementById('f-problem').value.trim()||null,
+            defectCodeId: parseInt(document.getElementById('f-defect').value,10)||null,
+            severity: parseInt(sevEl.value,10),
+            rootCauseMethod: rcEl.value?parseInt(rcEl.value,10):null,
+            rootCause: document.getElementById('f-rootcause').value.trim()||null,
+            responsiblePersonnelId: parseInt(document.getElementById('f-responsible').value,10)||null,
+            dueDate: document.getElementById('f-due').value||null,
+            effectivenessVerified: effEl.checked,
+            verifiedByPersonnelId: parseInt(document.getElementById('f-verifiedby').value,10)||null,
+            verifiedAt: document.getElementById('f-verifiedat').value||null,
+            effectivenessNote: document.getElementById('f-effnote').value.trim()||null,
+            actions: collectActions(),
+        };
+        try{
+            var r=await fetch('/Quality/SaveCapa',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify(payload)});
+            var d=await r.json();
+            if(!d.ok){notify(d.error||'Kaydedilemedi.',false);return;}
+            // Ek Alanlar (dinamik widget) değerlerini yeni/mevcut kayıt Id'sine yaz.
+            if(window.CalibraWidgetHost && d.id){
+                try{ await window.CalibraWidgetHost.save('capaWidgets', d.id); }catch(_){/* widget save hatası kaydı bloklamaz */}
+            }
+            // Aksiyon satırları her kaydetmede DELETE+INSERT edilir (Id'ler değişir) — güncel
+            // Id'lerle oturması için kaydı yeniden yükle.
+            location.href='/Quality/CapaEdit?id='+d.id;
+        }catch(e){notify('Hata: '+e.message,false);}
+    });
+
+    var btnDel=document.getElementById('capa-delete');
+    if(btnDel)btnDel.addEventListener('click',async function(){
+        var ok=(typeof showConfirm==='function')?await showConfirm({title:'DÖF Sil',message:'Bu DÖF kaydını silmek istediğinize emin misiniz?',okLabel:'Sil'}):confirm('Silmek istediğinize emin misiniz?');
+        if(!ok)return;
+        try{var r=await fetch('/Quality/DeleteCapaJson?id='+idVal,{method:'POST',credentials:'same-origin',headers:{'RequestVerificationToken':token()}});var d=await r.json();if(!d.ok){notify(d.error||'Silinemedi.',false);return;}location.href='/Quality/Capas';}catch(e){notify('Hata: '+e.message,false);}
+    });
+})();
+</script>
