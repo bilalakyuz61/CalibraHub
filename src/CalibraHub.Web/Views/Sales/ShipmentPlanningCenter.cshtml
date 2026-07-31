@@ -1,13 +1,15 @@
 @*
-    ShipmentPlanningCenter — Yükleme Planlama Merkezi (Faz 1, 2026-07-28).
+    ShipmentPlanningCenter — Yükleme Planlama Merkezi (Faz 1, 2026-07-28 · Faz 2, 2026-07-31).
     İhtiyaç Karşılama Merkezi'nin (Views/Purchase/FulfillmentCenter.cshtml, prefix fc3-) satış-tarafı
-    analoğu. Prefix: sp- (shipment planning). Faz 1 kapsamı SADE tutulur:
-      1) Açık satış sipariş kalemlerini listele + "Depodan Rezerve Et" (mantıksal rezervasyon).
-      2) Mevcut rezervasyonları (satır detayında) göster + iptal et.
-    "Yükle / İrsaliye" aksiyonu Faz 2 — burada YOK (buton bile eklenmedi).
+    analoğu. Prefix: sp- (shipment planning). Kapsam:
+      1) Açık satış sipariş kalemlerini listele + "Depodan Rezerve Et" (mantıksal rezervasyon) — Faz 1.
+      2) Mevcut rezervasyonları (satır detayında) göster + iptal et — Faz 1.
+      3) Rezervasyonu irsaliyeye çevir ("Yükle") — Faz 2. Tekil (satır bazlı Yükle butonu) veya
+         rezervasyon detay panelinde checkbox ile çoklu seçim + "Seçilenleri Yükle". Destrüktif/geri
+         alınamaz işlem olduğu için ekran-ortası onay modalı zorunlu (showConfirm).
     Sunucu tarafı render etmez; tüm veri client-side fetch ile GET /Sales/OpenOrderLinesForReservation,
-    GET /Sales/OrderReservations, POST /Sales/CreateReservation, POST /Sales/CancelReservation üzerinden
-    gelir (kesin sözleşme — bkz. SalesController.cs ilgili action'lar).
+    GET /Sales/OrderReservations, POST /Sales/CreateReservation, POST /Sales/CancelReservation,
+    POST /Sales/ShipReservations üzerinden gelir (kesin sözleşme — bkz. SalesController.cs ilgili action'lar).
 *@
 @{
     ViewData["Title"]     = "Yükleme Planlama";
@@ -146,16 +148,31 @@
         padding:6px 14px 6px 48px; border-bottom:1px solid rgba(255,255,255,.03); font-size:.76rem;
     }
     .sp-sub-row:last-child { border-bottom:none; }
+    .sp-sub-cb   { accent-color:#6366f1; width:14px; height:14px; cursor:pointer; margin:0; flex-shrink:0; }
     .sp-sub-loc  { color:#94a3b8; min-width:120px; }
     .sp-sub-qty  { color:#e2e8f0; font-weight:600; font-family:ui-monospace, Menlo, Consolas, monospace; min-width:70px; }
     .sp-sub-date { color:#64748b; min-width:80px; }
     .sp-sub-notes { color:#64748b; flex:1; min-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sp-sub-actions { margin-left:auto; display:flex; align-items:center; gap:6px; flex-shrink:0; }
     .sp-sub-cancel {
-        margin-left:auto; display:inline-flex; align-items:center; gap:4px;
+        display:inline-flex; align-items:center; gap:4px;
         padding:3px 9px; border-radius:6px; font-size:.72rem; font-weight:600; cursor:pointer;
         background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.28); color:#fca5a5; transition:all .12s;
     }
     .sp-sub-cancel:hover { background:rgba(239,68,68,.18); border-color:rgba(239,68,68,.4); }
+    .sp-sub-ship {
+        display:inline-flex; align-items:center; gap:4px;
+        padding:3px 9px; border-radius:6px; font-size:.72rem; font-weight:600; cursor:pointer;
+        background:rgba(99,102,241,.12); border:1px solid rgba(99,102,241,.32); color:#a5b4fc; transition:all .12s;
+    }
+    .sp-sub-ship:hover { background:rgba(99,102,241,.2); border-color:rgba(99,102,241,.45); }
+    .sp-sub-toolbar {
+        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+        padding:6px 14px 6px 48px; border-bottom:1px solid rgba(99,102,241,.14);
+        background:rgba(99,102,241,.04);
+    }
+    .sp-sub-toolbar-cnt { font-size:.74rem; font-weight:700; color:#a5b4fc; }
+    .sp-btn--xs { padding:4px 10px; font-size:.73rem; }
 
     /* ── Seçim aksiyon bar ── */
     .sp-selbar {
@@ -297,6 +314,10 @@
     body.app-theme-light .sp-sub-loc, body.app-theme-light .sp-sub-date, body.app-theme-light .sp-sub-notes { color:#64748b; }
     body.app-theme-light .sp-sub-qty { color:#0f172a; }
     body.app-theme-light .sp-sub-loading, body.app-theme-light .sp-sub-empty { color:#94a3b8; }
+    body.app-theme-light .sp-sub-ship { background:rgba(99,102,241,.08); border-color:rgba(99,102,241,.25); color:#4338ca; }
+    body.app-theme-light .sp-sub-ship:hover { background:rgba(99,102,241,.14); border-color:rgba(99,102,241,.38); }
+    body.app-theme-light .sp-sub-toolbar { background:rgba(99,102,241,.05); border-bottom-color:rgba(99,102,241,.16); }
+    body.app-theme-light .sp-sub-toolbar-cnt { color:#4338ca; }
 
     body.app-theme-light .sp-selbar { background:#ffffff; border-color:#e2e8f0; box-shadow:0 16px 40px rgba(15,23,42,.14); }
     body.app-theme-light .sp-sb-cnt { color:#4338ca; }
@@ -678,19 +699,32 @@
                     sub.innerHTML = '<div class="sp-sub-empty">Bu kalem için aktif rezervasyon yok.</div>';
                     return;
                 }
-                sub.innerHTML = data.map(function(r) {
+                var toolbar = ''
+                    + '<div class="sp-sub-toolbar" id="spSubToolbar-' + lineId + '" style="display:none;">'
+                    +   '<span class="sp-sub-toolbar-cnt" id="spSubToolbarCnt-' + lineId + '"></span>'
+                    +   '<button type="button" class="sp-btn sp-btn--p sp-btn--xs" onclick="spShipSelected(' + lineId + ')">Seçilenleri Yükle</button>'
+                    + '</div>';
+                var rows = data.map(function(r) {
                     return ''
                         + '<div class="sp-sub-row" data-res-id="' + r.id + '">'
+                        +   '<input type="checkbox" class="sp-sub-cb" data-res-id="' + r.id + '" onchange="spUpdateSubToolbar(' + lineId + ')">'
                         +   '<span class="sp-sub-loc">' + esc(r.locationName || ('#' + r.locationId)) + '</span>'
                         +   '<span class="sp-sub-qty">' + fmtN(r.quantity) + '</span>'
                         +   '<span class="sp-sub-date">' + (r.plannedShipDate ? fmtDate(r.plannedShipDate) : '—') + '</span>'
                         +   '<span class="sp-sub-notes">' + esc(r.notes || '') + '</span>'
-                        +   '<button type="button" class="sp-sub-cancel" onclick="spCancelReservation(' + r.id + ', ' + lineId + ')">'
-                        +     '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
-                        +     'İptal'
-                        +   '</button>'
+                        +   '<span class="sp-sub-actions">'
+                        +     '<button type="button" class="sp-sub-ship" onclick="spShipReservation(' + r.id + ', ' + lineId + ')" title="Bu rezervasyonu irsaliyeye çevir">'
+                        +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>'
+                        +       'Yükle'
+                        +     '</button>'
+                        +     '<button type="button" class="sp-sub-cancel" onclick="spCancelReservation(' + r.id + ', ' + lineId + ')">'
+                        +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
+                        +       'İptal'
+                        +     '</button>'
+                        +   '</span>'
                         + '</div>';
                 }).join('');
+                sub.innerHTML = toolbar + rows;
             })
             .catch(function() {
                 sub.innerHTML = '<div class="sp-sub-empty">Bağlantı hatası.</div>';
@@ -727,6 +761,92 @@
                 CalibraAlert.show('Bağlantı hatası — rezervasyon iptal edilemedi.', { type: 'error' });
             });
         });
+    };
+
+    // ── Yükle (Faz 2: rezervasyonu satış irsaliyesine çevirir + stoktan çıkış yazar) ───────────
+    window.spUpdateSubToolbar = function(lineId) {
+        var box = document.getElementById('spSubToolbar-' + lineId);
+        if (!box) return;
+        var n = document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb:checked').length;
+        box.style.display = n > 0 ? 'flex' : 'none';
+        var cnt = document.getElementById('spSubToolbarCnt-' + lineId);
+        if (cnt) cnt.textContent = n + ' rezervasyon seçili';
+    };
+
+    // Silme onay standardı (CLAUDE.md): "Yükle" geri alınamaz (stok çıkışı + irsaliye) — ekran-ortası
+    // custom modal ile onay alınır, native confirm() YASAK.
+    // POST /Sales/ShipReservations — body { reservationIds:[int] }
+    // yanıt { ok, deliveries:[{documentId,docNo,contactName,lineCount}], skipped:[{reservationId,reason}], approvalStarted }
+    function spExecuteShip(reservationIds, affectedLineIds) {
+        if (!reservationIds.length) return;
+        showConfirm({
+            title: 'Rezervasyonu Yükle',
+            message: 'Seçili rezervasyon' + (reservationIds.length > 1 ? 'lar' : '') + ' için satış irsaliyesi oluşturulacak ve stoktan çıkış yazılacak. Bu işlem geri alınamaz. Devam edilsin mi?',
+            okLabel: 'Yükle',
+            cancelLabel: 'Vazgeç',
+            danger: true
+        }).then(function(ok) {
+            if (!ok) return;
+            fetch('/Sales/ShipReservations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
+                body: JSON.stringify({ reservationIds: reservationIds }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d.ok) {
+                    CalibraAlert.show(d.error || 'Yükleme yapılamadı.', { type: 'error' });
+                    return;
+                }
+                // NOT: CalibraAlert.show tek seferde tek overlay render eder (aynı id'yi domdan sokup
+                // çıkarır) — art arda birden çok show() çağrısı yalnızca sonuncuyu gösterir. Bu yüzden
+                // tüm sonuç mesajları TEK show() çağrısında birleştirilir.
+                var deliveries = d.deliveries || [];
+                var skipped = d.skipped || [];
+                var parts = [];
+                var alertType = 'info';
+                if (deliveries.length) {
+                    var docNos = deliveries.map(function(x) { return x.docNo; }).join(', ');
+                    parts.push(deliveries.length + ' irsaliye oluşturuldu: ' + docNos);
+                    alertType = 'success';
+                }
+                if (skipped.length) {
+                    var reasons = skipped.map(function(s) { return s.reason; }).join('; ');
+                    parts.push(skipped.length + ' rezervasyon atlandı — ' + reasons);
+                    alertType = deliveries.length ? 'warning' : 'error';
+                } else if (!deliveries.length) {
+                    parts.push('Hiçbir rezervasyon yüklenemedi.');
+                    alertType = 'error';
+                }
+                if (d.approvalStarted) {
+                    parts.push('Onay süreci başlatıldı.');
+                }
+                var autoDismissMs = (alertType === 'success' && parts.length === 1) ? 4000 : 0;
+                CalibraAlert.show(parts.join('\n\n'), { type: alertType, autoDismissMs: autoDismissMs });
+
+                // in-place refresh — window.location.reload YOK
+                affectedLineIds.forEach(function(id) {
+                    if (EXPANDED[id]) spLoadDetail(id);
+                });
+                spLoadLines(); // rezerve/teslim/açık miktarlar değişti
+            })
+            .catch(function() {
+                CalibraAlert.show('Bağlantı hatası — yükleme yapılamadı.', { type: 'error' });
+            });
+        });
+    }
+
+    // Rezervasyon satırındaki tekil "Yükle" butonu.
+    window.spShipReservation = function(reservationId, lineId) {
+        spExecuteShip([reservationId], [lineId]);
+    };
+
+    // Rezervasyon detay panelindeki checkbox seçimiyle toplu "Seçilenleri Yükle".
+    window.spShipSelected = function(lineId) {
+        var checked = document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb:checked');
+        var ids = Array.prototype.map.call(checked, function(cb) { return parseInt(cb.getAttribute('data-res-id'), 10); });
+        if (!ids.length) return;
+        spExecuteShip(ids, [lineId]);
     };
 
     // ── Depo dropdown (lazy, cache) ─────────────────────────────────────────────
