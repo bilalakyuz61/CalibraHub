@@ -34,6 +34,14 @@ public sealed class WorkOrderComponent
 
     public int? UnitId { get; init; }
 
+    /// <summary>
+    /// Bileşenin sarf edileceği planlı depo/lokasyon (Location.Id). NULL ise sarf motoru
+    /// (IssueWorkOrderConsumptionAsync) iş emrinin genel deposuna (WorkOrder.WarehouseLocationId)
+    /// düşer. ExplodeBomAsync'te malzemenin varsayılan lokasyonu (ItemLocation.IsDefault) ile
+    /// önerilir; kullanıcı İş Emri ekranından override edebilir (UpdateComponentLocationAsync).
+    /// </summary>
+    public int? FromLocationId { get; init; }
+
     public string? Notes { get; init; }
 
     public DateTime Created { get; init; }

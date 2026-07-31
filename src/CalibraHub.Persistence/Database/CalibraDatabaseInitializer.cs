@@ -16342,6 +16342,7 @@ END;";
                     [IssuedQuantity]   DECIMAL(18,4) NOT NULL CONSTRAINT [df_WorkOrderComponent_Issued] DEFAULT(0),
                     [ScrapRate]        DECIMAL(18,4) NOT NULL CONSTRAINT [df_WorkOrderComponent_Scrap] DEFAULT(0),
                     [UnitId]           INT NULL,
+                    [FromLocationId]   INT NULL,
                     [Notes]            NVARCHAR(500) NULL,
                     [Created]          DATETIME NOT NULL CONSTRAINT [df_WorkOrderComponent_Created] DEFAULT(SYSUTCDATETIME()),
                     [Updated]          DATETIME NULL
@@ -16362,6 +16363,14 @@ END;";
                     ADD CONSTRAINT [FK_WorkOrderComponent_WorkOrder]
                     FOREIGN KEY ([WorkOrderId])
                     REFERENCES [{schemaForSql}].[WorkOrder]([Id]) ON DELETE CASCADE;
+            END;
+
+            -- WorkOrderComponent.FromLocationId (planli tuketim lokasyonu) — mevcut DB'ler icin idempotent ALTER.
+            -- FK/index yok (KISS): kolon yalnizca display/lookup, WHERE'de kullanilmiyor; lokasyon dropdown ayrica dogrular.
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderComponent]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrderComponent]', N'FromLocationId') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrderComponent] ADD [FromLocationId] INT NULL;
             END;
 
             -- ===== Faz 3a: WorkOrderOperation (is emri operasyon adimlari) =====
