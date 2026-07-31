@@ -25,6 +25,7 @@ public sealed class CalendarController : Controller
     {
         ViewData["Title"] = "Takvim";
         ViewData["FormCode"] = "";
+        ViewData["HelpKey"] = "calendar";
         return View();
     }
 

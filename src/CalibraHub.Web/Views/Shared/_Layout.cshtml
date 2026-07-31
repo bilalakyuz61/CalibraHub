@@ -1016,6 +1016,10 @@ else
 {
     <div id="calibra-db-info" style="display:none;" data-page-title="@(ViewData["Title"] ?? "")">@Html.Raw(dbInfoHtml)</div>
 }
+@if (ViewData["HelpKey"] is string helpKey && !string.IsNullOrWhiteSpace(helpKey))
+{
+    <div id="calibra-help" style="display:none;" data-help-key="@helpKey" data-page-title="@(ViewData["Title"] ?? "")"></div>
+}
 
 @* Rapor Tasarimi linkini runtime enjekte etme denemesi kaldirildi — *@
 @* React shell DOM'unun tam yapisini bilmeden guvenli enjeksiyon zor, *@

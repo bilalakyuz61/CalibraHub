@@ -2665,6 +2665,107 @@
         });
     };
 
+    /* ── Sayfa Yardimi (F1) Modal ────────────────────────────────── */
+    // title: baslik; bodyHtml: null -> "Yukleniyor" durumu. Doldurulacak
+    // govde elemanini dondurur (fetch tamamlaninca innerHTML atanir).
+    window.calibraShowHelpModal = function (title, bodyHtml) {
+        var existing = document.getElementById("calibra-help-modal");
+        if (existing) existing.remove();
+
+        var overlay = document.createElement("div");
+        overlay.id = "calibra-help-modal";
+        overlay.className = "calibra-help-overlay";
+
+        var box = document.createElement("div");
+        box.className = "calibra-help-box";
+
+        var head = document.createElement("div");
+        head.className = "calibra-help-head";
+        var ico = document.createElement("span"); ico.className = "h-ico"; ico.textContent = "?";
+        var ttl = document.createElement("span"); ttl.className = "h-title"; ttl.textContent = title;
+        var close = document.createElement("button");
+        close.type = "button"; close.className = "h-close"; close.innerHTML = "×";
+        close.addEventListener("click", function () { overlay.remove(); });
+        head.appendChild(ico); head.appendChild(ttl); head.appendChild(close);
+
+        var body = document.createElement("div");
+        body.className = "calibra-help-body";
+        body.innerHTML = bodyHtml || '<div class="calibra-help-doc"><p>Yükleniyor…</p></div>';
+
+        box.appendChild(head); box.appendChild(body);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
+        document.addEventListener("keydown", function handler(e) {
+            if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", handler); }
+        });
+        return body;
+    };
+
+    // Aktif sayfanin yardim dokumanini ac (#calibra-help div'inden key okur).
+    window.calibraOpenHelp = function () {
+        var div = document.getElementById("calibra-help");
+        if (!div) return;
+        var key = div.getAttribute("data-help-key");
+        if (!key) return;
+        var pageTitle = div.getAttribute("data-page-title") || "Sayfa";
+        var body = window.calibraShowHelpModal(pageTitle + " — Yardım", null);
+        fetch("/Help/Content?key=" + encodeURIComponent(key), { credentials: "same-origin" })
+            .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
+            .then(function (html) { if (body) body.innerHTML = html; })
+            .catch(function () {
+                if (body) body.innerHTML = '<div class="calibra-help-doc"><p>Bu sayfa için yardım içeriği bulunamadı.</p></div>';
+            });
+    };
+
+    // Yardim tetikleyicilerini kur: F1 tuşu + görünür "?" butonu.
+    // Yalniz ViewData["HelpKey"] verilmiş sayfalarda (#calibra-help) aktif olur.
+    const setupHelp = () => {
+        var div = document.getElementById("calibra-help");
+        if (!div) return;
+
+        // F1 -> yardim (tarayici varsayilan yardimini engelle)
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "F1") {
+                e.preventDefault();
+                e.stopPropagation();
+                window.calibraOpenHelp();
+            }
+        }, true);
+
+        var onClick = function (e) { e.preventDefault(); e.stopPropagation(); window.calibraOpenHelp(); };
+
+        // Entity-form toolbar varsa (i) DbInfo butonu yanina "?" ekle;
+        // yoksa (tam sayfa React ekranlari vb.) kösede yüzen buton.
+        var toolbarSelector = ".entity-form-toolbar, .integrator-form-actions, .integrator-settings-modern__action-bar";
+        var toolbars = Array.prototype.slice.call(document.querySelectorAll(toolbarSelector))
+            .filter(function (t) { return t instanceof HTMLElement; });
+
+        if (toolbars.length > 0) {
+            toolbars.forEach(function (toolbar) {
+                if (toolbar.querySelector(".calibra-help-btn")) return;
+                var btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "calibra-help-btn";
+                btn.title = "Yardım (F1)";
+                btn.textContent = "?";
+                btn.addEventListener("click", onClick);
+                var dbi = toolbar.querySelector(".calibra-dbinfo-btn");
+                if (dbi) { dbi.insertAdjacentElement("afterend", btn); }
+                else { btn.style.marginLeft = "auto"; toolbar.appendChild(btn); }
+            });
+        } else if (!document.querySelector(".calibra-help-fab")) {
+            var fab = document.createElement("button");
+            fab.type = "button";
+            fab.className = "calibra-help-fab";
+            fab.title = "Yardım (F1)";
+            fab.textContent = "?";
+            fab.addEventListener("click", onClick);
+            document.body.appendChild(fab);
+        }
+    };
+
     const setupWorkspaceActionBarProxy = () => {
         const workspaceActionBar = document.querySelector("[data-workspace-action-bar]");
         const workspaceActionBarPrimary = workspaceActionBar?.querySelector("[data-workspace-action-bar-primary]");
@@ -4201,6 +4302,7 @@
     setupFormDrafts();
     setupCollapsibleCards();
     setupEntityFormToolbars();
+    setupHelp();
     setupWorkspaceActionBarProxy();
     setupEntityLayoutTabs();
     setupCollaborationProxyButtons();

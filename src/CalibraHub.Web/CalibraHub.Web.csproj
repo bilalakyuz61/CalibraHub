@@ -16,6 +16,9 @@
   <ItemGroup>
     <Content Include="Resources\Integration\*.csv" CopyToOutputDirectory="PreserveNewest" />
     <Content Update="Resources\Integration\Seed\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Sayfa yardımı (F1) dokümanları — ContentRoot bin dizinine çözümlendiği için
+         (audit logları gibi) output'a kopyalanmalı; HelpController disk'ten okur. -->
+    <Content Include="App_Data\Help\**\*.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
