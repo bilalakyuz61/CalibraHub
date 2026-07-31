@@ -265,7 +265,7 @@
 
     function token(){return document.querySelector('input[name="__RequestVerificationToken"]')?.value||'';}
     function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-    function notify(text,ok){var el=document.getElementById('capa-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color=ok?'#059669':'#dc2626';}
+    function notify(text,ok){var el=document.getElementById('capa-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color=ok?'var(--success, #059669)':'var(--danger, #dc2626)';}
     function stateErr(text){var el=document.getElementById('cae-state-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';}
 
     // ── Sekme geçişi ──
