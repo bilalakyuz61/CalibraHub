@@ -45,4 +45,11 @@ public interface IWorkOrderService
     /// artırılır ve DocumentLine'a Issue satırı atomik yazılır.
     /// </summary>
     Task IssueComponentAsync(IssueWorkOrderComponentRequest request, CancellationToken ct);
+
+    /// <summary>
+    /// İş Emri ekranında bir bileşenin planlı sarf lokasyonunu (FromLocationId) günceller
+    /// (2026-07-31). locationId null ise override kaldırılır (sarf motoru WO'nun genel
+    /// deposuna düşer). Dönüş: (ok, error) — bileşen bulunamazsa ok=false.
+    /// </summary>
+    Task<(bool ok, string? error)> UpdateComponentLocationAsync(int componentId, int? locationId, int? userId, CancellationToken ct);
 }

@@ -1407,6 +1407,31 @@ public sealed class ProductionController : Controller
         return Json(list);
     }
 
+    public sealed record UpdateComponentLocationRequest(int ComponentId, int? LocationId);
+
+    /// <summary>
+    /// Bir bileşenin planlı sarf lokasyonunu (FromLocationId) günceller — ExplodeBom'un
+    /// item-default önerisini kullanıcı burada override eder (2026-07-31).
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.WorkOrderEdit)]
+    public async Task<IActionResult> UpdateComponentLocationJson([FromBody] UpdateComponentLocationRequest req, CancellationToken ct)
+    {
+        if (req is null || req.ComponentId <= 0)
+            return Json(new { ok = false, error = "Bileşen kaydı zorunlu." });
+        try
+        {
+            var (ok, error) = await _service.UpdateComponentLocationAsync(req.ComponentId, req.LocationId, CurrentUserId(), ct);
+            return Json(new { ok, error });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[WorkOrder.UpdateComponentLocation] componentId={ComponentId} lokasyon güncellenemedi.", req?.ComponentId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
     // ─── Faz 3b: Shop-floor tablet kiosk ─────────────────────────────────────────
     // GET  /Production/ShopFloor                              → kiosk view (tek SPA)
     // POST /Production/AuthOperator                           → PIN/NFC ile Personnel doğrulama (Faz 3a-7)

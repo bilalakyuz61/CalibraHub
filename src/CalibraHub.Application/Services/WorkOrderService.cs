@@ -608,18 +608,57 @@ public sealed class WorkOrderService : IWorkOrderService
                 + (wo.ConfigId.HasValue ? $" / Konfig {wo.ConfigId}" : "")
                 + ". Önce Lojistik → Ürün Ağacı'nda reçete tanımlayın.");
 
-        var components = bom.Lines.Select(l => new WorkOrderComponent
+        // Re-explode koruması (2026-07-31, CLAUDE.md kural-3 — sessiz veri kaybı): ReplaceForWorkOrderAsync
+        // DELETE+INSERT olduğu için "Patlat"a tekrar basınca kullanıcının elle seçtiği FromLocationId
+        // sessizce silinirdi. Eski bileşenleri (ItemId,ConfigId) anahtarıyla önceden okuyup override'ı koru.
+        var existing = await _workOrderComponents.GetByWorkOrderAsync(workOrderId, ct);
+        var previousLocationByKey = existing
+            .Where(e => e.FromLocationId.HasValue)
+            .GroupBy(e => (e.ItemId, e.ConfigId))
+            .ToDictionary(g => g.Key, g => g.First().FromLocationId);
+
+        // Malzemenin varsayılan lokasyonu (ItemLocation.IsDefault) — kullanıcı override'ı yoksa
+        // bileşen bu lokasyonla önerilir; hiç varsayılan yoksa NULL kalır (sarf motoru WO deposuna düşer).
+        var defaultLocationByItem = new Dictionary<int, int?>();
+        async Task<int?> ResolveDefaultLocationAsync(int itemId)
         {
-            WorkOrderId      = workOrderId,
-            ItemId           = l.ItemId,
-            ConfigId         = l.ConfigId,
-            // RequiredQty = bomLine.Quantity × wo.PlannedQuantity × (1 + ScrapRatio)
-            RequiredQuantity = l.Quantity * wo.PlannedQuantity * (1m + l.ScrapRatio),
-            IssuedQuantity   = 0m,
-            ScrapRate        = l.ScrapRatio,
-            UnitId           = null, // BOMLineWithName birim taşımıyor; ileride Item default birimi sızdırılabilir
-            Notes            = null,
-        }).ToList();
+            if (defaultLocationByItem.TryGetValue(itemId, out var cached)) return cached;
+            int? resolved = null;
+            try
+            {
+                var locations = await _logisticsConfig.GetItemLocationsAsync(itemId, ct);
+                resolved = locations.FirstOrDefault(l => l.IsDefault)?.LocationId;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[WorkOrder.ExplodeBom] ItemId={ItemId} varsayılan lokasyon okunamadı.", itemId);
+            }
+            defaultLocationByItem[itemId] = resolved;
+            return resolved;
+        }
+
+        var components = new List<WorkOrderComponent>();
+        foreach (var l in bom.Lines)
+        {
+            var key = (l.ItemId, l.ConfigId);
+            int? fromLocationId = previousLocationByKey.TryGetValue(key, out var preserved)
+                ? preserved
+                : await ResolveDefaultLocationAsync(l.ItemId);
+
+            components.Add(new WorkOrderComponent
+            {
+                WorkOrderId      = workOrderId,
+                ItemId           = l.ItemId,
+                ConfigId         = l.ConfigId,
+                // RequiredQty = bomLine.Quantity × wo.PlannedQuantity × (1 + ScrapRatio)
+                RequiredQuantity = l.Quantity * wo.PlannedQuantity * (1m + l.ScrapRatio),
+                IssuedQuantity   = 0m,
+                ScrapRate        = l.ScrapRatio,
+                UnitId           = null, // BOMLineWithName birim taşımıyor; ileride Item default birimi sızdırılabilir
+                FromLocationId   = fromLocationId,
+                Notes            = null,
+            });
+        }
 
         await _workOrderComponents.ReplaceForWorkOrderAsync(workOrderId, components, ct);
 
@@ -670,6 +709,44 @@ public sealed class WorkOrderService : IWorkOrderService
             }
             catch { /* audit yazımı sarf işlemini asla bozmaz */ }
         }
+    }
+
+    /// <summary>
+    /// İş Emri ekranında kullanıcının bir bileşenin planlı sarf lokasyonunu (FromLocationId)
+    /// elle seçmesi/değiştirmesi (2026-07-31). locationId null gönderilirse override kaldırılır
+    /// (sarf motoru IssueWorkOrderConsumptionAsync tekrar WO'nun genel deposuna düşer).
+    /// </summary>
+    public async Task<(bool ok, string? error)> UpdateComponentLocationAsync(int componentId, int? locationId, int? userId, CancellationToken ct)
+    {
+        if (componentId <= 0) return (false, "Bileşen kaydı zorunlu.");
+
+        var before = await _workOrderComponents.GetByIdAsync(componentId, ct);
+        if (before is null) return (false, "Bileşen bulunamadı.");
+
+        await _workOrderComponents.UpdateFromLocationAsync(componentId, locationId, ct);
+
+        if (_audit is not null)
+        {
+            try
+            {
+                string? workOrderNumber = null;
+                try { workOrderNumber = (await _workOrders.GetAsync(before.WorkOrderId, ct))?.OrderNumber; }
+                catch { /* başlık için WO okunamadı — title null kalır, log yine yazılır */ }
+
+                var itemLabel = before.ItemCode ?? before.ItemName ?? ("#" + before.ItemId);
+                _audit.LogChanges("WorkOrder", before.WorkOrderId, workOrderNumber,
+                    [new AuditFieldChange($"Component[{before.Id}].FromLocationId", $"Sarf Lokasyonu — {itemLabel}",
+                        before.FromLocationCode ?? before.FromLocationId?.ToString(),
+                        locationId?.ToString())],
+                    detail: $"Sarf lokasyonu değiştirildi — {itemLabel}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[WorkOrder.UpdateComponentLocation] componentId={ComponentId} audit yazılamadı.", componentId);
+            }
+        }
+
+        return (true, null);
     }
 
     private static void ValidateTransition(WorkOrderStatus current, WorkOrderStatus next)

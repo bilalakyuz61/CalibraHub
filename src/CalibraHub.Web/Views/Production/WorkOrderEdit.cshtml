@@ -2337,6 +2337,65 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
+        // ── Tüketim lokasyonu seçici — Depo modülündeki lokasyon listesini
+        //    tek sefer yükleyip cache'ler (aynı kaynak TRANSFER "Kaynak Depo" ile ortak). ──
+        var _woeLocations = null;
+        var _woeLocationsPromise = null;
+        function loadWoeLocations() {
+            if (_woeLocationsPromise) return _woeLocationsPromise;
+            _woeLocationsPromise = fetch('/Warehouse/GetLocationsJson', { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (list) { _woeLocations = Array.isArray(list) ? list : []; return _woeLocations; })
+                .catch(function () { _woeLocations = []; return _woeLocations; });
+            return _woeLocationsPromise;
+        }
+        function buildLocationOptionsHtml(selectedId) {
+            var opts = '<option value="">— (İş Emri Deposu) —</option>';
+            (_woeLocations || []).forEach(function (loc) {
+                var sel = (selectedId != null && String(selectedId) === String(loc.id)) ? ' selected' : '';
+                opts += '<option value="' + loc.id + '"' + sel + '>' +
+                    escHtml(loc.locationCode) + ' — ' + escHtml(loc.locationName) + '</option>';
+            });
+            return opts;
+        }
+        function refreshLocationSelects() {
+            bomList.querySelectorAll('.woe-bom-loc').forEach(function (sel) {
+                var current = sel.getAttribute('data-selected') || '';
+                sel.innerHTML = buildLocationOptionsHtml(current || null);
+            });
+        }
+        loadWoeLocations().then(function () { refreshLocationSelects(); });
+
+        // Satır bazlı lokasyon değişikliği — optimistic, tek alan güncellenir (tam loadBom() gereksiz).
+        bomList.addEventListener('change', async function (e) {
+            var sel = e.target.closest('.woe-bom-loc');
+            if (!sel) return;
+            var cid = parseInt(sel.getAttribute('data-cid'), 10);
+            var prevVal = sel.getAttribute('data-selected') || '';
+            var newVal = sel.value ? parseInt(sel.value, 10) : null;
+            sel.disabled = true;
+            try {
+                var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+                var r = await fetch('/Production/WorkOrder/UpdateComponentLocationJson', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({ componentId: cid, locationId: newVal }),
+                });
+                var j = await r.json();
+                if (j && j.ok) {
+                    sel.setAttribute('data-selected', newVal != null ? String(newVal) : '');
+                } else {
+                    flash((j && j.error) || 'Lokasyon güncellenemedi.', false);
+                    sel.value = prevVal;
+                }
+            } catch (ex) {
+                flash('Lokasyon güncellenemedi: ' + ex.message, false);
+                sel.value = prevVal;
+            } finally {
+                sel.disabled = false;
+            }
+        });
+
         function renderBomList(items) {
             // Header'ı koru, satırları replace et
             var head = bomList.querySelector('.woe-bom-head');
@@ -2364,6 +2423,10 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                     '<span style="text-align:right; color:' + (firePct > 0 ? '#f59e0b' : 'var(--woe-text-muted)') + ';">' +
                         (firePct > 0 ? firePct.toFixed(2) + ' %' : '—') + '</span>' +
                     '<span style="color:var(--woe-text-muted);">' + escHtml(c.unitCode || '—') + '</span>' +
+                    '<span><select class="woe-bom-loc" data-cid="' + c.id + '" data-selected="' +
+                        (c.fromLocationId == null ? '' : c.fromLocationId) + '">' +
+                        buildLocationOptionsHtml(c.fromLocationId == null ? null : c.fromLocationId) +
+                        '</select></span>' +
                     '<span style="color:var(--woe-text-muted); font-size:12px;">' + escHtml(c.notes || '') + '</span>';
                 bomList.appendChild(row);
             });
@@ -2469,6 +2532,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                     var qty = (c.requiredQuantity || 0) * (produced / planned);
                     return {
                         __componentId:     c.id,
+                        __fromLocationId:  c.fromLocationId || null,
                         stockCardId:       c.itemId,
                         materialCode:      c.itemCode || '',
                         materialName:      c.itemName || '',
@@ -2512,7 +2576,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                                 unitId: x.unitId || null,
                                 qty: parseFloat(x.quantity) || 0,
                                 combinationId: x.combinationId || null,
-                                fromLocationId: null,   // iş emri deposu (sunucu çözer)
+                                fromLocationId: x.__fromLocationId || null,   // planlı bileşen lokasyonu, yoksa iş emri deposu (sunucu çözer)
                                 lotNo: (x.lotNo || '').trim() || null,
                                 serials: (Array.isArray(x.serials) && x.serials.length) ? x.serials : null,
                                 notes: (x.notes || '').trim() || null,
