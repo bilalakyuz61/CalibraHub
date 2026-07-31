@@ -743,12 +743,28 @@ body.app-theme-dark .wpicker-backdrop {
 }
 .woe-bom-row {
     display: grid;
-    grid-template-columns: 2fr 1fr 110px 110px 80px 80px 1fr;
+    grid-template-columns: 2fr 1fr 110px 110px 80px 80px 150px 1fr;
     align-items: center; gap: 10px;
     padding: 8px 12px;
     border-bottom: 1px solid var(--woe-border-light);
     font-size: 13px;
 }
+/* Tüketim lokasyonu seçici — .woe-unit-select ile aynı kompakt select deseni */
+.woe-bom-loc {
+    width: 100%; min-width: 0;
+    padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--woe-border);
+    background: var(--woe-input-bg); color: var(--woe-text);
+    font-size: 12px; font-weight: 500;
+    outline: none; cursor: pointer;
+    transition: border-color .12s, box-shadow .12s;
+}
+.woe-bom-loc:hover:not(:disabled) { border-color: var(--woe-accent); }
+.woe-bom-loc:focus { border-color: var(--woe-accent); box-shadow: 0 0 0 2px rgba(99,102,241,.18); }
+.woe-bom-loc:disabled { opacity: .6; cursor: wait; }
+body.app-theme-dark .woe-bom-loc { color-scheme: dark; }
+.woe-bom-loc > * { background: var(--woe-surface); color: var(--woe-text); }
+body.app-theme-dark .woe-bom-loc > * { background-color: #0d1323; color: #e2e8f0; }
 .woe-bom-row:last-child { border-bottom: none; }
 .woe-bom-row.woe-bom-head {
     background: rgba(99,102,241,.06);
@@ -1210,6 +1226,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                             <span style="text-align:right;">Çıkış Yapılan</span>
                             <span style="text-align:right;">Fire %</span>
                             <span>Birim</span>
+                            <span>Tüketim Lokasyonu</span>
                             <span>Notlar</span>
                         </div>
                         <div class="woe-bom-empty src-empty">Yükleniyor…</div>

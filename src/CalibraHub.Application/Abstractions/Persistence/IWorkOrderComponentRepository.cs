@@ -24,6 +24,13 @@ public interface IWorkOrderComponentRepository
     Task DeleteByWorkOrderAsync(int workOrderId, CancellationToken ct);
 
     /// <summary>
+    /// Bileşenin planlı sarf lokasyonunu (FromLocationId) günceller — kullanıcı İş Emri
+    /// ekranında ExplodeBom'un item-default önerisini elle değiştirebilir. locationId null
+    /// ise kayıt NULL'a döner (sarf motoru IssueWorkOrderConsumptionAsync WO deposuna düşer).
+    /// </summary>
+    Task UpdateFromLocationAsync(int componentId, int? locationId, CancellationToken ct);
+
+    /// <summary>
     /// Malzeme sarfı (2026-07-02) — WorkOrderComponent.IssuedQuantity += quantity VE
     /// DocumentLine'a Issue satırı AYNI transaction'da atomik yazılır (WorkOrder.DocumentId +
     /// WarehouseLocationId, component'in bağlı olduğu WorkOrder'dan JOIN ile çözülür).

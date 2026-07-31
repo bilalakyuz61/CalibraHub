@@ -38,11 +38,13 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                    c.[RequiredQuantity], c.[IssuedQuantity], c.[ScrapRate],
                    c.[UnitId], u.[Code] AS UnitCode,
                    c.[Notes], c.[Created], c.[Updated],
-                   ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial
+                   ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial,
+                   c.[FromLocationId], loc.[LocationCode] AS FromLocationCode, loc.[LocationName] AS FromLocationName
             FROM {_table} c
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = c.[UnitId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = c.[FromLocationId]
             WHERE c.[WorkOrderId] = @WorkOrderId
             ORDER BY c.[Id];";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
@@ -68,7 +70,10 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 Created:          r.GetDateTime(13),
                 Updated:          r.IsDBNull(14) ? null : r.GetDateTime(14),
                 TrackingType:     r.IsDBNull(15) ? "None" : r.GetString(15),
-                AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16)));
+                AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16),
+                FromLocationId:   r.IsDBNull(17) ? null : r.GetInt32(17),
+                FromLocationCode: r.IsDBNull(18) ? null : r.GetString(18),
+                FromLocationName: r.IsDBNull(19) ? null : r.GetString(19)));
         }
         return list;
     }
@@ -83,11 +88,13 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                    c.[RequiredQuantity], c.[IssuedQuantity], c.[ScrapRate],
                    c.[UnitId], u.[Code] AS UnitCode,
                    c.[Notes], c.[Created], c.[Updated],
-                   ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial
+                   ISNULL(i.[TrackingType], 'None') AS TrackingType, ISNULL(i.[AutoSerial], 0) AS AutoSerial,
+                   c.[FromLocationId], loc.[LocationCode] AS FromLocationCode, loc.[LocationName] AS FromLocationName
             FROM {_table} c
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
             LEFT JOIN [{_schema}].[ItemConfiguration] cfg ON cfg.[Id] = c.[ConfigId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = c.[UnitId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = c.[FromLocationId]
             WHERE c.[Id] = @Id;";
         cmd.Parameters.AddWithValue("@Id", id);
 
@@ -110,7 +117,10 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             Created:          r.GetDateTime(13),
             Updated:          r.IsDBNull(14) ? null : r.GetDateTime(14),
             TrackingType:     r.IsDBNull(15) ? "None" : r.GetString(15),
-            AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16));
+            AutoSerial:       !r.IsDBNull(16) && r.GetBoolean(16),
+            FromLocationId:   r.IsDBNull(17) ? null : r.GetInt32(17),
+            FromLocationCode: r.IsDBNull(18) ? null : r.GetString(18),
+            FromLocationName: r.IsDBNull(19) ? null : r.GetString(19));
     }
 
     public async Task ReplaceForWorkOrderAsync(int workOrderId, IReadOnlyCollection<WorkOrderComponent> components, CancellationToken ct)
@@ -136,10 +146,10 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 ins.CommandText = $@"
                     INSERT INTO {_table}
                         ([WorkOrderId],[ItemId],[ConfigId],[RequiredQuantity],
-                         [IssuedQuantity],[ScrapRate],[UnitId],[Notes],[Created])
+                         [IssuedQuantity],[ScrapRate],[UnitId],[FromLocationId],[Notes],[Created])
                     VALUES
                         (@WorkOrderId,@ItemId,@ConfigId,@RequiredQuantity,
-                         @IssuedQuantity,@ScrapRate,@UnitId,@Notes,SYSUTCDATETIME());";
+                         @IssuedQuantity,@ScrapRate,@UnitId,@FromLocationId,@Notes,SYSUTCDATETIME());";
                 ins.Parameters.AddWithValue("@WorkOrderId", workOrderId);
                 ins.Parameters.AddWithValue("@ItemId", c.ItemId);
                 ins.Parameters.AddWithValue("@ConfigId", (object?)c.ConfigId ?? DBNull.Value);
@@ -147,6 +157,7 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 ins.Parameters.AddWithValue("@IssuedQuantity", c.IssuedQuantity);
                 ins.Parameters.AddWithValue("@ScrapRate", c.ScrapRate);
                 ins.Parameters.AddWithValue("@UnitId", (object?)c.UnitId ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@FromLocationId", (object?)c.FromLocationId ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@Notes", (object?)c.Notes ?? DBNull.Value);
                 await ins.ExecuteNonQueryAsync(ct);
             }
@@ -166,6 +177,24 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"DELETE FROM {_table} WHERE [WorkOrderId] = @WorkOrderId;";
         cmd.Parameters.AddWithValue("@WorkOrderId", workOrderId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Bileşenin planlı sarf lokasyonunu (FromLocationId) günceller — İş Emri ekranında
+    /// kullanıcının ExplodeBom'un item-default önerisini override etmesi için (2026-07-31).
+    /// locationId null gönderilirse kayıt NULL'a döner (sarf motoru WO deposuna düşer).
+    /// </summary>
+    public async Task UpdateFromLocationAsync(int componentId, int? locationId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            UPDATE {_table}
+            SET [FromLocationId] = @Loc, [Updated] = SYSUTCDATETIME()
+            WHERE [Id] = @Id;";
+        cmd.Parameters.AddWithValue("@Id", componentId);
+        cmd.Parameters.AddWithValue("@Loc", (object?)locationId ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

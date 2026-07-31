@@ -23,7 +23,12 @@ public sealed record WorkOrderComponentDto(
     // Sarf UI'ının takip modunu bilmesi için (Items join'i — 2026-07-10 üretim sarfı):
     // seri-takipli bileşende seri seçim hücresi, lot-takiplide lot zorunluluğu aktive olur.
     string? TrackingType = null,
-    bool AutoSerial = false);
+    bool AutoSerial = false,
+    // Planlı sarf lokasyonu (2026-07-31) — sarf motoru (IssueWorkOrderConsumptionAsync)
+    // `line.FromLocationId ?? woLocationId` ile bunu okur. Display alanları Location JOIN'inden.
+    int? FromLocationId = null,
+    string? FromLocationCode = null,
+    string? FromLocationName = null);
 
 /// <summary>
 /// Patlatma sonucu özeti — Frontend toast/log için.
