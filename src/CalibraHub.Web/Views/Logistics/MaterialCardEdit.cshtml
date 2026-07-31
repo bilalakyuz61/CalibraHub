@@ -2504,6 +2504,29 @@
         </div>
     </div>
 
+    <!-- Fiyat kaydi silme onay modali (silme onay standardi — native confirm YASAK) -->
+    <div id="mcePriceDelModal" class="mce-del-backdrop" style="display:none;" onclick="mcePriceDelCancel()">
+        <div class="mce-del-box" onclick="event.stopPropagation()">
+            <div class="mce-del-ico">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+            </div>
+            <h3 class="mce-del-title">Fiyat Kaydını Sil</h3>
+            <p class="mce-del-text">Bu fiyat kaydı silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?</p>
+            <div class="mce-del-btns">
+                <button type="button" class="mce-del-cancel" onclick="mcePriceDelCancel()">İptal</button>
+                <button type="button" class="mce-del-confirm" id="mcePriceDelConfirmBtn" onclick="mcePriceDelConfirm()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                    Evet, Sil
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Yeni Ozellik Ekleme Uyari Modali (kombinasyon varken) -->
     <div id="mceFeatAddWarnBackdrop" class="mce-vguide-backdrop" onclick="mceFeatAddWarnCancel()">
         <div class="mce-vguide-modal" onclick="event.stopPropagation()" style="width:min(480px,95vw);">
@@ -5123,13 +5146,40 @@
         mcePriceLoadList();
     };
 
+    // Silme onay standardi: native confirm YOK — ekran-ortasi custom modal.
+    var _mcePriceDelId = null;
     window.mcePriceDelete = function(id) {
+        if (!id) return;
+        _mcePriceDelId = id;
+        var m = document.getElementById('mcePriceDelModal');
+        if (!m) return; // modal yoksa (beklenmez) sessiz durur — silmeyi onaysiz YAPMA
+        m.style.display = 'flex';
+        var btn = document.getElementById('mcePriceDelConfirmBtn');
+        if (btn) btn.focus();
+    };
+    window.mcePriceDelCancel = function() {
+        var m = document.getElementById('mcePriceDelModal');
+        if (m) m.style.display = 'none';
+        _mcePriceDelId = null;
+    };
+    window.mcePriceDelConfirm = function() {
+        var id = _mcePriceDelId;
+        _mcePriceDelId = null;
+        var m = document.getElementById('mcePriceDelModal');
+        if (m) m.style.display = 'none';
         if (!id) return;
         fetch('/PriceList/DeletePriceListJson?id=' + id, { method: 'POST', credentials: 'same-origin' })
             .then(function(r){ return r.json(); })
             .then(function(){ mcePriceLoadList(); mcePricePrefill(); })
             .catch(function(){});
     };
+    // ESC ile fiyat silme modalini kapat (Enter = onay: confirm butonu focus'ta)
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var m = document.getElementById('mcePriceDelModal');
+            if (m && m.style.display !== 'none') window.mcePriceDelCancel();
+        }
+    });
 
     // ── Ozellik Eslestirme (Kombinasyon Takibi acik iken) ──────────
     function featureEsc(s) {
