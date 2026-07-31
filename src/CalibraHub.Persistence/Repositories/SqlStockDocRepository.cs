@@ -815,44 +815,81 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         var list = new List<OrderOpenLineDto>();
+        // Ara ham satırlar (kit tespiti için TypeId dahil) — DTO'lar snapshot yüklendikten sonra kurulur.
+        var raw = new List<(int LineId, string? Code, string? Name, string? Unit, decimal Qty, decimal BaseQ, decimal Deliv, string Track, int TypeId)>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            SELECT dl.[Id], i.[Code], i.[Name], u.[Name],
-                   dl.[Quantity], dl.[BaseQuantity], dl.[DeliveredQuantity],
-                   ISNULL(i.[TrackingType], N'None') AS TrackingType
-            FROM {T("DocumentLine")} dl
-            INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
-            LEFT JOIN {T("Items")} i ON i.[Id] = dl.[ItemId]
-            LEFT JOIN {T("Unit")} u ON u.[Id] = dl.[UnitId]
-            WHERE dl.[DocumentId] = @OrderId AND doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
-              AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
-              AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
-            ORDER BY dl.[LineNo];
-            """;
-        cmd.Parameters.AddWithValue("@OrderId", orderId);
-        cmd.Parameters.AddWithValue("@Cid", companyId);
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct))
+        await using (var cmd = conn.CreateCommand())
         {
-            int lineId   = r.GetInt32(0);
-            string? code = r.IsDBNull(1) ? null : r.GetString(1);
-            string? name = r.IsDBNull(2) ? null : r.GetString(2);
-            string? unit = r.IsDBNull(3) ? null : r.GetString(3);
-            decimal qty  = r.GetDecimal(4);
-            decimal baseQ = r.GetDecimal(5);
-            decimal deliv = r.GetDecimal(6);
-            string track = r.IsDBNull(7) ? "None" : r.GetString(7);
+            cmd.CommandText = $"""
+                SELECT dl.[Id], i.[Code], i.[Name], u.[Name],
+                       dl.[Quantity], dl.[BaseQuantity], dl.[DeliveredQuantity],
+                       ISNULL(i.[TrackingType], N'None') AS TrackingType,
+                       ISNULL(i.[TypeId], 0) AS TypeId
+                FROM {T("DocumentLine")} dl
+                INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
+                LEFT JOIN {T("Items")} i ON i.[Id] = dl.[ItemId]
+                LEFT JOIN {T("Unit")} u ON u.[Id] = dl.[UnitId]
+                WHERE dl.[DocumentId] = @OrderId AND doc.[CompanyId] = @Cid AND doc.[IsActive] = 1
+                  AND dl.[MovementType] IS NULL AND dl.[ItemId] IS NOT NULL
+                  AND dl.[BaseQuantity] > dl.[DeliveredQuantity]
+                ORDER BY dl.[LineNo];
+                """;
+            cmd.Parameters.AddWithValue("@OrderId", orderId);
+            cmd.Parameters.AddWithValue("@Cid", companyId);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                raw.Add((r.GetInt32(0),
+                         r.IsDBNull(1) ? null : r.GetString(1),
+                         r.IsDBNull(2) ? null : r.GetString(2),
+                         r.IsDBNull(3) ? null : r.GetString(3),
+                         r.GetDecimal(4), r.GetDecimal(5), r.GetDecimal(6),
+                         r.IsDBNull(7) ? "None" : r.GetString(7),
+                         r.GetInt32(8)));
+        }
 
+        // Kit satırları (ItemType.Kit=10) için donmuş bileşen dökümünü yükle (1-set oran + takip bayrağı).
+        var kitBriefs = new Dictionary<int, List<KitComponentBriefDto>>();
+        var kitLineIds = raw.Where(x => x.TypeId == 10).Select(x => x.LineId).ToList();
+        foreach (var lid in kitLineIds)
+        {
+            var comps = new List<KitComponentBriefDto>();
+            await using var sc = conn.CreateCommand();
+            sc.CommandText = $"""
+                SELECT ci.[Code], ci.[Name], s.[Quantity], ISNULL(ci.[TrackingType], N'None') AS Tracking
+                FROM {T("DocumentLineKitComponent")} s
+                LEFT JOIN {T("Items")} ci ON ci.[Id] = s.[ComponentItemId]
+                WHERE s.[DocumentLineId] = @L
+                ORDER BY s.[Id];
+                """;
+            sc.Parameters.AddWithValue("@L", lid);
+            await using var sr = await sc.ExecuteReaderAsync(ct);
+            while (await sr.ReadAsync(ct))
+            {
+                var track = sr.IsDBNull(3) ? "None" : sr.GetString(3);
+                bool tracked = string.Equals(track, "Serial", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(track, "Lot", StringComparison.OrdinalIgnoreCase);
+                comps.Add(new KitComponentBriefDto(
+                    sr.IsDBNull(0) ? null : sr.GetString(0),
+                    sr.IsDBNull(1) ? null : sr.GetString(1),
+                    sr.GetDecimal(2), tracked));
+            }
+            kitBriefs[lid] = comps;
+        }
+
+        foreach (var x in raw)
+        {
             // Açık/teslim miktarları gösterim birimine çevrilir (faktör = BaseQuantity / Quantity).
-            decimal factor       = qty != 0m ? baseQ / qty : 1m;
-            decimal openBase     = baseQ - deliv;
+            decimal factor       = x.Qty != 0m ? x.BaseQ / x.Qty : 1m;
+            decimal openBase     = x.BaseQ - x.Deliv;
             decimal openDisplay  = Math.Round(factor != 0m ? openBase / factor : openBase, 4);
-            decimal delivDisplay = Math.Round(qty - openDisplay, 4);
+            decimal delivDisplay = Math.Round(x.Qty - openDisplay, 4);
             if (delivDisplay < 0m) delivDisplay = 0m;
-            bool serial = string.Equals(track, "Serial", StringComparison.OrdinalIgnoreCase);
+            bool serial = string.Equals(x.Track, "Serial", StringComparison.OrdinalIgnoreCase);
+            bool isKit = x.TypeId == 10;
+            IReadOnlyList<KitComponentBriefDto>? kitComps = isKit && kitBriefs.TryGetValue(x.LineId, out var kb) ? kb : null;
 
-            list.Add(new OrderOpenLineDto(lineId, code, name, unit, qty, delivDisplay, openDisplay, serial));
+            list.Add(new OrderOpenLineDto(x.LineId, x.Code, x.Name, x.Unit, x.Qty, delivDisplay, openDisplay, serial,
+                isKit, kitComps));
         }
         return list;
     }

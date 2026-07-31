@@ -2130,23 +2130,44 @@
                 var bd = document.createElement('div');
                 bd.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
                 var brd = '1px solid var(--app-border,#334155)';
+                var _inpStyle = 'width:96px;padding:5px 8px;border-radius:7px;border:' + brd + ';background:var(--app-input-bg,rgba(255,255,255,.06));color:inherit;text-align:right;font-weight:600';
                 var rows = lines.map(function (l) {
+                    var td = 'padding:6px 8px;border-bottom:' + brd;
+                    // Kit satırı: miktar birimi "set"; yalnız TAM set teslim edilir, bileşenler otomatik patlar.
+                    if (l.isKit) {
+                        var comps = l.kitComponents || [];
+                        var hasTracked = comps.some(function (c) { return c.serialOrLotTracked; });
+                        var kitBadge = ' <span style="font-size:.6rem;font-weight:700;color:#0ea5e9;border:1px solid #0ea5e9;border-radius:4px;padding:0 4px;vertical-align:middle">KİT</span>';
+                        var compText = comps.map(function (c) { return (c.name || c.code || '?') + ' ×' + _sqFmt(c.perSet); }).join(' · ');
+                        var breakdown = '<div style="font-size:.68rem;opacity:.7;margin-top:2px">1 set = ' + (compText || '—') + '</div>';
+                        var warn = hasTracked ? '<div style="font-size:.66rem;color:#f59e0b;margin-top:2px">⚠ Seri/lot takipli bileşen — bu fazda kit teslim edilemez (elle seçim gerekiyor).</div>' : '';
+                        var qtyCell = hasTracked
+                            ? '<span style="opacity:.5;font-size:.72rem">—</span>'
+                            : '<input type="number" class="_sqDlvQty" data-line="' + l.lineId + '" data-open="' + l.open + '" data-kit="1" min="0" step="1" value="' + l.open + '" style="' + _inpStyle + '" />';
+                        return '<tr>'
+                            + '<td style="' + td + '">' + ((l.itemName || l.itemCode || ('#' + l.lineId))) + kitBadge + breakdown + warn + '</td>'
+                            + '<td style="' + td + ';text-align:center;opacity:.8">set</td>'
+                            + '<td style="' + td + ';text-align:right;opacity:.65">' + _sqFmt(l.ordered) + '</td>'
+                            + '<td style="' + td + ';text-align:right;opacity:.65">' + _sqFmt(l.delivered) + '</td>'
+                            + '<td style="' + td + ';text-align:right;font-weight:600">' + _sqFmt(l.open) + '</td>'
+                            + '<td style="' + td + ';text-align:right">' + qtyCell + '</td>'
+                            + '</tr>';
+                    }
                     var serialBadge = l.serialTracked ? ' <span style="font-size:.6rem;font-weight:700;color:#8b5cf6;border:1px solid #8b5cf6;border-radius:4px;padding:0 4px;vertical-align:middle">SERİ</span>' : '';
                     return '<tr>'
-                        + '<td style="padding:6px 8px;border-bottom:' + brd + '">' + ((l.itemName || l.itemCode || ('#' + l.lineId))) + serialBadge + '</td>'
-                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:center;opacity:.8">' + (l.unitName || '') + '</td>'
-                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right;opacity:.65">' + _sqFmt(l.ordered) + '</td>'
-                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right;opacity:.65">' + _sqFmt(l.delivered) + '</td>'
-                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right;font-weight:600">' + _sqFmt(l.open) + '</td>'
-                        + '<td style="padding:6px 8px;border-bottom:' + brd + ';text-align:right">'
-                        + '<input type="number" class="_sqDlvQty" data-line="' + l.lineId + '" data-open="' + l.open + '" min="0" step="any" value="' + l.open + '" '
-                        + 'style="width:96px;padding:5px 8px;border-radius:7px;border:' + brd + ';background:var(--app-input-bg,rgba(255,255,255,.06));color:inherit;text-align:right;font-weight:600" /></td>'
+                        + '<td style="' + td + '">' + ((l.itemName || l.itemCode || ('#' + l.lineId))) + serialBadge + '</td>'
+                        + '<td style="' + td + ';text-align:center;opacity:.8">' + (l.unitName || '') + '</td>'
+                        + '<td style="' + td + ';text-align:right;opacity:.65">' + _sqFmt(l.ordered) + '</td>'
+                        + '<td style="' + td + ';text-align:right;opacity:.65">' + _sqFmt(l.delivered) + '</td>'
+                        + '<td style="' + td + ';text-align:right;font-weight:600">' + _sqFmt(l.open) + '</td>'
+                        + '<td style="' + td + ';text-align:right">'
+                        + '<input type="number" class="_sqDlvQty" data-line="' + l.lineId + '" data-open="' + l.open + '" min="0" step="any" value="' + l.open + '" style="' + _inpStyle + '" /></td>'
                         + '</tr>';
                 }).join('');
                 bd.innerHTML = '<div style="max-width:740px;width:96%;max-height:88vh;display:flex;flex-direction:column;background:var(--app-surface,#1a1f2e);border:' + brd + ';border-radius:14px;color:var(--bs-body-color,#e2e8f0);box-shadow:0 20px 60px rgba(0,0,0,.5)">'
                     + '<div style="padding:16px 20px 12px;border-bottom:' + brd + '">'
                     +   '<div style="font-size:1rem;font-weight:700">' + _sqDlvLabel + ' → İrsaliye</div>'
-                    +   '<div style="font-size:.78rem;opacity:.72;margin-top:3px">Teslim edilecek miktarları girin. Kalandan az girerseniz kısmi teslimat yapılır; kalan sipariş açık kalır. 0 girilen kalem bu teslimatta atlanır.</div>'
+                    +   '<div style="font-size:.78rem;opacity:.72;margin-top:3px">Teslim edilecek miktarları girin. Kalandan az girerseniz kısmi teslimat yapılır; kalan sipariş açık kalır. 0 girilen kalem bu teslimatta atlanır. Kit satırları tam SET olarak teslim edilir — bileşenler irsaliyede otomatik patlar.</div>'
                     + '</div>'
                     + '<div style="overflow:auto;padding:6px 20px 4px">'
                     +   '<table style="width:100%;border-collapse:collapse;font-size:.82rem">'
@@ -2172,11 +2193,14 @@
                 bd.querySelector('#_sqDlvCancel').onclick = close;
                 var qtyInputs = bd.querySelectorAll('._sqDlvQty');
                 qtyInputs.forEach(function (inp) {
+                    var isKit = inp.getAttribute('data-kit') === '1';
                     inp.addEventListener('input', function () {
                         var mx = parseFloat(inp.getAttribute('data-open')) || 0;
                         var v = parseFloat(inp.value);
-                        if (!isNaN(v) && v > mx) inp.value = mx;
-                        if (!isNaN(v) && v < 0) inp.value = 0;
+                        // Kit: yalnız TAM set — kesirli girişi aşağı yuvarla (backend de reddeder).
+                        if (isKit && !isNaN(v)) { v = Math.floor(v); inp.value = String(v); }
+                        if (!isNaN(v) && v > mx) inp.value = String(isKit ? Math.floor(mx) : mx);
+                        if (!isNaN(v) && v < 0) inp.value = '0';
                     });
                 });
                 bd.querySelector('#_sqDlvAll').onclick = function () {

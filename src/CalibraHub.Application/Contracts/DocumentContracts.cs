@@ -32,7 +32,18 @@ public sealed record DocumentDto(
 /// </summary>
 public sealed record OrderOpenLineDto(
     int LineId, string? ItemCode, string? ItemName, string? UnitName,
-    decimal Ordered, decimal Delivered, decimal Open, bool SerialTracked);
+    decimal Ordered, decimal Delivered, decimal Open, bool SerialTracked,
+    // Kit tam-set kısmi teslimat: satır bir KİT (ItemType.Kit) ise IsKit=true; miktar birimi = "set"
+    // (yalnız tam set teslim edilebilir). KitComponents = donmuş snapshot'tan 1-set bileşen dökümü.
+    bool IsKit = false,
+    IReadOnlyList<KitComponentBriefDto>? KitComponents = null);
+
+/// <summary>
+/// Kit kısmi teslimat modalı için bileşen özeti: 1 set için gereken oran (PerSet) + bileşenin
+/// seri/lot takipli olup olmadığı (takipli ise bu fazda teslim engellenir, elle seçim gerekir).
+/// </summary>
+public sealed record KitComponentBriefDto(
+    string? Code, string? Name, decimal PerSet, bool SerialOrLotTracked);
 
 /// <summary>
 /// DocumentLineDto — UI'a gonderilen satir goruntusu. ItemId + CombinationId tablodaki
