@@ -1461,6 +1461,39 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
 
 @section Scripts {
 <script>
+// ── Ondalık ayarı (Ondalık Ayarları → İş Emri, formCode=WORK_ORDER_EDIT) ─────
+// Sayfadaki tüm IIFE'ler bu tek cache'i (kapanış/closure ile) paylaşır; ayar
+// gelene kadar quantity=2 varsayılanıyla çalışır, geldiğinde _woeDec güncellenir.
+var _woeDec = { quantity: 2, unitPrice: 2, fxUnitPrice: 2, amount: 2, rate: 2, exchangeRate: 2 };
+var _woeDecReady = (function () {
+    function normalize(d) {
+        return {
+            quantity:     (d && d.quantity != null)     ? d.quantity     : 2,
+            unitPrice:    (d && d.unitPrice != null)    ? d.unitPrice    : 2,
+            fxUnitPrice:  (d && d.fxUnitPrice != null)  ? d.fxUnitPrice  : 2,
+            amount:       (d && d.amount != null)       ? d.amount       : 2,
+            rate:         (d && d.rate != null)         ? d.rate         : 2,
+            exchangeRate: (d && d.exchangeRate != null) ? d.exchangeRate : 2,
+        };
+    }
+    var p = (window.CalibraHub && window.CalibraHub.decimals && typeof window.CalibraHub.decimals.load === 'function')
+        ? window.CalibraHub.decimals.load('WORK_ORDER_EDIT')
+        : fetch('/Decimals/Effective?formCode=WORK_ORDER_EDIT', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; });
+    return p.then(function (d) { _woeDec = normalize(d); return _woeDec; })
+        .catch(function () { _woeDec = normalize(null); return _woeDec; });
+})();
+// Miktar (quantity) hassasiyetiyle formatlı string döner — CalibraHub.decimals.roundTo
+// (C# Math.Round AwayFromZero ile uyumlu) mevcutsa onu kullanır, yoksa eşdeğer yerel yuvarlama.
+function _woeFmtQty(v) {
+    var d = _woeDec.quantity;
+    var n = Number(v) || 0;
+    if (window.CalibraHub && window.CalibraHub.decimals && typeof window.CalibraHub.decimals.roundTo === 'function') {
+        return window.CalibraHub.decimals.roundTo(n, d).toFixed(d);
+    }
+    var f = Math.pow(10, d);
+    return (Math.sign(n) * Math.round(Math.abs(n) * f) / f).toFixed(d);
+}
 (function () {
     const isNew = @(isNew ? "true" : "false");
     const id = @(Model?.Id ?? 0);
@@ -2418,8 +2451,8 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                     '<span><strong style="color:var(--woe-accent);">' + escHtml(c.itemCode || ('#' + c.itemId)) + '</strong>' +
                         (c.itemName ? ' · <span style="color:var(--woe-text-muted);">' + escHtml(c.itemName) + '</span>' : '') + '</span>' +
                     '<span style="color:var(--woe-text-muted); font-size:12px;">' + escHtml(c.configCode || '—') + '</span>' +
-                    '<span style="text-align:right; font-weight:600;">' + fmt(c.requiredQuantity, 2) + '</span>' +
-                    '<span style="text-align:right;">' + fmt(c.issuedQuantity, 2) + '</span>' +
+                    '<span style="text-align:right; font-weight:600;">' + fmt(c.requiredQuantity, _woeDec.quantity) + '</span>' +
+                    '<span style="text-align:right;">' + fmt(c.issuedQuantity, _woeDec.quantity) + '</span>' +
                     '<span style="text-align:right; color:' + (firePct > 0 ? '#f59e0b' : 'var(--woe-text-muted)') + ';">' +
                         (firePct > 0 ? firePct.toFixed(2) + ' %' : '—') + '</span>' +
                     '<span style="color:var(--woe-text-muted);">' + escHtml(c.unitCode || '—') + '</span>' +
@@ -2434,6 +2467,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
 
         async function loadBom() {
             try {
+                await _woeDecReady; // ondalık ayarı gelmeden render'a başlama
                 var r = await fetch('/Production/WorkOrderComponents?workOrderId=' + bomWoId, { credentials: 'same-origin' });
                 var list = await r.json();
                 renderBomList(Array.isArray(list) ? list : []);
@@ -2810,6 +2844,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
             return;
         }
         try {
+            await _woeDecReady; // ondalık ayarı gelmeden render'a başlama
             const r = await fetch('/Sales/GetQuote?id=' + encodeURIComponent(docId), { credentials: 'same-origin' });
             const data = await r.json();
             currentLines = Array.isArray(data?.lines) ? data.lines : (Array.isArray(data?.Lines) ? data.Lines : []);
@@ -2880,7 +2915,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
             var label = '#' + id + ' — ' + (code || '?');
             if (combo) label += ' [' + combo + ']';
             if (name)  label += ' / ' + name;
-            label += ' (' + qty.toFixed(2) + ')';
+            label += ' (' + _woeFmtQty(qty) + ')';
             opt.textContent = label;
             lineSel.appendChild(opt);
         });
@@ -2889,6 +2924,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
     }
 
     async function onLineChange() {
+        await _woeDecReady; // ondalık ayarı gelmeden render'a başlama
         const opt = lineSel.options[lineSel.selectedIndex];
         if (!opt || !opt.value) {
             lineInfo.textContent = '';
@@ -2906,8 +2942,8 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
             allocated = Number(data?.allocated || 0);
         } catch (e) { /* ignore */ }
         const remaining = totalQty - allocated;
-        lineInfo.textContent = 'Toplam: ' + totalQty.toFixed(2) + ' · Atanmış: ' + allocated.toFixed(2) + ' · Kalan: ' + remaining.toFixed(2);
-        qtyInput.value = remaining > 0 ? remaining.toFixed(4) : '';
+        lineInfo.textContent = 'Toplam: ' + _woeFmtQty(totalQty) + ' · Atanmış: ' + _woeFmtQty(allocated) + ' · Kalan: ' + _woeFmtQty(remaining);
+        qtyInput.value = remaining > 0 ? _woeFmtQty(remaining) : '';
         btnSubmit.disabled = remaining <= 0;
     }
 
@@ -3005,19 +3041,21 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
     }
 
     function fmtDuration(d, unit) {
+        // Süre (dk/sa) — miktar (quantity) değil, ondalık ayarına bağlanmaz.
         if (d == null) return '—';
         const u = (Number(unit) === 2) ? 'sa' : 'dk';
         return Number(d).toFixed(2) + ' ' + u;
     }
 
     function fmtQty(produced, scrap) {
-        const p = Number(produced || 0).toFixed(2);
-        const s = Number(scrap || 0).toFixed(2);
+        const p = _woeFmtQty(produced || 0);
+        const s = _woeFmtQty(scrap || 0);
         return p + ' / ' + s;
     }
 
     async function loadRota() {
         try {
+            await _woeDecReady; // ondalık ayarı gelmeden render'a başlama
             const r = await fetch('/Production/WorkOrderOperations?workOrderId=' + woId, { credentials: 'same-origin' });
             const list = await r.json();
             renderRota(list || []);
