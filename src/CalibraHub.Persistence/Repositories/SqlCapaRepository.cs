@@ -81,12 +81,17 @@ public sealed class SqlCapaRepository : ICapaRepository
 
     public async Task<Capa?> GetByDocumentIdAsync(int documentId, CancellationToken ct)
     {
+        // d.[IsActive]=1 filtresi ListAsync ile tutarlı — soft-delete edilmiş (silinmiş) DÖF'ün
+        // Document.IsActive=0 olmasına rağmen companion satırı silinmeden URL ile açılıp
+        // düzenlenebilmesini engeller (2026-07-31 code review fix).
         var sql = $"""
-            SELECT [Id],[DocumentId],[CapaType],[SourceKind],[SourceId],[Title],[ProblemDescription],
-                   [DefectCodeId],[Severity],[RootCauseMethod],[RootCause],[ResponsiblePersonnelId],[DueDate],
-                   [Status],[EffectivenessVerified],[VerifiedByPersonnelId],[VerifiedAt],[EffectivenessNote],[ClosedAt],
-                   [CreatedById],[Created],[UpdatedById],[Updated]
-            FROM {_capaTable} WHERE [DocumentId]=@Doc;
+            SELECT c.[Id],c.[DocumentId],c.[CapaType],c.[SourceKind],c.[SourceId],c.[Title],c.[ProblemDescription],
+                   c.[DefectCodeId],c.[Severity],c.[RootCauseMethod],c.[RootCause],c.[ResponsiblePersonnelId],c.[DueDate],
+                   c.[Status],c.[EffectivenessVerified],c.[VerifiedByPersonnelId],c.[VerifiedAt],c.[EffectivenessNote],c.[ClosedAt],
+                   c.[CreatedById],c.[Created],c.[UpdatedById],c.[Updated]
+            FROM {_capaTable} c
+            INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE c.[DocumentId]=@Doc AND d.[IsActive]=1;
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -136,7 +141,7 @@ public sealed class SqlCapaRepository : ICapaRepository
             LEFT JOIN {_defectTable} dc ON dc.[Id] = c.[DefectCodeId]
             LEFT JOIN {_personnelTable} rp ON rp.[Id] = c.[ResponsiblePersonnelId]
             LEFT JOIN {_personnelTable} vp ON vp.[Id] = c.[VerifiedByPersonnelId]
-            WHERE c.[DocumentId] = @Doc;
+            WHERE c.[DocumentId] = @Doc AND d.[IsActive] = 1;
             SELECT a.[Id], a.[ActionType], a.[Description], a.[ResponsiblePersonnelId], ap.[FullName] AS ResponsibleName,
                    a.[DueDate], a.[Status], a.[CompletedAt], a.[OrderNo]
             FROM {_actionTable} a

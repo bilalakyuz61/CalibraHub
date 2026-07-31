@@ -70,6 +70,10 @@ public sealed class CapaService : ICapaService
             order++;
             actionEntities.Add(new CapaAction
             {
+                // Id: request'ten gelen aksiyon Id'si yalnız audit diff eşlemesi İÇİN taşınır
+                // (var olan satır mı, yeni satır mı ayrımı — BuildActionChanges). Repo'nun INSERT
+                // ifadesi [Id] kolonunu YAZMAZ (IDENTITY), bu yüzden burada set etmek DB'ye gitmez.
+                Id = a.Id,
                 CapaId = 0, // upsert sonrası repo kendi CapaId'yi yazar
                 ActionType = (CapaActionType)a.ActionType,
                 Description = a.Description.Trim(),
@@ -88,6 +92,9 @@ public sealed class CapaService : ICapaService
             var existing = await _repo.GetByDocumentIdAsync(request.Id, ct);
             if (existing is null) return (false, "DÖF kaydı bulunamadı.", 0);
             var old = Clone(existing);
+            // Aksiyon satırlarının eski hali — repo UpsertAsync bunları DELETE+INSERT ile yeniden
+            // yazacağı için diff'i BUNDAN ÖNCE (silinmeden önceki hal) almalıyız.
+            var oldDetail = await _repo.GetDetailAsync(request.Id, ct);
 
             existing.CapaType = (CapaType)request.CapaType;
             existing.SourceKind = request.SourceKind;
@@ -100,14 +107,25 @@ public sealed class CapaService : ICapaService
             existing.RootCause = string.IsNullOrWhiteSpace(request.RootCause) ? null : request.RootCause.Trim();
             existing.ResponsiblePersonnelId = request.ResponsiblePersonnelId;
             existing.DueDate = request.DueDate;
-            existing.EffectivenessVerified = request.EffectivenessVerified;
-            existing.VerifiedByPersonnelId = request.VerifiedByPersonnelId;
-            existing.VerifiedAt = request.VerifiedAt;
+
+            // KAPALI KAYIT DOĞRULAMA GUARD'I: "Kapalı ⇒ etkinlik doğrulanmış" invaryantı Save
+            // ile bozulamaz — kapalı bir DÖF'te doğrulama alanları salt-okunurdur, request'ten
+            // gelen değerler YOK SAYILIR (mevcut değerler korunur). Yeniden açma yalnızca
+            // ChangeStatusAsync üzerinden yapılır.
+            if (existing.Status != CapaStatus.Kapali)
+            {
+                existing.EffectivenessVerified = request.EffectivenessVerified;
+                existing.VerifiedByPersonnelId = request.VerifiedByPersonnelId;
+                existing.VerifiedAt = request.VerifiedAt;
+            }
             existing.EffectivenessNote = string.IsNullOrWhiteSpace(request.EffectivenessNote) ? null : request.EffectivenessNote.Trim();
             existing.UpdatedById = userId;
 
             await _repo.UpsertAsync(existing, actionEntities, ct);
             _audit?.LogUpdate(AuditEntity, request.Id, title, old, existing);
+            var actionChanges = BuildActionChanges(oldDetail?.Actions ?? Array.Empty<CapaActionDto>(), actionEntities);
+            if (actionChanges.Count > 0)
+                _audit?.LogChanges(AuditEntity, request.Id, title, actionChanges, detail: "Aksiyon satırları güncellendi");
             return (true, null, request.Id);
         }
 
@@ -149,7 +167,11 @@ public sealed class CapaService : ICapaService
             CreatedById = userId,
         };
         await _repo.UpsertAsync(capa, actionEntities, ct);
-        _audit?.LogInsert(AuditEntity, documentId, number, snapshot: capa);
+        // Yeni kayıtta aksiyon satırları da "boş → değer" dökümü olarak eklenir (audit #5 —
+        // insert'te ilk değer dökümü kuralı, satırlar için LogChanges/elle diff ile genişletilir).
+        var insertActionChanges = BuildActionChanges(Array.Empty<CapaActionDto>(), actionEntities);
+        _audit?.LogInsert(AuditEntity, documentId, number, snapshot: capa,
+            extraChanges: insertActionChanges.Count > 0 ? insertActionChanges : null);
         return (true, null, documentId);
     }
 
@@ -189,9 +211,24 @@ public sealed class CapaService : ICapaService
     {
         var capa = await _repo.GetByDocumentIdAsync(documentId, ct);
         if (capa is null) return (false, "DÖF kaydı bulunamadı.");
+        // Silinen içeriğin dökümü — header alanları + aksiyon satırları — SİLİNMEDEN ÖNCE
+        // çekilir ("ne kayboldu" izlenebilsin, CLAUDE.md audit #5/Delete kuralı).
+        var detail = await _repo.GetDetailAsync(documentId, ct);
+        var snapshot = new List<AuditFieldChange>
+        {
+            new("Title", "Konu", capa.Title, null),
+            new("CapaType", "DÖF Türü", Describe(capa.CapaType), null),
+            new("Severity", "Önem Derecesi", Describe(capa.Severity), null),
+            new("Status", "Durum", Describe(capa.Status), null),
+        };
+        if (!string.IsNullOrWhiteSpace(capa.ProblemDescription))
+            snapshot.Add(new AuditFieldChange("ProblemDescription", "Problem Tanımı", capa.ProblemDescription, null));
+        if (detail is not null)
+            snapshot.AddRange(BuildActionChanges(detail.Actions, Array.Empty<CapaAction>()));
+
         // DÖF belgesi = Document; silme Document üzerinden (companion JOIN ile filtrelenir).
         await _documents.DeleteAsync(documentId, ct);
-        _audit?.LogDelete(AuditEntity, documentId, capa.Title);
+        _audit?.LogDelete(AuditEntity, documentId, capa.Title, snapshot: snapshot);
         return (true, null);
     }
 
@@ -230,4 +267,61 @@ public sealed class CapaService : ICapaService
         EffectivenessVerified = c.EffectivenessVerified, VerifiedByPersonnelId = c.VerifiedByPersonnelId,
         VerifiedAt = c.VerifiedAt, EffectivenessNote = c.EffectivenessNote, ClosedAt = c.ClosedAt,
     };
+
+    /// <summary>
+    /// Aksiyon satırı diff'i — DocumentService.BuildLineChanges deseninin sadeleştirilmiş hali
+    /// (kalem satırlarındaki içerik-anahtarı fallback'i burada gerekmiyor; aksiyon satırları
+    /// serbest metin olduğu için eşleme yalnız Id üzerinden yapılır — client mevcut satırın
+    /// Id'sini korur, yeni eklenen satırlarda Id &lt;= 0 gelir).
+    /// Silinen/eklenen satırlar için Old/New'den biri null (rapor: "Aksiyon Silindi/Eklendi");
+    /// eşleşen satırlarda alan bazlı (Description/ActionType/Status/Sorumlu/Termin/Tamamlanma) diff.
+    /// </summary>
+    private static List<AuditFieldChange> BuildActionChanges(
+        IReadOnlyCollection<CapaActionDto> oldActions, IReadOnlyList<CapaAction> newActions)
+    {
+        var changes = new List<AuditFieldChange>();
+        var oldById = oldActions.Where(a => a.Id > 0).ToDictionary(a => a.Id);
+        var matchedOldIds = new HashSet<int>();
+        var pairs = new List<(CapaActionDto Old, CapaAction New)>();
+        var added = new List<CapaAction>();
+
+        foreach (var n in newActions)
+        {
+            if (n.Id > 0 && oldById.TryGetValue(n.Id, out var o))
+            {
+                pairs.Add((o, n));
+                matchedOldIds.Add(n.Id);
+            }
+            else
+            {
+                added.Add(n);
+            }
+        }
+        var removed = oldActions.Where(o => o.Id > 0 && !matchedOldIds.Contains(o.Id)).ToList();
+
+        foreach (var o in removed)
+            changes.Add(new AuditFieldChange($"Action[{o.Id}]", $"Aksiyon Silindi — {o.Description}", o.Description, null));
+
+        foreach (var n in added)
+            changes.Add(new AuditFieldChange($"Action[new{n.OrderNo}]", $"Aksiyon Eklendi — {n.Description}", null, n.Description));
+
+        foreach (var (o, n) in pairs)
+        {
+            var name = n.Description;
+            void AddIfChanged(string field, string label, object? oldVal, object? newVal)
+            {
+                var os = AuditDiff.Normalize(oldVal);
+                var ns = AuditDiff.Normalize(newVal);
+                if (!string.Equals(os ?? "", ns ?? "", StringComparison.Ordinal))
+                    changes.Add(new AuditFieldChange($"Action[{o.Id}].{field}", $"{name} · {label}", os, ns));
+            }
+            AddIfChanged("Description", "Açıklama", o.Description, n.Description);
+            AddIfChanged("ActionType", "Aksiyon Tipi", Describe((CapaActionType)o.ActionType), Describe(n.ActionType));
+            AddIfChanged("Status", "Durum", Describe((CapaActionStatus)o.Status), Describe(n.Status));
+            AddIfChanged("ResponsiblePersonnelId", "Sorumlu", o.ResponsiblePersonnelId, n.ResponsiblePersonnelId);
+            AddIfChanged("DueDate", "Termin", o.DueDate, n.DueDate);
+            AddIfChanged("CompletedAt", "Tamamlanma Zamanı", o.CompletedAt, n.CompletedAt);
+        }
+        return changes;
+    }
 }
