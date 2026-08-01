@@ -4,6 +4,7 @@
 @model CalibraHub.Application.Contracts.ActivityReasonDto?
 @{
     ViewData["Title"] = Model is null ? "Yeni Aktivite Sebebi" : $"Sebep: {Model.Name}";
+    ViewData["HelpKey"] = "activity-reason-edit";
     ViewData["BodyClass"] = "page-activity-reason-edit workspace-frame-body";
     ViewData["FormCode"] = "ACTIVITY_REASON_EDIT";
     var isNew = Model is null;

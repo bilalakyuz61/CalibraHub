@@ -3,6 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"] = isNew ? "Yeni Makine" : $"Makine: {Model.MachineName ?? Model.MachineCode}";
     ViewData["FormCode"] = "MACHINES";
+    ViewData["HelpKey"] = "machine-edit";
     ViewData["BodyClass"] = "page-machine-edit workspace-frame-body";
 }
 

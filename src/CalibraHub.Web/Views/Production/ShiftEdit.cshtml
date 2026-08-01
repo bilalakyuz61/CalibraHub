@@ -2,6 +2,7 @@
 @model CalibraHub.Application.Contracts.ShiftDto?
 @{
     ViewData["Title"] = Model is null ? "Yeni Vardiya" : $"Vardiya: {Model.Name}";
+    ViewData["HelpKey"] = "shift-edit";
     ViewData["BodyClass"] = "page-shift-edit workspace-frame-body";
     ViewData["FormCode"] = "SHIFT_EDIT";
     var isNew = Model is null;

@@ -3,6 +3,7 @@
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni Personel" : $"Personel: {Model!.FullName}";
     ViewData["FormCode"] = "PERSONNEL_EDIT";
+    ViewData["HelpKey"] = "personnel-edit";
     ViewData["BodyClass"] = "page-personnel-edit workspace-frame-body";
 }
 

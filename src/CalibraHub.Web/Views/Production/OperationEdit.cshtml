@@ -3,6 +3,7 @@
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni Operasyon" : $"Operasyon: {Model!.Name ?? Model.Code}";
     ViewData["FormCode"] = "OPERATION_EDIT";
+    ViewData["HelpKey"] = "operation-edit";
     ViewData["BodyClass"] = "page-operation-edit workspace-frame-body";
 }
 

@@ -1,6 +1,7 @@
 @using CalibraHub.Application.Contracts
 @{
     ViewData["Title"] = "Vardiya Atamaları";
+    ViewData["HelpKey"] = "shift-assignments";
     ViewData["BodyClass"] = "page-shift-assignments";
 
     var personnel    = ViewBag.Personnel    as IReadOnlyCollection<PersonnelDto> ?? Array.Empty<PersonnelDto>();

@@ -4,6 +4,7 @@
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni Rota" : $"Rota: {Model!.Code}";
     ViewData["FormCode"] = "ROUTING_EDIT";
+    ViewData["HelpKey"] = "routing-edit";
     ViewData["BodyClass"] = "page-routing-edit workspace-frame-body";
 
     var operations = ViewBag.Operations as IReadOnlyCollection<RoutingOperationDto>
