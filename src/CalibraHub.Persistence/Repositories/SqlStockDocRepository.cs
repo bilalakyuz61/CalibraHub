@@ -439,12 +439,35 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // (Warehouse/Mobile/InventoryCountImport) request.Lines[].RequestLineIds hiç dolmaz →
             // bu sözlük boş kalır, aşağıdaki zenginleştirme no-op'tur.
             var lineIdByRequestLineId = new Dictionary<int, int>();
+
+            // Malzeme Belge Kilitleri (ItemDocumentLock) — sert kapı (2026-08-01, üretimdeki
+            // IssueWorkOrderConsumptionAsync ile aynı desen, bkz. bu dosyanın consumption bölümü).
+            // typeCode zaten DocumentType.Code ile ItemDocumentLock.DocType aynı sözlüğü paylaşır
+            // (depo_giris/depo_cikis/depo_transfer) — ayrı eşleme gerekmez. Tek sorgu, transaction
+            // içinde: bu belge tipi için kilitli TÜM ItemId'ler önce çekilir, sonra satır döngüsünde
+            // O(1) HashSet kontrolüyle kullanılır (N+1 yok).
+            var lockedForDocType = new HashSet<int>();
+            await using (var lockCmd = conn.CreateCommand())
+            {
+                lockCmd.Transaction = tx;
+                lockCmd.CommandText = $"SELECT [ItemId] FROM {T("ItemDocumentLock")} WHERE [DocType] = @DocType;";
+                lockCmd.Parameters.AddWithValue("@DocType", typeCode);
+                await using var lockReader = await lockCmd.ExecuteReaderAsync(ct);
+                while (await lockReader.ReadAsync(ct)) lockedForDocType.Add(lockReader.GetInt32(0));
+            }
+
             foreach (var line in request.Lines ?? [])
             {
                 var itemId = line.ItemId;
                 if ((!itemId.HasValue || itemId.Value <= 0) && !string.IsNullOrWhiteSpace(line.MaterialCode))
                     itemId = await ResolveItemIdByCodeAsync(conn, tx, line.MaterialCode!, ct);
                 if (!itemId.HasValue || itemId.Value <= 0) continue;
+                if (lockedForDocType.Contains(itemId.Value))
+                {
+                    var label = string.IsNullOrWhiteSpace(line.MaterialCode) ? $"#{itemId}" : line.MaterialCode!;
+                    throw new InvalidOperationException(
+                        $"'{label}' malzemesi {ItemDocumentLockTypes.LabelFor(typeCode)} için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+                }
                 // Qty<=0 satırlar metot başında (transaction açılmadan önce) reddedildi —
                 // buraya yalnızca Qty>0 satırlar ulaşır.
                 incomingQtyByItem[itemId.Value] = incomingQtyByItem.GetValueOrDefault(itemId.Value) + line.Qty;
@@ -689,6 +712,20 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 await del.ExecuteNonQueryAsync(ct);
             }
 
+            // Malzeme Belge Kilitleri (ItemDocumentLock) — sert kapı (2026-08-01, üretimdeki
+            // desenle aynı). "sayim" DocType'ı ItemDocumentLockTypes'ta sabit koddur. Tek sorgu,
+            // transaction içinde: kilitli TÜM ItemId'ler önce çekilir, satır döngüsünde O(1)
+            // HashSet kontrolüyle kullanılır (N+1 yok).
+            var lockedForCount = new HashSet<int>();
+            await using (var lockCmd = conn.CreateCommand())
+            {
+                lockCmd.Transaction = tx;
+                lockCmd.CommandText = $"SELECT [ItemId] FROM {T("ItemDocumentLock")} WHERE [DocType] = @DocType;";
+                lockCmd.Parameters.AddWithValue("@DocType", "sayim");
+                await using var lockReader = await lockCmd.ExecuteReaderAsync(ct);
+                while (await lockReader.ReadAsync(ct)) lockedForCount.Add(lockReader.GetInt32(0));
+            }
+
             foreach (var line in request.Lines ?? [])
             {
                 // ItemId gelmemişse MaterialCode'dan çöz — rehber modal bazı akışlarda
@@ -697,6 +734,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 if ((!itemId.HasValue || itemId.Value <= 0) && !string.IsNullOrWhiteSpace(line.MaterialCode))
                     itemId = await ResolveItemIdByCodeAsync(conn, tx, line.MaterialCode!, ct);
                 if (!itemId.HasValue || itemId.Value <= 0) continue;
+                if (lockedForCount.Contains(itemId.Value))
+                {
+                    var lockedLabel = string.IsNullOrWhiteSpace(line.MaterialCode) ? $"#{itemId}" : line.MaterialCode!;
+                    throw new InvalidOperationException(
+                        $"'{lockedLabel}' malzemesi {ItemDocumentLockTypes.LabelFor("sayim")} için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+                }
                 // Sıfır sayım geçerli giriştir ("saydım, yok") — yalnızca negatif atlanır.
                 if (line.Qty < 0) continue;
 

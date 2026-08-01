@@ -143,6 +143,18 @@
     }
     body.app-theme-dark .inv-hlabel { color: rgba(255,255,255,.78); }
     .inv-hinput { flex: 1; max-width: 320px; }
+    /* Sayım Tarihi — global calibra-datepicker.js standardina alindi (2026-08-01,
+       referans: Sales/DocumentEdit #sqQuoteDate). Genel .inv-hinput flex:1/max-width
+       hizalamasindan cikar, proje capindaki standart tarih input genisligine don
+       (calibra-datepicker.css: 176px) -- deger genisligine sigan dar alan + sagda
+       takvim ikonu. Flatpickr altInput orijinal input'un hemen ardina eklenir
+       (bkz. calibra-datepicker.js) -- bitisik kardes secici kullanilir. */
+    #invDocDate,
+    #invDocDate + input.calibra-date-input {
+        flex: 0 0 176px;
+        max-width: 176px;
+    }
+    .inv-hform .form-control[type="date"] { padding-right: 8px; }
     /* Alt-cizili (underline) ust bilgi alani — kanonik .ux-edit-pane/.cb-form-underline
        standardi (2026-07-31, eski kutu tasarimdan gecis). Kapsam sadece .inv-hform —
        kalem grid'i (#reactInvLineGrid) bu seciciye girmiyor, kutu kaliyor. Sayim accent'i
@@ -314,8 +326,8 @@
 
           <div class="inv-hrow">
             <label class="inv-hlabel">Sayım Tarihi</label>
-            <input type="text" id="invDocDate" class="form-control form-control-sm inv-hinput"
-                   placeholder="gg.aa.yyyy" autocomplete="off" />
+            <input type="date" id="invDocDate" class="form-control form-control-sm inv-hinput"
+                   value="@(isEdit ? "" : DateTime.Today.ToString("yyyy-MM-dd"))" />
           </div>
 
           <div class="inv-hrow">
@@ -440,18 +452,26 @@
     var DOC_ID     = @Html.Raw(Model.DocId.HasValue ? Model.DocId.Value.ToString() : "null");
     var LINE_GRID_CONFIG = @Html.Raw(Model.LineGridConfigJson);
     // Revize tasarım (2026-07-25): kalem gridindeki "Raf / Hücre" kolonu (key=fromLocationId)
-    // KORUNUR — üst bilgide depo/bölüm seçilir, kalem satırında alt kırılım (raf/hücre) girilir.
-    // Kolon seçenekleri üst bilgi deposunun aktif torunlarıdır: her satırın __invHeaderLoc alanı
-    // header lokasyonuyla senkronlanır ve kolon optionsUrl'i {__invHeaderLoc} token'ıyla
+    // üst bilgide depo/bölüm seçilince kalem satırında alt kırılım (raf/hücre) girilebilir hale
+    // gelir. Kolon seçenekleri üst bilgi deposunun aktif torunlarıdır: her satırın __invHeaderLoc
+    // alanı header lokasyonuyla senkronlanır ve kolon optionsUrl'i {__invHeaderLoc} token'ıyla
     // GetDescendantLocationsJson'ı çağırır (bkz. onRowsChange + header 'change' listener aşağıda).
     // Boş = kalem üst depoya sayılır; alt lokasyon seçilirse O lokasyona (save = satır ?? header).
+    //
+    // Kolon GÖRÜNÜRLÜĞÜ (2026-08-01): tek-seviyeli depoda (alt kırılımı YOK) bu kolon her zaman
+    // boş kalır — kullanıcıyı yoran boş kolon yerine tamamen GİZLENİR. Görünürlük LINE_GRID_CONFIG
+    // sunucudan sabit geldiği için burada client-side filtrelenir (_showRafHucre bayrağı +
+    // buildGridConfig/doMountGrid) — Controller'daki kolon tanımına dokunulmadı. Depo değişince
+    // (yeni kayıt veya kayıtlı belgede) kırılım durumu yeniden hesaplanır; görünürlük FİİLEN
+    // değiştiyse grid config.rows re-seed ile yeniden bağlanır (bkz. applyRafHucreVisibility).
     var BUNDLE_URL = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
     var CSS_URL    = '@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
     var TOKEN      = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
 
-    var _gridReady   = false;
-    var _pendingRows = null;
-    var _gridMounted = false;
+    var _gridReady      = false;
+    var _pendingRows     = null;
+    var _gridMounted     = false;
+    var _showRafHucre    = false; // Raf/Hücre kolonu görünürlüğü — depo kırılımlı olunca true
     window.__INV_LINES__ = [];
 
     // ── Tab geçişi ────────────────────────────────────────────────────
@@ -511,22 +531,31 @@
             var doc   = data.doc;
             var lines = data.lines || [];
 
+            var locId = null;
             if (doc) {
                 var noEl = document.getElementById('invDocNoInput');
                 if (noEl) noEl.value = doc.docNo || '';
                 invSetMeta(doc.docNo || '');
 
-                var dateFp = document.getElementById('invDocDate')?._flatpickr;
-                if (dateFp && doc.docDate) dateFp.setDate(doc.docDate.substring(0, 10));
+                // input.value ataması (calibra-datepicker.js property interceptor) hem
+                // enhance edilmeden ONCE hem SONRA çalışır — flatpickr'a manuel setDate
+                // gerekmez (bkz. calibra-datepicker.js "Programatik value atamaları").
+                var dateEl = document.getElementById('invDocDate');
+                if (dateEl && doc.docDate) dateEl.value = doc.docDate.substring(0, 10);
 
                 var locEl = document.getElementById('invLocation');
-                var locId = doc.fromLocationId || null;
+                locId = doc.fromLocationId || null;
                 if (locEl && locId) locEl.value = String(locId);
                 invUpdateTitleSuffix();
 
                 var notesEl = document.getElementById('invNotes');
                 if (notesEl) notesEl.value = doc.notes || '';
             }
+
+            // Raf/Hücre kolon görünürlüğü: header deposunun aktif torunu (kırılımı) var mı —
+            // satırlar oluşturulmadan ÖNCE belirlenir (grid henüz boşken remount ucuz olur).
+            var _descIds = await fetchDescendantIds(locId);
+            applyRafHucreVisibility(_descIds.length > 0);
 
             // İzlenebilirlik: taslak sayımın satır-seri/lot eşlemesini çek (track flag GetLinesAsync'ten gelir)
             var _invTrace = {};
@@ -629,10 +658,11 @@
             var locEl   = document.getElementById('invLocation');
             var fromLoc = (locEl && locEl.value) ? parseInt(locEl.value, 10) : null;
 
-            var dateFp  = document.getElementById('invDocDate');
-            var docDate = dateFp?._flatpickr?.selectedDates?.[0]
-                ? dateFp._flatpickr.selectedDates[0].toISOString()
-                : new Date().toISOString();
+            // Global calibra-datepicker.js standardı: orijinal input.value HER ZAMAN
+            // ISO (yyyy-MM-dd) tutar (flatpickr altInput sadece gösterimi d.m.Y yapar) —
+            // doğrudan .value okumak yeterli (bkz. Sales/DocumentEdit #sqQuoteDate).
+            var docDateStr = (document.getElementById('invDocDate')?.value || '').trim();
+            var docDate = docDateStr || new Date().toISOString();
 
             var rawLines = getGridRows();
             var lines = rawLines
@@ -984,26 +1014,10 @@
 
     // ── Bootstrap ────────────────────────────────────────────────────
     function bootstrap() {
-        // Flatpickr
-        function initFlatpickr() {
-            flatpickr('#invDocDate', {
-                dateFormat: 'd.m.Y', locale: 'tr', defaultDate: new Date(),
-            });
-        }
-        if (window.flatpickr) {
-            initFlatpickr();
-        } else {
-            /* _Layout normalde global yükler — bu fallback lokal vendor'a bakar */
-            var s = document.createElement('script');
-            s.src = '/lib/flatpickr/flatpickr.min.js';
-            s.onload = function() {
-                var l = document.createElement('script');
-                l.src = '/lib/flatpickr/l10n/tr.js';
-                l.onload = initFlatpickr;
-                document.head.appendChild(l);
-            };
-            document.head.appendChild(s);
-        }
+        // Sayım Tarihi: özel flatpickr kurulumu YOK — invDocDate artık type="date",
+        // global calibra-datepicker.js (_Layout, DOMContentLoaded'da otomatik scan)
+        // enhance eder. Yeni kayıtta değer Razor'dan bugünün tarihiyle basılır
+        // (bkz. yukarıdaki input value="@(...)"), edit'te loadDoc() input.value'yu set eder.
 
         // React bundle
         if (!document.querySelector('link[data-inv-grid-css]')) {
@@ -1042,28 +1056,46 @@
         // Üst bilgi deposu değişince (item E): (1) başlık ekini güncelle, (2) her satırın
         // __invHeaderLoc'unu yenile (Raf/Hücre seçenekleri yeni depoya göre çekilsin), (3) yeni
         // deponun torunlarına AİT OLMAYAN alt lokasyonları temizle + kullanıcıyı uyar (sessiz
-        // kayıp yok). patchRows kilitlemez; loaded (kilitli) satırın geçersiz alt lokasyonu da
-        // temizlenir — düzenlemek için "Düzelt" gerekir ama veri tutarlı kalır.
+        // kayıp yok), (4) kolon görünürlüğünü (kırılımlı/kırılımsız depo) güncelle.
         document.getElementById('invLocation')?.addEventListener('change', async function() {
             var newLocId = this.value ? parseInt(this.value, 10) : null;
             invUpdateTitleSuffix();
-            var api = window.CalibraHub && window.CalibraHub.whLineGrid;
-            if (!api || !api.patchRows) return;
             var validIds = await fetchDescendantIds(newLocId);
             var validSet = {};
             validIds.forEach(function(id) { validSet[String(id)] = true; });
+
             var cleared = 0;
-            api.patchRows(function(r) {
-                if (!r) return null;
+            function adjustRow(r) {
+                if (!r) return r;
                 var sub = r.fromLocationId;
                 var subInvalid = (sub != null && sub !== '' && !validSet[String(sub)]);
-                if (r.__invHeaderLoc === newLocId && !subInvalid) return null; // değişiklik yok
+                if (r.__invHeaderLoc === newLocId && !subInvalid) return r; // değişiklik yok
                 if (subInvalid) cleared++;
                 return Object.assign({}, r, {
                     __invHeaderLoc: newLocId,
                     fromLocationId: subInvalid ? null : r.fromLocationId,
                 });
-            });
+            }
+
+            // Kolon görünürlüğü FİİLEN değiştiyse (kırılımsız→kırılımlı ya da tersi) grid mevcut
+            // satırları koruyarak yeniden bağlanır (doMountGrid — patchRows'un aksine artık
+            // unmount edilmiş eski root üzerinde çalışmaz). Değişmediyse mevcut patchRows yolu
+            // (kilitlemez, kullanıcının aktif düzenlemesini bozmaz) aynen kullanılır.
+            if (_showRafHucre !== (validIds.length > 0) && _gridMounted) {
+                _showRafHucre = validIds.length > 0;
+                var seedRows = getGridRows().map(adjustRow);
+                doMountGrid(seedRows);
+            } else {
+                _showRafHucre = validIds.length > 0;
+                var api = window.CalibraHub && window.CalibraHub.whLineGrid;
+                if (api && api.patchRows) {
+                    api.patchRows(function(r) {
+                        var adj = adjustRow(r);
+                        return adj === r ? null : adj;
+                    });
+                }
+            }
+
             if (cleared > 0) {
                 var msg = cleared + ' kalemdeki alt lokasyon (raf/hücre) yeni depoya ait olmadığı için temizlendi.';
                 if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'warn');
