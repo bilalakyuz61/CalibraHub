@@ -3,6 +3,7 @@
     var isEdit     = existing is not null;
     var pageTitle  = isEdit ? $"Cari Düzenle — {existing!.AccountCode}" : "Yeni Cari Hesap";
     ViewData["Title"]     = pageTitle;
+    ViewData["HelpKey"]   = "contact-edit";
     ViewData["BodyClass"] = "page-contact-account-edit";
 
     var upsertUrl = Url.Action("UpsertContact", "Finance")!;

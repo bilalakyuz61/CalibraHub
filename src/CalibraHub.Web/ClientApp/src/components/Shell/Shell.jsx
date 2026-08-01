@@ -868,14 +868,18 @@ export default function Shell(props) {
      onun yardımı gelir (sekme değişince doğru içerik). */
   var openActiveHelp = useCallback(function () {
     var key = null, title = ''
-    try {
-      if (!showDashboard && activeTabKey) {
-        var el = iframeRefs.current[activeTabKey]
-        var doc = el && el.contentDocument
-        var hd = doc && doc.getElementById('calibra-help')
-        if (hd) { key = hd.getAttribute('data-help-key'); title = hd.getAttribute('data-page-title') || '' }
-      }
-    } catch (ex) { /* same-origin değilse veya yüklenmediyse yardım yok */ }
+    if (showDashboard) {
+      key = 'home'; title = 'Ana Sayfa'    // pano iframe değil → sabit key
+    } else {
+      try {
+        if (activeTabKey) {
+          var el = iframeRefs.current[activeTabKey]
+          var doc = el && el.contentDocument
+          var hd = doc && doc.getElementById('calibra-help')
+          if (hd) { key = hd.getAttribute('data-help-key'); title = hd.getAttribute('data-page-title') || '' }
+        }
+      } catch (ex) { /* same-origin değilse veya yüklenmediyse yardım yok */ }
+    }
     if (window.calibraOpenHelpFor) window.calibraOpenHelpFor(key, title)
   }, [activeTabKey, showDashboard])
 
