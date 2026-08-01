@@ -205,14 +205,14 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
         try
         {
             int itemId, documentId;
-            int? configId, unitId, warehouseLocationId;
+            int? configId, unitId, warehouseLocationId, componentFromLocationId;
             string tracking; string? itemCode;
             await using (var selCmd = conn.CreateCommand())
             {
                 selCmd.Transaction = tx;
                 selCmd.CommandText = $@"
                     SELECT c.[ItemId], c.[ConfigId], c.[UnitId], w.[DocumentId], w.[WarehouseLocationId],
-                           ISNULL(i.[TrackingType], 'None'), i.[Code]
+                           ISNULL(i.[TrackingType], 'None'), i.[Code], c.[FromLocationId]
                     FROM {_table} c
                     INNER JOIN [{_schema}].[WorkOrder] w ON w.[Id] = c.[WorkOrderId]
                     LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]
@@ -227,7 +227,12 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 warehouseLocationId = r.IsDBNull(4) ? null : r.GetInt32(4);
                 tracking = r.GetString(5);
                 itemCode = r.IsDBNull(6) ? null : r.GetString(6);
+                componentFromLocationId = r.IsDBNull(7) ? null : r.GetInt32(7);
             }
+
+            // Kaynak lokasyon: bileşenin planlı FromLocationId'si varsa o, yoksa İş Emri'nin
+            // genel deposu (IssueWorkOrderConsumptionAsync ile simetrik: line.FromLocationId ?? woLocationId).
+            var effectiveLocationId = componentFromLocationId ?? warehouseLocationId;
 
             // Bütünlük (2026-07-10): lot/seri-takipli bileşen bu lot/serisiz yoldan sarf edilirse
             // lot/seri bakiyesi fiziksel stoktan sapar (DocumentLineSerial/LotId yazılmaz). Bu
@@ -284,17 +289,17 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
                 insCmd.Parameters.AddWithValue("@UnitId", (object?)unitId ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@Quantity", quantity);
                 insCmd.Parameters.AddWithValue("@CombinationId", (object?)configId ?? DBNull.Value);
-                insCmd.Parameters.AddWithValue("@FromLocationId", (object?)warehouseLocationId ?? DBNull.Value);
+                insCmd.Parameters.AddWithValue("@FromLocationId", (object?)effectiveLocationId ?? DBNull.Value);
                 insCmd.Parameters.AddWithValue("@MovementType", (byte)StockMovementType.Issue);
                 insCmd.Parameters.AddWithValue("@Notes", $"Malzeme sarfı — Personnel #{personnelId}");
                 await insCmd.ExecuteNonQueryAsync(ct);
             }
 
             // Eksi bakiye kontrolü — üretim sarfı (Issue) kaynak depoyu azaltır (tarih: bugün)
-            if (warehouseLocationId is > 0)
+            if (effectiveLocationId is > 0)
             {
                 var companyId = _connectionFactory.ResolveCurrentCompanyId();
-                await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, itemId, warehouseLocationId.Value, DateTime.Today, ct);
+                await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, itemId, effectiveLocationId.Value, DateTime.Today, ct);
             }
 
             await tx.CommitAsync(ct);
