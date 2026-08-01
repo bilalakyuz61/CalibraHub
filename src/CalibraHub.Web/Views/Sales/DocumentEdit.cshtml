@@ -891,6 +891,18 @@
         flex: 0 0 176px;
         max-width: 176px;
     }
+    /* PageComment Seq 1059: "Gecerlilik/Vade/Teslim Gun/Tarih" combosu icindeki
+       tarih alani (#sqValidUntil) asagidaki genel `.sqe-hcombo > input.sqe-hinput`
+       kuralindan (flex:1 1 0 + max-width:none !important, ~line 1004) etkilenip
+       combonun kalan tum genisligini (~202px) dolduruyordu -> deger ile takvim
+       ikonu arasinda buyuk bos alan. #sqQuoteDate ile ayni 176px standardina
+       sabitleniyor. ID secici (specificity: id > class) + !important o genel
+       kuralin !important'ini de her zaman gecer. */
+    #sqValidUntil,
+    #sqValidUntil + input.calibra-date-input {
+        flex: 0 0 176px !important;
+        max-width: 176px !important;
+    }
     .sqe-hinput.is-locked {
         background-color: rgba(148, 163, 184, 0.12) !important;
         cursor: not-allowed;
@@ -1199,7 +1211,12 @@
     body.app-theme-dark .sqe-card textarea.form-control,
     body.app-theme-dark .sqe-tab-pane textarea.form-control,
     body.app-theme-dark .entity-form-toolbar select.form-select {
-        background: transparent !important;
+        /* PageComment Seq 1058(a): `background` SHORTHAND (eskiden) burada
+           background-image'i de 'none'a resetliyordu -> flatpickr altInput'un
+           CSS ikonu (.calibra-date-input, --cdp-input-icon degiskeni) karanlik
+           temada tamamen kayboluyordu (#sqQuoteDate / #sqValidUntil). Yalniz
+           background-color'u sifirla, background-image dokunulmasin. */
+        background-color: transparent !important;
         border: none !important;
         border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
         border-radius: 0 !important;
@@ -1219,7 +1236,7 @@
     body.app-theme-dark .sqe-tab-pane select.form-select:focus,
     body.app-theme-dark .sqe-card textarea.form-control:focus,
     body.app-theme-dark .sqe-tab-pane textarea.form-control:focus {
-        background: transparent !important;
+        background-color: transparent !important;
         border-bottom-color: #a5b4fc !important;
         box-shadow: 0 1px 0 0 #a5b4fc !important;
         color: #fff !important;
@@ -2480,11 +2497,14 @@
                 </div>
                 @if (isOrder)
                 {
-                    @* Siparis: Teslim Gun + Tarih (iki input) *@
+                    @* Siparis: Teslim Gun + Tarih (iki input)
+                       2026-08-01 PageComment Seq 1060: yeni kayitta varsayilan Gun=0
+                       (asil deger atamasi sqInitNew() JS'te yapilir; buradaki value
+                       sadece JS calisana kadarki ilk render'da tutarli gorunsun diyedir). *@
                     <div class="sqe-hrow">
                         <label class="sqe-hlabel">Teslim Gun/Tarih</label>
                         <div class="sqe-hcombo">
-                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" oninput="sqRecalcValidFromDays()" />
+                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
                             <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
                         </div>
                     </div>
@@ -2492,13 +2512,14 @@
                 else
                 {
                     @* Teklif / İhtiyaç Kaydı: Gecerlilik Gun + Tarih (iki input)
-                       2026-06-01: alis_talebi (İhtiyaç Kaydı) icin varsayilan Gun=0 —
-                       talep anlik bir is olusumudur, "kac gun gecerli" anlami yok.
-                       Teklif (satis_teklifi / alis_teklifi) icin bos kalir, kullanici girer. *@
+                       2026-08-01 PageComment Seq 1060: yeni kayitta varsayilan Gun=0
+                       tum belge tiplerinde (onceden yalniz alis_talebi/Ihtiyac Kaydi
+                       icindi, Teklif bos kaliyordu). Asil deger atamasi sqInitNew()
+                       JS'te yapilir (bkz. asagida); buradaki value ilk render icindir. *@
                     <div class="sqe-hrow">
                         <label class="sqe-hlabel">@(isDelivery ? "Vade Gun/Tarih" : "Gecerlilik Gun/Tarih")</label>
                         <div class="sqe-hcombo">
-                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="@(isPurchaseRequest ? "0" : "")" oninput="sqRecalcValidFromDays()" />
+                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
                             <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
                         </div>
                     </div>
@@ -3785,17 +3806,13 @@
     async function sqInitNew() {
         window.applyCustomerLock(false);
         window.sqSetDateValue('sqQuoteDate', new Date().toISOString().split('T')[0]);
-        // 2026-06-01: İhtiyaç Kaydi (alis_talebi) icin varsayilan Gecerlilik Gun = 0;
-        // anlik talep, gecerlilik suresi anlami yok. Diger belge tiplerinde bos baslar.
-        var __isPR_init = @(isPurchaseRequest ? "true" : "false");
-        if (__isPR_init) {
-            document.getElementById('sqValidDays').value = '0';
-            // Gun=0 + Tarih=bugun → ValidUntil=bugun (sqRecalcValidFromDays tetiklendi).
-            window.sqRecalcValidFromDays();
-        } else {
-            window.sqSetDateValue('sqValidUntil', '');
-            document.getElementById('sqValidDays').value = '';
-        }
+        // 2026-08-01 PageComment Seq 1060: yeni kayitta Gecerlilik/Teslim/Vade Gun
+        // varsayilani TUM belge tiplerinde 0 (onceden yalniz Ihtiyac Kaydi/alis_talebi
+        // icin 0'di, Teklif/Siparis/Irsaliye'de bos kaliyordu). Mevcut kayit
+        // yuklendiginde bu fonksiyon calismaz — DB degeri dokunulmadan gelir.
+        document.getElementById('sqValidDays').value = '0';
+        // Gun=0 + Tarih=bugun → ValidUntil=bugun (sqRecalcValidFromDays tetiklendi).
+        window.sqRecalcValidFromDays();
         document.getElementById('sqCustomerId').value = '';
         document.getElementById('sqCustomerDisplay').value = '';
         document.getElementById('sqCustomerDisplay').removeAttribute('data-value');
