@@ -163,7 +163,15 @@ export default function AiFloatingButton() {
   // FAB butonu kaldirildi (kullanici profil > menu > AI Asistan akisini istiyor); event ile
   // her yerden tetiklenebilir kalir (ileride farkli yerlerden de cagrilabilir).
   useEffect(() => {
-    function onOpenAi() { setOpen(true) }
+    function onOpenAi(e) {
+      setOpen(true)
+      // Yardım modalı "Calibo'ya Sor" ile bağlamsal soru geçirebilir → input'a önyaz.
+      var q = e && e.detail && e.detail.question
+      if (q) {
+        setInput(q)
+        setTimeout(function () { try { textareaRef.current && textareaRef.current.focus() } catch (_) { /* ignore */ } }, 60)
+      }
+    }
     window.addEventListener('calibra:open-ai', onOpenAi)
     return () => window.removeEventListener('calibra:open-ai', onOpenAi)
   }, [])

@@ -37,7 +37,7 @@ import {
   Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
   Layers, MessageSquare, Languages, UserCircle, LogOut, Bot, Menu,
   X, LayoutGrid, Building2, Check, Home, Plus, Pencil, Pin, PinOff, Trash2,
-  Wrench, HelpCircle, ChevronDown,
+  HelpCircle,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
@@ -2302,21 +2302,8 @@ function ShortcutsBar(props) {
 
   return (
     <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto overflow-y-hidden smartcard-widgets-scroll">
-      {/* Ana Sayfa — sabit, kısayol listesinden bağımsız, kaldırılamaz */}
-      <button
-        type="button"
-        onClick={onGoHome}
-        title={tShell('go_home', lang)}
-        aria-label={tShell('go_home', lang)}
-        className={
-          'flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors ' +
-          (isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900')
-        }
-      >
-        <Home size={15} strokeWidth={1.8} />
-      </button>
-
-      {/* İşlemler — genel işlemler menüsü; şimdilik aktif sayfanın Yardımı */}
+      {/* İşlemler — çark ikonu (yazısız); genel işlemler + aktif sayfanın Yardımı.
+          Ana Sayfa'nın SOLUNDA, ikon-only → boşluk bırakmaz. */}
       <div className="relative flex-shrink-0">
         <button
           type="button"
@@ -2324,13 +2311,11 @@ function ShortcutsBar(props) {
           title={tShell('actions', lang)}
           aria-label={tShell('actions', lang)}
           className={
-            'flex items-center gap-1 h-8 px-2 rounded-lg flex-shrink-0 transition-colors ' +
+            'flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors ' +
             (isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900')
           }
         >
-          <Wrench size={14} strokeWidth={1.8} />
-          <span className="text-[12px] font-medium whitespace-nowrap">{tShell('actions', lang)}</span>
-          <ChevronDown size={12} strokeWidth={2} className={'transition-transform ' + (actionsOpen ? 'rotate-180' : '')} />
+          <Settings size={15} strokeWidth={1.8} />
         </button>
         {actionsOpen && (
           <>
@@ -2358,6 +2343,20 @@ function ShortcutsBar(props) {
           </>
         )}
       </div>
+
+      {/* Ana Sayfa — sabit, kısayol listesinden bağımsız, kaldırılamaz */}
+      <button
+        type="button"
+        onClick={onGoHome}
+        title={tShell('go_home', lang)}
+        aria-label={tShell('go_home', lang)}
+        className={
+          'flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 transition-colors ' +
+          (isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900')
+        }
+      >
+        <Home size={15} strokeWidth={1.8} />
+      </button>
 
       {loaded && (resolved.length > 0 || editMode) && (
         <div className={'w-px h-5 flex-shrink-0 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />

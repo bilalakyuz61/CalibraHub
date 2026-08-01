@@ -10284,6 +10284,34 @@ body.app-theme-dark .cb-dbinfo-desc { color: rgba(255,255,255,0.78); }
   background: none; border: none; font-size: 1.4rem; line-height: 1;
   color: #94a3b8; cursor: pointer; padding: 0 4px;
 }
+/* Araç şeridi — arama + Calibo'ya sor */
+.calibra-help-tools {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px; border-bottom: 1px solid var(--app-border, #e2e8f0); flex-shrink: 0;
+}
+.calibra-help-search {
+  flex: 1; display: flex; align-items: center; gap: 7px; min-width: 0;
+  height: 34px; padding: 0 10px; border-radius: 9px;
+  border: 1px solid var(--app-border, #dbe2ea); background: var(--app-surface-2, #f1f5f9);
+}
+.calibra-help-search-ic { color: #94a3b8; display: inline-flex; flex-shrink: 0; }
+.calibra-help-search-input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  font-size: 0.82rem; color: var(--bs-body-color, #1e293b);
+}
+.calibra-help-search-input::-webkit-search-cancel-button { cursor: pointer; }
+.calibra-help-search-count { flex-shrink: 0; font-size: 0.72rem; color: #94a3b8; white-space: nowrap; }
+.calibra-help-calibo {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 12px; border-radius: 9px; border: none; cursor: pointer;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff;
+  font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.35); transition: filter .15s ease;
+}
+.calibra-help-calibo:hover { filter: brightness(1.07); }
+mark.calibra-help-hl { background: #fde68a; color: #7c2d12; border-radius: 3px; padding: 0 1px; }
+body.app-theme-dark .calibra-help-search { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.14); }
+body.app-theme-dark mark.calibra-help-hl { background: #b45309; color: #fff; }
 .calibra-help-body {
   padding: 18px 22px 22px; overflow-y: auto;
   font-size: 0.83rem; line-height: 1.62; color: var(--bs-body-color, #334155);

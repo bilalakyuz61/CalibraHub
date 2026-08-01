@@ -2665,10 +2665,43 @@
         });
     };
 
-    /* ── Sayfa Yardimi (F1) Modal ────────────────────────────────── */
-    // title: baslik; bodyHtml: null -> "Yukleniyor" durumu. Doldurulacak
-    // govde elemanini dondurur (fetch tamamlaninca innerHTML atanir).
-    window.calibraShowHelpModal = function (title, bodyHtml) {
+    /* ── Sayfa Yardimi Modal ─────────────────────────────────────── */
+    // Govde icindeki metinlerde eslesmeleri <mark> ile isaretler, adet doner.
+    var calibraHelpHighlight = function (root, rx) {
+        var count = 0;
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode: function (n) {
+                if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                var p = n.parentNode;
+                if (p && (p.nodeName === "MARK" || p.nodeName === "SCRIPT" || p.nodeName === "STYLE")) return NodeFilter.FILTER_REJECT;
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+        var nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        nodes.forEach(function (node) {
+            var text = node.nodeValue; rx.lastIndex = 0;
+            if (!rx.test(text)) return;
+            rx.lastIndex = 0;
+            var frag = document.createDocumentFragment();
+            var last = 0, m;
+            while ((m = rx.exec(text)) !== null) {
+                if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+                var mark = document.createElement("mark");
+                mark.className = "calibra-help-hl"; mark.textContent = m[0];
+                frag.appendChild(mark);
+                last = m.index + m[0].length; count++;
+                if (m.index === rx.lastIndex) rx.lastIndex++;
+            }
+            if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+            node.parentNode.replaceChild(frag, node);
+        });
+        return count;
+    };
+
+    // title: modal basligi; bodyHtml: null -> "Yukleniyor"; pageTitle: Calibo sorusu icin
+    // ham ekran adi. Doldurulacak govde elemanini dondurur.
+    window.calibraShowHelpModal = function (title, bodyHtml, pageTitle) {
         var existing = document.getElementById("calibra-help-modal");
         if (existing) existing.remove();
 
@@ -2684,22 +2717,78 @@
         var ico = document.createElement("span"); ico.className = "h-ico"; ico.textContent = "?";
         var ttl = document.createElement("span"); ttl.className = "h-title"; ttl.textContent = title;
         var close = document.createElement("button");
-        close.type = "button"; close.className = "h-close"; close.innerHTML = "×";
+        close.type = "button"; close.className = "h-close"; close.innerHTML = "×"; close.title = "Kapat";
         close.addEventListener("click", function () { overlay.remove(); });
         head.appendChild(ico); head.appendChild(ttl); head.appendChild(close);
+
+        // Araç şeridi — arama + Calibo'ya sor
+        var tools = document.createElement("div");
+        tools.className = "calibra-help-tools";
+        var searchWrap = document.createElement("div");
+        searchWrap.className = "calibra-help-search";
+        var searchIcon = document.createElement("span");
+        searchIcon.className = "calibra-help-search-ic";
+        searchIcon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+        var search = document.createElement("input");
+        search.type = "search"; search.className = "calibra-help-search-input";
+        search.placeholder = "Yardımda ara…";
+        var searchCount = document.createElement("span");
+        searchCount.className = "calibra-help-search-count";
+        searchWrap.appendChild(searchIcon); searchWrap.appendChild(search); searchWrap.appendChild(searchCount);
+        var caliboBtn = document.createElement("button");
+        caliboBtn.type = "button"; caliboBtn.className = "calibra-help-calibo";
+        caliboBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg><span>Calibo’ya Sor</span>';
+        tools.appendChild(searchWrap); tools.appendChild(caliboBtn);
 
         var body = document.createElement("div");
         body.className = "calibra-help-body";
         body.innerHTML = bodyHtml || '<div class="calibra-help-doc"><p>Yükleniyor…</p></div>';
 
-        box.appendChild(head); box.appendChild(body);
+        box.appendChild(head); box.appendChild(tools); box.appendChild(body);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
+
+        // Arama: highlight + adet + ilk eşleşmeye kaydır
+        function clearHl() {
+            var marks = body.querySelectorAll("mark.calibra-help-hl");
+            for (var i = 0; i < marks.length; i++) {
+                var mk = marks[i];
+                mk.parentNode.replaceChild(document.createTextNode(mk.textContent), mk);
+            }
+            body.normalize();
+        }
+        function doSearch() {
+            clearHl();
+            var q = search.value.trim();
+            if (q.length < 2) { searchCount.textContent = ""; return; }
+            var rx;
+            try { rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"); } catch (e) { return; }
+            var n = calibraHelpHighlight(body, rx);
+            searchCount.textContent = n > 0 ? (n + " sonuç") : "sonuç yok";
+            var first = body.querySelector("mark.calibra-help-hl");
+            if (first) first.scrollIntoView({ block: "center" });
+        }
+        search.addEventListener("input", doSearch);
+
+        // Calibo'ya sor: aktif ekran + arama metnini bağlam olarak geçir, paneli aç
+        caliboBtn.addEventListener("click", function () {
+            var q = search.value.trim();
+            var base = pageTitle || "Bu ekran";
+            var question = q ? (base + " ekranı — " + q) : (base + " ekranı nasıl kullanılır?");
+            try {
+                var w = window.top || window;
+                w.dispatchEvent(new w.CustomEvent("calibra:open-ai", { detail: { question: question } }));
+            } catch (e) {
+                try { window.dispatchEvent(new CustomEvent("calibra:open-ai", { detail: { question: question } })); } catch (e2) { /* ignore */ }
+            }
+            overlay.remove();
+        });
 
         overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
         document.addEventListener("keydown", function handler(e) {
             if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", handler); }
         });
+        setTimeout(function () { try { search.focus(); } catch (e) { /* ignore */ } }, 30);
         return body;
     };
 
@@ -2710,7 +2799,7 @@
             window.calibraShowHelpModal("Yardım", '<div class="calibra-help-doc"><p>Bu sayfa için yardım bulunmuyor.</p></div>');
             return;
         }
-        var body = window.calibraShowHelpModal((pageTitle || "Sayfa") + " — Yardım", null);
+        var body = window.calibraShowHelpModal((pageTitle || "Sayfa") + " — Yardım", null, pageTitle);
         fetch("/Help/Content?key=" + encodeURIComponent(key), { credentials: "same-origin" })
             .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
             .then(function (html) { if (body) body.innerHTML = html; })
