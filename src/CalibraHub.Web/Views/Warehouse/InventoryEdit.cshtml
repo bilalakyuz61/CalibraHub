@@ -963,35 +963,47 @@
         });
     }
 
-    function mountLineGrid() {
-        if (_gridMounted) return;
+    // "Raf / Hücre" kolonu (fromLocationId) üst bilgi deposunun torunlarını gösterir. Bunun için
+    // her satırın __invHeaderLoc alanı header lokasyonuyla senkron olmalı (kolon optionsUrl'i
+    // {__invHeaderLoc} token'ını kullanır). fromLocationId'ye DOKUNULMAZ — o kullanıcının alt
+    // kırılım seçimidir (boş = üst depoya sayılır). patchRows KİLİTLEMEZ. Guard ZORUNLU: patchRows
+    // her çağrıda yeni dizi üretip onRowsChange'i tekrar tetikler → guard'sız sonsuz döngü.
+    function handleGridRowsChange(rows) {
+        window.__INV_LINES__ = rows || [];
+        var headLoc = currentHeaderLoc();
+        var list = Array.isArray(rows) ? rows : [];
+        var needsSync = function(r) { return r && r.__invHeaderLoc !== headLoc; };
+        var api = window.CalibraHub && window.CalibraHub.whLineGrid;
+        if (list.some(needsSync) && api && api.patchRows) {
+            api.patchRows(function(r) {
+                return needsSync(r) ? Object.assign({}, r, { __invHeaderLoc: headLoc }) : null;
+            });
+        }
+    }
+
+    // Raf/Hücre kolonu (key=fromLocationId), yalnızca _showRafHucre true iken (seçili depo alt
+    // kırılımlıysa) config.columns'a dahil edilir — sunucudan sabit gelen LINE_GRID_CONFIG'e
+    // dokunmadan client-side filtrelenir. seedRows verilirse (remount senaryosu) config.rows'a
+    // yazılır — bu yol imperative api.setRows'un aksine satırları _locked işaretlemez.
+    function buildGridConfig(seedRows) {
+        var cols = LINE_GRID_CONFIG.columns || [];
+        if (!_showRafHucre) cols = cols.filter(function(c) { return c.key !== 'fromLocationId'; });
+        var cfg = Object.assign({}, LINE_GRID_CONFIG, { columns: cols });
+        if (seedRows) cfg.rows = seedRows;
+        return cfg;
+    }
+
+    function doMountGrid(seedRows) {
         var el = document.getElementById('reactInvLineGrid');
         if (!el) return;
         if (!window.CalibraHub || !window.CalibraHub.mountLineItemsGrid) {
             console.error('[INV] mountLineItemsGrid yok');
             return;
         }
-        _gridMounted = true;
+        _gridReady = false;
         try {
-            window.CalibraHub.mountLineItemsGrid(el, LINE_GRID_CONFIG, {
-                onRowsChange: function(rows) {
-                    window.__INV_LINES__ = rows || [];
-                    // "Raf / Hücre" kolonu (fromLocationId) üst bilgi deposunun torunlarını gösterir.
-                    // Bunun için her satırın __invHeaderLoc alanı header lokasyonuyla senkron olmalı
-                    // (kolon optionsUrl'i {__invHeaderLoc} token'ını kullanır). fromLocationId'ye
-                    // DOKUNULMAZ — o artık kullanıcının alt kırılım seçimidir (boş = üst depoya sayılır).
-                    // patchRows KİLİTLEMEZ (kullanıcının düzenlemesini bozmaz). Guard ZORUNLU: patchRows
-                    // her çağrıda yeni dizi üretip onRowsChange'i tekrar tetikler → guard'sız sonsuz döngü.
-                    var headLoc = currentHeaderLoc();
-                    var list = Array.isArray(rows) ? rows : [];
-                    var needsSync = function(r) { return r && r.__invHeaderLoc !== headLoc; };
-                    var api = window.CalibraHub && window.CalibraHub.whLineGrid;
-                    if (list.some(needsSync) && api && api.patchRows) {
-                        api.patchRows(function(r) {
-                            return needsSync(r) ? Object.assign({}, r, { __invHeaderLoc: headLoc }) : null;
-                        });
-                    }
-                }
+            window.CalibraHub.mountLineItemsGrid(el, buildGridConfig(seedRows), {
+                onRowsChange: handleGridRowsChange
             });
             var tries = 0;
             var timer = setInterval(function() {
@@ -1008,8 +1020,22 @@
             }, 25);
         } catch (ex) {
             console.error('[INV] grid mount exception:', ex);
-            _gridMounted = false;
         }
+    }
+
+    function mountLineGrid() {
+        if (_gridMounted) return;
+        _gridMounted = true;
+        doMountGrid();
+    }
+
+    // Raf/Hücre kolon görünürlüğü değişince (depo kırılım durumu farklılaştı) grid'i mevcut
+    // satırları koruyarak yeniden bağlar. Henüz mount edilmediyse yalnız bayrağı günceller —
+    // mountLineGrid() ilk çağrıldığında buildGridConfig() güncel _showRafHucre'yi kullanır.
+    function applyRafHucreVisibility(hasChildren) {
+        if (_showRafHucre === hasChildren) return;
+        _showRafHucre = hasChildren;
+        if (_gridMounted) doMountGrid(getGridRows());
     }
 
     // ── Bootstrap ────────────────────────────────────────────────────
@@ -1017,7 +1043,7 @@
         // Sayım Tarihi: özel flatpickr kurulumu YOK — invDocDate artık type="date",
         // global calibra-datepicker.js (_Layout, DOMContentLoaded'da otomatik scan)
         // enhance eder. Yeni kayıtta değer Razor'dan bugünün tarihiyle basılır
-        // (bkz. yukarıdaki input value="@(...)"), edit'te loadDoc() input.value'yu set eder.
+        // (bkz. yukarıdaki input value attribute'u), edit'te loadDoc() input.value'yu set eder.
 
         // React bundle
         if (!document.querySelector('link[data-inv-grid-css]')) {

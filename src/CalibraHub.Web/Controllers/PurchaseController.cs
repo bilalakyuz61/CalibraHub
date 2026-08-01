@@ -321,7 +321,8 @@ public sealed class PurchaseController : Controller
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseRequest)]
     public Task<IActionResult> Requests(CancellationToken ct) =>
         RenderListAsync("alis_talebi",   "PURCHASE_REQUEST_EDIT", "İhtiyaç Kayıtları",
-                        "ihtiyaç",       "/Purchase/Edit?type=purchase_request", "amber", ct);
+                        "ihtiyaç",       "/Purchase/Edit?type=purchase_request", "amber", ct,
+                        helpKey: "purchase-requests");
 
     [HttpGet("/Purchase/Quotes")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseQuote)]
@@ -379,7 +380,8 @@ public sealed class PurchaseController : Controller
     /// <summary>Liste view'ini render eden ortak helper — Sales/Documents.cshtml paylasilir.</summary>
     private async Task<IActionResult> RenderListAsync(
         string typeCode, string formCode, string title, string entityWord,
-        string editUrl, string iconColor, CancellationToken ct, string? newUrl = null)
+        string editUrl, string iconColor, CancellationToken ct, string? newUrl = null,
+        string? helpKey = null)
     {
         var boardConfig = await BuildPurchaseBoardAsync(
             typeCode, formCode, title, entityWord, editUrl, iconColor, ct, newUrl);
@@ -388,6 +390,9 @@ public sealed class PurchaseController : Controller
         ViewData["Title"]    = title;
         ViewData["FormCode"] = formCode;
         ViewData["DbInfo"]   = null;  // sales-spesifik HTML tablosunu gizle
+        // F1 yardimi yalniz helpKey verilen listede aktif (ortak Documents.cshtml'e yayilmasin).
+        if (!string.IsNullOrWhiteSpace(helpKey))
+            ViewData["HelpKey"] = helpKey;
         return View("~/Views/Sales/Documents.cshtml", new DocumentsViewModel
         {
             AvailableColumns = Array.Empty<CalibraHub.Web.Models.Logistics.GridColumnDefinition>(),

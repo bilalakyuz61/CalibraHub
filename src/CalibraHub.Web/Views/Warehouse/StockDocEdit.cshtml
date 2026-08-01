@@ -207,6 +207,17 @@
     }
     body.app-theme-dark .sqe-hlabel { color: rgba(255,255,255,.78); }
     .sqe-hinput { flex: 1; max-width: 320px; }
+    /* Tarih — global calibra-datepicker.js standardina alindi (2026-08-01, referans:
+       Sales/DocumentEdit #sqQuoteDate). Genel .sqe-hinput flex:1/max-width hizalamasindan
+       cikar, proje capindaki standart tarih input genisligine don (calibra-datepicker.css:
+       176px) -- deger genisligine sigan dar alan + sagda takvim ikonu. Flatpickr altInput
+       orijinal input'un hemen ardina eklenir -- bitisik kardes secici kullanilir. */
+    #wdeDocDate,
+    #wdeDocDate + input.calibra-date-input {
+        flex: 0 0 176px;
+        max-width: 176px;
+    }
+    .sqe-hform .form-control[type="date"] { padding-right: 8px; }
     /* Alt-cizili (underline) ust bilgi alani — kanonik .ux-edit-pane/.cb-form-underline
        standardi (2026-07-31, eski kutu tasarimdan gecis). Kapsam sadece .sqe-hform —
        kalem grid'i (#reactDocLineGrid) bu seciciye girmiyor, kutu kaliyor. */
@@ -418,8 +429,8 @@
 
           <div class="sqe-hrow">
             <label class="sqe-hlabel">Tarih</label>
-            <input type="text" id="wdeDocDate" class="form-control form-control-sm sqe-hinput"
-                   placeholder="gg.aa.yyyy" autocomplete="off" />
+            <input type="date" id="wdeDocDate" class="form-control form-control-sm sqe-hinput"
+                   value="@(isEdit ? "" : DateTime.Today.ToString("yyyy-MM-dd"))" />
           </div>
 
           @if (!isTransfer)
@@ -698,8 +709,11 @@
                 if (noEl) noEl.value = doc.docNo || '';
                 wdeSetMeta(doc.docNo || '');
 
-                var dateFp = document.getElementById('wdeDocDate')?._flatpickr;
-                if (dateFp && doc.docDate) dateFp.setDate(doc.docDate.substring(0, 10));
+                // input.value ataması (calibra-datepicker.js property interceptor) hem
+                // enhance edilmeden ONCE hem SONRA çalışır — flatpickr'a manuel setDate
+                // gerekmez (bkz. calibra-datepicker.js "Programatik value atamaları").
+                var dateEl = document.getElementById('wdeDocDate');
+                if (dateEl && doc.docDate) dateEl.value = doc.docDate.substring(0, 10);
 
                 if (!IS_TRANSFER) {
                     var locId = doc.fromLocationId || doc.toLocationId;
@@ -782,10 +796,11 @@
                 }
             }
 
-            var docDateEl = document.getElementById('wdeDocDate');
-            var docDate = docDateEl?._flatpickr?.selectedDates?.[0]
-                ? docDateEl._flatpickr.selectedDates[0].toISOString()
-                : new Date().toISOString();
+            // Global calibra-datepicker.js standardı: orijinal input.value HER ZAMAN
+            // ISO (yyyy-MM-dd) tutar (flatpickr altInput sadece gösterimi d.m.Y yapar) —
+            // doğrudan .value okumak yeterli (bkz. Sales/DocumentEdit #sqQuoteDate).
+            var docDateStr = (document.getElementById('wdeDocDate')?.value || '').trim();
+            var docDate = docDateStr || new Date().toISOString();
 
             var rawLines = getGridRows();
             var lines = rawLines
@@ -950,26 +965,10 @@
 
     // ── Bootstrap ────────────────────────────────────────────────────
     function bootstrap() {
-        // Flatpickr tarih
-        function initFlatpickr() {
-            flatpickr('#wdeDocDate', {
-                dateFormat: 'd.m.Y', locale: 'tr', defaultDate: new Date(),
-            });
-        }
-        if (window.flatpickr) {
-            initFlatpickr();
-        } else {
-            /* _Layout normalde global yükler — bu fallback lokal vendor'a bakar */
-            var s = document.createElement('script');
-            s.src = '/lib/flatpickr/flatpickr.min.js';
-            s.onload = function() {
-                var l = document.createElement('script');
-                l.src = '/lib/flatpickr/l10n/tr.js';
-                l.onload = initFlatpickr;
-                document.head.appendChild(l);
-            };
-            document.head.appendChild(s);
-        }
+        // Tarih: özel flatpickr kurulumu YOK — wdeDocDate artık type="date", global
+        // calibra-datepicker.js (_Layout, DOMContentLoaded'da otomatik scan) enhance
+        // eder. Yeni kayıtta değer Razor'dan bugünün tarihiyle basılır (bkz. yukarıdaki
+        // input value attribute'u), edit'te loadDoc() input.value'yu set eder.
 
         // React bundle + grid (Kalem sekmesi ilk kez açıldığında mount edilir)
         if (!document.querySelector('link[data-wh-grid-css]')) {
