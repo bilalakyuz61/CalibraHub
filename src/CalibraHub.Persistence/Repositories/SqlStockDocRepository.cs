@@ -1082,6 +1082,41 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 }
             }
 
+            // Malzeme Belge Kilitleri (ItemDocumentLock) — sert kapı (2026-08-01, SaveDirectDocAsync
+            // ile aynı desen). targetType (satis_irsaliyesi/alis_irsaliyesi) ItemDocumentLock.DocType
+            // ile aynı sözlüğü paylaşır. Kilitli malzeme içeren sipariş irsaliyeye/mal kabule
+            // dönüştürülemez. Hem açık kalemler hem kit bileşenleri kontrol edilir (kit teslimatta
+            // fiziksel hareket bileşenler üzerinde olur). Tek sorgu + HashSet (N+1 yok).
+            var lockedForDocType = new HashSet<int>();
+            await using (var lockCmd = conn.CreateCommand())
+            {
+                lockCmd.Transaction = tx;
+                lockCmd.CommandText = $"SELECT [ItemId] FROM {T("ItemDocumentLock")} WHERE [DocType] = @DocType;";
+                lockCmd.Parameters.AddWithValue("@DocType", targetType);
+                await using var lockReader = await lockCmd.ExecuteReaderAsync(ct);
+                while (await lockReader.ReadAsync(ct)) lockedForDocType.Add(lockReader.GetInt32(0));
+            }
+            if (lockedForDocType.Count > 0)
+            {
+                var checkItemIds = new HashSet<int>(open.Select(o => o.ItemId));
+                foreach (var comps in kitComps.Values)
+                    foreach (var c in comps) checkItemIds.Add(c.CompItemId);
+                var lockedHit = checkItemIds.FirstOrDefault(lockedForDocType.Contains);
+                if (lockedHit != 0)
+                {
+                    string? lockedCode = null;
+                    await using (var cc = conn.CreateCommand())
+                    {
+                        cc.Transaction = tx;
+                        cc.CommandText = $"SELECT [Code] FROM {T("Items")} WHERE [Id] = @Id;";
+                        cc.Parameters.AddWithValue("@Id", lockedHit);
+                        lockedCode = (await cc.ExecuteScalarAsync(ct)) as string;
+                    }
+                    throw new InvalidOperationException(
+                        $"'{lockedCode ?? ("#" + lockedHit)}' malzemesi {ItemDocumentLockTypes.LabelFor(targetType)} için kilitli — Malzeme Belge Kilitleri ekranından kilidi kaldırın.");
+                }
+            }
+
             // 2) Yeni İRSALİYE belgesi — siparişe ParentDocumentId ile bağlı, cari/tutarlar kopyalı
             var docNo = await ResolveDocNoByCodeAsync(conn, tx, targetType, prefix, createdById, DateTime.Today, ct);
             var notes = isPurchase ? $"Satın alma siparişi mal kabulü (#{orderId})"
