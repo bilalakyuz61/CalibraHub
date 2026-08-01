@@ -1,0 +1,67 @@
+<div class="calibra-help-doc">
+
+  <p class="help-lead">
+    İş Emri Düzenleme ekranı; bir mamulün üretim emrini tüm ayrıntılarıyla
+    yönetmenizi sağlar. Solda bölüm bağlantıları, sağda seçili bölümün alanları,
+    üstte sabit araç şeridi (Geri / Kaydet) bulunur.
+  </p>
+
+  <h3>Genel Bilgiler</h3>
+  <ul>
+    <li><b>Numara</b> ve <b>tarih</b> otomatik atanır (değiştirilemez).</li>
+    <li><b>Mamul Kodu</b> (zorunlu) — üretilecek mamul. Varyantlı mamulde
+        <b>Konfigürasyon Kodu</b> de seçilir.</li>
+    <li><b>Planlanan Miktar</b> (zorunlu) ve birim.</li>
+    <li>Yeni kayıtta <b>"Üretime Planla"</b> anahtarı: açıksa kayıt sonrası emir
+        doğrudan <b>Yayımlandı</b> durumuna geçer (rota patlatılır).</li>
+    <li>Düzenlemede ayrıca Üretilen / Fire / Gerçek Başlangıç-Bitiş bilgileri görünür.</li>
+  </ul>
+
+  <h3>Planlama Bilgileri</h3>
+  <p>Öncelik, plan başlangıç/bitiş tarihleri, sorumlu personel, makine, <b>rota</b>
+     (boşsa mamule göre otomatik bulunur), <b>üretim konumu</b> (depo/lokasyon) ve
+     ilgili AR-GE / ÜR-GE projesi.</p>
+
+  <h3>Rota / Operasyonlar</h3>
+  <p>Üretimin operasyon adımları (sıra, operasyon, makine, süre, üretilen/fire, durum).
+     <b>"Rota'dan Patlat"</b> ile mamulün rotasından adımlar oluşturulur; elle
+     <b>operasyon</b> da eklenebilir. Emir yayımlandıktan sonra ilerleme, üretim
+     terminalinden (ShopFloor) <b>Başlat / Kısmi Bitir / Bitir</b> ile işlenir.</p>
+
+  <h3>Reçete (Bileşenler)</h3>
+  <p>Üretim için gereken bileşenler: net ihtiyaç, çıkış yapılan, fire %, birim,
+     <b>tüketim lokasyonu</b> ve notlar.</p>
+  <ul>
+    <li><b>Reçeteyi Patlat:</b> Mamulün ürün ağacından bileşen listesini oluşturur.</li>
+    <li><b>Sarf Gir:</b> Bileşenleri stoktan düşer (stok çıkışı). Kaynak depo iş emri
+        deposudur; bileşen bazında tüketim lokasyonu değiştirilebilir.</li>
+  </ul>
+
+  <h3>Kaynak Siparişler</h3>
+  <p>Bu iş emrini tetikleyen satış siparişi kalem(ler)i. Sipariş bağlandıkça
+     planlanan miktar buna göre güncellenir.</p>
+
+  <h3>Ek Sahalar</h3>
+  <p>"Alan Yönetimi"nde iş emri formuna tanımlanmış özel alanlar ayrı bölüm olarak eklenir.</p>
+
+  <h3>Üretim Akışı ve Stok Etkisi</h3>
+  <ul>
+    <li><b>Akış:</b> Planlandı → Yayımlandı → Devam Ediyor → Tamamlandı → Kapatıldı.
+        Yayımlama için rota zorunludur (otomatik patlatılır).</li>
+    <li><b>Bileşen sarfı</b> stoktan <b>çıkış</b> yaratır (Reçete → Sarf Gir).</li>
+    <li><b>Mamul girişi</b> otomatiktir: son operasyon üretim terminalinde tamamlanınca
+        mamul stoğa alınır. Lot-takipli mamulde lot = iş emri numarası, seri-takipli
+        mamulde seriler otomatik üretilir (izlenebilirlik soy ağacının temeli).</li>
+  </ul>
+
+  <h3>Araç Şeridi</h3>
+  <ul>
+    <li><b>Kaydet</b> (yeni kayıtta veya Planlandı durumunda), <b>Geri</b>, <b>Yeni</b>.</li>
+    <li><b>Revize:</b> Yeni bir revizyon açar (geçmiş korunur).</li>
+    <li><b>Muayene Oluştur:</b> Bu iş emri için kalite muayenesi başlatır.</li>
+  </ul>
+
+  <p class="help-note">Not: Değişiklik geçmişi, ilgili kayıtta "Değişiklik Geçmişi"
+     bölümünden izlenebilir.</p>
+
+</div>

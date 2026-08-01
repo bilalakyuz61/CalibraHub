@@ -4,6 +4,7 @@
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni İş Emri" : $"İş Emri: {Model!.OrderNumber}";
     ViewData["FormCode"] = "WORK_ORDER";
+    ViewData["HelpKey"] = "work-order-edit";
     ViewData["BodyClass"] = "page-work-order-edit";
 
     // 2026-07-21 fix: PlannedStartDate/PlannedEndDate ADO.NET'ten Kind=Unspecified doner ve
