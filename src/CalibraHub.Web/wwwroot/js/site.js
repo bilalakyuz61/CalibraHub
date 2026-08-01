@@ -2703,14 +2703,14 @@
         return body;
     };
 
-    // Aktif sayfanin yardim dokumanini ac (#calibra-help div'inden key okur).
-    window.calibraOpenHelp = function () {
-        var div = document.getElementById("calibra-help");
-        if (!div) return;
-        var key = div.getAttribute("data-help-key");
-        if (!key) return;
-        var pageTitle = div.getAttribute("data-page-title") || "Sayfa";
-        var body = window.calibraShowHelpModal(pageTitle + " — Yardım", null);
+    // Belirtilen anahtarın yardım dokümanını modalda aç. Üst Shell host
+    // dokümanında da tanımlıdır → "İşlemler → Yardım" aktif sekmenin key'i ile çağırır.
+    window.calibraOpenHelpFor = function (key, pageTitle) {
+        if (!key) {
+            window.calibraShowHelpModal("Yardım", '<div class="calibra-help-doc"><p>Bu sayfa için yardım bulunmuyor.</p></div>');
+            return;
+        }
+        var body = window.calibraShowHelpModal((pageTitle || "Sayfa") + " — Yardım", null);
         fetch("/Help/Content?key=" + encodeURIComponent(key), { credentials: "same-origin" })
             .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
             .then(function (html) { if (body) body.innerHTML = html; })
@@ -2719,13 +2719,19 @@
             });
     };
 
-    // Yardim tetikleyicilerini kur: F1 tuşu + görünür "?" butonu.
-    // Yalniz ViewData["HelpKey"] verilmiş sayfalarda (#calibra-help) aktif olur.
-    const setupHelp = () => {
+    // Bu dokümandaki #calibra-help'e göre yardımı aç (iframe-yerel F1 için).
+    window.calibraOpenHelp = function () {
         var div = document.getElementById("calibra-help");
         if (!div) return;
+        window.calibraOpenHelpFor(div.getAttribute("data-help-key"), div.getAttribute("data-page-title"));
+    };
 
-        // F1 -> yardim (tarayici varsayilan yardimini engelle)
+    // F1 -> bu sayfanın yardımı. YALNIZ içerik sayfalarında (iframe/standalone).
+    // Üst Shell host dokümanında (panel-stack) çalışmaz — orada yardım React
+    // "İşlemler → Yardım" ile aktif sekmeye göre açılır (yanlış-sayfa sızıntısını önler).
+    const setupHelp = () => {
+        if (document.querySelector("[data-workspace-panel-stack]")) return; // üst Shell host
+        if (!document.getElementById("calibra-help")) return;
         document.addEventListener("keydown", function (e) {
             if (e.key === "F1") {
                 e.preventDefault();
@@ -2733,37 +2739,6 @@
                 window.calibraOpenHelp();
             }
         }, true);
-
-        var onClick = function (e) { e.preventDefault(); e.stopPropagation(); window.calibraOpenHelp(); };
-
-        // Entity-form toolbar varsa (i) DbInfo butonu yanina "?" ekle;
-        // yoksa (tam sayfa React ekranlari vb.) kösede yüzen buton.
-        var toolbarSelector = ".entity-form-toolbar, .integrator-form-actions, .integrator-settings-modern__action-bar";
-        var toolbars = Array.prototype.slice.call(document.querySelectorAll(toolbarSelector))
-            .filter(function (t) { return t instanceof HTMLElement; });
-
-        if (toolbars.length > 0) {
-            toolbars.forEach(function (toolbar) {
-                if (toolbar.querySelector(".calibra-help-btn")) return;
-                var btn = document.createElement("button");
-                btn.type = "button";
-                btn.className = "calibra-help-btn";
-                btn.title = "Yardım (F1)";
-                btn.textContent = "?";
-                btn.addEventListener("click", onClick);
-                var dbi = toolbar.querySelector(".calibra-dbinfo-btn");
-                if (dbi) { dbi.insertAdjacentElement("afterend", btn); }
-                else { btn.style.marginLeft = "auto"; toolbar.appendChild(btn); }
-            });
-        } else if (!document.querySelector(".calibra-help-fab")) {
-            var fab = document.createElement("button");
-            fab.type = "button";
-            fab.className = "calibra-help-fab";
-            fab.title = "Yardım (F1)";
-            fab.textContent = "?";
-            fab.addEventListener("click", onClick);
-            document.body.appendChild(fab);
-        }
     };
 
     const setupWorkspaceActionBarProxy = () => {

@@ -37,6 +37,7 @@ import {
   Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
   Layers, MessageSquare, Languages, UserCircle, LogOut, Bot, Menu,
   X, LayoutGrid, Building2, Check, Home, Plus, Pencil, Pin, PinOff, Trash2,
+  Wrench, HelpCircle, ChevronDown,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
@@ -126,6 +127,10 @@ var SHELL_I18N = {
   shortcuts_picker_apply:                  { TR: 'Uygula',                      EN: 'Apply' },
   shortcuts_picker_cancel:                  { TR: 'Vazgeç',                      EN: 'Cancel' },
   shortcuts_picker_selected_suffix:          { TR: 'seçili',                      EN: 'selected' },
+  // İşlemler menüsü — 2026-08-01
+  actions:                       { TR: 'İşlemler',                     EN: 'Actions' },
+  help:                          { TR: 'Yardım',                       EN: 'Help' },
+  help_none:                     { TR: 'Bu sayfa için yardım bulunmuyor.', EN: 'No help available for this page.' },
 }
 
 function tShell(key, lang) {
@@ -857,6 +862,35 @@ export default function Shell(props) {
     return function () { window.removeEventListener('keydown', onNewHotkey) }
   }, [activeTabKey, showDashboard])
 
+  /* ── Yardım — AKTİF sekmenin yardımını aç ───────────────────────
+     Aktif iframe içindeki #calibra-help div'inden (data-help-key) okur;
+     üst dokümandaki modal helper ile açar. Böylece hangi sayfa açıksa
+     onun yardımı gelir (sekme değişince doğru içerik). */
+  var openActiveHelp = useCallback(function () {
+    var key = null, title = ''
+    try {
+      if (!showDashboard && activeTabKey) {
+        var el = iframeRefs.current[activeTabKey]
+        var doc = el && el.contentDocument
+        var hd = doc && doc.getElementById('calibra-help')
+        if (hd) { key = hd.getAttribute('data-help-key'); title = hd.getAttribute('data-page-title') || '' }
+      }
+    } catch (ex) { /* same-origin değilse veya yüklenmediyse yardım yok */ }
+    if (window.calibraOpenHelpFor) window.calibraOpenHelpFor(key, title)
+  }, [activeTabKey, showDashboard])
+
+  /* F1 — odak Shell chrome'undayken aktif sayfanın yardımını aç.
+     (Odak iframe içindeyken F1'i sayfanın kendi site.js'i yakalar.) */
+  useEffect(function () {
+    function onHelpKey(e) {
+      if (e.key !== 'F1') return
+      e.preventDefault()
+      openActiveHelp()
+    }
+    window.addEventListener('keydown', onHelpKey)
+    return function () { window.removeEventListener('keydown', onHelpKey) }
+  }, [openActiveHelp])
+
   /* ── Tema/dil tercihlerini backend'e kaydet ───
      Mevcut /Account/SaveInterfacePreferences action'ina FormData POST. */
   var savePreferences = useCallback(async function(updates) {
@@ -953,6 +987,7 @@ export default function Shell(props) {
           menu={menu}
           onNavigate={openNodeAsTab}
           onGoHome={handleLogoClick}
+          onOpenHelp={openActiveHelp}
         />
 
         <AnimatePresence>
@@ -1923,6 +1958,7 @@ function Header(props) {
         menu={props.menu}
         onNavigate={props.onNavigate}
         onGoHome={props.onGoHome}
+        onOpenHelp={props.onOpenHelp}
       />
 
       <div className="flex items-center gap-2 flex-shrink-0">
@@ -2195,7 +2231,9 @@ function ShortcutsBar(props) {
   var menu = props.menu || []
   var onNavigate = props.onNavigate
   var onGoHome = props.onGoHome
+  var onOpenHelp = props.onOpenHelp
 
+  var [actionsOpen, setActionsOpen] = useState(false)
   var [shortcutKeys, setShortcutKeys] = useState([])
   var [showNames, setShowNames] = useState(false)
   var [loaded, setLoaded] = useState(false)
@@ -2277,6 +2315,49 @@ function ShortcutsBar(props) {
       >
         <Home size={15} strokeWidth={1.8} />
       </button>
+
+      {/* İşlemler — genel işlemler menüsü; şimdilik aktif sayfanın Yardımı */}
+      <div className="relative flex-shrink-0">
+        <button
+          type="button"
+          onClick={function() { setActionsOpen(function(v) { return !v }) }}
+          title={tShell('actions', lang)}
+          aria-label={tShell('actions', lang)}
+          className={
+            'flex items-center gap-1 h-8 px-2 rounded-lg flex-shrink-0 transition-colors ' +
+            (isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900')
+          }
+        >
+          <Wrench size={14} strokeWidth={1.8} />
+          <span className="text-[12px] font-medium whitespace-nowrap">{tShell('actions', lang)}</span>
+          <ChevronDown size={12} strokeWidth={2} className={'transition-transform ' + (actionsOpen ? 'rotate-180' : '')} />
+        </button>
+        {actionsOpen && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={function() { setActionsOpen(false) }} />
+            <div
+              className={
+                'absolute left-0 mt-2 min-w-[200px] rounded-xl border overflow-hidden z-40 py-1 ' +
+                (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
+              }
+              style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
+            >
+              <button
+                type="button"
+                onClick={function() { setActionsOpen(false); if (onOpenHelp) onOpenHelp() }}
+                className={
+                  'w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors ' +
+                  (isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100')
+                }
+              >
+                <HelpCircle size={15} strokeWidth={1.8} className="text-indigo-400" />
+                <span>{tShell('help', lang)}</span>
+                <kbd className={'ml-auto text-[10px] px-1.5 py-0.5 rounded border ' + (isDark ? 'border-white/15 text-white/50' : 'border-slate-300 text-slate-400')}>F1</kbd>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       {loaded && (resolved.length > 0 || editMode) && (
         <div className={'w-px h-5 flex-shrink-0 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />

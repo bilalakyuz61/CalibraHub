@@ -1,0 +1,69 @@
+<div class="calibra-help-doc">
+
+  <p class="help-lead">
+    Malzeme Kartı Düzenleme ekranı; bir malzemenin tüm bilgilerini tek yerden
+    yönetmenizi sağlar. Solda bölüm bağlantıları, sağda seçili bölümün alanları,
+    üstte sabit <b>Geri / Kaydet</b> (ve mevcut kartta <b>Sil</b>) şeridi bulunur.
+    Bölümler malzeme tipine ve ayarlara göre görünür/gizlenir.
+  </p>
+
+  <h3>Genel Bilgiler</h3>
+  <ul>
+    <li><b>Malzeme Kodu</b> ve <b>Malzeme Adı</b> (zorunlu), <b>Barkod</b>.</li>
+    <li><b>Malzeme Tipi:</b> Hammadde, Yarı Mamul, Mamul, Ticari Mal, Sarf Malzemesi
+        veya Kit. Seçilen tip, alttaki Reçete / Kit gibi bölümlerin görünürlüğünü belirler.</li>
+    <li><b>Ana Birim</b> (zorunlu) ve <b>KDV Oranı %</b>.</li>
+    <li><b>Kombinasyon Takibi:</b> Açılırsa Özellikler ve Kombinasyonlar bölümleri gelir
+        (renk/beden gibi varyant yönetimi).</li>
+    <li><b>İzlenebilirlik:</b> Lot ve/veya Seri takibi; Seri takibinde "Giriş Serisi Otomatik"
+        seçeneği.</li>
+    <li><b>Genel Asgari Stok</b> ve <b>Belge Kilitleri</b> özeti de bu bölümdedir.</li>
+  </ul>
+
+  <h3>Ölçü Birimleri</h3>
+  <p>Ana birim dışındaki alternatif birimler ve dönüşüm katsayıları
+     ("1 koli = 12 adet" gibi). Stok her zaman baz birime normalize edilerek tutulur.</p>
+
+  <h3>Gruplar</h3>
+  <p>5 seviyeli hiyerarşik gruplama (Grup 1 → Grup 5). Raporlama ve filtrelemede
+     malzemeleri sınıflandırmak için kullanılır.</p>
+
+  <h3>Planlama</h3>
+  <p>Lokasyon bazlı planlama bilgileri — malzemenin hangi depo/lokasyonlarda
+     tutulacağı ve ilgili planlama parametreleri.</p>
+
+  <h3>Stok Hareketleri</h3>
+  <p>Malzemenin giriş/çıkış hareket ekstresi: koşan bakiye, dönem özeti,
+     tarih / hareket tipi / lokasyon filtreleri ve <b>Excel</b> aktarımı.
+     Hareketler belge satırlarından beslenir (salt-okunur görünüm).</p>
+
+  <h3>Fiyatlar</h3>
+  <p>Fiyat listesi, döviz ve geçerlilik tarihine göre alış/satış fiyatı girişi ve
+     fiyat geçmişi. Belge girişinde satır fiyatı bu tanımlardan otomatik gelir.</p>
+
+  <h3>Tipe / Ayara Bağlı Bölümler</h3>
+  <ul>
+    <li><b>Özellikler & Kombinasyonlar:</b> Kombinasyon takibi açıkken görünür
+        (varyant özellik eşleştirme ve kombinasyon üretimi).</li>
+    <li><b>Reçete (BOM):</b> Mamul / Yarı Mamul tiplerinde ürün ağacı tanımı.</li>
+    <li><b>Kit İçeriği:</b> Kit tipinde paketi oluşturan bileşenler.</li>
+    <li><b>Ek Sahalar:</b> "Alan Yönetimi"nde bu forma tanımlanmış özel alanlar
+        otomatik olarak ayrı bölüm(ler) halinde eklenir.</li>
+  </ul>
+
+  <h3>Kaydetme</h3>
+  <ul>
+    <li>Üstteki <b>Kaydet</b> ile tüm bölümler birlikte kaydedilir.</li>
+    <li><b>Geri</b> kaydetmeden listeye döner.</li>
+    <li>Mevcut bir kartta <b>Sil</b> görünür; silmeden önce ortada onay penceresi çıkar.</li>
+    <li>Zorunlu alanlar (Ad, Ana Birim) boşsa kayıt engellenir ve alan işaretlenir.</li>
+  </ul>
+
+  <table class="help-keys">
+    <tr><td><kbd>F1</kbd></td><td>Bu yardım penceresini aç</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Açık pencereyi / paneli kapat</td></tr>
+  </table>
+  <p class="help-note">Not: Değişiklik geçmişi, ilgili kayıtta "Değişiklik Geçmişi"
+     bölümünden izlenebilir.</p>
+
+</div>
