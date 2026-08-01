@@ -1,0 +1,285 @@
+@*
+    _BomCopyModal — "Reçeteyi Yeni Mamule Kopyala" formu.
+    SmartCard fetch-modal mekanizması ile yüklenir: GET /Logistics/CopyModal?id={id}
+    (2026-08-01, PageComment Seq 1056: BOM liste ekranının satır aksiyonu — bu akış
+    daha önce BOMEdit.cshtml içindeki "İşlemler" dropdown'undaydı, tek yere taşındı.)
+    Model: BOMWithNames (kaynak reçete — sadece özet göstermek için; kopyalama
+    payload'ı submit anında /Logistics/GetBOMById ile taze çekilir).
+    Kaydetme mevcut /Logistics/SaveBOM ucunu kullanır — backend değişmedi.
+*@
+@model CalibraHub.Application.Contracts.BOMWithNames
+@{
+    var antiforgery = ViewContext.HttpContext.RequestServices
+        .GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
+    var tokens = antiforgery.GetAndStoreTokens(ViewContext.HttpContext);
+    var sourceLabel = string.IsNullOrWhiteSpace(Model.ItemName) ? Model.ItemCode : Model.ItemName;
+}
+<style>
+.bcp-root { font-family:inherit; color:var(--bs-body-color,#0f172a); font-size:0.86rem; }
+.bcp-source {
+    background:var(--app-surface-2,#f8fafc); border:1px solid var(--app-border,#e2e8f0);
+    border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:0.82rem;
+    color:var(--bs-secondary-color,#6c757d);
+}
+.bcp-source strong { color:var(--bs-body-color,#0f172a); }
+.bcp-field { margin-bottom:14px; }
+.bcp-label { display:block; font-size:0.78rem; font-weight:600; color:var(--bs-secondary-color,#6c757d); margin-bottom:5px; }
+.bcp-label--req::after { content:" *"; color:#ef4444; }
+.bcp-input-row { display:flex; gap:6px; align-items:center; }
+.bcp-input {
+    flex:1 1 auto; width:100%; padding:8px 11px; border-radius:7px; font-size:0.88rem;
+    border:1px solid var(--app-border,#e2e8f0); background:var(--app-input-bg,#fff);
+    color:var(--bs-body-color,#0f172a); outline:none; box-sizing:border-box;
+    transition:border-color .15s;
+}
+.bcp-input:focus { border-color:#6366f1; box-shadow:0 0 0 2px rgba(99,102,241,.15); }
+.bcp-input.bcp-shake { animation: bcpShake .4s; border-color:#ef4444; }
+.bcp-name { font-size:0.78rem; color:var(--bs-secondary-color,#6c757d); margin-top:4px; min-height:16px; }
+.bcp-lookup-btn {
+    flex:0 0 auto; width:34px; height:34px; border-radius:7px; border:1px solid var(--app-border,#e2e8f0);
+    background:var(--app-surface-2,#f1f5f9); color:var(--bs-body-color,#0f172a); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+}
+.bcp-lookup-btn:hover { background:var(--app-border,#e2e8f0); }
+.bcp-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
+.bcp-btn { padding:8px 18px; border-radius:7px; font-size:0.86rem; font-weight:600; border:none; cursor:pointer; transition:background .15s; }
+.bcp-btn--primary { background:#4f46e5; color:#fff; }
+.bcp-btn--primary:hover { background:#4338ca; }
+.bcp-btn--primary:disabled { opacity:.55; cursor:default; }
+.bcp-btn--secondary { background:var(--app-surface-2,#f1f5f9); color:var(--bs-body-color,#0f172a); }
+.bcp-btn--secondary:hover { background:var(--app-border,#e2e8f0); }
+.bcp-status { font-size:0.8rem; margin-top:10px; text-align:center; min-height:18px; }
+.bcp-status--ok  { color:#22c55e; }
+.bcp-status--err { color:#ef4444; }
+@@keyframes bcpShake {
+    10%, 90% { transform: translateX(-1px); }
+    20%, 80% { transform: translateX(2px); }
+    30%, 50%, 70% { transform: translateX(-4px); }
+    40%, 60% { transform: translateX(4px); }
+}
+body.app-theme-dark .bcp-source { background:#1e293b; border-color:#334155; }
+body.app-theme-dark .bcp-input { background:#1e293b; border-color:#334155; color:#e2e8f0; }
+body.app-theme-dark .bcp-lookup-btn { background:#1e293b; border-color:#334155; color:#e2e8f0; }
+body.app-theme-dark .bcp-lookup-btn:hover { background:#334155; }
+body.app-theme-dark .bcp-btn--secondary { background:#1e293b; color:#e2e8f0; }
+body.app-theme-dark .bcp-btn--secondary:hover { background:#334155; }
+</style>
+
+<div class="bcp-root">
+    <div class="bcp-source">
+        Kaynak: <strong>@sourceLabel</strong> (@Model.ItemCode)
+        @if (!string.IsNullOrWhiteSpace(Model.ConfigCode))
+        {
+            @: &middot; Kombinasyon: <strong>@Model.ConfigCode</strong>
+        }
+        &middot; @Model.Lines.Count bileşen
+    </div>
+
+    <div class="bcp-field">
+        <label class="bcp-label bcp-label--req" for="bcpTargetCode">Hedef Mamul Kodu</label>
+        <div class="bcp-input-row">
+            <input type="text" id="bcpTargetCode" class="bcp-input" placeholder="Mamul kodunu yazın..." autocomplete="off" />
+        </div>
+        <div class="bcp-name" id="bcpTargetName"></div>
+    </div>
+
+    <div class="bcp-field" id="bcpConfigField" style="display:none;">
+        <label class="bcp-label" for="bcpTargetConfigCode">Hedef Kombinasyon</label>
+        <div class="bcp-input-row">
+            <input type="text" id="bcpTargetConfigCode" class="bcp-input" placeholder="Kombinasyon kodunu yazın..." autocomplete="off" />
+            <button type="button" class="bcp-lookup-btn" id="bcpConfigLookupBtn" title="Kombinasyon seçimi">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+            </button>
+        </div>
+        <div class="bcp-name" id="bcpTargetConfigDesc"></div>
+    </div>
+
+    <div class="bcp-actions">
+        <button type="button" class="bcp-btn bcp-btn--secondary" id="bcpCancelBtn">Vazgeç</button>
+        <button type="button" class="bcp-btn bcp-btn--primary" id="bcpApplyBtn">Kopyala ve Kaydet</button>
+    </div>
+    <div id="bcpStatus" class="bcp-status"></div>
+</div>
+
+<script>
+(function() {
+    var sourceId = @Model.Id;
+    var codeInput = document.getElementById('bcpTargetCode');
+    var nameEl    = document.getElementById('bcpTargetName');
+    var cfgField  = document.getElementById('bcpConfigField');
+    var cfgInput  = document.getElementById('bcpTargetConfigCode');
+    var cfgDesc   = document.getElementById('bcpTargetConfigDesc');
+    var applyBtn  = document.getElementById('bcpApplyBtn');
+    var statusEl  = document.getElementById('bcpStatus');
+    var csrfToken = '@tokens.RequestToken';
+    var resolvedTarget = null; // { code, name, hasConfig }
+
+    function shake(el) {
+        el.classList.remove('bcp-shake');
+        void el.offsetWidth;
+        el.classList.add('bcp-shake');
+    }
+
+    function setStatus(msg, ok) {
+        statusEl.textContent = msg || '';
+        statusEl.className = 'bcp-status' + (msg ? (ok ? ' bcp-status--ok' : ' bcp-status--err') : '');
+    }
+
+    document.getElementById('bcpCancelBtn').addEventListener('click', function() {
+        window.dispatchEvent(new CustomEvent('close-sc-modal'));
+    });
+
+    // Hedef mamul resolve — BOMEdit'teki ptaResolveTarget ile ayni mantik (StockLookup).
+    async function resolveTarget() {
+        var code = (codeInput.value || '').trim();
+        resolvedTarget = null;
+        if (!code) { nameEl.textContent = ''; cfgField.style.display = 'none'; return null; }
+        try {
+            var resp = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code));
+            var list = await resp.json();
+            var match = (list || []).find(function(s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+            if (!match) { nameEl.textContent = ''; cfgField.style.display = 'none'; return null; }
+            codeInput.value = match.code;
+            nameEl.textContent = match.name || '';
+            var hasCfg = match.hasConfig === true || match.hasConfig === 'true';
+            cfgField.style.display = hasCfg ? '' : 'none';
+            if (!hasCfg) { cfgInput.value = ''; cfgDesc.textContent = ''; }
+            resolvedTarget = { code: match.code, name: match.name, hasConfig: hasCfg };
+            return resolvedTarget;
+        } catch (err) {
+            console.error('[BomCopyModal][resolveTarget]', err);
+            return null;
+        }
+    }
+
+    // Hedef kombinasyon resolve — /Sales/GetCombinations (BOMEdit ile ayni uc).
+    async function resolveTargetConfig() {
+        var matCode = (codeInput.value || '').trim();
+        var cfgCode = (cfgInput.value || '').trim();
+        if (!matCode || !cfgCode) { cfgDesc.textContent = ''; return null; }
+        try {
+            var resp = await fetch('/Sales/GetCombinations?materialCode=' + encodeURIComponent(matCode));
+            var list = await resp.json();
+            var match = (list || []).find(function(c) { return (c.code || '').toLowerCase() === cfgCode.toLowerCase(); });
+            if (!match) { cfgDesc.textContent = ''; return null; }
+            cfgInput.value = match.code;
+            cfgDesc.textContent = (match.features || []).map(function(f) {
+                return f.feature + ': ' + (f.value || f.valueCode || '');
+            }).join(' | ');
+            return match;
+        } catch (err) {
+            console.error('[BomCopyModal][resolveTargetConfig]', err);
+            return null;
+        }
+    }
+
+    codeInput.addEventListener('change', resolveTarget);
+    codeInput.addEventListener('blur', resolveTarget);
+    cfgInput.addEventListener('blur', resolveTargetConfig);
+
+    // Kombinasyon rehberi — React tarafındaki paylaşılan CombinationPickerModal
+    // (window.CalibraHub.openCombinationPicker). Bundle SmartBoard için zaten
+    // liste sayfasında yüklü — BOMEdit'in kendi wiring'i yeniden kopyalanmadı.
+    document.getElementById('bcpConfigLookupBtn').addEventListener('click', function() {
+        var matCode = (codeInput.value || '').trim();
+        if (!matCode) { setStatus('Önce hedef mamul kodu girin.', false); shake(codeInput); return; }
+        if (!window.CalibraHub || typeof window.CalibraHub.openCombinationPicker !== 'function') {
+            setStatus('Kombinasyon seçici yüklenemedi.', false);
+            return;
+        }
+        window.CalibraHub.openCombinationPicker(matCode, {
+            materialName: nameEl.textContent || '',
+            currentCode: cfgInput.value || null,
+            onApply: function(configId, code, details) {
+                cfgInput.value = code;
+                cfgDesc.textContent = (details || []).map(function(d) {
+                    return d.featureName + ': ' + (d.valueName || d.valueCode || '');
+                }).join(' | ');
+            }
+        });
+    });
+
+    applyBtn.addEventListener('click', async function() {
+        setStatus('', false);
+        var target = (resolvedTarget && resolvedTarget.code === codeInput.value.trim())
+            ? resolvedTarget
+            : await resolveTarget();
+        if (!target) { setStatus('Hedef mamul kodu geçersiz.', false); shake(codeInput); return; }
+        var targetCfg = (cfgInput.value || '').trim();
+        if (target.hasConfig && !targetCfg) {
+            setStatus('Bu mamul kombinasyonlu. Hedef kombinasyon kodu girin.', false);
+            shake(cfgInput);
+            return;
+        }
+        if (target.hasConfig && targetCfg) {
+            var cfgMatch = await resolveTargetConfig();
+            if (!cfgMatch) { setStatus('Hedef kombinasyon kodu geçersiz.', false); shake(cfgInput); return; }
+        }
+
+        applyBtn.disabled = true;
+        setStatus('Kopyalanıyor…', true);
+        try {
+            // Kaynak reçeteyi taze cek (bilesenler/gorsel/rota) — GetBOMById ayni uc.
+            var srcResp = await fetch('/Logistics/GetBOMById?id=' + sourceId, { credentials: 'same-origin' });
+            var src = await srcResp.json();
+            if (!src || !src.found) { setStatus('Kaynak reçete okunamadı.', false); applyBtn.disabled = false; return; }
+
+            var payload = {
+                id: null,
+                itemId: 0,
+                configId: null,
+                parentMaterialCode: target.code,
+                configurationCode: target.hasConfig ? targetCfg : null,
+                description: src.description || null,
+                imageBase64: src.imageBase64 || null,
+                imageMimeType: src.imageMimeType || null,
+                imageFitMode: src.imageFitMode || 'square',
+                imageRotation: src.imageRotation || 0,
+                routingId: src.routingId || null,
+                routingCode: src.routingCode || null,
+                lines: (src.lines || []).map(function(l) {
+                    return {
+                        itemId: 0,
+                        configId: null,
+                        componentMaterialCode: l.componentMaterialCode,
+                        componentConfigCode: l.componentConfigCode || null,
+                        quantity: l.quantity,
+                        scrapRatio: l.scrapRatio,
+                        note: l.note || null
+                    };
+                })
+            };
+
+            var saveResp = await fetch('/Logistics/SaveBOM', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'RequestVerificationToken': csrfToken
+                },
+                body: JSON.stringify(payload)
+            });
+            var data = null;
+            try { data = await saveResp.json(); } catch (_) { /* bos govde */ }
+            if (data && data.success) {
+                setStatus('Reçete başarıyla kopyalandı.', true);
+                var newId = data.id;
+                // BOMEdit'teki eski "apply" davranisiyla tutarli: kopya olustuktan
+                // sonra kullanici o kaydin duzenleme ekranina gecer.
+                setTimeout(function() {
+                    window.dispatchEvent(new CustomEvent('close-sc-modal'));
+                    window.location.href = '/Logistics/BOMEdit?id=' + newId;
+                }, 500);
+            } else {
+                setStatus((data && data.message) || 'Kayıt hatası.', false);
+                applyBtn.disabled = false;
+            }
+        } catch (err) {
+            console.error('[BomCopyModal][apply]', err);
+            setStatus('Bağlantı veya sunucu hatası.', false);
+            applyBtn.disabled = false;
+        }
+    });
+})();
+</script>

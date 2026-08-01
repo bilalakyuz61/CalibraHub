@@ -134,6 +134,23 @@ public sealed class BomController : Controller
                 apiUrl  = $"/Logistics/DeleteBOMJson?id={b.Id}",
                 confirm = "Bu reçeteyi silmek istediğinizden emin misiniz?",
             },
+            // Satır (kart) düzeyinde "Reçeteyi Kopyala" — tek yer artık burası
+            // (BOMEdit'teki "İşlemler" dropdown'undan kaldırıldı, 2026-08-01
+            // PageComment Seq 1056). SmartCard extraActions + fetch-modal deseni
+            // (bkz. Purchase/FulfillModal, DocumentManagement/_RevisePartial).
+            extraActions = new object[]
+            {
+                new
+                {
+                    id        = "copy",
+                    label     = "Reçeteyi Kopyala",
+                    icon      = "Copy",
+                    color     = "blue",
+                    type      = "fetch-modal",
+                    fetchUrl  = $"/Logistics/CopyModal?id={b.Id}",
+                    modalTitle = "Reçeteyi Yeni Mamule Kopyala",
+                },
+            },
         }).ToList();
 
     // ── Endpoints ─────────────────────────────────────────────────────
@@ -239,6 +256,23 @@ public sealed class BomController : Controller
         if (tree is null) return Ok(new { found = false });
 
         return Ok(BuildBomResponse(tree));
+    }
+
+    /// <summary>
+    /// SmartCard fetch-modal ile yüklenir: GET /Logistics/CopyModal?id={id}
+    /// "Reçeteyi Yeni Mamule Kopyala" formu — liste ekranının satır aksiyonu
+    /// (2026-08-01, PageComment Seq 1056: BOMEdit'teki eşdeğer akış kaldırılıp
+    /// buraya taşındı — tek yer). Kaydetme mevcut SaveBOM ucunu kullanır;
+    /// bu action yalnızca kaynak özetini + formu render eder.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> CopyModal(int id, CancellationToken ct)
+    {
+        var tree = await _logisticsConfigurationService.GetBOMByIdAsync(id, ct);
+        if (tree is null)
+            return Content("<div style=\"padding:20px;color:#f87171;font-size:.85rem;\">Reçete bulunamadı.</div>", "text/html");
+
+        return PartialView("~/Views/Logistics/_BomCopyModal.cshtml", tree);
     }
 
     [HttpPost]
