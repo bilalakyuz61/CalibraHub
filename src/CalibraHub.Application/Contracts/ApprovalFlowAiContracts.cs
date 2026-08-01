@@ -14,6 +14,9 @@ public sealed record ApprovalFlowAiUserRef(int Id, string Name);
 /// <summary>Context — mevcut şirkete ait departman listesi (Department eşleme için).</summary>
 public sealed record ApprovalFlowAiDepartmentRef(int Id, string Name);
 
+/// <summary>POST /ApprovalFlow/GenerateStepsAi body'si.</summary>
+public sealed record GenerateFlowAiRequest(string Command, string? DocumentKind);
+
 /// <summary>
 /// AI üretim sonucu. Ok=false ise Nodes/Edges/Rules boş liste, Error dolu.
 /// Warnings: isim→ID eşleşmedi (approverId boş bırakıldı, tasarımcıda seçilmeli) gibi

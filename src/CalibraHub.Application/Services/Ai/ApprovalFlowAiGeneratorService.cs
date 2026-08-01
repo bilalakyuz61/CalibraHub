@@ -85,7 +85,7 @@ public sealed class ApprovalFlowAiGeneratorService : IApprovalFlowAiGeneratorSer
                 Temperature = 0.2f,
             };
 
-            ChatResponse response;
+            Microsoft.Extensions.AI.ChatResponse response;
             try
             {
                 response = await client.GetResponseAsync(messages, options, ct).ConfigureAwait(false);
@@ -720,7 +720,7 @@ HER ZAMAN `{ToolName}` tool'unu çağır — metin cevap verme, açıklama yazma
     }
 
     // ── JSON args helpers (CalibroDocumentTools.GetString ile aynı desen) ───
-    private static string? GetString(IReadOnlyDictionary<string, object?> a, string k)
+    private static string? GetString(IDictionary<string, object?> a, string k)
         => a.TryGetValue(k, out var v) && v != null ? v.ToString() : null;
 
     // 2026-08-01: JsonElement → CLR object (array/object/scalar recursive) —

@@ -407,6 +407,11 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiUserK
                            CalibraHub.Application.Services.Ai.AiUserKeyService>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiChatService,
                            CalibraHub.Application.Services.Ai.AiChatService>();
+// 2026-08-01 Onay akışı AI üretimi — doğal dil komuttan node/edge/rule TASLAĞI
+// (bkz. IApprovalFlowAiGeneratorService). Sağlayıcı IAiClientFactory üzerinden
+// Company Settings'teki aktif AI'ya çözülür (hardcode yok).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalFlowAiGeneratorService,
+                           CalibraHub.Application.Services.Ai.ApprovalFlowAiGeneratorService>();
 
 // 2026-06-20 Şablon-tabanlı içe aktarım (AI'sız) — Cari pilotu.
 // Repo + Service scoped (per-company DB + IFinanceService bağımlılığı); ExcelReader stateless singleton.

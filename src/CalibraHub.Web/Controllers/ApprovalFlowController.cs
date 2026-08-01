@@ -29,6 +29,8 @@ public sealed class ApprovalFlowController : Controller
     private readonly IDocumentRepository _documentRepo;
     private readonly IDocumentTypeRepository _documentTypeRepo;
     private readonly ICompanyParameterService _companyParameters;
+    private readonly IApprovalFlowAiGeneratorService _aiGenerator;
+    private readonly ILogger<ApprovalFlowController> _logger;
 
     public ApprovalFlowController(
         IApprovalFlowService service,
@@ -42,7 +44,9 @@ public sealed class ApprovalFlowController : Controller
         IIntegrationService integrationService,
         IDocumentRepository documentRepo,
         IDocumentTypeRepository documentTypeRepo,
-        ICompanyParameterService companyParameters)
+        ICompanyParameterService companyParameters,
+        IApprovalFlowAiGeneratorService aiGenerator,
+        ILogger<ApprovalFlowController> logger)
     {
         _service = service;
         _userRepo = userRepo;
@@ -56,6 +60,8 @@ public sealed class ApprovalFlowController : Controller
         _documentRepo = documentRepo;
         _documentTypeRepo = documentTypeRepo;
         _companyParameters = companyParameters;
+        _aiGenerator = aiGenerator;
+        _logger = logger;
     }
 
     // ── Liste ─────────────────────────────────────────────────────────────────
@@ -354,6 +360,54 @@ public sealed class ApprovalFlowController : Controller
                 foreach (var p in el.EnumerateObject()) dict[p.Name] = ConvertJsonElement(p.Value);
                 return dict;
             default: return null;
+        }
+    }
+
+    // ── AI ile akış taslağı üret (POST) ─────────────────────────────────────────
+    // 2026-08-01: Doğal dil komuttan node/edge/rule TASLAĞI üretir — direkt kaydetme
+    // YOK. Sonuç ApprovalFlowDesigner'ın (React Flow) beklediği {nodes, edges, rules}
+    // şekliyle birebir aynıdır (BuildDesignerInitialPayload ile uyumlu); frontend
+    // kullanıcı onayıyla mevcut designer state'ine yükler, kaydetme her zaman
+    // normal "Kaydet" akışıyla olur. Sağlayıcı Company Settings'teki aktif AI
+    // provider'dır (hardcode yok — IApprovalFlowAiGeneratorService.GenerateAsync
+    // providerCode=null geçer).
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenerateStepsAi([FromBody] GenerateFlowAiRequest request, CancellationToken ct)
+    {
+        try
+        {
+            if (request is null || string.IsNullOrWhiteSpace(request.Command))
+                return Json(new { ok = false, error = "Komut boş olamaz." });
+
+            var (companyId, userId) = GetCurrentUser();
+            var users = (await _userRepo.GetAllAsync(ct))
+                .Where(u => u.IsActive && (companyId == 0 || u.CompanyId == companyId))
+                .Select(u => new ApprovalFlowAiUserRef(u.Id, u.FullName))
+                .ToArray();
+            var departments = (await _deptRepo.GetAllAsync(ct))
+                .Where(d => d.IsActive && (companyId == 0 || d.CompanyId == companyId))
+                .Select(d => new ApprovalFlowAiDepartmentRef(d.Id, d.Name))
+                .ToArray();
+
+            var result = await _aiGenerator.GenerateAsync(
+                request.Command, request.DocumentKind, users, departments,
+                userId == 0 ? (int?)null : userId, ct);
+
+            return Json(new
+            {
+                ok = result.Ok,
+                nodes = result.Nodes,
+                edges = result.Edges,
+                rules = result.Rules,
+                warnings = result.Warnings,
+                error = result.Error,
+            }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Onay akışı AI üretimi endpoint hatası. Komut: {Command}", request?.Command);
+            return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
 
