@@ -2,6 +2,7 @@
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"]     = "Rapor Tasarımcısı";
+    ViewData["HelpKey"]   = "report-designer";
     ViewData["BodyClass"] = "page-report-designer";
     var csrfToken = Antiforgery.GetAndStoreTokens(Context).RequestToken ?? "";
 }
