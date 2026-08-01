@@ -414,6 +414,8 @@ public sealed class ProductionController : Controller
             await _service.UpdateAsync(id, req, ct);
             return Json(new { ok = true });
         }
+        catch (ArgumentException ex)      { return Json(new { ok = false, error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Json(new { ok = false, error = ex.Message }); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[WorkOrder.Update] id={Id} güncellenemedi.", id);
@@ -431,6 +433,8 @@ public sealed class ProductionController : Controller
             await _service.ChangeStatusAsync(id, req.NewStatus, ct);
             return Json(new { ok = true });
         }
+        catch (ArgumentException ex)      { return Json(new { ok = false, error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Json(new { ok = false, error = ex.Message }); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[WorkOrder.ChangeStatus] id={Id} newStatus={NewStatus} durum değiştirilemedi.", id, req?.NewStatus);
@@ -448,6 +452,8 @@ public sealed class ProductionController : Controller
             var newId = await _service.ReviseAsync(id, ct);
             return Json(new { ok = true, id = newId });
         }
+        catch (ArgumentException ex)      { return Json(new { ok = false, error = ex.Message }); }
+        catch (InvalidOperationException ex) { return Json(new { ok = false, error = ex.Message }); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[WorkOrder.Revise] id={Id} revize oluşturulamadı.", id);

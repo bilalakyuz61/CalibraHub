@@ -133,7 +133,15 @@ public sealed class PurchaseController : Controller
 
         // Açık (Pending) onay süreci olan belgeler — parametre sonradan kapatılsa bile önce
         // onay akışını tamamlamalı. Bu kontrol her durumda uygulanır.
-        var pendingIds = (await GetPendingApprovalDocIdsAsync(ct)).ToHashSet();
+        // FAIL-CLOSED: pending listesi DB hatasıyla okunamazsa karşılamayı ENGELLE (boş sanıp
+        // onay kapısını atlama — GetPendingApprovalDocIdsAsync artık throw ediyor).
+        HashSet<int> pendingIds;
+        try { pendingIds = (await GetPendingApprovalDocIdsAsync(ct)).ToHashSet(); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Purchase.CheckFulfillmentApprovalGuard] Bekleyen onay durumu okunamadı — fail-closed (karşılama engellendi).");
+            return "Onay durumu doğrulanamadı — lütfen tekrar deneyin.";
+        }
 
         foreach (var id in documentIds.Distinct())
         {
@@ -827,7 +835,11 @@ public sealed class PurchaseController : Controller
         ViewData["ExtraColumnsJson"]  = JsonSerializer.Serialize(
             extraColTuples.Select(t => new { key = t.Key, label = t.Label }).ToList(), fcJsonOpts);
 
-        var pendingApprovalDocIds = await GetPendingApprovalDocIdsAsync(ct);
+        // Salt-gösterim (board'da pending belgeleri işaretleme) — DB hatasında boş geç (fail-open
+        // burada zararsız: gerçek karşılama guard'ı ayrıca fail-closed kontrol eder).
+        IReadOnlyList<int> pendingApprovalDocIds;
+        try { pendingApprovalDocIds = await GetPendingApprovalDocIdsAsync(ct); }
+        catch { pendingApprovalDocIds = []; }
         ViewData["PendingApprovalDocIdsJson"] = JsonSerializer.Serialize(pendingApprovalDocIds, fcJsonOpts);
 
         // İhtiyaç Kaydı onay tetikleme açık mı → karşılama ekranında seçim kapısını belirler.
@@ -2519,11 +2531,12 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
-            // Sessizce yutma (CLAUDE.md kural #2) — bu liste onay guard'inda kullanilir
-            // (CheckFulfillmentApprovalGuardAsync); sessiz bos donus yetki kontrolunu
-            // atlatabilir, DB hatasi teshis edilebilsin diye logla.
+            // FAIL-CLOSED: bos donmek yetki kapisini atlatir (pending onay belgesi yokmus gibi).
+            // Logla ve RETHROW et — guard (CheckFulfillmentApprovalGuardAsync) bunu yakalayip
+            // karsilamayi engeller; salt-gosterim cagrisi (FulfillmentCenter board) kendi
+            // try/catch'inde bos listeye duser. Sessiz bos donus YASAK (CLAUDE.md kural #2).
             _logger.LogError(ex, "[Purchase.GetPendingApprovalDocIdsAsync] Bekleyen onay belge ID'leri okunamadi.");
-            return [];
+            throw;
         }
     }
 
