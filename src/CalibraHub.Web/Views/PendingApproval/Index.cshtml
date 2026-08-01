@@ -1,5 +1,6 @@
 @{
     ViewData["Title"] = "Onayda Bekleyenler";
+    ViewData["HelpKey"] = "pending-approval";
     var scopes = ViewBag.AvailableScopes as IReadOnlyList<string> ?? new[] { "mine" };
     var defaultScope = (string)(ViewBag.DefaultScope ?? "mine");
 }
