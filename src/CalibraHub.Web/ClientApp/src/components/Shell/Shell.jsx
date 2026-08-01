@@ -21,6 +21,7 @@
  * MenuNode: { key, label, icon, url, children }
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as notifApi from '../../services/notificationsService'
 // 2026-05-23 — Yapay zeka asistanı (sağ alt floating widget). Top-level Shell altında
@@ -2237,8 +2238,26 @@ function ShortcutsBar(props) {
   var onGoHome = props.onGoHome
   var onOpenHelp = props.onOpenHelp
 
+  var gearRef = useRef(null)
   var [actionsOpen, setActionsOpen] = useState(false)
+  var [actionsPos, setActionsPos] = useState({ top: 0, left: 0 })
   var [shortcutKeys, setShortcutKeys] = useState([])
+
+  // İşlemler menüsü: butonun altına konumlandır (portal ile body'ye render → overflow kırpmaz)
+  function toggleActions() {
+    if (!actionsOpen && gearRef.current) {
+      var r = gearRef.current.getBoundingClientRect()
+      setActionsPos({ top: Math.round(r.bottom + 6), left: Math.round(r.left) })
+    }
+    setActionsOpen(function(v) { return !v })
+  }
+  // Esc → İşlemler menüsünü kapat
+  useEffect(function() {
+    if (!actionsOpen) return undefined
+    function onKey(e) { if (e.key === 'Escape') setActionsOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return function() { window.removeEventListener('keydown', onKey) }
+  }, [actionsOpen])
   var [showNames, setShowNames] = useState(false)
   var [loaded, setLoaded] = useState(false)
   var [editMode, setEditMode] = useState(false)
@@ -2306,12 +2325,13 @@ function ShortcutsBar(props) {
 
   return (
     <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto overflow-y-hidden smartcard-widgets-scroll">
-      {/* İşlemler — çark ikonu (yazısız); genel işlemler + aktif sayfanın Yardımı.
-          Ana Sayfa'nın SOLUNDA, ikon-only → boşluk bırakmaz. */}
-      <div className="relative flex-shrink-0">
+      {/* İşlemler — çark ikonu (yazısız), Ana Sayfa'nın SOLUNDA. Menü portal ile
+          body'ye render edilir → ShortcutsBar overflow'u kırpmaz, buton altından açılır. */}
+      <div className="flex-shrink-0">
         <button
+          ref={gearRef}
           type="button"
-          onClick={function() { setActionsOpen(function(v) { return !v }) }}
+          onClick={toggleActions}
           title={tShell('actions', lang)}
           aria-label={tShell('actions', lang)}
           className={
@@ -2321,32 +2341,33 @@ function ShortcutsBar(props) {
         >
           <Settings size={15} strokeWidth={1.8} />
         </button>
-        {actionsOpen && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={function() { setActionsOpen(false) }} />
-            <div
-              className={
-                'absolute left-0 mt-2 min-w-[200px] rounded-xl border overflow-hidden z-40 py-1 ' +
-                (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
-              }
-              style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
-            >
-              <button
-                type="button"
-                onClick={function() { setActionsOpen(false); if (onOpenHelp) onOpenHelp() }}
-                className={
-                  'w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors ' +
-                  (isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100')
-                }
-              >
-                <HelpCircle size={15} strokeWidth={1.8} className="text-indigo-400" />
-                <span>{tShell('help', lang)}</span>
-                <kbd className={'ml-auto text-[10px] px-1.5 py-0.5 rounded border ' + (isDark ? 'border-white/15 text-white/50' : 'border-slate-300 text-slate-400')}>F1</kbd>
-              </button>
-            </div>
-          </>
-        )}
       </div>
+      {actionsOpen && createPortal(
+        <>
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }} onClick={function() { setActionsOpen(false) }} />
+          <div
+            className={
+              'min-w-[200px] rounded-xl border overflow-hidden py-1 ' +
+              (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
+            }
+            style={{ position: 'fixed', top: actionsPos.top, left: actionsPos.left, zIndex: 1001, boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
+          >
+            <button
+              type="button"
+              onClick={function() { setActionsOpen(false); if (onOpenHelp) onOpenHelp() }}
+              className={
+                'w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors ' +
+                (isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-slate-100')
+              }
+            >
+              <HelpCircle size={15} strokeWidth={1.8} className="text-indigo-400" />
+              <span>{tShell('help', lang)}</span>
+              <kbd className={'ml-auto text-[10px] px-1.5 py-0.5 rounded border ' + (isDark ? 'border-white/15 text-white/50' : 'border-slate-300 text-slate-400')}>F1</kbd>
+            </button>
+          </div>
+        </>,
+        document.body
+      )}
 
       {/* Ana Sayfa — sabit, kısayol listesinden bağımsız, kaldırılamaz */}
       <button
