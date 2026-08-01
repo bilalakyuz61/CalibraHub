@@ -336,26 +336,29 @@ public sealed class PurchaseController : Controller
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseQuote)]
     public Task<IActionResult> Quotes(CancellationToken ct) =>
         RenderListAsync("alis_teklifi",  "PURCHASE_QUOTE_EDIT",   "Satin Alma Teklifleri",
-                        "teklif",        "/Purchase/Edit?type=purchase_quote",   "blue",  ct);
+                        "teklif",        "/Purchase/Edit?type=purchase_quote",   "blue",  ct,
+                        helpKey: "purchase-quotes");
 
     [HttpGet("/Purchase/Orders")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseOrder)]
     public Task<IActionResult> Orders(CancellationToken ct) =>
         RenderListAsync("alis_siparisi", "PURCHASE_ORDER_EDIT",   "Satin Alma Siparisleri",
-                        "siparis",       "/Purchase/Edit?type=purchase_order",   "emerald", ct);
+                        "siparis",       "/Purchase/Edit?type=purchase_order",   "emerald", ct,
+                        helpKey: "purchase-orders");
 
     [HttpGet("/Purchase/PurchaseDemands")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseDemand)]
     public Task<IActionResult> PurchaseDemands(CancellationToken ct) =>
         RenderListAsync("satin_alma_talebi", "PURCHASE_DEMAND_EDIT", "Satın Alma Talepleri",
                         "talep", "/Purchase/Edit?type=purchase_demand", "violet", ct,
-                        newUrl: "/Purchase/PurchaseRequestWizard");
+                        newUrl: "/Purchase/PurchaseRequestWizard", helpKey: "purchase-demands");
 
     [HttpGet("/Purchase/Deliveries")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.PurchaseDelivery)]
     public Task<IActionResult> Deliveries(CancellationToken ct) =>
         RenderListAsync("alis_irsaliyesi", "PURCHASE_DELIVERY_EDIT", "Alış İrsaliyeleri",
-                        "irsaliye", "/Purchase/Edit?type=purchase_delivery", "rose", ct);
+                        "irsaliye", "/Purchase/Edit?type=purchase_delivery", "rose", ct,
+                        helpKey: "purchase-deliveries");
 
     [HttpGet("/Purchase/DeliveriesBoardConfig")]
     public async Task<IActionResult> DeliveriesBoardConfig(CancellationToken ct)

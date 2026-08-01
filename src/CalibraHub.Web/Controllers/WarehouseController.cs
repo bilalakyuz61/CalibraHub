@@ -713,6 +713,7 @@ public sealed class WarehouseController : Controller
     public async Task<IActionResult> StockIn(CancellationToken ct)
     {
         ViewData["Title"] = "Ambar Giriş";
+        ViewData["HelpKey"] = "stock-in";
         var config = await BuildStockEntryBoardConfigAsync("in", ct);
         return View("StockEntry", new WarehouseBoardViewModel { BoardConfig = config });
     }
@@ -726,6 +727,7 @@ public sealed class WarehouseController : Controller
     public async Task<IActionResult> StockOut(CancellationToken ct)
     {
         ViewData["Title"] = "Ambar Çıkış";
+        ViewData["HelpKey"] = "stock-out";
         var config = await BuildStockEntryBoardConfigAsync("out", ct);
         return View("StockEntry", new WarehouseBoardViewModel { BoardConfig = config });
     }

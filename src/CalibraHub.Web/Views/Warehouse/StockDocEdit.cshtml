@@ -1,5 +1,6 @@
 @model CalibraHub.Web.Models.Warehouse.StockDocEditViewModel
 @{
+    ViewData["HelpKey"] = "stock-doc-edit";
     var isTransfer = Model.DocType == "TRANSFER";
     var isStockIn  = Model.DocType == "STOCK_IN";
     var isEdit     = Model.DocId.HasValue;

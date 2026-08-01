@@ -187,6 +187,7 @@ public sealed class SalesController : Controller
         var userId = GetUserId();
         var cols = await _uiConfigurationService.GetGridColumnPreferencesAsync(userId, "sales-quotes", ct);
         var boardConfig = await BuildQuotesBoardConfigAsync(ct);
+        ViewData["HelpKey"] = "sales-quotes";
         return View("Documents", new DocumentsViewModel
         {
             AvailableColumns = DocumentGridColumns,
@@ -552,6 +553,7 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> Deliveries(CancellationToken ct)
     {
         var boardConfig = await BuildDeliveriesBoardConfigAsync(ct);
+        ViewData["HelpKey"] = "sales-deliveries";
         return View("Documents", new DocumentsViewModel
         {
             AvailableColumns = DocumentGridColumns,
@@ -2465,6 +2467,7 @@ public sealed class SalesController : Controller
     public IActionResult ShipmentPlanningCenter()
     {
         ViewData["Title"] = "Yükleme Planlama";
+        ViewData["HelpKey"] = "shipment-planning";
         return View();
     }
 

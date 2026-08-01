@@ -1,5 +1,6 @@
 @model CalibraHub.Web.Models.Sales.DocumentEditViewModel
 @{
+    ViewData["HelpKey"] = "document-edit";
     var isOrder = string.Equals(Model.DocumentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase);
     var isPurchaseOrder = string.Equals(Model.DocumentTypeCode, "alis_siparisi", StringComparison.OrdinalIgnoreCase);
     var isPurchase = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.IsPurchase(Model.DocumentTypeCode);

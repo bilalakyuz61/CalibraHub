@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = Model.FeatureId.HasValue ? "Ozellik Duzenle" : "Yeni Ozellik";
     ViewData["FormCode"] = "PRODUCT_FEATURE_EDIT";
+    ViewData["HelpKey"] = "product-feature-edit";
     ViewData["BodyClass"] = "page-product-feature-edit";
     var editId = (int)(ViewData["ProductFeatureEditId"] ?? 0);
 }
