@@ -3,6 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"]    = isNew ? "Yeni Cari Grup" : $"Grup: {Model.Name}";
     ViewData["FormCode"] = "CARI_GROUPS";
+    ViewData["HelpKey"]  = "cari-group-edit";
     ViewData["BodyClass"] = "page-cge workspace-frame-body";
 }
 

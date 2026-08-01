@@ -3,6 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"]    = isNew ? "Yeni Satış Temsilcisi" : $"Temsilci: {Model.RepName}";
     ViewData["FormCode"] = "SALES_REPS";
+    ViewData["HelpKey"]  = "sales-rep-edit";
     ViewData["BodyClass"] = "page-sre";
 }
 

@@ -2,6 +2,7 @@
     var groupId = (int?)ViewBag.PriceGroupId ?? 0;
     ViewData["Title"]    = groupId > 0 ? "Fiyat Grubu Duzenle" : "Yeni Fiyat Grubu";
     ViewData["FormCode"] = "PRICE_LIST";
+    ViewData["HelpKey"]  = "price-group-edit";
     // 2026-06-02: workspace-frame-body sınıfı, body'yi 100dvh + overflow:hidden yapar.
     // Bu sayede openGuideLookup'ın createPortal ile body'e mount ettiği `position:fixed`
     // modal viewport'a tam ortalanır. Önceden body height değişken olduğu için modal
