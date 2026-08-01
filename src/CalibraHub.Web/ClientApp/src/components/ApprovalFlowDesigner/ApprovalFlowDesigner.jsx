@@ -136,6 +136,43 @@ function decorateEdge(edge) {
   })
 }
 
+/* sourceHandle/targetHandle deduce + decorateEdge — hem mount (props.initialEdges)
+   hem "AI ile Oluştur" sonucu (backend'den gelen edges, aynı ham şekil) için ortak. */
+function buildDecoratedEdges(nodesForTypeLookup, rawEdges) {
+  var nodeTypeById = {}
+  ;(Array.isArray(nodesForTypeLookup) ? nodesForTypeLookup : []).forEach(function (n) { nodeTypeById[n.id] = n.type })
+  return (Array.isArray(rawEdges) ? rawEdges : []).map(function (e) {
+    var srcType = nodeTypeById[e.source]
+    var kind = e.data && e.data.edgeKind
+    var sh = e.sourceHandle
+    var th = e.targetHandle
+    if (!sh && kind) {
+      if (srcType === 'step') {
+        if (kind === 'true')        sh = 'approve'
+        else if (kind === 'false')  sh = 'reject'
+        else if (kind === 'timeout') sh = 'timeout'
+      } else if (srcType === 'decision') {
+        if (kind === 'true')       sh = 'true'
+        else if (kind === 'false') sh = 'false'
+      }
+    }
+    var patch = {}
+    if (sh) patch.sourceHandle = sh
+    if (th) patch.targetHandle = th
+    var withHandle = (sh || th) ? Object.assign({}, e, patch) : e
+    return decorateEdge(withHandle)
+  })
+}
+
+/* Save akışıyla aynı desen: gizli antiforgery input'undan (Razor @Html.AntiForgeryToken())
+   token okunur. Sayfa üzerinde her zaman mevcut (Edit.cshtml render eder). */
+function getCsrfToken() {
+  try {
+    var el = document.querySelector('input[name="__RequestVerificationToken"]')
+    return el ? el.value : ''
+  } catch (_) { return '' }
+}
+
 /* ──────────────────────────────────────────────────────────────
    Designer Inner — useReactFlow hook gerekli olduğundan
    ReactFlowProvider içinde render edilir.
@@ -164,33 +201,10 @@ function DesignerInner(props) {
 
   var [nodes, setNodes] = useState(function () { return ensureMinimumNodes(props.initialNodes) })
   var [edges, setEdges] = useState(function () {
-    var initNodes = ensureMinimumNodes(props.initialNodes)
-    var nodeTypeById = {}
-    initNodes.forEach(function (n) { nodeTypeById[n.id] = n.type })
-    return (Array.isArray(props.initialEdges) ? props.initialEdges : []).map(function (e) {
-      // 1) Backend'den gelen sourceHandle/targetHandle varsa direkt kullan
-      //    (2026-06-15: ApprovalFlowEdge.SourceHandle/TargetHandle kolonlari).
-      // 2) Yoksa edgeKind + source node tipinden deduce (geriye uyum, eski kayitlar).
-      var srcType = nodeTypeById[e.source]
-      var kind = e.data && e.data.edgeKind
-      var sh = e.sourceHandle
-      var th = e.targetHandle
-      if (!sh && kind) {
-        if (srcType === 'step') {
-          if (kind === 'true')        sh = 'approve'
-          else if (kind === 'false')  sh = 'reject'
-          else if (kind === 'timeout') sh = 'timeout'
-        } else if (srcType === 'decision') {
-          if (kind === 'true')       sh = 'true'
-          else if (kind === 'false') sh = 'false'
-        }
-      }
-      var patch = {}
-      if (sh) patch.sourceHandle = sh
-      if (th) patch.targetHandle = th
-      var withHandle = (sh || th) ? Object.assign({}, e, patch) : e
-      return decorateEdge(withHandle)
-    })
+    // 1) Backend'den gelen sourceHandle/targetHandle varsa direkt kullan
+    //    (2026-06-15: ApprovalFlowEdge.SourceHandle/TargetHandle kolonlari).
+    // 2) Yoksa edgeKind + source node tipinden deduce (geriye uyum, eski kayitlar).
+    return buildDecoratedEdges(ensureMinimumNodes(props.initialNodes), props.initialEdges)
   })
   var [rules, setRules] = useState(function () {
     return Array.isArray(props.initialRules) ? props.initialRules.slice() : []
@@ -225,6 +239,25 @@ function DesignerInner(props) {
   var [showMinimap, setShowMinimap] = useState(function () {
     try { return localStorage.getItem(AFD_MINIMAP_KEY) === '1' } catch (_) { return false }
   })
+
+  /* ── "AI ile Oluştur" — doğal dil komuttan taslak süreç üretir ──────────────
+     Backend: POST {apiBase}/GenerateStepsAi { command, documentKind } →
+     { ok, nodes, edges, rules, warnings:[{text}], error? } — designer açılış
+     payload'ıyla (BuildDesignerInitialPayload) birebir aynı şekil; doğrudan
+     setNodes/setEdges/setRules'a verilebilir. OTOMATİK KAYIT YOK — kullanıcı
+     taslağı inceleyip mevcut "Kaydet" ile persist eder. */
+  var [aiOpen, setAiOpen] = useState(false)
+  var [aiStep, setAiStep] = useState('input')          // 'input' | 'result'
+  var [aiCommand, setAiCommand] = useState('')
+  var [aiLoading, setAiLoading] = useState(false)
+  var [aiError, setAiError] = useState(null)
+  var [aiWarnings, setAiWarnings] = useState([])
+  // Canvas'ta kullanıcı adımı varken AI sonucu doğrudan uygulanmaz — onay bekletilir.
+  var [aiPending, setAiPending] = useState(null)
+  var [aiPendingStepCount, setAiPendingStepCount] = useState(0)
+  var [confirmOpen, setConfirmOpen] = useState(false)
+  var aiTextareaRef = useRef(null)
+  var confirmOkRef = useRef(null)
 
   var reactFlowWrapper = useRef(null)
   var rf = useReactFlow()
@@ -555,6 +588,99 @@ function DesignerInner(props) {
      snapshot atmıyoruz, sadece "kullanıcı bıraktı" anında. */
   var onNodeDragStop = useCallback(function () { schedulePush() }, [schedulePush])
 
+  /* ── "AI ile Oluştur" — sonuç uygulama + istek ─────────────────────────── */
+  function applyAiResult(result) {
+    var newNodes = Array.isArray(result.nodes) ? result.nodes : []
+    var newEdges = buildDecoratedEdges(newNodes, result.edges)
+    setNodes(newNodes)
+    setEdges(newEdges)
+    setRules(Array.isArray(result.rules) ? result.rules : [])
+    setSelected(null)
+    setAiWarnings(Array.isArray(result.warnings)
+      ? result.warnings.map(function (w) { return (w && w.text) ? w.text : String(w) })
+      : [])
+    schedulePush()
+    setTimeout(function () {
+      if (rf && typeof rf.fitView === 'function') {
+        try { rf.fitView({ padding: 0.2, maxZoom: 1.2, duration: 250 }) } catch (_) {}
+      }
+    }, 80)
+  }
+
+  function runAiGenerate() {
+    var cmd = (aiCommand || '').trim()
+    if (!cmd) { setAiError('Süreci tarif eden bir komut girin.'); return }
+    setAiLoading(true)
+    setAiError(null)
+    fetch(apiBase + '/GenerateStepsAi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getCsrfToken() },
+      body: JSON.stringify({ command: cmd, documentKind: currentEntityType }),
+    })
+      .then(function (res) { return res.json().catch(function () { return null }) })
+      .then(function (data) {
+        setAiLoading(false)
+        if (!data || data.ok !== true || !Array.isArray(data.nodes)) {
+          setAiError((data && data.error) || 'AI önerisi alınamadı. Lütfen tekrar deneyin.')
+          return
+        }
+        // "Boş canvas" = sadece Start/End var, kullanıcı henüz adım eklememiş.
+        var isCanvasEmpty = nodes.every(function (n) { return n.type === 'start' || n.type === 'end' })
+        if (isCanvasEmpty) {
+          applyAiResult(data)
+          setAiStep('result')
+        } else {
+          var stepCount = nodes.filter(function (n) { return n.type !== 'start' && n.type !== 'end' }).length
+          setAiPending(data)
+          setAiPendingStepCount(stepCount)
+          setAiOpen(false)
+          setConfirmOpen(true)
+        }
+      })
+      .catch(function () {
+        setAiLoading(false)
+        setAiError('AI önerisi alınamadı. Sunucuya ulaşılamadı.')
+      })
+  }
+
+  function confirmApplyPending() {
+    if (!aiPending) { setConfirmOpen(false); return }
+    applyAiResult(aiPending)
+    setAiPending(null)
+    setConfirmOpen(false)
+    setAiStep('result')
+    setAiOpen(true)
+  }
+
+  function cancelPending() {
+    setAiPending(null)
+    setConfirmOpen(false)
+  }
+
+  // AI komut modalı — Esc ile kapat (yükleniyorken kapatma, isteği kesme). Açılışta textarea odakla.
+  useEffect(function () {
+    if (!aiOpen) return
+    function onKey(e) {
+      if (e.key === 'Escape' && !aiLoading) { e.preventDefault(); setAiOpen(false) }
+    }
+    window.addEventListener('keydown', onKey)
+    var t = setTimeout(function () { if (aiTextareaRef.current) aiTextareaRef.current.focus() }, 60)
+    return function () { window.removeEventListener('keydown', onKey); clearTimeout(t) }
+  }, [aiOpen, aiLoading])
+
+  // Değiştirme onay modalı — silme onay standardı: Esc/backdrop iptal, Enter onay, OK default focus.
+  useEffect(function () {
+    if (!confirmOpen) return
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); cancelPending() }
+      else if (e.key === 'Enter') { e.preventDefault(); confirmApplyPending() }
+    }
+    window.addEventListener('keydown', onKey)
+    var t = setTimeout(function () { if (confirmOkRef.current) confirmOkRef.current.focus() }, 60)
+    return function () { window.removeEventListener('keydown', onKey); clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmOpen])
+
   /* ── Render ── */
   // selected node'un en taze data'sını al (props panel re-bind için)
   var selectedView = useMemo(function () {
@@ -615,6 +741,21 @@ function DesignerInner(props) {
           {/* 2026-05-25: MiniMap parametrik — varsayilan kapali, kullanici toggle ile acar.
               Tercih localStorage'da saklanir, bir sonraki acilista korunur. */}
           <Panel position="top-right" style={{ display: 'flex', gap: 6 }}>
+            {/* AI ile Oluştur — doğal dil komuttan taslak süreç üretir (otomatik kayıt yok) */}
+            <button
+              type="button"
+              title="AI ile süreç adımları üret"
+              onClick={function () { setAiStep('input'); setAiError(null); setAiOpen(true) }}
+              style={{
+                padding: '6px 10px', borderRadius: 7,
+                background: 'var(--afd-accent, #6366f1)',
+                border: '1px solid var(--afd-accent, #6366f1)',
+                color: '#fff', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                fontSize: 11, fontWeight: 600, boxShadow: '0 2px 6px rgba(0,0,0,.08)',
+              }}>
+              <Sparkles size={13} /> AI ile Oluştur
+            </button>
             {/* Undo / Redo — disabled state stack durumuna göre */}
             <button
               type="button"
@@ -688,6 +829,94 @@ function DesignerInner(props) {
         onChange={function (next) { setVariables(next); schedulePush() }}
         onClose={function () { setVariablesOpen(false) }}
       />
+
+      {/* ── "AI ile Oluştur" komut modalı ── */}
+      {aiOpen && (
+        <div className="afd-ai-backdrop"
+             onClick={function (e) { if (e.target === e.currentTarget && !aiLoading) setAiOpen(false) }}>
+          <div className="afd-ai-card" role="dialog" aria-modal="true">
+            <div className="afd-ai-head">
+              <div className="afd-ai-title"><Sparkles size={16} style={{ marginRight: 6 }} /> AI ile Oluştur</div>
+              <button type="button" className="afd-vars-close" title="Kapat"
+                      onClick={function () { if (!aiLoading) setAiOpen(false) }}>×</button>
+            </div>
+
+            {aiStep === 'input' && (
+              <>
+                <div className="afd-ai-hint">
+                  Süreci doğal dille tarif edin, AI adımları taslak olarak canvas'a düşürsün. Örn:
+                  {' '}<em>"önce departman müdürü onaylasın, tutar 10.000 TL üstündeyse genel müdür de
+                  onaylasın, sonra muhasebe"</em>. Hiçbir şey otomatik kaydedilmez — taslağı gözden
+                  geçirip mevcut <strong>Kaydet</strong> ile siz onaylarsınız.
+                </div>
+                <div className="afd-ai-body">
+                  <textarea
+                    ref={aiTextareaRef}
+                    className="afd-ai-textarea"
+                    rows={5}
+                    placeholder="Süreci tarif edin…"
+                    value={aiCommand}
+                    disabled={aiLoading}
+                    onChange={function (e) { setAiCommand(e.target.value) }}
+                  />
+                  {aiError && <div className="afd-vars-err">{aiError}</div>}
+                </div>
+                <div className="afd-ai-foot">
+                  <span className="afd-ai-foot-hint">{aiLoading ? 'AI süreci oluşturuyor…' : ''}</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" className="afd-vars-add" disabled={aiLoading}
+                            onClick={function () { setAiOpen(false) }}>Vazgeç</button>
+                    <button type="button" className="afd-vars-ok" disabled={aiLoading || !aiCommand.trim()}
+                            onClick={runAiGenerate}>
+                      {aiLoading ? 'Oluşturuluyor…' : 'Oluştur'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {aiStep === 'result' && (
+              <>
+                <div className="afd-ai-success">
+                  Öneri canvas'a eklendi — gözden geçirip <strong>Kaydet</strong>'e basın. Hiçbir şey
+                  otomatik kaydedilmedi.
+                </div>
+                {aiWarnings.length > 0 && (
+                  <div className="afd-ai-body">
+                    <div className="afd-ai-warn-title">Bulunamayan onaylayanlar — tasarımcıda tamamlayın:</div>
+                    <ul className="afd-ai-warn-list">
+                      {aiWarnings.map(function (w, i) { return <li key={i}>{w}</li> })}
+                    </ul>
+                  </div>
+                )}
+                <div className="afd-ai-foot">
+                  <span />
+                  <button type="button" className="afd-vars-ok" onClick={function () { setAiOpen(false) }}>Tamam</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Canvas dolu iken AI önerisiyle değiştirme onayı — silme onay standardı ── */}
+      {confirmOpen && (
+        <div className="afd-confirm-backdrop" onClick={function (e) { if (e.target === e.currentTarget) cancelPending() }}>
+          <div className="afd-confirm-card" role="alertdialog" aria-modal="true">
+            <div className="afd-confirm-icon"><AlertTriangle size={22} /></div>
+            <div className="afd-confirm-title">Mevcut Adımlar Değiştirilecek</div>
+            <div className="afd-confirm-msg">
+              Canvas'ta {aiPendingStepCount} adım var. AI önerisi uygulanırsa bu adımların yerine yeni
+              taslak gelecek. Devam edilsin mi?
+            </div>
+            <div className="afd-confirm-actions">
+              <button type="button" className="afd-confirm-btn afd-confirm-btn--ghost" onClick={cancelPending}>Vazgeç</button>
+              <button type="button" ref={confirmOkRef} className="afd-confirm-btn afd-confirm-btn--danger"
+                      onClick={confirmApplyPending}>Devam Et</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     </AltKeyCtx.Provider>
     </NodeDataCtx.Provider>
