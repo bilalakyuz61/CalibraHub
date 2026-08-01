@@ -7,6 +7,7 @@ using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using System.Text.Json;
 
