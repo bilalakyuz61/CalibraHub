@@ -1384,14 +1384,13 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                     <table class="ca-item-grid" style="width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem;">
                         <thead>
                             <tr>
+                                <th class="ca-item-grid__th" style="width:120px;text-align:center;">İşlem</th>
                                 <th class="ca-item-grid__th" style="width:36px;">#</th>
                                 <th class="ca-item-grid__th" style="width:160px;">Stok Kodu *</th>
                                 <th class="ca-item-grid__th">Stok Adı</th>
                                 <th class="ca-item-grid__th" style="width:160px;">Cari Stok Kodu</th>
                                 <th class="ca-item-grid__th" style="width:240px;">Cari Stok Adı</th>
                                 <th class="ca-item-grid__th" style="width:240px;">Not</th>
-                                <th class="ca-item-grid__th" style="width:60px;text-align:center;">Aktif</th>
-                                <th class="ca-item-grid__th" style="width:60px;"></th>
                             </tr>
                         </thead>
                         <tbody id="caItemRows"></tbody>
@@ -2619,6 +2618,14 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
         tr.setAttribute('data-item-id', row && row.itemId ? String(row.itemId) : '0');
 
         var html = ''
+            + '<td style="text-align:center;white-space:nowrap;">'
+            +   '<button type="button" class="ca-item-grid__row-del" title="Sil">Sil</button>'
+            +   '<label class="ca-toggle" title="Aktif" style="vertical-align:middle;margin-left:8px;">'
+            +     '<input type="checkbox" data-field="isActive"' + ((!row || row.isActive !== false) ? ' checked' : '') + ' />'
+            +     '<span class="ca-toggle-track"></span>'
+            +   '</label>'
+            +   '<span class="ca-item-grid__status" data-status style="margin-left:6px;"></span>'
+            + '</td>'
             + '<td class="ca-item-grid__index"></td>'
             + '<td class="ca-item-grid__cell-code' + ((row && row.itemId) ? '' : ' ca-item-grid__needs-pick') + '">'
             +   '<input type="text" data-field="itemCode" autocomplete="off" placeholder="Stok kodu ile ara..." maxlength="60" value="' + escapeHtml(row && row.itemCode ? row.itemCode : '') + '" />'
@@ -2626,17 +2633,7 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
             + '<td><input type="text" data-field="itemName" readonly value="' + escapeHtml(row && row.itemName ? row.itemName : '') + '" placeholder="(otomatik dolar)" /></td>'
             + '<td><input type="text" data-field="vendorCode" maxlength="60" value="' + escapeHtml(row && row.vendorCode ? row.vendorCode : '') + '" placeholder="—" /></td>'
             + '<td><input type="text" data-field="vendorName" maxlength="200" value="' + escapeHtml(row && row.vendorName ? row.vendorName : '') + '" placeholder="—" /></td>'
-            + '<td><input type="text" data-field="notes" maxlength="500" value="' + escapeHtml(row && row.notes ? row.notes : '') + '" placeholder="—" /></td>'
-            + '<td style="text-align:center;">'
-            +   '<label class="ca-toggle" title="Aktif" style="vertical-align:middle;">'
-            +     '<input type="checkbox" data-field="isActive"' + ((!row || row.isActive !== false) ? ' checked' : '') + ' />'
-            +     '<span class="ca-toggle-track"></span>'
-            +   '</label>'
-            +   '<span class="ca-item-grid__status" data-status style="margin-left:6px;"></span>'
-            + '</td>'
-            + '<td style="text-align:center;">'
-            +   '<button type="button" class="ca-item-grid__row-del" title="Sil">Sil</button>'
-            + '</td>';
+            + '<td><input type="text" data-field="notes" maxlength="500" value="' + escapeHtml(row && row.notes ? row.notes : '') + '" placeholder="—" /></td>';
         tr.innerHTML = html;
         caItemBindRow(tr);
         return tr;

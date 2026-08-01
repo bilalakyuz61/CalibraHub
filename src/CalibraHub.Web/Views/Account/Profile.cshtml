@@ -175,22 +175,10 @@
                 </div>
             </div>
 
-            <div class="ap-grid-2">
-                <div class="ap-row">
-                    <label class="ap-label" for="LanguageCode">Dil</label>
-                    <select asp-for="LanguageCode" class="ap-select">
-                        <option value="tr-TR">Türkçe</option>
-                        <option value="en-US">English</option>
-                    </select>
-                </div>
-                <div class="ap-row">
-                    <label class="ap-label" for="ThemeCode">Tema</label>
-                    <select asp-for="ThemeCode" class="ap-select">
-                        <option value="light">Açık</option>
-                        <option value="dark">Koyu</option>
-                    </select>
-                </div>
-            </div>
+            @* Dil ve Tema header profil dropdown'unda yönetilir (Views/Shared/_Layout.cshtml).
+               Mevcut değerler POST'ta kaybolmasın diye hidden alan olarak taşınır. *@
+            <input type="hidden" asp-for="LanguageCode" />
+            <input type="hidden" asp-for="ThemeCode" />
 
             <div class="ap-actions">
                 <a class="ap-btn--link" asp-action="ChangePassword">Şifre değiştir →</a>
