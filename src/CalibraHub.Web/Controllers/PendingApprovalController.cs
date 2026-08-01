@@ -1,17 +1,14 @@
-﻿using CalibraHub.Application.Abstractions.Persistence;
-using CalibraHub.Application.Abstractions.Services;
+﻿using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
 /// 2026-05-26 — "Onayda Bekleyenler" ekran controller'i.
-/// Sol panel: belge turune gore gruplandirilmis sayim.
-/// Orta panel: secili turun bekleyen kayitlari.
-/// Modal: tek instance detay + onayla/reddet.
+/// 2026-08-01 — Sol panel/sutun-ayarlari kaldirildi (CalibraSmartBoard donusumu,
+/// bkz. BoardConfig). Modal: tek instance detay + onayla/reddet (bespoke, korunan).
 /// </summary>
 [Authorize]
 [Route("PendingApproval/[action]")]
@@ -19,13 +16,10 @@ namespace CalibraHub.Web.Controllers;
 public sealed class PendingApprovalController : Controller
 {
     private readonly IPendingApprovalService _service;
-    private readonly IUserSettingRepository _userSettingRepo;
-    private const string ColCfgKey = "ui.pa.col-cfg";
 
-    public PendingApprovalController(IPendingApprovalService service, IUserSettingRepository userSettingRepo)
+    public PendingApprovalController(IPendingApprovalService service)
     {
         _service = service;
-        _userSettingRepo = userSettingRepo;
     }
 
     [HttpGet("/PendingApproval")]
@@ -40,11 +34,92 @@ public sealed class PendingApprovalController : Controller
         return View();
     }
 
+    /// <summary>
+    /// 2026-08-01 — CalibraSmartBoard donusumu: SmartBoard config JSON'i.
+    /// scope = mine|department|all (bos ise "mine"); mode = pending|completed (bos ise "pending").
+    /// Yetki/kapsam cozumlemesi tamamen mevcut servise devredilir (EnsureScopeAllowedAsync
+    /// GetListAsync/GetCompletedListAsync icinde calisir) — burada ek kontrol yok.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> Groups(string? scope, CancellationToken ct)
+    public async Task<IActionResult> BoardConfig(string? scope, string? mode, CancellationToken ct)
     {
-        var groups = await _service.GetGroupsAsync(scope ?? PendingApprovalScope.Mine, ct);
-        return Json(new { ok = true, groups });
+        var resolvedScope = string.IsNullOrWhiteSpace(scope) ? PendingApprovalScope.Mine : scope;
+        var isCompleted = string.Equals(mode, "completed", StringComparison.OrdinalIgnoreCase);
+
+        var items = isCompleted
+            ? await _service.GetCompletedListAsync(resolvedScope, null, ct)
+            : await _service.GetListAsync(resolvedScope, null, ct);
+
+        var now = DateTime.UtcNow;
+        var entities = items.Select(it => new
+        {
+            id = it.InstanceId,
+            title = it.DocumentNumber,
+            subtitle = string.IsNullOrEmpty(it.DocumentTypeName) ? "Belirsiz" : it.DocumentTypeName,
+            description = it.FlowName + " • " + it.StepName,
+            imageUrl = (string?)null,
+            statusBadge = BuildStatusBadge(it, isCompleted, now),
+            widgets = new object[]
+            {
+                new { id = "w_typ",  type = "data", dataType = "text",     label = "Belge Türü",  value = string.IsNullOrEmpty(it.DocumentTypeName) ? "Belirsiz" : it.DocumentTypeName, detail = (string?)null, color = "slate" },
+                new { id = "w_cari", type = "data", dataType = "text",     label = "Cari",        value = it.ContactName ?? "—", detail = (string?)null, color = "indigo" },
+                new { id = "w_amt",  type = "data", dataType = "numeric",  label = "Tutar",       value = it.GrandTotal, detail = it.CurrencyCode, color = "emerald" },
+                new { id = "w_step", type = "data", dataType = "text",     label = "Adım",        value = it.StepPosition + "/" + it.TotalSteps, detail = it.StepName, color = "amber" },
+                new { id = "w_apvr", type = "data", dataType = "text",     label = "Onaylayıcı",  value = it.ApproverName ?? "—", detail = (string?)null, color = "violet" },
+                new { id = "w_dt",   type = "data", dataType = "datetime", label = isCompleted ? "Tamamlanma" : "Bekliyor", value = it.StepCreated, detail = (string?)null, color = "blue" },
+            },
+            primaryAction = (object?)null,
+            secondaryAction = (object?)null,
+            extraActions = new object[]
+            {
+                new { id = "inspect", type = "trigger", trigger = "paOpenDetail", label = "İncele", icon = "Eye", color = "indigo", payload = new { instanceId = it.InstanceId } },
+            },
+        }).ToArray();
+
+        var boardKey = isCompleted ? "pending-approval-completed" : "pending-approval-pending";
+        var subtitle = isCompleted
+            ? $"{entities.Length} tamamlanmış kayıt"
+            : $"{entities.Length} bekleyen kayıt";
+
+        var config = new
+        {
+            boardKey,
+            title = "Onay Takibi",
+            subtitle,
+            icon = "ClipboardList",
+            iconColor = "indigo",
+            refreshUrl = $"/PendingApproval/BoardConfig?scope={Uri.EscapeDataString(resolvedScope)}&mode={(isCompleted ? "completed" : "pending")}",
+            searchPlaceholder = "Belge no, cari, onaylayıcı ara…",
+            emptyText = isCompleted ? "Tamamlanmış onay kaydı bulunamadı." : "Bekleyen onay kaydı bulunamadı.",
+            actions = Array.Empty<object>(),
+            masterWidgets = new object[]
+            {
+                new { id = "w_typ",  label = "Belge Türü", dataType = "text" },
+                new { id = "w_cari", label = "Cari",       dataType = "text" },
+                new { id = "w_amt",  label = "Tutar",      dataType = "numeric" },
+                new { id = "w_step", label = "Adım",       dataType = "text" },
+                new { id = "w_apvr", label = "Onaylayıcı", dataType = "text" },
+                new { id = "w_dt",   label = isCompleted ? "Tamamlanma" : "Bekliyor", dataType = "datetime" },
+            },
+            entities,
+        };
+        return Json(config);
+    }
+
+    private static object? BuildStatusBadge(PendingApprovalItemDto it, bool isCompleted, DateTime now)
+    {
+        if (isCompleted)
+        {
+            return it.InstanceStatus switch
+            {
+                "Approved" => new { label = "Onaylandı", color = "emerald" },
+                "Rejected" => new { label = "Reddedildi", color = "rose" },
+                _ => null,
+            };
+        }
+        return it.DueDate.HasValue && it.DueDate.Value < now
+            ? new { label = "Gecikti", color = "rose" }
+            : null;
     }
 
     [HttpGet]
@@ -64,13 +139,6 @@ public sealed class PendingApprovalController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> CompletedGroups(string? scope, CancellationToken ct)
-    {
-        var groups = await _service.GetCompletedGroupsAsync(scope ?? PendingApprovalScope.Mine, ct);
-        return Json(new { ok = true, groups });
-    }
-
-    [HttpGet]
     public async Task<IActionResult> CompletedList(string? scope, int? documentTypeId, CancellationToken ct)
     {
         var items = await _service.GetCompletedListAsync(scope ?? PendingApprovalScope.Mine, documentTypeId, ct);
@@ -86,27 +154,4 @@ public sealed class PendingApprovalController : Controller
         return Json(new { ok = true, detail = dto });
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetColConfig(CancellationToken ct)
-    {
-        var uid = CurrentUserId();
-        if (!uid.HasValue) return Json(new { config = (string?)null });
-        var json = await _userSettingRepo.GetAsync(uid.Value, ColCfgKey, ct);
-        return Json(new { config = json });
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveColConfig([FromBody] SaveColConfigRequest request, CancellationToken ct)
-    {
-        var uid = CurrentUserId();
-        if (!uid.HasValue) return Json(new { ok = false });
-        await _userSettingRepo.SetAsync(uid.Value, ColCfgKey, request.Config, ct);
-        return Json(new { ok = true });
-    }
-
-    private int? CurrentUserId()
-        => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 }
-
-public sealed record SaveColConfigRequest(string? Config);
