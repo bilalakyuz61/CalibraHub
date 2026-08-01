@@ -21,6 +21,7 @@ public sealed class DocumentService : IDocumentService
     private readonly IDecimalSettingService? _decimalSettings;
     private readonly IAuditTrailService? _audit;
     private readonly IWorkOrderRepository? _workOrders;
+    private readonly ILogisticsConfigurationRepository? _itemLocks;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
     private static readonly IReadOnlyDictionary<int, decimal> EmptyWorkOrderAllocations = new Dictionary<int, decimal>();
@@ -35,7 +36,8 @@ public sealed class DocumentService : IDocumentService
         ICompanyParameterService? companyParameters = null,
         IDecimalSettingService? decimalSettings = null,
         IAuditTrailService? audit = null,
-        IWorkOrderRepository? workOrders = null)
+        IWorkOrderRepository? workOrders = null,
+        ILogisticsConfigurationRepository? itemLocks = null)
     {
         _repo = repo;
         _financeService = financeService;
@@ -47,6 +49,7 @@ public sealed class DocumentService : IDocumentService
         _decimalSettings = decimalSettings;
         _audit = audit;
         _workOrders = workOrders;
+        _itemLocks = itemLocks;
     }
 
     /// <summary>
@@ -452,10 +455,11 @@ public sealed class DocumentService : IDocumentService
         // 2026-05-23: İhtiyaç Kaydı (alis_talebi) bir IC belge — tedarikci/musteri
         // bu asamada belli degil. Cari Kod zorunlulugu sadece diger belge tiplerinde geçerli.
         var isPurchaseRequest = false;
+        CalibraHub.Domain.Entities.DocumentType? documentType = null;
         if (request.DocumentTypeId.HasValue)
         {
-            var dt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
-            isPurchaseRequest = string.Equals(dt?.Code, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+            documentType = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
+            isPurchaseRequest = string.Equals(documentType?.Code, "alis_talebi", StringComparison.OrdinalIgnoreCase);
         }
         if (!isPurchaseRequest && !resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
             return (false, "Cari (musteri) zorunludur. Kalem eklemeden once cari seciniz.", null, false);
@@ -488,6 +492,33 @@ public sealed class DocumentService : IDocumentService
             if (ln.TrackCombinations && (!ln.CombinationId.HasValue || ln.CombinationId.Value <= 0))
             {
                 return (false, $"{i + 1}. kalemde kombinasyon takibi açık; kombinasyon seçilmelidir.", null, false);
+            }
+        }
+
+        // Malzeme Belge Kilitleri (ItemDocumentLock) — sert kapı (2026-08-01, üretimdeki
+        // WorkOrderService.CreateAsync/CreateFromSalesLineAsync ile aynı desen — bkz. o dosyadaki
+        // "Malzeme Belge Kilitleri" yorumu). DocumentType.Code (satis_teklifi/satis_siparisi/
+        // satis_irsaliyesi/alis_talebi/alis_teklifi/alis_siparisi/satin_alma_talebi/alis_irsaliyesi)
+        // ItemDocumentLock.DocType ile birebir aynı kod sözlüğünü paylaşır (ItemDocumentLockTypes),
+        // ayrı bir eşleme gerekmez. Tek sorgu: bu belge tipi için kilitli TÜM itemId'ler önce
+        // çekilir, sonra kalem listesiyle bellek içinde kesişim alınır (N+1 yok).
+        if (_itemLocks is not null && ItemDocumentLockTypes.IsValidCode(documentType?.Code))
+        {
+            var lockedItemIdSet = (await _itemLocks.GetLockedItemIdsByDocTypeAsync(documentType!.Code, ct)).ToHashSet();
+            if (lockedItemIdSet.Count > 0)
+            {
+                var lockedInLines = lineList.Select(l => l.ItemId).Distinct()
+                    .Where(id => lockedItemIdSet.Contains(id)).ToList();
+                if (lockedInLines.Count > 0)
+                {
+                    var lockedItems = await _itemLocks.GetItemsByIdsAsync(lockedInLines, ct);
+                    var labels = lockedInLines.Select(id =>
+                        lockedItems.FirstOrDefault(x => x.Id == id)?.Code ?? $"#{id}");
+                    var docLabel = ItemDocumentLockTypes.LabelFor(documentType.Code);
+                    var msg = $"{string.Join(", ", labels)} malzemesi '{docLabel}' için kilitli — " +
+                        "Malzeme Belge Kilitleri ekranından kilidi kaldırın.";
+                    return (false, msg, null, false);
+                }
             }
         }
 
