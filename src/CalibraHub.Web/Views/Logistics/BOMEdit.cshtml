@@ -1036,16 +1036,7 @@
         ["ListUrl"]     = "/Logistics/BOMs",
         ["NewUrl"]      = "/Logistics/BOMEdit",
         ["ShowDelete"]  = false,
-        ["ShowActions"] = true,
     })
-    @* Reçete'ye özel İşlemler dropdown içeriği — JS sayfada wire'lenmiş *@
-    <div class="pte-actions-menu" id="ptActionsMenu" role="menu" aria-labelledby="ptBtnActions">
-        <button type="button" class="pte-actions-menu__item" id="ptaMenuCopy" role="menuitem">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-            Reçeteyi Kopyala
-        </button>
-        <!-- Yeni islem item'lari buraya eklenecek -->
-    </div>
 
     <!-- Body: sidenav + content -->
     <div class="pte-body">
@@ -1280,51 +1271,6 @@
 
   </div><!-- /integrator-dashboard__content -->
 </section>
-
-<!-- Reçete Islemler Modal -->
-<div class="pta-overlay" id="ptActionsOverlay" role="dialog" aria-labelledby="ptActionsTitle" aria-hidden="true">
-    <div class="pta-panel" role="document">
-        <div class="pta-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6;">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-            </svg>
-            <h3 id="ptActionsTitle">Reçete İşlemleri</h3>
-            <button type="button" class="pta-close" id="ptaBtnClose" aria-label="Kapat">&times;</button>
-        </div>
-
-        <div class="pta-section">
-            <h4>Reçeteyi Yeni Mamule Kopyala</h4>
-            <div class="pta-source" id="ptaCopySource">
-                Aktif reçete yok. Önce bir reçete açın.
-            </div>
-
-            <div class="pta-field">
-                <label class="pta-field-label pta-field-required" for="ptaTargetCode">Hedef Mamul Kodu</label>
-                <div class="pta-field-row">
-                    <input type="text" id="ptaTargetCode" class="pte-input" data-field-key="copyTargetMaterialCode" placeholder="Mamul kodunu yazın..." autocomplete="off" />
-                </div>
-                <input type="text" id="ptaTargetName" class="pta-field-name" readonly placeholder="Hedef mamul adı (otomatik)..." />
-            </div>
-
-            <div class="pta-field" id="ptaTargetConfigField" style="display:none;">
-                <label class="pta-field-label" for="ptaTargetConfigCode">Hedef Kombinasyon</label>
-                <div class="pta-field-row">
-                    <input type="text" id="ptaTargetConfigCode" class="pte-input" placeholder="Kombinasyon kodunu yazın..." autocomplete="off" />
-                    <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="ptaBtnTargetConfigLookup" title="Kombinasyon secimi">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
-                    </button>
-                </div>
-                <input type="text" id="ptaTargetConfigDesc" class="pta-field-name" readonly placeholder="Kombinasyon açıklaması..." />
-            </div>
-        </div>
-
-        <div class="pta-actions">
-            <button type="button" class="pte-btn pte-btn--secondary" id="ptaBtnCancel">İptal</button>
-            <button type="button" class="pte-btn pte-btn--primary" id="ptaBtnApply">Kopyala ve Kaydet</button>
-        </div>
-    </div>
-</div>
 
 <!-- Excel'den Toplu Yapıştırma Modalı (2026-07-05) -->
 <div class="pta-overlay" id="ptPasteOverlay" role="dialog" aria-labelledby="ptPasteTitle" aria-hidden="true">
@@ -2409,7 +2355,7 @@
         window.location.href = '/Logistics/BOMEdit';
     });
 
-    /* ===== SAVE *====
+    /* ===== SAVE =====
        ptDoSave(): true/false doner — "Kaydet ve Çık" akisi da ayni fonksiyonu kullanir.
        2026-07-05 duzeltmeleri:
          - description artik ptRecipeNote'tan okunuyor (onceden null hardcode idi
