@@ -446,6 +446,19 @@ body.app-theme-dark .afd-node--end { background: rgba(239,68,68,.2); color: #fca
     border-top-right-radius: 8px;
     border-bottom: 1px solid var(--afd-border);
 }
+/* Belirsiz onaylayan (AI ile Oluştur veya elle bırakılan boş seçim) — amber uyarı */
+.afd-node--step.afd-node--warn {
+    border-color: var(--afd-warn);
+}
+.afd-node--step.afd-node--warn .afd-node__head {
+    color: #b45309;
+    background: rgba(245,158,11,.14);
+}
+body.app-theme-dark .afd-node--step.afd-node--warn .afd-node__head { color: #fbbf24; background: rgba(245,158,11,.22); }
+.afd-node--step.afd-node--warn.is-selected { box-shadow: 0 0 0 3px rgba(245,158,11,.3); }
+.afd-node__warn-badge { color: var(--afd-warn); margin-left: auto; flex-shrink: 0; }
+.afd-node__meta--warn { color: #b45309; font-weight: 600; }
+body.app-theme-dark .afd-node__meta--warn { color: #fbbf24; }
 
 /* ── DecisionNode ── */
 .afd-node--decision {
@@ -895,3 +908,90 @@ body.app-theme-dark .afd-vars-err { color: #fca5a5; }
     background: var(--afd-accent); color: #fff; border-radius: 10px;
     font-size: 10px; line-height: 1.4; font-weight: 700; text-align: center;
 }
+
+/* ── "AI ile Oluştur" komut modalı — VariablesPanel modal deseninin tekrarı ── */
+.afd-ai-backdrop {
+    position: fixed; inset: 0; z-index: 1100;
+    background: rgba(15, 23, 42, .42); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+}
+.afd-ai-card {
+    width: min(560px, 94vw); max-height: 86vh;
+    background: var(--afd-surface);
+    color: var(--afd-text);
+    border-radius: 12px;
+    box-shadow: 0 24px 48px rgba(0,0,0,.28);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    font-size: 13px;
+}
+.afd-ai-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--afd-border);
+    background: var(--afd-bg);
+}
+.afd-ai-title { font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; color: var(--afd-accent); }
+.afd-ai-hint {
+    padding: 12px 16px 4px; font-size: 11.5px; line-height: 1.6;
+    color: var(--afd-muted);
+}
+.afd-ai-hint em { color: var(--afd-text); font-style: italic; }
+.afd-ai-body { padding: 10px 16px 4px; }
+.afd-ai-textarea {
+    width: 100%; padding: 10px 12px; font-size: 12.5px;
+    font-family: inherit; line-height: 1.5;
+    background: var(--afd-bg); color: var(--afd-text);
+    border: 1px solid var(--afd-border); border-radius: 8px;
+    resize: vertical; min-height: 96px;
+}
+.afd-ai-textarea:focus { outline: none; border-color: var(--afd-accent); box-shadow: 0 0 0 3px var(--afd-accent-s); }
+.afd-ai-textarea:disabled { opacity: .6; }
+.afd-ai-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 12px 16px; border-top: 1px solid var(--afd-border);
+    background: var(--afd-bg);
+}
+.afd-ai-foot-hint { font-size: 11px; color: var(--afd-muted); font-style: italic; }
+.afd-ai-success {
+    margin: 14px 16px 0; padding: 10px 12px;
+    background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.35);
+    color: #047857; border-radius: 8px; font-size: 12.5px; line-height: 1.5;
+}
+body.app-theme-dark .afd-ai-success { color: #6ee7b7; background: rgba(16,185,129,.16); }
+.afd-ai-warn-title { font-size: 11.5px; font-weight: 700; color: var(--afd-warn); margin-bottom: 6px; }
+.afd-ai-warn-list {
+    margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.7; color: var(--afd-text);
+    max-height: 180px; overflow: auto;
+}
+
+/* ── Onay/silme onay standardı — canvas dolu iken AI önerisiyle değiştirme onayı ── */
+.afd-confirm-backdrop {
+    position: fixed; inset: 0; z-index: 1200;
+    background: rgba(15, 23, 42, .5); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center;
+}
+.afd-confirm-card {
+    width: min(420px, 92vw);
+    background: var(--afd-surface); color: var(--afd-text);
+    border-radius: 12px; padding: 22px 22px 18px;
+    box-shadow: 0 24px 48px rgba(0,0,0,.32);
+    text-align: center;
+}
+.afd-confirm-icon {
+    width: 44px; height: 44px; margin: 0 auto 12px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 999px;
+    background: rgba(245,158,11,.15); color: var(--afd-warn);
+}
+.afd-confirm-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+.afd-confirm-msg { font-size: 12.5px; line-height: 1.6; color: var(--afd-muted); margin-bottom: 18px; }
+.afd-confirm-actions { display: flex; justify-content: center; gap: 10px; }
+.afd-confirm-btn {
+    padding: 8px 18px; border-radius: 7px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--afd-border);
+}
+.afd-confirm-btn--ghost { background: var(--afd-surface); color: var(--afd-text); }
+.afd-confirm-btn--ghost:hover { border-color: var(--afd-muted); }
+.afd-confirm-btn--danger { background: var(--afd-warn); color: #fff; border-color: var(--afd-warn); }
+.afd-confirm-btn--danger:hover { filter: brightness(1.06); }

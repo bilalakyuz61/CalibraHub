@@ -8,7 +8,7 @@
  */
 import React, { useCallback, useEffect } from 'react'
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { Play, Square, GitBranch, CheckSquare, Bell, GitMerge, Zap, Variable, Clock, Users, Layers, Globe } from 'lucide-react'
+import { Play, Square, GitBranch, CheckSquare, Bell, GitMerge, Zap, Variable, Clock, Users, Layers, Globe, AlertTriangle } from 'lucide-react'
 import DraggableHandle from './DraggableHandle.jsx'
 import { useUpdateNodeData } from './nodeDataContext.js'
 
@@ -148,6 +148,10 @@ var STEP_DEFAULT_HANDLES = {
 }
 
 export function StepNode({ id, data, selected }) {
+  // Belirsiz onaylayan — AI ile Oluştur akışı boş approverId bırakabilir (SpecificUser/Department
+  // seçimi netleşmedi). Kaynak state'ten türetilir (kalıcı flag değil) — kullanıcı Özellikler
+  // panelinden onaylayanı seçince otomatik kaybolur.
+  var approverUnresolved = (data.approverType === 'SpecificUser' || data.approverType === 'Department') && !data.approverId
   var approverHint =
     data.approverType === 'SpecificUser' ? (data.approverLabel || 'Kullanıcı seçilmedi')
       : data.approverType === 'Department' ? (data.approverLabel || 'Departman seçilmedi')
@@ -162,7 +166,7 @@ export function StepNode({ id, data, selected }) {
   }
 
   return (
-    <div className={'afd-node afd-node--step' + (selected ? ' is-selected' : '')}>
+    <div className={'afd-node afd-node--step' + (selected ? ' is-selected' : '') + (approverUnresolved ? ' afd-node--warn' : '')}>
       <DraggableHandle
         id="in" type="target" nodeId={id}
         defaultSide={STEP_DEFAULT_HANDLES.in.side} defaultOffset={STEP_DEFAULT_HANDLES.in.offset}
@@ -173,8 +177,11 @@ export function StepNode({ id, data, selected }) {
       <div className="afd-node__head">
         <CheckSquare size={13} strokeWidth={2.4} />
         <span className="afd-node__title">{data.stepName || 'Adım'}</span>
+        {approverUnresolved && (
+          <AlertTriangle size={12} strokeWidth={2.6} className="afd-node__warn-badge" title="Onaylayan seçilmedi" />
+        )}
       </div>
-      <div className="afd-node__meta">{approverHint}</div>
+      <div className={'afd-node__meta' + (approverUnresolved ? ' afd-node__meta--warn' : '')}>{approverHint}</div>
       <DraggableHandle
         id="approve" type="source" nodeId={id}
         defaultSide={STEP_DEFAULT_HANDLES.approve.side} defaultOffset={STEP_DEFAULT_HANDLES.approve.offset}

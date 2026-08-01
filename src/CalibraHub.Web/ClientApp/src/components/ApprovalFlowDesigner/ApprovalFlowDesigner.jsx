@@ -32,7 +32,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { Undo2, Redo2 } from 'lucide-react'
+import { Undo2, Redo2, Sparkles, AlertTriangle } from 'lucide-react'
 
 import { nodeTypes } from './nodeTypes.jsx'
 import NodePalette from './NodePalette.jsx'
