@@ -1,0 +1,57 @@
+<div class="calibra-help-doc">
+
+  <p class="help-lead">
+    Onay Akışı Tasarımcısı; bir onay sürecini sürükle-bırak düğümlerle çizdiğiniz
+    görsel tuvaldir. Solda düğüm paleti, ortada akış tuvali, sağda seçili düğümün
+    özellik paneli, üstte Genel Bilgiler / Değişkenler / Revizyon Geçmişi araçları bulunur.
+  </p>
+
+  <h3>Genel Bilgiler</h3>
+  <ul>
+    <li><b>Akış Adı</b> ve <b>Belge / Kayıt Türü</b> (hangi belgeye uygulanacağı).</li>
+    <li><b>Aktif</b> anahtarı — pasif akışlar tetiklenmez.</li>
+  </ul>
+
+  <h3>Düğümler (Palet)</h3>
+  <p>Paletten tuvale sürüklediğiniz düğümleri oklarla (edge) birbirine bağlarsınız:</p>
+  <ul>
+    <li><b>Başla / Bitir:</b> Akışın giriş ve çıkış noktaları.</li>
+    <li><b>Adım:</b> Onaylayıcı kararı gerektiren onay adımı (asıl onay noktası).</li>
+    <li><b>Karar:</b> Bir koşulu değerlendirip <i>evet/hayır</i> dallanma.</li>
+    <li><b>Paralel:</b> Aynı anda birden çok dala ayırma / birleştirme.</li>
+    <li><b>Bildirim:</b> Mail / WhatsApp bildirimi (hızlı onay linkleri gönderebilir).</li>
+    <li><b>Oylama:</b> Birden çok kişinin oyu (çoğunluk / oybirliği).</li>
+    <li><b>Bekleme:</b> Belirli süre bekletir (dk/saat/gün/iş günü).</li>
+    <li><b>Değişken Ata / Entegrasyon / Alt Süreç / Webhook:</b> ileri düzey adımlar.</li>
+  </ul>
+
+  <h3>Adım Onaylayıcıları</h3>
+  <p>Bir <b>Adım</b> seçildiğinde sağ panelden onaylayıcı tipi belirlenir:</p>
+  <ul>
+    <li><b>Herhangi kullanıcı</b>, <b>Belirli kullanıcı</b>, <b>Departman</b>
+        (bir veya birden çok departman üyesi) veya <b>Talep sahibinin amiri</b>
+        (organizasyon şemasından çalışma anında bulunur).</li>
+    <li>Her adımın <b>Onay</b>, <b>Red</b> ve <b>Zaman Aşımı (SLA)</b> çıkış kolları
+        vardır; bunları farklı düğümlere bağlayarak red/gecikme davranışını kurarsınız.</li>
+    <li><b>SLA/gecikme</b> tanımlıysa süre dolduğunda hatırlatma bildirimi gönderilir.</li>
+  </ul>
+
+  <h3>Tetikleme Koşulları</h3>
+  <p>Akışın devreye girip girmeyeceği kurallarla belirlenir: <b>Her zaman</b>,
+     <b>Asgari/Azami tutar</b>, <b>Tutar aralığı</b>, <b>Gönderen VKN</b> veya
+     <b>Departman</b>.</p>
+
+  <h3>Araçlar</h3>
+  <ul>
+    <li><b>Değişkenler:</b> Süreç boyunca taşınan değerleri tanımlar.</li>
+    <li><b>Mini Harita:</b> Büyük akışlarda gezinme.</li>
+    <li><b>Revizyon Geçmişi:</b> Her kayıt bir revizyon anlık görüntüsü tutar;
+        çalışan (bekleyen) belgeler başladıkları revizyonla devam eder — böylece
+        akışı değiştirmek süregelen onayları bozmaz.</li>
+    <li><b>Kaydet:</b> Akışı kaydeder (yeni revizyon oluşturur).</li>
+  </ul>
+
+  <p class="help-note">Not: Bildirim düğümünde şablona {approveLink} / {rejectLink}
+     eklerseniz alıcılar mail/WhatsApp üzerinden tek tıkla onaylayıp reddedebilir.</p>
+
+</div>

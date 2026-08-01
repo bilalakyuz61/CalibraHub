@@ -4,6 +4,7 @@
 @model CalibraHub.Application.Contracts.ApprovalFlowDto?
 @{
     ViewData["Title"] = Model is null ? "Yeni Onay Akışı" : $"Akış Düzenle — {Model.Name}";
+    ViewData["HelpKey"] = "approval-flow-edit";
     ViewData["BodyClass"] = "page-approval-flow-edit workspace-frame-body";
     var isNew = Model is null;
     var flowId = Model?.Id ?? 0;
