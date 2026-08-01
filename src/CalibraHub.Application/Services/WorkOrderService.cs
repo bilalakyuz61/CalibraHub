@@ -133,7 +133,9 @@ public sealed class WorkOrderService : IWorkOrderService
                 nameof(request.ItemId));
         }
 
-        var orderDate = DateTime.UtcNow;
+        // İş Emri Tarihi (2026-08-01) — frontend'den doluysa (WorkOrderEdit editable alan) onu
+        // kullan; boş/null gelirse mevcut davranış (bugün) korunur.
+        var orderDate = request.OrderDate ?? DateTime.UtcNow;
         var orderNumber = await ResolveOrderNumberAsync(orderDate, ct);
 
         // 2026-07-02: Document companion modeli — belge kimligi (numara/tarih/notlar) once
@@ -231,6 +233,8 @@ public sealed class WorkOrderService : IWorkOrderService
         await _workOrders.UpdateAsync(id, request, null, ct);
 
         // Notlar artik Document.notes'ta — WorkOrder tarafi guncellendikten sonra ayrica yazilir.
+        // İş Emri Tarihi (2026-08-01) — WorkOrder.OrderDate, Document.DocumentDate'in view alias'ı;
+        // request.OrderDate doluysa güncellenir, boş/null gelirse mevcut tarih korunur.
         var current = await _workOrders.GetAsync(id, ct);
         if (current is not null)
         {
@@ -238,6 +242,7 @@ public sealed class WorkOrderService : IWorkOrderService
             if (doc is not null)
             {
                 doc.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+                if (request.OrderDate.HasValue) doc.DocumentDate = request.OrderDate.Value;
                 await _documents.UpsertAsync(doc, ct);
             }
         }

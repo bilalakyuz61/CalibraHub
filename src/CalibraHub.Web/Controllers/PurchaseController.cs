@@ -1069,6 +1069,9 @@ public sealed class PurchaseController : Controller
         }
         catch (Exception ex)
         {
+            // Sessizce yutma (CLAUDE.md kural #2) — ex daha once hic loglanmiyordu; server'a
+            // logla, istemciye jenerik mesaj don.
+            _logger.LogError(ex, "[Purchase.RequestLines] Kalem verisi cekilirken hata. RequestIds: {RequestIds}", string.Join(",", requestIds));
             return Json(new { error = true, message = "Islem sirasinda bir hata olustu." });
         }
     }
@@ -2476,7 +2479,13 @@ public sealed class PurchaseController : Controller
             while (await r.ReadAsync(ct)) cols.Add(r.GetString(0));
             return cols;
         }
-        catch { return []; }
+        catch (Exception ex)
+        {
+            // Sessizce yutma (CLAUDE.md kural #2) — view/kolon yoksa bos liste donmek dogru
+            // davranis (opsiyonel ek alan ozelligi), ama nedeni teshis edilebilsin diye logla.
+            _logger.LogWarning(ex, "[Purchase.GetFulfillmentExtraColumnsAsync] cbv_FulfillmentLineExtras kolonlari okunamadi.");
+            return [];
+        }
     }
 
     /// <summary>
@@ -2503,7 +2512,14 @@ public sealed class PurchaseController : Controller
             }
             return result;
         }
-        catch { return []; }
+        catch (Exception ex)
+        {
+            // Sessizce yutma (CLAUDE.md kural #2) — bu liste onay guard'inda kullanilir
+            // (CheckFulfillmentApprovalGuardAsync); sessiz bos donus yetki kontrolunu
+            // atlatabilir, DB hatasi teshis edilebilsin diye logla.
+            _logger.LogError(ex, "[Purchase.GetPendingApprovalDocIdsAsync] Bekleyen onay belge ID'leri okunamadi.");
+            return [];
+        }
     }
 
     // ── Sütun ayarları (Karşılama Merkezi — flat view) ──────────────────────

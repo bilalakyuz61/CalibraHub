@@ -106,7 +106,13 @@ public sealed record CreateWorkOrderRequest(
     /// Opsiyonel AR-GE/ÜR-GE proje (Document.id). NULL ise ItemId AR-GE seri/prototip mamuluyse
     /// WorkOrderService otomatik turetir.
     /// </summary>
-    int? ArgeProjectId = null);
+    int? ArgeProjectId = null,
+    /// <summary>
+    /// İş Emri Tarihi (2026-08-01, WorkOrderEdit editable alan) — doluysa Document.DocumentDate'e
+    /// yazılır (WorkOrder.OrderDate bu kolonun view alias'ıdır). NULL ise mevcut davranış:
+    /// DateTime.UtcNow (bugün).
+    /// </summary>
+    DateTime? OrderDate = null);
 
 public sealed record UpdateWorkOrderRequest(
     decimal PlannedQuantity,
@@ -121,7 +127,12 @@ public sealed record UpdateWorkOrderRequest(
     int? AssignedPersonnelId,
     string? Notes,
     /// <summary>AR-GE Faz 3: opsiyonel AR-GE/ÜR-GE proje (Document.id). Mevcut caller'lar icin default null.</summary>
-    int? ArgeProjectId = null);
+    int? ArgeProjectId = null,
+    /// <summary>
+    /// İş Emri Tarihi (2026-08-01, WorkOrderEdit editable alan) — doluysa Document.DocumentDate'e
+    /// yazılır. NULL/boş gelirse mevcut tarih korunur (davranış değişmez).
+    /// </summary>
+    DateTime? OrderDate = null);
 
 public sealed record ChangeWorkOrderStatusRequest(int WorkOrderId, WorkOrderStatus NewStatus);
 
