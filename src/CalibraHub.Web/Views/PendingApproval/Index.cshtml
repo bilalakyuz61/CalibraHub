@@ -299,7 +299,9 @@
      *     boardKey: 'pending-approval-pending' | 'pending-approval-completed',
      *     title: 'Onay Takibi',
      *     subtitle: '<n> bekleyen kayıt' | '<n> tamamlanmış kayıt',
-     *     icon: 'ClipboardCheck', iconColor: 'indigo',
+     *     icon: 'ClipboardList', iconColor: 'indigo',  // 'ClipboardList' whitelisted in
+     *                                                   // DynamicWidgetFactory.js iconMap
+     *                                                   // ('ClipboardCheck' YOK — CircleDot'a düşer)
      *     refreshUrl: '/PendingApproval/BoardConfig?scope=<scope>&mode=<mode>',
      *     searchPlaceholder: 'Belge no, cari, onaylayıcı ara…',
      *     emptyText: '...',
