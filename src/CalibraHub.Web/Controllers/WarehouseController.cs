@@ -892,7 +892,8 @@ public sealed class WarehouseController : Controller
         if (orderId <= 0) return Json(new { success = false, message = "Sipariş bulunamadı." });
         try
         {
-            var (id, docNo) = await _stockDocRepo.DeliverSalesOrderAsync(orderId, CurrentUserId(), BuildDeliverMap(body!.Lines), ct);
+            var (id, docNo) = await _stockDocRepo.DeliverSalesOrderAsync(
+                orderId, CurrentUserId(), BuildDeliverMap(body!.Lines), ct, BuildComponentPicksMap(body!.Lines));
             // Belge soyağacı: satış irsaliyesi ← satış siparişi.
             // Repo ParentDocumentId + kalem SourceLineId set ediyor; İlişkili Belgeler paneli DocumentSource okur.
             await _docSourceRepo.EnsureSchemaAsync(ct);
@@ -977,9 +978,27 @@ public sealed class WarehouseController : Controller
                    .ToDictionary(g => g.Key, g => g.Last().Quantity)
             : null;
 
+    // Faz 3 — UI payload'ındaki kit bileşen seçimlerini repo haritasına çevirir (LineId → bileşen
+    // pick listesi). Bileşen listesi olmayan satırlar haritaya girmez; hiç kit satırı yoksa null döner.
+    private static IReadOnlyDictionary<int, IReadOnlyList<KitComponentPickDto>>? BuildComponentPicksMap(
+        IReadOnlyList<DeliverLineQtyDto>? lines)
+    {
+        if (lines is not { Count: > 0 }) return null;
+        var map = lines
+            .Where(l => l.LineId > 0 && l.Components is { Count: > 0 })
+            .GroupBy(l => l.LineId)
+            .ToDictionary(g => g.Key, g => g.Last().Components!);
+        return map.Count > 0 ? map : null;
+    }
+
     /// <summary>Kısmi teslimat isteği — OrderId + opsiyonel kalem miktarları (gösterim birimi).</summary>
     public sealed record DeliverOrderRequest(int OrderId, IReadOnlyList<DeliverLineQtyDto>? Lines);
-    public sealed record DeliverLineQtyDto(int LineId, decimal Quantity);
+
+    /// <summary>
+    /// <paramref name="Components"/> (Faz 3) — satır bir kit ise, modalda bileşen bazında elle
+    /// seçilen seri/lot listesi. Kit olmayan satırlarda null/boş geçilir.
+    /// </summary>
+    public sealed record DeliverLineQtyDto(int LineId, decimal Quantity, IReadOnlyList<KitComponentPickDto>? Components = null);
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -1163,8 +1182,11 @@ public sealed class WarehouseController : Controller
     }
 
     // Stoktaki (InStock) seriler — çıkış/transfer seri seçim modalını besler (Seri takibi Faz 2).
+    // locationId (Faz 3, kit bileşen elle seçimi) verilirse yalnız o depodaki (veya konumsuz) seriler
+    // döner — kit bileşeni kit satırının kaynak deposundan (OrderOpenLineDto.SourceLocationId) seçilir.
+    // Verilmezse mevcut davranış (tüm InStock seriler) korunur.
     [HttpGet]
-    public async Task<IActionResult> GetSerialsJson(int itemId, CancellationToken ct)
+    public async Task<IActionResult> GetSerialsJson(int itemId, int? locationId, CancellationToken ct)
     {
         if (itemId <= 0) return Json(Array.Empty<object>());
 
@@ -1175,9 +1197,11 @@ public sealed class WarehouseController : Controller
             FROM [{_schema}].[ItemSerial] s
             LEFT JOIN [{_schema}].[Lot] lot ON lot.[Id] = s.[LotId]
             WHERE s.[ItemId] = @ItemId AND s.[IsActive] = 1 AND s.[Status] = 1
+              {(locationId.HasValue ? "AND (s.[CurrentLocationId] IS NULL OR s.[CurrentLocationId] = @LocationId)" : "")}
             ORDER BY s.[SerialNo];
             """;
         cmd.Parameters.AddWithValue("@ItemId", itemId);
+        if (locationId.HasValue) cmd.Parameters.AddWithValue("@LocationId", locationId.Value);
 
         var result = new List<object>();
         await using var r = await cmd.ExecuteReaderAsync(ct);

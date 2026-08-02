@@ -1172,6 +1172,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             //    açık miktara clamp; tam teslimatta satır birebir kapanır (DeliveredQuantity=BaseQuantity).
             var lineNo = 1;
             var decreases = new HashSet<(int ItemId, int LocId)>();
+            // Faz 3 — kit bileşenlerinden lot-takipli olanların (ItemId, LotId, LocId) azaltımı;
+            // tüm satırlar yazıldıktan SONRA toplu kontrol edilir (EnsureLotBalanceAsync, bkz. adım 4).
+            var lotDecreases = new HashSet<(int ItemId, int LotId, int LocId)>();
             decimal deliveredSubTotal = 0m;
             var anyDelivered = false;
             foreach (var o in open)
@@ -1396,6 +1399,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             // 4) Eksi bakiye kontrolü — yalnızca çıkış (satış irsaliyesi). Giriş bakiyeyi artırır.
             foreach (var (it, loc) in decreases)
                 await NegativeBalanceGuard.EnsureAsync(conn, tx, _schema, companyId, it, loc, DateTime.Today, ct);
+            // 4b) Lot bakiye kontrolü (Faz 3, kit bileşenleri) — tüm satırlar yazıldıktan sonra toplu.
+            foreach (var (it, lot, loc) in lotDecreases)
+                await EnsureLotBalanceAsync(conn, tx, companyId, it, lot, loc, ct);
 
             // 5) Seri çözümleme (yalnız satış çıkışı): siparişte rezerve/seçili seriler → Issued,
             //    irsaliye satırına bağlanır. Satın alma (giriş) tarafında seri kabul ayrı akış (kapsamda değil).
