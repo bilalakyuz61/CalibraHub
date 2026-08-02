@@ -4106,7 +4106,11 @@ body.app-theme-dark .cst-root {
      span'a DOĞRUDAN inline stil yazar ve her zaman kazanır (bilinçli, bkz.
      SmartTable.jsx dosya üstü yorumu). */
   font-size: var(--cst-body-fs, 12.5px);
-  font-weight: 600;
+  /* --cst-body-fw — "Genel → Veri Font Kalınlığı" (SmartColumnSettings, kullanıcı
+     bazında, SÜTUN BAZINDA DEĞİL); yoksa mevcut 600 fallback. Sütun bazlı
+     fontWeight override'ı (SmartTableRow.jsx fontStyleFor) yine inline stil ile
+     bunu EZER (--cst-body-fs ile aynı "genel=varsayılan, sütun=istisna" deseni). */
+  font-weight: var(--cst-body-fw, 600);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

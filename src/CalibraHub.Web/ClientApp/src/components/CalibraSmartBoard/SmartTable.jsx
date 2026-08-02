@@ -21,10 +21,11 @@
  * gibi kalır (regresyonsuz).
  *
  * `tableFormat` prop'u (SmartColumnSettings.jsx "Genel" bölümünün ürettiği
- * { headerFontSize, bodyFontSize, rowSpacing } — SÜTUN BAZLI DEĞİL, TABLO
- * GENELİNE uygulanır) verilmişse `.cst-root`'a CSS değişkeni (`--cst-head-fs`,
- * `--cst-body-fs`, `--cst-row-pad`) olarak yazılır; index.css bunları MEVCUT
- * değerleri fallback vererek tüketir (`var(--cst-body-fs, 12.5px)` gibi).
+ * { headerFontSize, bodyFontSize, bodyFontWeight, rowSpacing } — SÜTUN BAZLI
+ * DEĞİL, TABLO GENELİNE uygulanır) verilmişse `.cst-root`'a CSS değişkeni
+ * (`--cst-head-fs`, `--cst-body-fs`, `--cst-body-fw`, `--cst-row-pad`) olarak
+ * yazılır; index.css bunları MEVCUT değerleri fallback vererek tüketir
+ * (`var(--cst-body-fs, 12.5px)` gibi).
  * Per-sütun `columnConfig` font override'ı (yukarısı, fontSize/fontWeight)
  * YALNIZCA veri hücresine DOĞRUDAN inline stil olarak yazılır (başlığa DEĞİL —
  * 2026-08-02, bkz. thead render'ı) ve `--cst-body-fs` genel ayarını her zaman
@@ -372,8 +373,9 @@ export default function SmartTable(props) {
   var visibleIds = Array.isArray(props.visibleIds) ? props.visibleIds : null
   var order = Array.isArray(props.order) ? props.order : null
   var columnConfig = (props.columnConfig && typeof props.columnConfig === 'object') ? props.columnConfig : null
-  // tableFormat — SUTUN BAZLI DEGIL, TABLO GENELİNE uygulanan 3 ayar (Baslik/
-  // Veri font boyutu + Satir Araligi, kullanici bazinda; bkz. SmartColumnSettings
+  // tableFormat — SUTUN BAZLI DEGIL, TABLO GENELİNE uygulanan 4 ayar (Baslik
+  // font boyutu + Veri font boyutu/kalinligi + Satir Araligi, kullanici bazinda;
+  // bkz. SmartColumnSettings
   // "Genel" bolumu + columnConfigService normalizeColumnConfig `table` alani).
   // columnConfig (per-sutun) ile AYNI "trust upstream normalize" seviyesinde
   // dogrulanir (>0 sayi mi) — asagida CSS degiskeni olarak .cst-root'a yazilir;
@@ -458,6 +460,7 @@ export default function SmartTable(props) {
   if (tableFormat) {
     if (typeof tableFormat.headerFontSize === 'number' && tableFormat.headerFontSize > 0) rootStyle['--cst-head-fs'] = tableFormat.headerFontSize + 'px'
     if (typeof tableFormat.bodyFontSize === 'number' && tableFormat.bodyFontSize > 0) rootStyle['--cst-body-fs'] = tableFormat.bodyFontSize + 'px'
+    if (typeof tableFormat.bodyFontWeight === 'number' && tableFormat.bodyFontWeight > 0) rootStyle['--cst-body-fw'] = tableFormat.bodyFontWeight
     if (typeof tableFormat.rowSpacing === 'number' && tableFormat.rowSpacing > 0) rootStyle['--cst-row-pad'] = tableFormat.rowSpacing + 'px'
   }
 

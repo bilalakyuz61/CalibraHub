@@ -164,7 +164,6 @@ public sealed class SqlCapaRepository : ICapaRepository
             CapaType: capaType,
             SourceKind: r.IsDBNull(3) ? null : r.GetString(3),
             SourceId: r.IsDBNull(4) ? null : r.GetInt32(4),
-            SourceLabel: null, SourceUrl: null,
             Title: r.GetString(5),
             ProblemDescription: r.IsDBNull(6) ? null : r.GetString(6),
             DefectCodeId: r.IsDBNull(7) ? null : r.GetInt32(7),

@@ -19,7 +19,7 @@ public sealed record CapaActionDto(
 
 public sealed record CapaDetailDto(
     int DocumentId, string DocumentNumber, byte CapaType,
-    string? SourceKind, int? SourceId, string? SourceLabel, string? SourceUrl,
+    string? SourceKind, int? SourceId,
     string Title, string? ProblemDescription,
     int? DefectCodeId, string? DefectCodeName,
     byte Severity, byte? RootCauseMethod, string? RootCause,

@@ -29,7 +29,7 @@
  *     columns: {
  *       '<id>': { align, width, pin, fontSize, fontWeight, label, headerWrap }
  *     },
- *     table: { headerFontSize, bodyFontSize, rowSpacing }   // SUTUN BAZLI
+ *     table: { headerFontSize, bodyFontSize, bodyFontWeight, rowSpacing }   // SUTUN BAZLI
  *       // DEGIL — TABLO GENELİNE uygulanan 3 ayar (kullanici bazinda kalici),
  *       // SmartColumnSettings.jsx "Genel" bolumunun urettigi. Deger yoksa/
  *       // gecersizse Otomatik (index.css'teki var(--cst-*, <fallback>)
@@ -101,6 +101,9 @@ export function normalizeColumnConfig(raw) {
   }
   if (typeof rawTable.bodyFontSize === 'number' && isFinite(rawTable.bodyFontSize) && rawTable.bodyFontSize > 0) {
     table.bodyFontSize = Math.round(rawTable.bodyFontSize)
+  }
+  if (typeof rawTable.bodyFontWeight === 'number' && isFinite(rawTable.bodyFontWeight) && rawTable.bodyFontWeight > 0) {
+    table.bodyFontWeight = Math.round(rawTable.bodyFontWeight)
   }
   if (typeof rawTable.rowSpacing === 'number' && isFinite(rawTable.rowSpacing) && rawTable.rowSpacing > 0) {
     table.rowSpacing = Math.round(rawTable.rowSpacing)

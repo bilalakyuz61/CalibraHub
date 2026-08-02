@@ -814,6 +814,10 @@ export default function SmartColumnSettings(props) {
   var headerFontSizeOverridden = headerFontSizeValue > 0
   var bodyFontSizeValue = clampTableFontSize(tableFormat.bodyFontSize)
   var bodyFontSizeOverridden = bodyFontSizeValue > 0
+  // Veri Font Kalınlığı — Boyut ile aynı "tablo geneli master" (clampFontWeight
+  // ile 100-900 aralığı; per-sütun Kalınlık ile AYNI aralık/anchor).
+  var bodyFontWeightValue = clampFontWeight(tableFormat.bodyFontWeight)
+  var bodyFontWeightOverridden = bodyFontWeightValue > 0
   var rowSpacingValue = clampRowSpacing(tableFormat.rowSpacing)
   var rowSpacingOverridden = rowSpacingValue > 0
 
@@ -866,6 +870,37 @@ export default function SmartColumnSettings(props) {
   function handleBodyFontSizeReset() {
     patchTable({ bodyFontSize: undefined })
     applyBodyFontToAllColumns(undefined)
+  }
+
+  // "Veri Font Kalınlığı" TEK MASTER — Boyut'takiyle BİREBİR aynı senkron
+  // (2026-08-02, kullanıcı isteği: "Kalınlık için de aynı senkronu ekle").
+  // Değişince tüm görünür sütunun per-sütun "Kalınlık" (fontWeight) değeri de
+  // buna eşitlenir; Otomatik → tüm sütun fontWeight override'ı temizlenir
+  // (--cst-body-fw varsayılanını miras alır). CSS font-weight yalnızca 100'ün
+  // katlarını tanır → clampFontWeight + FONT_WEIGHT_STEP=100.
+  function applyBodyFontWeightToAllColumns(value) {
+    setColumns(function (prev) {
+      var next = Object.assign({}, prev)
+      visibleIds.forEach(function (id) {
+        var cur = Object.assign({}, next[id] || {})
+        if (typeof value === 'number' && value > 0) cur.fontWeight = value
+        else delete cur.fontWeight
+        if (Object.keys(cur).length === 0) delete next[id]
+        else next[id] = cur
+      })
+      return next
+    })
+  }
+  function handleBodyFontWeightStep(dir) {
+    var cur = clampFontWeight(tableFormat.bodyFontWeight) || FONT_WEIGHT_NATURAL
+    var next = Math.max(FONT_WEIGHT_MIN, Math.min(FONT_WEIGHT_MAX, cur + dir * FONT_WEIGHT_STEP))
+    var applied = next === FONT_WEIGHT_NATURAL ? undefined : next
+    patchTable({ bodyFontWeight: applied })
+    applyBodyFontWeightToAllColumns(applied)
+  }
+  function handleBodyFontWeightReset() {
+    patchTable({ bodyFontWeight: undefined })
+    applyBodyFontWeightToAllColumns(undefined)
   }
   function handleRowSpacingStep(dir) {
     var cur = clampRowSpacing(tableFormat.rowSpacing) || TABLE_ROW_PAD_NATURAL
@@ -1041,11 +1076,12 @@ export default function SmartColumnSettings(props) {
                         kaydedilir (bkz. normalizeColumnConfig).
                         · Başlık Font Boyutu → SADECE başlık (--cst-head-fs); per-sütun
                           Boyut/Kalınlık artık başlığa DOKUNMAZ (2026-08-02).
-                        · Veri Font Boyutu → veri hücreleri için TEK MASTER: değişince
-                          tüm görünür sütunun per-sütun "Boyut" değeri buna eşitlenir
-                          (applyBodyFontToAllColumns). Sütun bazlı Boyut yine de sonra
-                          ince ayar için EZebilir (CSS değişkeni < inline stil), bkz.
-                          SmartTable.jsx / index.css .cst-value__text yorumu. */}
+                        · Veri Font Boyutu / Veri Font Kalınlığı → veri hücreleri için
+                          TEK MASTER: değişince tüm görünür sütunun per-sütun "Boyut"/
+                          "Kalınlık" değeri buna eşitlenir (applyBodyFontToAllColumns /
+                          applyBodyFontWeightToAllColumns). Sütun bazlı Boyut/Kalınlık
+                          yine de sonra ince ayar için EZebilir (CSS değişkeni < inline
+                          stil), bkz. SmartTable.jsx / index.css .cst-value__text yorumu. */}
                     <div className="px-5 pt-3 pb-2">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
@@ -1073,6 +1109,16 @@ export default function SmartColumnSettings(props) {
                           downTitle="Küçült"
                           upTitle="Büyüt"
                           resetTitle="Otomatik boyut (miras)"
+                        />
+                        <GeneralFormatRow
+                          label="Veri Font Kalınlığı"
+                          overridden={bodyFontWeightOverridden}
+                          displayValue={String(bodyFontWeightValue)}
+                          onStep={handleBodyFontWeightStep}
+                          onReset={handleBodyFontWeightReset}
+                          downTitle="İncelt"
+                          upTitle="Kalınlaştır"
+                          resetTitle="Otomatik kalınlık (miras)"
                         />
                         <GeneralFormatRow
                           label="Satır Aralığı"
