@@ -138,7 +138,11 @@ export default function CapaDashboard({ config }) {
         if (!r.ok) throw new Error('HTTP ' + r.status)
         return r.json()
       })
-      .then(d => { setData(d); setLoading(false) })
+      .then(d => {
+        // Backend hata durumunda { error } + HTTP 200 döner (r.ok true) — veri sanılmamalı.
+        if (d && d.error) { setError(d.error); setLoading(false); return }
+        setData(d); setLoading(false)
+      })
       .catch(e => { setError(e.message || 'Veri yüklenemedi'); setLoading(false) })
   }, [kpiUrl])
 

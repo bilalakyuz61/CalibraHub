@@ -1259,7 +1259,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     // (seri listesi / lot kodu). Eşleşme ID-tabanlıdır (ComponentItemId+ConfigId), CLAUDE.md
                     // "ID tabanlı eşleştirme" kuralı. Pick yoksa ResolveLotForLineAsync/ResolveSerialsForLineAsync
                     // aşağıda zaten net hata fırlatır (lot bulunamadı / seri sayısı≠miktar) — sessiz kırık yok.
-                    componentPicks?.TryGetValue(o.LineId, out var picksForLine);
+                    IReadOnlyList<KitComponentPickDto>? picksForLine = null;
+                    componentPicks?.TryGetValue(o.LineId, out picksForLine);
 
                     // Kit BAŞLIK satırı (stok etkisiz, fiyatlı). SCOPE_IDENTITY ile bileşenlere parent id.
                     int headerLineId;

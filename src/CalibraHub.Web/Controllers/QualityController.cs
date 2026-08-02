@@ -741,10 +741,12 @@ public sealed class QualityController : Controller
     // DÖF KPI Panosu — salt-okunur; frontend (React CapaDashboard) ayrı ajanda geliştirilir.
     // ════════════════════════════════════════════════════════════════
 
-    // GET /Quality/CapaDashboard → pano kabuğu (.cshtml). Veri React tarafından /Quality/CapaKpi'den çekilir.
+    // GET /Quality/DofDashboard → pano kabuğu (.cshtml). Veri React tarafından /Quality/CapaKpi'den çekilir.
+    // Rota "Capa" namespace'i DIŞINDA (DofDashboard): "/Quality/Capa" matchPath'i (Capas+CapaEdit sekme reuse)
+    // ile prefix çakışmasını önler — aksi halde pano açıkken DÖF listesi menüsü panoyu aktive ediyordu.
     [HttpGet]
     [PermissionScope(FormCodes.QualityCapa)]
-    public IActionResult CapaDashboard() => View();
+    public IActionResult DofDashboard() => View();
 
     // GET /Quality/CapaKpi → CapaKpiDto JSON (camelCase). Salt-okunur, audit yok.
     [HttpGet]
