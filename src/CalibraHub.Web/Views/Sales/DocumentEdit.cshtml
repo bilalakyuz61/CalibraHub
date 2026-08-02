@@ -886,10 +886,15 @@
        boylece deger genisligine sigan dar alan + sag kenarda takvim ikonu (buton)
        gorunur. Flatpickr altInput orijinal input'un hemen ardina eklenir (bkz.
        calibra-datepicker.js) — bu yuzden bitisik kardes secici kullanilir. */
+    /* PageComment Seq 1065: flatpickr altInput (.calibra-date-input) orijinal input'un
+       `.sqe-hinput` sinifini devraliyor -> genel `.sqe-hinput { flex:1; max-width:none !important }`
+       kurali bu ID kuralini (specificity yuksek ama !important'siz) EZIYORDU: "Tarih" alani
+       combonun tum genisligine yayilip deger ile takvim ikonu arasinda buyuk bosluk biraktiriyordu.
+       #sqValidUntil ile ayni sekilde !important eklenerek 176px standardina sabitlenir. */
     #sqQuoteDate,
     #sqQuoteDate + input.calibra-date-input {
-        flex: 0 0 176px;
-        max-width: 176px;
+        flex: 0 0 176px !important;
+        max-width: 176px !important;
     }
     /* PageComment Seq 1059: "Gecerlilik/Vade/Teslim Gun/Tarih" combosu icindeki
        tarih alani (#sqValidUntil) asagidaki genel `.sqe-hcombo > input.sqe-hinput`

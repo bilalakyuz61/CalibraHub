@@ -117,6 +117,8 @@
     }
     .idl-switch-row:last-child { border-bottom: none; }
     .idl-switch-label { font-size: 13.5px; color: var(--idl-text); }
+    .idl-switch-row--all { margin-bottom: 4px; }
+    .idl-switch-label--all { font-weight: 700; }
     .idl-loading, .idl-error, .idl-empty-hint { padding: 18px 4px; color: var(--idl-text-muted); font-size: 13px; }
     .idl-error { color: #dc2626; }
 
@@ -297,8 +299,17 @@
     }
 
     // ── Ortak switch listesi (tekil + toplu panel paylaşır) ───────
+    // "Tümü" öğesi en başta: gerçek bir belge tipi değil, tüm belge tipi
+    // switch'lerini tek seferde açıp/kapatan yardımcı toggle (data-doctype
+    // taşımaz → readCheckedDocTypes'a dahil olmaz).
     function buildSwitchListHtml(idPrefix, checkedCodes) {
-        var html = '';
+        var allChecked = DOC_TYPES.length > 0 && DOC_TYPES.every(function (t) { return checkedCodes.indexOf(t.code) !== -1; });
+        var html = '<label class="idl-switch-row idl-switch-row--all">'
+            + '<span class="idl-switch-label idl-switch-label--all">Tümü</span>'
+            + '<span class="form-check form-switch" style="margin:0;">'
+            + '<input class="form-check-input" type="checkbox" role="switch" data-select-all="1" id="' + idPrefix + '-all"' + (allChecked ? ' checked' : '') + '>'
+            + '</span>'
+            + '</label>';
         DOC_TYPES.forEach(function (t) {
             var checked = checkedCodes.indexOf(t.code) !== -1;
             html += '<label class="idl-switch-row">'
@@ -317,6 +328,28 @@
         });
         return result;
     }
+    // "Tümü" switch'ini alt öğelerle iki yönlü senkronize eder: üstten
+    // toggle → tüm alt switch'ler; alttan herhangi bir değişiklik → "Tümü"
+    // durumu (tam/kısmi/boş) yeniden hesaplanır.
+    function wireSelectAllToggle(container, idPrefix) {
+        var allCb = container.querySelector('#' + idPrefix + '-all');
+        if (!allCb) return;
+        var itemCbs = container.querySelectorAll('input[data-doctype]');
+        function syncAllState() {
+            var checkedCount = 0;
+            Array.prototype.forEach.call(itemCbs, function (cb) { if (cb.checked) checkedCount++; });
+            allCb.checked = itemCbs.length > 0 && checkedCount === itemCbs.length;
+            allCb.indeterminate = checkedCount > 0 && checkedCount < itemCbs.length;
+        }
+        allCb.addEventListener('change', function () {
+            Array.prototype.forEach.call(itemCbs, function (cb) { cb.checked = allCb.checked; });
+            allCb.indeterminate = false;
+        });
+        Array.prototype.forEach.call(itemCbs, function (cb) {
+            cb.addEventListener('change', syncAllState);
+        });
+        syncAllState();
+    }
 
     // ── Tekil düzenleme paneli ─────────────────────────────────────
     var editBackdrop = document.getElementById('idlEditBackdrop');
@@ -334,6 +367,7 @@
         getJson('/Logistics/ItemDocumentLockGet?itemId=' + itemId).then(function (data) {
             if (!data || data.error) { editBody.innerHTML = '<div class="idl-error">Yüklenemedi.</div>'; return; }
             editBody.innerHTML = buildSwitchListHtml('idl-edit', data.docTypes || []);
+            wireSelectAllToggle(editBody, 'idl-edit');
         }).catch(function () { editBody.innerHTML = '<div class="idl-error">Bağlantı hatası.</div>'; });
     }
     function closeEditModal() {
@@ -388,6 +422,7 @@
         bulkResultsEl.innerHTML = '<div class="idl-empty-hint">Aramak için yazın…</div>';
         renderBulkSelected();
         bulkDocTypesBody.innerHTML = buildSwitchListHtml('idl-bulk', []);
+        wireSelectAllToggle(bulkDocTypesBody, 'idl-bulk');
         bulkBackdrop.hidden = false;
         document.addEventListener('keydown', onBulkKeydown);
     }

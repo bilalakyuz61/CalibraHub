@@ -79,7 +79,7 @@ public static class UiCatalog
                 Label("sales", "Satış", "Sales"),
                 Label("product_configuration", "Ürün Konfigürasyonu", "Product Configuration"),
                 Label("items", "Malzeme Kartları", "Material Cards"),
-                Label("fixed_definitions", "Sabit Tanımlamalar", "Fixed Definitions"),
+                Label("fixed_definitions", "Tanımlamalar", "Definitions"),
                 Label("locations", "Lokasyon Tanımlamaları", "Warehouse Locations"),
                 Label("measure_units", "Ölçü Birimleri", "Measure Units"),
                 Label("settings", "Ayarlar", "Settings"),

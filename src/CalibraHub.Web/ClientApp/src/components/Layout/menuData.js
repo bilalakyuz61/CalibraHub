@@ -24,7 +24,7 @@ const menuData = [
     children: [
       {
         id: 'logistics-definitions',
-        label: 'Sabit Tanimlamalar',
+        label: 'Tanimlamalar',
         icon: Layers,
         children: [
           { id: 'material-cards', label: 'Malzeme Kartlari', icon: Package, href: '/Logistics/MaterialCards' },

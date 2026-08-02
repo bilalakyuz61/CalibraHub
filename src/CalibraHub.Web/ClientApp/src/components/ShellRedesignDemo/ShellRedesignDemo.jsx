@@ -80,7 +80,7 @@ var SIDEBAR_TREE = [
     children: [
       {
         id: 'logistics.masters',
-        label: 'Sabit Tanimlamalar',
+        label: 'Tanimlamalar',
         icon: Folder,
         children: [
           { id: 'logistics.masters.materials', label: 'Malzeme Kartlari', icon: Boxes },

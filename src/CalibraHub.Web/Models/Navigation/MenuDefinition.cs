@@ -137,8 +137,8 @@ public static class MenuDefinition
             // Grup: isMenuAdmin || canView("MATERIAL_CARD_EDIT") || canView("PRODUCT_CONFIG") || canView("SALES_QUOTE")
             new("logistics", isEn ? "Logistics" : "Lojistik", "Package", null, new List<MenuNode>
             {
-                // Sabit Tanımlamalar: canView("MATERIAL_CARD_EDIT") || canView("PRODUCT_CONFIG")
-                new("logistics.fixed", isEn ? "Fixed Definitions" : "Sabit Tanımlamalar", "Folder", null, new List<MenuNode>
+                // Tanımlamalar: canView("MATERIAL_CARD_EDIT") || canView("PRODUCT_CONFIG")
+                new("logistics.fixed", isEn ? "Definitions" : "Tanımlamalar", "Folder", null, new List<MenuNode>
                 {
                     new("logistics.materials",     isEn ? "Material Cards"          : "Malzeme Kartları",          "Boxes",   "/Logistics/MaterialCards",         null,
                         MatchPath: "/Logistics/MaterialCard",

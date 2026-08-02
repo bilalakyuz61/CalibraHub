@@ -384,6 +384,17 @@ body.app-theme-dark .ap-tab.is-active::before {
 }
 #ap-flash.ok  { background: var(--ap-toast-ok-bg); color: var(--ap-toast-ok-tx); }
 #ap-flash.err { background: var(--ap-toast-er-bg); color: var(--ap-toast-er-tx); }
+
+/* ── Güvenlik sekmesi — sayısal alanlarda native spinner oku gizle (PageComment Seq 1061) ── */
+#ap-pane-guvenlik input[type=number]::-webkit-inner-spin-button,
+#ap-pane-guvenlik input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+#ap-pane-guvenlik input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
 </style>
 }
 
