@@ -308,6 +308,50 @@
         @@keyframes caldPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.14); } }
         @@keyframes caldShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(3px)} }
         .cald-wrap.cald-shake .cald-stage { animation: caldShake .5s ease; }
+
+        /* ── Kalibrasyon okuma katmanı — "havalı mühendislik hesabı" hissi (2026-08-03) ──
+           SOLVE MANTIĞI DEĞİŞMEDİ (round-robin iğne + server-truth çözülme aynen geçerli).
+           Yalnız dekoratif iki katman: (a) dış kadranda 4 ana çentikte BASILI ölçek rakamları
+           (.cald-scale-num) — idle'da çok soluk, şifre girişinde/doğrulamada belirginleşir
+           (iğnelerin "gösterdiği" skala hissi). (b) alt-orta dijital okuma penceresi
+           (.cald-readout*) — monospace, her tuşta hesaplanıp oturan ölçüm değeri; doğrulama
+           fazında kanal-kanal hızlı hesap sekansı. Kullanıcının 2026-07-16 "iğneler sürekli
+           hareket etmesin" geri bildirimine dokunulmaz — bu katman sayısal, iğne değil. */
+        .cald-scale-num {
+            fill: var(--cald-status);
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 11px; font-weight: 600;
+            text-anchor: middle; dominant-baseline: middle;
+            opacity: .22; transition: opacity .35s ease, fill .3s ease;
+        }
+        .cald-wrap.is-typing .cald-scale-num { opacity: .60; }
+        .cald-wrap.is-measuring .cald-scale-num { opacity: .78; }
+        .cald-wrap.is-solved .cald-scale-num { fill: var(--cald-success); opacity: .55; }
+        .cald-wrap.is-fail .cald-scale-num { fill: var(--cald-danger); opacity: .55; }
+
+        .cald-readout-box {
+            fill: var(--cald-glass-b); stroke: var(--cald-ring); stroke-width: 1;
+            opacity: 0; transition: opacity .35s ease;
+        }
+        .cald-readout-text {
+            fill: var(--cald-n1);
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 11px; font-weight: 600; letter-spacing: .2px;
+            text-anchor: middle; dominant-baseline: middle;
+            opacity: 0; transition: opacity .35s ease, fill .3s ease;
+        }
+        .cald-wrap.is-typing .cald-readout-box,
+        .cald-wrap.is-measuring .cald-readout-box,
+        .cald-wrap.is-solved .cald-readout-box,
+        .cald-wrap.is-fail .cald-readout-box { opacity: .92; }
+        .cald-wrap.is-typing .cald-readout-text,
+        .cald-wrap.is-measuring .cald-readout-text,
+        .cald-wrap.is-solved .cald-readout-text,
+        .cald-wrap.is-fail .cald-readout-text { opacity: 1; }
+        .cald-wrap.is-measuring .cald-readout-text { fill: var(--cald-n2); }
+        .cald-wrap.is-solved .cald-readout-text { fill: var(--cald-success); }
+        .cald-wrap.is-fail .cald-readout-text { fill: var(--cald-danger); }
+
         @@media (prefers-reduced-motion: reduce) {
             .cald-needle, .cald-stage { transition: none; }
             .cald-stage,
@@ -378,6 +422,8 @@
                     <svg class="cald-svg" viewBox="0 0 200 200">
                         <circle class="cald-track" cx="100" cy="100" r="88" />
                         <g class="cald-ticks" id="caldTicks"></g>
+                        @* Basılı ölçek rakamları (4 ana çentik) — JS ile konumlanır (bkz. buildScale). *@
+                        <g class="cald-scale" id="caldScale"></g>
                         @* İç kadran 1 (dış, r=60) — 8 çentik; büyük iğnelerden bağımsız, tuş
                            başına rastgele döner (bkz. script spinInnerRandom). *@
                         <circle class="cald-inner-track" cx="100" cy="100" r="60" />
@@ -403,6 +449,10 @@
                         </g>
                         <circle class="cald-hub-ring" cx="100" cy="100" r="8" />
                         <circle class="cald-hub" cx="100" cy="100" r="4.2" />
+                        @* Dijital okuma penceresi (alt-orta) — iğnelerin ÜSTÜNDE, okunur kalsın.
+                           İçerik JS ile sürülür (scrambleReadout / runCalcSequence). *@
+                        <rect class="cald-readout-box" x="59" y="121" width="82" height="18" rx="4" ry="4" />
+                        <text class="cald-readout-text" id="caldReadout" x="100" y="130.5">----</text>
                     </svg>
                 </div>
                 <div class="cald-status" id="caldStatus">Giriş yapmaya hazır</div>
@@ -856,11 +906,80 @@
         function setStatus(t) { if (statusEl) statusEl.textContent = t; }
         function setMode(m, cls) {
             mode = m;
-            dial.classList.remove('is-measuring', 'is-solved', 'is-fail');
+            dial.classList.remove('is-typing', 'is-measuring', 'is-solved', 'is-fail');
             if (cls) dial.classList.add(cls);
         }
         function toTyping(len) {
             for (var r = 0; r < 3; r++) animateNeedleStepped(r, typingTarget(len, r));
+        }
+
+        // ── Kalibrasyon okuma katmanı — salt dekoratif "mühendislik hesabı" hissi ──
+        // (a) Basılı ölçek rakamları: 4 ana çentikte (0/90/180/270) sabit skala değerleri
+        //     — gerçek bir enstrüman kadranı gibi iğnelerin "gösterdiği" rakamlar.
+        // (b) Dijital okuma penceresi: monospace ölçüm değeri; her tuşta hızla değişip
+        //     oturur (hesaplanıyor hissi), doğrulama fazında kanal-kanal hızlı sekans.
+        // Bu katmanın needle/solve mantığıyla HİÇBİR bağı yoktur (server-truth korunur).
+        (function buildScale() {
+            var scaleG = document.getElementById('caldScale');
+            if (!scaleG) return;
+            // Saat yönünde tepeden: 0 → 25 → 50 → 75 (basılı skala), r=68'de yerleşir.
+            var SC = [{ deg: 0, txt: '0' }, { deg: 90, txt: '25' }, { deg: 180, txt: '50' }, { deg: 270, txt: '75' }];
+            SC.forEach(function (s) {
+                var rad = (s.deg - 90) * Math.PI / 180;
+                var t = document.createElementNS(NS, 'text');
+                t.setAttribute('x', (100 + 68 * Math.cos(rad)).toFixed(2));
+                t.setAttribute('y', (100 + 68 * Math.sin(rad)).toFixed(2));
+                t.setAttribute('class', 'cald-scale-num');
+                t.textContent = s.txt;
+                scaleG.appendChild(t);
+            });
+        })();
+
+        // Ölçüm kanalları — ASCII birimler (mojibake güvenli, bkz. Türkçe/encoding kuralı).
+        var READ_CH = [
+            { unit: 'mm',  dec: 4, min: 0.001, max: 0.098 },
+            { unit: 'Hz',  dec: 1, min: 40,    max: 260 },
+            { unit: 'V',   dec: 3, min: 3.00,  max: 5.20 },
+            { unit: 'Nm',  dec: 2, min: 1.5,   max: 48 },
+            { unit: 'mV',  dec: 1, min: 5,     max: 240 },
+            { unit: 'kPa', dec: 2, min: 96,    max: 104 }
+        ];
+        var readoutEl = document.getElementById('caldReadout');
+        var readoutRaf = null;
+        var seqTimer = null;
+        function fmtRead(ch, v) { return v.toFixed(ch.dec) + ' ' + ch.unit; }
+        function stopReadoutAnims() {
+            if (readoutRaf) { cancelAnimationFrame(readoutRaf); readoutRaf = null; }
+            if (seqTimer) { clearTimeout(seqTimer); seqTimer = null; }
+        }
+        // Bir değere doğru "hesaplanıp oturan" haneler: jitter ~1'den 0'a söner.
+        function scrambleReadout(ch, finalV, durMs) {
+            if (!readoutEl) return;
+            if (readoutRaf) { cancelAnimationFrame(readoutRaf); readoutRaf = null; }
+            if (reduce) { readoutEl.textContent = fmtRead(ch, finalV); return; }
+            var span = (ch.max - ch.min) * 0.5, t0 = null;
+            function frame(ts) {
+                if (t0 === null) t0 = ts;
+                var t = Math.min(1, (ts - t0) / durMs);
+                var v = finalV + (Math.random() * 2 - 1) * span * (1 - t);
+                if (v < ch.min) v = ch.min + (ch.min - v) * 0.3;
+                readoutEl.textContent = fmtRead(ch, v);
+                if (t < 1) { readoutRaf = requestAnimationFrame(frame); }
+                else { readoutEl.textContent = fmtRead(ch, finalV); readoutRaf = null; }
+            }
+            readoutRaf = requestAnimationFrame(frame);
+        }
+        // Doğrulama fazı: kanal-kanal hızlı hesap sekansı (durana kadar döner).
+        function runCalcSequence() {
+            stopReadoutAnims();
+            if (reduce) { if (readoutEl) readoutEl.textContent = 'CALC...'; return; }
+            var i = 0;
+            (function tick() {
+                var ch = READ_CH[i % READ_CH.length];
+                scrambleReadout(ch, ch.min + Math.random() * (ch.max - ch.min), 170);
+                i++;
+                seqTimer = setTimeout(tick, 200);
+            })();
         }
 
         // ── Şifre alanı: her karakter SADECE bir iğneyi bir çentik döndürür (round-robin),
@@ -870,10 +989,20 @@
             pwEl.addEventListener('input', function () {
                 if (mode === 'measuring' || mode === 'solved') return;   // aktif akışla çakışma
                 var len = pwEl.value.length;
-                setMode(len > 0 ? 'typing' : 'idle');
+                setMode(len > 0 ? 'typing' : 'idle', len > 0 ? 'is-typing' : null);
                 setStatus(len > 0 ? 'Şifre giriliyor…' : 'Giriş yapmaya hazır');
                 toTyping(len);
                 spinInnerRandom();   // iç kadranlar — büyük iğnelerden bağımsız rastgele dönüş
+                // Okuma penceresi — her tuşta hesaplanıp oturan ölçüm değeri (uzunluğa bağlı,
+                // deterministik-ish → tuşa tepki verir ama tahmin edilebilir değildir).
+                if (len > 0) {
+                    var ch = READ_CH[(len - 1) % READ_CH.length];
+                    var frac = ((len * 37) % 100) / 100;
+                    scrambleReadout(ch, ch.min + frac * (ch.max - ch.min), 240);
+                } else {
+                    stopReadoutAnims();
+                    if (readoutEl) readoutEl.textContent = '----';
+                }
             });
         }
 
@@ -882,6 +1011,7 @@
             begin: function () {
                 setMode('measuring', 'is-measuring');
                 setStatus('Doğrulanıyor…');
+                runCalcSequence();   // okuma penceresi — kanal-kanal hızlı hesap sekansı
                 // Kısa "oturma/arama" sekmesi (bir kerelik) — her iğne mevcut konumundan
                 // ufak bir kick alıp yaylı (spring) dönüşle AYNI konuma geri oturur; client
                 // parola doğrulamaz, yalnızca "işleniyor" hissi verir. Kick bitince iğneler
@@ -899,6 +1029,8 @@
             success: function (done) {
                 setMode('solved', 'is-solved');
                 setStatus('Giriş başarılı');
+                stopReadoutAnims();
+                if (readoutEl) readoutEl.textContent = '100.0 %';   // kalibrasyon tamam
                 // Kilit açılışı: her iğne SIRAYLA en yakın ORTAK faza (360°'nin tam katı,
                 // yani mod 360 ≡ 0 → yukarı/12 yönü) "klik" diye oturur — üçü de aynı mutlak
                 // açıya geldiği için tam hizalanır → "kilit açıldı" hissi + yeşil parıltı.
@@ -913,6 +1045,8 @@
             fail: function (label, detail) {
                 setMode('fail', 'is-fail');
                 setStatus(label || 'Giriş başarısız');
+                stopReadoutAnims();
+                if (readoutEl) readoutEl.textContent = 'ERR';   // kalibrasyon başarısız
                 dial.classList.remove('cald-shake');
                 void dial.offsetWidth;   // reflow — animasyonu yeniden tetikler
                 dial.classList.add('cald-shake');
