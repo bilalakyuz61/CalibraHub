@@ -1303,6 +1303,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         if (compBase <= 0m)   // PerKit>0 olmalı; 0/negatif → sessiz atlama YERİNE net hata
                             throw new InvalidOperationException(
                                 $"Kit bileşeninin ({c.CompName ?? ("#" + c.CompItemId)}) kit-başına miktarı geçersiz (0 veya negatif); kit tanımını düzeltin.");
+                        // Seri-takipli bileşen tam sayı miktar taşımalı — kesirli oranı ResolveSerials
+                        // jenerik "miktar tam sayı olmalı" ile reddeder + TÜM teslimatı rollback eder;
+                        // burada bileşeni adıyla, net biçimde erken yakala (kafa karıştırıcı hatayı önle).
+                        if (string.Equals(c.Tracking, "Serial", StringComparison.OrdinalIgnoreCase)
+                            && compBase != Math.Truncate(compBase))
+                            throw new InvalidOperationException(
+                                $"Kit bileşeni '{c.CompName ?? ("#" + c.CompItemId)}' seri takipli ama {sets} set × {c.PerKit:0.####} = {compBase:0.####} tam sayı değil. Seri takipli bileşen kit-başına tam sayı miktar taşımalı; kit tanımını düzeltin.");
 
                         var pick = picksForLine?.FirstOrDefault(p =>
                             p.ComponentItemId == c.CompItemId && p.ConfigId == c.ConfigId);

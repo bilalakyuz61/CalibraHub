@@ -2258,7 +2258,8 @@
                 }
 
                 // Faz 3 — panel içeriğini geçerli set miktarına (N) göre yeniden çizer; seri bileşende
-                // seçim yoksa FIFO ilk N×PerSet öneçilir, lot bileşende ilk uygun lot (FEFO) öneçilir.
+                // seçim yoksa listenin ilk N×PerSet serisi (GetSerialsJson sırası) öneçilir, lot bileşende
+                // ilk lot öneçilir. Kullanıcı seçimi elle değiştirebilir.
                 function _sqRenderKitPanelBody(lineId) {
                     var panelRow = bd.querySelector('._sqKitPanelRow[data-line="' + lineId + '"]');
                     var panelDiv = panelRow ? panelRow.querySelector('._sqKitPanel') : null;
@@ -2380,14 +2381,23 @@
                                         validationError = (c.name || c.code || 'Bileşen') + ' için ' + need + ' seri seçilmeli (şu an ' + sel.length + ' seçili). "Seri/Lot Seç" ile tamamlayın.';
                                         break;
                                     }
-                                    components.push({ componentItemId: c.componentItemId, configId: c.configId || null, serials: sel, lotCode: null });
+                                    components.push({ componentItemId: c.componentItemId, configId: c.configId ?? null, serials: sel, lotCode: null });
                                 } else if (c.tracking === 'Lot') {
                                     var lotSel = st && st.selections[key];
                                     if (!lotSel) {
                                         validationError = (c.name || c.code || 'Bileşen') + ' için lot seçilmeli. "Seri/Lot Seç" ile seçim yapın.';
                                         break;
                                     }
-                                    components.push({ componentItemId: c.componentItemId, configId: c.configId || null, serials: null, lotCode: lotSel });
+                                    // Faz 3 (v1) — bileşen başına TEK lot: seçilen lotun bakiyesi ihtiyacı karşılamalı
+                                    // (aksi halde backend EnsureLotBalance tüm teslimatı rollback eder — erken uyar).
+                                    var lotNeed = q * c.perSet;
+                                    var lotData = (st && st.dataByComp[key]) || [];
+                                    var chosenLot = lotData.filter(function (lo) { return lo.lotNo === lotSel; })[0];
+                                    if (chosenLot && typeof chosenLot.balance === 'number' && chosenLot.balance < lotNeed - 0.00005) {
+                                        validationError = (c.name || c.code || 'Bileşen') + ' için seçilen lot bakiyesi yetersiz (gereken ' + _sqFmt(lotNeed) + ', lot bakiyesi ' + _sqFmt(chosenLot.balance) + '). Tek seferde yeterli bakiyeli bir lot seçin.';
+                                        break;
+                                    }
+                                    components.push({ componentItemId: c.componentItemId, configId: c.configId ?? null, serials: null, lotCode: lotSel });
                                 }
                             }
                             if (validationError) return;
