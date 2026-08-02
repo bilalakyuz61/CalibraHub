@@ -1252,15 +1252,11 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         throw new InvalidOperationException(
                             "Kit içeriği bulunamadı (snapshot yok). Kit tanımı aktif değilse siparişi düzenleyip kit satırını yeniden ekleyin/güncelleyin.");
 
-                    // Faz 1 kapsamı: seri/lot takipli bileşen için bileşen bazında elle seçim gerekir
-                    // (sonraki fazda eklenecek). Sessiz kırık yerine net hata — kit bütünlüğü korunur.
-                    var trackedComps = comps
-                        .Where(c => string.Equals(c.Tracking, "Serial", StringComparison.OrdinalIgnoreCase)
-                                 || string.Equals(c.Tracking, "Lot", StringComparison.OrdinalIgnoreCase))
-                        .Select(c => c.CompName ?? ("#" + c.CompItemId)).ToList();
-                    if (trackedComps.Count > 0)
-                        throw new InvalidOperationException(
-                            $"Seri/lot takipli bileşen içeren kit için bileşen seri/lot seçimi gerekir (sonraki fazda eklenecek): {string.Join(", ", trackedComps)}.");
+                    // Faz 3 (2026-08-02) — bu kit satırı için modaldan gelen bileşen bazlı elle seçimler
+                    // (seri listesi / lot kodu). Eşleşme ID-tabanlıdır (ComponentItemId+ConfigId), CLAUDE.md
+                    // "ID tabanlı eşleştirme" kuralı. Pick yoksa ResolveLotForLineAsync/ResolveSerialsForLineAsync
+                    // aşağıda zaten net hata fırlatır (lot bulunamadı / seri sayısı≠miktar) — sessiz kırık yok.
+                    componentPicks?.TryGetValue(o.LineId, out var picksForLine);
 
                     // Kit BAŞLIK satırı (stok etkisiz, fiyatlı). SCOPE_IDENTITY ile bileşenlere parent id.
                     int headerLineId;
@@ -1292,22 +1288,37 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                     }
 
                     // Bileşen satırları — gerçek stok hareketi (fiyat 0), KitParentLineId=başlık satırı.
+                    // Faz 3: lot-takipli bileşende mevcut lot çözülür + LotId/LotNo yazılır; seri-takipli
+                    // bileşende INSERT sonrası (satır id gerekli) ResolveSerialsForLineAsync ile seçilen
+                    // seriler Issued'a çekilip DocumentLineSerial ile bağlanır. Faz 1'in normal (kit
+                    // olmayan) satır dalı ve lot/seri guard'ları (ResolveLotForLineAsync/ResolveSerialsForLineAsync)
+                    // AYNEN kullanılır — burada tekrarlanmaz.
                     foreach (var c in comps)
                     {
                         decimal compBase = Math.Round(sets * c.PerKit, 4);
                         if (compBase <= 0m)   // PerKit>0 olmalı; 0/negatif → sessiz atlama YERİNE net hata
                             throw new InvalidOperationException(
                                 $"Kit bileşeninin ({c.CompName ?? ("#" + c.CompItemId)}) kit-başına miktarı geçersiz (0 veya negatif); kit tanımını düzeltin.");
+
+                        var pick = picksForLine?.FirstOrDefault(p =>
+                            p.ComponentItemId == c.CompItemId && p.ConfigId == c.ConfigId);
+
+                        // Lot çözümleme — bileşen lot-takipliyse mevcut lot şart (movementType=1 → çıkış).
+                        var (compLotId, compLotNo) = await ResolveLotForLineAsync(
+                            conn, tx, c.CompItemId, c.CompName, pick?.LotCode, movementType, createdById, ct);
+
+                        int componentLineId;
                         await using (var cl = conn.CreateCommand())
                         {
                             cl.Transaction = tx;
                             cl.CommandText = $"""
                                 INSERT INTO {T("DocumentLine")}
                                     ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
-                                     [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[KitParentLineId],[Notes])
+                                     [CombinationId],[FromLocationId],[LocationId],[MovementType],[SourceLineId],[KitParentLineId],[LotId],[LotNo],[Notes])
                                 VALUES
                                     (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,0,0,0,
-                                     @CombId,@FromLoc,@ToLoc,@Mt,NULL,@KitParent,@Notes);
+                                     @CombId,@FromLoc,@ToLoc,@Mt,NULL,@KitParent,@LotId,@LotNo,@Notes);
+                                SELECT CAST(SCOPE_IDENTITY() AS INT);
                                 """;
                             cl.Parameters.AddWithValue("@DocId", docId);
                             cl.Parameters.AddWithValue("@LineNo", lineNo++);
@@ -1320,10 +1331,23 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                             cl.Parameters.AddWithValue("@ToLoc",   isPurchase ? o.LocId!.Value : (object)DBNull.Value);
                             cl.Parameters.AddWithValue("@Mt", movementType);
                             cl.Parameters.AddWithValue("@KitParent", headerLineId);
+                            cl.Parameters.AddWithValue("@LotId", (object?)compLotId ?? DBNull.Value);
+                            cl.Parameters.AddWithValue("@LotNo", (object?)compLotNo ?? DBNull.Value);
                             cl.Parameters.AddWithValue("@Notes", $"Kit bileşeni ({sets}×{c.PerKit:0.####}) — Sipariş #{orderId}");
-                            await cl.ExecuteNonQueryAsync(ct);
+                            componentLineId = Convert.ToInt32(await cl.ExecuteScalarAsync(ct));
                         }
-                        if (!isPurchase) decreases.Add((c.CompItemId, o.LocId!.Value));
+
+                        // Seri çözümleme — bileşen seri-takipliyse stoktaki (InStock) serilerden
+                        // compBase (tam sayı olmalı) adet seçim şart → Issued + DocumentLineSerial.
+                        await ResolveSerialsForLineAsync(
+                            conn, tx, componentLineId, c.CompItemId, c.CompName, compBase, pick?.Serials,
+                            compLotId, movementType, o.LocId, DateTime.Today, createdById, ct);
+
+                        if (!isPurchase)
+                        {
+                            decreases.Add((c.CompItemId, o.LocId!.Value));
+                            if (compLotId.HasValue) lotDecreases.Add((c.CompItemId, compLotId.Value, o.LocId!.Value));
+                        }
                     }
                 }
 
