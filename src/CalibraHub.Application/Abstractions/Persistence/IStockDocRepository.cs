@@ -33,9 +33,13 @@ public interface IStockDocRepository
     /// teslim edilen kalemlerden yeniden hesaplanır (kısmi teslimatta orantılı).
     /// <paramref name="deliverByLine"/> = LineId → teslim miktarı (gösterim birimi); null ise TÜM açık
     /// miktar teslim edilir (geriye uyum). Miktar açık miktarı aşamaz; ≤0 olan satır atlanır.
+    /// <paramref name="componentPicks"/> (Faz 3) — kit satırları için LineId → bileşen bazında elle
+    /// seçilen seri/lot listesi (<see cref="KitComponentPickDto"/>). Seri/lot takipli bileşen için
+    /// eşleşen pick yoksa/eksikse ResolveSerialsForLineAsync/ResolveLotForLineAsync net hata fırlatır.
     /// </summary>
     Task<(int Id, string DocNo)> DeliverSalesOrderAsync(
-        int salesOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct);
+        int salesOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct,
+        IReadOnlyDictionary<int, IReadOnlyList<KitComponentPickDto>>? componentPicks = null);
 
     /// <summary>
     /// Satın alma siparişi → Alış İrsaliyesi (stok etkili mal kabul): açık sipariş kalemleri için

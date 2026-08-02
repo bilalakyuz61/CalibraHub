@@ -36,14 +36,29 @@ public sealed record OrderOpenLineDto(
     // Kit tam-set kısmi teslimat: satır bir KİT (ItemType.Kit) ise IsKit=true; miktar birimi = "set"
     // (yalnız tam set teslim edilebilir). KitComponents = donmuş snapshot'tan 1-set bileşen dökümü.
     bool IsKit = false,
-    IReadOnlyList<KitComponentBriefDto>? KitComponents = null);
+    IReadOnlyList<KitComponentBriefDto>? KitComponents = null,
+    // Faz 3 — kit satırının kaynak deposu (kalem deposu yoksa belge deposu). Modal, bileşen
+    // seri/lot seçim sorgusunu (GetSerialsJson) bu depoya göre yapar.
+    int? SourceLocationId = null);
 
 /// <summary>
 /// Kit kısmi teslimat modalı için bileşen özeti: 1 set için gereken oran (PerSet) + bileşenin
-/// seri/lot takipli olup olmadığı (takipli ise bu fazda teslim engellenir, elle seçim gerekir).
+/// seri/lot takipli olup olmadığı (takipli ise elle seçim modalı açılır — bkz. Faz 3).
 /// </summary>
 public sealed record KitComponentBriefDto(
-    string? Code, string? Name, decimal PerSet, bool SerialOrLotTracked);
+    string? Code, string? Name, decimal PerSet, bool SerialOrLotTracked,
+    // Faz 3 — ID-tabanlı eşleşme için bileşenin ItemId/ConfigId'si (modal seçimini
+    // KitComponentPickDto ile geri gönderirken kullanılır) + takip tipi (None/Serial/Lot).
+    int ComponentItemId = 0, int? ConfigId = null, string Tracking = "None");
+
+/// <summary>
+/// Faz 3 — kit kısmi teslimat modalından bileşen bazında elle seçilen seri/lot. ComponentItemId +
+/// ConfigId, DocumentLineKitComponent snapshot'ındaki bileşenle ID-tabanlı eşleşir (CLAUDE.md ID
+/// eşleştirme kuralı). Serials seri-takipli bileşen için (adet = teslim edilen set × PerKit),
+/// LotCode lot-takipli bileşen için mevcut lot numarasıdır.
+/// </summary>
+public sealed record KitComponentPickDto(
+    int ComponentItemId, int? ConfigId, IReadOnlyList<string>? Serials, string? LotCode);
 
 /// <summary>
 /// DocumentLineDto — UI'a gonderilen satir goruntusu. ItemId + CombinationId tablodaki
