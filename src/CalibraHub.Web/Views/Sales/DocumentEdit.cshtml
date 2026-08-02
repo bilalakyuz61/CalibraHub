@@ -2144,32 +2144,48 @@
                 if (isNaN(x)) return '0';
                 return (x % 1 === 0) ? String(x) : String(x).replace('.', ',');
             }
+            // Faz 3 — kit bileşen anahtarı: ComponentItemId + ConfigId (ID-tabanlı eşleşme, CLAUDE.md).
+            function _sqKitCompKey(c) { return c.componentItemId + ':' + (c.configId || 0); }
             function _sqDlvModal(oid, lines) {
                 var bd = document.createElement('div');
                 bd.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(2,6,23,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
                 var brd = '1px solid var(--app-border,#334155)';
                 var _inpStyle = 'width:96px;padding:5px 8px;border-radius:7px;border:' + brd + ';background:var(--app-input-bg,rgba(255,255,255,.06));color:inherit;text-align:right;font-weight:600';
+                // Faz 3 — kit satırı başına takipli bileşen listesi + kaynak depo (panel açılışında kullanılır).
+                var _sqKitCompsByLine = {};
+                var _sqKitLocByLine = {};
+                // Faz 3 — kit satırı başına seçim durumu: { comps, dataByComp, selections, loaded }.
+                var _sqKitState = {};
                 var rows = lines.map(function (l) {
                     var td = 'padding:6px 8px;border-bottom:' + brd;
                     // Kit satırı: miktar birimi "set"; yalnız TAM set teslim edilir, bileşenler otomatik patlar.
+                    // Faz 3 — seri/lot takipli bileşenli kit de teslim edilebilir (bileşen bazında elle seçim paneli).
                     if (l.isKit) {
                         var comps = l.kitComponents || [];
-                        var hasTracked = comps.some(function (c) { return c.serialOrLotTracked; });
+                        var trackedComps = comps.filter(function (c) { return c.tracking && c.tracking !== 'None'; });
+                        var hasTracked = trackedComps.length > 0;
+                        if (hasTracked) { _sqKitCompsByLine[l.lineId] = trackedComps; _sqKitLocByLine[l.lineId] = l.sourceLocationId; }
                         var kitBadge = ' <span style="font-size:.6rem;font-weight:700;color:#0ea5e9;border:1px solid #0ea5e9;border-radius:4px;padding:0 4px;vertical-align:middle">KİT</span>';
                         var compText = comps.map(function (c) { return (c.name || c.code || '?') + ' ×' + _sqFmt(c.perSet); }).join(' · ');
                         var breakdown = '<div style="font-size:.68rem;opacity:.7;margin-top:2px">1 set = ' + (compText || '—') + '</div>';
-                        var warn = hasTracked ? '<div style="font-size:.66rem;color:#f59e0b;margin-top:2px">⚠ Seri/lot takipli bileşen — bu fazda kit teslim edilemez (elle seçim gerekiyor).</div>' : '';
-                        var qtyCell = hasTracked
-                            ? '<span style="opacity:.5;font-size:.72rem">—</span>'
-                            : '<input type="number" class="_sqDlvQty" data-line="' + l.lineId + '" data-open="' + l.open + '" data-kit="1" min="0" step="1" value="' + l.open + '" style="' + _inpStyle + '" />';
-                        return '<tr>'
-                            + '<td style="' + td + '">' + ((l.itemName || l.itemCode || ('#' + l.lineId))) + kitBadge + breakdown + warn + '</td>'
+                        var pickBtn = hasTracked
+                            ? '<button type="button" class="_sqKitPickBtn" data-line="' + l.lineId + '" style="margin-top:4px;font-size:.66rem;font-weight:700;color:#0ea5e9;background:transparent;border:1px solid #0ea5e9;border-radius:5px;padding:1px 7px;cursor:pointer">Seri/Lot Seç</button>'
+                            : '';
+                        var hint = hasTracked ? '<div style="font-size:.66rem;color:#0ea5e9;margin-top:2px">ℹ Seri/lot takipli bileşen var — teslimden önce "Seri/Lot Seç" ile bileşen seçimini tamamlayın.' + pickBtn + '</div>' : '';
+                        var qtyCell = '<input type="number" class="_sqDlvQty" data-line="' + l.lineId + '" data-open="' + l.open + '" data-kit="1" min="0" step="1" value="' + l.open + '" style="' + _inpStyle + '" />';
+                        var mainRow = '<tr>'
+                            + '<td style="' + td + '">' + ((l.itemName || l.itemCode || ('#' + l.lineId))) + kitBadge + breakdown + hint + '</td>'
                             + '<td style="' + td + ';text-align:center;opacity:.8">set</td>'
                             + '<td style="' + td + ';text-align:right;opacity:.65">' + _sqFmt(l.ordered) + '</td>'
                             + '<td style="' + td + ';text-align:right;opacity:.65">' + _sqFmt(l.delivered) + '</td>'
                             + '<td style="' + td + ';text-align:right;font-weight:600">' + _sqFmt(l.open) + '</td>'
                             + '<td style="' + td + ';text-align:right">' + qtyCell + '</td>'
                             + '</tr>';
+                        var panelRow = hasTracked
+                            ? '<tr class="_sqKitPanelRow" data-line="' + l.lineId + '" style="display:none">'
+                              + '<td colspan="6" style="padding:4px 8px 12px;border-bottom:' + brd + '"><div class="_sqKitPanel" data-line="' + l.lineId + '" style="font-size:.74rem"></div></td></tr>'
+                            : '';
+                        return mainRow + panelRow;
                     }
                     var serialBadge = l.serialTracked ? ' <span style="font-size:.6rem;font-weight:700;color:#8b5cf6;border:1px solid #8b5cf6;border-radius:4px;padding:0 4px;vertical-align:middle">SERİ</span>' : '';
                     return '<tr>'
@@ -2185,7 +2201,7 @@
                 bd.innerHTML = '<div style="max-width:740px;width:96%;max-height:88vh;display:flex;flex-direction:column;background:var(--app-surface,#1a1f2e);border:' + brd + ';border-radius:14px;color:var(--bs-body-color,#e2e8f0);box-shadow:0 20px 60px rgba(0,0,0,.5)">'
                     + '<div style="padding:16px 20px 12px;border-bottom:' + brd + '">'
                     +   '<div style="font-size:1rem;font-weight:700">' + _sqDlvLabel + ' → İrsaliye</div>'
-                    +   '<div style="font-size:.78rem;opacity:.72;margin-top:3px">Teslim edilecek miktarları girin. Kalandan az girerseniz kısmi teslimat yapılır; kalan sipariş açık kalır. 0 girilen kalem bu teslimatta atlanır. Kit satırları tam SET olarak teslim edilir — bileşenler irsaliyede otomatik patlar.</div>'
+                    +   '<div style="font-size:.78rem;opacity:.72;margin-top:3px">Teslim edilecek miktarları girin. Kalandan az girerseniz kısmi teslimat yapılır; kalan sipariş açık kalır. 0 girilen kalem bu teslimatta atlanır. Kit satırları tam SET olarak teslim edilir — bileşenler irsaliyede otomatik patlar; seri/lot takipli bileşenler için elle seçim gerekir.</div>'
                     + '</div>'
                     + '<div style="overflow:auto;padding:6px 20px 4px">'
                     +   '<table style="width:100%;border-collapse:collapse;font-size:.82rem">'
@@ -2210,6 +2226,107 @@
                 bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
                 bd.querySelector('#_sqDlvCancel').onclick = close;
                 var qtyInputs = bd.querySelectorAll('._sqDlvQty');
+
+                // Faz 3 — bileşen seçim panelini (ilk açılışta fetch + render) doldurur/gösterir.
+                function _sqOpenKitPanel(lineId) {
+                    var panelRow = bd.querySelector('._sqKitPanelRow[data-line="' + lineId + '"]');
+                    if (!panelRow) return;
+                    var isHidden = panelRow.style.display === 'none';
+                    if (!isHidden) { panelRow.style.display = 'none'; return; }
+                    panelRow.style.display = '';
+                    var st = _sqKitState[lineId];
+                    if (st && st.loaded) { _sqRenderKitPanelBody(lineId); return; }
+                    var comps = _sqKitCompsByLine[lineId] || [];
+                    var loc = _sqKitLocByLine[lineId];
+                    _sqKitState[lineId] = { comps: comps, dataByComp: {}, selections: {}, loaded: false };
+                    var panelDiv = panelRow.querySelector('._sqKitPanel');
+                    if (panelDiv) panelDiv.innerHTML = '<div style="opacity:.6;padding:6px 0">Yükleniyor…</div>';
+                    var fetches = comps.map(function (c) {
+                        var url = (c.tracking === 'Serial'
+                            ? '/Warehouse/GetSerialsJson?itemId=' + c.componentItemId
+                            : '/Warehouse/GetLotBalancesJson?itemId=' + c.componentItemId)
+                            + (loc ? '&locationId=' + loc : '');
+                        return fetch(url, { credentials: 'same-origin' })
+                            .then(function (r) { return r.json(); })
+                            .then(function (data) { _sqKitState[lineId].dataByComp[_sqKitCompKey(c)] = data || []; })
+                            .catch(function () { _sqKitState[lineId].dataByComp[_sqKitCompKey(c)] = []; });
+                    });
+                    Promise.all(fetches).then(function () {
+                        _sqKitState[lineId].loaded = true;
+                        _sqRenderKitPanelBody(lineId);
+                    });
+                }
+
+                // Faz 3 — panel içeriğini geçerli set miktarına (N) göre yeniden çizer; seri bileşende
+                // seçim yoksa FIFO ilk N×PerSet öneçilir, lot bileşende ilk uygun lot (FEFO) öneçilir.
+                function _sqRenderKitPanelBody(lineId) {
+                    var panelRow = bd.querySelector('._sqKitPanelRow[data-line="' + lineId + '"]');
+                    var panelDiv = panelRow ? panelRow.querySelector('._sqKitPanel') : null;
+                    var st = _sqKitState[lineId];
+                    if (!panelDiv || !st) return;
+                    var qtyInput = bd.querySelector('._sqDlvQty[data-line="' + lineId + '"]');
+                    var n = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+                    var html = '';
+                    st.comps.forEach(function (c) {
+                        var key = _sqKitCompKey(c);
+                        var need = n * c.perSet;
+                        var data = st.dataByComp[key] || [];
+                        if (c.tracking === 'Serial') {
+                            var needInt = Math.round(need);
+                            if (!st.selections[key]) st.selections[key] = data.slice(0, needInt).map(function (s) { return s.serialNo; });
+                            var sel = st.selections[key];
+                            html += '<div style="margin-bottom:10px;border:' + brd + ';border-radius:8px;padding:8px 10px">'
+                                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px">'
+                                +   '<span style="font-weight:600">' + (c.name || c.code || '?') + ' <span style="opacity:.6;font-weight:400">(Seri)</span></span>'
+                                +   '<span class="_sqKitCountLbl" data-line="' + lineId + '" data-key="' + key + '" data-need="' + needInt + '" style="font-size:.7rem;font-weight:700;' + (sel.length === needInt ? 'color:#10b981' : 'color:#f59e0b') + '">seçili ' + sel.length + ' / gereken ' + needInt + '</span>'
+                                + '</div>'
+                                + '<div style="max-height:140px;overflow:auto;border-top:1px dashed var(--app-border,#334155);padding-top:4px">'
+                                + (data.length ? data.map(function (s) {
+                                    var checked = sel.indexOf(s.serialNo) >= 0 ? 'checked' : '';
+                                    var lbl = s.serialNo + (s.lotNo ? ' · Lot: ' + s.lotNo : '') + (s.expiryDate ? ' · SKT: ' + String(s.expiryDate).substring(0, 10) : '');
+                                    return '<label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:.74rem;cursor:pointer"><input type="checkbox" class="_sqKitSerialChk" data-line="' + lineId + '" data-key="' + key + '" value="' + s.serialNo + '" ' + checked + ' /> ' + lbl + '</label>';
+                                }).join('') : '<div style="opacity:.5;padding:4px 0">Bu depoda uygun seri bulunamadı.</div>')
+                                + '</div></div>';
+                        } else if (c.tracking === 'Lot') {
+                            if (st.selections[key] === undefined) st.selections[key] = data.length ? data[0].lotNo : '';
+                            var selLot = st.selections[key];
+                            html += '<div style="margin-bottom:10px;border:' + brd + ';border-radius:8px;padding:8px 10px">'
+                                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px">'
+                                +   '<span style="font-weight:600">' + (c.name || c.code || '?') + ' <span style="opacity:.6;font-weight:400">(Lot) · gereken ' + _sqFmt(need) + '</span></span>'
+                                + '</div>'
+                                + (data.length
+                                    ? '<select class="_sqKitLotSel" data-line="' + lineId + '" data-key="' + key + '" style="width:100%;padding:5px 8px;border-radius:6px;border:' + brd + ';background:var(--app-input-bg,rgba(255,255,255,.06));color:inherit">'
+                                        + data.map(function (lo) { return '<option value="' + lo.lotNo + '" ' + (lo.lotNo === selLot ? 'selected' : '') + '>' + lo.label + '</option>'; }).join('')
+                                        + '</select>'
+                                    : '<div style="opacity:.5;padding:4px 0">Bu depoda uygun lot bulunamadı.</div>')
+                                + '</div>';
+                        }
+                    });
+                    panelDiv.innerHTML = html;
+                    panelDiv.querySelectorAll('._sqKitSerialChk').forEach(function (chk) {
+                        chk.addEventListener('change', function () {
+                            var key = chk.getAttribute('data-key');
+                            var arr = st.selections[key] || [];
+                            if (chk.checked) { if (arr.indexOf(chk.value) < 0) arr.push(chk.value); }
+                            else { arr = arr.filter(function (v) { return v !== chk.value; }); }
+                            st.selections[key] = arr;
+                            var lblEl = panelDiv.querySelector('._sqKitCountLbl[data-key="' + key + '"]');
+                            if (lblEl) {
+                                var needAttr = parseInt(lblEl.getAttribute('data-need'), 10) || 0;
+                                lblEl.textContent = 'seçili ' + arr.length + ' / gereken ' + needAttr;
+                                lblEl.style.color = arr.length === needAttr ? '#10b981' : '#f59e0b';
+                            }
+                        });
+                    });
+                    panelDiv.querySelectorAll('._sqKitLotSel').forEach(function (sel3) {
+                        sel3.addEventListener('change', function () { st.selections[sel3.getAttribute('data-key')] = sel3.value; });
+                    });
+                }
+
+                bd.querySelectorAll('._sqKitPickBtn').forEach(function (btn) {
+                    btn.addEventListener('click', function () { _sqOpenKitPanel(btn.getAttribute('data-line')); });
+                });
+
                 qtyInputs.forEach(function (inp) {
                     var isKit = inp.getAttribute('data-kit') === '1';
                     inp.addEventListener('input', function () {
@@ -2219,24 +2336,66 @@
                         if (isKit && !isNaN(v)) { v = Math.floor(v); inp.value = String(v); }
                         if (!isNaN(v) && v > mx) inp.value = String(isKit ? Math.floor(mx) : mx);
                         if (!isNaN(v) && v < 0) inp.value = '0';
+                        // Faz 3 — set miktarı değişince açık panelin seri varsayılanı yeniden hesaplanır.
+                        if (isKit) {
+                            var lineId = inp.getAttribute('data-line');
+                            var st = _sqKitState[lineId];
+                            if (st && st.loaded) {
+                                st.comps.forEach(function (c) { if (c.tracking === 'Serial') delete st.selections[_sqKitCompKey(c)]; });
+                                _sqRenderKitPanelBody(lineId);
+                            }
+                        }
                     });
                 });
                 bd.querySelector('#_sqDlvAll').onclick = function () {
-                    qtyInputs.forEach(function (inp) { inp.value = inp.getAttribute('data-open'); });
+                    qtyInputs.forEach(function (inp) { inp.value = inp.getAttribute('data-open'); inp.dispatchEvent(new Event('input', { bubbles: true })); });
                 };
                 bd.querySelector('#_sqDlvNone').onclick = function () {
-                    qtyInputs.forEach(function (inp) { inp.value = 0; });
+                    qtyInputs.forEach(function (inp) { inp.value = 0; inp.dispatchEvent(new Event('input', { bubbles: true })); });
                 };
                 var okBtn = bd.querySelector('#_sqDlvOk');
                 okBtn.onclick = function () {
                     var payload = [];
+                    var validationError = null;
                     qtyInputs.forEach(function (inp) {
+                        if (validationError) return;
                         var q = parseFloat(inp.value);
                         var mx = parseFloat(inp.getAttribute('data-open')) || 0;
                         if (isNaN(q) || q <= 0) return;
                         if (q > mx) q = mx;
-                        payload.push({ lineId: parseInt(inp.getAttribute('data-line'), 10), quantity: q });
+                        var lineId = inp.getAttribute('data-line');
+                        var entry = { lineId: parseInt(lineId, 10), quantity: q };
+                        // Faz 3 — takipli bileşenli kit satırı: seçimleri payload'a ekle + eksikse engelle.
+                        var trackedComps = _sqKitCompsByLine[lineId];
+                        if (trackedComps && trackedComps.length) {
+                            var st = _sqKitState[lineId];
+                            var components = [];
+                            for (var i = 0; i < trackedComps.length; i++) {
+                                var c = trackedComps[i];
+                                var key = _sqKitCompKey(c);
+                                var need = Math.round(q * c.perSet);
+                                if (c.tracking === 'Serial') {
+                                    var sel = (st && st.selections[key]) || [];
+                                    if (sel.length !== need) {
+                                        validationError = (c.name || c.code || 'Bileşen') + ' için ' + need + ' seri seçilmeli (şu an ' + sel.length + ' seçili). "Seri/Lot Seç" ile tamamlayın.';
+                                        break;
+                                    }
+                                    components.push({ componentItemId: c.componentItemId, configId: c.configId || null, serials: sel, lotCode: null });
+                                } else if (c.tracking === 'Lot') {
+                                    var lotSel = st && st.selections[key];
+                                    if (!lotSel) {
+                                        validationError = (c.name || c.code || 'Bileşen') + ' için lot seçilmeli. "Seri/Lot Seç" ile seçim yapın.';
+                                        break;
+                                    }
+                                    components.push({ componentItemId: c.componentItemId, configId: c.configId || null, serials: null, lotCode: lotSel });
+                                }
+                            }
+                            if (validationError) return;
+                            if (components.length) entry.components = components;
+                        }
+                        payload.push(entry);
                     });
+                    if (validationError) { _sqDlvToast(validationError, false); return; }
                     if (!payload.length) { _sqDlvToast('En az bir kalem için teslim miktarı girin.', false); return; }
                     okBtn.disabled = true; okBtn.style.opacity = '.6';
                     var tokEl = document.querySelector('input[name="__RequestVerificationToken"]');
