@@ -913,6 +913,15 @@ public sealed class SalesController : Controller
                 return Forbid();
         }
 
+        // Seq 1066: "Temsilci" etiketi, kullanıcının Satış Temsilcileri tanımlama ekranına
+        // (GeneralDefs form kodu) erişim yetkisi VARSA o ekrana link olur; yoksa düz etiket kalır.
+        {
+            UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var _repRole);
+            int? _repDept = int.TryParse(User.FindFirstValue("department_id"), out var _rd) && _rd > 0 ? _rd : null;
+            ViewData["CanViewSalesReps"] = await _permService.CheckAnyForFormAsync(
+                GetUserId(), _repRole, _repDept, FormCodes.GeneralDefs, ct);
+        }
+
         // DocumentType sadece kavramsal belge tipi (Document.DocumentTypeId FK + raporlama).
         // UI metadata (ListUrl/Icon/IsTransferable) Forms tablosundan beslenir — Faz N hub.
         var docType = await _documentTypeRepo.GetByCodeAsync(typeCode, ct);

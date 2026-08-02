@@ -753,6 +753,23 @@
     body.app-theme-dark .sqe-hlabel {
         color: rgba(255,255,255,.78);
     }
+    /* Seq 1066: yetki varsa "Temsilci" etiketi link — tanımlama ekranını açar.
+       Etiket görünümünü korur (ayni font/renk), yalnız tıklanabilirlik ipucu ekler. */
+    a.sqe-hlabel--link {
+        display: inline-block;
+        cursor: pointer;
+        text-decoration: none;
+        border-bottom: 1px dashed color-mix(in srgb, var(--app-text-muted, #64748b) 55%, transparent);
+        transition: color .15s ease, border-color .15s ease;
+    }
+    a.sqe-hlabel--link:hover {
+        color: var(--app-accent, #6366f1);
+        border-bottom-color: var(--app-accent, #6366f1);
+    }
+    body.app-theme-dark a.sqe-hlabel--link:hover {
+        color: #a5b4fc;
+        border-bottom-color: #a5b4fc;
+    }
     /* Cari Isim: input degil, salt-okunur etiket (span) */
     .sqe-hlabel-value {
         display: inline-block;
@@ -2102,12 +2119,9 @@
          Container .sqe-action-bar korundu: KITT flash + collaboration lock banner
          host + status akışı buna bağlı. Sadece butonlar standart tile'a çevrildi. -->
     <div class="sqe-action-bar" data-no-proxy data-collaboration-banner-host>
-        <a href="@listReturnUrl" class="pte-btn pte-btn--secondary pte-btn--icon" id="ptBtnList" aria-label="Liste" title="Liste">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </a>
-        <!-- İşlemler menüsü — sol aksiyon grubunda, Geri (Liste) butonunun hemen
-             yanında (2026-08-02, kullanıcı isteği: sağdan sola taşındı). --leading
-             varyantı margin-left:auto'yu sıfırlar ki sağa itilmesin. -->
+        <!-- İşlemler menüsü — aksiyon şeridinin EN BAŞINDA, Geri (Liste) butonunun
+             SOLUNDA (2026-08-03, Seq 1069: sıralama = İşlemler, Geri, Kaydet, Sil).
+             --leading varyantı margin-left:auto'yu sıfırlar ki sağa itilmesin. -->
         <div class="sqe-actions-menu sqe-actions-menu--leading" id="sqActionsMenu">
             <button type="button"
                     class="pte-btn pte-btn--actions pte-btn--icon"
@@ -2125,6 +2139,9 @@
                 <span class="pte-btn__label">İşlemler</span>
             </button>
         </div>
+        <a href="@listReturnUrl" class="pte-btn pte-btn--secondary pte-btn--icon" id="ptBtnList" aria-label="Liste" title="Liste">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </a>
         <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" data-collaboration-write="true" onclick="sqSave({ validate: true })" aria-label="Kaydet">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
             <span class="pte-btn__label">Kaydet</span>
@@ -2746,7 +2763,17 @@
                 @if (!isPurchaseRequest)
                 {
                 <div class="sqe-hrow">
-                    <label class="sqe-hlabel">Temsilci</label>
+                    @if ((bool)(ViewData["CanViewSalesReps"] ?? false))
+                    {
+                        @* Seq 1066: yetki varsa etiket Satış Temsilcileri tanımlama ekranına link.
+                           İframe içinde workspace sekmesi olarak açar (window.top.CalibraHub); değilse yeni sekme. *@
+                        <a href="/GeneralDefinitions/SalesRepresentatives" class="sqe-hlabel sqe-hlabel--link"
+                           onclick="return sqOpenSalesRepDefs(event)" title="Satış Temsilcileri tanımlama ekranını aç">Temsilci</a>
+                    }
+                    else
+                    {
+                        <label class="sqe-hlabel">Temsilci</label>
+                    }
                     <div class="sqe-rep-cb sqe-hinput" id="sqSalesRepWrapper">
                         <button type="button" class="sqe-rep-btn" id="sqSalesRepBtn" aria-haspopup="listbox" aria-expanded="false">
                             <span class="sqe-rep-label is-placeholder" id="sqSalesRepLabel">Seçiniz</span>
@@ -3715,6 +3742,24 @@
     }
 
     var _sqRepsData = [];
+
+    // Seq 1066: "Temsilci" etiketi tıklanınca Satış Temsilcileri tanımlama ekranını aç.
+    // İframe (workspace) içindeysek üst kabuğun openWorkspaceTab API'siyle yeni bir sekme
+    // aç (mevcut teklif ekranı korunur); değilsek yeni tarayıcı sekmesi. Etiket yalnız
+    // yetki varsa link olarak render edilir (server-side ViewData["CanViewSalesReps"]).
+    function sqOpenSalesRepDefs(e) {
+        if (e) e.preventDefault();
+        var url = '/GeneralDefinitions/SalesRepresentatives';
+        try {
+            var top = window.top;
+            if (top && top.CalibraHub && typeof top.CalibraHub.openWorkspaceTab === 'function') {
+                top.CalibraHub.openWorkspaceTab({ url: url, title: 'Satış Temsilcileri', matchPath: '/GeneralDefinitions/SalesRep' });
+                return false;
+            }
+        } catch (_) { /* cross-origin/erişim yoksa new-tab fallback */ }
+        window.open(url, '_blank', 'noopener');
+        return false;
+    }
 
     async function loadSalesReps() {
         var resp = await fetch('/GeneralDefinitions/GetSalesReps');
