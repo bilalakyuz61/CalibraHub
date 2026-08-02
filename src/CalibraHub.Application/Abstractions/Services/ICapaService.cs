@@ -17,4 +17,7 @@ public interface ICapaService
     Task<(bool Ok, string? Error)> DeleteAsync(int documentId, int? userId, CancellationToken ct);
 
     Task<IReadOnlyCollection<CapaPersonnelOption>> GetPersonnelOptionsAsync(CancellationToken ct);
+
+    /// <summary>KPI panosu agregasyonu — salt-okunur, audit YOK.</summary>
+    Task<CapaKpiDto> GetKpiAsync(CancellationToken ct);
 }

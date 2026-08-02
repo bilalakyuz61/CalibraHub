@@ -310,4 +310,144 @@ public sealed class SqlCapaRepository : ICapaRepository
             list.Add(new CapaPersonnelOption(r.GetInt32(0), r.GetString(1)));
         return list;
     }
+
+    /// <summary>
+    /// KPI panosu agregasyonu — tek bağlantı, çok result-set'li tek SQL batch (7 sorgu). Soft-delete
+    /// filtresi d.[IsActive]=1 diğer metodlarla (ListAsync vb.) tutarlı. "Bu ay"/"bugün" tanımı sunucu
+    /// yerel saatiyle (DateTime.Now) hesaplanır — QualityController.BuildCapasBoardAsync'teki overdue
+    /// hesabıyla aynı taban (UTC değil).
+    /// </summary>
+    public async Task<CapaKpiDto> GetKpiAsync(CancellationToken ct)
+    {
+        var now = DateTime.Now;
+        var today = now.Date;
+        var monthStart = new DateTime(now.Year, now.Month, 1);
+        var trendStart = monthStart.AddMonths(-11); // son 12 takvim ayı (bu ay dahil)
+
+        var sql = $"""
+            SELECT
+                COUNT(*) AS TotalCount,
+                SUM(CASE WHEN c.[Status] NOT IN (4,5) THEN 1 ELSE 0 END) AS OpenCount,
+                SUM(CASE WHEN c.[DueDate] IS NOT NULL AND c.[DueDate] < @Today AND c.[Status] NOT IN (4,5) THEN 1 ELSE 0 END) AS OverdueCount,
+                SUM(CASE WHEN c.[Status] = 4 THEN 1 ELSE 0 END) AS ClosedCount,
+                SUM(CASE WHEN c.[Created] >= @MonthStart THEN 1 ELSE 0 END) AS OpenedThisMonth,
+                SUM(CASE WHEN c.[Status] = 4 AND c.[ClosedAt] >= @MonthStart THEN 1 ELSE 0 END) AS ClosedThisMonth
+            FROM {_capaTable} c
+            INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE d.[IsActive] = 1;
+
+            SELECT AVG(CAST(DATEDIFF(day, c.[Created], c.[ClosedAt]) AS FLOAT)) AS AvgClosureDays
+            FROM {_capaTable} c
+            INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE d.[IsActive] = 1 AND c.[Status] = 4 AND c.[ClosedAt] IS NOT NULL;
+
+            SELECT c.[Status] AS Bucket, COUNT(*) AS Cnt
+            FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE d.[IsActive] = 1 GROUP BY c.[Status];
+
+            SELECT c.[CapaType] AS Bucket, COUNT(*) AS Cnt
+            FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE d.[IsActive] = 1 GROUP BY c.[CapaType];
+
+            SELECT c.[Severity] AS Bucket, COUNT(*) AS Cnt
+            FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE d.[IsActive] = 1 GROUP BY c.[Severity];
+
+            SELECT YEAR(c.[Created]) AS Yr, MONTH(c.[Created]) AS Mo, COUNT(*) AS Cnt
+            FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE d.[IsActive] = 1 AND c.[Created] >= @TrendStart
+            GROUP BY YEAR(c.[Created]), MONTH(c.[Created]);
+
+            SELECT YEAR(c.[ClosedAt]) AS Yr, MONTH(c.[ClosedAt]) AS Mo, COUNT(*) AS Cnt
+            FROM {_capaTable} c INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            WHERE d.[IsActive] = 1 AND c.[Status] = 4 AND c.[ClosedAt] >= @TrendStart
+            GROUP BY YEAR(c.[ClosedAt]), MONTH(c.[ClosedAt]);
+
+            SELECT TOP 8 c.[ResponsiblePersonnelId] AS PersonnelId, p.[FullName] AS Name, COUNT(*) AS Cnt
+            FROM {_capaTable} c
+            INNER JOIN {_docTable} d ON d.[id] = c.[DocumentId]
+            INNER JOIN {_personnelTable} p ON p.[Id] = c.[ResponsiblePersonnelId]
+            WHERE d.[IsActive] = 1 AND c.[ResponsiblePersonnelId] IS NOT NULL AND c.[Status] NOT IN (4,5)
+            GROUP BY c.[ResponsiblePersonnelId], p.[FullName]
+            ORDER BY COUNT(*) DESC;
+            """;
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.Add(new SqlParameter("@Today", today));
+        cmd.Parameters.Add(new SqlParameter("@MonthStart", monthStart));
+        cmd.Parameters.Add(new SqlParameter("@TrendStart", trendStart));
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+
+        int totalCount = 0, openCount = 0, overdueCount = 0, closedCount = 0, openedThisMonth = 0, closedThisMonth = 0;
+        if (await r.ReadAsync(ct))
+        {
+            totalCount = r.GetInt32(0);
+            openCount = r.IsDBNull(1) ? 0 : r.GetInt32(1);
+            overdueCount = r.IsDBNull(2) ? 0 : r.GetInt32(2);
+            closedCount = r.IsDBNull(3) ? 0 : r.GetInt32(3);
+            openedThisMonth = r.IsDBNull(4) ? 0 : r.GetInt32(4);
+            closedThisMonth = r.IsDBNull(5) ? 0 : r.GetInt32(5);
+        }
+
+        await r.NextResultAsync(ct);
+        double? avgClosureDays = null;
+        if (await r.ReadAsync(ct) && !r.IsDBNull(0)) avgClosureDays = r.GetDouble(0);
+
+        await r.NextResultAsync(ct);
+        var statusCounts = new Dictionary<byte, int>();
+        while (await r.ReadAsync(ct)) statusCounts[r.GetByte(0)] = r.GetInt32(1);
+
+        await r.NextResultAsync(ct);
+        var typeCounts = new Dictionary<byte, int>();
+        while (await r.ReadAsync(ct)) typeCounts[r.GetByte(0)] = r.GetInt32(1);
+
+        await r.NextResultAsync(ct);
+        var severityCounts = new Dictionary<byte, int>();
+        while (await r.ReadAsync(ct)) severityCounts[r.GetByte(0)] = r.GetInt32(1);
+
+        await r.NextResultAsync(ct);
+        var openedByMonth = new Dictionary<(int Year, int Month), int>();
+        while (await r.ReadAsync(ct)) openedByMonth[(r.GetInt32(0), r.GetInt32(1))] = r.GetInt32(2);
+
+        await r.NextResultAsync(ct);
+        var closedByMonth = new Dictionary<(int Year, int Month), int>();
+        while (await r.ReadAsync(ct)) closedByMonth[(r.GetInt32(0), r.GetInt32(1))] = r.GetInt32(2);
+
+        await r.NextResultAsync(ct);
+        var topResponsible = new List<CapaKpiResponsible>();
+        while (await r.ReadAsync(ct))
+            topResponsible.Add(new CapaKpiResponsible(r.GetInt32(0), r.GetString(1), r.GetInt32(2)));
+
+        // Enum bucket'ları TÜM tanımlı değerleri içerir — SQL sadece dolu grupları döndürür,
+        // eksik değerler burada 0 olarak eklenir (dağılım grafiği tam olsun, CLAUDE.md ID/enum kuralı).
+        var byStatus = Enum.GetValues<CapaStatus>()
+            .Select(v => new CapaKpiBucket((byte)v, Describe(v), statusCounts.TryGetValue((byte)v, out var c) ? c : 0))
+            .ToList();
+        var byType = Enum.GetValues<CapaType>()
+            .Select(v => new CapaKpiBucket((byte)v, Describe(v), typeCounts.TryGetValue((byte)v, out var c) ? c : 0))
+            .ToList();
+        var bySeverity = Enum.GetValues<CapaSeverity>()
+            .Select(v => new CapaKpiBucket((byte)v, Describe(v), severityCounts.TryGetValue((byte)v, out var c) ? c : 0))
+            .ToList();
+
+        var monthlyTrend = new List<CapaKpiTrendPoint>(12);
+        for (var i = 0; i < 12; i++)
+        {
+            var m = trendStart.AddMonths(i);
+            var key = (m.Year, m.Month);
+            var opened = openedByMonth.TryGetValue(key, out var o) ? o : 0;
+            var closed = closedByMonth.TryGetValue(key, out var cl) ? cl : 0;
+            monthlyTrend.Add(new CapaKpiTrendPoint(m.ToString("yyyy-MM"), opened, closed));
+        }
+
+        return new CapaKpiDto(
+            TotalCount: totalCount, OpenCount: openCount, OverdueCount: overdueCount, ClosedCount: closedCount,
+            OpenedThisMonth: openedThisMonth, ClosedThisMonth: closedThisMonth,
+            AvgClosureDays: avgClosureDays,
+            ByStatus: byStatus, ByType: byType, BySeverity: bySeverity,
+            MonthlyTrend: monthlyTrend, TopResponsible: topResponsible);
+    }
 }

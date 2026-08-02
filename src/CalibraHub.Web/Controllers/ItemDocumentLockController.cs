@@ -244,7 +244,13 @@ public sealed class ItemDocumentLockController : Controller
             // JS'imiz okur (bkz. Views/Logistics/ItemDocumentLocks.cshtml).
             activeLockedDocType = effectiveType,
             docTypeCatalog,
-            actions = Array.Empty<object>(),
+            // Toplu İşlem board header aksiyonu — trigger ile sayfadaki window.idlOpenBulk'u
+            // çağırır (bkz. Views/Logistics/ItemDocumentLocks.cshtml). Belge-tipi hızlı filtre
+            // çipleri kaldırıldı; filtreleme artık filtre panelinden (w_locked_types) yapılır.
+            actions = new object[]
+            {
+                new { id = "bulk", label = "Toplu İşlem", icon = "Layers", variant = "primary", trigger = "idlOpenBulk" },
+            },
             masterWidgets = new List<object>
             {
                 SmartBoardFilterHelpers.MakeStdWidget("w_grup", "Grup", "text"),

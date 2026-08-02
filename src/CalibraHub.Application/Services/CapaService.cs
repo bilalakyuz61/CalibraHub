@@ -50,6 +50,8 @@ public sealed class CapaService : ICapaService
     public Task<IReadOnlyCollection<CapaPersonnelOption>> GetPersonnelOptionsAsync(CancellationToken ct)
         => _repo.GetPersonnelOptionsAsync(ct);
 
+    public Task<CapaKpiDto> GetKpiAsync(CancellationToken ct) => _repo.GetKpiAsync(ct);
+
     public async Task<(bool Ok, string? Error, int DocumentId)> SaveAsync(SaveCapaRequest request, int? userId, CancellationToken ct)
     {
         var title = request.Title?.Trim();

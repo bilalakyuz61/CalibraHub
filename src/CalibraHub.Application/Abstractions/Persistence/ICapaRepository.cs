@@ -18,4 +18,8 @@ public interface ICapaRepository
     Task UpdateStatusAsync(int documentId, byte status, DateTime? closedAt, int? userId, CancellationToken ct);
 
     Task<IReadOnlyCollection<CapaPersonnelOption>> GetPersonnelOptionsAsync(CancellationToken ct);
+
+    /// <summary>KPI panosu agregasyonu — salt-okunur, tüm zaman (trend son 12 ay). Enum bucket'ları
+    /// (ByStatus/ByType/BySeverity) TÜM enum değerlerini içerir (0 sayım dahil, dağılım grafiği tam olsun).</summary>
+    Task<CapaKpiDto> GetKpiAsync(CancellationToken ct);
 }

@@ -6,6 +6,7 @@
     ViewData["Title"] = Model is null ? "Yeni Hata Kodu" : $"Hata Kodu: {Model.Name}";
     ViewData["BodyClass"] = "page-quality-defect-edit workspace-frame-body";
     ViewData["FormCode"] = "QUALITY_DEFECT_CODE";
+    ViewData["HelpKey"] = "defect-code-edit";
     var isNew = Model is null;
     string CatLabel(DefectCategory c)
     {

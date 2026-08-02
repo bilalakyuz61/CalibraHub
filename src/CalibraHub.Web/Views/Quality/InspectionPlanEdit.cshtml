@@ -6,6 +6,7 @@
     ViewData["Title"] = Model is null ? "Yeni Muayene Planı" : $"Muayene Planı: {Model.Name}";
     ViewData["BodyClass"] = "page-quality-plan-edit workspace-frame-body";
     ViewData["FormCode"] = "QUALITY_INSPECTION_PLAN";
+    ViewData["HelpKey"] = "inspection-plan-edit";
     var isNew = Model is null;
     string TypeLabel(InspectionType t)
     {

@@ -736,4 +736,26 @@ public sealed class QualityController : Controller
         try { var (ok, error) = await _capa.DeleteAsync(id, CurrentUserId(), ct); return Json(new { ok, error }); }
         catch (Exception ex) { _logger.LogError(ex, "DÖF silme hatası (id={Id})", id); return Json(new { ok = false, error = "Silinirken bir hata oluştu." }); }
     }
+
+    // ════════════════════════════════════════════════════════════════
+    // DÖF KPI Panosu — salt-okunur; frontend (React CapaDashboard) ayrı ajanda geliştirilir.
+    // ════════════════════════════════════════════════════════════════
+
+    // GET /Quality/CapaDashboard → pano kabuğu (.cshtml). Veri React tarafından /Quality/CapaKpi'den çekilir.
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public IActionResult CapaDashboard() => View();
+
+    // GET /Quality/CapaKpi → CapaKpiDto JSON (camelCase). Salt-okunur, audit yok.
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> CapaKpi(CancellationToken ct)
+    {
+        try { return Json(await _capa.GetKpiAsync(ct)); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DÖF KPI hesaplama hatası");
+            return Json(new { error = "KPI verileri hesaplanırken bir hata oluştu." });
+        }
+    }
 }

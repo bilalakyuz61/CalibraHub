@@ -50,3 +50,24 @@ public sealed record CapaPersonnelOption(int Id, string Name);
 
 /// <summary>Kaynak kayıt arama sonucu (muayene vb.) — DÖF formu "Kaynak" seçici.</summary>
 public sealed record CapaSourceLookupItem(string SourceKind, int SourceId, string Label, DateTime? Date);
+
+// ══════════════════════════════════════════════════════════════════
+// DÖF KPI Panosu — salt-okunur agregasyon (JSON sözleşmesi frontend'e SABİT, camelCase serialize edilir)
+// ══════════════════════════════════════════════════════════════════
+
+public sealed record CapaKpiDto(
+    int TotalCount, int OpenCount, int OverdueCount, int ClosedCount,
+    int OpenedThisMonth, int ClosedThisMonth,
+    double? AvgClosureDays,
+    IReadOnlyList<CapaKpiBucket> ByStatus,
+    IReadOnlyList<CapaKpiBucket> ByType,
+    IReadOnlyList<CapaKpiBucket> BySeverity,
+    IReadOnlyList<CapaKpiTrendPoint> MonthlyTrend,
+    IReadOnlyList<CapaKpiResponsible> TopResponsible);
+
+public sealed record CapaKpiBucket(byte Value, string Label, int Count);
+
+/// <summary>Month = "yyyy-MM".</summary>
+public sealed record CapaKpiTrendPoint(string Month, int Opened, int Closed);
+
+public sealed record CapaKpiResponsible(int PersonnelId, string Name, int OpenCount);

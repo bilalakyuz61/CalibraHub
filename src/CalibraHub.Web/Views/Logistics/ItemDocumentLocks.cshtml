@@ -50,11 +50,6 @@
         --idl-border: #e2e8f0;
         --idl-text: #0f172a;
         --idl-text-muted: #64748b;
-        --idl-chip-bg: #f1f5f9;
-        --idl-chip-border: #e2e8f0;
-        --idl-chip-active-bg: #fff1f2;
-        --idl-chip-active-border: #fda4af;
-        --idl-chip-active-text: #be123c;
         --idl-backdrop: rgba(15, 23, 42, 0.45);
         display: flex; flex-direction: column; height: 100%; min-height: 0;
     }
@@ -64,47 +59,8 @@
         --idl-border: #263042;
         --idl-text: #e2e8f0;
         --idl-text-muted: #94a3b8;
-        --idl-chip-bg: #1a2332;
-        --idl-chip-border: #2b3648;
-        --idl-chip-active-bg: #3f1622;
-        --idl-chip-active-border: #9f1239;
-        --idl-chip-active-text: #fda4af;
         --idl-backdrop: rgba(2, 6, 15, 0.65);
     }
-
-    .idl-toolbar-row {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 12px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--idl-border);
-        background: var(--idl-bg);
-    }
-    .idl-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .idl-chip {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 5px 12px; border-radius: 999px; border: 1px solid var(--idl-chip-border);
-        background: var(--idl-chip-bg); color: var(--idl-text); font-size: 12.5px; font-weight: 500;
-        cursor: pointer; transition: all .12s ease; white-space: nowrap;
-    }
-    .idl-chip:hover { filter: brightness(0.97); }
-    body.app-theme-dark .idl-chip:hover { filter: brightness(1.15); }
-    .idl-chip--active {
-        background: var(--idl-chip-active-bg); border-color: var(--idl-chip-active-border);
-        color: var(--idl-chip-active-text); font-weight: 600;
-    }
-    .idl-chip-count {
-        display: inline-flex; align-items: center; justify-content: center;
-        min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-        background: rgba(100, 116, 139, 0.18); font-size: 11px; font-weight: 600;
-    }
-    .idl-chip--active .idl-chip-count { background: rgba(190, 18, 60, 0.16); }
-
-    .idl-bulk-btn {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 7px 14px; border-radius: 8px; border: 1px solid var(--idl-border);
-        background: var(--idl-chip-bg); color: var(--idl-text); font-size: 13px; font-weight: 600;
-        cursor: pointer;
-    }
-    .idl-bulk-btn:hover { filter: brightness(0.97); }
-    body.app-theme-dark .idl-bulk-btn:hover { filter: brightness(1.15); }
 
     .idl-board-host { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
@@ -194,10 +150,6 @@
 </style>
 
 <div class="idl-root">
-    <div class="idl-toolbar-row">
-        <div class="idl-chips" id="idlChips"></div>
-        <button type="button" class="idl-bulk-btn" id="idlBulkBtn">Toplu İşlem</button>
-    </div>
     <div class="idl-board-host">
         <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
             <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
@@ -333,33 +285,16 @@
         });
     }
 
-    // ── Hızlı filtre çipleri ──────────────────────────────────────
-    function renderChips(config) {
-        var wrap = document.getElementById('idlChips');
-        if (!wrap || !config) return;
-        var html = '<button type="button" class="idl-chip' + (!config.activeLockedDocType ? ' idl-chip--active' : '') + '" data-doctype="">Tümü</button>';
-        (config.docTypeCatalog || []).forEach(function (t) {
-            var active = config.activeLockedDocType === t.code;
-            html += '<button type="button" class="idl-chip' + (active ? ' idl-chip--active' : '') + '" data-doctype="' + t.code + '">'
-                + escapeHtml(t.label) + ' <span class="idl-chip-count">' + t.count + '</span></button>';
-        });
-        wrap.innerHTML = html;
-        Array.prototype.forEach.call(wrap.querySelectorAll('.idl-chip'), function (btn) {
-            btn.addEventListener('click', function () { switchFilter(btn.getAttribute('data-doctype') || ''); });
-        });
-    }
-
-    function switchFilter(code) {
-        activeLockedType = code || '';
-        var url = '/Logistics/ItemDocumentLocksBoardConfig' + (code ? ('?lockedDocType=' + encodeURIComponent(code)) : '');
+    // Belge-tipi hızlı filtre çipleri kaldırıldı — filtreleme artık board filtre
+    // panelinden (Kilitli Tipler master widget'ı) yapılır. reloadBoard yalnız
+    // kaydet/toplu-işlem sonrası board'u tazelemek için board config'i yeniden çeker.
+    function reloadBoard() {
+        var url = '/Logistics/ItemDocumentLocksBoardConfig' + (activeLockedType ? ('?lockedDocType=' + encodeURIComponent(activeLockedType)) : '');
         getJson(url).then(function (config) {
-            if (!config || config.error) { notify('Filtre uygulanamadı.', 'err'); return; }
+            if (!config || config.error) { notify('Board yenilenemedi.', 'err'); return; }
             if (mountHandle) mountHandle.refresh(config);
-            renderChips(config);
         }).catch(function () { notify('Bağlantı hatası.', 'err'); });
     }
-
-    function reloadBoard() { switchFilter(activeLockedType); }
 
     // ── Ortak switch listesi (tekil + toplu panel paylaşır) ───────
     function buildSwitchListHtml(idPrefix, checkedCodes) {
@@ -460,7 +395,9 @@
         bulkBackdrop.hidden = true;
         document.removeEventListener('keydown', onBulkKeydown);
     }
-    document.getElementById('idlBulkBtn').addEventListener('click', openBulkModal);
+    // Board header'daki "Toplu İşlem" aksiyonu (config.actions[].trigger = 'idlOpenBulk')
+    // bu global fonksiyonu çağırır (bkz. SmartBoard.jsx handleActionClick trigger yolu).
+    window.idlOpenBulk = openBulkModal;
     document.getElementById('idlBulkCancel').addEventListener('click', closeBulkModal);
     document.getElementById('idlBulkClose').addEventListener('click', closeBulkModal);
     bulkBackdrop.addEventListener('click', function (e) { if (e.target === bulkBackdrop) closeBulkModal(); });
@@ -552,7 +489,6 @@
     document.getElementById('idlBulkUnlock').addEventListener('click', function () { runBulkAction('unlock'); });
 
     // ── Başlat ──────────────────────────────────────────────────
-    renderChips(BOARD_CONFIG);
     if (window.location.hash) handleHash();
     loadCss();
     if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount(BOARD_CONFIG);

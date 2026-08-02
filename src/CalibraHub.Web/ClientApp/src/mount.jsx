@@ -51,6 +51,8 @@ import AuditTrailPanel from './components/AuditLog/AuditTrailPanel'
 import './components/AuditLog/auditLog.css'
 import ViewBuilder from './components/ViewBuilder/ViewBuilder'
 import './components/ViewBuilder/ViewBuilder.css'
+import CapaDashboard from './components/CapaDashboard/CapaDashboard'
+import './components/CapaDashboard/CapaDashboard.css'
 import OperationGrid from './components/OperationGrid/OperationGrid'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
@@ -1910,3 +1912,26 @@ function mountViewBuilder(element, config) {
   return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountViewBuilder = mountViewBuilder
+
+/**
+ * CapaDashboard mount — "DÖF Panosu" KPI ekranı (/Quality/CapaDashboard).
+ * @param {HTMLElement} element
+ * @param {{ kpiUrl?: string }} config
+ */
+function mountCapaDashboard(element, config) {
+  config = config || {}
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(CapaDashboard, { config: { kpiUrl: config.kpiUrl || '/Quality/CapaKpi' } })
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountCapaDashboard = mountCapaDashboard

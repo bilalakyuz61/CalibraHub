@@ -7,6 +7,7 @@
     ViewData["Title"] = Model is null ? "Yeni Muayene" : $"Muayene: {Model.DocumentNumber}";
     ViewData["BodyClass"] = "page-quality-inspection-edit workspace-frame-body";
     ViewData["FormCode"] = "QUALITY_INSPECTION_EDIT";
+    ViewData["HelpKey"] = "inspection-edit";
     var isNew = Model is null;
     string TypeLabel(InspectionType t) { var m = typeof(InspectionType).GetMember(t.ToString()).FirstOrDefault(); return m?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? t.ToString(); }
     var linesJson = System.Text.Json.JsonSerializer.Serialize(Model?.Lines ?? new List<CalibraHub.Application.Contracts.QualityInspectionLineDto>(),

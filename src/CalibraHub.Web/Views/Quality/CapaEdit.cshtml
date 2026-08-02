@@ -8,6 +8,7 @@
     ViewData["Title"] = Model is null ? "Yeni DÖF" : $"DÖF: {Model.DocumentNumber}";
     ViewData["BodyClass"] = "page-quality-capa-edit workspace-frame-body";
     ViewData["FormCode"] = "QUALITY_CAPA";
+    ViewData["HelpKey"] = "capa-edit";
     var isNew = Model is null;
 
     string Label(Enum e)
