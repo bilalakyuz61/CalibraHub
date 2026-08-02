@@ -215,7 +215,12 @@ public sealed class LogisticsController : Controller
                     url = "/Logistics/MaterialCardEdit",
                     // Nested tab (PageComment Seq 1063, 2026-08-03) — Malzeme Kartlari liste
                     // sekmesi kalici kalsin, yeni malzeme onun altinda child sekme olarak acilsin.
-                    openInTab = new { title = "Yeni Malzeme", matchPath = (string?)null, asChild = true }
+                    // matchPath KASITLI OLARAK gonderilmiyor (Bulgu 1, adversarial review):
+                    // asChild:true iken JS tarafi (SmartBoard.jsx handleActionClick) matchPath'i
+                    // hic dikkate almaz — HER ZAMAN null'a kelepceler; backend'in bu alani
+                    // serialize'da gonderip gondermedigi (WhenWritingNull ile dusebilir)
+                    // artik ONEMSIZ. Kontrat: asChild=true → sadece exact-URL eslesmesi.
+                    openInTab = new { title = "Yeni Malzeme", asChild = true }
                 }
             },
             masterWidgets,
@@ -537,12 +542,13 @@ public sealed class LogisticsController : Controller
                     url = $"/Logistics/MaterialCardEdit?id={card.Id}",
                     // Nested tab (PageComment Seq 1063, 2026-08-03) — Malzeme Kartlari liste
                     // sekmesi kalici kalsin, secilen malzeme onun altinda child sekme olarak
-                    // acilsin. matchPath acikca null verilir (undefined DEGIL) → SmartTableRow
-                    // dispatchActionUrl URL'den prefix turetmez, her malzeme KENDI child
-                    // sekmesinde acilir (ayni matchPath ile farkli malzemeler ayni sekmeyi
-                    // paylasmaz). Ayni malzeme ikinci kez tiklanirsa exact-url eslesmesi
-                    // (Shell openWorkspaceTab adim 1) mevcut child'a odaklanir.
-                    openInTab = new { title = card.Name, matchPath = (string?)null, asChild = true }
+                    // acilsin. matchPath KASITLI OLARAK gonderilmiyor (Bulgu 1, adversarial
+                    // review): asChild:true iken SmartTableRow.jsx dispatchActionUrl matchPath'i
+                    // JS tarafinda HER ZAMAN null'a kelepceliyor (backend'in serialize'da null'u
+                    // dusurup dusurmedigine artik bagli degil) — her malzeme KENDI child
+                    // sekmesinde acilir, sadece exact-URL eslesmesi (Shell openWorkspaceTab
+                    // adim 1) ile ayni malzeme ikinci kez tiklanirsa mevcut child'a odaklanir.
+                    openInTab = new { title = card.Name, asChild = true }
                 },
                 secondaryAction = new {
                     label = "Sil",

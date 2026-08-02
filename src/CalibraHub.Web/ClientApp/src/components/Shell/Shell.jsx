@@ -95,6 +95,10 @@ var SHELL_I18N = {
   close_all_dirty_msg:     { TR: ' sayfada kaydedilmemiş değişiklik var. Tüm sekmeleri kapatmak istiyor musunuz?', EN: ' page(s) have unsaved changes. Close all tabs?' },
   close_all_clean_msg:     { TR: 'Tüm sekmeleri kapatmak istiyor musunuz?', EN: 'Close all tabs?' },
   single_close_dirty:      { TR: 'Bu sayfada kaydedilmemiş değişiklik var. Kapatmak istiyor musunuz?', EN: 'This page has unsaved changes. Close anyway?' },
+  // Nested tab (PageComment Seq 1063, 2026-08-03, Bulgu 2): parent sekmenin kendisi
+  // temiz olsa bile altındaki child sekmelerden biri dirty ise (parent kapanınca
+  // kaskad kapanacağı için) kullanıcı bilgilendirilir.
+  single_close_dirty_children: { TR: 'Bu sekmenin altındaki bir alt sekmede kaydedilmemiş değişiklik var. Kapatırsanız kaybolur. Kapatmak istiyor musunuz?', EN: 'A nested tab under this one has unsaved changes that will be lost if you close it. Close anyway?' },
   single_close_title:      { TR: 'Sayfayı Kapat?',                  EN: 'Close Page?' },
   countdown:               { TR: 'saniye içinde iptal edilmezse otomatik kapatılır.', EN: "second(s) — will close automatically if not cancelled." },
   cancel:                  { TR: 'İptal',                            EN: 'Cancel' },
@@ -184,6 +188,25 @@ function appendWorkspaceFlag(url) {
   if (!url) return '/?workspace=1'
   if (url.indexOf('workspace=1') !== -1) return url
   return url + (url.indexOf('?') !== -1 ? '&' : '?') + 'workspace=1'
+}
+
+/* Max 24 tab limiti (mevcut site.js ile ayni) — en eski sekmeler onden atilir.
+   Nested tab (PageComment Seq 1063, 2026-08-03, Bulgu 3): atilan sekmeler
+   arasinda bir PARENT varsa, altindaki child'lar "oksuz" (parentKey dolu ama
+   parent tabs'ta yok) kalip TabBar'da hicbir satirda render edilemez + kapatilamaz
+   hale gelirdi. Bu yuzden atilan bir tab'in child'i olan sekmeler top-level'a
+   terfi edilir (parentKey: null) — sekme kaybolmaz, sadece grubu dagilir. */
+function capTabsAtLimit(list, maxCount) {
+  if (!list || list.length <= maxCount) return list
+  var dropped = list.slice(0, list.length - maxCount)
+  var kept = list.slice(list.length - maxCount)
+  if (dropped.length === 0) return kept
+  var droppedKeys = dropped.map(function(t) { return t.key })
+  return kept.map(function(t) {
+    return (t.parentKey && droppedKeys.indexOf(t.parentKey) !== -1)
+      ? Object.assign({}, t, { parentKey: null })
+      : t
+  })
 }
 
 /* Menuyu dolasarak key → parent key'leri haritasi olustur.
@@ -635,10 +658,7 @@ export default function Shell(props) {
       title: node.label,
     }
     setTabs(function(prev) {
-      // Max 24 tab limiti (mevcut site.js ile ayni)
-      var next = prev.concat([newTab])
-      if (next.length > 24) next = next.slice(next.length - 24)
-      return next
+      return capTabsAtLimit(prev.concat([newTab]), 24)
     })
     setActiveTabKey(newTab.key)
     setActiveMenuKey(node.key)
@@ -694,7 +714,12 @@ export default function Shell(props) {
 
     // 3) Yeni tab ac — parentKey verilmisse (ve tabs icinde hala mevcutsa) child
     //    olarak isaretlenir; degilse eskisi gibi duz ust-seviye tab.
-    var resolvedParentKey = (parentKey && tabs.some(function (t) { return t.key === parentKey })) ? parentKey : null
+    //    GRANDCHILD ONLENIR (Bulgu 4, 2026-08-03 adversarial review): cozulen
+    //    parent'in KENDISI bir child ise (parentTab.parentKey dolu), TabBar iki
+    //    seviyeyi dogru gosteremedigi icin dedenin key'i kullanilir — nesting
+    //    HER ZAMAN tek seviyeye kelepcelenir.
+    var parentTab = parentKey ? tabs.find(function (t) { return t.key === parentKey }) : null
+    var resolvedParentKey = parentTab ? (parentTab.parentKey || parentTab.key) : null
     var newTab = {
       key: 'tab-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       url: url,
@@ -702,9 +727,8 @@ export default function Shell(props) {
       parentKey: resolvedParentKey,
     }
     setTabs(function (prev) {
-      var next = prev.concat([newTab])
-      if (next.length > 24) next = next.slice(next.length - 24)
-      return next
+      // Bulgu 3: 24-tab limitinde atilan bir parent'in child'lari oksuz kalmasin.
+      return capTabsAtLimit(prev.concat([newTab]), 24)
     })
     setActiveTabKey(newTab.key)
   }
@@ -793,14 +817,20 @@ export default function Shell(props) {
 
   function closeTab(key, e) {
     if (e) e.stopPropagation()
-    if (dirtyTabs[key]) {
+    // Nested tab (PageComment Seq 1063, 2026-08-03, Bulgu 2): key kapanınca
+    // performCloseSingle altındaki TÜM child'ları kaskad kapatır. Bu yüzden dirty
+    // kontrolü yalnızca kapatılan sekmenin kendisiyle sınırlı kalamaz — dirty bir
+    // child sessizce (onaysız) kaybolmasın diye child'lar da taranır.
+    var isSelfDirty = !!dirtyTabs[key]
+    var hasDirtyChild = tabs.some(function(x) { return x.parentKey === key && !!dirtyTabs[x.key] })
+    if (isSelfDirty || hasDirtyChild) {
       var t = tabs.find(function(x) { return x.key === key })
       setCloseConfirm({
         kind: 'single',
         key: key,
         title: tShell('single_close_title', lang),
         message: (t && t.title ? '"' + t.title + '" ' : '') +
-                 tShell('single_close_dirty', lang)
+                 tShell(isSelfDirty ? 'single_close_dirty' : 'single_close_dirty_children', lang)
       })
       return
     }

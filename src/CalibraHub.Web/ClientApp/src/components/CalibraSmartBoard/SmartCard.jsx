@@ -378,10 +378,26 @@ export default function SmartCard(props) {
           // sekmeye git" davranisi caller ayrica matchPath gondermese bile calisir.
           // Acikca null/false verilmis (alan mevcut ama falsy) "her tiklamada yeni
           // sekme ac" istisnalari KIRILMAZ — sadece "tanimsiz" durumda turetme yapilir.
-          var explicitMatchPath = action.openInTab.matchPath
-          var matchPath = (explicitMatchPath !== undefined)
-            ? (explicitMatchPath || null)
-            : deriveMatchPathFromUrl(action.url)
+          //
+          // asChild ISTISNASI (Bulgu 1, 2026-08-03 adversarial review): asChild:true
+          // niyeti zaten "her kayit KENDI child sekmesinde acilsin" demektir. matchPath'i
+          // backend'in gonderip gondermedigine GUVENME — .NET tarafinda null alanlar
+          // JsonIgnoreCondition.WhenWritingNull ile serialize'da DUSEBILIYOR (ilk yukleme
+          // vs in-place refresh farkli JSON secenekleri kullanabiliyor), bu da
+          // explicitMatchPath'i beklenmedik sekilde undefined yapip deriveMatchPathFromUrl'u
+          // tetikleyebilir → farkli id'ler ayni prefix'i paylasip birbirini ezer. Bu yuzden
+          // asChild=true iken matchPath'i HER ZAMAN JS tarafinda null'a kelepceleriz;
+          // sadece exact-URL eslesmesi (Shell openWorkspaceTab adim 1) gecerli olur.
+          var isAsChild = !!action.openInTab.asChild
+          var matchPath
+          if (isAsChild) {
+            matchPath = null
+          } else {
+            var explicitMatchPath = action.openInTab.matchPath
+            matchPath = (explicitMatchPath !== undefined)
+              ? (explicitMatchPath || null)
+              : deriveMatchPathFromUrl(action.url)
+          }
           window.top.CalibraHub.openWorkspaceTab({
             url: action.url,
             title: action.openInTab.title || action.label || 'Yeni Sekme',
@@ -389,7 +405,7 @@ export default function SmartCard(props) {
             // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — backend
             // openInTab.asChild:true gonderirse Shell bu yeni sekmeyi cagiran sekmenin
             // (veya openInTab.parentKey ile acikca verilenin) ALTINDA child olarak acar.
-            asChild: !!action.openInTab.asChild,
+            asChild: isAsChild,
             parentKey: action.openInTab.parentKey || null,
           })
           return

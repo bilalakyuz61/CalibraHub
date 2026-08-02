@@ -448,17 +448,28 @@ export default function SmartBoard(props) {
       if (action.openInTab) {
         try {
           if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
-            var explicitMatchPath = action.openInTab.matchPath
-            var matchPath = (explicitMatchPath !== undefined)
-              ? (explicitMatchPath || null)
-              : deriveMatchPathFromUrl(action.url)
+            // asChild ISTISNASI (Bulgu 1, 2026-08-03 adversarial review) — bkz. SmartCard.jsx
+            // dispatchActionUrl (birebir ayni mantik): backend'in matchPath'i JSON'da
+            // gonderip gondermedigine guvenilmez (WhenWritingNull null'i dusurebiliyor),
+            // bu yuzden asChild=true iken matchPath JS tarafinda HER ZAMAN null'a
+            // kelepcelenir — sadece exact-URL eslesmesi gecerli olur.
+            var isAsChild = !!action.openInTab.asChild
+            var matchPath
+            if (isAsChild) {
+              matchPath = null
+            } else {
+              var explicitMatchPath = action.openInTab.matchPath
+              matchPath = (explicitMatchPath !== undefined)
+                ? (explicitMatchPath || null)
+                : deriveMatchPathFromUrl(action.url)
+            }
             window.top.CalibraHub.openWorkspaceTab({
               url: action.url,
               title: action.openInTab.title || action.label || 'Yeni Sekme',
               matchPath: matchPath,
               // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — bkz.
               // SmartCard.jsx dispatchActionUrl (birebir ayni mantik).
-              asChild: !!action.openInTab.asChild,
+              asChild: isAsChild,
               parentKey: action.openInTab.parentKey || null,
             })
             return
