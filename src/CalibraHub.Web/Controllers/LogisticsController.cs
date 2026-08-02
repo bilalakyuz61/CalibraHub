@@ -212,7 +212,10 @@ public sealed class LogisticsController : Controller
                     label = "Yeni Malzeme",
                     icon = "Plus",
                     variant = "primary",
-                    url = "/Logistics/MaterialCardEdit"
+                    url = "/Logistics/MaterialCardEdit",
+                    // Nested tab (PageComment Seq 1063, 2026-08-03) — Malzeme Kartlari liste
+                    // sekmesi kalici kalsin, yeni malzeme onun altinda child sekme olarak acilsin.
+                    openInTab = new { title = "Yeni Malzeme", matchPath = (string?)null, asChild = true }
                 }
             },
             masterWidgets,
@@ -531,7 +534,15 @@ public sealed class LogisticsController : Controller
                 primaryAction = new {
                     label = "Duzenle",
                     icon = "Edit",
-                    url = $"/Logistics/MaterialCardEdit?id={card.Id}"
+                    url = $"/Logistics/MaterialCardEdit?id={card.Id}",
+                    // Nested tab (PageComment Seq 1063, 2026-08-03) — Malzeme Kartlari liste
+                    // sekmesi kalici kalsin, secilen malzeme onun altinda child sekme olarak
+                    // acilsin. matchPath acikca null verilir (undefined DEGIL) → SmartTableRow
+                    // dispatchActionUrl URL'den prefix turetmez, her malzeme KENDI child
+                    // sekmesinde acilir (ayni matchPath ile farkli malzemeler ayni sekmeyi
+                    // paylasmaz). Ayni malzeme ikinci kez tiklanirsa exact-url eslesmesi
+                    // (Shell openWorkspaceTab adim 1) mevcut child'a odaklanir.
+                    openInTab = new { title = card.Name, matchPath = (string?)null, asChild = true }
                 },
                 secondaryAction = new {
                     label = "Sil",

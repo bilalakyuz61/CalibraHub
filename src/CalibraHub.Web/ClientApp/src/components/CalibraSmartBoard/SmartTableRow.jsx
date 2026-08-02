@@ -517,6 +517,10 @@ export default function SmartTableRow(props) {
             url: action.url,
             title: action.openInTab.title || action.label || 'Yeni Sekme',
             matchPath: matchPath,
+            // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — bkz.
+            // SmartCard.jsx dispatchActionUrl (birebir ayni mantik).
+            asChild: !!action.openInTab.asChild,
+            parentKey: action.openInTab.parentKey || null,
           })
           return
         }

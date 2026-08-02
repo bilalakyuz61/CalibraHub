@@ -386,6 +386,11 @@ export default function SmartCard(props) {
             url: action.url,
             title: action.openInTab.title || action.label || 'Yeni Sekme',
             matchPath: matchPath,
+            // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — backend
+            // openInTab.asChild:true gonderirse Shell bu yeni sekmeyi cagiran sekmenin
+            // (veya openInTab.parentKey ile acikca verilenin) ALTINDA child olarak acar.
+            asChild: !!action.openInTab.asChild,
+            parentKey: action.openInTab.parentKey || null,
           })
           return
         }

@@ -53,7 +53,8 @@ import {
   BarChart3, CheckCircle2, FlaskConical, FileStack, Upload, CalendarDays,
   MessageCircle, LayoutDashboard, PenLine, Inbox, GitBranch, Grid3X3,
   ShoppingCart, ShoppingBag, ClipboardList, Tablet, FileUp, PenSquare,
-  SlidersHorizontal, ShieldCheck, EyeOff, ScrollText, Activity
+  SlidersHorizontal, ShieldCheck, EyeOff, ScrollText, Activity,
+  CornerDownRight
 } from 'lucide-react'
 
 /* ══════════════════════════════════════════════════════════════
@@ -655,9 +656,16 @@ export default function Shell(props) {
     var url = String(arg.url)
     var title = arg.title || 'Yeni Sekme'
     var matchPath = arg.matchPath || null
+    // Nested (child) tab destegi (PageComment Seq 1063, 2026-08-03) — arg.asChild
+    // true gelince yeni tab'in parentKey'i acikca verilmis arg.parentKey, yoksa
+    // cagiran tarafin o an aktif sekmesi olur. parentKey/asChild verilmeyen
+    // cagrilar ESKISI GIBI duz ust-seviye tab acar (regresyon yok).
+    var parentKey = arg.parentKey || (arg.asChild ? activeTabKey : null) || null
     setShowDashboard(false)
 
-    // 1) Ayni URL ile mevcut tab varsa → sadece aktive et
+    // 1) Ayni URL ile mevcut tab varsa → sadece aktive et (parent/child ayrimi
+    //    yapmadan; "ayni malzeme ikinci kez tiklanirsa mevcut child'a odaklan"
+    //    davranisi bu satirla saglanir)
     var exactExisting = tabs.find(function (t) { return t.url === url })
     if (exactExisting) { setActiveTabKey(exactExisting.key); return }
 
@@ -684,11 +692,14 @@ export default function Shell(props) {
       }
     }
 
-    // 3) Yeni tab ac
+    // 3) Yeni tab ac — parentKey verilmisse (ve tabs icinde hala mevcutsa) child
+    //    olarak isaretlenir; degilse eskisi gibi duz ust-seviye tab.
+    var resolvedParentKey = (parentKey && tabs.some(function (t) { return t.key === parentKey })) ? parentKey : null
     var newTab = {
       key: 'tab-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       url: url,
       title: title,
+      parentKey: resolvedParentKey,
     }
     setTabs(function (prev) {
       var next = prev.concat([newTab])
@@ -731,26 +742,45 @@ export default function Shell(props) {
   var [closeConfirm, setCloseConfirm] = useState(null)
 
   function performCloseSingle(key) {
+    // Nested tab kurali (PageComment Seq 1063, 2026-08-03): bir ust (parent) sekme
+    // kapaninca altindaki tum child sekmeler de kapanir. Child sekme kapaninca
+    // (aktifse) parent aktif kalir — baska bir child'a degil.
+    var closedTab = tabs.find(function(t) { return t.key === key })
+    var childKeys = tabs.filter(function(t) { return t.parentKey === key }).map(function(t) { return t.key })
+    var removeKeys = [key].concat(childKeys)
+    var wasActive = removeKeys.indexOf(activeTabKey) !== -1
+    var fallbackParentKey = (closedTab && closedTab.parentKey && removeKeys.indexOf(closedTab.parentKey) === -1)
+      ? closedTab.parentKey
+      : null
+
     setTabs(function(prev) {
       var idx = prev.findIndex(function(t) { return t.key === key })
-      var next = prev.filter(function(t) { return t.key !== key })
-      if (key === activeTabKey && next.length > 0) {
-        var newIdx = Math.max(0, Math.min(idx, next.length - 1))
-        setActiveTabKey(next[newIdx].key)
-      } else if (next.length === 0) {
-        setActiveTabKey(null)
+      var next = prev.filter(function(t) { return removeKeys.indexOf(t.key) === -1 })
+      if (wasActive) {
+        if (fallbackParentKey && next.some(function(t) { return t.key === fallbackParentKey })) {
+          setActiveTabKey(fallbackParentKey)
+        } else if (next.length > 0) {
+          var newIdx = Math.max(0, Math.min(idx, next.length - 1))
+          setActiveTabKey(next[newIdx].key)
+        } else {
+          setActiveTabKey(null)
+        }
       }
       return next
     })
     setDirtyTabs(function(prev) {
-      if (!prev[key]) return prev
-      var next = Object.assign({}, prev); delete next[key]; return next
+      var changed = false
+      var next = Object.assign({}, prev)
+      removeKeys.forEach(function(k) { if (next[k]) { delete next[k]; changed = true } })
+      return changed ? next : prev
     })
     setSidebarHideTabKeys(function(prev) {
-      if (!prev.has(key)) return prev
-      var next = new Set(prev); next.delete(key); return next
+      var changed = false
+      var next = new Set(prev)
+      removeKeys.forEach(function(k) { if (next.has(k)) { next.delete(k); changed = true } })
+      return changed ? next : prev
     })
-    delete iframeRefs.current[key]
+    removeKeys.forEach(function(k) { delete iframeRefs.current[k] })
   }
 
   function performCloseAll() {
@@ -3136,93 +3166,129 @@ function TabBar(props) {
   // doğrudan üst çubuğun altından başlar; home ikonu zaten kısayol çubuğunda).
   if (!props.tabs || props.tabs.length === 0) return null
 
-  return (
-    <div
-      className={'flex items-center h-11 border-b flex-shrink-0 ' + borderColor}
-      style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
-    >
-      {/* Scrollable tab alanı */}
-      <div className="relative flex-1 overflow-hidden h-full">
-        {canLeft && (
-          <button
-            type="button"
-            onClick={function() { scrollBy(-200) }}
-            className={chevronBtn}
-            style={{ left: 4 }}
-            title="Sola kaydır"
-          >
-            <ChevronLeft size={14} strokeWidth={2.2} />
-          </button>
-        )}
-        {canRight && (
-          <button
-            type="button"
-            onClick={function() { scrollBy(200) }}
-            className={chevronBtn}
-            style={{ right: 4 }}
-            title="Sağa kaydır"
-          >
-            <ChevronRight size={14} strokeWidth={2.2} />
-          </button>
-        )}
-        <div
-          ref={scrollRef}
-          onWheel={handleWheel}
-          className="flex items-center gap-1 h-full overflow-x-auto smartcard-widgets-scroll"
-          style={{ paddingLeft: canLeft ? 34 : 8, paddingRight: canRight ? 34 : 16 }}
-        >
-      {props.tabs.map(function(t) {
-        var isActive = t.key === props.activeKey && !showDash
-        return (
-          <div
-            key={t.key}
-            data-tab-key={t.key}
-            onClick={function() { props.onTabClick(t.key) }}
-            onMouseDown={function(e) { e.preventDefault() }}
-            className={
-              'relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium cursor-pointer transition-all flex-shrink-0 max-w-[220px] select-none ' +
-              (isActive
-                ? (isDark ? 'text-white bg-white/[0.06]' : 'text-slate-900 bg-slate-100')
-                : (isDark ? 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'))
-            }
-            title={(props.dirtyTabs && props.dirtyTabs[t.key]) ? tShell('unsaved_prefix', lang) + t.title : t.title}
-          >
-            {props.dirtyTabs && props.dirtyTabs[t.key] && (
-              <span
-                className="calibra-dirty-dot"
-                style={{
-                  width: 7, height: 7, borderRadius: 9999, flexShrink: 0,
-                  background: '#22c55e',
-                  boxShadow: '0 0 8px rgba(34,197,94,0.95), 0 0 14px rgba(34,197,94,0.55)',
-                }}
-              />
-            )}
-            <span className="truncate select-none">{t.title}</span>
-            <button
-              onClick={function(e) { props.onTabClose(t.key, e) }}
-              className={
-                'w-4 h-4 rounded flex items-center justify-center transition-colors flex-shrink-0 ' +
-                (isDark ? 'hover:bg-white/10 text-white/50 hover:text-white/80' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700')
-              }
-            >
-              <X size={10} strokeWidth={2.4} />
-            </button>
+  // Nested (child) tab gruplama (PageComment Seq 1063, 2026-08-03) — üst satır
+  // her zaman sadece üst-seviye (parentKey'siz) sekmeleri gösterir; aktif sekmenin
+  // (veya aktif sekme bir child ise onun parent'ının) child'ları ikinci bir satırda
+  // gösterilir. parentKey hiç kullanılmayan ekranlarda childTabs her zaman boş
+  // kalır → görsel olarak ESKİSİ GİBİ tek satır (regresyon yok).
+  var allTabs = props.tabs
+  var topTabs = allTabs.filter(function(t) { return !t.parentKey })
+  var activeTabObj = allTabs.find(function(t) { return t.key === props.activeKey })
+  var activeGroupKey = activeTabObj ? (activeTabObj.parentKey || activeTabObj.key) : null
+  var childTabs = activeGroupKey ? allTabs.filter(function(t) { return t.parentKey === activeGroupKey }) : []
 
-            {isActive && (
-              <motion.div
-                layoutId="tab-underline"
-                className="absolute left-2 right-2 -bottom-[6px] h-0.5 rounded-full"
-                style={{
-                  background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)',
-                  boxShadow: '0 0 10px rgba(99,102,241,0.7)',
-                }}
-              />
-            )}
+  function renderTabChip(t, isChild) {
+    var isActive = !showDash && (isChild ? t.key === props.activeKey : (t.key === props.activeKey || t.key === activeGroupKey))
+    return (
+      <div
+        key={t.key}
+        data-tab-key={t.key}
+        onClick={function() { props.onTabClick(t.key) }}
+        onMouseDown={function(e) { e.preventDefault() }}
+        className={
+          'relative flex items-center gap-2 cursor-pointer transition-all flex-shrink-0 select-none ' +
+          (isChild ? 'px-2.5 py-1 rounded-md text-[12px] font-medium max-w-[200px] ' : 'px-3 py-1.5 rounded-lg text-[13px] font-medium max-w-[220px] ') +
+          (isActive
+            ? (isDark ? 'text-white bg-white/[0.06]' : 'text-slate-900 bg-slate-100')
+            : (isDark ? 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'))
+        }
+        title={(props.dirtyTabs && props.dirtyTabs[t.key]) ? tShell('unsaved_prefix', lang) + t.title : t.title}
+      >
+        {isChild && (
+          <CornerDownRight
+            size={11}
+            strokeWidth={2.2}
+            className={'flex-shrink-0 ' + (isDark ? 'text-white/30' : 'text-slate-400')}
+          />
+        )}
+        {props.dirtyTabs && props.dirtyTabs[t.key] && (
+          <span
+            className="calibra-dirty-dot"
+            style={{
+              width: 7, height: 7, borderRadius: 9999, flexShrink: 0,
+              background: '#22c55e',
+              boxShadow: '0 0 8px rgba(34,197,94,0.95), 0 0 14px rgba(34,197,94,0.55)',
+            }}
+          />
+        )}
+        <span className="truncate select-none">{t.title}</span>
+        <button
+          onClick={function(e) { props.onTabClose(t.key, e) }}
+          className={
+            'w-4 h-4 rounded flex items-center justify-center transition-colors flex-shrink-0 ' +
+            (isDark ? 'hover:bg-white/10 text-white/50 hover:text-white/80' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700')
+          }
+        >
+          <X size={10} strokeWidth={2.4} />
+        </button>
+
+        {isActive && (
+          <motion.div
+            layoutId={isChild ? 'child-tab-underline' : 'tab-underline'}
+            className="absolute left-2 right-2 -bottom-[6px] h-0.5 rounded-full"
+            style={{
+              background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)',
+              boxShadow: '0 0 10px rgba(99,102,241,0.7)',
+            }}
+          />
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col flex-shrink-0">
+      <div
+        className={'flex items-center h-11 border-b ' + borderColor}
+        style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
+      >
+        {/* Scrollable tab alanı */}
+        <div className="relative flex-1 overflow-hidden h-full">
+          {canLeft && (
+            <button
+              type="button"
+              onClick={function() { scrollBy(-200) }}
+              className={chevronBtn}
+              style={{ left: 4 }}
+              title="Sola kaydır"
+            >
+              <ChevronLeft size={14} strokeWidth={2.2} />
+            </button>
+          )}
+          {canRight && (
+            <button
+              type="button"
+              onClick={function() { scrollBy(200) }}
+              className={chevronBtn}
+              style={{ right: 4 }}
+              title="Sağa kaydır"
+            >
+              <ChevronRight size={14} strokeWidth={2.2} />
+            </button>
+          )}
+          <div
+            ref={scrollRef}
+            onWheel={handleWheel}
+            className="flex items-center gap-1 h-full overflow-x-auto smartcard-widgets-scroll"
+            style={{ paddingLeft: canLeft ? 34 : 8, paddingRight: canRight ? 34 : 16 }}
+          >
+            {topTabs.map(function(t) { return renderTabChip(t, false) })}
           </div>
-        )
-      })}
         </div>
       </div>
+
+      {/* Child (nested) sekme satırı — sadece aktif grubun altında, üst-seviye
+          sekme (liste ekranı gibi) hep görünür kalır. */}
+      {childTabs.length > 0 && (
+        <div
+          className={'flex items-center h-9 border-b overflow-x-auto smartcard-widgets-scroll ' + borderColor}
+          style={{ background: isDark ? '#070910' : '#eef2f7', paddingLeft: 18, paddingRight: 16 }}
+        >
+          <div className="flex items-center gap-1">
+            {childTabs.map(function(t) { return renderTabChip(t, true) })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
