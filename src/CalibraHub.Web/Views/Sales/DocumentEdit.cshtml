@@ -2100,6 +2100,26 @@
         <a href="@listReturnUrl" class="pte-btn pte-btn--secondary pte-btn--icon" id="ptBtnList" aria-label="Liste" title="Liste">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </a>
+        <!-- İşlemler menüsü — sol aksiyon grubunda, Geri (Liste) butonunun hemen
+             yanında (2026-08-02, kullanıcı isteği: sağdan sola taşındı). --leading
+             varyantı margin-left:auto'yu sıfırlar ki sağa itilmesin. -->
+        <div class="sqe-actions-menu sqe-actions-menu--leading" id="sqActionsMenu">
+            <button type="button"
+                    class="pte-btn pte-btn--actions pte-btn--icon"
+                    id="sqActionsBtn"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    data-collaboration-allow
+                    title="İşlemler"
+                    onclick="sqToggleActionsMenu(event)"
+                    aria-label="İşlemler">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span class="pte-btn__label">İşlemler</span>
+            </button>
+        </div>
         <button type="button" class="pte-btn pte-btn--primary pte-btn--icon" data-collaboration-write="true" onclick="sqSave({ validate: true })" aria-label="Kaydet">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
             <span class="pte-btn__label">Kaydet</span>
@@ -2504,24 +2524,6 @@
         </select>
         <span id="sqStatusBadge"></span>
         <span class="sqe-meta" id="sqMeta"></span>
-        <!-- İşlemler menüsü butonu — standart tile, meta'dan sonra sağda. -->
-        <div class="sqe-actions-menu" id="sqActionsMenu">
-            <button type="button"
-                    class="pte-btn pte-btn--actions pte-btn--icon"
-                    id="sqActionsBtn"
-                    aria-haspopup="menu"
-                    aria-expanded="false"
-                    data-collaboration-allow
-                    title="İşlemler"
-                    onclick="sqToggleActionsMenu(event)"
-                    aria-label="İşlemler">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-                <span class="pte-btn__label">İşlemler</span>
-            </button>
-        </div>
     </div>
 
     <!-- Islemler Dropdown — aksiyon sertinin DISINDA ki backdrop-filter +
@@ -3303,6 +3305,14 @@
     var searchTimer = null;
     var currentQuoteId  = @Html.Raw(editId.HasValue ? $"'{editId.Value}'" : "null");
     var fromRequestId   = @Html.Raw(Model.FromRequestId.HasValue ? Model.FromRequestId.Value.ToString() : "null");
+    // Liste ekranlarindaki "Islemler" menusunden gelen derin-link: ?autoAction=costs|approval|status.
+    // Yalnizca MEVCUT kayitta (currentQuoteId dolu) gecerlidir; belge+kalem gridi TAM
+    // yuklendikten sonra sqLoadQuote icinde TEK SEFER tetiklenir (bkz. sqRunAutoAction).
+    var autoActionParam    = (function () {
+        try { return new URLSearchParams(window.location.search).get('autoAction'); }
+        catch (_) { return null; }
+    })();
+    var __sqAutoActionFired = false;
     var materials = [];
     var customers = [];
 
@@ -4158,6 +4168,10 @@
             // Ek alanlar renderer'ina integer Id'yi recordId olarak yansit.
             // Polling: renderer ve ic handleRef hazir olana kadar bekle, sonra reload.
             if (q.id) sqReloadRenderer(String(q.id));
+
+            // Belge + kalem gridi burada TAM yuklenmis sayilir — derin-link autoAction
+            // (varsa) burada tetiklenir. Bkz. sqRunAutoAction.
+            sqRunAutoAction(initialLines.length);
         } catch (e) {
             console.error('sqLoadQuote hatasi:', e);
             CalibraAlert.error('Teklif yuklenemedi: ' + e.message);
@@ -5552,6 +5566,76 @@
             window.CalibraApprovalDrawer.open();
         }
     };
+
+    // ── Islemler: Liste ekranindan derin-link (?autoAction=costs|approval|status) ──
+    // sqLoadQuote, belge + kalem gridi TAM yuklendikten sonra bunu cagirir (mevcut
+    // kayitta, tek sefer — __sqAutoActionFired flag'i korur). "costs" React grid
+    // bridge'inden satir okur (sqActionShowAllCosts), bu yuzden bridge'in yeni
+    // satirlari yansitmasini kisa polling ile bekleriz (sqReloadRenderer ile ayni
+    // desen). "approval"/"status" grid'e bagimli degil, dogrudan tetiklenir.
+    function sqRunAutoAction(expectedLineCount) {
+        if (!autoActionParam || __sqAutoActionFired) return;
+        __sqAutoActionFired = true;
+
+        function cleanUrl() {
+            // Tekrar yenilemede otomatik tetiklenmesin diye query'den autoAction'i cikar.
+            try {
+                var url = new URL(window.location.href);
+                url.searchParams.delete('autoAction');
+                window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+            } catch (_) { /* yoksay — kritik degil */ }
+        }
+
+        function fire() {
+            cleanUrl();
+            switch (autoActionParam) {
+                case 'costs':
+                    window.sqActionShowAllCosts();
+                    break;
+                case 'approval':
+                    window.sqActionOpenApproval();
+                    break;
+                case 'status':
+                    // Islemler menusunu ac, ardindan Durum Degistir alt-menusunu ac.
+                    // Her iki toggle fonksiyonu da event'siz cagrilinca guvenli calisir:
+                    // sqToggleActionsMenu ev'i yalnizca stopPropagation icin kullanir,
+                    // sqToggleStatusSubmenu ev yoksa querySelector('.sqe-actions-item--has-sub')
+                    // fallback'ine duser. sqToggleActionsMenu kendi konumlandirmasini
+                    // (sqPositionActionsDropdown) bir rAF'e erteliyor; alt-menuyu de bir
+                    // rAF'e erteleyerek ayni frame'de ONCE ana dropdown konumlanmis,
+                    // SONRA alt-menu acilmis olur (has-sub butonun rect'i dogru olur).
+                    window.sqToggleActionsMenu();
+                    requestAnimationFrame(function () {
+                        window.sqToggleStatusSubmenu();
+                    });
+                    break;
+                default:
+                    // Bilinmeyen autoAction degeri — sessizce yoksay.
+                    break;
+            }
+        }
+
+        if (autoActionParam !== 'costs') {
+            fire();
+            return;
+        }
+
+        var attempts = 0;
+        (function waitForGrid() {
+            var rows = null;
+            try {
+                if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                    && typeof window.CalibraHub.salesLineGrid.getRows === 'function') {
+                    rows = window.CalibraHub.salesLineGrid.getRows();
+                }
+            } catch (_) {}
+            if ((Array.isArray(rows) && rows.length >= expectedLineCount) || ++attempts >= 40) {
+                fire();
+                return;
+            }
+            setTimeout(waitForGrid, 80);
+        })();
+    }
 
     window.sqDelete = async function () {
         if (!currentQuoteId) return;

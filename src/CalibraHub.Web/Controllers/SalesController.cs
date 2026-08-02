@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
+using System.Linq;
 using System.Security.Claims;
 using static CalibraHub.Web.Helpers.AuditLogActionHelper;
 
@@ -175,6 +176,20 @@ public sealed class SalesController : Controller
         url = $"/Sales/CopyDocumentJson?id={documentId}",
         apiUrl = $"/Sales/CopyDocumentJson?id={documentId}",
         apiMethod = "POST",
+    };
+
+    /// <summary>
+    /// Belge LİSTE satır menüsüne "kaydın edit ekranını autoAction ile aç" 3 işlemi
+    /// (Durum Değiştir / Tüm Ürünlerin Maliyeti / Onay Süreci) — 2026-08-02, kullanıcı
+    /// isteği: edit ekranı İşlemler menüsündeki işlemler liste satır menüsünde de olsun.
+    /// Tümü /Sales/DocumentEdit'i (5 belge tipi paylaşır) autoAction query'siyle açar;
+    /// edit ekranı yükleme sonrası ilgili işlemi otomatik tetikler.
+    /// </summary>
+    private static object[] BuildRecordOperationActions(int id) => new object[]
+    {
+        new { label = "Durum Değiştir",         icon = "Clock",     color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
+        new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt",   color = "amber",  url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" },
+        new { label = "Onay Süreci",            icon = "GitBranch", color = "sky",    url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" },
     };
 
     [HttpGet]
@@ -396,8 +411,7 @@ public sealed class SalesController : Controller
                         submitLabel = "Gonder",
                         successMessage = "Mail kuyruga alindi",
                     },
-                    BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode),
-                },
+                }.Concat(BuildRecordOperationActions(quote.Id)).Append(BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode)).ToArray(),
             });
         }
 
@@ -505,7 +519,10 @@ public sealed class SalesController : Controller
                     precheckUrl = $"/Sales/CanDeleteDocumentJson?id={order.Id}",
                     confirm = $"Bu siparisi silmek istediginizden emin misiniz? ({order.DocumentNumber})",
                 },
-                extraActions = new object[] { BuildCopyAction(order.Id), BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode) },
+                extraActions = new object[] { BuildCopyAction(order.Id) }
+                    .Concat(BuildRecordOperationActions(order.Id))
+                    .Append(BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode))
+                    .ToArray(),
             });
         }
 
@@ -619,7 +636,10 @@ public sealed class SalesController : Controller
                     apiUrl = $"/Sales/DeleteDocumentJson?id={doc.Id}",
                     precheckUrl = $"/Sales/CanDeleteDocumentJson?id={doc.Id}",
                     confirm = $"Bu irsaliyeyi silmek istediginizden emin misiniz? ({doc.DocumentNumber})" },
-                extraActions = new object[] { BuildCopyAction(doc.Id), BuildAuditLogAction("satis_irsaliyesi", doc.Id, deliveryAuditFormCode) },
+                extraActions = new object[] { BuildCopyAction(doc.Id) }
+                    .Concat(BuildRecordOperationActions(doc.Id))
+                    .Append(BuildAuditLogAction("satis_irsaliyesi", doc.Id, deliveryAuditFormCode))
+                    .ToArray(),
             });
         }
 

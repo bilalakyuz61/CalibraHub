@@ -100,6 +100,20 @@ public sealed class PurchaseController : Controller
     };
 
     /// <summary>
+    /// Belge LİSTE satır menüsüne "kaydın edit ekranını autoAction ile aç" 3 işlemi
+    /// (Durum Değiştir / Tüm Ürünlerin Maliyeti / Onay Süreci) — 2026-08-02, kullanıcı
+    /// isteği: edit ekranı İşlemler menüsündeki işlemler liste satır menüsünde de olsun.
+    /// Tümü /Sales/DocumentEdit'i (5 belge tipi paylaşır) autoAction query'siyle açar;
+    /// edit ekranı yükleme sonrası ilgili işlemi otomatik tetikler.
+    /// </summary>
+    private static object[] BuildRecordOperationActions(int id) => new object[]
+    {
+        new { label = "Durum Değiştir",         icon = "Clock",     color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
+        new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt",   color = "amber",  url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" },
+        new { label = "Onay Süreci",            icon = "GitBranch", color = "sky",    url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" },
+    };
+
+    /// <summary>
     /// Stok etkisi kapalı (STOCK_EFFECT_{code}=false) belge türleri için SQL filtre
     /// parçası üretir. Bakiye sorgularında Document alias'ına eklenir; parametre
     /// tanımsızken boş döner (filtre yok = mevcut davranış).
@@ -619,6 +633,7 @@ public sealed class PurchaseController : Controller
                     });
                 }
             }
+            extraActionsList.AddRange(BuildRecordOperationActions(doc.Id));
             extraActionsList.Add(BuildAuditLogAction(typeCode, doc.Id, auditFormCode));
             var extraActions = extraActionsList.ToArray();
 
