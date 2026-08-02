@@ -19,6 +19,8 @@
     string SourceKindLabel(string? kind) => kind switch
     {
         "QualityInspection" => "Muayene",
+        "alis_irsaliyesi" => "Alış İrsaliyesi",
+        "Contact" => "Cari / Müşteri",
         _ => kind ?? "",
     };
 
@@ -31,10 +33,15 @@
     var actionTypeOptionsHtml = string.Join("", Enum.GetValues<CapaActionType>().Select(t => $"<option value=\"{(byte)t}\">{Label(t)}</option>"));
     var actionStatusOptionsHtml = string.Join("", Enum.GetValues<CapaActionStatus>().Select(s => $"<option value=\"{(byte)s}\">{Label(s)}</option>"));
 
-    // Kaynak Belge ön-doldurma — Muayene ekranından "DÖF Aç" linkiyle gelen query paramları.
-    // Yalnız yeni kayıtta kullanılır (var olan kayıtta Model.SourceKind/SourceId geçerli, değiştirilemez).
+    // Kaynak Belge ön-doldurma — Muayene / alış irsaliyesi / cari ekranlarından "DÖF Aç"
+    // linkiyle gelen query paramları. Yalnız yeni kayıtta kullanılır (var olan kayıtta
+    // Model.SourceKind/SourceId geçerli, değiştirilemez).
     var prefillSourceKind = ViewData["PrefillSourceKind"] as string;
     var prefillSourceId = ViewData["PrefillSourceId"] as int?;
+    var hasPrefillSource = isNew && !string.IsNullOrWhiteSpace(prefillSourceKind) && prefillSourceId.HasValue;
+    // Yeni+prefill'de dropdown yerine mevcut-kayıt gösterimindeki gibi salt-okunur "Kaynak: {label}" bloğu gösterilir.
+    var showSourceNew = isNew && !hasPrefillSource;
+    var showSourceExisting = (!isNew && Model?.SourceKind is { Length: > 0 }) || hasPrefillSource;
 }
 
 <div class="ux-edit-shell">
@@ -67,8 +74,8 @@
 
         <input type="hidden" id="f-id" value="@(Model?.DocumentId ?? 0)" />
         <input type="hidden" id="f-status" value="@(Model?.Status ?? 0)" />
-        <input type="hidden" id="f-source-kind-current" value="@(Model?.SourceKind ?? "")" />
-        <input type="hidden" id="f-source-id-current" value="@(Model?.SourceId?.ToString() ?? "")" />
+        <input type="hidden" id="f-source-kind-current" value="@(Model?.SourceKind ?? (hasPrefillSource ? prefillSourceKind : ""))" />
+        <input type="hidden" id="f-source-id-current" value="@(Model?.SourceId?.ToString() ?? (hasPrefillSource ? prefillSourceId?.ToString() : ""))" />
 
         <div class="ux-field ux-field--wide">
           <label for="f-title">Konu *</label>
@@ -111,15 +118,16 @@
           <input type="date" id="f-due" value="@(Model?.DueDate?.ToString("yyyy-MM-dd"))" />
         </div>
 
-        <!-- Kaynak — yeni kayıtta seçilebilir; mevcut kayıtta salt görüntüleme (değiştirilemez). -->
-        <div class="ux-field ux-field--wide" id="capa-source-new" style="@(isNew ? "" : "display:none;")">
+        <!-- Kaynak — yeni kayıtta (prefill yoksa) seçilebilir; mevcut kayıtta ve prefill'li
+             yeni kayıtta salt görüntüleme (değiştirilemez). -->
+        <div class="ux-field ux-field--wide" id="capa-source-new" style="@(showSourceNew ? "" : "display:none;")">
           <label for="f-source">Kaynak Muayene <span style="font-weight:400;">(opsiyonel)</span></label>
           <select id="f-source"><option value="">— Yok —</option></select>
           <div class="ux-hint">Uygunsuzluk kararı verilmiş bir muayeneden DÖF açıyorsanız burada seçin.</div>
         </div>
-        <div class="ux-field ux-field--wide" id="capa-source-existing" style="@(!isNew && Model?.SourceKind is { Length: > 0 } ? "" : "display:none;")">
+        <div class="ux-field ux-field--wide" id="capa-source-existing" style="@(showSourceExisting ? "" : "display:none;")">
           <label>Kaynak</label>
-          <div class="ux-edit-hint" style="margin:0;">Kaynak: @(SourceKindLabel(Model?.SourceKind)) #@(Model?.SourceId)</div>
+          <div class="ux-edit-hint" id="capa-source-existing-text" style="margin:0;">—</div>
         </div>
 
         <div id="capa-err" style="display:none;" class="ux-err"></div>
@@ -258,10 +266,11 @@
         4: [ {s:3, label:'Yeniden Aç'} ],
         5: [],
     };
-    var PREFILL_SOURCE_KIND = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(prefillSourceKind));
-    var PREFILL_SOURCE_ID = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(prefillSourceId));
+    var HAS_PREFILL_SOURCE = @(hasPrefillSource ? "true" : "false");
     var ACTION_TYPE_OPTIONS_HTML = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(actionTypeOptionsHtml));
     var ACTION_STATUS_OPTIONS_HTML = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(actionStatusOptionsHtml));
+    // SourceKindLabel (C#) ile birebir aynı eşleme — kaynak etiketinin JS tarafındaki aynası.
+    var SOURCE_KIND_LABELS = { QualityInspection:'Muayene', alis_irsaliyesi:'Alış İrsaliyesi', Contact:'Cari / Müşteri' };
 
     function token(){return document.querySelector('input[name="__RequestVerificationToken"]')?.value||'';}
     function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -296,9 +305,9 @@
         document.querySelectorAll('.cae-resp').forEach(function(sel){var cur=sel.getAttribute('data-current')||'';sel.innerHTML=personnelOptionsHtml(cur);});
     }).catch(function(){});
 
-    // ── Kaynak Muayene (yeni kayıt) ──
+    // ── Kaynak Muayene (yeni kayıt, prefill yoksa) ──
     var srcSel=document.getElementById('f-source');
-    if(IS_NEW && srcSel){
+    if(IS_NEW && srcSel && !HAS_PREFILL_SOURCE){
         function loadSources(){
             fetch('/Quality/CapaSourceLookup?kind=QualityInspection&search=',{credentials:'same-origin'})
                 .then(function(r){return r.ok?r.json():[];})
@@ -308,16 +317,47 @@
                         var o=document.createElement('option');o.value=it.sourceId;o.textContent=it.label+(it.date?(' · '+String(it.date).substring(0,10)):'');
                         srcSel.appendChild(o);
                     });
-                    if(PREFILL_SOURCE_KIND==='QualityInspection'&&PREFILL_SOURCE_ID){
-                        var opt=srcSel.querySelector('option[value="'+PREFILL_SOURCE_ID+'"]');
-                        if(opt)srcSel.value=String(PREFILL_SOURCE_ID);
-                    }
                 }).catch(function(){});
         }
         loadSources();
     }
-    function currentSourceKind(){ if(!IS_NEW)return document.getElementById('f-source-kind-current').value||null; return (srcSel&&srcSel.value)?'QualityInspection':null; }
-    function currentSourceId(){ if(!IS_NEW){var v=document.getElementById('f-source-id-current').value;return v?parseInt(v,10):null;} return (srcSel&&srcSel.value)?parseInt(srcSel.value,10):null; }
+
+    // ── Kaynak gösterimi (mevcut kayıt veya prefill'li yeni kayıt) — label+[Aç] linki
+    // CapaSourceLabelLookup ile çözülür (referans: InspectionEdit showExistingSource). ──
+    function showExistingSource(kind,id){
+        var el=document.getElementById('capa-source-existing-text');
+        if(!el)return;
+        if(!kind||!id){el.textContent='—';return;}
+        var prefix=SOURCE_KIND_LABELS[kind]||kind;
+        el.textContent='Yükleniyor…';
+        fetch('/Quality/CapaSourceLabelLookup?sourceKind='+encodeURIComponent(kind)+'&sourceId='+encodeURIComponent(id),{credentials:'same-origin'})
+            .then(function(r){return r.ok?r.json():null;})
+            .then(function(d){
+                var labelText=(d&&d.label)?d.label:('#'+id);
+                var html=esc(prefix)+': <b>'+esc(labelText)+'</b>';
+                if(d&&d.url)html+=' <a href="'+esc(d.url)+'" target="_blank" rel="noopener">Aç ↗</a>';
+                el.innerHTML=html;
+            }).catch(function(){el.innerHTML=esc(prefix)+': #'+id+' (bilgi alınamadı)';});
+    }
+    var SOURCE_KIND_CUR=document.getElementById('f-source-kind-current').value||null;
+    var SOURCE_ID_CUR=document.getElementById('f-source-id-current').value||null;
+    if(SOURCE_KIND_CUR&&SOURCE_ID_CUR){
+        showExistingSource(SOURCE_KIND_CUR,SOURCE_ID_CUR);
+    }
+
+    // currentSourceKind/currentSourceId: prefill/hidden değeri varsa önce onu döndür
+    // (mevcut kayıt VEYA prefill'li yeni kayıt) — yoksa (manuel yeni kayıt) dropdown seçimini kullan.
+    function currentSourceKind(){
+        var hidden=document.getElementById('f-source-kind-current').value;
+        if(hidden)return hidden;
+        return (IS_NEW&&srcSel&&srcSel.value)?'QualityInspection':null;
+    }
+    function currentSourceId(){
+        var hiddenK=document.getElementById('f-source-kind-current').value;
+        var hiddenV=document.getElementById('f-source-id-current').value;
+        if(hiddenK&&hiddenV)return parseInt(hiddenV,10);
+        return (IS_NEW&&srcSel&&srcSel.value)?parseInt(srcSel.value,10):null;
+    }
 
     // ── Aksiyon satırları ──
     var rowsEl=document.getElementById('cae-rows'), emptyEl=document.getElementById('cae-rows-empty');
