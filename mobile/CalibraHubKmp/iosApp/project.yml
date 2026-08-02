@@ -1,0 +1,61 @@
+# XcodeGen spec — iosApp Xcode projesini üretir (elle .xcodeproj yazmak kırılgan olduğu için).
+# Codemagic (veya bir Mac) build öncesi `xcodegen generate` çalıştırır → iosApp.xcodeproj oluşur.
+# KMP `shared` framework'ü preBuildScript ile derlenip linklenir (embedAndSignAppleFrameworkForXcode).
+name: iosApp
+options:
+  bundleIdPrefix: com.calibrahub
+  deploymentTarget:
+    iOS: "14.0"
+settings:
+  base:
+    # Yeni Xcode'da Gradle'ın framework'ü build klasörüne yazabilmesi için sandbox kapalı.
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: iosApp
+    info:
+      path: iosApp/Info.plist
+      properties:
+        CFBundleDisplayName: CalibraHub KMP
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Geliştirme backend'i HTTP (cleartext) → ATS gevşetildi. PRODUCTION'da KALDIR.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.calibrahub.mobile
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        # KMP framework arama yolu (embedAndSignAppleFrameworkForXcode buraya kopyalar).
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -framework
+          - shared
+    preBuildScripts:
+      - name: KMP shared framework derle
+        basedOnDependencyAnalysis: false
+        script: |
+          export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+schemes:
+  iosApp:
+    build:
+      targets:
+        iosApp: all
+    run:
+      config: Debug
+    archive:
+      config: Release

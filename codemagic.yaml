@@ -1,0 +1,89 @@
+# Codemagic CI — CalibraHub KMP mobil (iOS build)
+# ─────────────────────────────────────────────────────────────────────────────
+# Repo:      github.com/bilalakyuz61/CalibraHub
+# KMP proje: mobile/CalibraHubKmp   (mevcut mobile/CalibraHubAndroid'e DOKUNMAZ)
+# Bu dosya repo KÖKÜNDE olmalı — Codemagic yapılandırmayı burada arar.
+#
+# İki workflow:
+#   1) ios-compile-check  → İMZASIZ derleme kanıtı. Apple Developer hesabı GEREKMEZ.
+#                           İlk çalıştırılacak workflow budur ("iOS derleniyor mu?").
+#   2) ios-testflight     → İMZALI IPA + TestFlight. Apple Developer hesabı + Codemagic'te
+#                           App Store Connect entegrasyonu kurulunca kullanılır.
+#
+# NOT: Otomatik push-trigger BİLİNÇLİ olarak KONMADI — bu repoda src/ her tur otomatik
+#      commit'leniyor; her push'ta iOS build tetiklenmesin diye workflow'lar Codemagic
+#      arayüzünden ELLE (ya da tag ile) tetiklenir.
+# ─────────────────────────────────────────────────────────────────────────────
+
+workflows:
+
+  ios-compile-check:
+    name: iOS derleme kontrolu (imzasiz)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: latest
+      vars:
+        KMP_DIR: "mobile/CalibraHubKmp"
+    scripts:
+      - name: XcodeGen kur (yoksa)
+        script: which xcodegen || brew install xcodegen
+      - name: Xcode projesini uret (xcodegen)
+        script: |
+          cd "$KMP_DIR/iosApp"
+          xcodegen generate
+      - name: gradlew calistirilabilir yap
+        script: chmod +x "$KMP_DIR/gradlew"
+      - name: iOS uygulamasini derle (imzasiz, simulator SDK)
+        script: |
+          cd "$KMP_DIR/iosApp"
+          xcodebuild \
+            -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            build \
+            CODE_SIGNING_ALLOWED=NO
+    artifacts:
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-testflight:
+    name: iOS TestFlight (imzali) — Apple + Codemagic ayari GEREKIR
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+    # ⬇ Codemagic UI → Teams/App settings → Integrations → App Store Connect ile bir
+    #   API anahtari olustur ve adini buraya yaz. Apple Developer hesabi ($99/yil) sart.
+    integrations:
+      app_store_connect: CalibraHub ASC
+    environment:
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.calibrahub.mobile   # Apple Developer'da kayitli olmali
+      vars:
+        KMP_DIR: "mobile/CalibraHubKmp"
+    scripts:
+      - name: XcodeGen kur (yoksa)
+        script: which xcodegen || brew install xcodegen
+      - name: Xcode projesini uret (xcodegen)
+        script: |
+          cd "$KMP_DIR/iosApp"
+          xcodegen generate
+      - name: gradlew calistirilabilir yap
+        script: chmod +x "$KMP_DIR/gradlew"
+      - name: Kod imzalama profillerini uygula
+        script: xcode-project use-profiles
+      - name: IPA derle (imzali)
+        script: |
+          cd "$KMP_DIR/iosApp"
+          xcode-project build-ipa \
+            --project iosApp.xcodeproj \
+            --scheme iosApp
+    artifacts:
+      - $KMP_DIR/iosApp/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
