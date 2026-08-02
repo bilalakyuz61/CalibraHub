@@ -69,6 +69,13 @@ public sealed class AccountController : Controller
     [HttpGet]
     public async Task<IActionResult> Login(string? returnUrl = null, CancellationToken cancellationToken = default)
     {
+        // Login sayfası bfcache/proxy önbelleğine girmesin — idle-logout sonrası tarayıcının BAYAT
+        // antiforgery token'lı eski sayfayı (back-forward cache) göstermesi ilk giriş denemesini
+        // token uyuşmazlığıyla reddettiriyordu (kullanıcı "şifre kabul edilmedi" sanıyor, ikinci
+        // denemede taze token ile geçiyordu). no-store → her zaman taze sayfa + taze token/şirket state. (2026-07-31)
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+
         if (User.Identity?.IsAuthenticated == true)
         {
             return RedirectToAction("Index", "Home");

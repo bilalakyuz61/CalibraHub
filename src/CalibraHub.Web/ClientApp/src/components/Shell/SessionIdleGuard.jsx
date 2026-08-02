@@ -6,11 +6,19 @@ import './SessionIdleGuard.css'
  *
  *  - /Account/SessionPolicy → { idleMinutes, warnSeconds }. idleMinutes <= 0 → tamamen devre dışı.
  *  - Aktivite: fare/klavye/scroll/dokunma + iframe sekmelerinden 'calibra:activity' postMessage
- *    (içerik iframe'lerine _Layout küçük bir forwarder enjekte eder) → idle sayacı sıfırlanır.
+ *    (içerik iframe'lerine _Layout küçük bir forwarder enjekte eder) → son-aktivite zamanı güncellenir.
  *  - Aktivitede throttle'lı /Account/KeepAlive ping → sliding auth cookie tazelenir; böylece aktif
  *    ama sunucuya istek atmayan (okuyan) kullanıcı sunucu backstop'una takılmaz.
  *  - (idle - warnSeconds) noktasında geri sayımlı uyarı modalı + "Devam Et". Süre dolunca
  *    /Account/Logout?returnUrl=... — kullanıcı giriş sonrası kaldığı yere dönebilir.
+ *
+ *  DUVAR-SAATİ (wall-clock) TABANLI (2026-07-31): idle penceresi setTimeout ile DEĞİL, son-aktivite
+ *  zaman damgası (lastActivity) + 1 sn'lik interval ile ölçülür. Bilgisayar uykuya girince / sekme
+ *  uzun süre arka planda kalınca tarayıcı setTimeout'ları DONDURUR; uyanışta birikmiş timer'lar
+ *  neredeyse aynı anda tetiklenip "uyarı bir an parlayıp hemen logout" davranışı yaratıyordu.
+ *  Wall-clock'ta uyanışta tek tick GERÇEK geçen süreyi hesaplar: hâlâ uyarı penceresindeyse uyarıyı
+ *  düzgün gösterir, süre çoktan aşılmışsa doğrudan logout eder (flaş-uyarı olmaz). visibilitychange
+ *  ile sekmeye dönüşte anında değerlendirilir.
  *
  * Per-company süre client tarafında burada uygulanır (kesin + uyarılı); sunucu ExpireTimeSpan
  * (appsettings Authentication:IdleMinutes) yalnız coarse backstop'tur.
@@ -25,20 +33,17 @@ export default function SessionIdleGuard() {
   useEffect(function () {
     let alive = true
     const cfg = { idleMs: 0, warnMs: 60000 }
-    const timers = { warn: null, hard: null, tick: null }
+    let tick = null
+    let lastActivity = Date.now()
     let lastPing = 0
     let done = false
 
-    function clearTimers() {
-      if (timers.warn) clearTimeout(timers.warn)
-      if (timers.hard) clearTimeout(timers.hard)
-      if (timers.tick) clearInterval(timers.tick)
-      timers.warn = timers.hard = timers.tick = null
-    }
+    function stop() { if (tick) clearInterval(tick); tick = null }
+
     function logout() {
       if (done) return
       done = true
-      clearTimers()
+      stop()
       const rt = encodeURIComponent(window.location.pathname + window.location.search)
       window.location.href = '/Account/Logout?returnUrl=' + rt
     }
@@ -50,30 +55,32 @@ export default function SessionIdleGuard() {
       lastPing = now
       fetch('/Account/KeepAlive', { method: 'POST', credentials: 'same-origin' }).catch(function () {})
     }
-    function beginCountdown() {
-      let secs = Math.round(cfg.warnMs / 1000)
-      setWarnLeft(secs)
-      timers.tick = setInterval(function () {
-        secs -= 1
-        if (secs <= 0) { logout(); return }
-        setWarnLeft(secs)
-      }, 1000)
-    }
-    function reset() {
-      if (!cfg.idleMs || done) return
-      clearTimers()
-      setWarnLeft(0)
-      keepAlive()
-      timers.warn = setTimeout(beginCountdown, Math.max(0, cfg.idleMs - cfg.warnMs))
-      timers.hard = setTimeout(logout, cfg.idleMs + 3000)   // güvenlik ağı
-    }
     function onActivity() {
       if (warnLeftRef.current > 0) return   // modal açıkken aktivite yeterli değil — "Devam Et" gerekir
-      reset()
+      lastActivity = Date.now()
+      keepAlive()
     }
     function onMsg(ev) { if (ev && ev.data === 'calibra:activity') onActivity() }
 
-    apiRef.current.continue = function () { setWarnLeft(0); lastPing = 0; reset() }
+    // Wall-clock değerlendirme — her tick + görünürlük değişiminde (uyanış) çağrılır.
+    function evaluate() {
+      if (done || !cfg.idleMs) return
+      const elapsed = Date.now() - lastActivity
+      if (elapsed >= cfg.idleMs) { logout(); return }
+      const remainingMs = cfg.idleMs - elapsed
+      if (remainingMs <= cfg.warnMs) {
+        setWarnLeft(Math.max(1, Math.ceil(remainingMs / 1000)))
+      } else if (warnLeftRef.current !== 0) {
+        setWarnLeft(0)
+      }
+    }
+
+    apiRef.current.continue = function () {
+      lastActivity = Date.now()
+      lastPing = 0
+      setWarnLeft(0)
+      keepAlive()
+    }
     apiRef.current.logout = logout
 
     const evs = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'wheel']
@@ -86,9 +93,11 @@ export default function SessionIdleGuard() {
         if (mins <= 0) return   // idle timeout kapalı (0)
         cfg.idleMs = mins * 60000
         cfg.warnMs = Math.min((Number(d.warnSeconds) || 60) * 1000, cfg.idleMs - 1000)
+        lastActivity = Date.now()
         evs.forEach(function (e) { window.addEventListener(e, onActivity, { passive: true }) })
         window.addEventListener('message', onMsg)
-        reset()
+        document.addEventListener('visibilitychange', evaluate)
+        tick = setInterval(evaluate, 1000)
       })
       .catch(function () { /* sessiz — idle guard devre dışı */ })
 
@@ -96,7 +105,8 @@ export default function SessionIdleGuard() {
       alive = false
       evs.forEach(function (e) { window.removeEventListener(e, onActivity) })
       window.removeEventListener('message', onMsg)
-      clearTimers()
+      document.removeEventListener('visibilitychange', evaluate)
+      stop()
     }
   }, [])
 
