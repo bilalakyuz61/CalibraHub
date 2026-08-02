@@ -846,13 +846,14 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
     // Satış siparişi → Satış İrsaliyesi (çıkış). "Teslim Et" butonu buradan geçer.
     public Task<(int Id, string DocNo)> DeliverSalesOrderAsync(
-        int salesOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct)
-        => ConvertOrderToDeliveryAsync(salesOrderId, isPurchase: false, createdById, deliverByLine, ct);
+        int salesOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct,
+        IReadOnlyDictionary<int, IReadOnlyList<KitComponentPickDto>>? componentPicks = null)
+        => ConvertOrderToDeliveryAsync(salesOrderId, isPurchase: false, createdById, deliverByLine, ct, componentPicks);
 
     // Satın alma siparişi → Alış İrsaliyesi (giriş / mal kabul).
     public Task<(int Id, string DocNo)> ReceivePurchaseOrderAsync(
         int purchaseOrderId, int? createdById, IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct)
-        => ConvertOrderToDeliveryAsync(purchaseOrderId, isPurchase: true, createdById, deliverByLine, ct);
+        => ConvertOrderToDeliveryAsync(purchaseOrderId, isPurchase: true, createdById, deliverByLine, ct, componentPicks: null);
 
     // Kısmi teslimat modalı için siparişin açık kalemleri (gösterim biriminde miktarlar).
     public async Task<IReadOnlyList<OrderOpenLineDto>> GetOrderOpenLinesAsync(int orderId, CancellationToken ct)
@@ -860,7 +861,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         var list = new List<OrderOpenLineDto>();
         // Ara ham satırlar (kit tespiti için TypeId dahil) — DTO'lar snapshot yüklendikten sonra kurulur.
-        var raw = new List<(int LineId, string? Code, string? Name, string? Unit, decimal Qty, decimal BaseQ, decimal Deliv, string Track, int TypeId)>();
+        var raw = new List<(int LineId, string? Code, string? Name, string? Unit, decimal Qty, decimal BaseQ, decimal Deliv, string Track, int TypeId, int? LocId)>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using (var cmd = conn.CreateCommand())
         {
@@ -868,7 +869,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 SELECT dl.[Id], i.[Code], i.[Name], u.[Name],
                        dl.[Quantity], dl.[BaseQuantity], dl.[DeliveredQuantity],
                        ISNULL(i.[TrackingType], N'None') AS TrackingType,
-                       ISNULL(i.[TypeId], 0) AS TypeId
+                       ISNULL(i.[TypeId], 0) AS TypeId,
+                       ISNULL(dl.[LocationId], doc.[LocationId]) AS LocId
                 FROM {T("DocumentLine")} dl
                 INNER JOIN {T("Document")} doc ON doc.[Id] = dl.[DocumentId]
                 LEFT JOIN {T("Items")} i ON i.[Id] = dl.[ItemId]
@@ -888,10 +890,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                          r.IsDBNull(3) ? null : r.GetString(3),
                          r.GetDecimal(4), r.GetDecimal(5), r.GetDecimal(6),
                          r.IsDBNull(7) ? "None" : r.GetString(7),
-                         r.GetInt32(8)));
+                         r.GetInt32(8),
+                         r.IsDBNull(9) ? null : r.GetInt32(9)));
         }
 
-        // Kit satırları (ItemType.Kit=10) için donmuş bileşen dökümünü yükle (1-set oran + takip bayrağı).
+        // Kit satırları (ItemType.Kit=10) için donmuş bileşen dökümünü yükle (1-set oran + takip bayrağı
+        // + Faz 3: ComponentItemId/ConfigId — modal seçim geri-gönderiminde ID-tabanlı eşleşme için).
         var kitBriefs = new Dictionary<int, List<KitComponentBriefDto>>();
         var kitLineIds = raw.Where(x => x.TypeId == 10).Select(x => x.LineId).ToList();
         foreach (var lid in kitLineIds)
@@ -899,7 +903,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             var comps = new List<KitComponentBriefDto>();
             await using var sc = conn.CreateCommand();
             sc.CommandText = $"""
-                SELECT ci.[Code], ci.[Name], s.[Quantity], ISNULL(ci.[TrackingType], N'None') AS Tracking
+                SELECT ci.[Code], ci.[Name], s.[Quantity], ISNULL(ci.[TrackingType], N'None') AS Tracking,
+                       s.[ComponentItemId], s.[ConfigId]
                 FROM {T("DocumentLineKitComponent")} s
                 LEFT JOIN {T("Items")} ci ON ci.[Id] = s.[ComponentItemId]
                 WHERE s.[DocumentLineId] = @L
@@ -915,7 +920,10 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 comps.Add(new KitComponentBriefDto(
                     sr.IsDBNull(0) ? null : sr.GetString(0),
                     sr.IsDBNull(1) ? null : sr.GetString(1),
-                    sr.GetDecimal(2), tracked));
+                    sr.GetDecimal(2), tracked,
+                    ComponentItemId: sr.GetInt32(4),
+                    ConfigId: sr.IsDBNull(5) ? null : sr.GetInt32(5),
+                    Tracking: track));
             }
             kitBriefs[lid] = comps;
         }
@@ -933,7 +941,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             IReadOnlyList<KitComponentBriefDto>? kitComps = isKit && kitBriefs.TryGetValue(x.LineId, out var kb) ? kb : null;
 
             list.Add(new OrderOpenLineDto(x.LineId, x.Code, x.Name, x.Unit, x.Qty, delivDisplay, openDisplay, serial,
-                isKit, kitComps));
+                isKit, kitComps, SourceLocationId: x.LocId));
         }
         return list;
     }
@@ -955,7 +963,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
     /// </summary>
     private async Task<(int Id, string DocNo)> ConvertOrderToDeliveryAsync(
         int orderId, bool isPurchase, int? createdById,
-        IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct)
+        IReadOnlyDictionary<int, decimal>? deliverByLine, CancellationToken ct,
+        IReadOnlyDictionary<int, IReadOnlyList<KitComponentPickDto>>? componentPicks = null)
     {
         var companyId    = _connectionFactory.ResolveCurrentCompanyId();
         var expectedType = isPurchase ? "alis_siparisi"   : "satis_siparisi";
