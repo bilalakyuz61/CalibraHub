@@ -26,11 +26,13 @@ public sealed class QualityController : Controller
     private readonly IDocumentRepository _documents;
     private readonly IStockDocRepository _stockDocs;
     private readonly IWorkOrderRepository _workOrders;
+    private readonly IFinanceService _finance;
     private readonly ILogger<QualityController> _logger;
 
     public QualityController(IQualityService quality, IQualityDefectCodeService defectCodes,
         ICapaService capa, ILogisticsConfigurationService logistics, IDocumentRepository documents,
-        IStockDocRepository stockDocs, IWorkOrderRepository workOrders, ILogger<QualityController> logger)
+        IStockDocRepository stockDocs, IWorkOrderRepository workOrders, IFinanceService finance,
+        ILogger<QualityController> logger)
     {
         _quality = quality;
         _defectCodes = defectCodes;
@@ -39,6 +41,7 @@ public sealed class QualityController : Controller
         _documents = documents;
         _stockDocs = stockDocs;
         _workOrders = workOrders;
+        _finance = finance;
         _logger = logger;
     }
 
@@ -641,6 +644,63 @@ public sealed class QualityController : Controller
         {
             _logger.LogError(ex, "DÖF kaynak kayıt arama hatası (kind={Kind}, search={Search})", kind, search);
             return Json(Array.Empty<object>());
+        }
+    }
+
+    // GET /Quality/CapaSourceLabelLookup?sourceKind=&sourceId=
+    // → { label, url } — var olan DÖF kaydında kaynağı salt-okunur göstermek (belge no/ad + link).
+    // SourceDocumentLabelLookup'ın DÖF (CapaDetailDto.SourceKind/SourceId) versiyonu.
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> CapaSourceLabelLookup(string? sourceKind, int? sourceId, CancellationToken ct)
+    {
+        if (sourceId is not > 0) return Json(new { label = (string?)null, url = (string?)null });
+        try
+        {
+            switch (sourceKind)
+            {
+                case "QualityInspection":
+                {
+                    var insp = await _quality.GetInspectionAsync(sourceId.Value, ct);
+                    var verdictLabel = insp?.Verdict switch
+                    {
+                        (byte)InspectionVerdict.Conforming => "Uygun",
+                        (byte)InspectionVerdict.NonConforming => "Uygunsuz",
+                        (byte)InspectionVerdict.Conditional => "Şartlı Kabul",
+                        _ => null,
+                    };
+                    return Json(new
+                    {
+                        label = insp is null ? null : insp.DocumentNumber + (verdictLabel is { Length: > 0 } ? " · " + verdictLabel : ""),
+                        url = insp is null ? null : $"/Quality/InspectionEdit?id={sourceId.Value}",
+                    });
+                }
+                case "alis_irsaliyesi":
+                {
+                    var doc = await _documents.GetByIdAsync(sourceId.Value, ct);
+                    return Json(new
+                    {
+                        label = doc?.DocumentNumber,
+                        url = doc is null ? null : $"/Sales/DocumentEdit?id={sourceId.Value}",
+                    });
+                }
+                case "Contact":
+                {
+                    var contact = await _finance.GetContactByIdAsync(sourceId.Value, ct);
+                    return Json(new
+                    {
+                        label = contact is null ? null : contact.AccountCode + " — " + contact.AccountTitle,
+                        url = contact is null ? null : $"/Finance/ContactEdit?id={sourceId.Value}",
+                    });
+                }
+                default:
+                    return Json(new { label = (string?)null, url = (string?)null });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DÖF kaynak etiket arama hatası (sourceKind={Kind}, sourceId={Id})", sourceKind, sourceId);
+            return Json(new { label = (string?)null, url = (string?)null });
         }
     }
 

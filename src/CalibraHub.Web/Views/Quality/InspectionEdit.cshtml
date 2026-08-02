@@ -25,6 +25,17 @@
         itemId = string.IsNullOrWhiteSpace(qItemId) ? null : qItemId,
         quantity = string.IsNullOrWhiteSpace(qQuantity) ? null : qQuantity,
     });
+
+    // "DÖF Aç" — yalnız kayıtlı ve uygunsuz (NonConforming) karar verilmiş muayenede görünür.
+    // Standart action bar'ın ExtraButtonsHtml slotunda render edilir (referans: StockDocEdit "Muayene Oluştur").
+    var isNonConforming = Model?.Verdict == (byte)InspectionVerdict.NonConforming;
+    var inspExtraBtns = isNonConforming
+        ? "<button type=\"button\" class=\"pte-btn pte-btn--danger pte-btn--icon\" id=\"in-dof-btn\" " +
+          "title=\"Bu uygunsuz muayeneden DÖF açar\" aria-label=\"DÖF Aç\" " +
+          "onclick=\"window.location.href='/Quality/CapaEdit?sourceKind=QualityInspection&sourceId=" + Model!.DocumentId + "'\">" +
+          "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z\"/><line x1=\"12\" x2=\"12\" y1=\"9\" y2=\"13\"/><line x1=\"12\" x2=\"12.01\" y1=\"17\" y2=\"17\"/></svg>" +
+          "<span class=\"pte-btn__label\">DÖF Aç</span></button>"
+        : "";
 }
 
 <div class="ux-edit-shell">
@@ -36,6 +47,7 @@
       ["SaveBtnId"]   = "in-save",
       ["DeleteBtnId"] = "in-delete",
       ["ShowDelete"]  = !isNew,
+      ["ExtraButtonsHtml"] = inspExtraBtns,
   })
 
   <div class="ux-edit-body">
