@@ -25,9 +25,12 @@
  * GENELİNE uygulanır) verilmişse `.cst-root`'a CSS değişkeni (`--cst-head-fs`,
  * `--cst-body-fs`, `--cst-row-pad`) olarak yazılır; index.css bunları MEVCUT
  * değerleri fallback vererek tüketir (`var(--cst-body-fs, 12.5px)` gibi).
- * Per-sütun `columnConfig` override'ı (yukarısı) hücreye/başlığa DOĞRUDAN
- * inline stil olarak yazıldığı için bu genel ayarı her zaman EZER — bilinçli
- * ("genel = varsayılan, sütun = istisna"), bkz. SmartTableRow.jsx fontStyleFor.
+ * Per-sütun `columnConfig` font override'ı (yukarısı, fontSize/fontWeight)
+ * YALNIZCA veri hücresine DOĞRUDAN inline stil olarak yazılır (başlığa DEĞİL —
+ * 2026-08-02, bkz. thead render'ı) ve `--cst-body-fs` genel ayarını her zaman
+ * EZER — bilinçli ("genel = varsayılan, sütun = istisna"), bkz.
+ * SmartTableRow.jsx fontStyleFor. Başlık font boyutu ise SADECE `--cst-head-fs`
+ * (Genel → Başlık Font Boyutu) ile yönetilir, per-sütun ayarından etkilenmez.
  *
  * Sabit sol blok — sadece Islemler, sticky-left (0'da). Pin'li veri sutunlari
  * bu sutundan hemen sonra baslar. Opaklik/z-index: bkz. index.css
@@ -446,10 +449,11 @@ export default function SmartTable(props) {
 
   // rootStyle — sadece kullanici override etmisse CSS degiskeni yazilir;
   // yoksa key hic eklenmez ve index.css'teki var(--cst-*, <fallback>) devreye
-  // girer (Otomatik). Sutun bazli fontSize/fontWeight (TableValueCell/bu
-  // dosyadaki th render'i, ikisi de inline style) BUNDAN DAHA SPESIFIK oldugu
-  // icin her zaman kazanir — genel ayar "varsayilan", sutun ayari "istisna"
-  // (bilincli, bozma).
+  // girer (Otomatik). Sutun bazli fontSize/fontWeight (yalnizca TableValueCell —
+  // veri hucresi; th render'ina UYGULANMAZ, 2026-08-02) BUNDAN DAHA SPESIFIK
+  // oldugu icin veri hucresinde her zaman kazanir — genel ayar "varsayilan",
+  // sutun ayari "istisna" (bilincli, bozma). Baslik (--cst-head-fs) tamamen
+  // ayri: per-sutun ayardan etkilenmez.
   var rootStyle = {}
   if (tableFormat) {
     if (typeof tableFormat.headerFontSize === 'number' && tableFormat.headerFontSize > 0) rootStyle['--cst-head-fs'] = tableFormat.headerFontSize + 'px'
@@ -474,9 +478,12 @@ export default function SmartTable(props) {
                 var Icon = resolveIcon(c.icon, null, c.dataType)
                 var thStyle = { textAlign: c.align }
                 if (c.pinned) thStyle.left = c.stickyLeft
-                var labelStyle = {}
-                if (c.fontSize) labelStyle.fontSize = c.fontSize + 'px'
-                if (c.fontWeight) labelStyle.fontWeight = c.fontWeight
+                // BAŞLIK FONT'U — per-sütun Boyut/Kalınlık (fontSize/fontWeight)
+                // buraya UYGULANMAZ (2026-08-02, kullanıcı isteği: "kolon ayarları
+                // başlığa müdahale etmesin"). Başlık font boyutu YALNIZCA "Genel"
+                // bölümündeki "Başlık Font Boyutu" (--cst-head-fs) ile yönetilir;
+                // per-sütun Boyut/Kalınlık artık SADECE veri hücrelerine
+                // (SmartTableRow.jsx fontStyleFor) etki eder.
                 return (
                   <th
                     key={c.id}
@@ -486,7 +493,7 @@ export default function SmartTable(props) {
                   >
                     <span className="cst-th__inner">
                       <Icon size={12} strokeWidth={2} className="cst-th__icon" />
-                      <span className="cst-th__label" style={labelStyle}>{c.label}</span>
+                      <span className="cst-th__label">{c.label}</span>
                     </span>
                   </th>
                 )

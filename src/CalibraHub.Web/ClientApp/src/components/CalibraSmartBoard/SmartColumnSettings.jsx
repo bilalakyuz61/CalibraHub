@@ -834,12 +834,39 @@ export default function SmartColumnSettings(props) {
     patchTable({ headerFontSize: next === FONT_SIZE_NATURAL ? undefined : next })
   }
   function handleHeaderFontSizeReset() { patchTable({ headerFontSize: undefined }) }
+
+  // "Veri Font Boyutu" TEK MASTER (2026-08-02, kullanıcı isteği): üstteki genel
+  // veri fontu değiştiğinde AKTİF (görünür) tüm sütunların per-sütun "Boyut"
+  // (fontSize) değeri de bu değere eşitlenir — "kolon ayarlarındaki tüm veri
+  // font ayarları burada yapılan ayara göre değişsin". Explicit değer (V) →
+  // tüm görünür sütun fontSize = V (per-sütun stepper'lar V gösterir); Otomatik
+  // (undefined) → tüm görünür sütun fontSize override'ı temizlenir (Otomatik'e
+  // döner, --cst-body-fs varsayılanını miras alır). Sütun bazlı ince ayar sonra
+  // yine yapılabilir; bir sonraki genel değişiklik yine hepsini eşitler.
+  function applyBodyFontToAllColumns(value) {
+    setColumns(function (prev) {
+      var next = Object.assign({}, prev)
+      visibleIds.forEach(function (id) {
+        var cur = Object.assign({}, next[id] || {})
+        if (typeof value === 'number' && value > 0) cur.fontSize = value
+        else delete cur.fontSize
+        if (Object.keys(cur).length === 0) delete next[id]
+        else next[id] = cur
+      })
+      return next
+    })
+  }
   function handleBodyFontSizeStep(dir) {
     var cur = clampTableFontSize(tableFormat.bodyFontSize) || FONT_SIZE_NATURAL
     var next = Math.max(TABLE_FONT_MIN, Math.min(TABLE_FONT_MAX, cur + dir * TABLE_FONT_STEP))
-    patchTable({ bodyFontSize: next === FONT_SIZE_NATURAL ? undefined : next })
+    var applied = next === FONT_SIZE_NATURAL ? undefined : next
+    patchTable({ bodyFontSize: applied })
+    applyBodyFontToAllColumns(applied)
   }
-  function handleBodyFontSizeReset() { patchTable({ bodyFontSize: undefined }) }
+  function handleBodyFontSizeReset() {
+    patchTable({ bodyFontSize: undefined })
+    applyBodyFontToAllColumns(undefined)
+  }
   function handleRowSpacingStep(dir) {
     var cur = clampRowSpacing(tableFormat.rowSpacing) || TABLE_ROW_PAD_NATURAL
     var next = Math.max(TABLE_ROW_PAD_MIN, Math.min(TABLE_ROW_PAD_MAX, cur + dir * TABLE_ROW_PAD_STEP))
@@ -1011,11 +1038,14 @@ export default function SmartColumnSettings(props) {
                     {/* Genel — TABLO GENELİNE uygulanan 3 ayar (kullanıcı bazında,
                         sütun bazında DEĞİL): Başlık/Veri font boyutu + Satır Aralığı.
                         columnConfigService kanonik şekline "table" alanı olarak
-                        kaydedilir (bkz. normalizeColumnConfig). Sütun bazlı override
-                        (aşağıdaki ColumnRow → Boyut) inline stil olarak hücreye
-                        uygulanır ve bu genel ayarı EZER — bilinçli (CSS değişkeni <
-                        inline stil), bkz. SmartTable.jsx / index.css .cst-value__text
-                        yorumu. */}
+                        kaydedilir (bkz. normalizeColumnConfig).
+                        · Başlık Font Boyutu → SADECE başlık (--cst-head-fs); per-sütun
+                          Boyut/Kalınlık artık başlığa DOKUNMAZ (2026-08-02).
+                        · Veri Font Boyutu → veri hücreleri için TEK MASTER: değişince
+                          tüm görünür sütunun per-sütun "Boyut" değeri buna eşitlenir
+                          (applyBodyFontToAllColumns). Sütun bazlı Boyut yine de sonra
+                          ince ayar için EZebilir (CSS değişkeni < inline stil), bkz.
+                          SmartTable.jsx / index.css .cst-value__text yorumu. */}
                     <div className="px-5 pt-3 pb-2">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
