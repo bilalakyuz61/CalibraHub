@@ -676,7 +676,7 @@
         if (lines.length === 0) { showMsg('Kit içinde en az bir bileşen olmalı.', true); return; }
 
         var fixedPrice = null;
-        if (priceMode === 'Fixed') {
+        if (priceMode === 'FixedPackage') {
             var fp = parseFloat(($('keFixedPrice').value || '').replace(',', '.'));
             fixedPrice = isFinite(fp) ? fp : null;
         }
@@ -688,7 +688,15 @@
             fixedPrice: fixedPrice,
             description: ($('keDescription').value || '').trim() || null,
             lines: lines.map(function (l) {
-                return { itemId: 0, componentMaterialCode: l.code, componentConfigCode: null, quantity: l.quantity, note: l.note || null };
+                return {
+                    itemId: 0,
+                    componentMaterialCode: l.code,
+                    configId: l.configId || null,
+                    componentConfigCode: l.configCode || null,
+                    quantity: l.quantity,
+                    note: l.note || null,
+                    unitPrice: (priceMode === 'FixedComponent' && l.unitPrice != null) ? l.unitPrice : null
+                };
             })
         };
 
@@ -729,7 +737,7 @@
         $('keHeaderTitle').textContent = KIT_CODE ? ('Kit: ' + KIT_CODE) : 'Kit İçeriği';
         $('keHeaderSub').textContent = KIT_NAME || 'Paket ürün — tek kod altında bileşen listesi';
 
-        if (KIT_ITEM_ID <= 0) { setPriceMode('Fixed'); renderLines(); return; }
+        if (KIT_ITEM_ID <= 0) { setPriceMode('FixedPackage'); renderLines(); return; }
 
         fetch('/Logistics/GetKit?itemId=' + KIT_ITEM_ID, { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : { found: false }; })
@@ -737,22 +745,26 @@
                 if (d && d.found) {
                     if (d.itemCode) { KIT_CODE = d.itemCode; $('keHeaderTitle').textContent = 'Kit: ' + d.itemCode; }
                     if (d.itemName) { KIT_NAME = d.itemName; $('keHeaderSub').textContent = d.itemName; }
-                    setPriceMode(d.priceMode || 'Fixed');
+                    setPriceMode(d.priceMode || 'FixedPackage');
                     $('keFixedPrice').value = (d.fixedPrice != null) ? d.fixedPrice : '';
                     $('keDescription').value = d.description || '';
                     lines = (d.lines || []).map(function (l) {
-                        return { code: l.componentMaterialCode, name: l.componentMaterialName, quantity: l.quantity, note: l.note || '' };
+                        return {
+                            code: l.componentMaterialCode, name: l.componentMaterialName, quantity: l.quantity, note: l.note || '',
+                            configId: l.configId || null, configCode: l.componentConfigCode || null,
+                            unitPrice: (l.unitPrice != null) ? l.unitPrice : null
+                        };
                     });
                     var ver = $('keHeaderVer');
                     ver.style.display = ''; ver.textContent = 'v' + (d.versionNo || 1);
                 } else {
-                    setPriceMode('Fixed');
+                    setPriceMode('FixedPackage');
                 }
                 renderLines();
-                // Seq 1073: Sabit modda fiyat boşsa Genel Liste'den otomatik doldur (kayıtlı değer ezilmez).
-                if (priceMode === 'Fixed') keAutofillFixedPriceFromList(false);
+                // Seq 1073: Sabit Paket modda fiyat boşsa Genel Liste'den otomatik doldur (kayıtlı değer ezilmez).
+                if (priceMode === 'FixedPackage') keAutofillFixedPriceFromList(false);
             })
-            .catch(function () { setPriceMode('Fixed'); renderLines(); });
+            .catch(function () { setPriceMode('FixedPackage'); renderLines(); });
     }
 
     loadKit();
