@@ -10497,6 +10497,23 @@ body.app-theme-dark .ux-edit-nav {
   background: rgba(15,15,26,0.45);
   border-right-color: rgba(255,255,255,0.06);
 }
+/* ── Sayısal alanlarda native artırma/azaltma (spinner) oklarını kaldır —
+   PROGRAM GENELİ (2026-08-03 kullanıcı isteği). Tek global kural; ekran-bazlı
+   dağınık .sq-no-spinner / .pte-input / .wf-input tekrarlarının yerini alır
+   (onlar zararsız kalır). Chromium/WebKit inner+outer spin-button + Firefox
+   appearance:textfield. Sadece görünümü kaldırır; ok tuşu/scroll ile değer
+   değiştirme (native davranış) ETKİLENMEZ. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .ux-edit-nav__group {
   font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
   color: #94a3b8;
