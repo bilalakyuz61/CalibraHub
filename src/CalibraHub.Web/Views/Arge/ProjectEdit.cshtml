@@ -5,6 +5,7 @@
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni AR-GE Projesi" : $"AR-GE Projesi: {Model!.Name}";
     ViewData["FormCode"] = "ARGE_PROJECT_EDIT";
+    ViewData["HelpKey"] = "arge-project-edit";
     ViewData["BodyClass"] = "page-arge-edit workspace-frame-body";
 
     var statusEnum = isNew ? ArgeProjectStatus.Planning : (ArgeProjectStatus)Model!.Status;
