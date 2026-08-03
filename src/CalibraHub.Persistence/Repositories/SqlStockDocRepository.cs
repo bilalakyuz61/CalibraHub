@@ -330,6 +330,28 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
+            // Kit koruması (Faz 4): kit phantom bundle'dır (stok bileşende) — manuel Giriş/Çıkış/Transfer
+            // belgesine kit kalemi eklenemez; kit üzerinde gerçek stok hareketi anlamsız/yanıltıcıdır.
+            // Sessiz phantom hareket YERİNE net hata. Kit yalnız satış teslimatında bileşenlerine patlar.
+            var lineItemIds = incomingLines.Where(l => l.ItemId > 0).Select(l => l.ItemId).Distinct().ToList();
+            if (lineItemIds.Count > 0)
+            {
+                var kitNames = new List<string>();
+                await using (var kchk = conn.CreateCommand())
+                {
+                    kchk.Transaction = tx;
+                    var pn = lineItemIds.Select((_, i) => "@ki" + i).ToArray();
+                    kchk.CommandText = $"SELECT ISNULL([Name],[Code]) FROM {T("Items")} WHERE [Id] IN ({string.Join(",", pn)}) AND [TypeId] = 10;";
+                    for (var i = 0; i < lineItemIds.Count; i++) kchk.Parameters.AddWithValue(pn[i], lineItemIds[i]);
+                    await using var kr = await kchk.ExecuteReaderAsync(ct);
+                    while (await kr.ReadAsync(ct)) kitNames.Add(kr.IsDBNull(0) ? "?" : kr.GetString(0));
+                }
+                if (kitNames.Count > 0)
+                    throw new InvalidOperationException(
+                        $"Kit ürünü manuel stok belgesine eklenemez: {string.Join(", ", kitNames)}. " +
+                        "Kit yalnız satış teslimatında bileşenlerine patlar; stok hareketi bileşen kartları üzerinden yapılır.");
+            }
+
             int docId;
             string docNo;
             var notesWithRef = CombineNotesWithRef(request.Notes, request.RefNo);
