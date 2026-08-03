@@ -50,7 +50,7 @@
  */
 import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical } from 'lucide-react'
+import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical, ChevronDown } from 'lucide-react'
 import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'

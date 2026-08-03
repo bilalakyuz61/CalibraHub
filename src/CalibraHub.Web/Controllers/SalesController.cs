@@ -179,17 +179,46 @@ public sealed class SalesController : Controller
     };
 
     /// <summary>
-    /// Belge LİSTE satır menüsüne "kaydın edit ekranını autoAction ile aç" 3 işlemi
-    /// (Durum Değiştir / Tüm Ürünlerin Maliyeti / Onay Süreci) — 2026-08-02, kullanıcı
-    /// isteği: edit ekranı İşlemler menüsündeki işlemler liste satır menüsünde de olsun.
-    /// Tümü /Sales/DocumentEdit'i (5 belge tipi paylaşır) autoAction query'siyle açar;
+    /// Belge LİSTE satır menüsüne "kaydın edit ekranını autoAction ile aç" 2 işlemi
+    /// (Tüm Ürünlerin Maliyeti / Onay Süreci) — 2026-08-02, kullanıcı isteği: edit
+    /// ekranı İşlemler menüsündeki işlemler liste satır menüsünde de olsun.
+    /// /Sales/DocumentEdit'i (5 belge tipi paylaşır) autoAction query'siyle açar;
     /// edit ekranı yükleme sonrası ilgili işlemi otomatik tetikler.
     /// </summary>
     private static object[] BuildRecordOperationActions(int id) => new object[]
     {
-        new { label = "Durum Değiştir",         icon = "Clock",     color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
+        BuildChangeStatusAction(id),
         new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt",   color = "amber",  url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" },
         new { label = "Onay Süreci",            icon = "GitBranch", color = "sky",    url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" },
+    };
+
+    /// <summary>
+    /// "Durum Değiştir" — PageComment Seq 1071 (2026-08-03): önceden edit ekranına
+    /// deep-link'ti (autoAction=status), kullanıcı listeden ayrılmadan inline durum
+    /// değiştirmek istedi. type="status-menu" SmartTableRow.jsx'e (İşlemler menüsünde
+    /// bu öge tıklanınca AÇILAN sekme yerine NESTED bir seçenek listesi) render talimatı
+    /// verir; seçim ChangeQuoteStatus'a (mevcut endpoint — DocumentEdit'in
+    /// window.sqActionStatus/sqChangeStatus'unun kullandığı AYNI endpoint) POST edilir.
+    /// options listesi DocumentEdit.cshtml'deki sabit 5 durumlu state machine ile
+    /// BİREBİR aynı (satır 2649-2668) — akış/izin mantığı değişmedi, sadece tetikleme
+    /// yolu (deep-link → inline menü) değişti.
+    /// </summary>
+    private static object BuildChangeStatusAction(int id) => new
+    {
+        label = "Durum Değiştir",
+        icon = "Clock",
+        color = "violet",
+        type = "status-menu",
+        apiUrl = "/Sales/ChangeQuoteStatus",
+        recordId = id,
+        options = new object[]
+        {
+            new { value = "Draft",     label = "Taslak",     color = "slate" },
+            new { value = "Sent",      label = "Gönderildi", color = "blue" },
+            new { value = "Approved",  label = "Onaylandı",  color = "emerald" },
+            new { value = "Rejected",  label = "Reddedildi", color = "rose" },
+            new { value = "Cancelled", label = "İptal",      color = "amber" },
+        },
     };
 
     [HttpGet]
@@ -215,6 +244,12 @@ public sealed class SalesController : Controller
     // Sadece Quotes'a delege et.
     [HttpGet]
     public Task<IActionResult> Documents(CancellationToken ct) => Quotes(ct);
+
+    // In-place refresh endpoint (GET, JSON) — Deliveries'in DeliveriesBoardConfig'iyle
+    // aynı desen (bkz. board config içindeki refreshUrl notu).
+    [HttpGet("/Sales/QuotesBoardConfig")]
+    public async Task<IActionResult> QuotesBoardConfig(CancellationToken ct)
+        => Json(await BuildQuotesBoardConfigAsync(ct));
 
     // ════════════════════════════════════════════════════════════════
     // BuildQuotesBoardConfigAsync
@@ -422,6 +457,10 @@ public sealed class SalesController : Controller
             subtitle = $"{entities.Count} teklif",
             icon = "FileText",
             iconColor = "indigo",
+            // PageComment Seq 1071 (2026-08-03): inline "Durum Değiştir" aksiyonu POST
+            // sonrası SADECE bu board'u in-place yenilemeli (CLAUDE.md — window.location.reload
+            // yasak). Deliveries board'unun zaten kurduğu refreshUrl deseniyle aynı (satır ~653).
+            refreshUrl = "/Sales/QuotesBoardConfig",
             searchPlaceholder = "Hizli ara... (teklif no, musteri)",
             emptyText = "Henuz teklif olusturulmamis",
             actions = new object[]
