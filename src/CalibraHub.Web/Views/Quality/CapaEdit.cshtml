@@ -193,6 +193,14 @@
         <h2>Etkinlik Doğrulama &amp; Kapanış</h2>
         <div class="ux-edit-hint">Tüm aksiyonlar tamamlanıp etkinlik doğrulandıktan sonra DÖF kapatılabilir.</div>
 
+        <div id="cae-approval-status" class="cae-approval-box" style="display:none;">
+          <div class="cae-approval-box__row">
+            <span id="cae-approval-badge" class="cae-badge">—</span>
+            <span id="cae-approval-step" class="cae-approval-box__step" style="display:none;"></span>
+          </div>
+          <div id="cae-approval-note" class="cae-approval-box__note"></div>
+        </div>
+
         <div class="ux-field">
           <label>Etkinlik Doğrulandı</label>
           <div class="ux-switch-row">
@@ -223,6 +231,7 @@
             <div class="cae-state__row"><span>Durum</span><span id="cae-status-badge" class="cae-badge">—</span></div>
           </div>
           <div class="cae-state__actions" id="cae-transitions"></div>
+          <div id="cae-close-msg" style="display:none;" class="cae-info"></div>
           <div id="cae-state-err" style="display:none;" class="ux-err"></div>
         }
         else
@@ -287,6 +296,25 @@
   .cae-state__actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
   .cae-badge{display:inline-flex;align-items:center;padding:2px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:var(--app-surface-2,rgba(148,163,184,.15));color:var(--app-text-muted,#64748b);}
   body.app-theme-dark .cae-state{background:var(--app-surface,#1e293b);}
+
+  /* Kapanış onayı (ApprovalFlow) rozeti — durum rozetinden bağımsız ayrı bilgi kutusu. */
+  .cae-approval-box{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 16px;margin:0 0 16px;max-width:560px;background:var(--app-surface,#fff);}
+  body.app-theme-dark .cae-approval-box{background:var(--app-surface,#1e293b);}
+  .cae-approval-box__row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .cae-approval-box__step{font-size:12.5px;font-weight:600;color:var(--app-text-muted,#64748b);}
+  .cae-approval-box__note{font-size:12.5px;color:var(--app-text-muted,#64748b);margin-top:6px;display:none;}
+  .cae-badge--amber{background:rgba(245,158,11,.16);color:var(--warning,#b45309);}
+  body.app-theme-dark .cae-badge--amber{color:#fbbf24;}
+  .cae-badge--emerald{background:rgba(16,185,129,.16);color:var(--success,#059669);}
+  body.app-theme-dark .cae-badge--emerald{color:#34d399;}
+  .cae-badge--rose{background:rgba(239,68,68,.16);color:var(--danger,#dc2626);}
+  body.app-theme-dark .cae-badge--rose{color:#f87171;}
+  .cae-badge--blue{background:rgba(59,130,246,.16);color:var(--info,#2563eb);}
+  body.app-theme-dark .cae-badge--blue{color:#60a5fa;}
+
+  /* Durum geçişi info mesajı (Kapat → onaya gönderildi) — ux-err'in kırmızı tonundan ayrı, mavi bilgi tonu. */
+  .cae-info{margin-top:10px;padding:9px 13px;border-radius:8px;font-size:13px;background:rgba(59,130,246,.08);color:var(--info,#2563eb);border:1px solid rgba(59,130,246,.22);max-width:560px;}
+  body.app-theme-dark .cae-info{color:#60a5fa;}
 </style>
 
 @Html.AntiForgeryToken()
@@ -317,6 +345,7 @@
     function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
     function notify(text,ok){var el=document.getElementById('capa-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';el.style.color=ok?'var(--success, #059669)':'var(--danger, #dc2626)';}
     function stateErr(text){var el=document.getElementById('cae-state-err');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';}
+    function closeMsg(text){var el=document.getElementById('cae-close-msg');if(!el)return;if(!text){el.style.display='none';return;}el.textContent=text;el.style.display='';}
 
     // ── Sekme geçişi ──
     function activateTab(key){if(!key)return;document.querySelectorAll('#capaNav .ux-edit-nav__tab').forEach(function(b){b.classList.toggle('is-active',b.dataset.tab===key);});document.querySelectorAll('.ux-edit-pane').forEach(function(p){p.classList.toggle('is-active',p.dataset.tab===key);});}
@@ -567,6 +596,54 @@
         btn.title = canClose ? '' : 'Kapatmak için tüm aksiyonlar Tamamlandı/İptal olmalı ve etkinlik doğrulanmalı.';
     }
 
+    // ── Kapanış onayı (ApprovalFlow) durumu — DÖF'ün kendi durum makinesinden (STATUS_LABELS)
+    // ayrı, bağımsız bir onay akışı sonucudur. Pending iken durum ilerletme butonları gizlenir
+    // (zaten onaya gönderilmiş, tekrar tetiklenmesin); rozet tek başına yeterli bilgi verir.
+    var APPROVAL_COLOR = { Pending:'amber', Approved:'emerald', Rejected:'rose' };
+    var APPROVAL_LABEL = { Pending:'Bekliyor', Approved:'Onaylandı', Rejected:'Reddedildi', Cancelled:'İptal Edildi' };
+    function renderApprovalStatus(data){
+        var box=document.getElementById('cae-approval-status');
+        if(!box)return;
+        var badge=document.getElementById('cae-approval-badge');
+        var stepEl=document.getElementById('cae-approval-step');
+        var noteEl=document.getElementById('cae-approval-note');
+        var transWrap=document.getElementById('cae-transitions');
+        if(!data||!data.hasApproval||!data.status){
+            box.style.display='none';
+            if(transWrap)transWrap.style.display='';
+            return;
+        }
+        box.style.display='';
+        badge.className='cae-badge'+(APPROVAL_COLOR[data.status]?(' cae-badge--'+APPROVAL_COLOR[data.status]):'');
+        badge.textContent='Kapanış Onayı: '+(APPROVAL_LABEL[data.status]||data.status);
+        if(data.status==='Pending' && data.totalSteps){
+            stepEl.textContent='Adım '+data.currentStep+'/'+data.totalSteps;
+            stepEl.style.display='';
+        }else{
+            stepEl.style.display='none';
+        }
+        if(data.status==='Pending'){
+            noteEl.textContent='Kapanış onayı bekleniyor; onaylandığında DÖF otomatik kapanır.';
+            noteEl.style.display='';
+        }else if(data.status==='Rejected'){
+            noteEl.textContent='Kapanış onayı reddedildi; yeniden çalışma gerekli (Aksiyonda).';
+            noteEl.style.display='';
+        }else{
+            noteEl.style.display='none';
+        }
+        // Onaylayıcı /PendingApproval üzerinden işler — burada tekrar tetiklenmesin diye geçiş
+        // butonları yalnız Pending'de gizlenir (Approved/Rejected/Cancelled'da durum makinesi
+        // normal seyrine döner).
+        if(transWrap)transWrap.style.display=(data.status==='Pending')?'none':'';
+    }
+    function fetchApprovalStatus(){
+        if(IS_NEW || !idVal)return;
+        fetch('/Quality/CapaApprovalStatus?documentId='+idVal,{credentials:'same-origin'})
+            .then(function(r){return r.ok?r.json():null;})
+            .then(renderApprovalStatus)
+            .catch(function(){});
+    }
+
     // ── Durum rozeti + geçiş butonları (mevcut kayıt) ──
     var idVal=parseInt(document.getElementById('f-id').value,10)||0;
     if(!IS_NEW && idVal){
@@ -578,11 +655,20 @@
             b.type='button'; b.className='ux-edit-bar__btn'+(tr.s===4?' ux-edit-bar__btn--primary':'');
             b.textContent=tr.label; b.setAttribute('data-status',String(tr.s));
             b.addEventListener('click',async function(){
-                stateErr('');
+                stateErr(''); closeMsg('');
                 try{
                     var r=await fetch('/Quality/ChangeCapaStatus',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify({id:idVal,newStatus:tr.s})});
                     var d=await r.json();
                     if(!d.ok){stateErr(d.error||'İşlem başarısız.');return;}
+                    if(d.status!=null){
+                        // İstenen durum (ör. Kapat) uygulanmadı — kayıt d.status'te kaldı, kapanış
+                        // onaya gönderildi. Sayfayı yeniden yüklemeden yerel durumu güncelle.
+                        document.getElementById('f-status').value=String(d.status);
+                        if(badge)badge.textContent=STATUS_LABELS[d.status]||'—';
+                        closeMsg(d.message||'Kapanış onaya gönderildi.');
+                        fetchApprovalStatus();
+                        return;
+                    }
                     location.reload();
                 }catch(e){stateErr('Hata: '+e.message);}
             });
@@ -590,6 +676,7 @@
         });
         updateCloseGuard();
     }
+    fetchApprovalStatus();
 
     // ── Kaydet ──
     document.getElementById('capa-save').addEventListener('click',async function(){
