@@ -5706,8 +5706,13 @@ END;";
 
     /// <summary>
     /// Kit (paket urun) tablolari — ItemKit (versiyonlu baslik) + ItemKitLine (bilesen).
-    /// Yeni ozellik oldugu icin migration/backfill yok, sadece idempotent CREATE guard.
     /// BOM deseninin yalin klonu: rota/fire kolonlari yok; VersionNo + PriceMode + FixedPrice var.
+    /// 2026-08-03 (PageComment Seq 1078) — Kit fiyatlamasi 2 moddan 4 moda genisledi:
+    ///   ItemKit.PriceMode eski degerleri ('Fixed'/'RollUp') idempotent UPDATE ile yeni
+    ///   degerlere ('FixedPackage'/'ListComponent') migrate edilir — kodda alias/parse YOK,
+    ///   DB tek dogru kaynak (bkz. KitPriceMode.All whitelist, Domain/Entities/ItemKit.cs).
+    ///   ItemKitLine.UnitPrice (nullable) eklendi — FixedComponent modda bilesenin ELLE
+    ///   girilen birim fiyati (fiyat listesi DEGIL).
     /// </summary>
     private async Task EnsureItemKitTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
@@ -5720,7 +5725,7 @@ END;";
                     [Id]          INT            NOT NULL IDENTITY(1,1) CONSTRAINT [PK_ItemKit] PRIMARY KEY,
                     [ItemId]      INT            NOT NULL,
                     [VersionNo]   INT            NOT NULL CONSTRAINT [DF_ItemKit_VersionNo] DEFAULT 1,
-                    [PriceMode]   NVARCHAR(20)   NOT NULL CONSTRAINT [DF_ItemKit_PriceMode] DEFAULT 'Fixed',
+                    [PriceMode]   NVARCHAR(20)   NOT NULL CONSTRAINT [DF_ItemKit_PriceMode] DEFAULT 'FixedPackage',
                     [FixedPrice]  DECIMAL(18,4)  NULL,
                     [Description] NVARCHAR(500)  NULL,
                     [IsActive]    BIT            NOT NULL CONSTRAINT [DF_ItemKit_IsActive] DEFAULT 1,
@@ -5749,6 +5754,7 @@ END;";
                     [ItemId]      INT              NOT NULL,
                     [ConfigId]    INT              NULL,
                     [Quantity]    DECIMAL(18,4)    NOT NULL CONSTRAINT [DF_ItemKitLine_Quantity] DEFAULT 1,
+                    [UnitPrice]   DECIMAL(18,4)    NULL,
                     [LineGuid]    UNIQUEIDENTIFIER NOT NULL CONSTRAINT [DF_ItemKitLine_LineGuid] DEFAULT NEWID(),
                     [Note]        NVARCHAR(1000)   NULL,
                     [CreatedById] INT              NULL,
@@ -5758,9 +5764,24 @@ END;";
                 );
             END;
 
+            -- 2026-08-03 (Seq 1078): mevcut (canli) DB'lerde idempotent kolon ekleme —
+            -- FixedComponent modda bilesenin ELLE girilen birim fiyati.
+            IF COL_LENGTH(N'[{s}].[ItemKitLine]', N'UnitPrice') IS NULL
+                ALTER TABLE [{s}].[ItemKitLine] ADD [UnitPrice] DECIMAL(18,4) NULL;
+
             IF NOT EXISTS (SELECT 1 FROM sys.indexes
                            WHERE object_id = OBJECT_ID(N'[{s}].[ItemKitLine]') AND name = N'IX_ItemKitLine_ItemKitId')
                 CREATE INDEX [IX_ItemKitLine_ItemKitId] ON [{s}].[ItemKitLine]([ItemKitId]);
+
+            -- 2026-08-03 (Seq 1078): PriceMode 2 moddan 4 moda genisledi. Eski degerler
+            -- idempotent UPDATE ile yeni isimlere migrate edilir (2. calistirmada WHERE
+            -- eslesmeyecegi icin no-op olur). KitPriceMode.FixedPackage/ListComponent ile
+            -- birebir (Domain/Entities/ItemKit.cs).
+            IF OBJECT_ID(N'[{s}].[ItemKit]', N'U') IS NOT NULL
+            BEGIN
+                UPDATE [{s}].[ItemKit] SET [PriceMode] = N'FixedPackage' WHERE [PriceMode] = N'Fixed';
+                UPDATE [{s}].[ItemKit] SET [PriceMode] = N'ListComponent' WHERE [PriceMode] = N'RollUp';
+            END;
             """;
 
         await using var cmd = connection.CreateCommand();
@@ -5858,6 +5879,9 @@ END;";
     /// Kit snapshot tablosu — DocumentLineKitComponent. Bir kit belge kalemine eklendiginde
     /// o anki aktif ItemKit icerigi buraya DONDURULUR (Faz 2). DocumentLine'dan SONRA gelmeli
     /// (FK). Faz 3 irsaliye patlatmasi bu tablodan okur.
+    /// 2026-08-03 (Seq 1078): [UnitPrice] eklendi — kaynak kit PriceMode=FixedComponent iken
+    /// donduruldugu anki bilesen elle fiyati (ItemKitLine.UnitPrice). ListComponent/ListPackage
+    /// modda fiyat hep CANLI fiyat listesinden cozuldugu icin burada NULL kalir.
     /// </summary>
     private async Task EnsureDocumentLineKitSnapshotAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
@@ -5875,6 +5899,7 @@ END;";
                     [ComponentItemId] INT           NOT NULL,
                     [ConfigId]        INT           NULL,
                     [Quantity]        DECIMAL(18,4) NOT NULL CONSTRAINT [DF_DocLineKit_Qty] DEFAULT 1,
+                    [UnitPrice]       DECIMAL(18,4) NULL,
                     [Created]         DATETIME      NOT NULL CONSTRAINT [DF_DocLineKit_Created] DEFAULT SYSUTCDATETIME(),
                     CONSTRAINT [FK_DocumentLineKitComponent_DocumentLine]
                         FOREIGN KEY ([DocumentLineId]) REFERENCES [{s}].[DocumentLine]([Id]) ON DELETE CASCADE
@@ -5883,6 +5908,11 @@ END;";
                 CREATE INDEX [IX_DocumentLineKitComponent_DocumentLineId]
                     ON [{s}].[DocumentLineKitComponent]([DocumentLineId]);
             END;
+
+            -- 2026-08-03 (Seq 1078): mevcut (canli) DB'lerde idempotent kolon ekleme.
+            IF OBJECT_ID(N'[{s}].[DocumentLineKitComponent]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLineKitComponent]', N'UnitPrice') IS NULL
+                ALTER TABLE [{s}].[DocumentLineKitComponent] ADD [UnitPrice] DECIMAL(18,4) NULL;
             """;
 
         await using var cmd = connection.CreateCommand();

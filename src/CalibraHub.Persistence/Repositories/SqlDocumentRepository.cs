@@ -61,9 +61,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         var paramNames = ids.Select((_, i) => "@k" + i).ToArray();
         // Aktif kit = ayni ItemId icin MAX(Id) WHERE IsActive=1; satirlariyla JOIN.
-        // PriceMode (Seq 1073 Part B) — RollUp fiyatlama icin DocumentService bu alani kullanir.
+        // PriceMode (Seq 1073 Part B, 4 moda genisletildi Seq 1078) — server-truth fiyatlama
+        // icin DocumentService bu alani kullanir. l.UnitPrice — FixedComponent modda bilesenin
+        // ELLE girilen birim fiyati (fiyat listesi degil); diger modlarda NULL.
         cmd.CommandText = $"""
-            SELECT k.[ItemId], k.[VersionNo], k.[PriceMode], l.[ItemId] AS ComponentItemId, l.[ConfigId], l.[Quantity]
+            SELECT k.[ItemId], k.[VersionNo], k.[PriceMode], l.[ItemId] AS ComponentItemId, l.[ConfigId], l.[Quantity], l.[UnitPrice]
             FROM [{_schema}].[ItemKit] k
             INNER JOIN [{_schema}].[ItemKitLine] l ON l.[ItemKitId] = k.[Id]
             WHERE k.[IsActive] = 1
@@ -80,7 +82,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         {
             var kitItemId = reader.GetInt32(0);
             var version = reader.GetInt32(1);
-            var priceMode = reader.IsDBNull(2) ? "Fixed" : reader.GetString(2);
+            var priceMode = reader.IsDBNull(2) ? KitPriceMode.FixedPackage : reader.GetString(2);
             if (!byKit.TryGetValue(kitItemId, out var entry))
             {
                 entry = (version, priceMode, new List<KitSnapshotComponentDto>());
@@ -89,7 +91,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             entry.Comps.Add(new KitSnapshotComponentDto(
                 reader.GetInt32(3),
                 reader.IsDBNull(4) ? null : reader.GetInt32(4),
-                reader.GetDecimal(5)));
+                reader.GetDecimal(5),
+                reader.IsDBNull(6) ? null : reader.GetDecimal(6)));
         }
         return byKit.Select(kv => new KitSnapshotSourceDto(kv.Key, kv.Value.Version, kv.Value.PriceMode, kv.Value.Comps)).ToList();
     }
@@ -137,8 +140,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             ins.Transaction = tx;
             ins.CommandText = $"""
                 INSERT INTO [{_schema}].[DocumentLineKitComponent]
-                    ([DocumentLineId],[KitItemId],[KitVersionNo],[ComponentItemId],[ConfigId],[Quantity],[Created])
-                VALUES (@L,@K,@V,@C,@Cfg,@Q,SYSUTCDATETIME());
+                    ([DocumentLineId],[KitItemId],[KitVersionNo],[ComponentItemId],[ConfigId],[Quantity],[UnitPrice],[Created])
+                VALUES (@L,@K,@V,@C,@Cfg,@Q,@UP,SYSUTCDATETIME());
                 """;
             ins.Parameters.Add(new SqlParameter("@L", documentLineId));
             ins.Parameters.Add(new SqlParameter("@K", kitItemId));
@@ -146,6 +149,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             ins.Parameters.Add(new SqlParameter("@C", c.ComponentItemId));
             ins.Parameters.Add(new SqlParameter("@Cfg", (object?)c.ConfigId ?? DBNull.Value));
             ins.Parameters.Add(new SqlParameter("@Q", c.Quantity));
+            // FixedComponent modda donduruldugu anki elle bilesen fiyati (bkz. KitSnapshotComponentDto);
+            // diger modlarda NULL (fiyat her save'de canli fiyat listesinden yeniden cozulur).
+            ins.Parameters.Add(new SqlParameter("@UP", (object?)c.UnitPrice ?? DBNull.Value));
             await ins.ExecuteNonQueryAsync(ct);
         }
 
@@ -159,7 +165,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT s.[Id], s.[DocumentLineId], s.[KitItemId], s.[KitVersionNo], s.[ComponentItemId],
-                   s.[ConfigId], s.[Quantity], s.[Created],
+                   s.[ConfigId], s.[Quantity], s.[UnitPrice], s.[Created],
                    ci.[Code] AS CompCode, ci.[Name] AS CompName, cfg.[RecordCode] AS ConfigCode
             FROM [{_schema}].[DocumentLineKitComponent] s
             LEFT JOIN [{_schema}].[Items] ci ON ci.[Id] = s.[ComponentItemId]
@@ -182,10 +188,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 ComponentItemId = reader.GetInt32(4),
                 ConfigId        = reader.IsDBNull(5) ? null : reader.GetInt32(5),
                 Quantity        = reader.GetDecimal(6),
-                Created         = reader.GetDateTime(7),
-                ComponentCode   = reader.IsDBNull(8) ? null : reader.GetString(8),
-                ComponentName   = reader.IsDBNull(9) ? null : reader.GetString(9),
-                ConfigCode      = reader.IsDBNull(10) ? null : reader.GetString(10),
+                UnitPrice       = reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                Created         = reader.GetDateTime(8),
+                ComponentCode   = reader.IsDBNull(9) ? null : reader.GetString(9),
+                ComponentName   = reader.IsDBNull(10) ? null : reader.GetString(10),
+                ConfigCode      = reader.IsDBNull(11) ? null : reader.GetString(11),
             });
         }
         return list;

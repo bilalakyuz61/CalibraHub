@@ -96,34 +96,46 @@ public sealed class DocumentService : IDocumentService
     }
 
     /// <summary>
-    /// Seq 1073 Part B — RollUp (Bileşen Toplamı) modundaki kit satırlarının birim fiyatını
-    /// SERVER-TRUTH olarak hesaplar. Dönen sözlük <paramref name="lineRequests"/> içindeki
-    /// DİZİN (index) → hesaplanan birim fiyat şeklindedir (KitItemId DEĞİL — review Bulgu #1:
-    /// aynı kit birden fazla satırda geçebilir ve satırlardan biri dondurulmuş/diğeri
-    /// dondurulmamış olabilir; ItemId bazlı anahtarlama bu durumda çakışırdı).
+    /// Seq 1073 Part B, 4 moda genişletildi Seq 1078 (PageComment) — FixedPackage DIŞINDAKİ 3
+    /// kit fiyat modunun (FixedComponent/ListPackage/ListComponent) birim fiyatını SERVER-TRUTH
+    /// olarak hesaplar. Dönen sözlük <paramref name="lineRequests"/> içindeki DİZİN (index) →
+    /// hesaplanan birim fiyat şeklindedir (KitItemId DEĞİL — review Bulgu #1: aynı kit birden
+    /// fazla satırda geçebilir ve satırlardan biri dondurulmuş/diğeri dondurulmamış olabilir;
+    /// ItemId bazlı anahtarlama bu durumda çakışırdı).
     ///
-    /// Kaynak seçimi (Bulgu #1 — fiyat≠teslim ayrışmasını önler): bir satır ZATEN dondurulmuş
-    /// bir kit snapshot'ı taşıyorsa (<see cref="IDocumentRepository.GetExistingKitSnapshotsAsync"/>
+    /// Mod başına kaynak:
+    ///   FixedPackage   → bu sözlüğe HİÇ girmez (sunucu ezmez, client'ın/kayıtlı FixedPrice değeri kullanılır).
+    ///   FixedComponent → kitUnitPrice = Σ(bileşenin kit tanımındaki ELLE UnitPrice'ı × miktar).
+    ///                    Fiyat listesi ÇAĞRISI YOK — tamamen ItemKitLine.UnitPrice'tan (veya
+    ///                    donmuşsa DocumentLineKitComponent.UnitPrice'tan) gelir.
+    ///   ListPackage    → kitUnitPrice = kit'in KENDİ ItemId'si için Genel Liste/cari fiyatı
+    ///                    (bileşenlere hiç bakılmaz).
+    ///   ListComponent  → kitUnitPrice = Σ(bileşenin Genel Liste/cari fiyatı × miktar) — eski "RollUp".
+    ///
+    /// Kaynak seçimi (Bulgu #1 — fiyat≠teslim ayrışmasını önler, FixedComponent/ListComponent için):
+    /// bir satır ZATEN dondurulmuş bir kit snapshot'ı taşıyorsa (<see cref="IDocumentRepository.GetExistingKitSnapshotsAsync"/>
     /// ile tespit — freeze-on-first ile AYNI eşleşme kuralı: snapshot'taki KitItemId == satırın
-    /// güncel ItemId'si) fiyat o DONMUŞ bileşen listesinden (<see cref="IDocumentRepository.GetKitSnapshotAsync"/>)
-    /// hesaplanır — irsaliye/patlatma da aynı donmuş içerikten üretildiği için fiyat ile teslim
-    /// aynı kaynağı paylaşır. Henüz dondurulmamış satırlarda (yeni satır veya kit değişmiş —
-    /// ikisi de kayıt sırasında canlı içerikle YENİDEN donacak) canlı aktif içerik
+    /// güncel ItemId'si) bileşen listesi o DONMUŞ içerikten (<see cref="IDocumentRepository.GetKitSnapshotAsync"/>)
+    /// alınır — irsaliye/patlatma da aynı donmuş içerikten üretildiği için fiyat ile teslim aynı
+    /// kaynağı paylaşır. FixedComponent'te donmuş satırın ELLE fiyatı da (DocumentLineKitComponent.UnitPrice)
+    /// donduğu andaki değerdir (kit tanımı sonradan revize edilse bile bu belge etkilenmez).
+    /// ListComponent'te ise donan yalnız MİKTAR/bileşen kümesidir — fiyat her save'de yine CANLI
+    /// Genel Liste'den yeniden çözülür (dış kaynak zaman içinde değişir). Henüz dondurulmamış
+    /// satırlarda (yeni satır veya kit değişmiş) canlı aktif içerik
     /// (<see cref="IDocumentRepository.GetActiveKitContentsAsync"/>) kullanılır — snapshot bloğuyla
-    /// (SaveQuoteAsync, kit snapshot bölümü) TUTARLI: ikisi de "dondurulacak/dondurulmuş içerik"
-    /// tanımını paylaşır.
+    /// (SaveQuoteAsync, kit snapshot bölümü) TUTARLI.
     ///
-    /// Bileşen ItemId+ConfigId anahtarları TEK <see cref="IPriceListService.ResolveLinePricesAsync"/>
-    /// çağrısıyla (flat batch, N+1 yok) belge para birimi + cari + tarih + <paramref name="direction"/>
-    /// bağlamında çözülür, kitUnitPrice = Σ(componentPrice × componentQuantity) üretilir.
+    /// Fiyat listesi gerektiren key'ler (ListComponent bileşenleri + ListPackage kit'in kendisi)
+    /// TEK <see cref="IPriceListService.ResolveLinePricesAsync"/> çağrısıyla (flat batch, N+1 yok)
+    /// belge para birimi + cari + tarih + <paramref name="direction"/> bağlamında çözülür.
     ///
-    /// Fixed modda kit'ler bu sözlüğe HİÇ girmez (çağıran taraf client'ın/kayıtlı fixedPrice
-    /// değerini kullanmaya devam eder). Review Bulgu #2/#5 (silent-loss, CLAUDE.md kural #3):
-    /// bir kit'in bileşenlerinden TEK BİRİ bile fiyatlanamazsa o satır dictionary'e HİÇ girmez —
-    /// eksik/yanlış bir kısmi toplam asla yazılmaz, çağıran taraf mevcut/istemci UnitPrice'ı
-    /// korur. Fiyatlanamayan bileşen(ler) LogWarning ile loglanır (sessiz kayıp değil).
+    /// Review Bulgu #2/#5 (silent-loss, CLAUDE.md kural #3) TÜM modlara uygulanır: bir kit'in
+    /// bileşenlerinden TEK BİRİ bile fiyatlanamazsa (ListComponent: liste fiyatı yok; FixedComponent:
+    /// elle UnitPrice girilmemiş) veya ListPackage'da kit'in kendi fiyatı çözülemezse o satır
+    /// dictionary'e HİÇ girmez — eksik/yanlış bir kısmi toplam asla yazılmaz, çağıran taraf
+    /// mevcut/istemci UnitPrice'ı korur. Fiyatlanamayan durum LogWarning ile loglanır (sessiz kayıp değil).
     /// </summary>
-    private async Task<IReadOnlyDictionary<int, decimal>> ResolveKitRollUpPricesAsync(
+    private async Task<IReadOnlyDictionary<int, decimal>> ResolveKitServerTruthPricesAsync(
         IReadOnlyList<SaveDocumentLineRequest> lineRequests, int? contactId, int currencyId,
         PriceDirection direction, DateTime date, CancellationToken ct)
     {
@@ -132,8 +144,9 @@ public sealed class DocumentService : IDocumentService
 
         var itemIds = lineRequests.Select(l => l.ItemId).Distinct().ToArray();
         var kitContents = await _repo.GetActiveKitContentsAsync(itemIds, ct);
+        // FixedPackage kit'ler bu sözlüğe hiç girmez — sunucu ezmez.
         var liveKitByItem = kitContents
-            .Where(k => string.Equals(k.PriceMode, "RollUp", StringComparison.OrdinalIgnoreCase) && k.Components.Count > 0)
+            .Where(k => k.PriceMode != KitPriceMode.FixedPackage && k.Components.Count > 0)
             .ToDictionary(k => k.KitItemId);
         if (liveKitByItem.Count == 0) return result;
 
@@ -148,61 +161,109 @@ public sealed class DocumentService : IDocumentService
             : (await _repo.GetExistingKitSnapshotsAsync(existingLineIds, ct))
                 .ToDictionary(x => x.LineId, x => x.KitItemId);
 
-        // Her RollUp kit satırı için fiyatlanacak bileşen listesini (dondurulmuş ya da canlı) topla.
-        var perLineComponents = new Dictionary<int, List<(int ComponentItemId, int? ConfigId, decimal Quantity)>>();
+        // ListPackage satırları — kit'in KENDİ fiyatı, bileşenlere bakılmaz.
+        var listPackageLines = new Dictionary<int, PriceEntryKey>();
+        // FixedComponent/ListComponent satırları — bileşen listesi (dondurulmuş ya da canlı) + mod.
+        var componentModeLines = new Dictionary<int, (string Mode, List<(int CompItemId, int? ConfigId, decimal Qty, decimal? UnitPrice)> Comps)>();
+
         for (var i = 0; i < lineRequests.Count; i++)
         {
             var ln = lineRequests[i];
-            if (!liveKitByItem.TryGetValue(ln.ItemId, out var liveKit)) continue; // RollUp kit değil
+            if (!liveKitByItem.TryGetValue(ln.ItemId, out var liveKit)) continue; // kit değil / FixedPackage
+
+            if (liveKit.PriceMode == KitPriceMode.ListPackage)
+            {
+                listPackageLines[i] = new PriceEntryKey(ln.ItemId, ln.CombinationId);
+                continue;
+            }
 
             var isFrozenForThisKit = ln.Id is > 0
                 && frozenKitByLineId.TryGetValue(ln.Id.Value, out var frozenKitItemId)
                 && frozenKitItemId == ln.ItemId;
 
-            List<(int, int?, decimal)> comps;
+            List<(int CompItemId, int? ConfigId, decimal Qty, decimal? UnitPrice)> comps;
             if (isFrozenForThisKit)
             {
                 var snap = await _repo.GetKitSnapshotAsync(ln.Id!.Value, ct);
-                comps = snap.Select(s => (s.ComponentItemId, s.ConfigId, s.Quantity)).ToList();
+                comps = snap.Select(s => (CompItemId: s.ComponentItemId, s.ConfigId, Qty: s.Quantity, s.UnitPrice)).ToList();
             }
             else
             {
-                comps = liveKit.Components.Select(c => (c.ComponentItemId, c.ConfigId, c.Quantity)).ToList();
+                comps = liveKit.Components.Select(c => (CompItemId: c.ComponentItemId, c.ConfigId, Qty: c.Quantity, c.UnitPrice)).ToList();
             }
-            if (comps.Count > 0) perLineComponents[i] = comps;
+            if (comps.Count > 0) componentModeLines[i] = (liveKit.PriceMode, comps);
         }
-        if (perLineComponents.Count == 0) return result;
+        if (listPackageLines.Count == 0 && componentModeLines.Count == 0) return result;
 
-        var componentKeys = perLineComponents.Values
-            .SelectMany(c => c)
-            .Select(c => new PriceEntryKey(c.ComponentItemId, c.ConfigId))
-            .Distinct()
-            .ToArray();
+        // Fiyat listesinden çözülmesi gereken key'ler: ListComponent bileşenleri + ListPackage kit'in
+        // kendisi. FixedComponent bileşenlerinin key'leri buraya GİRMEZ (elle fiyat, liste çağrısı yok).
+        var listComponentKeys = componentModeLines
+            .Where(kv => kv.Value.Mode == KitPriceMode.ListComponent)
+            .SelectMany(kv => kv.Value.Comps)
+            .Select(c => new PriceEntryKey(c.CompItemId, c.ConfigId));
+        var allKeys = listComponentKeys.Concat(listPackageLines.Values).Distinct().ToArray();
 
-        var resolved = await _priceListService.ResolveLinePricesAsync(
-            new ResolveLinePricesRequest(contactId, currencyId, direction, date, componentKeys), ct);
-        var priceByKey = resolved
-            .Where(r => r.Price.HasValue)
-            .ToDictionary(r => (r.ItemId, r.ConfigId), r => r.Price!.Value);
-
-        foreach (var (idx, comps) in perLineComponents)
+        var priceByKey = new Dictionary<(int, int?), decimal>();
+        if (allKeys.Length > 0)
         {
+            var resolved = await _priceListService.ResolveLinePricesAsync(
+                new ResolveLinePricesRequest(contactId, currencyId, direction, date, allKeys), ct);
+            priceByKey = resolved
+                .Where(r => r.Price.HasValue)
+                .ToDictionary(r => (r.ItemId, r.ConfigId), r => r.Price!.Value);
+        }
+
+        // ── ListPackage: kit'in KENDİ liste fiyatı ──
+        foreach (var (idx, key) in listPackageLines)
+        {
+            if (priceByKey.TryGetValue((key.ItemId, key.ConfigId), out var kitPrice))
+            {
+                result[idx] = kitPrice;
+            }
+            else
+            {
+                _logger?.LogWarning(
+                    "Kit ListPackage fiyatlama: kit ItemId={KitItemId} icin Genel Liste/cari fiyati " +
+                    "bulunamadi (satir index={LineIndex}); mevcut/istemci birim fiyati korunuyor.",
+                    key.ItemId, idx);
+            }
+        }
+
+        // ── FixedComponent / ListComponent: bileşen toplamı ──
+        foreach (var (idx, entry) in componentModeLines)
+        {
+            var mode = entry.Mode;
             decimal sum = 0m;
             var allResolved = true;
-            foreach (var comp in comps)
+            foreach (var comp in entry.Comps)
             {
-                if (priceByKey.TryGetValue((comp.ComponentItemId, comp.ConfigId), out var compPrice))
+                decimal compPrice;
+                if (mode == KitPriceMode.FixedComponent)
                 {
-                    sum += compPrice * comp.Quantity;
+                    if (!comp.UnitPrice.HasValue)
+                    {
+                        allResolved = false;
+                        _logger?.LogWarning(
+                            "Kit FixedComponent fiyatlama: bileşen ItemId={ComponentItemId} (ConfigId={ConfigId}) " +
+                            "icin kit tanımında elle birim fiyat girilmemiş (satir index={LineIndex}, Kit ItemId={KitItemId}).",
+                            comp.CompItemId, comp.ConfigId, idx, lineRequests[idx].ItemId);
+                        continue;
+                    }
+                    compPrice = comp.UnitPrice.Value;
                 }
-                else
+                else // ListComponent
                 {
-                    allResolved = false;
-                    _logger?.LogWarning(
-                        "Kit RollUp fiyatlama: bileşen ItemId={ComponentItemId} (ConfigId={ConfigId}) icin " +
-                        "Genel Liste/cari fiyati bulunamadi (satir index={LineIndex}, ItemId={KitItemId}).",
-                        comp.ComponentItemId, comp.ConfigId, idx, lineRequests[idx].ItemId);
+                    if (!priceByKey.TryGetValue((comp.CompItemId, comp.ConfigId), out compPrice))
+                    {
+                        allResolved = false;
+                        _logger?.LogWarning(
+                            "Kit ListComponent fiyatlama: bileşen ItemId={ComponentItemId} (ConfigId={ConfigId}) icin " +
+                            "Genel Liste/cari fiyati bulunamadi (satir index={LineIndex}, ItemId={KitItemId}).",
+                            comp.CompItemId, comp.ConfigId, idx, lineRequests[idx].ItemId);
+                        continue;
+                    }
                 }
+                sum += compPrice * comp.Qty;
             }
             // Bulgu #2/#5 — TEK bileşen bile fiyatsızsa yanlış (eksik) toplam YAZILMAZ; satır
             // dictionary'e hiç girmez, çağıran taraf mevcut/istemci UnitPrice'ı korur.
@@ -210,9 +271,9 @@ public sealed class DocumentService : IDocumentService
                 result[idx] = sum;
             else
                 _logger?.LogWarning(
-                    "Kit RollUp fiyatlama: satir index={LineIndex} (Kit ItemId={KitItemId}) en az bir " +
-                    "bileşeni fiyatlanamadığı icin RollUp fiyati UYGULANMADI; mevcut/istemci birim " +
-                    "fiyati korunuyor.", idx, lineRequests[idx].ItemId);
+                    "Kit {Mode} fiyatlama: satir index={LineIndex} (Kit ItemId={KitItemId}) en az bir " +
+                    "bileşeni fiyatlanamadığı icin fiyat UYGULANMADI; mevcut/istemci birim fiyati korunuyor.",
+                    mode, idx, lineRequests[idx].ItemId);
         }
         return result;
     }
@@ -768,13 +829,14 @@ public sealed class DocumentService : IDocumentService
             isPurchaseRequest ? FormCodes.PurchaseRequest : FormCodes.SalesQuote, ct);
         var lineRequests = request.Lines.ToArray();
 
-        // Seq 1073 Part B — RollUp kit satırlarının birim fiyatı burada server-truth olarak
-        // çözülür (pricing loop'undan ÖNCE — subTotal/taxAmount/grandTotal bu değeri yansıtsın).
-        // Yön (review Bulgu #4): bu belge İhtiyaç Kaydı (alis_talebi) ise Purchase, aksi halde
-        // Sales — SaveQuoteAsync hem satış hem satın alma belgelerini işler, sabit 's' YANLIŞTI.
-        // Sözlük ItemId DEĞİL, lineRequests DİZİN'i ile anahtarlanır (Bulgu #1 — aynı kit birden
-        // fazla satırda farklı dondurma durumunda olabilir).
-        var kitRollUpPrices = await ResolveKitRollUpPricesAsync(
+        // Seq 1073 Part B, 4 moda genişletildi Seq 1078 — FixedComponent/ListPackage/ListComponent
+        // kit satırlarının birim fiyatı burada server-truth olarak çözülür (pricing loop'undan
+        // ÖNCE — subTotal/taxAmount/grandTotal bu değeri yansıtsın). Yön (review Bulgu #4): bu
+        // belge İhtiyaç Kaydı (alis_talebi) ise Purchase, aksi halde Sales — SaveQuoteAsync hem
+        // satış hem satın alma belgelerini işler, sabit 's' YANLIŞTI. Sözlük ItemId DEĞİL,
+        // lineRequests DİZİN'i ile anahtarlanır (Bulgu #1 — aynı kit birden fazla satırda farklı
+        // dondurma durumunda olabilir).
+        var kitServerPrices = await ResolveKitServerTruthPricesAsync(
             lineRequests,
             resolvedContactId,
             request.CurrencyId > 0 ? request.CurrencyId : 1,
@@ -787,18 +849,20 @@ public sealed class DocumentService : IDocumentService
         for (var lineIdx = 0; lineIdx < lineRequests.Length; lineIdx++)
         {
             var ln = lineRequests[lineIdx];
-            // RollUp kit satırıysa hesaplanan bileşen-toplamı fiyat kullanılır (istemci değeri
-            // ezilir); Fixed mod / kit-olmayan satırlarda dictionary boş → ln.UnitPrice korunur.
-            var isRollUp = kitRollUpPrices.TryGetValue(lineIdx, out var rollUpPrice);
-            var effectiveUnitPrice = isRollUp ? rollUpPrice : ln.UnitPrice;
+            // FixedComponent/ListPackage/ListComponent kit satırıysa hesaplanan server-truth fiyat
+            // kullanılır (istemci değeri ezilir); FixedPackage modu / kit-olmayan satırlarda
+            // dictionary boş → ln.UnitPrice korunur.
+            var isServerTruth = kitServerPrices.TryGetValue(lineIdx, out var serverPrice);
+            var effectiveUnitPrice = isServerTruth ? serverPrice : ln.UnitPrice;
 
             var lineDiscountMultiplier = 1m - (ln.DiscountRate / 100m);
             // PageComment Seq 1068 — IsVatIncluded=true iken UnitPrice brüt kabul edilir;
             // LineTotal/SubTotal header TaxRate ile geri hesaplanan net birim üzerinden hesaplanır.
-            // Review Bulgu #3 — RollUp fiyatı ZATEN net (Genel Liste bileşen fiyatları KDV hariç
-            // toplamı); net-out ikinci kez uygulanırsa KDV kadar EKSİK hesaplanır. Bu yüzden
-            // net-out SADECE istemci-girişli (RollUp OLMAYAN) satırlara uygulanır.
-            var netUnitPrice = isRollUp
+            // Review Bulgu #3 (Seq 1073) + Seq 1078 genişlemesi — server-truth kit fiyatı ZATEN net
+            // (Genel Liste veya kit tanımındaki elle fiyat, ikisi de KDV hariç); net-out ikinci kez
+            // uygulanırsa KDV kadar EKSİK hesaplanır. Bu yüzden net-out SADECE istemci-girişli
+            // (server-truth OLMAYAN — FixedPackage/kit-dışı) satırlara uygulanır.
+            var netUnitPrice = isServerTruth
                 ? effectiveUnitPrice
                 : NetUnitPrice(effectiveUnitPrice, request.TaxRate, request.IsVatIncluded);
             var lineTotal = decimals.RoundAmount(ln.Quantity * netUnitPrice * lineDiscountMultiplier);

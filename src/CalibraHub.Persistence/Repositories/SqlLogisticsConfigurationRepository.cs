@@ -3065,6 +3065,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 l.[ConfigId] AS LineConfigId,
                 lcfg.[RecordCode] AS LineConfigCode,
                 l.[Quantity],
+                l.[UnitPrice] AS LineUnitPrice,
                 l.[LineGuid],
                 l.[Note]     AS LineNote
             FROM [{_schema}].[ItemKit] k
@@ -3113,8 +3114,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     ConfigId:  reader.IsDBNull(12) ? null : reader.GetInt32(12),
                     ConfigCode:reader.IsDBNull(13) ? null : reader.GetString(13),
                     Quantity:  reader.GetDecimal(14),
-                    LineGuid:  reader.IsDBNull(15) ? Guid.Empty : reader.GetGuid(15),
-                    Note:      reader.IsDBNull(16) ? null : reader.GetString(16)));
+                    LineGuid:  reader.IsDBNull(16) ? Guid.Empty : reader.GetGuid(16),
+                    Note:      reader.IsDBNull(17) ? null : reader.GetString(17),
+                    UnitPrice: reader.IsDBNull(15) ? null : reader.GetDecimal(15)));
             }
         }
 
@@ -3202,14 +3204,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         lineCmd.Transaction = transaction;
         lineCmd.CommandText = $"""
             INSERT INTO [{_schema}].[ItemKitLine]
-                ([ItemKitId],[ItemId],[ConfigId],[Quantity],[LineGuid],[Note],[CreatedById],[Created])
+                ([ItemKitId],[ItemId],[ConfigId],[Quantity],[UnitPrice],[LineGuid],[Note],[CreatedById],[Created])
             VALUES
-                (@ItemKitId,@ItemId,@ConfigId,@Qty,@LineGuid,@Note,@CreatedById,SYSUTCDATETIME());
+                (@ItemKitId,@ItemId,@ConfigId,@Qty,@UnitPrice,@LineGuid,@Note,@CreatedById,SYSUTCDATETIME());
             """;
         lineCmd.Parameters.Add(new SqlParameter("@ItemKitId", kitId));
         lineCmd.Parameters.Add(new SqlParameter("@ItemId",    line.ItemId));
         lineCmd.Parameters.Add(new SqlParameter("@ConfigId",  (object?)line.ConfigId ?? DBNull.Value));
         lineCmd.Parameters.Add(new SqlParameter("@Qty",       line.Quantity));
+        lineCmd.Parameters.Add(new SqlParameter("@UnitPrice", (object?)line.UnitPrice ?? DBNull.Value));
         lineCmd.Parameters.Add(new SqlParameter("@LineGuid",  line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
         lineCmd.Parameters.Add(new SqlParameter("@Note",      (object?)line.Note ?? DBNull.Value));
         lineCmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)line.CreatedById ?? (object?)fallbackUserId ?? DBNull.Value));
