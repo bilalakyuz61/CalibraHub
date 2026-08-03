@@ -1732,8 +1732,10 @@ public sealed class DocumentService : IDocumentService
                 if (sourceSnapshot.Count > 0)
                 {
                     var firstSnap = sourceSnapshot.First();
+                    // UnitPrice tasinir (Seq 1078) — FixedComponent modda donmus elle bilesen fiyati
+                    // olmadan tasinirsa hedef satirda fiyat kaybolurdu (silent-loss, CLAUDE.md kural #3).
                     var comps = sourceSnapshot
-                        .Select(s => new KitSnapshotComponentDto(s.ComponentItemId, s.ConfigId, s.Quantity))
+                        .Select(s => new KitSnapshotComponentDto(s.ComponentItemId, s.ConfigId, s.Quantity, s.UnitPrice))
                         .ToList();
                     await _repo.ReplaceKitSnapshotAsync(destLine.Id, firstSnap.KitItemId, firstSnap.KitVersionNo, comps, ct);
                 }

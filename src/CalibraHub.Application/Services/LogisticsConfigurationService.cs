@@ -3445,17 +3445,20 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             activeById[found.Id] = found;
         }
 
-        // PriceMode normalize (whitelist) + Fixed disinda FixedPrice yok say.
-        var priceMode = string.Equals(request.PriceMode, KitPriceMode.RollUp, StringComparison.OrdinalIgnoreCase)
-            ? KitPriceMode.RollUp
-            : KitPriceMode.Fixed;
-        decimal? fixedPrice = priceMode == KitPriceMode.Fixed ? request.FixedPrice : null;
+        // PriceMode normalize (whitelist, 4 mod — 2026-08-03 Seq 1078) + moda gore ilgisiz
+        // alanlari yok say: FixedPrice yalniz FixedPackage'da, bilesen UnitPrice yalniz
+        // FixedComponent'te anlamlidir (asagida resolvedLines olustururken de ayni kural uygulanir).
+        var priceMode = KitPriceMode.All.FirstOrDefault(m =>
+            string.Equals(request.PriceMode, m, StringComparison.OrdinalIgnoreCase))
+            ?? KitPriceMode.FixedPackage;
+        decimal? fixedPrice = priceMode == KitPriceMode.FixedPackage ? request.FixedPrice : null;
+        var isFixedComponentMode = priceMode == KitPriceMode.FixedComponent;
 
         var lines = (request.Lines ?? Array.Empty<SaveItemKitLineRequest>()).ToList();
         if (lines.Count == 0)
             throw new ArgumentException("Kit icerisinde en az bir bilesen olmalidir.");
 
-        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, string? Note)>(lines.Count);
+        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, string? Note, decimal? UnitPrice)>(lines.Count);
         foreach (var line in lines)
         {
             int lineItemId = line.ItemId;
@@ -3499,8 +3502,18 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 lineConfigId = match.ConfigId;
             }
 
+            // Bilesen elle birim fiyati — yalniz FixedComponent modda anlamli (diger modlarda
+            // gonderilse bile yok sayilir; kaydedilen tanim daima mod ile tutarli kalsin).
+            decimal? lineUnitPrice = null;
+            if (isFixedComponentMode && line.UnitPrice.HasValue)
+            {
+                if (line.UnitPrice.Value < 0)
+                    throw new ArgumentException("Bilesen birim fiyati negatif olamaz.");
+                lineUnitPrice = line.UnitPrice.Value;
+            }
+
             resolvedLines.Add((lineItemId, lineConfigId, line.Quantity,
-                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim()));
+                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim(), lineUnitPrice));
         }
 
         // UPSERT hedefi — kit kartinin mevcut aktif icerigi (varsa VersionNo++).
