@@ -408,7 +408,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             SELECT l.[Id],l.[DocumentId],l.[LineNo],l.[ItemId],l.[UnitId],
                    l.[Quantity],l.[UnitPrice],l.[DiscountRate],l.[LineTotal],
                    l.[CombinationId],l.[LocationId],l.[Notes],ISNULL(l.[NotesPinned], 0) AS [NotesPinned],
-                   l.[RevisedFromId], l.[SourceLineId], l.[DeliveryDate], l.[DeliveryDays],
+                   l.[RevisedFromId], l.[SourceLineId], l.[KitParentLineId], l.[DeliveryDate], l.[DeliveryDays],
                    ISNULL(l.[FulfilledFromStock], 0) AS [FulfilledFromStock],
                    ISNULL(l.[FulfilledByPurchase], 0) AS [FulfilledByPurchase],
                    CAST(ISNULL(l.[FulfillmentStatus], 0) AS INT) AS [FulfillmentStatus],
@@ -1014,6 +1014,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var notesPinnedOrd = TryGetOrdinal(r, "NotesPinned");
         var revisedFromIdOrd = TryGetOrdinal(r, "RevisedFromId");
         var sourceLineIdOrd = TryGetOrdinal(r, "SourceLineId");
+        var kitParentIdOrd = TryGetOrdinal(r, "KitParentLineId");
         return new()
         {
             Id = r.GetInt32(r.GetOrdinal("Id")),
@@ -1031,6 +1032,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             NotesPinned = notesPinnedOrd >= 0 && !r.IsDBNull(notesPinnedOrd) && r.GetBoolean(notesPinnedOrd),
             RevisedFromId = revisedFromIdOrd >= 0 && !r.IsDBNull(revisedFromIdOrd) ? r.GetInt32(revisedFromIdOrd) : null,
             SourceLineId = sourceLineIdOrd >= 0 && !r.IsDBNull(sourceLineIdOrd) ? r.GetInt32(sourceLineIdOrd) : null,
+            KitParentLineId = kitParentIdOrd >= 0 && !r.IsDBNull(kitParentIdOrd) ? r.GetInt32(kitParentIdOrd) : null,
             DeliveryDate = SafeOrdinalDate(r, "DeliveryDate"),
             DeliveryDays = SafeOrdinalInt(r, "DeliveryDays"),
             MaterialCode = matCodeOrd >= 0 && !r.IsDBNull(matCodeOrd) ? r.GetString(matCodeOrd) : null,

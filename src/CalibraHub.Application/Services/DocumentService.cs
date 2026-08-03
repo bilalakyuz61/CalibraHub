@@ -1889,5 +1889,6 @@ public sealed class DocumentService : IDocumentService
         SourceLineId:        ln.SourceLineId,
         FulfilledFromStock:  ln.FulfilledFromStock,
         FulfilledByPurchase: ln.FulfilledByPurchase,
-        FulfillmentStatus:   ln.FulfillmentStatus);
+        FulfillmentStatus:   ln.FulfillmentStatus,
+        KitParentLineId:     ln.KitParentLineId);
 }

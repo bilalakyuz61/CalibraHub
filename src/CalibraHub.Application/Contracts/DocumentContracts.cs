@@ -86,7 +86,11 @@ public sealed record DocumentLineDto(
     // İhtiyaç Kaydı karşılama takip alanları (alis_talebi satırları için; diğerlerinde 0).
     decimal FulfilledFromStock = 0m,
     decimal FulfilledByPurchase = 0m,
-    int FulfillmentStatus = 0);
+    int FulfillmentStatus = 0,
+    // Faz 4a — kit tam-set teslimat patlaması: bu satır hangi kit BAŞLIK satırından türedi
+    // (aynı belgede). NULL = kit bileşeni değil. Grid, kit başlık+bileşen satırlarını bunun
+    // üzerinden görsel gruplar (başlık rozet, bileşen girinti).
+    int? KitParentLineId = null);
 
 public sealed record DocumentLineDetailDto(
     int Id, int QuoteLineId,
