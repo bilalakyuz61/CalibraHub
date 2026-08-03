@@ -501,6 +501,10 @@ public sealed class GeneralDefinitionsController : Controller
         }));
     }
 
+    // Seq 1074: DocumentEdit'in para birimi secimine gore kuru otomatik doldurmasi icin resolve
+    // sozlesmesi. rate?.Date fallback (hafta sonu/tatil → en yakin onceki is gunu) tetiklendiginde
+    // istenen tarihten FARKLI donebilir; rateDate alani bu yuzden ayrica dondurulur (fallback'in
+    // sessizce gizlenmemesi icin — bkz. CLAUDE.md "sessiz kirik" kural 3).
     [HttpGet]
     public async Task<IActionResult> GetCurrencyRate(int id, DateTime? rateDate, CancellationToken ct)
     {
@@ -509,7 +513,18 @@ public sealed class GeneralDefinitionsController : Controller
         var date = rateDate ?? DateTime.Today;
         var rateRepo = HttpContext.RequestServices.GetRequiredService<Application.Abstractions.Persistence.IExchangeRateRepository>();
         var rate = await rateRepo.GetRateAsync(c.Code, date, ct);
-        return Json(new { c.Id, c.Code, c.Name, c.Symbol, c.IsActive, buyingRate = rate?.BuyingRate, sellingRate = rate?.SellingRate, effectiveBuyingRate = rate?.EffectiveBuyingRate, effectiveSellingRate = rate?.EffectiveSellingRate });
+        return Json(new {
+            c.Id, c.Code, c.Name, c.Symbol, c.IsActive,
+            buyingRate = rate?.BuyingRate, sellingRate = rate?.SellingRate,
+            effectiveBuyingRate = rate?.EffectiveBuyingRate, effectiveSellingRate = rate?.EffectiveSellingRate,
+            // Frontend sozlesmesi (lider DocumentEdit'te bunu kullanacak):
+            //   rate       -> satis kuru (default), yoksa null (kur bulunamadi)
+            //   rateDate   -> kurun ait oldugu gercek tarih (fallback oldugunda istenenden farkli olabilir)
+            //   source     -> "TCMB" veya "Manuel"
+            rate = rate?.SellingRate,
+            rateDate = rate?.Date,
+            source = rate?.Source,
+        });
     }
 
     [HttpPost]

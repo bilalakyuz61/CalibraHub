@@ -2784,7 +2784,7 @@
                                 try {
                                     var opt = el.options[el.selectedIndex];
                                     var code = (opt && opt.getAttribute('data-code')) || 'TRY';
-                                    window.dispatchEvent(new CustomEvent('sq:currency', { detail: { id: parseInt(el.value) || 1, code: code } }));
+                                    window.dispatchEvent(new CustomEvent('sq:currency', { detail: { id: parseInt(el.value) || 1, code: code, userInitiated: true } }));
                                 } catch(e) {}
                             })(this)">
                         <option value="1" data-code="TRY">TRY</option>
@@ -4102,7 +4102,39 @@
         }
         if (hint) hint.textContent = isForeign ? ('1 ' + code + ' = ? TL') : '';
         if (typeof sqRecalc === 'function') sqRecalc();
+        // Seq 1074: kullanıcı döviz belge seçince kuru TCMB tablosundan otomatik çek.
+        // Yalnız kullanıcı-tetiklemeli seçimde (load'da kayıtlı kur korunur, ezilmez).
+        if (isForeign && e && e.detail && e.detail.userInitiated) sqFetchTcmbRate(id, code);
     });
+
+    // Seq 1074: GET /GeneralDefinitions/GetCurrencyRate?id=&rateDate= → #sqExchangeRate auto-fill.
+    // Kaynak: TCMB günlük kur tablosu (Exchange); belge tarihine göre, yoksa en yakın önceki gün
+    // (fallback backend'de). Kur tablosunda hiç yoksa alan boş kalır, kullanıcı elle girer (1067).
+    function sqFetchTcmbRate(currencyId, code) {
+        var rateEl = document.getElementById('sqExchangeRate');
+        var hint   = document.getElementById('sqExchangeRateHint');
+        if (!rateEl) return;
+        var dateEl  = document.getElementById('sqQuoteDate');
+        var docDate = (dateEl && dateEl.value) ? dateEl.value : '';
+        var url = '/GeneralDefinitions/GetCurrencyRate?id=' + encodeURIComponent(currencyId) +
+                  (docDate ? ('&rateDate=' + encodeURIComponent(docDate)) : '');
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (d && d.rate != null) {
+                    rateEl.value = d.rate;
+                    if (hint) {
+                        var rd = d.rateDate ? String(d.rateDate).split('T')[0] : '';
+                        hint.textContent = '1 ' + code + ' = ' + d.rate + ' TL' +
+                            (rd ? (' (' + rd + (d.source ? ' · ' + d.source : '') + ')') : '');
+                    }
+                    if (typeof sqRecalc === 'function') sqRecalc();
+                } else if (hint) {
+                    hint.textContent = '1 ' + code + ' = ? TL (kur tablosunda yok — elle girin)';
+                }
+            })
+            .catch(function () { /* sessiz — elle giriş serbest */ });
+    }
 
     function sqLoadCurrencies() {
         return fetch('/PriceList/GetCurrencies', { credentials: 'same-origin' })
