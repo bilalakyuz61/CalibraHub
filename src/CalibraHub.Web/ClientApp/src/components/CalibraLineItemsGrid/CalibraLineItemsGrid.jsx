@@ -251,6 +251,54 @@ export default function CalibraLineItemsGrid(props) {
   }, [])
   var currencySymbol = ({ TRY: '₺', USD: '$', EUR: '€', GBP: '£' })[docCurrency] || docCurrency
 
+  // ── Belge kuru (#sqExchangeRate) — TL karsiligi kolonlari icin kopru (Seq 1077b) ──
+  // Belge dovizi TRY disiyken header'da "1 birim doviz = kac TL" girilir. Computed
+  // formula'lar SATIR-LOKAL (formulaEvaluator header'a erisemez) — bu yuzden TL
+  // kolonlari formula DEGIL, render-time'da bu state ile elle carpilarak hesaplanir
+  // (bkz. tlCellValue). #sqExchangeRate hem kullanici elle girisiyle (oninput) hem de
+  // programatik atamayla (dogrudan .value=, event FIRLATMADAN) degisebilir — TCMB
+  // otomatik kur cekimi (sqFetchTcmbRate) ve mevcut teklif yuklemesi (sqLoadQuote) ikisi
+  // de dogrudan .value atiyor. Bu yuzden tek-seferlik polling yetmez; input/change
+  // listener + 'sq:currency' + hafif surekli poll (400ms) birlikte kullanilir.
+  function readExchangeRate(el) {
+    if (!el) return 1
+    var v = parseFloat(el.value)
+    return (isFinite(v) && v > 0) ? v : 1
+  }
+  var [exchangeRate, setExchangeRate] = useState(function () {
+    if (typeof document === 'undefined') return 1
+    return readExchangeRate(document.getElementById('sqExchangeRate'))
+  })
+  useEffect(function () {
+    var el = (typeof document !== 'undefined') ? document.getElementById('sqExchangeRate') : null
+    function sync() {
+      var v = readExchangeRate(document.getElementById('sqExchangeRate'))
+      setExchangeRate(function (prev) { return prev !== v ? v : prev })
+    }
+    if (el) { el.addEventListener('input', sync); el.addEventListener('change', sync) }
+    window.addEventListener('sq:currency', sync)
+    var poll = setInterval(sync, 400)
+    return function () {
+      if (el) { el.removeEventListener('input', sync); el.removeEventListener('change', sync) }
+      window.removeEventListener('sq:currency', sync)
+      clearInterval(poll)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // TL kolonlari (unitPriceTL/lineTotalTL, config'te tlMirror:true) yalniz belge dovizi
+  // TRY disiyken gorunur — TRY belgede TL karsiligi gereksiz kolon olur.
+  var showTlColumns = !!docCurrency && docCurrency !== 'TRY'
+  function tlCellValue(col, row) {
+    if (!col.tlMirror) return row[col.key]
+    var raw = row[col.sourceKey]
+    var n = typeof raw === 'number' ? raw : parseFloat(String(raw == null ? '' : raw).replace(',', '.'))
+    if (isNaN(n)) return null
+    return n * (exchangeRate || 1)
+  }
+  // TRY belgede tlMirror kolonlari header/body render'indan dusur (gecici olarak
+  // ekleyip kaldirmak yerine, "columns" var zaten reassignable — bkz. yukarida tanimi).
+  columns = columns.filter(function (c) { return !c.tlMirror || showTlColumns })
+
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
   //   Suan tek item: "Stok Kartina Git". Ileride ek ozellikler (kart bilgisi,
@@ -1362,7 +1410,7 @@ export default function CalibraLineItemsGrid(props) {
                           <LineGridCell
                             column={col}
                             row={row}
-                            value={row[col.key]}
+                            value={tlCellValue(col, row)}
                             onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
                             siblingColumns={allColumns}
                           />
@@ -1497,6 +1545,19 @@ export default function CalibraLineItemsGrid(props) {
             </span>
             <span className="font-mono tabular-nums text-amber-600 dark:text-amber-300 text-[15px] font-bold">
               {TR_FMT(totalSum, decimalCfg ? decimalCfg.amount : 2)} {currencySymbol}
+            </span>
+          </div>
+        )}
+
+        {/* Belge dovizi TRY disiyken toplamin TL karsiligi (Seq 1077b) — lineTotalTL kolonuyla
+            tutarli sekilde ayni exchangeRate ile hesaplanir, ayrica store edilmez. */}
+        {footer.showSubtotal && rows.length > 0 && showTlColumns && (
+          <div className="flex items-center gap-3 text-[12px]">
+            <span className="text-slate-500 dark:text-white/40 uppercase tracking-wider font-semibold text-[10px]">
+              {(labels.totalLabel || 'Toplam') + ' (TL)'}
+            </span>
+            <span className="font-mono tabular-nums text-amber-600 dark:text-amber-300 text-[15px] font-bold">
+              {TR_FMT(totalSum * (exchangeRate || 1), decimalCfg ? decimalCfg.amount : 2)} ₺
             </span>
           </div>
         )}
