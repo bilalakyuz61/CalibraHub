@@ -1331,7 +1331,7 @@ export default function CalibraLineItemsGrid(props) {
                               className="w-full max-w-[260px]"
                               style={isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}}
                             >
-                              <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/45 mb-0.5">
+                              <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
                                 <span className="truncate">{materialCodeCol.label}</span>
                                 {(materialCodeCol.required || materialCodeCol.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
                               </div>
@@ -1387,7 +1387,7 @@ export default function CalibraLineItemsGrid(props) {
                         var mirror = tlMirrorBySource[col.key]
                         return (
                           <div key={col.key} data-cell-key={col.key} style={lockedStyle}>
-                            <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/45 mb-0.5">
+                            <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
                               <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
                               <span className="truncate">{col.label}</span>
                               {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
