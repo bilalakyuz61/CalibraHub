@@ -181,12 +181,7 @@
             <div class="ke-card">
                 <p class="ke-card__title">Paket Bilgileri</p>
                 <div class="ke-grid">
-                    <label class="ke-label">Kit Kodu</label>
-                    <input type="text" id="keKitCode" class="ke-input" readonly />
-
-                    <label class="ke-label">Kit Adı</label>
-                    <input type="text" id="keKitName" class="ke-input" readonly />
-
+                    @* Seq 1072: Kit Kodu + Kit Adı yalnız üst başlıkta gösterilir; burada tekrar edilmez. *@
                     <label class="ke-label">Fiyat Modu</label>
                     <div>
                         <div class="ke-seg" id="kePriceModeSeg">
@@ -548,9 +543,10 @@
 
     // ── Yükleme ──
     function loadKit() {
-        $('keKitCode').value = KIT_CODE;
-        $('keKitName').value = KIT_NAME;
+        // Seq 1072: kit kodu + adı yalnız üst başlıkta (başlık=kod, alt satır=ad);
+        // Paket Bilgileri'ndeki tekrar eden Kit Kodu/Kit Adı alanları kaldırıldı.
         $('keHeaderTitle').textContent = KIT_CODE ? ('Kit: ' + KIT_CODE) : 'Kit İçeriği';
+        $('keHeaderSub').textContent = KIT_NAME || 'Paket ürün — tek kod altında bileşen listesi';
 
         if (KIT_ITEM_ID <= 0) { setPriceMode('Fixed'); renderLines(); return; }
 
@@ -558,8 +554,8 @@
             .then(function (r) { return r.ok ? r.json() : { found: false }; })
             .then(function (d) {
                 if (d && d.found) {
-                    if (d.itemCode) { KIT_CODE = d.itemCode; $('keKitCode').value = d.itemCode; $('keHeaderTitle').textContent = 'Kit: ' + d.itemCode; }
-                    if (d.itemName) { KIT_NAME = d.itemName; $('keKitName').value = d.itemName; }
+                    if (d.itemCode) { KIT_CODE = d.itemCode; $('keHeaderTitle').textContent = 'Kit: ' + d.itemCode; }
+                    if (d.itemName) { KIT_NAME = d.itemName; $('keHeaderSub').textContent = d.itemName; }
                     setPriceMode(d.priceMode || 'Fixed');
                     $('keFixedPrice').value = (d.fixedPrice != null) ? d.fixedPrice : '';
                     $('keDescription').value = d.description || '';
