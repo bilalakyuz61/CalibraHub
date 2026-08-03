@@ -286,6 +286,11 @@ public sealed class CapaService : ICapaService
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "DÖF kapanış onayı akış eşleme hatası (documentId={Id})", request.Id);
+                        // Fail-closed: kapanış onayı bir governance kapısıdır — eşleme geçici bir hatayla
+                        // belirlenemezse DÖF onaysız kapanmamalı. Kapatmayı blokla, kullanıcı tekrar denesin
+                        // (code review 2026-08-04). Eşleşen akış GERÇEKTEN yoksa MatchFlowAsync null döner
+                        // (exception değil) → aşağıdaki flow==null yolu doğrudan kapatır, eski davranış korunur.
+                        return (false, "Kapanış onayı durumu belirlenemedi. Lütfen tekrar deneyin.", null, null);
                     }
 
                     if (flow is not null)
