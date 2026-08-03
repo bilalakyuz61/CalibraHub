@@ -14,14 +14,18 @@ public interface IStockReservationRepository
         string? materialSearch, string? orderNumber, CancellationToken ct);
 
     /// <summary>
-    /// Seçilen sipariş kalemleri için rezervasyon oluşturur (tek transaction). Kit satırı, açık miktarı
-    /// aşan talep veya yetersiz kullanılabilir stok içeren kalemler <c>Skipped</c> listesine reason ile
-    /// düşer — TÜM istek reddedilmez (kısmi başarı Fulfillment deseniyle aynı).
+    /// Seçilen sipariş kalemleri için rezervasyon oluşturur (tek transaction). Açık miktarı aşan talep
+    /// veya yetersiz kullanılabilir stok içeren kalemler <c>Skipped</c> listesine reason ile düşer —
+    /// TÜM istek reddedilmez (kısmi başarı Fulfillment deseniyle aynı). Faz 1.5 (2026-08-03): kit
+    /// satırlarında (IsKit=true) <c>Qty</c> SET SAYISI olarak yorumlanır ve hepsi-ya-hiç atomik olarak
+    /// N bileşen satırı (aynı KitOrderLineId altında) yazılır — bir bileşen bile yetersizse TÜM kit reddedilir.
     /// </summary>
     Task<CreateReservationResult> CreateReservationsAsync(
         CreateReservationRequest request, int? userId, CancellationToken ct);
 
-    /// <summary>Yalnız Status=Active olan rezervasyonları iptal eder (Status=Cancelled, IsActive=0). Döner: iptal edilen kayıt sayısı.</summary>
+    /// <summary>Yalnız Status=Active olan rezervasyonları iptal eder (Status=Cancelled, IsActive=0). Döner:
+    /// iptal edilen kayıt sayısı. Faz 1.5: verilen id'lerden biri kit bileşeniyse, aynı KitOrderLineId'ye
+    /// ait TÜM aktif bileşenler de otomatik iptal kapsamına genişletilir (set bütünlüğü).</summary>
     Task<int> CancelReservationsAsync(
         IReadOnlyList<int> reservationIds, int? userId, CancellationToken ct);
 
@@ -35,7 +39,10 @@ public interface IStockReservationRepository
     /// çıkış deposu rezervasyonun kendi LocationId'sidir (sipariş kaleminin deposu DEĞİL). Rezervasyon
     /// bulunamaz/zaten yüklenmiş/iptal edilmişse o rezervasyon Skipped listesine reason ile düşer —
     /// diğer geçerli rezervasyonlar yine de işlenir (Fulfillment deseni, tüm istek reddedilmez).
-    /// Tek transaction (tüm cari grupları dahil); hata → tam rollback.
+    /// Tek transaction (tüm cari grupları dahil); hata → tam rollback. Faz 1.5 (2026-08-03): kit
+    /// bileşen rezervasyonları (KitOrderLineId dolu) KİT BAŞLIK satırı (stok etkisiz) + BİLEŞEN
+    /// satırları (gerçek çıkış) olarak patlatılır — aynı KitOrderLineId'nin TÜM bileşenleri seçili
+    /// değilse o kit grubu tamamen Skipped'e düşer (set bölünmez). Seri takibi hâlâ KAPSAM DIŞI (Faz 3).
     /// </summary>
     Task<ShipReservationsResult> ShipReservationsAsync(
         IReadOnlyList<int> reservationIds, int? userId, CancellationToken ct);

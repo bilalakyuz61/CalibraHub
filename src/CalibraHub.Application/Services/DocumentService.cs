@@ -1653,6 +1653,34 @@ public sealed class DocumentService : IDocumentService
                 await _repo.SaveLineDetailsAsync(destLineId, clonedDetails, ct);
             }
 
+            // ── 4b) Kit snapshot taşıma (Faz 1.5, 2026-08-03) — "donmuş içerik + dönüşüm düzeltmesi" ──
+            // Kaynak teklif satırı zaten dondurulmuş bir kit içeriği taşıyorsa (freeze-on-first,
+            // SaveQuoteAsync) o AYNI donmuş içerik yeni sipariş satırına taşınır — kit sonradan revize
+            // edilse bile fiyat/patlatma teklifteki ile TUTARLI kalır (Yükleme Planlama'nın kit
+            // rezervasyonu + Faz 3 irsaliye patlatması bu satırın snapshot'ından okur). Kaynakta
+            // snapshot yoksa (kit teklif kaydından SONRA tanımlandıysa) canlı aktif kit içeriğinden
+            // dondurulur — lazy freeze; item gerçekte kit DEĞİLSE (Components boş) no-op.
+            for (int i = 0; i < savedByLineNo.Length && i < lineSourceMap.Count; i++)
+            {
+                var sourceLineId = lineSourceMap[i];
+                var destLine = savedByLineNo[i];
+                var sourceSnapshot = await _repo.GetKitSnapshotAsync(sourceLineId, ct);
+                if (sourceSnapshot.Count > 0)
+                {
+                    var firstSnap = sourceSnapshot.First();
+                    var comps = sourceSnapshot
+                        .Select(s => new KitSnapshotComponentDto(s.ComponentItemId, s.ConfigId, s.Quantity))
+                        .ToList();
+                    await _repo.ReplaceKitSnapshotAsync(destLine.Id, firstSnap.KitItemId, firstSnap.KitVersionNo, comps, ct);
+                }
+                else
+                {
+                    var liveKit = (await _repo.GetActiveKitContentsAsync(new[] { destLine.ItemId }, ct)).FirstOrDefault();
+                    if (liveKit != null && liveKit.Components.Count > 0)
+                        await _repo.ReplaceKitSnapshotAsync(destLine.Id, liveKit.KitItemId, liveKit.VersionNo, liveKit.Components, ct);
+                }
+            }
+
             // ── 5) document_source koprusu + status update ──
             foreach (var (quote, _) in grp)
             {

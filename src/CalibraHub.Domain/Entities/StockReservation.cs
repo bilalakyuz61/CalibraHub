@@ -8,7 +8,8 @@ namespace CalibraHub.Domain.Entities;
 /// çıkış ancak "Yükle" aksiyonuyla üretilen irsaliyede olur (Faz 2).
 ///
 /// Faz 1 KAPSAMI: kit-DIŞI (Items.TypeId != 10) normal malzemeler + miktar düzeyi.
-/// Kit'ler tam-set atomik rezervasyonla sonraki fazda eklenir (seti bölmemek için).
+/// Faz 1.5 (2026-08-03): kit'ler (Items.TypeId = 10) tam-SET atomik rezervasyonla eklendi —
+/// bkz. <see cref="KitOrderLineId"/> (seti bölmeyen hepsi-ya-hiç bileşen rezervasyonu).
 /// </summary>
 public class StockReservation
 {
@@ -28,6 +29,17 @@ public class StockReservation
 
     /// <summary>Varyant/kombinasyon (opsiyonel).</summary>
     public int? CombinationId { get; set; }
+
+    /// <summary>
+    /// Faz 1.5 (2026-08-03) — KİT tam-set rezervasyonu. NULL = normal rezervasyon (ItemId, doğrudan
+    /// sipariş kaleminin malzemesi). DOLU = bu satır bir kit BİLEŞENİNİN rezervasyonudur — ItemId
+    /// bileşenin kendisidir, KitOrderLineId ise kit sipariş kaleminin (DocumentLine.Id) kendisidir
+    /// (OrderLineId ile AYNI değeri taşır — kit satırının hem "sahibi sipariş kalemi" hem "kit grup
+    /// anahtarı" tanımı). Bir kit rezervasyonu her zaman AYNI KitOrderLineId altında N bileşen satırı
+    /// (N = snapshot'taki bileşen sayısı) olarak, hepsi-ya-hiç atomik yazılır — set bütünlüğü bu
+    /// alanla korunur (iptal/yükleme aynı KitOrderLineId'yi grup olarak işler).
+    /// </summary>
+    public int? KitOrderLineId { get; set; }
 
     /// <summary>Gösterim birimi (DocumentLine.UnitId). Kanonik karşılaştırma BaseQuantity üzerinden yapılır.</summary>
     public int? UnitId { get; set; }

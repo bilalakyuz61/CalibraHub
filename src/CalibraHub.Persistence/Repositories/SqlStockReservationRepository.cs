@@ -38,6 +38,107 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
 
     private string T(string table) => $"[{_schema}].[{table}]";
 
+    // ── Faz 1.5 (2026-08-03) — KİT tam-set rezervasyon ortak yardımcıları ─────────────────────
+    // Bileşen satırı: DocumentLineKitComponent (donmuş snapshot). "Lazy freeze": bir kit sipariş
+    // kalemi henüz snapshot taşımıyorsa (kit teklif aşamasında dondurulmamış / eski veri) canlı
+    // aktif ItemKit içeriğinden dondurulur — bu modülün her giriş noktası (liste, rezerve, yükle)
+    // aynı garantiyle çalışır: EnsureKitSnapshotAsync çağrıldıktan sonra snapshot ya doludur ya da
+    // gerçekten aktif bir kit tanımı yoktur (liste 0 döner, çağıran net hata/atlama üretir).
+    private sealed record KitComponentRow(int CompItemId, int? ConfigId, decimal PerKit, int? UnitId, string? CompName);
+
+    private async Task<List<KitComponentRow>> EnsureKitSnapshotAsync(
+        SqlConnection conn, SqlTransaction? tx, int orderLineId, int kitItemId, CancellationToken ct)
+    {
+        async Task<List<KitComponentRow>> ReadSnapshotAsync()
+        {
+            var rows = new List<KitComponentRow>();
+            await using var sel = conn.CreateCommand();
+            sel.Transaction = tx;
+            sel.CommandText = $"""
+                SELECT s.[ComponentItemId], s.[ConfigId], s.[Quantity], ci.[UnitId], ci.[Name]
+                FROM {T("DocumentLineKitComponent")} s
+                LEFT JOIN {T("Items")} ci ON ci.[Id] = s.[ComponentItemId]
+                WHERE s.[DocumentLineId] = @L
+                ORDER BY s.[Id];
+                """;
+            sel.Parameters.AddWithValue("@L", orderLineId);
+            await using var r = await sel.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                rows.Add(new KitComponentRow(
+                    r.GetInt32(0), r.IsDBNull(1) ? null : r.GetInt32(1), r.GetDecimal(2),
+                    r.IsDBNull(3) ? null : r.GetInt32(3), r.IsDBNull(4) ? null : r.GetString(4)));
+            return rows;
+        }
+
+        var existing = await ReadSnapshotAsync();
+        if (existing.Count > 0) return existing;
+
+        // Snapshot yok — canlı aktif kit tanımından (ItemKit/ItemKitLine, MAX Id WHERE IsActive=1)
+        // dondur. DocumentService.SaveQuoteAsync'teki freeze-on-first mantığıyla AYNI kaynak.
+        int? versionNo = null;
+        var liveComps = new List<(int CompItemId, int? ConfigId, decimal Qty)>();
+        await using (var kc = conn.CreateCommand())
+        {
+            kc.Transaction = tx;
+            kc.CommandText = $"""
+                SELECT k.[VersionNo], l.[ItemId], l.[ConfigId], l.[Quantity]
+                FROM {T("ItemKit")} k
+                INNER JOIN {T("ItemKitLine")} l ON l.[ItemKitId] = k.[Id]
+                WHERE k.[IsActive] = 1 AND k.[ItemId] = @KitItemId
+                  AND k.[Id] = (SELECT MAX([Id]) FROM {T("ItemKit")} WHERE [ItemId] = @KitItemId AND [IsActive] = 1)
+                ORDER BY l.[Id];
+                """;
+            kc.Parameters.AddWithValue("@KitItemId", kitItemId);
+            await using var r = await kc.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                versionNo ??= r.GetInt32(0);
+                liveComps.Add((r.GetInt32(1), r.IsDBNull(2) ? null : r.GetInt32(2), r.GetDecimal(3)));
+            }
+        }
+        if (liveComps.Count == 0) return existing; // kit değil ya da aktif tanım/bileşen yok — boş döner
+
+        foreach (var c in liveComps)
+        {
+            await using var ins = conn.CreateCommand();
+            ins.Transaction = tx;
+            ins.CommandText = $"""
+                INSERT INTO {T("DocumentLineKitComponent")}
+                    ([DocumentLineId],[KitItemId],[KitVersionNo],[ComponentItemId],[ConfigId],[Quantity],[Created])
+                VALUES (@L,@K,@V,@C,@Cfg,@Q,SYSUTCDATETIME());
+                """;
+            ins.Parameters.AddWithValue("@L", orderLineId);
+            ins.Parameters.AddWithValue("@K", kitItemId);
+            ins.Parameters.AddWithValue("@V", versionNo ?? 1);
+            ins.Parameters.AddWithValue("@C", c.CompItemId);
+            ins.Parameters.Add(new SqlParameter("@Cfg", (object?)c.ConfigId ?? DBNull.Value));
+            ins.Parameters.AddWithValue("@Q", c.Qty);
+            await ins.ExecuteNonQueryAsync(ct);
+        }
+
+        return await ReadSnapshotAsync();
+    }
+
+    /// <summary>Bir kit sipariş kalemine (KitOrderLineId) bağlı aktif bileşen rezervasyonlarından
+    /// SET sayısını türetir: Σ(BaseQuantity WHERE ItemId=refComponentItemId) / perKit. Kit hepsi-ya-hiç
+    /// atomik yazıldığından herhangi bir bileşenin oranı aynı set sayısını verir.</summary>
+    private async Task<decimal> GetKitReservedSetsAsync(
+        SqlConnection conn, SqlTransaction? tx, int kitOrderLineId, int refComponentItemId, decimal perKit, CancellationToken ct)
+    {
+        if (perKit <= 0m) return 0m;
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"""
+            SELECT ISNULL(SUM([BaseQuantity]), 0) FROM {T("StockReservation")}
+            WHERE [KitOrderLineId] = @L AND [ItemId] = @Comp AND [Status] = 1 AND [IsActive] = 1;
+            """;
+        cmd.Parameters.AddWithValue("@L", kitOrderLineId);
+        cmd.Parameters.AddWithValue("@Comp", refComponentItemId);
+        var v = await cmd.ExecuteScalarAsync(ct);
+        var reservedBase = v is null or DBNull ? 0m : Convert.ToDecimal(v);
+        return Math.Round(reservedBase / perKit, 4);
+    }
+
     public async Task<IReadOnlyList<OpenOrderLineForReservationDto>> GetOpenOrderLinesAsync(
         string? materialSearch, string? orderNumber, CancellationToken ct)
     {
@@ -45,6 +146,10 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
         // (Document.CompanyId DB-lokal sabit, oturum claim'i ile eşleşmeyebilir → yanlış eleme).
         // Referans: PurchaseController.AllOpenRequestLines de CompanyId filtresi kullanmaz.
         var list = new List<OpenOrderLineForReservationDto>();
+        // Faz 1.5 — kit satırlarının indeksleri + patlatma için gereken ham veriler; reader kapandıktan
+        // SONRA (yeni komutlar açmak için) ikinci geçişte işlenir (aynı connection üzerinde açık reader varken
+        // yeni komut çalıştırılamaz).
+        var kitPostProcess = new List<(int Index, int LineId, int KitItemId, int? LocationId, decimal OrderQtySets, decimal DeliveredDisplay)>();
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -74,9 +179,13 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
             INNER JOIN {T("Items")}        i  ON i.[Id]  = dl.[ItemId]
             LEFT  JOIN {T("Unit")}         u  ON u.[Id]  = dl.[UnitId]
             OUTER APPLY (
+                -- KitOrderLineId IS NULL: kit bileşen rezervasyonları (ItemId=bileşen, ayrı bir birim
+                -- taşır) bu kalemin kendi (kit-dışı) rezerve toplamına karışmasın. Kit satırının kendi
+                -- rezerve SET sayısı ayrı bir sorguyla (GetKitReservedSetsAsync, ikinci geçiş) hesaplanır.
                 SELECT SUM(sr.[BaseQuantity]) AS Reserved
                 FROM {T("StockReservation")} sr
                 WHERE sr.[OrderLineId] = dl.[Id] AND sr.[Status] = 1 AND sr.[IsActive] = 1
+                  AND sr.[KitOrderLineId] IS NULL
             ) rsvLine
             OUTER APPLY (
                 SELECT SUM(CASE WHEN sm.[MovementType] IN (2,3,4) AND sm.[LocationId]     = ISNULL(dl.[LocationId], d.[LocationId]) THEN sm.[BaseQuantity]
@@ -130,16 +239,20 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
 
             var itemTypeIdOrd = r.GetOrdinal("ItemTypeId");
             int? itemTypeId = r.IsDBNull(itemTypeIdOrd) ? null : r.GetInt32(itemTypeIdOrd);
+            var isKit = ItemTypeCatalog.IsKit(itemTypeId);
 
             var locOrd = r.GetOrdinal("EffLocationId");
             int? locationId = r.IsDBNull(locOrd) ? null : r.GetInt32(locOrd);
 
+            var lineId = r.GetInt32(r.GetOrdinal("LineId"));
+            var itemId = r.GetInt32(r.GetOrdinal("ItemId"));
+
             list.Add(new OpenOrderLineForReservationDto(
-                LineId: r.GetInt32(r.GetOrdinal("LineId")),
+                LineId: lineId,
                 OrderDocumentId: r.GetInt32(r.GetOrdinal("OrderDocumentId")),
                 OrderNumber: r.GetString(r.GetOrdinal("OrderNumber")),
                 OrderDate: r.GetDateTime(r.GetOrdinal("OrderDate")),
-                ItemId: r.GetInt32(r.GetOrdinal("ItemId")),
+                ItemId: itemId,
                 MaterialCode: r.IsDBNull(r.GetOrdinal("MaterialCode")) ? null : r.GetString(r.GetOrdinal("MaterialCode")),
                 MaterialName: r.IsDBNull(r.GetOrdinal("MaterialName")) ? null : r.GetString(r.GetOrdinal("MaterialName")),
                 UnitId: r.IsDBNull(r.GetOrdinal("UnitId")) ? null : r.GetInt32(r.GetOrdinal("UnitId")),
@@ -149,9 +262,50 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                 ReservedQty: reservedDisplay,
                 OpenQty: openQty,
                 AvailableStock: availableDisplay,
-                IsKit: ItemTypeCatalog.IsKit(itemTypeId),
+                IsKit: isKit,
                 LocationId: locationId,
                 LineNotes: r.IsDBNull(r.GetOrdinal("LineNotes")) ? null : r.GetString(r.GetOrdinal("LineNotes"))));
+
+            if (isKit)
+                kitPostProcess.Add((list.Count - 1, lineId, itemId, locationId, orderQty, deliveredDisplay));
+        }
+
+        // ── Faz 1.5 — kit satırları için bileşen-min available/reserved SET hesabı (ikinci geçiş,
+        // reader kapandıktan sonra; aynı connection üzerinde art arda komut çalıştırılabilir). ──
+        foreach (var kp in kitPostProcess)
+        {
+            var comps = await EnsureKitSnapshotAsync(conn, null, kp.LineId, kp.KitItemId, ct);
+            decimal availableSets = 0m;
+            decimal reservedSets = 0m;
+
+            if (comps.Count > 0 && kp.LocationId is > 0)
+            {
+                var loc = kp.LocationId.Value;
+                decimal? minSets = null;
+                foreach (var c in comps)
+                {
+                    if (c.PerKit <= 0m) continue;
+                    var physical = await GetPhysicalBalanceAsync(conn, null, c.CompItemId, loc, ct);
+                    var reserved = await GetActiveReservedAsync(conn, null, c.CompItemId, loc, ct);
+                    var availableComp = physical - reserved;
+                    var setsForComp = Math.Max(0m, Math.Floor(availableComp / c.PerKit));
+                    minSets = minSets is null ? setsForComp : Math.Min(minSets.Value, setsForComp);
+                }
+                availableSets = minSets ?? 0m;
+
+                var refComp = comps[0];
+                reservedSets = await GetKitReservedSetsAsync(conn, null, kp.LineId, refComp.CompItemId, refComp.PerKit, ct);
+            }
+
+            var openSets = Math.Max(0m, kp.OrderQtySets - kp.DeliveredDisplay - reservedSets);
+            list[kp.Index] = list[kp.Index] with
+            {
+                AvailableStock = availableSets,
+                OpenQty = openSets,
+                ReservedQty = reservedSets,
+                AvailableSets = availableSets,
+                ReservedSets = reservedSets,
+            };
         }
 
         return list;
@@ -202,6 +356,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                         SELECT SUM(sr.[BaseQuantity]) AS Reserved
                         FROM {T("StockReservation")} sr
                         WHERE sr.[OrderLineId] = dl.[Id] AND sr.[Status] = 1 AND sr.[IsActive] = 1
+                          AND sr.[KitOrderLineId] IS NULL
                     ) rsvLine
                     WHERE dl.[Id] IN ({paramList})
                       AND dt.[Code] = N'satis_siparisi'
@@ -245,7 +400,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
 
                 if (ItemTypeCatalog.IsKit(row.ItemTypeId))
                 {
-                    skipped.Add(new CreateReservationSkippedItem(req.OrderLineId, "Kit rezervasyonu sonraki fazda."));
+                    await ReserveKitLineAsync(conn, tx, row, req, request!, userId, balanceCache, committedThisBatch, created, skipped, ct);
                     continue;
                 }
 
@@ -335,8 +490,131 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
         }
     }
 
+    /// <summary>
+    /// Faz 1.5 — KİT tam-set rezervasyonu (hepsi-ya-hiç, atomik). <paramref name="req"/>.Qty burada
+    /// SET SAYISI olarak yorumlanır (tam sayı zorunlu). Snapshot yoksa EnsureKitSnapshotAsync ile
+    /// canlı aktif kit içeriğinden dondurulur (lazy freeze). Her bileşenin (fiziksel−rezerve)/perKit
+    /// tabanındaki kullanılabilir set sayısı talebi karşılamıyorsa TÜM kit reddedilir — hiçbir
+    /// bileşen için kısmi rezervasyon yazılmaz (set bütünlüğü, CLAUDE.md kural #3: sessiz atlama yok).
+    /// </summary>
+    private async Task ReserveKitLineAsync(
+        SqlConnection conn, SqlTransaction tx, OrderLineRow row, CreateReservationLineRequest req,
+        CreateReservationRequest request, int? userId,
+        Dictionary<(int ItemId, int LocationId), (decimal Physical, decimal ExistingReserved)> balanceCache,
+        Dictionary<(int ItemId, int LocationId), decimal> committedThisBatch,
+        List<CreateReservationResultItem> created, List<CreateReservationSkippedItem> skipped,
+        CancellationToken ct)
+    {
+        var targetLocationId = request.LocationId ?? row.EffLocationId;
+        if (targetLocationId is null or <= 0)
+        {
+            skipped.Add(new CreateReservationSkippedItem(req.OrderLineId,
+                "Rezervasyon deposu belirlenemedi (sipariş kaleminde/başlığında depo yok)."));
+            return;
+        }
+
+        var setsRaw = req.Qty;
+        var setsRounded = Math.Round(setsRaw, 0, MidpointRounding.AwayFromZero);
+        if (Math.Abs(setsRaw - setsRounded) > 0.0001m || setsRounded <= 0m)
+        {
+            skipped.Add(new CreateReservationSkippedItem(req.OrderLineId,
+                $"Kit yalnız tam set olarak rezerve edilebilir (girilen: {setsRaw:0.####})."));
+            return;
+        }
+        var sets = setsRounded;
+
+        var comps = await EnsureKitSnapshotAsync(conn, tx, row.LineId, row.ItemId, ct);
+        if (comps.Count == 0)
+        {
+            skipped.Add(new CreateReservationSkippedItem(req.OrderLineId,
+                "Kit içeriği bulunamadı (tanım aktif değil veya bileşen yok)."));
+            return;
+        }
+
+        // Açık SET kontrolü — kit satırının kendi orderQty/delivered/mevcut-rezerve(set) karşılaştırması.
+        var refComp = comps[0];
+        var existingReservedSets = await GetKitReservedSetsAsync(conn, tx, row.LineId, refComp.CompItemId, refComp.PerKit, ct);
+        var factor = row.Qty != 0m ? row.BaseQty / row.Qty : 1m;
+        var deliveredSetsDisplay = factor != 0m ? Math.Round(row.DeliveredBase / factor, 4) : row.DeliveredBase;
+        var openSets = row.Qty - deliveredSetsDisplay - existingReservedSets;
+        if (sets > openSets + 0.0001m)
+        {
+            skipped.Add(new CreateReservationSkippedItem(req.OrderLineId,
+                $"Talep edilen set sayısı açık sipariş miktarını aşıyor (açık: {openSets:0.####} set)."));
+            return;
+        }
+
+        // Hepsi-ya-hiç: her bileşenin kullanılabilir stoğu (talep×perKit) karşılamalı.
+        var perComponentNeed = new List<(KitComponentRow Comp, decimal NeedBase)>();
+        string? insufficientReason = null;
+        foreach (var c in comps)
+        {
+            var needBase = Math.Round(sets * c.PerKit, 4);
+            var locKeyC = (c.CompItemId, targetLocationId.Value);
+            if (!balanceCache.TryGetValue(locKeyC, out var balC))
+            {
+                var physicalC = await GetPhysicalBalanceAsync(conn, tx, c.CompItemId, targetLocationId.Value, ct);
+                var existingReservedC = await GetActiveReservedAsync(conn, tx, c.CompItemId, targetLocationId.Value, ct);
+                balC = (physicalC, existingReservedC);
+                balanceCache[locKeyC] = balC;
+            }
+            committedThisBatch.TryGetValue(locKeyC, out var committedC);
+            var availableC = balC.Physical - balC.ExistingReserved - committedC;
+            perComponentNeed.Add((c, needBase));
+
+            if (needBase > availableC + 0.0001m && insufficientReason is null)
+            {
+                var availableSetsForComp = c.PerKit != 0m ? Math.Floor(availableC / c.PerKit) : 0m;
+                insufficientReason = $"Yetersiz set (kullanılabilir: {availableSetsForComp:0.####}; kısıtlayan bileşen: {c.CompName ?? ("#" + c.CompItemId)}).";
+            }
+        }
+        if (insufficientReason != null)
+        {
+            skipped.Add(new CreateReservationSkippedItem(req.OrderLineId, insufficientReason));
+            return;
+        }
+
+        foreach (var (c, needBase) in perComponentNeed)
+        {
+            await using (var ins = conn.CreateCommand())
+            {
+                ins.Transaction = tx;
+                ins.CommandText = $"""
+                    INSERT INTO {T("StockReservation")}
+                        ([OrderDocumentId],[OrderLineId],[ItemId],[LocationId],[CombinationId],[UnitId],
+                         [Quantity],[BaseQuantity],[Status],[KitOrderLineId],[PlannedShipDate],[Notes],[IsActive],
+                         [CreatedById],[Created])
+                    VALUES
+                        (@OrderDocumentId,@OrderLineId,@ItemId,@LocationId,@CombinationId,@UnitId,
+                         @Quantity,@BaseQuantity,1,@KitOrderLineId,@PlannedShipDate,@Notes,1,
+                         @CreatedById,SYSUTCDATETIME());
+                    """;
+                ins.Parameters.AddWithValue("@OrderDocumentId", row.OrderDocumentId);
+                ins.Parameters.AddWithValue("@OrderLineId", row.LineId);
+                ins.Parameters.AddWithValue("@ItemId", c.CompItemId);
+                ins.Parameters.AddWithValue("@LocationId", targetLocationId.Value);
+                ins.Parameters.Add(new SqlParameter("@CombinationId", (object?)c.ConfigId ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@UnitId", (object?)c.UnitId ?? DBNull.Value));
+                // Bileşende ayrı gösterim birimi yok — Quantity=BaseQuantity (Items.UnitId zaten baz birim).
+                ins.Parameters.AddWithValue("@Quantity", needBase);
+                ins.Parameters.AddWithValue("@BaseQuantity", needBase);
+                ins.Parameters.AddWithValue("@KitOrderLineId", row.LineId);
+                ins.Parameters.Add(new SqlParameter("@PlannedShipDate", (object?)request.PlannedShipDate ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@Notes", (object?)request.Notes ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+                await ins.ExecuteNonQueryAsync(ct);
+            }
+
+            var locKeyC = (c.CompItemId, targetLocationId.Value);
+            committedThisBatch.TryGetValue(locKeyC, out var committedPrev);
+            committedThisBatch[locKeyC] = committedPrev + needBase;
+        }
+
+        created.Add(new CreateReservationResultItem(req.OrderLineId, sets, null));
+    }
+
     private async Task<decimal> GetPhysicalBalanceAsync(
-        SqlConnection conn, SqlTransaction tx, int itemId, int locationId, CancellationToken ct)
+        SqlConnection conn, SqlTransaction? tx, int itemId, int locationId, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
@@ -357,7 +635,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
     }
 
     private async Task<decimal> GetActiveReservedAsync(
-        SqlConnection conn, SqlTransaction tx, int itemId, int locationId, CancellationToken ct)
+        SqlConnection conn, SqlTransaction? tx, int itemId, int locationId, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();
         cmd.Transaction = tx;
@@ -378,18 +656,63 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
         if (ids.Count == 0) return 0;
 
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        var paramList = string.Join(",", ids.Select((_, i) => $"@id{i}"));
-        cmd.CommandText = $"""
-            UPDATE {T("StockReservation")}
-            SET [Status] = 3, [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
-            WHERE [Id] IN ({paramList}) AND [Status] = 1 AND [IsActive] = 1;
-            """;
-        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
-        for (var i = 0; i < ids.Count; i++)
-            cmd.Parameters.Add(new SqlParameter($"@id{i}", ids[i]));
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // Faz 1.5 — Kit set bütünlüğü: id'lerden biri kit bileşeniyse (KitOrderLineId dolu),
+            // AYNI KitOrderLineId'ye ait TÜM aktif bileşen rezervasyonları da iptal kapsamına
+            // genişletilir (yarım set kalmaz — CANCEL de CREATE/SHIP ile aynı bütünlüğü korur).
+            var kitOrderLineIds = new HashSet<int>();
+            await using (var kcmd = conn.CreateCommand())
+            {
+                kcmd.Transaction = tx;
+                var pn = ids.Select((_, i) => "@id" + i).ToArray();
+                kcmd.CommandText = $"""
+                    SELECT DISTINCT [KitOrderLineId] FROM {T("StockReservation")}
+                    WHERE [Id] IN ({string.Join(",", pn)}) AND [KitOrderLineId] IS NOT NULL;
+                    """;
+                for (var i = 0; i < ids.Count; i++) kcmd.Parameters.AddWithValue(pn[i], ids[i]);
+                await using var kr = await kcmd.ExecuteReaderAsync(ct);
+                while (await kr.ReadAsync(ct)) kitOrderLineIds.Add(kr.GetInt32(0));
+            }
 
-        return await cmd.ExecuteNonQueryAsync(ct);
+            if (kitOrderLineIds.Count > 0)
+            {
+                var kk = kitOrderLineIds.ToList();
+                await using var expandCmd = conn.CreateCommand();
+                expandCmd.Transaction = tx;
+                var pn = kk.Select((_, i) => "@k" + i).ToArray();
+                expandCmd.CommandText = $"""
+                    SELECT [Id] FROM {T("StockReservation")}
+                    WHERE [KitOrderLineId] IN ({string.Join(",", pn)}) AND [Status] = 1 AND [IsActive] = 1;
+                    """;
+                for (var i = 0; i < kk.Count; i++) expandCmd.Parameters.AddWithValue(pn[i], kk[i]);
+                await using var er = await expandCmd.ExecuteReaderAsync(ct);
+                while (await er.ReadAsync(ct)) ids.Add(er.GetInt32(0));
+                ids = ids.Distinct().ToList();
+            }
+
+            await using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            var paramList = string.Join(",", ids.Select((_, i) => $"@id{i}"));
+            cmd.CommandText = $"""
+                UPDATE {T("StockReservation")}
+                SET [Status] = 3, [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+                WHERE [Id] IN ({paramList}) AND [Status] = 1 AND [IsActive] = 1;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+            for (var i = 0; i < ids.Count; i++)
+                cmd.Parameters.Add(new SqlParameter($"@id{i}", ids[i]));
+
+            var affected = await cmd.ExecuteNonQueryAsync(ct);
+            await tx.CommitAsync(ct);
+            return affected;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<StockReservationDto>> GetReservationsAsync(
@@ -401,10 +724,15 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
         cmd.CommandText = $"""
             SELECT r.[Id], r.[OrderDocumentId], r.[OrderLineId], r.[ItemId], i.[Code], i.[Name],
                    r.[LocationId], ISNULL(loc.[LocationName], loc.[LocationCode]) AS LocationLabel,
-                   r.[Quantity], r.[BaseQuantity], r.[Status], r.[PlannedShipDate], r.[Notes], r.[Created]
+                   r.[Quantity], r.[BaseQuantity], r.[Status], r.[PlannedShipDate], r.[Notes], r.[Created],
+                   r.[KitOrderLineId], kc.[Quantity] AS PerKit
             FROM {T("StockReservation")} r
             LEFT JOIN {T("Items")}    i   ON i.[Id]   = r.[ItemId]
             LEFT JOIN {T("Location")} loc ON loc.[Id] = r.[LocationId]
+            -- Faz 1.5 — kit bileşen satırında "set" gösterimi: kendi snapshot bileşeninin perKit'i.
+            LEFT JOIN {T("DocumentLineKitComponent")} kc
+                ON kc.[DocumentLineId] = r.[KitOrderLineId] AND kc.[ComponentItemId] = r.[ItemId]
+                   AND (kc.[ConfigId] = r.[CombinationId] OR (kc.[ConfigId] IS NULL AND r.[CombinationId] IS NULL))
             WHERE r.[IsActive] = 1
               AND (@OrderDocumentId IS NULL OR r.[OrderDocumentId] = @OrderDocumentId)
               AND (@OrderLineId IS NULL OR r.[OrderLineId] = @OrderLineId)
@@ -416,6 +744,14 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
+            var kitOrderLineIdOrd = r.GetOrdinal("KitOrderLineId");
+            int? kitOrderLineId = r.IsDBNull(kitOrderLineIdOrd) ? null : r.GetInt32(kitOrderLineIdOrd);
+            var perKitOrd = r.GetOrdinal("PerKit");
+            var baseQuantity = r.GetDecimal(9);
+            decimal? kitSets = (!r.IsDBNull(perKitOrd) && r.GetDecimal(perKitOrd) > 0m)
+                ? Math.Round(baseQuantity / r.GetDecimal(perKitOrd), 4)
+                : null;
+
             list.Add(new StockReservationDto(
                 Id: r.GetInt32(0),
                 OrderDocumentId: r.GetInt32(1),
@@ -426,11 +762,13 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                 LocationId: r.GetInt32(6),
                 LocationName: r.IsDBNull(7) ? null : r.GetString(7),
                 Quantity: r.GetDecimal(8),
-                BaseQuantity: r.GetDecimal(9),
+                BaseQuantity: baseQuantity,
                 Status: r.GetByte(10),
                 PlannedShipDate: r.IsDBNull(11) ? null : r.GetDateTime(11),
                 Notes: r.IsDBNull(12) ? null : r.GetString(12),
-                Created: r.GetDateTime(13)));
+                Created: r.GetDateTime(13),
+                KitOrderLineId: kitOrderLineId,
+                KitSets: kitSets));
         }
         return list;
     }
@@ -441,15 +779,25 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
     // NegativeBalanceGuard) buraya BİREBİR uyarlandı. Farklar: (1) kaynak StockReservation satırları
     // (sipariş kaleminin TÜM açığı değil, yalnız o rezervasyonun miktarı) — TAM yükleme, kısmi yok;
     // (2) cari (Document.ContactId) başına TEK irsaliyede toplama (çok-sipariş olabilir) — SaveDeliveryFifoAsync
-    // (:1420) ile aynı "tek kaynak sipariş → ParentDocumentId, çoklu → null" kuralı; (3) kit/seri
-    // KAPSAM DIŞI (Faz 1 rezervasyonlar zaten kit-dışı, seri Faz 3) — DocumentLineLink dual-write ve
-    // ResolveOrderSerialsToIssuedAsync bilinçli olarak YAPILMADI (bu akış onlara dokunmuyor).
+    // (:1420) ile aynı "tek kaynak sipariş → ParentDocumentId, çoklu → null" kuralı; (3) seri KAPSAM
+    // DIŞI (Faz 3) — DocumentLineLink dual-write ve ResolveOrderSerialsToIssuedAsync bilinçli olarak
+    // YAPILMADI (bu akış onlara dokunmuyor). (4) Faz 1.5 (2026-08-03) — kit bileşen rezervasyonları
+    // (KitOrderLineId dolu) SqlStockDocRepository.ConvertOrderToDeliveryAsync'in kit patlatma deseniyle
+    // (:1234) BİREBİR aynı yazılır: KİT BAŞLIK satırı (stok etkisiz, fiyatlı) + BİLEŞEN satırları
+    // (gerçek stok çıkışı, fiyat 0, KitParentLineId=başlık). Set bütünlüğü: bir KitOrderLineId'nin
+    // TÜM bileşenleri seçili DEĞİLSE o kit grubu TAMAMEN atlanır (yarım set irsaliyeye yazılmaz).
 
     private sealed record ShipReservationRow(
         int ReservationId, int OrderDocumentId, int OrderLineId, int ItemId, int LocationId,
         int? CombinationId, int? UnitId, decimal Qty, decimal BaseQty,
         decimal OrderQty, decimal UnitPrice, decimal DiscRate, decimal OrderLineTotal,
-        int ContactId, string? ContactName);
+        int ContactId, string? ContactName,
+        /// <summary>Faz 1.5 — dolu ise bu satır bir kit BİLEŞENİDİR (ItemId=bileşen); değer = kit
+        /// sipariş kaleminin (DocumentLine.Id) kendisi (sr.OrderLineId ile AYNI).</summary>
+        int? KitOrderLineId,
+        /// <summary>Faz 1.5 — kit satırının KENDİ Item/Unit/Combination bilgisi (dl JOIN'i zaten kit
+        /// satırına eşleniyor çünkü sr.OrderLineId=kit kalemi); kit BAŞLIK satırı yazımında kullanılır.</summary>
+        int OrderLineItemId, int? OrderLineUnitId, int? OrderLineCombinationId);
 
     public async Task<ShipReservationsResult> ShipReservationsAsync(
         IReadOnlyList<int> reservationIds, int? userId, CancellationToken ct)
@@ -508,7 +856,9 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                     SELECT sr.[Id], sr.[OrderDocumentId], sr.[OrderLineId], sr.[ItemId], sr.[LocationId],
                            sr.[CombinationId], sr.[UnitId], sr.[Quantity], sr.[BaseQuantity],
                            dl.[Quantity] AS OrderQty, dl.[UnitPrice], dl.[DiscountRate], dl.[LineTotal] AS OrderLineTotal,
-                           ISNULL(d.[ContactId], 0) AS ContactId, ca.[AccountTitle] AS ContactName
+                           ISNULL(d.[ContactId], 0) AS ContactId, ca.[AccountTitle] AS ContactName,
+                           sr.[KitOrderLineId], dl.[ItemId] AS OrderLineItemId, dl.[UnitId] AS OrderLineUnitId,
+                           dl.[CombinationId] AS OrderLineCombinationId
                     FROM {T("StockReservation")} sr
                     INNER JOIN {T("DocumentLine")} dl ON dl.[Id] = sr.[OrderLineId]
                     INNER JOIN {T("Document")} d       ON d.[Id]  = sr.[OrderDocumentId]
@@ -536,7 +886,11 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                         DiscRate: r.GetDecimal(11),
                         OrderLineTotal: r.GetDecimal(12),
                         ContactId: r.GetInt32(13),
-                        ContactName: r.IsDBNull(14) ? null : r.GetString(14)));
+                        ContactName: r.IsDBNull(14) ? null : r.GetString(14),
+                        KitOrderLineId: r.IsDBNull(15) ? null : r.GetInt32(15),
+                        OrderLineItemId: r.GetInt32(16),
+                        OrderLineUnitId: r.IsDBNull(17) ? null : r.GetInt32(17),
+                        OrderLineCombinationId: r.IsDBNull(18) ? null : r.GetInt32(18)));
                 }
             }
 
@@ -554,6 +908,32 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                     validRows.Add(row);
             }
 
+            // 2b) Faz 1.5 — kit set bütünlüğü: bir KitOrderLineId'nin (kit bileşen grubu) TÜM aktif
+            //     bileşenleri seçili DEĞİLSE (kısmi seçim/kısmen zaten yüklenmiş/iptal), o grubun
+            //     TÜM satırları Skipped'e düşer — yarım set irsaliyeye yazılmaz (CLAUDE.md kural #3).
+            var excludedKitReservationIds = new HashSet<int>();
+            foreach (var kg in validRows.Where(r => r.KitOrderLineId.HasValue).GroupBy(r => r.KitOrderLineId!.Value))
+            {
+                var kitOrderLineId = kg.Key;
+                var kitRowsForGroup = kg.ToList();
+                var kitItemId = kitRowsForGroup[0].OrderLineItemId;
+                var snapshotComps = await EnsureKitSnapshotAsync(conn, tx, kitOrderLineId, kitItemId, ct);
+                var expectedKeys = snapshotComps.Select(c => (c.CompItemId, c.ConfigId)).ToHashSet();
+                var presentKeys = kitRowsForGroup.Select(r => (r.ItemId, r.CombinationId)).ToHashSet();
+                var complete = expectedKeys.Count > 0 && expectedKeys.SetEquals(presentKeys);
+                if (!complete)
+                {
+                    foreach (var row in kitRowsForGroup)
+                    {
+                        skipped.Add(new ShipReservationsSkippedItem(row.ReservationId,
+                            "Kit setinin tüm bileşenleri seçili değil; kit yalnız TAM set olarak yüklenebilir."));
+                        excludedKitReservationIds.Add(row.ReservationId);
+                    }
+                }
+            }
+            if (excludedKitReservationIds.Count > 0)
+                validRows = validRows.Where(r => !excludedKitReservationIds.Contains(r.ReservationId)).ToList();
+
             if (validRows.Count == 0)
             {
                 await tx.CommitAsync(ct);
@@ -570,16 +950,54 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
 
                 var docNo = await ResolveDocNoAsync(conn, tx, contactId, userId, DateTime.Today, ct);
 
-                var lineTotals = new decimal[groupRows.Count];
+                // Faz 1.5 — kit bileşen satırlarını normal satırlardan ayır: kit grubu TEK DocumentLine
+                // grubu (başlık+bileşenler) olarak yazılır, normal satırlar mevcut 1:1 desende kalır.
+                var kitSubGroups = groupRows.Where(x => x.KitOrderLineId.HasValue)
+                    .GroupBy(x => x.KitOrderLineId!.Value).ToList();
+                var normalGroupRows = groupRows.Where(x => !x.KitOrderLineId.HasValue).ToList();
+
+                var normalLineTotals = new decimal[normalGroupRows.Count];
                 decimal subTotal = 0m;
-                for (var i = 0; i < groupRows.Count; i++)
+                for (var i = 0; i < normalGroupRows.Count; i++)
                 {
-                    var row = groupRows[i];
+                    var row = normalGroupRows[i];
                     var lineTotal = row.OrderQty != 0m
                         ? Math.Round(row.OrderLineTotal * row.Qty / row.OrderQty, 4)
                         : row.OrderLineTotal;
-                    lineTotals[i] = lineTotal;
+                    normalLineTotals[i] = lineTotal;
                     subTotal += lineTotal;
+                }
+
+                // Kit grupları — sets = herhangi bir bileşenin BaseQuantity/PerKit oranı (hepsi-ya-hiç
+                // atomik yazıldığından her bileşen aynı oranı verir; min() güvenlik için). Kit LineTotal,
+                // kit sipariş satırının LineTotal'ından set oranıyla türetilir (bileşen satırları fiyatsız, 0).
+                var kitSetsByGroup = new Dictionary<int, decimal>();
+                var kitLineTotalByGroup = new Dictionary<int, decimal>();
+                foreach (var kg in kitSubGroups)
+                {
+                    var kitOrderLineId = kg.Key;
+                    var rowsForKit = kg.ToList();
+                    var first = rowsForKit[0];
+                    var perKitByComp = (await EnsureKitSnapshotAsync(conn, tx, kitOrderLineId, first.OrderLineItemId, ct))
+                        .ToDictionary(c => (c.CompItemId, c.ConfigId), c => c.PerKit);
+
+                    decimal? sets = null;
+                    foreach (var row in rowsForKit)
+                    {
+                        if (perKitByComp.TryGetValue((row.ItemId, row.CombinationId), out var perKit) && perKit > 0m)
+                        {
+                            var s = Math.Round(row.BaseQty / perKit, 4);
+                            sets = sets is null ? s : Math.Min(sets.Value, s);
+                        }
+                    }
+                    var setsFinal = sets ?? 0m;
+                    kitSetsByGroup[kitOrderLineId] = setsFinal;
+
+                    var kitLineTotal = first.OrderQty != 0m
+                        ? Math.Round(first.OrderLineTotal * setsFinal / first.OrderQty, 4)
+                        : first.OrderLineTotal;
+                    kitLineTotalByGroup[kitOrderLineId] = kitLineTotal;
+                    subTotal += kitLineTotal;
                 }
                 subTotal = Math.Round(subTotal, 4);
 
@@ -612,9 +1030,11 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
 
                 var lineNo = 1;
                 var decreases = new HashSet<(int ItemId, int LocId)>();
-                for (var i = 0; i < groupRows.Count; i++)
+
+                // ── Normal (kit-dışı) satırlar — mevcut davranış AYNEN (1 rezervasyon = 1 belge satırı). ──
+                for (var i = 0; i < normalGroupRows.Count; i++)
                 {
-                    var row = groupRows[i];
+                    var row = normalGroupRows[i];
                     await using (var li = conn.CreateCommand())
                     {
                         li.Transaction = tx;
@@ -634,7 +1054,7 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                         li.Parameters.AddWithValue("@BaseQty", row.BaseQty);
                         li.Parameters.AddWithValue("@UnitPrice", row.UnitPrice);
                         li.Parameters.AddWithValue("@DiscRate", row.DiscRate);
-                        li.Parameters.AddWithValue("@LineTotal", lineTotals[i]);
+                        li.Parameters.AddWithValue("@LineTotal", normalLineTotals[i]);
                         li.Parameters.Add(new SqlParameter("@CombId", (object?)row.CombinationId ?? DBNull.Value));
                         li.Parameters.AddWithValue("@FromLoc", row.LocationId);
                         li.Parameters.AddWithValue("@SourceLineId", row.OrderLineId);
@@ -666,6 +1086,100 @@ public sealed class SqlStockReservationRepository : IStockReservationRepository
                     }
 
                     decreases.Add((row.ItemId, row.LocationId));
+                }
+
+                // ── Kit grupları — KİT BAŞLIK satırı (stok etkisiz, fiyatlı) + BİLEŞEN satırları (gerçek
+                // stok çıkışı, fiyat 0, KitParentLineId=başlık). SqlStockDocRepository.ConvertOrderToDeliveryAsync
+                // kit patlatma deseniyle (:1234) BİREBİR aynı — lot/seri KAPSAM DIŞI (Faz 3, bkz. sınıf üstü not). ──
+                foreach (var kg in kitSubGroups)
+                {
+                    var kitOrderLineId = kg.Key;
+                    var rowsForKit = kg.ToList();
+                    var first = rowsForKit[0];
+                    var setsFinal = kitSetsByGroup[kitOrderLineId];
+                    var kitLineTotal = kitLineTotalByGroup[kitOrderLineId];
+
+                    int headerLineId;
+                    await using (var hk = conn.CreateCommand())
+                    {
+                        hk.Transaction = tx;
+                        hk.CommandText = $"""
+                            INSERT INTO {T("DocumentLine")}
+                                ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                 [CombinationId],[MovementType],[SourceLineId],[Notes])
+                            VALUES
+                                (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,@UnitPrice,@DiscRate,@LineTotal,
+                                 @CombId,NULL,@SourceLineId,@Notes);
+                            SELECT CAST(SCOPE_IDENTITY() AS INT);
+                            """;
+                        hk.Parameters.AddWithValue("@DocId", docId);
+                        hk.Parameters.AddWithValue("@LineNo", lineNo++);
+                        hk.Parameters.AddWithValue("@ItemId", first.OrderLineItemId);
+                        hk.Parameters.Add(new SqlParameter("@UnitId", (object?)first.OrderLineUnitId ?? DBNull.Value));
+                        hk.Parameters.AddWithValue("@Qty", setsFinal);
+                        hk.Parameters.AddWithValue("@BaseQty", setsFinal);
+                        hk.Parameters.AddWithValue("@UnitPrice", first.UnitPrice);
+                        hk.Parameters.AddWithValue("@DiscRate", first.DiscRate);
+                        hk.Parameters.AddWithValue("@LineTotal", kitLineTotal);
+                        hk.Parameters.Add(new SqlParameter("@CombId", (object?)first.OrderLineCombinationId ?? DBNull.Value));
+                        hk.Parameters.AddWithValue("@SourceLineId", kitOrderLineId);
+                        hk.Parameters.AddWithValue("@Notes", $"Yükleme planı → irsaliye (kit, {setsFinal:0.####} set)");
+                        headerLineId = Convert.ToInt32(await hk.ExecuteScalarAsync(ct));
+                    }
+
+                    foreach (var row in rowsForKit)
+                    {
+                        await using (var cl = conn.CreateCommand())
+                        {
+                            cl.Transaction = tx;
+                            cl.CommandText = $"""
+                                INSERT INTO {T("DocumentLine")}
+                                    ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[BaseQuantity],[UnitPrice],[DiscountRate],[LineTotal],
+                                     [CombinationId],[FromLocationId],[MovementType],[KitParentLineId],[Notes])
+                                VALUES
+                                    (@DocId,@LineNo,@ItemId,@UnitId,@Qty,@BaseQty,0,0,0,
+                                     @CombId,@FromLoc,1,@KitParent,@Notes);
+                                """;
+                            cl.Parameters.AddWithValue("@DocId", docId);
+                            cl.Parameters.AddWithValue("@LineNo", lineNo++);
+                            cl.Parameters.AddWithValue("@ItemId", row.ItemId);
+                            cl.Parameters.Add(new SqlParameter("@UnitId", (object?)row.UnitId ?? DBNull.Value));
+                            cl.Parameters.AddWithValue("@Qty", row.Qty);
+                            cl.Parameters.AddWithValue("@BaseQty", row.BaseQty);
+                            cl.Parameters.Add(new SqlParameter("@CombId", (object?)row.CombinationId ?? DBNull.Value));
+                            cl.Parameters.AddWithValue("@FromLoc", row.LocationId);
+                            cl.Parameters.AddWithValue("@KitParent", headerLineId);
+                            cl.Parameters.AddWithValue("@Notes", "Kit bileşeni — Yükleme planı → irsaliye");
+                            await cl.ExecuteNonQueryAsync(ct);
+                        }
+
+                        await using (var rup = conn.CreateCommand())
+                        {
+                            rup.Transaction = tx;
+                            rup.CommandText = $"""
+                                UPDATE {T("StockReservation")}
+                                SET [Status] = 2, [ShippedDocumentId] = @DocId, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+                                WHERE [Id] = @Id;
+                                """;
+                            rup.Parameters.AddWithValue("@DocId", docId);
+                            rup.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+                            rup.Parameters.AddWithValue("@Id", row.ReservationId);
+                            await rup.ExecuteNonQueryAsync(ct);
+                        }
+
+                        decreases.Add((row.ItemId, row.LocationId));
+                    }
+
+                    // Kit sipariş kalemi DeliveredQuantity += setsFinal (kit satırında miktar birimi =
+                    // set, ConvertOrderToDeliveryAsync ile AYNI konvansiyon — bileşen bazlı DEĞİL).
+                    await using (var updKit = conn.CreateCommand())
+                    {
+                        updKit.Transaction = tx;
+                        updKit.CommandText = $"UPDATE {T("DocumentLine")} SET [DeliveredQuantity] = [DeliveredQuantity] + @Add WHERE [Id] = @LineId;";
+                        updKit.Parameters.AddWithValue("@Add", setsFinal);
+                        updKit.Parameters.AddWithValue("@LineId", kitOrderLineId);
+                        await updKit.ExecuteNonQueryAsync(ct);
+                    }
                 }
 
                 // 4) Eksi bakiye kontrolü — çıkış (satış irsaliyesi), ConvertOrderToDeliveryAsync ile aynı guard.
