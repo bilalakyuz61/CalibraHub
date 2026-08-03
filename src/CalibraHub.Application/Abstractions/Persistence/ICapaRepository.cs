@@ -5,14 +5,18 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 
 /// <summary>
 /// DÖF (CAPA) kaydı veri erişimi. Document shell service tarafında IDocumentRepository ile
-/// yazılır; bu repo companion (Capa) + aksiyon satırlarını yönetir. Stok repo'suna referans yok.
+/// yazılır; bu repo companion (Capa) + aksiyon satırları + yapısal kök neden satırlarını yönetir.
+/// Stok repo'suna referans yok.
 /// </summary>
 public interface ICapaRepository
 {
     Task<IReadOnlyCollection<CapaListItemDto>> ListAsync(string? search, byte? status, CancellationToken ct);
     Task<Capa?> GetByDocumentIdAsync(int documentId, CancellationToken ct);
     Task<CapaDetailDto?> GetDetailAsync(int documentId, CancellationToken ct);
-    Task UpsertAsync(Capa capa, IReadOnlyList<CapaAction> actions, CancellationToken ct);
+
+    /// <summary>Companion + aksiyon satırları + yapısal kök neden satırlarını tek transaction'da
+    /// yazar. Aksiyonlarda olduğu gibi rootCauseItems da DELETE+INSERT ile yeniden yazılır.</summary>
+    Task UpsertAsync(Capa capa, IReadOnlyList<CapaAction> actions, IReadOnlyList<CapaRootCauseItem> rootCauseItems, CancellationToken ct);
 
     /// <summary>Yalnız companion Status/ClosedAt alanlarını günceller (ChangeStatus).</summary>
     Task UpdateStatusAsync(int documentId, byte status, DateTime? closedAt, int? userId, CancellationToken ct);

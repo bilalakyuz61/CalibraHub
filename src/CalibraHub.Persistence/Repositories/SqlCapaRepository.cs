@@ -18,6 +18,7 @@ public sealed class SqlCapaRepository : ICapaRepository
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _capaTable;
     private readonly string _actionTable;
+    private readonly string _rootCauseTable;
     private readonly string _docTable;
     private readonly string _defectTable;
     private readonly string _personnelTable;
@@ -28,6 +29,7 @@ public sealed class SqlCapaRepository : ICapaRepository
         var s = (string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim()).Replace("]", "]]");
         _capaTable = $"[{s}].[Capa]";
         _actionTable = $"[{s}].[CapaAction]";
+        _rootCauseTable = $"[{s}].[CapaRootCauseItem]";
         _docTable = $"[{s}].[Document]";
         _defectTable = $"[{s}].[QualityDefectCode]";
         _personnelTable = $"[{s}].[Personnel]";
@@ -148,6 +150,10 @@ public sealed class SqlCapaRepository : ICapaRepository
             LEFT JOIN {_personnelTable} ap ON ap.[Id] = a.[ResponsiblePersonnelId]
             WHERE a.[CapaId] = (SELECT [Id] FROM {_capaTable} WHERE [DocumentId] = @Doc)
             ORDER BY a.[OrderNo], a.[Id];
+            SELECT rc.[Id], rc.[Method], rc.[Category], rc.[Sequence], rc.[Text]
+            FROM {_rootCauseTable} rc
+            WHERE rc.[CapaId] = (SELECT [Id] FROM {_capaTable} WHERE [DocumentId] = @Doc)
+            ORDER BY rc.[Method], rc.[Category], rc.[Sequence], rc.[Id];
             """;
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -181,7 +187,8 @@ public sealed class SqlCapaRepository : ICapaRepository
             VerifiedAt: r.IsDBNull(19) ? null : r.GetDateTime(19),
             EffectivenessNote: r.IsDBNull(20) ? null : r.GetString(20),
             ClosedAt: r.IsDBNull(21) ? null : r.GetDateTime(21),
-            Actions: Array.Empty<CapaActionDto>());
+            Actions: Array.Empty<CapaActionDto>(),
+            RootCauseItems: Array.Empty<CapaRootCauseItemDto>());
         var actions = new List<CapaActionDto>();
         await r.NextResultAsync(ct);
         while (await r.ReadAsync(ct))
@@ -200,10 +207,23 @@ public sealed class SqlCapaRepository : ICapaRepository
                 CompletedAt: r.IsDBNull(7) ? null : r.GetDateTime(7),
                 OrderNo: r.GetInt32(8)));
         }
-        return head with { Actions = actions };
+        var rootCauseItems = new List<CapaRootCauseItemDto>();
+        await r.NextResultAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            byte? category = r.IsDBNull(2) ? null : r.GetByte(2);
+            rootCauseItems.Add(new CapaRootCauseItemDto(
+                Id: r.GetInt32(0),
+                Method: r.GetByte(1),
+                Category: category,
+                CategoryLabel: category.HasValue ? Describe((IshikawaCategory)category.Value) : null,
+                Sequence: r.GetInt32(3),
+                Text: r.GetString(4)));
+        }
+        return head with { Actions = actions, RootCauseItems = rootCauseItems };
     }
 
-    public async Task UpsertAsync(Capa c, IReadOnlyList<CapaAction> actions, CancellationToken ct)
+    public async Task UpsertAsync(Capa c, IReadOnlyList<CapaAction> actions, IReadOnlyList<CapaRootCauseItem> rootCauseItems, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
@@ -276,6 +296,29 @@ public sealed class SqlCapaRepository : ICapaRepository
                 cmd.Parameters.Add(new SqlParameter("@Completed", (object?)a.CompletedAt ?? DBNull.Value));
                 cmd.Parameters.Add(new SqlParameter("@Order", a.OrderNo));
                 cmd.Parameters.Add(new SqlParameter("@Cre", (object?)a.CreatedById ?? DBNull.Value));
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+            await using (var delRc = conn.CreateCommand())
+            {
+                delRc.Transaction = tx;
+                delRc.CommandText = $"DELETE FROM {_rootCauseTable} WHERE [CapaId]=@C;";
+                delRc.Parameters.Add(new SqlParameter("@C", capaId));
+                await delRc.ExecuteNonQueryAsync(ct);
+            }
+            foreach (var rc in rootCauseItems)
+            {
+                await using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = $"""
+                    INSERT INTO {_rootCauseTable} ([CapaId],[Method],[Category],[Sequence],[Text],[CreatedById],[Created])
+                    VALUES (@C,@Method,@Category,@Seq,@Text,@Cre,SYSUTCDATETIME());
+                    """;
+                cmd.Parameters.Add(new SqlParameter("@C", capaId));
+                cmd.Parameters.Add(new SqlParameter("@Method", (byte)rc.Method));
+                cmd.Parameters.Add(new SqlParameter("@Category", (object?)(rc.Category.HasValue ? (byte)rc.Category.Value : (byte?)null) ?? DBNull.Value));
+                cmd.Parameters.Add(new SqlParameter("@Seq", rc.Sequence));
+                cmd.Parameters.Add(new SqlParameter("@Text", rc.Text));
+                cmd.Parameters.Add(new SqlParameter("@Cre", (object?)rc.CreatedById ?? DBNull.Value));
                 await cmd.ExecuteNonQueryAsync(ct);
             }
             await tx.CommitAsync(ct);

@@ -34,6 +34,14 @@
     var actionTypeOptionsHtml = string.Join("", Enum.GetValues<CapaActionType>().Select(t => $"<option value=\"{(byte)t}\">{Label(t)}</option>"));
     var actionStatusOptionsHtml = string.Join("", Enum.GetValues<CapaActionStatus>().Select(s => $"<option value=\"{(byte)s}\">{Label(s)}</option>"));
 
+    // Yapısal kök neden satırları (Faz 2) — yönteme (ve Ishikawa'da kategoriye) göre JS tarafında gruplanır.
+    var rootCauseItemsJson = System.Text.Json.JsonSerializer.Serialize(
+        Model?.RootCauseItems ?? new List<CalibraHub.Application.Contracts.CapaRootCauseItemDto>(),
+        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+    // Ishikawa 6M kategori sabit sıralaması + Türkçe etiket ([Description] attribute) — JS tarafına aynen aktarılır.
+    var ishikawaCategoriesJson = System.Text.Json.JsonSerializer.Serialize(
+        Enum.GetValues<IshikawaCategory>().Select(c => new { id = (byte)c, label = Label(c) }));
+
     // Kaynak Belge ön-doldurma — Muayene / alış irsaliyesi / cari ekranlarından "DÖF Aç"
     // linkiyle gelen query paramları. Yalnız yeni kayıtta kullanılır (var olan kayıtta
     // Model.SourceKind/SourceId geçerli, değiştirilemez).
@@ -137,7 +145,7 @@
       <!-- ══════════ Kök Neden ══════════ -->
       <div class="ux-edit-pane" data-tab="rootcause">
         <h2>Kök Neden Analizi</h2>
-        <div class="ux-edit-hint">Kullanılan analiz yöntemini seçip bulguları aşağıya yazın.</div>
+        <div class="ux-edit-hint">Kullanılan analiz yöntemini seçin; yönteme uygun yapısal editör aşağıda açılır.</div>
 
         <div class="ux-field">
           <label for="f-rcmethod">Yöntem</label>
@@ -147,9 +155,27 @@
           </select>
         </div>
 
-        <div class="ux-field ux-field--wide">
-          <label for="f-rootcause">Analiz</label>
-          <textarea id="f-rootcause" maxlength="4000" style="min-height:180px;" placeholder="Kök neden bulgularını yazın…">@Model?.RootCause</textarea>
+        <div id="rc-empty-hint" class="ux-edit-hint" style="display:none;">Önce bir analiz yöntemi seçin.</div>
+
+        <!-- 5 Neden zinciri editörü — RootCauseMethod = FiveWhy (1) veya SekizD (3) iken görünür. -->
+        <div id="rc-fivewhy" class="rc-block" style="display:none;">
+          <h3 class="rc-block__title">5 Neden</h3>
+          <div class="ux-edit-hint">Her adımda bir önceki cevabın nedenini sorun (genellikle 5 kez tekrarlanır).</div>
+          <div id="rc-fivewhy-rows"></div>
+          <button type="button" class="ux-edit-bar__btn" id="rc-fivewhy-add">+ Neden Ekle</button>
+        </div>
+
+        <!-- Ishikawa (Balık Kılçığı) editörü — RootCauseMethod = Ishikawa (2) veya SekizD (3) iken görünür. -->
+        <div id="rc-ishikawa" class="rc-block" style="display:none;">
+          <h3 class="rc-block__title">Balık Kılçığı (Ishikawa) — 6M</h3>
+          <div class="ux-edit-hint">Her kategoride etkili olabilecek nedenleri listeleyin.</div>
+          <div id="rc-ishikawa-categories"></div>
+        </div>
+
+        <div class="ux-field ux-field--wide" style="margin-top:16px;">
+          <label for="f-rootcause">Belirlenen Kök Neden (Özet)</label>
+          <textarea id="f-rootcause" maxlength="4000" style="min-height:120px;" placeholder="Yapısal analiz sonucu ulaşılan asıl kök nedeni özetleyin…">@Model?.RootCause</textarea>
+          <div class="ux-hint">Yapısal analiz sonucu ulaşılan asıl kök nedeni özetleyin.</div>
         </div>
       </div>
 

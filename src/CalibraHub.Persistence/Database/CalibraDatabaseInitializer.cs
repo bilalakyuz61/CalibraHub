@@ -10508,6 +10508,27 @@ END;";
                 );
                 CREATE INDEX [IX_CapaAction_Capa] ON [{s}].[CapaAction]([CapaId], [OrderNo]);
             END;
+
+            -- DÖF yapısal kök neden analiz satırları (5 Neden / Ishikawa 6M / 8D) — Faz 2 (2026-08-03)
+            IF OBJECT_ID(N'[{s}].[CapaRootCauseItem]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[CapaRootCauseItem]
+                (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_CapaRootCauseItem] PRIMARY KEY,
+                    [CapaId]      INT NOT NULL,
+                    [Method]      TINYINT NOT NULL,
+                    [Category]    TINYINT NULL,
+                    [Sequence]    INT NOT NULL CONSTRAINT [DF_CapaRootCauseItem_Sequence] DEFAULT(0),
+                    [Text]        NVARCHAR(1000) NOT NULL,
+                    [CreatedById] INT NULL,
+                    [Created]     DATETIME NOT NULL CONSTRAINT [DF_CapaRootCauseItem_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT NULL,
+                    [Updated]     DATETIME NULL,
+                    CONSTRAINT [FK_CapaRootCauseItem_Capa] FOREIGN KEY ([CapaId])
+                        REFERENCES [{s}].[Capa]([Id])
+                );
+                CREATE INDEX [IX_CapaRootCauseItem_Capa] ON [{s}].[CapaRootCauseItem]([CapaId], [Method], [Category], [Sequence]);
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;

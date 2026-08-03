@@ -88,6 +88,30 @@ public sealed class CapaService : ICapaService
             });
         }
 
+        // Yapısal kök neden satırları (5 Neden / Ishikawa / 8D) — aksiyon satırlarıyla AYNI
+        // muamele: boş Text elenir (anlamsız satır sessizce yutulmaz, filtrelenir), Sequence
+        // request'ten geldiği gibi korunur (5 Neden'de seviye, Ishikawa'da kategori-içi sıra —
+        // aksiyonun global OrderNo'sundan farklı olarak burada global yeniden numaralama YOK).
+        var rootCauseRequests = (request.RootCauseItems ?? Array.Empty<SaveCapaRootCauseItemRequest>())
+            .Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
+        var rootCauseEntities = new List<CapaRootCauseItem>(rootCauseRequests.Count);
+        foreach (var x in rootCauseRequests)
+        {
+            if (!Enum.IsDefined(typeof(RootCauseMethod), x.Method)) return (false, "Geçersiz kök neden yöntemi (yapısal analiz).", 0);
+            if (x.Category.HasValue && !Enum.IsDefined(typeof(IshikawaCategory), x.Category.Value))
+                return (false, "Geçersiz Ishikawa (6M) kategorisi.", 0);
+            rootCauseEntities.Add(new CapaRootCauseItem
+            {
+                Id = x.Id,
+                CapaId = 0, // upsert sonrası repo kendi CapaId'yi yazar
+                Method = (RootCauseMethod)x.Method,
+                Category = x.Category.HasValue ? (IshikawaCategory)x.Category.Value : null,
+                Sequence = x.Sequence,
+                Text = x.Text.Trim(),
+                CreatedById = userId,
+            });
+        }
+
         // ── Mevcut kayıt: companion güncelle ──
         if (request.Id > 0)
         {
@@ -123,11 +147,14 @@ public sealed class CapaService : ICapaService
             existing.EffectivenessNote = string.IsNullOrWhiteSpace(request.EffectivenessNote) ? null : request.EffectivenessNote.Trim();
             existing.UpdatedById = userId;
 
-            await _repo.UpsertAsync(existing, actionEntities, ct);
+            await _repo.UpsertAsync(existing, actionEntities, rootCauseEntities, ct);
             _audit?.LogUpdate(AuditEntity, request.Id, title, old, existing);
             var actionChanges = BuildActionChanges(oldDetail?.Actions ?? Array.Empty<CapaActionDto>(), actionEntities);
             if (actionChanges.Count > 0)
                 _audit?.LogChanges(AuditEntity, request.Id, title, actionChanges, detail: "Aksiyon satırları güncellendi");
+            var rootCauseChanges = BuildRootCauseChanges(oldDetail?.RootCauseItems ?? Array.Empty<CapaRootCauseItemDto>(), rootCauseEntities);
+            if (rootCauseChanges.Count > 0)
+                _audit?.LogChanges(AuditEntity, request.Id, title, rootCauseChanges, detail: "Yapısal kök neden analizi güncellendi");
             return (true, null, request.Id);
         }
 
@@ -168,12 +195,14 @@ public sealed class CapaService : ICapaService
             EffectivenessNote = string.IsNullOrWhiteSpace(request.EffectivenessNote) ? null : request.EffectivenessNote.Trim(),
             CreatedById = userId,
         };
-        await _repo.UpsertAsync(capa, actionEntities, ct);
-        // Yeni kayıtta aksiyon satırları da "boş → değer" dökümü olarak eklenir (audit #5 —
-        // insert'te ilk değer dökümü kuralı, satırlar için LogChanges/elle diff ile genişletilir).
+        await _repo.UpsertAsync(capa, actionEntities, rootCauseEntities, ct);
+        // Yeni kayıtta aksiyon + kök neden satırları da "boş → değer" dökümü olarak eklenir
+        // (audit #5 — insert'te ilk değer dökümü kuralı, satırlar için LogChanges/elle diff ile genişletilir).
         var insertActionChanges = BuildActionChanges(Array.Empty<CapaActionDto>(), actionEntities);
+        var insertRootCauseChanges = BuildRootCauseChanges(Array.Empty<CapaRootCauseItemDto>(), rootCauseEntities);
+        var insertExtraChanges = insertActionChanges.Concat(insertRootCauseChanges).ToList();
         _audit?.LogInsert(AuditEntity, documentId, number, snapshot: capa,
-            extraChanges: insertActionChanges.Count > 0 ? insertActionChanges : null);
+            extraChanges: insertExtraChanges.Count > 0 ? insertExtraChanges : null);
         return (true, null, documentId);
     }
 
@@ -226,7 +255,10 @@ public sealed class CapaService : ICapaService
         if (!string.IsNullOrWhiteSpace(capa.ProblemDescription))
             snapshot.Add(new AuditFieldChange("ProblemDescription", "Problem Tanımı", capa.ProblemDescription, null));
         if (detail is not null)
+        {
             snapshot.AddRange(BuildActionChanges(detail.Actions, Array.Empty<CapaAction>()));
+            snapshot.AddRange(BuildRootCauseChanges(detail.RootCauseItems, Array.Empty<CapaRootCauseItem>()));
+        }
 
         // DÖF belgesi = Document; silme Document üzerinden (companion JOIN ile filtrelenir).
         await _documents.DeleteAsync(documentId, ct);
@@ -323,6 +355,59 @@ public sealed class CapaService : ICapaService
             AddIfChanged("ResponsiblePersonnelId", "Sorumlu", o.ResponsiblePersonnelId, n.ResponsiblePersonnelId);
             AddIfChanged("DueDate", "Termin", o.DueDate, n.DueDate);
             AddIfChanged("CompletedAt", "Tamamlanma Zamanı", o.CompletedAt, n.CompletedAt);
+        }
+        return changes;
+    }
+
+    /// <summary>
+    /// Yapısal kök neden satırı diff'i — BuildActionChanges'in analoğu. Eşleme yalnız Id
+    /// üzerinden yapılır (client mevcut satırın Id'sini korur, yeni eklenen satırlarda Id &lt;= 0
+    /// gelir). Silinen/eklenen satırlar için Old/New'den biri null; eşleşen satırlarda
+    /// Text/Method/Category/Sequence alan bazlı diff.
+    /// </summary>
+    private static List<AuditFieldChange> BuildRootCauseChanges(
+        IReadOnlyCollection<CapaRootCauseItemDto> oldItems, IReadOnlyList<CapaRootCauseItem> newItems)
+    {
+        var changes = new List<AuditFieldChange>();
+        var oldById = oldItems.Where(x => x.Id > 0).ToDictionary(x => x.Id);
+        var matchedOldIds = new HashSet<int>();
+        var pairs = new List<(CapaRootCauseItemDto Old, CapaRootCauseItem New)>();
+        var added = new List<CapaRootCauseItem>();
+
+        foreach (var n in newItems)
+        {
+            if (n.Id > 0 && oldById.TryGetValue(n.Id, out var o))
+            {
+                pairs.Add((o, n));
+                matchedOldIds.Add(n.Id);
+            }
+            else
+            {
+                added.Add(n);
+            }
+        }
+        var removed = oldItems.Where(o => o.Id > 0 && !matchedOldIds.Contains(o.Id)).ToList();
+
+        foreach (var o in removed)
+            changes.Add(new AuditFieldChange($"RootCause[{o.Id}]", $"Kök Neden Satırı Silindi — {o.Text}", o.Text, null));
+
+        foreach (var n in added)
+            changes.Add(new AuditFieldChange($"RootCause[new{n.Sequence}]", $"Kök Neden Satırı Eklendi — {n.Text}", null, n.Text));
+
+        foreach (var (o, n) in pairs)
+        {
+            var name = n.Text;
+            void AddIfChanged(string field, string label, object? oldVal, object? newVal)
+            {
+                var os = AuditDiff.Normalize(oldVal);
+                var ns = AuditDiff.Normalize(newVal);
+                if (!string.Equals(os ?? "", ns ?? "", StringComparison.Ordinal))
+                    changes.Add(new AuditFieldChange($"RootCause[{o.Id}].{field}", $"{name} · {label}", os, ns));
+            }
+            AddIfChanged("Text", "Metin", o.Text, n.Text);
+            AddIfChanged("Method", "Yöntem", Describe((RootCauseMethod)o.Method), Describe(n.Method));
+            AddIfChanged("Category", "6M Kategorisi", o.CategoryLabel, n.Category.HasValue ? Describe(n.Category.Value) : null);
+            AddIfChanged("Sequence", "Sıra", o.Sequence, n.Sequence);
         }
         return changes;
     }
