@@ -2776,7 +2776,7 @@
                         <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
                                style="max-width:120px;" value="1" min="0" step="0.000001"
                                title="1 birim belge dövizinin TL karşılığı"
-                               oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<0)el.value=1;sqRecalc();})(this)" />
+                               oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
                         <span class="sqe-hlabel-value" id="sqExchangeRateHint" style="margin-left:8px;opacity:.7;"></span>
                     </div>
                     @* Seq 1068: KDV Dahil switch — aktifse girilen birim fiyat KDV dahil kabul edilir. *@
