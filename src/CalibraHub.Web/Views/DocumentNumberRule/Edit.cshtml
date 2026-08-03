@@ -1,6 +1,7 @@
 @model CalibraHub.Domain.Entities.DocumentNumberRule
 @{
     ViewData["Title"] = Model.Id == 0 ? "Yeni Numara Kuralı" : "Numara Kuralı Düzenle";
+    ViewData["HelpKey"] = "doc-number-rule-edit";
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewData["BodyClass"] = "page-dnr-edit workspace-frame-body";
 

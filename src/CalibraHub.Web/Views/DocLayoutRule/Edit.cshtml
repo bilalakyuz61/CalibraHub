@@ -1,6 +1,7 @@
 @model CalibraHub.Web.Controllers.DocLayoutRuleController.DocLayoutRuleEditVm
 @{
     ViewData["Title"] = Model.Id == 0 ? "Yeni Tasarım Kuralı" : "Tasarım Kuralı Düzenle";
+    ViewData["HelpKey"] = "doc-layout-rule-edit";
     Layout = "~/Views/Shared/_Layout.cshtml";
     ViewData["BodyClass"] = "page-dlr-edit workspace-frame-body";
 

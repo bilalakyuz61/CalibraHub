@@ -4,6 +4,7 @@
     var entityType  = (string)(ViewBag.EntityType ?? Model.EntityType);
     var entityLabel = (string)(ViewBag.EntityLabel ?? (entityType == "Item" ? "Stok Kodu" : "Cari Kodu"));
     ViewData["Title"] = (Model.Id == 0 ? "Yeni" : "Düzenle") + " — " + entityLabel + " Kuralı";
+    ViewData["HelpKey"] = "code-rule-edit";
 
     var resetPeriods = ViewBag.ResetPeriods as System.Collections.IEnumerable;
     var sampleFields = (ViewBag.SampleFields as string[]) ?? Array.Empty<string>();

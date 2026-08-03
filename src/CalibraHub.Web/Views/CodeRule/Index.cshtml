@@ -4,6 +4,7 @@
     var entityType = (string)(ViewBag.EntityType ?? "Contact");
     var entityLabel = (string)(ViewBag.EntityLabel ?? "Cari Kodu");
     ViewData["Title"] = $"{entityLabel} Kuralları";
+    ViewData["HelpKey"] = "code-rules";
     // embed=1 → iç iframe içeriği (şeritsiz). Host modda alt-sekme şeridi + iframe (partial).
     var embed = Context.Request.Query["embed"] == "1";
     ViewData["BodyClass"] = embed ? "page-doc-layout-rule" : "page-design-rules-host";

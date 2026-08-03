@@ -2,6 +2,7 @@
 @using System.Text.Json
 @{
     ViewData["Title"] = "Belge Numarası Kuralları";
+    ViewData["HelpKey"] = "doc-number-rules";
     // embed=1 → iç iframe içeriği (şeritsiz). Host modda alt-sekme şeridi + iframe (partial).
     var embed = Context.Request.Query["embed"] == "1";
     ViewData["BodyClass"] = embed ? "page-doc-layout-rule" : "page-design-rules-host";
