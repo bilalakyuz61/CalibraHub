@@ -50,7 +50,7 @@
  */
 import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical, ChevronDown } from 'lucide-react'
+import { AlertTriangle, Trash2, X, ArrowUpRight, List, MoreVertical, ChevronRight } from 'lucide-react'
 import { resolveIcon, resolveColorForTheme, formatValue, resolveBooleanIcon } from './DynamicWidgetFactory'
 import { checkConstraintViolation, resolveTokensWithRecord } from './SmartWidget'
 import GuideListField from '../DynamicWidgetRenderer/GuideListField'
@@ -793,8 +793,25 @@ export default function SmartTableRow(props) {
                 // sadece tetikleme yolu değişti).
                 if (action.type === 'status-menu' && Array.isArray(action.options)) {
                   var isSubOpen = statusSubOpenKey === actionKey
+                  // Alt-menü YANA açılır (inline/aşağı değil — kullanıcı isteği 2026-08-03).
+                  // Yön: ana menü ekranın sağ kenarına yakın (horizontal === 'right', sola
+                  // doğru) açıldıysa alt-menü de SOLA; aksi halde SAĞA fışkırır.
+                  var flyoutLeft = !(menuPos && menuPos.horizontal === 'right')
+                  var subPanelStyle = {
+                    position: 'absolute', top: -5, zIndex: 10011,
+                    minWidth: 168, maxWidth: 240, padding: 5, borderRadius: 12,
+                    background: isDark ? 'rgba(30,41,59,0.97)' : 'rgba(255,255,255,0.97)',
+                    border: isDark ? '1px solid rgba(255,255,255,0.14)' : '1px solid rgba(15,23,42,0.09)',
+                    boxShadow: isDark
+                      ? '0 4px 10px rgba(0,0,0,0.35), 0 20px 44px -10px rgba(0,0,0,0.65)'
+                      : '0 4px 10px rgba(15,23,42,0.06), 0 16px 36px -8px rgba(15,23,42,0.22)',
+                    backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+                    display: 'flex', flexDirection: 'column', gap: 1,
+                  }
+                  if (flyoutLeft) { subPanelStyle.left = '100%'; subPanelStyle.marginLeft = 5 }
+                  else { subPanelStyle.right = '100%'; subPanelStyle.marginRight = 5 }
                   return (
-                    <div key={actionKey}>
+                    <div key={actionKey} style={{ position: 'relative' }}>
                       <button
                         type="button"
                         onClick={function (e) { e.stopPropagation(); setStatusSubOpenKey(isSubOpen ? null : actionKey) }}
@@ -811,13 +828,13 @@ export default function SmartTableRow(props) {
                       >
                         <ActionIcon size={13} style={{ flexShrink: 0 }} />
                         <span style={{ flex: 1 }}>{action.label}</span>
-                        <ChevronDown
+                        <ChevronRight
                           size={12}
-                          style={{ flexShrink: 0, transition: 'transform 0.15s ease', transform: isSubOpen ? 'rotate(180deg)' : 'rotate(0deg)', opacity: 0.6 }}
+                          style={{ flexShrink: 0, opacity: 0.6, transform: flyoutLeft ? 'none' : 'rotate(180deg)' }}
                         />
                       </button>
                       {isSubOpen && (
-                        <div style={{ padding: '2px 2px 2px 14px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <div style={subPanelStyle}>
                           {action.options.map(function (opt) {
                             var dotColor = resolveColorForTheme(opt.color, null, isDark).icon
                             return (

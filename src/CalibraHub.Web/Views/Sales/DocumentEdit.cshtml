@@ -966,20 +966,23 @@
     }
     /* ── Aranabilir temsilci combobox ── */
     .sqe-rep-cb { position: relative; }
+    /* Seq 1075: Temsilci alanı kutu değil, diğer üst-bilgi alanları gibi alt-çizgili
+       (underline standardı). Kutu border/radius/shadow kaldırıldı, yalnız border-bottom. */
     .sqe-rep-btn {
         display: flex; align-items: center; justify-content: space-between;
-        width: 100%; height: 38px;
-        border-radius: 10px; border: 1px solid #e2e8f0;
-        background-color: #ffffff;
-        padding: 0 10px 0 12px;
+        width: 100%; height: auto;
+        border-radius: 0; border: none;
+        border-bottom: 1px solid #e2e8f0;
+        background-color: transparent;
+        padding: 9px 4px 9px 0;
         font-size: .875rem; font-weight: 500; color: #0f172a;
-        box-shadow: 0 1px 2px rgba(15,23,42,.04);
+        box-shadow: none;
         cursor: pointer; text-align: left;
-        transition: border-color .12s, box-shadow .12s, background-color .12s;
+        transition: border-color .12s;
     }
-    .sqe-rep-btn:hover { border-color: #c7d2fe; }
-    .sqe-rep-btn:focus  { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
-    .sqe-rep-btn[aria-expanded="true"] { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+    .sqe-rep-btn:hover { border-bottom-color: #c7d2fe; }
+    .sqe-rep-btn:focus  { outline: none; border-bottom-color: #6366f1; box-shadow: none; }
+    .sqe-rep-btn[aria-expanded="true"] { border-bottom-color: #6366f1; box-shadow: none; }
     .sqe-rep-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sqe-rep-label.is-placeholder { color: #94a3b8; }
     .sqe-rep-chevron { flex-shrink: 0; width: 14px; height: 14px; color: #64748b; transition: transform .15s; }
@@ -1010,13 +1013,33 @@
     .sqe-rep-option.is-selected { font-weight: 600; color: #6366f1; }
     .sqe-rep-no-result { padding: 10px 12px; font-size: .8rem; color: #94a3b8; text-align: center; }
     body.app-theme-dark .sqe-rep-btn {
-        background-color: rgba(255,255,255,.04); border-color: rgba(255,255,255,.08);
+        background-color: transparent; border-bottom-color: rgba(255,255,255,.14);
         color: #f1f5f9; box-shadow: none;
     }
-    body.app-theme-dark .sqe-rep-btn:hover { border-color: rgba(165,180,252,.35); }
+    body.app-theme-dark .sqe-rep-btn:hover { border-bottom-color: rgba(165,180,252,.35); }
     body.app-theme-dark .sqe-rep-btn:focus,
-    body.app-theme-dark .sqe-rep-btn[aria-expanded="true"] { border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.25); }
+    body.app-theme-dark .sqe-rep-btn[aria-expanded="true"] { border-bottom-color: #a5b4fc; box-shadow: none; }
     body.app-theme-dark .sqe-rep-chevron { color: rgba(255,255,255,.4); }
+    /* Seq 1075: Cari Kod / Tedarikçi rehber alanı (React .gl-card, attachGuide .gl-wrapper
+       içinde) de kutu değil ALT-ÇİZGİLİ olsun — guide bileşeni normalde "kutu" render eder.
+       Override yalnız üst-bilgi (.sqe-hform) kapsamındaki tek gl-card'ı (Cari Kod) etkiler;
+       bundle'daki paylaşılan guide stiline dokunulmaz. */
+    .sqe-hform .gl-wrapper .gl-card {
+        border: none !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        height: auto !important;
+    }
+    .sqe-hform .gl-wrapper .gl-card__bar { display: none !important; }
+    .sqe-hform .gl-wrapper .gl-card__input {
+        background: transparent !important;
+        border: none !important;
+    }
+    body.app-theme-dark .sqe-hform .gl-wrapper .gl-card {
+        border-bottom-color: rgba(255,255,255,.14) !important;
+    }
     body.app-theme-dark .sqe-rep-panel {
         background: #1e2130; border-color: rgba(255,255,255,.08);
         box-shadow: 0 8px 32px rgba(0,0,0,.45);

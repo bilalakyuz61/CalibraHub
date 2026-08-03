@@ -5796,6 +5796,7 @@ END;";
                     [Status]            TINYINT        NOT NULL CONSTRAINT [DF_StockReservation_Status] DEFAULT 1,
                     [PlannedShipDate]   DATETIME       NULL,
                     [ShippedDocumentId] INT            NULL,
+                    [KitOrderLineId]    INT            NULL,   -- Faz 1.5: kit bilesen rezervasyonu → ait oldugu KIT siparis kalemi (grup+tip ayrimi; NULL = normal rezervasyon, ItemId=bilesen)
                     [Notes]             NVARCHAR(1000) NULL,
                     [IsActive]          BIT            NOT NULL CONSTRAINT [DF_StockReservation_IsActive] DEFAULT 1,
                     [CreatedById]       INT            NULL,
@@ -5831,6 +5832,20 @@ END;";
                     CREATE INDEX [IX_StockReservation_OrderDoc]
                         ON [{s}].[StockReservation]([OrderDocumentId])
                         WHERE [IsActive] = 1;
+                ';
+
+            -- Faz 1.5 (2026-08-03): kit tam-set rezervasyon. Mevcut (canlı) DB için idempotent ekleme.
+            -- Filtered index EXEC ile ertelenmiş derlenir (yeni kolon aynı batch'te compile-time 207
+            -- vermesin — ItemSerial ReservedForDocumentId dersi).
+            IF COL_LENGTH(N'[{s}].[StockReservation]', N'KitOrderLineId') IS NULL
+                ALTER TABLE [{s}].[StockReservation] ADD [KitOrderLineId] INT NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[StockReservation]') AND name = N'IX_StockReservation_KitOrderLine')
+               AND COL_LENGTH(N'[{s}].[StockReservation]', N'KitOrderLineId') IS NOT NULL
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_StockReservation_KitOrderLine]
+                        ON [{s}].[StockReservation]([KitOrderLineId])
+                        WHERE [KitOrderLineId] IS NOT NULL AND [IsActive] = 1;
                 ';
             """;
 
