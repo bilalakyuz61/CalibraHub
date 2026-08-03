@@ -269,6 +269,18 @@
   .cae-rm:hover{background:rgba(239,68,68,.1);}
   body.app-theme-dark .cae-row,body.app-theme-dark .cae-row input,body.app-theme-dark .cae-row select,body.app-theme-dark .cae-rm{background:var(--app-surface,#1e293b);}
 
+  /* Kök Neden — 5 Neden zinciri + Ishikawa 6M editörü (cae-row deseninin sadeleştirilmiş hali). */
+  .rc-block{margin:14px 0 20px;}
+  .rc-block__title{font-size:14px;font-weight:600;color:var(--app-text,#0f172a);margin:0 0 4px;}
+  .rc-row{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin-bottom:8px;}
+  .rc-row__seq{font-size:12.5px;font-weight:600;color:var(--app-text-muted,#64748b);min-width:64px;}
+  .rc-row input{font-size:13px;padding:7px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:7px;background:var(--app-surface,#fff);color:var(--app-text,#0f172a);width:100%;}
+  body.app-theme-dark .rc-row input{background:var(--app-surface,#1e293b);}
+  .rc-cat{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:10px 14px;margin-bottom:10px;background:var(--app-surface,#fff);}
+  body.app-theme-dark .rc-cat{background:var(--app-surface,#1e293b);}
+  .rc-cat__title{font-size:13px;font-weight:600;color:var(--app-text,#0f172a);margin:0 0 8px;}
+  .rc-cat .rc-row{grid-template-columns:1fr auto;}
+
   /* Durum rozeti + geçiş butonları */
   .cae-state{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 16px;margin:14px 0;background:var(--app-surface,#fff);max-width:560px;}
   .cae-state__row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
@@ -282,6 +294,8 @@
 <script>
 (function () {
     var INITIAL_ACTIONS = @Html.Raw(actionsJson);
+    var INITIAL_ROOT_CAUSE_ITEMS = @Html.Raw(rootCauseItemsJson);
+    var ISHIKAWA_CATEGORIES = @Html.Raw(ishikawaCategoriesJson);
     var IS_NEW = @(isNew ? "true" : "false");
     var STATUS_LABELS = { 0:'Açık', 1:'Kök Neden Analizi', 2:'Aksiyonda', 3:'Doğrulama Bekliyor', 4:'Kapalı', 5:'İptal' };
     // ValidateTransition (CapaService) ile birebir aynı geçiş haritası — sadece UI için ayna.
@@ -311,6 +325,92 @@
     var typeEl=document.getElementById('f-type'); if(typeEl.getAttribute('data-current'))typeEl.value=typeEl.getAttribute('data-current');
     var sevEl=document.getElementById('f-severity'); if(sevEl.getAttribute('data-current'))sevEl.value=sevEl.getAttribute('data-current');
     var rcEl=document.getElementById('f-rcmethod'); if(rcEl.getAttribute('data-current'))rcEl.value=rcEl.getAttribute('data-current');
+
+    // ── Kök Neden — yapısal editörler (5 Neden zinciri + Ishikawa 6M) ──
+    // RootCauseMethod: 1=5 Neden, 2=Ishikawa, 3=8D (ikisi birden). item.method (1/2) teknik demektir,
+    // Capa'nın seçili yöntemi değil — 8D'de her iki teknik de kullanılabildiği için ayrı tutulur.
+    var rcFiveWhyRows=document.getElementById('rc-fivewhy-rows');
+    var rcFiveWhyBlock=document.getElementById('rc-fivewhy');
+    var rcIshikawaBlock=document.getElementById('rc-ishikawa');
+    var rcIshikawaCategories=document.getElementById('rc-ishikawa-categories');
+    var rcEmptyHint=document.getElementById('rc-empty-hint');
+
+    function rcFiveWhyRenumber(){
+        Array.prototype.forEach.call(rcFiveWhyRows.querySelectorAll('.rc-row'),function(row,i){
+            row.querySelector('.rc-row__seq').textContent=(i+1)+'. Neden';
+        });
+    }
+    function addFiveWhyRow(text){
+        var row=document.createElement('div');row.className='rc-row';row.setAttribute('data-id','0');
+        row.innerHTML='<span class="rc-row__seq"></span><input class="rc-text" maxlength="1000" value="'+esc(text||'')+'" placeholder="Neden…" /><button type="button" class="cae-rm" title="Kaldır">×</button>';
+        rcFiveWhyRows.appendChild(row);
+        row.querySelector('.cae-rm').addEventListener('click',function(){row.remove();rcFiveWhyRenumber();});
+        rcFiveWhyRenumber();
+        return row;
+    }
+    document.getElementById('rc-fivewhy-add').addEventListener('click',function(){var r=addFiveWhyRow('');r.querySelector('.rc-text').focus();});
+
+    // 6 kategori bölümü sabit sırayla bir kez oluşturulur; her biri kendi satır listesine sahiptir.
+    var rcCategoryRowsById={};
+    (ISHIKAWA_CATEGORIES||[]).forEach(function(cat){
+        var box=document.createElement('div');box.className='rc-cat';box.setAttribute('data-category',String(cat.id));
+        box.innerHTML='<div class="rc-cat__title">'+esc(cat.label)+'</div><div class="rc-cat-rows"></div><button type="button" class="ux-edit-bar__btn rc-cat-add">+ Neden</button>';
+        rcIshikawaCategories.appendChild(box);
+        var rowsHost=box.querySelector('.rc-cat-rows');
+        rcCategoryRowsById[cat.id]=rowsHost;
+        function addCatRow(text){
+            var row=document.createElement('div');row.className='rc-row';row.setAttribute('data-id','0');
+            row.innerHTML='<input class="rc-text" maxlength="1000" value="'+esc(text||'')+'" placeholder="Neden…" /><button type="button" class="cae-rm" title="Kaldır">×</button>';
+            rowsHost.appendChild(row);
+            row.querySelector('.cae-rm').addEventListener('click',function(){row.remove();});
+            return row;
+        }
+        box.querySelector('.rc-cat-add').addEventListener('click',function(){var r=addCatRow('');r.querySelector('.rc-text').focus();});
+        box.__addCatRow=addCatRow;
+    });
+
+    function updateRcVisibility(){
+        var m=rcEl.value?parseInt(rcEl.value,10):null;
+        var showFiveWhy = m===1||m===3;
+        var showIshikawa = m===2||m===3;
+        rcFiveWhyBlock.style.display = showFiveWhy?'':'none';
+        rcIshikawaBlock.style.display = showIshikawa?'':'none';
+        rcEmptyHint.style.display = m?'none':'';
+    }
+    rcEl.addEventListener('change',updateRcVisibility);
+    updateRcVisibility();
+
+    // ── Kök Neden — mevcut kayıttan gelen satırları yönteme/kategoriye göre grupla ve doldur ──
+    (INITIAL_ROOT_CAUSE_ITEMS||[]).slice().sort(function(a,b){return a.sequence-b.sequence;}).forEach(function(it){
+        if(it.method===1){
+            addFiveWhyRow(it.text).setAttribute('data-id',String(it.id||0));
+        }else if(it.method===2 && rcCategoryRowsById[it.category]){
+            var rowsHost=rcCategoryRowsById[it.category];
+            var box=rowsHost.closest('.rc-cat');
+            var row=box.__addCatRow(it.text);
+            row.setAttribute('data-id',String(it.id||0));
+        }
+    });
+
+    function collectRootCauseItems(){
+        var out=[];
+        Array.prototype.forEach.call(rcFiveWhyRows.querySelectorAll('.rc-row'),function(row,i){
+            var text=row.querySelector('.rc-text').value.trim();
+            if(!text)return; // boş satır gönderilmez
+            out.push({ id: parseInt(row.getAttribute('data-id'),10)||0, method:1, category:null, sequence:i+1, text:text });
+        });
+        (ISHIKAWA_CATEGORIES||[]).forEach(function(cat){
+            var rowsHost=rcCategoryRowsById[cat.id];
+            var seq=0;
+            Array.prototype.forEach.call(rowsHost.querySelectorAll('.rc-row'),function(row){
+                var text=row.querySelector('.rc-text').value.trim();
+                if(!text)return; // boş satır gönderilmez
+                seq++;
+                out.push({ id: parseInt(row.getAttribute('data-id'),10)||0, method:2, category:cat.id, sequence:seq, text:text });
+            });
+        });
+        return out;
+    }
 
     var effEl=document.getElementById('f-effverified'), effLabel=document.getElementById('f-effverified-label');
     effEl.addEventListener('change',function(){effLabel.textContent=effEl.checked?'Evet':'Hayır';updateCloseGuard();});
@@ -504,6 +604,7 @@
             verifiedAt: document.getElementById('f-verifiedat').value||null,
             effectivenessNote: document.getElementById('f-effnote').value.trim()||null,
             actions: collectActions(),
+            rootCauseItems: collectRootCauseItems(),
         };
         try{
             var r=await fetch('/Quality/SaveCapa',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','RequestVerificationToken':token()},body:JSON.stringify(payload)});
