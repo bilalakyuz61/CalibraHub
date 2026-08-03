@@ -1,6 +1,8 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Approval.EntityTypes;
 using CalibraHub.Application.Auditing;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -13,11 +15,23 @@ namespace CalibraHub.Application.Services;
 /// (companion + Document 'dof' 1-1) birebir izlenir. Kapanış (Status=Kapali) yalnızca tüm
 /// CapaAction satırları Tamamlandı/İptal VE EffectivenessVerified=1 ise izinlidir — server-side
 /// guard burada uygulanır, bypass edilemez (frontend kontrolü bu guard'ın yerini tutmaz).
+///
+/// Kapanış onayı (2026-08-04): ApprovalFlow "Capa" entity kind'ı (<see cref="CapaApprovalEntityType"/>)
+/// üzerinden mevcut onay akışı altyapısına ADDITIVE olarak bağlanır. Şirket parametresi
+/// (ApprovalParameters, kind="Capa") ile açık/kapalı; eşleşen aktif akış yoksa eski davranış
+/// (doğrudan kapanış) aynen sürer — belge (Document/SalesQuote vb.) onay yolları bu değişiklikten
+/// ETKİLENMEZ (ayrı EntityKind="Capa", ayrı kod dalı).
 /// </summary>
 public sealed class CapaService : ICapaService
 {
     private const string TypeCode = "dof";
     private const string AuditEntity = "Capa";
+
+    /// <summary>
+    /// ApprovalFlow entity kind'ı — <see cref="CapaApprovalEntityType.Code"/> ile TUTARLI olmalı
+    /// (kayıt/DI ve ApprovalController/SqlApprovalInstanceRepository'deki "Capa" literalleriyle de).
+    /// </summary>
+    private const string ApprovalEntityKind = "Capa";
 
     private readonly ICapaRepository _repo;
     private readonly IDocumentRepository _documents;
@@ -25,6 +39,9 @@ public sealed class CapaService : ICapaService
     private readonly IDocumentNumberService _numberService;
     private readonly ILogger<CapaService> _logger;
     private readonly IAuditTrailService? _audit;
+    private readonly IApprovalFlowService? _approvalFlowService;
+    private readonly ICompanyParameterService? _companyParameters;
+    private readonly IUserProfileRepository? _userProfiles;
 
     public CapaService(
         ICapaRepository repo,
@@ -32,7 +49,10 @@ public sealed class CapaService : ICapaService
         IDocumentTypeRepository documentTypes,
         IDocumentNumberService numberService,
         ILogger<CapaService> logger,
-        IAuditTrailService? audit = null)
+        IAuditTrailService? audit = null,
+        IApprovalFlowService? approvalFlowService = null,
+        ICompanyParameterService? companyParameters = null,
+        IUserProfileRepository? userProfiles = null)
     {
         _repo = repo;
         _documents = documents;
@@ -40,6 +60,9 @@ public sealed class CapaService : ICapaService
         _numberService = numberService;
         _logger = logger;
         _audit = audit;
+        _approvalFlowService = approvalFlowService;
+        _companyParameters = companyParameters;
+        _userProfiles = userProfiles;
     }
 
     public Task<IReadOnlyCollection<CapaListItemDto>> ListAsync(string? search, byte? status, CancellationToken ct)
@@ -215,15 +238,15 @@ public sealed class CapaService : ICapaService
         return (true, null, documentId);
     }
 
-    public async Task<(bool Ok, string? Error)> ChangeStatusAsync(ChangeCapaStatusRequest request, int? userId, CancellationToken ct)
+    public async Task<(bool Ok, string? Error, string? Message, byte? ActualStatus)> ChangeStatusAsync(ChangeCapaStatusRequest request, int? userId, CancellationToken ct)
     {
-        if (!Enum.IsDefined(typeof(CapaStatus), request.NewStatus)) return (false, "Geçersiz durum.");
+        if (!Enum.IsDefined(typeof(CapaStatus), request.NewStatus)) return (false, "Geçersiz durum.", null, null);
         var capa = await _repo.GetByDocumentIdAsync(request.Id, ct);
-        if (capa is null) return (false, "DÖF kaydı bulunamadı.");
+        if (capa is null) return (false, "DÖF kaydı bulunamadı.", null, null);
         var next = (CapaStatus)request.NewStatus;
-        if (capa.Status == next) return (true, null);
+        if (capa.Status == next) return (true, null, null, null);
         if (!ValidateTransition(capa.Status, next))
-            return (false, $"Geçersiz durum geçişi: {Describe(capa.Status)} → {Describe(next)}.");
+            return (false, $"Geçersiz durum geçişi: {Describe(capa.Status)} → {Describe(next)}.", null, null);
 
         // KAPANIŞ GUARD (server-side, kritik): tüm aksiyonlar Tamamlandı/İptal olmalı VE
         // etkinlik doğrulanmış olmalı. Bu mesaj kullanıcı-dostu bir iş kuralı açıklamasıdır,
@@ -235,16 +258,143 @@ public sealed class CapaService : ICapaService
                 (CapaActionStatus)a.Status != CapaActionStatus.Tamamlandi &&
                 (CapaActionStatus)a.Status != CapaActionStatus.Iptal) ?? false;
             if (actionsNotDone)
-                return (false, "Kapatmak için tüm aksiyonlar tamamlanmalı ve etkinlik doğrulanmalı.");
+                return (false, "Kapatmak için tüm aksiyonlar tamamlanmalı ve etkinlik doğrulanmalı.", null, null);
             if (!capa.EffectivenessVerified)
-                return (false, "Kapatmak için tüm aksiyonlar tamamlanmalı ve etkinlik doğrulanmalı.");
+                return (false, "Kapatmak için tüm aksiyonlar tamamlanmalı ve etkinlik doğrulanmalı.", null, null);
+
+            // Kapanış onayı (ADDITIVE): aktif bir "Capa" ApprovalFlow eşleşirse durum burada
+            // Kapali'ya GEÇMEZ — DogrulamaBekliyor'da kalır, onay süreci başlatılır. Gerçek
+            // kapanış OnClosureApprovalCompletedAsync (ApprovalController → onay tamamlandığında)
+            // içinde yapılır. Servis inject edilmemişse (test/DI eksik) veya eşleşen akış yoksa
+            // ya da şirket parametresi kapalıysa eski davranış (doğrudan kapanış) aynen sürer.
+            if (_approvalFlowService is not null)
+            {
+                var approvalEnabled = true;
+                if (_companyParameters is not null)
+                {
+                    approvalEnabled = await _companyParameters.GetBoolAsync(
+                        ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(ApprovalEntityKind), ct) ?? true;
+                }
+
+                if (approvalEnabled)
+                {
+                    ApprovalFlowDto? flow = null;
+                    try
+                    {
+                        flow = await _approvalFlowService.MatchFlowAsync(ApprovalEntityKind, 0m, null, null, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "DÖF kapanış onayı akış eşleme hatası (documentId={Id})", request.Id);
+                    }
+
+                    if (flow is not null)
+                    {
+                        var existingInstance = await _approvalFlowService.GetInstanceByDocumentIdAsync(request.Id, ct);
+                        if (existingInstance is not null
+                            && string.Equals(existingInstance.Status, "Pending", StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(existingInstance.EntityKind, ApprovalEntityKind, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return (false, "Bu DÖF zaten kapanış onayında; onay bekleniyor.", null, null);
+                        }
+
+                        var startedBy = "system";
+                        if (userId.HasValue && _userProfiles is not null)
+                        {
+                            var profile = await _userProfiles.GetByIdAsync(userId.Value, ct);
+                            if (profile is not null) startedBy = profile.FullName;
+                        }
+
+                        try
+                        {
+                            await _approvalFlowService.StartAsync(
+                                new StartApprovalRequest(
+                                    DocumentId:      request.Id,
+                                    FlowId:          flow.Id,
+                                    StartedBy:       startedBy,
+                                    StartedByUserId: userId,
+                                    EntityKind:      ApprovalEntityKind),
+                                ct);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "DÖF kapanış onayı başlatılamadı (documentId={Id})", request.Id);
+                            return (false, "Kapanış onaya gönderilemedi.", null, null);
+                        }
+
+                        // Durum burada değiştirilmez — mevcut durumda (DogrulamaBekliyor) kalır.
+                        _audit?.LogChanges(AuditEntity, request.Id, capa.Title,
+                            new[] { new AuditFieldChange("ApprovalStatus", "Kapanış Onayı", "—", "Onaya Gönderildi") });
+                        return (true, null, "Kapanış onaya gönderildi. Onaylandığında DÖF kapanacak.", (byte)capa.Status);
+                    }
+                }
+            }
         }
 
         var closedAt = next == CapaStatus.Kapali ? DateTime.UtcNow : (DateTime?)null;
         await _repo.UpdateStatusAsync(request.Id, (byte)next, closedAt, userId, ct);
         _audit?.LogChanges(AuditEntity, request.Id, capa.Title,
             new[] { new AuditFieldChange("Status", "Durum", Describe(capa.Status), Describe(next)) });
-        return (true, null);
+        return (true, null, null, null);
+    }
+
+    /// <summary>
+    /// ApprovalController tarafından EntityKind="Capa" onay örneği tamamlandığında (Approved/Rejected)
+    /// çağrılır. Idempotent: kayıt bulunamazsa veya Status artık DogrulamaBekliyor değilse
+    /// (zaten kapanmış/iptal/elle değiştirilmiş olabilir) no-op — ama SESSİZ değil, logla.
+    /// approved=true → kapanış guard'ı TEKRAR doğrulanır (onay sürecinde aksiyon/etkinlik durumu
+    /// değişmiş olabilir); guard geçmezse kapatma yapılmaz. approved=false → Aksiyonda'ya döner.
+    /// </summary>
+    public async Task OnClosureApprovalCompletedAsync(int documentId, bool approved, int? actorUserId, CancellationToken ct)
+    {
+        var capa = await _repo.GetByDocumentIdAsync(documentId, ct);
+        if (capa is null)
+        {
+            _logger.LogWarning("DÖF kapanış onayı tamamlandı ama kayıt bulunamadı (documentId={Id}).", documentId);
+            return;
+        }
+        if (capa.Status != CapaStatus.DogrulamaBekliyor)
+        {
+            _logger.LogInformation(
+                "DÖF kapanış onayı tamamlandı ama durum DogrulamaBekliyor değil (documentId={Id}, status={Status}) — no-op.",
+                documentId, capa.Status);
+            return;
+        }
+
+        if (approved)
+        {
+            var detail = await _repo.GetDetailAsync(documentId, ct);
+            var actionsNotDone = detail?.Actions.Any(a =>
+                (CapaActionStatus)a.Status != CapaActionStatus.Tamamlandi &&
+                (CapaActionStatus)a.Status != CapaActionStatus.Iptal) ?? false;
+            if (actionsNotDone || !capa.EffectivenessVerified)
+            {
+                _logger.LogWarning(
+                    "DÖF kapanış onayı ONAYLANDI ama kapanış guard'ı artık geçmiyor (documentId={Id}) — kapatılmadı.",
+                    documentId);
+                return;
+            }
+
+            await _repo.UpdateStatusAsync(documentId, (byte)CapaStatus.Kapali, DateTime.UtcNow, actorUserId, ct);
+            _audit?.LogChanges(AuditEntity, documentId, capa.Title,
+                new[]
+                {
+                    new AuditFieldChange("Status", "Durum", Describe(CapaStatus.DogrulamaBekliyor), Describe(CapaStatus.Kapali)),
+                    new AuditFieldChange("ApprovalStatus", "Kapanış Onayı", "Onaya Gönderildi", "Onaylandı"),
+                },
+                detail: "Kapanış onayı ile kapatıldı");
+        }
+        else
+        {
+            await _repo.UpdateStatusAsync(documentId, (byte)CapaStatus.Aksiyonda, null, actorUserId, ct);
+            _audit?.LogChanges(AuditEntity, documentId, capa.Title,
+                new[]
+                {
+                    new AuditFieldChange("Status", "Durum", Describe(CapaStatus.DogrulamaBekliyor), Describe(CapaStatus.Aksiyonda)),
+                    new AuditFieldChange("ApprovalStatus", "Kapanış Onayı", "Onaya Gönderildi", "Reddedildi"),
+                },
+                detail: "Kapanış onayı reddedildi — yeniden çalışma");
+        }
     }
 
     public async Task<(bool Ok, string? Error)> DeleteAsync(int documentId, int? userId, CancellationToken ct)

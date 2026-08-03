@@ -266,6 +266,10 @@ builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityType,
                            CalibraHub.Application.Approval.EntityTypes.ContactApprovalEntityType>();
 builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityType,
                            CalibraHub.Application.Approval.EntityTypes.ProductionRecordApprovalEntityType>();
+// DÖF (CAPA) kapanış onayı — ayrı "Capa" kind'ı (Document wildcard'tan bağımsız).
+// ICapaRepository'ye bağımlı (Scoped).
+builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityType,
+                           CalibraHub.Application.Approval.EntityTypes.CapaApprovalEntityType>();
 // Document tipi IApprovalDocumentContextProvider'a bağımlı (Scoped); registry de Scoped olur.
 builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityTypeRegistry,
                            CalibraHub.Application.Approval.ApprovalEntityTypeRegistry>();

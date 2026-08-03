@@ -27,11 +27,13 @@ public sealed class QualityController : Controller
     private readonly IStockDocRepository _stockDocs;
     private readonly IWorkOrderRepository _workOrders;
     private readonly IFinanceService _finance;
+    private readonly IApprovalFlowService _approvalFlowService;
     private readonly ILogger<QualityController> _logger;
 
     public QualityController(IQualityService quality, IQualityDefectCodeService defectCodes,
         ICapaService capa, ILogisticsConfigurationService logistics, IDocumentRepository documents,
         IStockDocRepository stockDocs, IWorkOrderRepository workOrders, IFinanceService finance,
+        IApprovalFlowService approvalFlowService,
         ILogger<QualityController> logger)
     {
         _quality = quality;
@@ -42,6 +44,7 @@ public sealed class QualityController : Controller
         _stockDocs = stockDocs;
         _workOrders = workOrders;
         _finance = finance;
+        _approvalFlowService = approvalFlowService;
         _logger = logger;
     }
 
@@ -724,8 +727,42 @@ public sealed class QualityController : Controller
     public async Task<IActionResult> ChangeCapaStatus([FromBody] ChangeCapaStatusRequest? req, CancellationToken ct)
     {
         if (req is null) return Json(new { ok = false, error = "Geçersiz istek." });
-        try { var (ok, error) = await _capa.ChangeStatusAsync(req, CurrentUserId(), ct); return Json(new { ok, error }); }
+        try
+        {
+            // ActualStatus dolu dönerse istenen NewStatus UYGULANMADI (kapanış onaya gönderildi,
+            // durum eskisi gibi kaldı) — frontend bu durumda kaydı yeniden çekmeli, NewStatus'u
+            // yerel olarak varsaymamalı. message dolu + ok=true → bilgilendirme (hata DEĞİL).
+            var (ok, error, message, actualStatus) = await _capa.ChangeStatusAsync(req, CurrentUserId(), ct);
+            return Json(new { ok, error, message, status = actualStatus });
+        }
         catch (Exception ex) { _logger.LogError(ex, "DÖF durum değişikliği hatası (id={Id})", req.Id); return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." }); }
+    }
+
+    // GET /Quality/CapaApprovalStatus?documentId= → DÖF kapanış onayı durumu (EntityKind="Capa" filtreli).
+    // Frontend "onay bekliyor" göstergesi + Kapat butonu yönetimi için çağırır.
+    [HttpGet]
+    [PermissionScope(FormCodes.QualityCapa)]
+    public async Task<IActionResult> CapaApprovalStatus(int documentId, CancellationToken ct)
+    {
+        try
+        {
+            var instance = await _approvalFlowService.GetInstanceByDocumentIdAsync(documentId, ct);
+            if (instance is null || !string.Equals(instance.EntityKind, "Capa", StringComparison.OrdinalIgnoreCase))
+                return Json(new { hasApproval = false, status = (string?)null, currentStep = 0, totalSteps = 0 });
+
+            return Json(new
+            {
+                hasApproval = true,
+                status = instance.Status,          // "Pending" | "Approved" | "Rejected" | "Cancelled"
+                currentStep = instance.CurrentStep,
+                totalSteps = instance.TotalSteps,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DÖF kapanış onayı durum sorgusu hatası (documentId={Id})", documentId);
+            return Json(new { hasApproval = false, status = (string?)null, currentStep = 0, totalSteps = 0 });
+        }
     }
 
     [HttpPost]
