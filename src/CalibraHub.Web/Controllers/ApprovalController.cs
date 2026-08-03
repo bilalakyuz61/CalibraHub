@@ -23,6 +23,8 @@ public sealed class ApprovalController : Controller
     private readonly IIncomingDocumentRepository _incomingDocumentRepository;
     private readonly IApprovalFlowService _approvalFlowService;
     private readonly IDocumentService _documentService;
+    private readonly ICapaService _capaService;
+    private readonly ILogger<ApprovalController> _logger;
 
     public ApprovalController(
         IApprovalQueueService approvalQueueService,
@@ -30,7 +32,9 @@ public sealed class ApprovalController : Controller
         IDocumentImportService documentImportService,
         IIncomingDocumentRepository incomingDocumentRepository,
         IApprovalFlowService approvalFlowService,
-        IDocumentService documentService)
+        IDocumentService documentService,
+        ICapaService capaService,
+        ILogger<ApprovalController> logger)
     {
         _approvalQueueService = approvalQueueService;
         _uiConfigurationService = uiConfigurationService;
@@ -38,6 +42,8 @@ public sealed class ApprovalController : Controller
         _incomingDocumentRepository = incomingDocumentRepository;
         _approvalFlowService = approvalFlowService;
         _documentService = documentService;
+        _capaService = capaService;
+        _logger = logger;
     }
 
     public Task<IActionResult> Index(
@@ -807,11 +813,26 @@ public sealed class ApprovalController : Controller
             var instance = await _approvalFlowService.ApproveStepAsync(
                 new ApproveStepRequest(instanceId, userId, userName, note, choiceArmId), cancellationToken);
 
-            // Onay tamamlandıysa Document.Status = Approved yap (alis_talebi için)
-            if (string.Equals(instance.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+            // Onay tamamlandıysa entity'yi ilerlet. EntityKind="Capa" (DÖF kapanış onayı) AYRI
+            // bir dala gider — CapaService kapanış guard'ını tekrar doğrulayıp kapatır. Diğer
+            // TÜM entity kind'ları (varsayılan "Document" dahil) ESKİ davranışı aynen korur.
+            if (string.Equals(instance.Status, "Approved", StringComparison.OrdinalIgnoreCase) && instance.DocumentId.HasValue)
             {
-                if (instance.DocumentId.HasValue)
+                if (string.Equals(instance.EntityKind, "Capa", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        await _capaService.OnClosureApprovalCompletedAsync(instance.DocumentId.Value, approved: true, GetCurrentUserId(), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "DÖF kapanış onayı tamamlama hatası (documentId={Id}).", instance.DocumentId.Value);
+                    }
+                }
+                else
+                {
                     await _documentService.ChangeStatusAsync(instance.DocumentId.Value, "Approved", cancellationToken);
+                }
             }
 
             return Json(new { ok = true, status = instance.Status,
@@ -819,6 +840,7 @@ public sealed class ApprovalController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Onay adımı işlenirken hata (instanceId={InstanceId}).", instanceId);
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }
@@ -837,17 +859,32 @@ public sealed class ApprovalController : Controller
             var instance = await _approvalFlowService.RejectAsync(
                 new RejectStepRequest(instanceId, userId, userName, note), cancellationToken);
 
-            // Onay reddedildiyse Document.Status = Rejected yap
-            if (string.Equals(instance.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+            // Onay reddedildiyse entity'yi ilerlet. EntityKind="Capa" AYRI dala gider (CapaService
+            // Aksiyonda'ya geri döner); diğer TÜM entity kind'ları eski davranışı korur.
+            if (string.Equals(instance.Status, "Rejected", StringComparison.OrdinalIgnoreCase) && instance.DocumentId.HasValue)
             {
-                if (instance.DocumentId.HasValue)
+                if (string.Equals(instance.EntityKind, "Capa", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        await _capaService.OnClosureApprovalCompletedAsync(instance.DocumentId.Value, approved: false, GetCurrentUserId(), cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "DÖF kapanış onayı reddi işlenirken hata (documentId={Id}).", instance.DocumentId.Value);
+                    }
+                }
+                else
+                {
                     await _documentService.ChangeStatusAsync(instance.DocumentId.Value, "Rejected", cancellationToken);
+                }
             }
 
             return Json(new { ok = true, status = instance.Status });
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Onay reddi işlenirken hata (instanceId={InstanceId}).", instanceId);
             return Json(new { ok = false, error = "İşlem sırasında bir hata oluştu." });
         }
     }

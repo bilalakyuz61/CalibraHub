@@ -182,7 +182,10 @@ SELECT
 FROM [{s}].[ApprovalStepRecord] sr
 INNER JOIN [{s}].[ApprovalInstance] inst ON inst.[Id] = sr.[InstanceId]
 INNER JOIN [{s}].[ApprovalFlow] flow              ON flow.[Id] = inst.[FlowId]
-LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[Id] = inst.[DocumentId]
+-- EntityKind='Capa' (DÖF kapanış onayı) DocumentId'si de bir Document.Id'dir (dof shell,
+-- companion deseni) — bu yüzden 'Capa' de aynı JOIN'e ADDITIVE olarak dahil edilir; 'Document'
+-- davranışı değişmez, yalnız DÖF kayıtları için de DocumentNumber/DocumentDate çözülür.
+LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] IN (N'Document', N'Capa') AND doc.[Id] = inst.[DocumentId]
 LEFT  JOIN [{s}].[DocumentType] dt                ON dt.[Id] = doc.[DocumentTypeId]
 LEFT  JOIN [{s}].[Contact] c                      ON c.[Id]  = doc.[ContactId]
 LEFT  JOIN [{s}].[Currency] cur                   ON cur.[Id] = doc.[CurrencyId]
@@ -191,7 +194,7 @@ WHERE sr.[Status] = N'Pending'
   AND inst.[IsActive] = 1
   AND sr.[StepOrder] = inst.[CurrentStep]
   AND inst.[DocumentId] IS NOT NULL
-  AND (inst.[EntityKind] <> N'Document' OR doc.[IsActive] = 1)
+  AND (inst.[EntityKind] NOT IN (N'Document', N'Capa') OR doc.[IsActive] = 1)
 ");
 
         var sql = sb.ToString();
@@ -308,14 +311,15 @@ INNER JOIN [{s}].[ApprovalStepRecord] sr          ON sr.[InstanceId] = inst.[Id]
         SELECT MAX([StepOrder]) FROM [{s}].[ApprovalStepRecord]
         WHERE [InstanceId] = inst.[Id] AND [Status] NOT IN (N'Pending',N'Waiting',N'Skipped')
     )
-LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] = N'Document' AND doc.[Id] = inst.[DocumentId]
+-- EntityKind='Capa' additive JOIN — bkz. GetPendingForUserAsync üstündeki açıklama.
+LEFT  JOIN [{s}].[Document] doc                   ON inst.[EntityKind] IN (N'Document', N'Capa') AND doc.[Id] = inst.[DocumentId]
 LEFT  JOIN [{s}].[DocumentType] dt                ON dt.[Id] = doc.[DocumentTypeId]
 LEFT  JOIN [{s}].[Contact] c                      ON c.[Id]  = doc.[ContactId]
 LEFT  JOIN [{s}].[Currency] cur                   ON cur.[Id] = doc.[CurrencyId]
 WHERE inst.[Status] IN (N'Approved',N'Rejected')
   AND inst.[IsActive] = 1
   AND inst.[DocumentId] IS NOT NULL
-  AND (inst.[EntityKind] <> N'Document' OR doc.[IsActive] = 1)
+  AND (inst.[EntityKind] NOT IN (N'Document', N'Capa') OR doc.[IsActive] = 1)
 ");
 
         var sql = sb.ToString();
