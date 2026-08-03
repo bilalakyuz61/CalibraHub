@@ -418,6 +418,11 @@ export default function SmartTableRow(props) {
   var [menuVisible, setMenuVisible] = useState(false)
   var menuBtnRef = useRef(null)
   var menuRef = useRef(null)
+  // "status-menu" tipi aksiyonlar (ör. Durum Değiştir) İşlemler menüsü İÇİNDE
+  // NESTED bir seçenek listesi açar — ayrı sekmeye gitmez (PageComment Seq 1071,
+  // 2026-08-03). Hangi status-menu ögesinin açık olduğunu tutar (action anahtarı);
+  // menü kapanınca (toggleMenu/dış tık/Escape) sıfırlanır.
+  var [statusSubOpenKey, setStatusSubOpenKey] = useState(null)
   // confirm/alert portal'larinin ust-duzey DOM node'lari — sadece
   // useClosePortalOnFrameHidden'in hard-navigasyon (pagehide) senaryosunda
   // dogrudan DOM'dan sokmesi icin (bkz. asagidaki hook cagrilari + dosya
@@ -448,6 +453,13 @@ export default function SmartTableRow(props) {
   useClosePortalOnFrameHidden(menuOpen, function () { setMenuOpen(false) }, menuRef)
   useClosePortalOnFrameHidden(confirmOpen, handleConfirmNo, confirmPortalRef)
   useClosePortalOnFrameHidden(alertOpen, function () { setAlertOpen(false) }, alertPortalRef)
+
+  // İşlemler menüsü her kapandığında (dış tık, Escape, aksiyon seçimi, tab
+  // gizlenmesi) status-menu alt-listesi de sıfırlanır — bir dahaki açılışta
+  // yanlışlıkla açık kalmasın.
+  useEffect(function () {
+    if (!menuOpen) setStatusSubOpenKey(null)
+  }, [menuOpen])
 
   useEffect(function () {
     if (!menuOpen) return undefined
@@ -681,6 +693,16 @@ export default function SmartTableRow(props) {
     dispatchActionUrl(action)
   }
 
+  // "status-menu" tipi aksiyonun (Durum Değiştir) nested seçeneğine tıklanınca
+  // — runMenuApiAction'ın AYNI POST/toast/onRefresh akışını kullanır, tek fark
+  // body'nin { id, status } ile burada kurulması. Menü + alt-liste kapatılır.
+  function runStatusChange(action, value) {
+    if (busy) return
+    setMenuOpen(false)
+    setStatusSubOpenKey(null)
+    runMenuApiAction(Object.assign({}, action, { apiBody: { id: id, status: value } }))
+  }
+
   function toggleMenu(e) {
     if (e) e.stopPropagation()
     if (busy) return
@@ -762,9 +784,73 @@ export default function SmartTableRow(props) {
             <>
               {menuActions.map(function (action, i) {
                 var ActionIcon = resolveIcon(action.icon)
+                var actionKey = action.id || action.label || i
+
+                // "status-menu" — Durum Değiştir (PageComment Seq 1071, 2026-08-03):
+                // ayrı sekmeye gitmez, İşlemler menüsü İÇİNDE açılan nested bir
+                // seçenek listesi sunar. Seçim runStatusChange ile inline POST
+                // edilir (aynı ChangeQuoteStatus endpoint'i, aynı state machine —
+                // sadece tetikleme yolu değişti).
+                if (action.type === 'status-menu' && Array.isArray(action.options)) {
+                  var isSubOpen = statusSubOpenKey === actionKey
+                  return (
+                    <div key={actionKey}>
+                      <button
+                        type="button"
+                        onClick={function (e) { e.stopPropagation(); setStatusSubOpenKey(isSubOpen ? null : actionKey) }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+                          padding: '6px 8px', borderRadius: 7, border: 'none',
+                          background: isSubOpen ? (isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9') : 'transparent',
+                          cursor: 'pointer', fontSize: 13, fontWeight: 500, lineHeight: 1.3, textAlign: 'left',
+                          color: isDark ? 'rgba(255,255,255,0.82)' : '#334155',
+                          transition: 'background-color 0.1s ease',
+                        }}
+                        onMouseEnter={function (e) { if (!isSubOpen) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}
+                        onMouseLeave={function (e) { if (!isSubOpen) e.currentTarget.style.background = 'transparent' }}
+                      >
+                        <ActionIcon size={13} style={{ flexShrink: 0 }} />
+                        <span style={{ flex: 1 }}>{action.label}</span>
+                        <ChevronDown
+                          size={12}
+                          style={{ flexShrink: 0, transition: 'transform 0.15s ease', transform: isSubOpen ? 'rotate(180deg)' : 'rotate(0deg)', opacity: 0.6 }}
+                        />
+                      </button>
+                      {isSubOpen && (
+                        <div style={{ padding: '2px 2px 2px 14px', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {action.options.map(function (opt) {
+                            var dotColor = resolveColorForTheme(opt.color, null, isDark).icon
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                disabled={busy}
+                                onClick={function (e) { e.stopPropagation(); runStatusChange(action, opt.value) }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 7, width: '100%',
+                                  padding: '5px 8px', borderRadius: 6, border: 'none', background: 'transparent',
+                                  cursor: busy ? 'not-allowed' : 'pointer', fontSize: 12.5, fontWeight: 500,
+                                  lineHeight: 1.3, textAlign: 'left', opacity: busy ? 0.5 : 1,
+                                  color: isDark ? 'rgba(255,255,255,0.72)' : '#475569',
+                                  transition: 'background-color 0.1s ease',
+                                }}
+                                onMouseEnter={function (e) { if (!busy) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}
+                                onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent' }}
+                              >
+                                <span style={{ width: 7, height: 7, borderRadius: 999, background: dotColor, flexShrink: 0 }} />
+                                {opt.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
                 return (
                   <button
-                    key={action.id || action.label || i}
+                    key={actionKey}
                     type="button"
                     onClick={function (e) { e.stopPropagation(); setMenuOpen(false); dispatchMenuAction(action) }}
                     style={{

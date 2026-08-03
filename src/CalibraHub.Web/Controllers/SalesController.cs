@@ -185,9 +185,14 @@ public sealed class SalesController : Controller
     /// /Sales/DocumentEdit'i (5 belge tipi paylaşır) autoAction query'siyle açar;
     /// edit ekranı yükleme sonrası ilgili işlemi otomatik tetikler.
     /// </summary>
-    private static object[] BuildRecordOperationActions(int id) => new object[]
+    // inlineStatusMenu: Seq 1071 inline durum menüsü YALNIZ Satış Teklifi listesinde
+    // (kullanıcının istediği ekran). Sipariş/İrsaliye listeleri eski deep-link davranışını
+    // korur — C-Grid değişikliği açık talep olmadan diğer ekranlara YAYILMAZ (feedback_cgrid_propagation).
+    private static object[] BuildRecordOperationActions(int id, bool inlineStatusMenu) => new object[]
     {
-        BuildChangeStatusAction(id),
+        inlineStatusMenu
+            ? (object)BuildChangeStatusAction()
+            : (object)new { label = "Durum Değiştir", icon = "Clock", color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
         new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt",   color = "amber",  url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" },
         new { label = "Onay Süreci",            icon = "GitBranch", color = "sky",    url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" },
     };
@@ -203,14 +208,13 @@ public sealed class SalesController : Controller
     /// BİREBİR aynı (satır 2649-2668) — akış/izin mantığı değişmedi, sadece tetikleme
     /// yolu (deep-link → inline menü) değişti.
     /// </summary>
-    private static object BuildChangeStatusAction(int id) => new
+    private static object BuildChangeStatusAction() => new
     {
         label = "Durum Değiştir",
         icon = "Clock",
         color = "violet",
         type = "status-menu",
         apiUrl = "/Sales/ChangeQuoteStatus",
-        recordId = id,
         options = new object[]
         {
             new { value = "Draft",     label = "Taslak",     color = "slate" },
@@ -446,7 +450,7 @@ public sealed class SalesController : Controller
                         submitLabel = "Gonder",
                         successMessage = "Mail kuyruga alindi",
                     },
-                }.Concat(BuildRecordOperationActions(quote.Id)).Append(BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode)).ToArray(),
+                }.Concat(BuildRecordOperationActions(quote.Id, inlineStatusMenu: true)).Append(BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode)).ToArray(),
             });
         }
 
@@ -559,7 +563,7 @@ public sealed class SalesController : Controller
                     confirm = $"Bu siparisi silmek istediginizden emin misiniz? ({order.DocumentNumber})",
                 },
                 extraActions = new object[] { BuildCopyAction(order.Id) }
-                    .Concat(BuildRecordOperationActions(order.Id))
+                    .Concat(BuildRecordOperationActions(order.Id, inlineStatusMenu: false))
                     .Append(BuildAuditLogAction("satis_siparisi", order.Id, orderAuditFormCode))
                     .ToArray(),
             });
@@ -676,7 +680,7 @@ public sealed class SalesController : Controller
                     precheckUrl = $"/Sales/CanDeleteDocumentJson?id={doc.Id}",
                     confirm = $"Bu irsaliyeyi silmek istediginizden emin misiniz? ({doc.DocumentNumber})" },
                 extraActions = new object[] { BuildCopyAction(doc.Id) }
-                    .Concat(BuildRecordOperationActions(doc.Id))
+                    .Concat(BuildRecordOperationActions(doc.Id, inlineStatusMenu: false))
                     .Append(BuildAuditLogAction("satis_irsaliyesi", doc.Id, deliveryAuditFormCode))
                     .ToArray(),
             });
