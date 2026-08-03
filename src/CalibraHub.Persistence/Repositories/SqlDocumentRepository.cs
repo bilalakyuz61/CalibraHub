@@ -61,8 +61,9 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         var paramNames = ids.Select((_, i) => "@k" + i).ToArray();
         // Aktif kit = ayni ItemId icin MAX(Id) WHERE IsActive=1; satirlariyla JOIN.
+        // PriceMode (Seq 1073 Part B) — RollUp fiyatlama icin DocumentService bu alani kullanir.
         cmd.CommandText = $"""
-            SELECT k.[ItemId], k.[VersionNo], l.[ItemId] AS ComponentItemId, l.[ConfigId], l.[Quantity]
+            SELECT k.[ItemId], k.[VersionNo], k.[PriceMode], l.[ItemId] AS ComponentItemId, l.[ConfigId], l.[Quantity]
             FROM [{_schema}].[ItemKit] k
             INNER JOIN [{_schema}].[ItemKitLine] l ON l.[ItemKitId] = k.[Id]
             WHERE k.[IsActive] = 1
@@ -73,23 +74,24 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         for (var i = 0; i < ids.Length; i++)
             cmd.Parameters.Add(new SqlParameter(paramNames[i], ids[i]));
 
-        var byKit = new Dictionary<int, (int Version, List<KitSnapshotComponentDto> Comps)>();
+        var byKit = new Dictionary<int, (int Version, string PriceMode, List<KitSnapshotComponentDto> Comps)>();
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
             var kitItemId = reader.GetInt32(0);
             var version = reader.GetInt32(1);
+            var priceMode = reader.IsDBNull(2) ? "Fixed" : reader.GetString(2);
             if (!byKit.TryGetValue(kitItemId, out var entry))
             {
-                entry = (version, new List<KitSnapshotComponentDto>());
+                entry = (version, priceMode, new List<KitSnapshotComponentDto>());
                 byKit[kitItemId] = entry;
             }
             entry.Comps.Add(new KitSnapshotComponentDto(
-                reader.GetInt32(2),
-                reader.IsDBNull(3) ? null : reader.GetInt32(3),
-                reader.GetDecimal(4)));
+                reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                reader.GetDecimal(5)));
         }
-        return byKit.Select(kv => new KitSnapshotSourceDto(kv.Key, kv.Value.Version, kv.Value.Comps)).ToList();
+        return byKit.Select(kv => new KitSnapshotSourceDto(kv.Key, kv.Value.Version, kv.Value.PriceMode, kv.Value.Comps)).ToList();
     }
 
     public async Task<IReadOnlyCollection<(int LineId, int KitItemId)>> GetExistingKitSnapshotsAsync(

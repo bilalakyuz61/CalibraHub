@@ -332,7 +332,8 @@ public sealed class PriceListService : IPriceListService
 
     // ── Fallback'li Fiyat Cozumu (belge/kit satiri) ─────────────────────────
     // Cari (varsa) → Contact.PriceGroupId listesi; yoksa/urun yoksa Genel Liste.
-    // Kit rollup ileride ayni metodu bilesen key'leriyle cagirir (flat batch).
+    // Kit rollup (Seq 1073 Part B, DocumentService.ResolveKitRollUpPricesAsync) bu metodu
+    // bilesen key'leriyle (flat batch) cagirir — asagidaki mantik degismedi.
     public async Task<IReadOnlyCollection<ResolvedPriceRow>> ResolveLinePricesAsync(
         ResolveLinePricesRequest req, CancellationToken ct)
     {

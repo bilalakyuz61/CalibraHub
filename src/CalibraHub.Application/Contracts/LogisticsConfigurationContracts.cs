@@ -491,9 +491,12 @@ public sealed record SaveItemKitLineRequest(
 
 // ── Kit snapshot kaynagi (Faz 2) — belge kaydinda aktif ItemKit icerigi ────
 // Bir kit belge kalemine eklendiginde bu icerik DocumentLineKitComponent'e dondurulur.
+// PriceMode (Seq 1073 Part B) — RollUp modundaki kit'lerin birim fiyati DocumentService'te
+// bilesen fiyatlari toplamindan server-truth olarak hesaplanir; Fixed modda kullanilmaz.
 public sealed record KitSnapshotSourceDto(
     int KitItemId,
     int VersionNo,
+    string PriceMode,
     IReadOnlyList<KitSnapshotComponentDto> Components);
 
 public sealed record KitSnapshotComponentDto(

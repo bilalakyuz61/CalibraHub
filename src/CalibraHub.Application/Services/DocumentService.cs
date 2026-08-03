@@ -6,6 +6,7 @@ using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Application.Services;
 
@@ -22,6 +23,8 @@ public sealed class DocumentService : IDocumentService
     private readonly IAuditTrailService? _audit;
     private readonly IWorkOrderRepository? _workOrders;
     private readonly ILogisticsConfigurationRepository? _itemLocks;
+    private readonly IPriceListService? _priceListService;
+    private readonly ILogger<DocumentService>? _logger;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
     private static readonly IReadOnlyDictionary<int, decimal> EmptyWorkOrderAllocations = new Dictionary<int, decimal>();
@@ -37,7 +40,9 @@ public sealed class DocumentService : IDocumentService
         IDecimalSettingService? decimalSettings = null,
         IAuditTrailService? audit = null,
         IWorkOrderRepository? workOrders = null,
-        ILogisticsConfigurationRepository? itemLocks = null)
+        ILogisticsConfigurationRepository? itemLocks = null,
+        IPriceListService? priceListService = null,
+        ILogger<DocumentService>? logger = null)
     {
         _repo = repo;
         _financeService = financeService;
@@ -50,6 +55,8 @@ public sealed class DocumentService : IDocumentService
         _audit = audit;
         _workOrders = workOrders;
         _itemLocks = itemLocks;
+        _priceListService = priceListService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -86,6 +93,73 @@ public sealed class DocumentService : IDocumentService
         if (woQty >= derivedQty && woQty >= consumed) return LineFloorSource.WorkOrder;
         if (derivedQty >= consumed) return LineFloorSource.Derived;
         return LineFloorSource.Consumed;
+    }
+
+    /// <summary>
+    /// Seq 1073 Part B — RollUp (Bileşen Toplamı) modundaki kit satırlarının birim fiyatını
+    /// SERVER-TRUTH olarak hesaplar: verilen satır ItemId'leri arasından aktif RollUp kit
+    /// olanların bileşenlerini (<see cref="IDocumentRepository.GetActiveKitContentsAsync"/>) alır,
+    /// bileşen ItemId+ConfigId anahtarlarını TEK <see cref="IPriceListService.ResolveLinePricesAsync"/>
+    /// çağrısıyla (flat batch — tüm kit'lerin tüm bileşenleri birlikte, N+1 yok) belge para birimi +
+    /// cari + tarih bağlamında çözer, kitUnitPrice = Σ(componentPrice × componentQuantity) üretir.
+    ///
+    /// Fixed modda kit'ler bu sözlüğe HİÇ girmez (çağıran taraf zaten client'ın/kayıtlı fixedPrice
+    /// değerini kullanmaya devam eder — Part A'nın ürettiği unitPrice'a dokunulmaz).
+    /// Bir bileşenin fiyatı listede bulunamazsa 0 sayılır ve loglanır (sessiz kayıp değil — CLAUDE.md
+    /// kural #3). Kit'in TEK bir bileşeni bile fiyatlanamazsa kit dictionary'e hiç girmez — çağıran
+    /// mevcut/istemci unitPrice'ını korur (0'a ezmez).
+    /// </summary>
+    private async Task<IReadOnlyDictionary<int, decimal>> ResolveKitRollUpPricesAsync(
+        IReadOnlyCollection<int> lineItemIds, int? contactId, int currencyId, DateTime date, CancellationToken ct)
+    {
+        var result = new Dictionary<int, decimal>();
+        if (_priceListService is null || lineItemIds.Count == 0) return result;
+
+        var kitContents = await _repo.GetActiveKitContentsAsync(lineItemIds, ct);
+        var rollUpKits = kitContents
+            .Where(k => string.Equals(k.PriceMode, "RollUp", StringComparison.OrdinalIgnoreCase) && k.Components.Count > 0)
+            .ToArray();
+        if (rollUpKits.Length == 0) return result;
+
+        var componentKeys = rollUpKits
+            .SelectMany(k => k.Components)
+            .Select(c => new PriceEntryKey(c.ComponentItemId, c.ConfigId))
+            .Distinct()
+            .ToArray();
+
+        var resolved = await _priceListService.ResolveLinePricesAsync(
+            new ResolveLinePricesRequest(contactId, currencyId, PriceDirection.Sales, date, componentKeys), ct);
+        var priceByKey = resolved
+            .Where(r => r.Price.HasValue)
+            .ToDictionary(r => (r.ItemId, r.ConfigId), r => r.Price!.Value);
+
+        foreach (var kit in rollUpKits)
+        {
+            decimal sum = 0m;
+            var anyResolved = false;
+            foreach (var comp in kit.Components)
+            {
+                if (priceByKey.TryGetValue((comp.ComponentItemId, comp.ConfigId), out var compPrice))
+                {
+                    sum += compPrice * comp.Quantity;
+                    anyResolved = true;
+                }
+                else
+                {
+                    _logger?.LogWarning(
+                        "Kit RollUp fiyatlama: bileşen ItemId={ComponentItemId} (ConfigId={ConfigId}) icin " +
+                        "Genel Liste/cari fiyati bulunamadi; 0 sayildi (Kit ItemId={KitItemId}).",
+                        comp.ComponentItemId, comp.ConfigId, kit.KitItemId);
+                }
+            }
+            if (anyResolved)
+                result[kit.KitItemId] = sum;
+            else
+                _logger?.LogWarning(
+                    "Kit RollUp fiyatlama: Kit ItemId={KitItemId} hicbir bileseni fiyatlanamadi; " +
+                    "mevcut/istemci birim fiyati korunuyor.", kit.KitItemId);
+        }
+        return result;
     }
 
     // ── İşlem logu (audit trail) yardımcıları ──────────────────────────────
@@ -638,15 +712,30 @@ public sealed class DocumentService : IDocumentService
         var decimals = await ResolveDecimalsAsync(
             isPurchaseRequest ? FormCodes.PurchaseRequest : FormCodes.SalesQuote, ct);
         var lineRequests = request.Lines.ToArray();
+
+        // Seq 1073 Part B — RollUp kit satırlarının birim fiyatı burada server-truth olarak
+        // çözülür (pricing loop'undan ÖNCE — subTotal/taxAmount/grandTotal bu değeri yansıtsın).
+        var kitRollUpPrices = await ResolveKitRollUpPricesAsync(
+            lineRequests.Select(l => l.ItemId).Distinct().ToArray(),
+            resolvedContactId,
+            request.CurrencyId > 0 ? request.CurrencyId : 1,
+            request.DocumentDate, ct);
+
         decimal subTotal = 0;
         var lineEntities = new List<DocumentLine>(lineRequests.Length);
         int lineNo = 1;
         foreach (var ln in lineRequests)
         {
+            // RollUp kit satırıysa hesaplanan bileşen-toplamı fiyat kullanılır (istemci değeri
+            // ezilir); Fixed mod / kit-olmayan satırlarda dictionary boş → ln.UnitPrice korunur.
+            var effectiveUnitPrice = kitRollUpPrices.TryGetValue(ln.ItemId, out var rollUpPrice)
+                ? rollUpPrice
+                : ln.UnitPrice;
+
             var lineDiscountMultiplier = 1m - (ln.DiscountRate / 100m);
             // PageComment Seq 1068 — IsVatIncluded=true iken UnitPrice brüt kabul edilir;
             // LineTotal/SubTotal header TaxRate ile geri hesaplanan net birim üzerinden hesaplanır.
-            var netUnitPrice = NetUnitPrice(ln.UnitPrice, request.TaxRate, request.IsVatIncluded);
+            var netUnitPrice = NetUnitPrice(effectiveUnitPrice, request.TaxRate, request.IsVatIncluded);
             var lineTotal = decimals.RoundAmount(ln.Quantity * netUnitPrice * lineDiscountMultiplier);
             subTotal += lineTotal;
             lineEntities.Add(new DocumentLine
@@ -658,7 +747,7 @@ public sealed class DocumentService : IDocumentService
                 ItemId = ln.ItemId,
                 UnitId = ln.UnitId,
                 Quantity = decimals.RoundQuantity(ln.Quantity),
-                UnitPrice = decimals.RoundUnitPrice(ln.UnitPrice),
+                UnitPrice = decimals.RoundUnitPrice(effectiveUnitPrice),
                 DiscountRate = decimals.RoundRate(ln.DiscountRate),
                 LineTotal = lineTotal,
                 CombinationId = ln.CombinationId,
