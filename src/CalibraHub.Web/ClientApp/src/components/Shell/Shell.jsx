@@ -3207,7 +3207,7 @@ function TabBar(props) {
   var activeGroupKey = activeTabObj ? (activeTabObj.parentKey || activeTabObj.key) : null
   var childTabs = activeGroupKey ? allTabs.filter(function(t) { return t.parentKey === activeGroupKey }) : []
 
-  function renderTabChip(t, isChild) {
+  function renderTabChip(t, isChild, isAnchor) {
     var isActive = !showDash && (isChild ? t.key === props.activeKey : (t.key === props.activeKey || t.key === activeGroupKey))
     return (
       <div
@@ -3224,11 +3224,18 @@ function TabBar(props) {
         }
         title={(props.dirtyTabs && props.dirtyTabs[t.key]) ? tShell('unsaved_prefix', lang) + t.title : t.title}
       >
-        {isChild && (
+        {isChild && !isAnchor && (
           <CornerDownRight
             size={11}
             strokeWidth={2.2}
             className={'flex-shrink-0 ' + (isDark ? 'text-white/30' : 'text-slate-400')}
+          />
+        )}
+        {isAnchor && (
+          <LayoutList
+            size={12}
+            strokeWidth={2.2}
+            className={'flex-shrink-0 ' + (isDark ? 'text-indigo-300/75' : 'text-indigo-500')}
           />
         )}
         {props.dirtyTabs && props.dirtyTabs[t.key] && (
@@ -3242,15 +3249,18 @@ function TabBar(props) {
           />
         )}
         <span className="truncate select-none">{t.title}</span>
-        <button
-          onClick={function(e) { props.onTabClose(t.key, e) }}
-          className={
-            'w-4 h-4 rounded flex items-center justify-center transition-colors flex-shrink-0 ' +
-            (isDark ? 'hover:bg-white/10 text-white/50 hover:text-white/80' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700')
-          }
-        >
-          <X size={10} strokeWidth={2.4} />
-        </button>
+        {/* Liste ankuru (pinli) kapatilamaz — kapatma ust satirdaki ayni sekmeden yapilir. */}
+        {!isAnchor && (
+          <button
+            onClick={function(e) { props.onTabClose(t.key, e) }}
+            className={
+              'w-4 h-4 rounded flex items-center justify-center transition-colors flex-shrink-0 ' +
+              (isDark ? 'hover:bg-white/10 text-white/50 hover:text-white/80' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-700')
+            }
+          >
+            <X size={10} strokeWidth={2.4} />
+          </button>
+        )}
 
         {isActive && (
           <motion.div
@@ -3315,6 +3325,12 @@ function TabBar(props) {
           style={{ background: isDark ? '#070910' : '#eef2f7', paddingLeft: 18, paddingRight: 16 }}
         >
           <div className="flex items-center gap-1">
+            {/* Liste sekmesi (grup parent'i) her zaman en solda SABİT anchor olarak
+                — kayıtlardayken listeye tek tıkla dönülür (kullanıcı isteği 2026-08-03). */}
+            {(function() {
+              var listTab = allTabs.find(function(x) { return x.key === activeGroupKey })
+              return listTab ? renderTabChip(listTab, true, true) : null
+            })()}
             {childTabs.map(function(t) { return renderTabChip(t, true) })}
           </div>
         </div>
