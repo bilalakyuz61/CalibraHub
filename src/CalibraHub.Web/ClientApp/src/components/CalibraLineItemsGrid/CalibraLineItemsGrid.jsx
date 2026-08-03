@@ -1007,9 +1007,24 @@ export default function CalibraLineItemsGrid(props) {
   // Row-level flag helpers
   // canEdit: Duzelt butonu her zaman aktif (kilit toggle icin)
   // canDelete / canModify: _locked false olmali (ve server-side __canDelete engellemedigi surece)
-  function canEdit(row) { return row.__canEdit !== false }
-  // Kilitleme gecici olarak devre disi — kalem ikonu kaldi, kilit etkisi yok.
-  function isRowLocked(row) { return false }
+  //
+  // Kit tam-set teslimat satirlari (Faz 4a) SALT-OKUNUR: irsaliyede kit BASLIK
+  // (stok-etkisiz, fiyatli) + patlatilmis BILESEN (gercek stok) satirlarinin
+  // duzenlenmesi/silinmesi teslimati bozar (fiyat baslikta, stok bilesende; bilesen
+  // silinirse orphan/desenkron). Bilesen: row.kitParentLineId dolu. Baslik: baska bir
+  // satir bu satirin id'sine kitParentLineId ile isaret ediyor. NORMAL teklif/siparis
+  // kit satiri (tek satir, kitParentLineId=null, kimse isaret etmez) ETKILENMEZ — orada
+  // kit hala duzenlenebilir; kilit yalniz patlatilmis teslimat satirlarinda devrededir.
+  function isKitLockedRow(row) {
+    if (!row) return false
+    if (row.kitParentLineId != null && Number(row.kitParentLineId) > 0) return true   // bilesen
+    if (row.id == null || Number(row.id) <= 0) return false
+    var hid = Number(row.id)
+    return (rows || []).some(function (r) { return r && r.kitParentLineId != null && Number(r.kitParentLineId) === hid })  // baslik
+  }
+  function canEdit(row) { return row.__canEdit !== false && !isKitLockedRow(row) }
+  // Kilitleme gecici olarak devre disi — YALNIZ kit tam-set teslimat satirlari salt-okunur.
+  function isRowLocked(row) { return isKitLockedRow(row) }
   function canDelete(row) { return !isRowLocked(row) && row.__canDelete !== false }
   function canModify(row) { return !isRowLocked(row) }
 
@@ -1286,11 +1301,23 @@ export default function CalibraLineItemsGrid(props) {
                     </div>
                   )}
 
-                  <div className="p-2.5 sm:p-3">
-                    {/* ── Kart ust bolgesi: malzeme kimligi (kod + ad) solda, satir
-                        aksiyonlari (kisayol/kombinasyon/seri/ek-alan/sil) sagda. ── */}
-                    <div className="flex items-start justify-between gap-3 flex-wrap mb-2.5">
-                      <div className="flex-1 min-w-[180px]">
+                  <div
+                    className="p-2.5 sm:p-3"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto',
+                      gridTemplateAreas: '"identity actions" "fields fields"',
+                      columnGap: 12, rowGap: 10, alignItems: 'start',
+                    }}
+                  >
+                    {/* DOM sirasi (identity → fields → actions) klavye Enter-nav ile
+                        eslesir (bkz. handleGridKeyDown plain-Enter focusables listesi):
+                        malzeme → alan izgarasi → aksiyon butonlari → sonraki kart.
+                        Gorsel yerlesim ise CSS grid-area ile bagimsiz kontrol edilir —
+                        aksiyonlar DOM'da sonda olsa da saga-usta gorunur, boylece
+                        Enter tuşuyla ilerlerken Sil butonuna erken takilmaz. */}
+                    {/* ── Kart kimlik bolgesi: malzeme kodu + adi. ── */}
+                    <div style={{ gridArea: 'identity' }} className="min-w-[180px]">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {isKitComponent && (
                             <span
@@ -1339,137 +1366,19 @@ export default function CalibraLineItemsGrid(props) {
                         )}
                       </div>
 
-                      {/* Aksiyon kumesi (sadelesti): ••• kisayol + Kombinasyon + Seri + Ek Alanlar (⚙) + Sil.
-                          Not ve Revize butonlari ••• icine tasindi — tek dropdown'dan erisilir. */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {/* Satir kisayol menusu — MoreHorizontal ikonu, tiklayinca liste acilir */}
-                        <button
-                          type="button"
-                          onClick={function (e) {
-                            // Butonun ekrandaki pozisyonunu al, menuyu onun altina konumla.
-                            var rect = e.currentTarget.getBoundingClientRect()
-                            setShortcutsMenu({
-                              row: row,
-                              pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
-                            })
-                          }}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
-                          title="Kisayollar / satir islemleri"
-                          aria-label="Kisayol menusu"
-                          aria-haspopup="menu"
-                          aria-expanded={!!(shortcutsMenu && shortcutsMenu.row && shortcutsMenu.row._uid === row._uid)}
-                        >
-                          <MoreHorizontal size={14} strokeWidth={2} />
-                        </button>
-                        {actionLookupColumns.map(function(col) {
-                          // Kilitli satirda Kombinasyon butonu da pasif — CombinationLookupCell'in
-                          // kendi iki hali var (secili/eksik), burada locked ozel durumu DOM'da
-                          // pointer-events: none ile disari kapatiyoruz.
-                          return (
-                            <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
-                              <CombinationLookupCell
-                                compact={true}
-                                column={col}
-                                row={row}
-                                value={row[col.key]}
-                                onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                              />
-                            </div>
-                          )
-                        })}
-                        {/* İzlenebilirlik (Lot/Seri) — kompakt buton, modal grid seviyesinde açılır */}
-                        {traceColumns.map(function(col) {
-                          return (
-                            <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
-                              <TraceEntryCell column={col} row={row} onOpen={function(r) { setTraceModalRow({ row: r, column: col }) }} />
-                            </div>
-                          )
-                        })}
-                        {/* Not butonu aksiyon kumesinden cikartildi — artik ••• kisayol
-                            menusunun icinde "Not Ekle / Goster / Gizle" olarak yer aliyor. */}
-                        {/* Ek Alanlar (SALES_QUOTE_LINES widget'lari) — sadece kayitli satirlarda.
-                            Renk kuralı:
-                              - Satir kaydedilmemis → sky (notr)
-                              - Kaydedilmis + invalidLineIds'de → kirmizi (eksik zorunlu widget)
-                              - Kaydedilmis + invalidLineIds'de degil → yesil (OK) */}
-                        {(function() {
-                          var savedLineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
-                          // Kayitli olmasa da ⚙ butonu aktif — kullanici ek alanlari
-                          // girip "Kaydet" deyince degerler row.__extras icinde local
-                          // tutulur; ana Kaydet'te satir DB'ye islendikten sonra
-                          // extras widget API'siyle satir id'sine senkron edilir.
-                          // Sadece kilitli satirda pasif (canModify=false).
-                          var disabled = !canModify(row)
-                          var hasPending = row.__extras && Object.keys(row.__extras).length > 0
-                          var isInvalid = savedLineId != null && invalidLineIds.indexOf(savedLineId) !== -1
-                          var colorClass
-                          if (disabled) {
-                            colorClass = 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                          } else if (isInvalid) {
-                            // Boyut sabit kalsin diye ring yok — sadece zemin + metin rengi.
-                            colorClass = 'text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-500/80 dark:hover:bg-rose-500'
-                          } else if (savedLineId == null && !hasPending) {
-                            // Kaydedilmemis + ek alan doldurulmamis → notr (sky)
-                            colorClass = 'text-sky-600 bg-sky-50 hover:bg-sky-100 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25'
-                          } else {
-                            // Kaydedilmis + gecerli, veya kaydedilmemis ama local __extras dolu → yesil
-                            colorClass = 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25'
-                          }
-                          return (
-                            <button
-                              type="button"
-                              data-extras-line-id={savedLineId || ''}
-                              onClick={function() {
-                                if (disabled) return
-                                setExtrasModalRow(row)
-                              }}
-                              disabled={disabled}
-                              className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
-                              title={disabled
-                                ? 'Once kilidi acin'
-                                : (isInvalid
-                                    ? 'Zorunlu ek alanlar eksik — doldurun'
-                                    : (savedLineId == null
-                                        ? (hasPending ? 'Ek alan girildi — satiri Kaydet ile kesinlestirin' : 'Bu satir icin ek alan gir (Kaydet ile kesinlesir)')
-                                        : 'Satira ait ek alanlari duzenle'))}
-                            >
-                              <Settings size={13} strokeWidth={1.8} />
-                            </button>
-                          )
-                        })()}
-                        {/* Revize butonu aksiyon kumesinden cikartildi — artik ••• kisayol
-                            menusunde "Revize Et" olarak yer aliyor (hala revised zincir
-                            rozetini kart uzerinde gostermiyoruz; modal icinde zincir var). */}
-                        <button
-                          type="button"
-                          onClick={function() {
-                            // Silme bekleme konumunda tekrar basarsa silme IPTAL
-                            if (isPending) { cancelPendingDelete(row._uid); return }
-                            if (canDelete(row)) handleDeleteRow(row._uid)
-                          }}
-                          disabled={!canDelete(row) && !isPending}
-                          className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                            (!canDelete(row) && !isPending)
-                              ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                              : (isPending
-                                  ? 'text-white bg-rose-600 ring-2 ring-rose-400 animate-pulse'
-                                  : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500')
-                          )}
-                          title={isPending ? 'Silmeyi iptal et'
-                                 : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil'))}
-                        >
-                          {canDelete(row) || isPending ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
-                        </button>
-                      </div>
-                    </div>
-
                     {/* ── Kart alan izgarasi: kalan kolonlar (miktar/birim/fiyat/iskonto/
                         kdv/toplam/seri vb.), her biri kendi etiketiyle. TL karsiligi
                         (Seq 1077b, tlMirror) olan alanlarda kucuk ikinci satir olarak
-                        alt tarafta gosterilir — ayri kolon DEGIL. */}
+                        alt tarafta gosterilir — ayri kolon DEGIL. DOM'da kimlik alanindan
+                        (materialCode/materialName) hemen sonra gelir — Enter-nav bu
+                        alanlari aksiyon butonlarindan ONCE gezer (bkz. asagidaki not). */}
                     <div
-                      className={'grid gap-x-3 gap-y-2.5' + (isKitComponent ? ' opacity-90' : '')}
-                      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))' }}
+                      style={{
+                        gridArea: 'fields', display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))',
+                        columnGap: 12, rowGap: 10,
+                      }}
+                      className={isKitComponent ? 'opacity-90' : ''}
                     >
                       {cardBodyColumns.map(function(col) {
                         // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
@@ -1501,6 +1410,136 @@ export default function CalibraLineItemsGrid(props) {
                           </div>
                         )
                       })}
+                    </div>
+
+                    {/* Aksiyon kumesi (sadelesti): ••• kisayol + Kombinasyon + Seri + Ek Alanlar (⚙) + Sil.
+                        Not ve Revize butonlari ••• icine tasindi — tek dropdown'dan erisilir.
+                        DOM sirasi bilerek alan izgarasindan SONRA konuldu: klavye Enter-nav
+                        (handleGridKeyDown) DOM sirasini takip eder — boylece kullanici
+                        miktar/fiyat/iskonto gibi veri alanlarini gezerken araya giren bir
+                        butona (ozellikle Sil'e) yanlislikla odaklanip Enter'a basmaz. Gorsel
+                        yerlesim grid-area:"actions" ile kimlik satirinin sagina sabitlenir —
+                        DOM sirasindan bagimsizdir. */}
+                    <div style={{ gridArea: 'actions' }} className="flex items-center gap-1 flex-shrink-0 justify-self-end">
+                      {/* Satir kisayol menusu — MoreHorizontal ikonu, tiklayinca liste acilir */}
+                      <button
+                        type="button"
+                        onClick={function (e) {
+                          // Butonun ekrandaki pozisyonunu al, menuyu onun altina konumla.
+                          var rect = e.currentTarget.getBoundingClientRect()
+                          setShortcutsMenu({
+                            row: row,
+                            pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
+                          })
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
+                        title="Kisayollar / satir islemleri"
+                        aria-label="Kisayol menusu"
+                        aria-haspopup="menu"
+                        aria-expanded={!!(shortcutsMenu && shortcutsMenu.row && shortcutsMenu.row._uid === row._uid)}
+                      >
+                        <MoreHorizontal size={14} strokeWidth={2} />
+                      </button>
+                      {actionLookupColumns.map(function(col) {
+                        // Kilitli satirda Kombinasyon butonu da pasif — CombinationLookupCell'in
+                        // kendi iki hali var (secili/eksik), burada locked ozel durumu DOM'da
+                        // pointer-events: none ile disari kapatiyoruz.
+                        return (
+                          <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                            <CombinationLookupCell
+                              compact={true}
+                              column={col}
+                              row={row}
+                              value={row[col.key]}
+                              onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                            />
+                          </div>
+                        )
+                      })}
+                      {/* İzlenebilirlik (Lot/Seri) — kompakt buton, modal grid seviyesinde açılır */}
+                      {traceColumns.map(function(col) {
+                        return (
+                          <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                            <TraceEntryCell column={col} row={row} onOpen={function(r) { setTraceModalRow({ row: r, column: col }) }} />
+                          </div>
+                        )
+                      })}
+                      {/* Not butonu aksiyon kumesinden cikartildi — artik ••• kisayol
+                          menusunun icinde "Not Ekle / Goster / Gizle" olarak yer aliyor. */}
+                      {/* Ek Alanlar (SALES_QUOTE_LINES widget'lari) — sadece kayitli satirlarda.
+                          Renk kuralı:
+                            - Satir kaydedilmemis → sky (notr)
+                            - Kaydedilmis + invalidLineIds'de → kirmizi (eksik zorunlu widget)
+                            - Kaydedilmis + invalidLineIds'de degil → yesil (OK) */}
+                      {(function() {
+                        var savedLineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+                        // Kayitli olmasa da ⚙ butonu aktif — kullanici ek alanlari
+                        // girip "Kaydet" deyince degerler row.__extras icinde local
+                        // tutulur; ana Kaydet'te satir DB'ye islendikten sonra
+                        // extras widget API'siyle satir id'sine senkron edilir.
+                        // Sadece kilitli satirda pasif (canModify=false).
+                        var disabled = !canModify(row)
+                        var hasPending = row.__extras && Object.keys(row.__extras).length > 0
+                        var isInvalid = savedLineId != null && invalidLineIds.indexOf(savedLineId) !== -1
+                        var colorClass
+                        if (disabled) {
+                          colorClass = 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                        } else if (isInvalid) {
+                          // Boyut sabit kalsin diye ring yok — sadece zemin + metin rengi.
+                          colorClass = 'text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-500/80 dark:hover:bg-rose-500'
+                        } else if (savedLineId == null && !hasPending) {
+                          // Kaydedilmemis + ek alan doldurulmamis → notr (sky)
+                          colorClass = 'text-sky-600 bg-sky-50 hover:bg-sky-100 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25'
+                        } else {
+                          // Kaydedilmis + gecerli, veya kaydedilmemis ama local __extras dolu → yesil
+                          colorClass = 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25'
+                        }
+                        return (
+                          <button
+                            type="button"
+                            data-extras-line-id={savedLineId || ''}
+                            onClick={function() {
+                              if (disabled) return
+                              setExtrasModalRow(row)
+                            }}
+                            disabled={disabled}
+                            className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
+                            title={disabled
+                              ? 'Once kilidi acin'
+                              : (isInvalid
+                                  ? 'Zorunlu ek alanlar eksik — doldurun'
+                                  : (savedLineId == null
+                                      ? (hasPending ? 'Ek alan girildi — satiri Kaydet ile kesinlestirin' : 'Bu satir icin ek alan gir (Kaydet ile kesinlesir)')
+                                      : 'Satira ait ek alanlari duzenle'))}
+                          >
+                            <Settings size={13} strokeWidth={1.8} />
+                          </button>
+                        )
+                      })()}
+                      {/* Revize butonu aksiyon kumesinden cikartildi — artik ••• kisayol
+                          menusunde "Revize Et" olarak yer aliyor (hala revised zincir
+                          rozetini kart uzerinde gostermiyoruz; modal icinde zincir var). */}
+                      <button
+                        type="button"
+                        onClick={function() {
+                          // Silme bekleme konumunda tekrar basarsa silme IPTAL
+                          if (isPending) { cancelPendingDelete(row._uid); return }
+                          if (canDelete(row)) handleDeleteRow(row._uid)
+                        }}
+                        disabled={!canDelete(row) && !isPending}
+                        className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                          (!canDelete(row) && !isPending)
+                            ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                            : (isPending
+                                ? 'text-white bg-rose-600 ring-2 ring-rose-400 animate-pulse'
+                                : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500')
+                        )}
+                        title={isPending ? 'Silmeyi iptal et'
+                               : ((isKitHeader || isKitComponent) ? 'Kit teslimat satiri — kit bilesenleriyle birlikte yonetilir, tek tek duzenlenemez/silinemez'
+                                  : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil')))}
+                      >
+                        {canDelete(row) || isPending ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
+                      </button>
                     </div>
                   </div>
 
