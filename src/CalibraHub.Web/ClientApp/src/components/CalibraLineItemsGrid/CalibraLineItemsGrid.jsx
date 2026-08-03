@@ -206,15 +206,26 @@ export default function CalibraLineItemsGrid(props) {
   // Toplam alaninin sag tarafinda ve para birimi gosterilen yerlerde
   // kullanilir. Default TRY; programatik set sonrasi 'sq:currency' window
   // event'i ile de senkronlanir (DocumentEdit yukleyici tarafinda dispatch).
+  // Seq 1077: #sqCurrency <select> value'su currency ID'dir (kod DEĞİL); ISO kodu
+  // option'ın data-code attribute'unda. Eskiden el.value (ID) okunuyordu → currencySymbol
+  // map'te bulunamayıp ID rakamını ("3" gibi) sembol sanıp footer'da "TOPLAM 25,00 3" gösteriyordu.
+  function readCurrencyCode(el) {
+    if (!el) return 'TRY'
+    var opt = el.options && el.options[el.selectedIndex]
+    var code = opt && opt.getAttribute && opt.getAttribute('data-code')
+    if (code) return code
+    var v = el.value
+    if (v && isNaN(Number(v))) return v   // value zaten kod (numeric değil) ise onu kullan
+    return 'TRY'
+  }
   var [docCurrency, setDocCurrency] = useState(function () {
     if (typeof document === 'undefined') return 'TRY'
-    var el = document.getElementById('sqCurrency')
-    return (el && el.value) ? el.value : 'TRY'
+    return readCurrencyCode(document.getElementById('sqCurrency'))
   })
   useEffect(function () {
     var el = (typeof document !== 'undefined') ? document.getElementById('sqCurrency') : null
     function syncFromEl() {
-      if (el && el.value) setDocCurrency(el.value)
+      if (el) setDocCurrency(readCurrencyCode(el))
     }
     function onCustom(e) {
       var code = (e && e.detail && e.detail.code) || (el && el.value) || 'TRY'
@@ -227,8 +238,9 @@ export default function CalibraLineItemsGrid(props) {
     var attempts = 0
     var poll = setInterval(function () {
       if (attempts++ > 20) { clearInterval(poll); return }
-      var v = el && el.value
-      if (v && v !== docCurrency) { setDocCurrency(v); clearInterval(poll) }
+      if (!el || !el.value) return
+      var code = readCurrencyCode(el)
+      if (code !== docCurrency) { setDocCurrency(code); clearInterval(poll) }
     }, 150)
     return function () {
       if (el) el.removeEventListener('change', syncFromEl)
