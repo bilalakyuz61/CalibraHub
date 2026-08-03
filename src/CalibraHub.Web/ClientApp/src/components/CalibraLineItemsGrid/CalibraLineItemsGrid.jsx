@@ -299,6 +299,22 @@ export default function CalibraLineItemsGrid(props) {
   // ekleyip kaldirmak yerine, "columns" var zaten reassignable — bkz. yukarida tanimi).
   columns = columns.filter(function (c) { return !c.tlMirror || showTlColumns })
 
+  // ── Kart duzeni (PageComment Seq 1079) — kolonlari kart bolgelerine ayir ──
+  //   tlMirror kolonlari (unitPriceTL/lineTotalTL) artik ayri alan DEGIL; kaynak
+  //   alanin (unitPrice/lineTotal) hemen altinda kucuk ikinci satir olarak
+  //   gosterilir (bkz. tlMirrorBySource + kart alan grid'i asagida).
+  //   materialCode/materialName kartin ust kimlik bolgesine, geri kalanlar
+  //   (miktar/birim/fiyat/iskonto/kdv/toplam/seri vb.) alan izgarasina gider.
+  //   LineGridCell'in kendisi DEGISMEDI — sadece dis yerlesim (tablo -> kart).
+  var tlMirrorBySource = {}
+  columns.forEach(function (c) { if (c.tlMirror && c.sourceKey) tlMirrorBySource[c.sourceKey] = c })
+  var mainFieldColumns = columns.filter(function (c) { return !c.tlMirror })
+  var materialCodeCol = mainFieldColumns.find(function (c) { return c.key === 'materialCode' }) || null
+  var materialNameCol = mainFieldColumns.find(function (c) { return c.key === 'materialName' }) || null
+  var cardBodyColumns = mainFieldColumns.filter(function (c) {
+    return c !== materialCodeCol && c !== materialNameCol
+  })
+
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
   //   Suan tek item: "Stok Kartina Git". Ileride ek ozellikler (kart bilgisi,
@@ -1165,33 +1181,12 @@ export default function CalibraLineItemsGrid(props) {
     <div
       ref={gridRootRef}
       onKeyDown={handleGridKeyDown}
-      className="calibra-line-grid rounded-2xl overflow-x-auto overflow-y-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
-      {/* Header row */}
-      <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
-        <div className="w-[140px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
-          Islem
-        </div>
-        {columns.map(function(col) {
-          var Icon = resolveIcon(col.icon)
-          var align =
-            col.align === 'right'  ? 'justify-end'  :
-            col.align === 'center' ? 'justify-center' : 'justify-start'
-          return (
-            <div
-              key={col.key}
-              className={'flex items-center gap-1.5 px-2.5 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-white/60 ' + align}
-              style={widthCss(col)}
-            >
-              <Icon size={11} strokeWidth={1.8} className="text-slate-400 dark:text-white/40 flex-shrink-0" />
-              <span className="truncate">{col.label}</span>
-              {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Data rows */}
-      <div>
+      className="calibra-line-grid calibra-line-grid--cards rounded-2xl border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
+      {/* Kart listesi (PageComment Seq 1079) — her aktif kalem tek bir karttir.
+          Onceki tablo basligi (kolon adlari) kaldirildi; her alanin etiketi artik
+          kartin icinde, o alanin hemen ustunde gosterilir (bkz. asagidaki
+          cardBodyColumns.map). */}
+      <div className="p-2.5 sm:p-3 flex flex-col gap-2.5">
         {/* ── Revize zinciri: superseded satirlari GIZLE ─────────────────
             Bir satir X'i revize ederek yeni satir Y eklenince, X "kapanmis"
             sayilir (Y.revisedFromId = X.id). Grid yalnizca zincirin en
