@@ -3448,9 +3448,19 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         // PriceMode normalize (whitelist, 4 mod — 2026-08-03 Seq 1078) + moda gore ilgisiz
         // alanlari yok say: FixedPrice yalniz FixedPackage'da, bilesen UnitPrice yalniz
         // FixedComponent'te anlamlidir (asagida resolvedLines olustururken de ayni kural uygulanir).
+        // Seq 1078 review BULGU #1: eski 2-mod istemci degerlerini ('Fixed'/'RollUp') acikca
+        // yeni adlara alias'la (bilinmeyen degeri SESSIZCE FixedPackage'a dusurmek yerine —
+        // o davranis mevcut kitleri re-save'de bozardi). Gercekten gecersiz deger -> hata.
+        var rawMode = (request.PriceMode ?? string.Empty).Trim();
+        if (string.Equals(rawMode, "Fixed", StringComparison.OrdinalIgnoreCase))
+            rawMode = KitPriceMode.FixedPackage;
+        else if (string.Equals(rawMode, "RollUp", StringComparison.OrdinalIgnoreCase))
+            rawMode = KitPriceMode.ListComponent;
         var priceMode = KitPriceMode.All.FirstOrDefault(m =>
-            string.Equals(request.PriceMode, m, StringComparison.OrdinalIgnoreCase))
-            ?? KitPriceMode.FixedPackage;
+            string.Equals(rawMode, m, StringComparison.OrdinalIgnoreCase));
+        if (priceMode is null)
+            throw new ArgumentException(
+                $"Gecersiz fiyat modu: '{request.PriceMode}'. Beklenen degerler: {string.Join(", ", KitPriceMode.All)}.");
         decimal? fixedPrice = priceMode == KitPriceMode.FixedPackage ? request.FixedPrice : null;
         var isFixedComponentMode = priceMode == KitPriceMode.FixedComponent;
 
