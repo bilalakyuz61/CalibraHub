@@ -8,40 +8,40 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.calibrahub.mobile.data.CalibraApiClient
-import com.calibrahub.mobile.net.createHttpClient
+import com.calibrahub.mobile.session.SessionManager
+import com.calibrahub.mobile.storage.SecureStorageFactory
 
 /**
  * POC navigasyonu: kutuphane YOK, basit sealed-state + when. Yeni ekran eklenirse
  * bu enum/sealed genisletilir (bkz. gorev talimati — Navigation kutuphanesi YOK).
  */
 private sealed class Screen {
-    data class Login(val baseUrl: String = "http://10.0.2.2:61001/") : Screen()
-    data class Stock(val baseUrl: String, val client: CalibraApiClient, val displayName: String?) : Screen()
+    data object Login : Screen()
+    data class Stock(val displayName: String?) : Screen()
 }
 
 @Composable
 fun App() {
     MaterialTheme {
         Surface(modifier = Modifier) {
-            var screen by remember { mutableStateOf<Screen>(Screen.Login()) }
-            // HttpClient uygulama yasam suresince tek instance — login cookie'sini
-            // Stock ekranina tasimak icin ayni client + CalibraApiClient reuse edilir.
-            val httpClient = remember { createHttpClient() }
+            var screen by remember { mutableStateOf<Screen>(Screen.Login) }
+            // SessionManager uygulama yasam suresince TEK instance — kalici cookie jar'i +
+            // baseUrl/tema/beni-hatirla tercihlerini Login<->Stock arasinda tasir (bkz.
+            // com.calibrahub.mobile.session.SessionManager).
+            val sessionManager = remember { SessionManager(SecureStorageFactory.create()) }
 
             when (val current = screen) {
                 is Screen.Login -> LoginScreen(
-                    initialBaseUrl = current.baseUrl,
-                    httpClient = httpClient,
-                    onLoginSuccess = { baseUrl, client, displayName ->
-                        screen = Screen.Stock(baseUrl = baseUrl, client = client, displayName = displayName)
+                    sessionManager = sessionManager,
+                    onLoginSuccess = { displayName ->
+                        screen = Screen.Stock(displayName = displayName)
                     },
                 )
                 is Screen.Stock -> StockScreen(
-                    apiClient = current.client,
+                    sessionManager = sessionManager,
                     displayName = current.displayName,
                     onLogout = {
-                        screen = Screen.Login(baseUrl = current.baseUrl)
+                        screen = Screen.Login
                     },
                 )
             }

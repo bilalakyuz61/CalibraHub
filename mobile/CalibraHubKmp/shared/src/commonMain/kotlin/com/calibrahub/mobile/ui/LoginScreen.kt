@@ -17,6 +17,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,18 +28,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.calibrahub.mobile.data.ApiResult
-import com.calibrahub.mobile.data.CalibraApiClient
 import com.calibrahub.mobile.data.CompanyDto
-import io.ktor.client.HttpClient
+import com.calibrahub.mobile.session.SessionManager
 import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
-    initialBaseUrl: String,
-    httpClient: HttpClient,
-    onLoginSuccess: (baseUrl: String, client: CalibraApiClient, displayName: String?) -> Unit,
+    sessionManager: SessionManager,
+    onLoginSuccess: (displayName: String?) -> Unit,
 ) {
-    var baseUrl by remember { mutableStateOf(initialBaseUrl) }
+    var baseUrl by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -47,17 +46,30 @@ fun LoginScreen(
 
     val scope = rememberCoroutineScope()
 
+    // Kalici base URL/e-posta tercihini SessionManager'dan (SecureStorage) bir kez oku —
+    // Android SessionManager.currentBaseUrl()/rememberedEmail() ile AYNI acilis deseni.
+    LaunchedEffect(Unit) {
+        baseUrl = sessionManager.currentBaseUrl()
+        email = sessionManager.rememberedEmail() ?: ""
+    }
+
     fun doLogin(companyId: Int?) {
         isLoading = true
         errorMessage = null
         scope.launch {
-            val apiClient = CalibraApiClient(baseUrl = baseUrl, client = httpClient)
-            when (val result = apiClient.login(email = email, password = password, companyId = companyId)) {
+            sessionManager.setBaseUrl(baseUrl)
+            when (val result = sessionManager.login(email = email, password = password, companyId = companyId)) {
                 is ApiResult.Success -> {
                     isLoading = false
                     val body = result.data
                     if (body.ok) {
-                        onLoginSuccess(baseUrl, apiClient, body.displayName)
+                        sessionManager.persistSessionDisplay(
+                            email = email,
+                            displayName = body.displayName,
+                            companyId = companyId ?: 0,
+                            companyName = null,
+                        )
+                        onLoginSuccess(body.displayName)
                     } else {
                         errorMessage = body.error ?: "Hatali giris / erisim yok"
                     }
@@ -75,8 +87,8 @@ fun LoginScreen(
         errorMessage = null
         companies = emptyList()
         scope.launch {
-            val apiClient = CalibraApiClient(baseUrl = baseUrl, client = httpClient)
-            when (val result = apiClient.loginCompanies(email = email, password = password)) {
+            sessionManager.setBaseUrl(baseUrl)
+            when (val result = sessionManager.loginCompanies(email = email, password = password)) {
                 is ApiResult.Success -> {
                     isLoading = false
                     val list = result.data

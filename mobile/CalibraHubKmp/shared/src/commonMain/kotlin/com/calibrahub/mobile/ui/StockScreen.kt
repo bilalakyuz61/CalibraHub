@@ -25,14 +25,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.calibrahub.mobile.data.ApiResult
-import com.calibrahub.mobile.data.CalibraApiClient
 import com.calibrahub.mobile.data.StockQueryDto
+import com.calibrahub.mobile.session.SessionManager
 import kotlinx.coroutines.launch
 
 @Composable
 fun StockScreen(
-    apiClient: CalibraApiClient,
+    sessionManager: SessionManager,
     displayName: String?,
     onLogout: () -> Unit,
 ) {
@@ -48,16 +47,16 @@ fun StockScreen(
         errorMessage = null
         result = null
         scope.launch {
-            when (val response = apiClient.queryStock(code)) {
-                is ApiResult.Success -> {
+            sessionManager.warehouseRepository.stock(code).fold(
+                onSuccess = {
                     isLoading = false
-                    result = response.data
-                }
-                is ApiResult.Failure -> {
+                    result = it
+                },
+                onFailure = {
                     isLoading = false
-                    errorMessage = response.message
-                }
-            }
+                    errorMessage = it.message ?: "Bağlantı hatası"
+                },
+            )
         }
     }
 

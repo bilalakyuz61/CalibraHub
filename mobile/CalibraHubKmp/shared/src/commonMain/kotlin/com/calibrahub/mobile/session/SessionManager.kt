@@ -1,0 +1,281 @@
+package com.calibrahub.mobile.session
+
+import com.calibrahub.mobile.data.ApiResult
+import com.calibrahub.mobile.data.AuthApi
+import com.calibrahub.mobile.data.CompanyDto
+import com.calibrahub.mobile.data.LoginCompaniesRequest
+import com.calibrahub.mobile.data.LoginRequest
+import com.calibrahub.mobile.data.LoginResponse
+import com.calibrahub.mobile.data.PingResponse
+import com.calibrahub.mobile.data.ProductionApi
+import com.calibrahub.mobile.data.ProductionRepository
+import com.calibrahub.mobile.data.SessionDto
+import com.calibrahub.mobile.data.WarehouseApi
+import com.calibrahub.mobile.data.WarehouseRepository
+import com.calibrahub.mobile.data.WhoAmIResponse
+import com.calibrahub.mobile.data.parseApiError
+import com.calibrahub.mobile.net.PersistentCookiesStorage
+import com.calibrahub.mobile.net.createHttpClient
+import com.calibrahub.mobile.net.httpEngineFactory
+import com.calibrahub.mobile.storage.SecureStorage
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+
+/**
+ * Kullanicinin koyu/acik tema tercihi — CalibraHubAndroid `SessionManager.ThemeMode` ile AYNI
+ * uc degerli model + storageKey deseni. [SYSTEM] (varsayilan) cihaz ayarini izler.
+ *
+ * BILINCLI SADELESTIRME (Faz 1): Android tarafinda bu alan CANLI bir [kotlinx.coroutines.flow.Flow]
+ * olarak disari acilir (DataStore Flow ile ekranlar arasi aninda senkron); burada [SecureStorage]
+ * arayuzu suspend get/put'tan ibaret oldugu icin (gorev talimati) reaktif Flow YOK — suspend
+ * getter/setter yeterli (Faz 2 UI katmaninda gerekirse StateFlow sarmalayicisi eklenir).
+ */
+enum class ThemeMode(val storageKey: String) {
+    SYSTEM("system"),
+    LIGHT("light"),
+    DARK("dark");
+
+    companion object {
+        fun fromStorageKey(key: String?): ThemeMode = entries.firstOrNull { it.storageKey == key } ?: SYSTEM
+    }
+}
+
+/** GET /api/mobile/session sonucu — 200/401/diger ayrimi CalibraHubAndroid'deki AYNI kontratla
+ * (bkz. AuthApi.session KDoc): 401'de govde HIC parse edilmez. */
+sealed class SessionProbeResult {
+    data class Success(val dto: SessionDto) : SessionProbeResult()
+    data object Unauthorized : SessionProbeResult()
+    data class Error(val message: String) : SessionProbeResult()
+}
+
+/**
+ * Platform-bagimsiz oturum yoneticisi — CalibraHubAndroid `SessionManager.kt`'nin (Retrofit/OkHttp/
+ * Context tabanli) KMP karsiligi: Ktor + [SecureStorage] uzerine kurulu, Android Context'e bagimli
+ * DEGIL. Gorevleri Android ile AYNI: base URL persistence, cached display name, HttpClient factory
+ * (kalici cookie jar ile), "beni hatirla" tercihi + cookie yaziminin bu tercihe gate'lenmesi, global
+ * 401 yakalama ([sessionExpiredEvents]), tema tercihi persistence.
+ *
+ * KMP karsiligi olarak `buildApi(Class<T>)` yerine [authApi]/[warehouseApi]/[productionApi] TIPLI
+ * factory metodlari kullanilir (Ktor'da reflection tabanli servis uretimi yok — annotation
+ * islemcisi gerektirmez, bu yuzden Class<T> parametresine gerek kalmadi).
+ */
+class SessionManager(private val storage: SecureStorage) {
+
+    private val cookiesStorage = PersistentCookiesStorage(storage)
+
+    /** Uygulama yasam suresince TEK HttpClient — cookie state'i (persistent jar) korunur. */
+    private val httpClient: HttpClient by lazy {
+        createHttpClient(cookiesStorage = cookiesStorage, onUnauthorized = ::handleUnauthorized)
+    }
+
+    private val _sessionExpiredEvents = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** Herhangi bir authed `/api/mobile/` cagrisi 401 donerse bir event basilir — UI katmani
+     * (Faz 2) bunu dinleyip login ekranina yonlendirir (Android AppNav'in AYNI rolu). */
+    val sessionExpiredEvents: SharedFlow<Unit> = _sessionExpiredEvents.asSharedFlow()
+
+    val warehouseRepository: WarehouseRepository by lazy { WarehouseRepository(this) }
+    val productionRepository: ProductionRepository by lazy { ProductionRepository(this) }
+
+    init {
+        // Uygulama acilisinda son kaydedilen "beni hatirla" tercihini cookie jar'a senkronla —
+        // Android SessionManager.init ile AYNI davranis (senkron, tek seferlik runBlocking;
+        // SessionManager application-scoped tek instance oldugu icin maliyeti dusuk). Tercih
+        // hic kaydedilmemisse (ilk kurulum) varsayilan ACIK.
+        val remembered = runBlocking { storage.getString(REMEMBER_ME_KEY)?.toBooleanStrictOrNull() ?: true }
+        cookiesStorage.setPersistenceEnabled(remembered)
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Kalici alanlar — base URL / display / remember-me / tema
+    // ─────────────────────────────────────────────────────────────────
+
+    suspend fun currentBaseUrl(): String = storage.getString(BASE_URL_KEY) ?: DEFAULT_BASE_URL
+
+    suspend fun setBaseUrl(url: String) {
+        val normalized = if (url.endsWith("/")) url else "$url/"
+        storage.putString(BASE_URL_KEY, normalized)
+    }
+
+    suspend fun currentDisplayName(): String? = storage.getString(DISPLAY_NAME_KEY)
+
+    suspend fun setDisplayName(name: String?) {
+        if (name == null) storage.remove(DISPLAY_NAME_KEY) else storage.putString(DISPLAY_NAME_KEY, name)
+    }
+
+    suspend fun isRememberMeEnabled(): Boolean = storage.getString(REMEMBER_ME_KEY)?.toBooleanStrictOrNull() ?: true
+
+    /**
+     * "Beni hatirla" tercihini kaydeder + cookie jar'in SecureStorage yazimini (persistenceEnabled)
+     * HEMEN senkronlar. LoginScreen'in login istegi ONCESINDE cagirmasi ZORUNLU — Android
+     * SessionManager.setRememberMe ile AYNI sozlesme (bkz. o KDoc).
+     */
+    suspend fun setRememberMe(enabled: Boolean) {
+        storage.putString(REMEMBER_ME_KEY, enabled.toString())
+        cookiesStorage.setPersistenceEnabled(enabled)
+    }
+
+    suspend fun rememberedEmail(): String? = storage.getString(REMEMBERED_EMAIL_KEY)
+
+    suspend fun currentCompanyName(): String? = storage.getString(COMPANY_NAME_KEY)
+
+    suspend fun currentCompanyId(): Int? = storage.getString(COMPANY_ID_KEY)?.toIntOrNull()
+
+    suspend fun themeMode(): ThemeMode = ThemeMode.fromStorageKey(storage.getString(THEME_MODE_KEY))
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        storage.putString(THEME_MODE_KEY, mode.storageKey)
+    }
+
+    /** Basarili login/acilis probe'u sonrasi oturum goruntu alanlarini kaydeder — cookie'nin
+     * kendisi bu fonksiyonun isi DEGIL (bkz. Android KDoc, ayni gerekce). */
+    suspend fun persistSessionDisplay(email: String?, displayName: String?, companyId: Int, companyName: String?) {
+        if (!email.isNullOrBlank()) storage.putString(REMEMBERED_EMAIL_KEY, email)
+        if (!displayName.isNullOrBlank()) storage.putString(DISPLAY_NAME_KEY, displayName)
+        storage.putString(COMPANY_ID_KEY, companyId.toString())
+        if (!companyName.isNullOrBlank()) storage.putString(COMPANY_NAME_KEY, companyName)
+    }
+
+    /** Logout VEYA 401-tetiklemeli oturum sonlandirma. [REMEMBERED_EMAIL_KEY]/[REMEMBER_ME_KEY]
+     * BILEREK silinmez (Android ile AYNI karar — bir sonraki LoginScreen'de hatirlanmaya devam eder). */
+    suspend fun clearSession() {
+        cookiesStorage.clear()
+        storage.remove(DISPLAY_NAME_KEY)
+        storage.remove(COMPANY_ID_KEY)
+        storage.remove(COMPANY_NAME_KEY)
+    }
+
+    private suspend fun handleUnauthorized() {
+        cookiesStorage.clear()
+        storage.remove(DISPLAY_NAME_KEY)
+        storage.remove(COMPANY_ID_KEY)
+        storage.remove(COMPANY_NAME_KEY)
+        _sessionExpiredEvents.tryEmit(Unit)
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Tipli Api factory'leri — Android'deki `buildApi(Class<T>)`'in KMP karsiligi
+    // ─────────────────────────────────────────────────────────────────
+
+    suspend fun authApi(): AuthApi = AuthApi(baseUrl = currentBaseUrl(), client = httpClient)
+    suspend fun warehouseApi(): WarehouseApi = WarehouseApi(baseUrl = currentBaseUrl(), client = httpClient)
+    suspend fun productionApi(): ProductionApi = ProductionApi(baseUrl = currentBaseUrl(), client = httpClient)
+
+    // ─────────────────────────────────────────────────────────────────
+    // Auth akislari
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Sunucu dogrulama (LoginScreen "Dogrula" akisi) — kullanicinin o an yazdigi, HENUZ
+     * [setBaseUrl] ile KAYDEDILMEMIS [rawBaseUrl] degeriyle bagimsiz/tek-seferlik bir cagri yapar.
+     * [authApi] BILEREK KULLANILMAZ (o [currentBaseUrl] / kalici cookie jar okur); burada ayri,
+     * cookie'siz, kisa timeout'lu (5 sn) bir HttpClient kurulur — Android `ping(rawBaseUrl)` ile
+     * AYNI gerekce.
+     */
+    suspend fun ping(rawBaseUrl: String): Result<PingResponse> = runCatching {
+        val trimmed = rawBaseUrl.trim()
+        require(trimmed.isNotEmpty()) { "Sunucu adresi boş" }
+        val normalized = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
+
+        val probeClient = HttpClient(httpEngineFactory) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 5_000
+                connectTimeoutMillis = 5_000
+            }
+            defaultRequest { header("X-Requested-With", "XMLHttpRequest") }
+            expectSuccess = false
+        }
+        try {
+            val resp = probeClient.get("${normalized}api/mobile/ping")
+            if (!resp.status.isSuccess()) error("HTTP ${resp.status.value}")
+            resp.body<PingResponse>()
+        } finally {
+            probeClient.close()
+        }
+    }
+
+    suspend fun loginCompanies(email: String, password: String): ApiResult<List<CompanyDto>> = try {
+        val resp = authApi().loginCompanies(LoginCompaniesRequest(email = email, password = password))
+        if (resp.status == HttpStatusCode.OK) {
+            ApiResult.Success(resp.body<List<CompanyDto>>())
+        } else {
+            ApiResult.Failure(parseApiError(resp) ?: "Sunucu hatası: ${resp.status.value}")
+        }
+    } catch (e: Exception) {
+        ApiResult.Failure(e.message ?: "Bağlantı hatası")
+    }
+
+    suspend fun login(email: String, password: String, companyId: Int?): ApiResult<LoginResponse> = try {
+        val resp = authApi().login(LoginRequest(email = email, password = password, companyId = companyId))
+        if (resp.status == HttpStatusCode.OK) {
+            ApiResult.Success(resp.body<LoginResponse>())
+        } else {
+            ApiResult.Failure(parseApiError(resp) ?: "Sunucu hatası: ${resp.status.value}")
+        }
+    } catch (e: Exception) {
+        ApiResult.Failure(e.message ?: "Bağlantı hatası")
+    }
+
+    suspend fun logout(): ApiResult<Unit> = try {
+        authApi().logout()
+        clearSession()
+        ApiResult.Success(Unit)
+    } catch (e: Exception) {
+        ApiResult.Failure(e.message ?: "Bağlantı hatası")
+    }
+
+    suspend fun whoAmI(): ApiResult<WhoAmIResponse> = try {
+        val resp = authApi().whoAmI()
+        if (resp.status.isSuccess()) {
+            ApiResult.Success(resp.body<WhoAmIResponse>())
+        } else {
+            ApiResult.Failure(parseApiError(resp) ?: "Sunucu hatası: ${resp.status.value}")
+        }
+    } catch (e: Exception) {
+        ApiResult.Failure(e.message ?: "Bağlantı hatası")
+    }
+
+    /** Acilis probe'u (auto-login) — bkz. [SessionProbeResult] KDoc. */
+    suspend fun probeSession(): SessionProbeResult = try {
+        val resp = authApi().session()
+        when {
+            resp.status == HttpStatusCode.OK -> SessionProbeResult.Success(resp.body<SessionDto>())
+            resp.status == HttpStatusCode.Unauthorized -> SessionProbeResult.Unauthorized
+            else -> SessionProbeResult.Error("HTTP ${resp.status.value}")
+        }
+    } catch (e: Exception) {
+        SessionProbeResult.Error(e.message ?: "Bağlantı hatası")
+    }
+
+    companion object {
+        private const val BASE_URL_KEY = "base_url"
+        private const val DISPLAY_NAME_KEY = "display_name"
+        private const val REMEMBER_ME_KEY = "remember_me"
+        private const val REMEMBERED_EMAIL_KEY = "remembered_email"
+        private const val COMPANY_ID_KEY = "company_id"
+        private const val COMPANY_NAME_KEY = "company_name"
+        private const val THEME_MODE_KEY = "theme_mode"
+
+        /** Emulator varsayilani (10.0.2.2 host loopback) — fiziksel cihazda kullanici LAN IP'sine
+         * degistirir (bkz. gorev talimati). */
+        private const val DEFAULT_BASE_URL = "http://10.0.2.2:61001/"
+    }
+}
