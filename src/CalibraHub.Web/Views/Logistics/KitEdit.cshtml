@@ -82,17 +82,22 @@
     textarea.ke-input { resize: vertical; min-height: 44px; }
 
     /* Fiyat modu segment kontrolü */
-    .ke-seg { display: inline-flex; background: var(--ke-surface-2); border: 1px solid var(--ke-border); border-radius: 9px; padding: 3px; gap: 3px; }
+    .ke-seg { display: inline-flex; flex-wrap: wrap; background: var(--ke-surface-2); border: 1px solid var(--ke-border); border-radius: 9px; padding: 3px; gap: 3px; }
     .ke-seg button {
         border: 0; background: transparent; color: var(--ke-muted); cursor: pointer;
-        padding: 7px 14px; border-radius: 7px; font-size: .8rem; font-weight: 600; transition: all .15s;
+        padding: 7px 13px; border-radius: 7px; font-size: .78rem; font-weight: 600; transition: all .15s; white-space: nowrap;
     }
     .ke-seg button.is-active { background: var(--ke-primary); color: #fff; }
 
     /* Bileşen ekleme satırı */
-    .ke-addrow { display: grid; grid-template-columns: 190px 1fr 110px 1fr auto; gap: 10px; align-items: end; }
+    .ke-addrow { display: grid; grid-template-columns: 170px 1fr 150px 90px 1fr auto; gap: 10px; align-items: end; }
     .ke-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
     .ke-field > span { font-size: .74rem; font-weight: 600; color: var(--ke-muted); }
+
+    /* Kombinasyon seçim butonu (bileşen ekleme satırı) — Seq 1076 */
+    .ke-combo-btn { width: 100%; justify-content: center; }
+    .ke-combo-btn.is-set { border-color: var(--ke-ok); color: var(--ke-ok); }
+    .ke-combo-btn:disabled { opacity: .45; }
 
     /* Stok kodu rehberi (autocomplete dropdown) */
     .ke-lookup { position: relative; }
@@ -123,6 +128,14 @@
     .ke-table tr:last-child td { border-bottom: 0; }
     .ke-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--ke-primary); }
     .ke-qty-cell { width: 110px; }
+    /* Birim Fiyat kolonu — yalnız FixedComponent modda görünür (Seq 1078) */
+    .ke-col-price { display: none; }
+    table.ke-table.ke-mode-fixedcomponent .ke-col-price { display: table-cell; }
+    /* Kombinasyon rozeti — satırda seçili kombinasyon varsa Ad hücresinin altında (Seq 1076) */
+    .ke-comb-badge {
+        display: inline-block; margin-top: 3px; padding: 2px 8px; border-radius: 999px;
+        font-size: .68rem; font-weight: 700; background: var(--ke-primary-weak); color: var(--ke-primary);
+    }
     .ke-x {
         display: inline-flex; align-items: center; justify-content: center;
         width: 26px; height: 26px; border-radius: 7px; cursor: pointer;
@@ -185,8 +198,10 @@
                     <label class="ke-label">Fiyat Modu</label>
                     <div>
                         <div class="ke-seg" id="kePriceModeSeg">
-                            <button type="button" data-mode="Fixed" class="is-active">Sabit Paket Fiyatı</button>
-                            <button type="button" data-mode="RollUp">Bileşen Toplamı</button>
+                            <button type="button" data-mode="FixedPackage" class="is-active">Sabit Paket Fiyatı</button>
+                            <button type="button" data-mode="FixedComponent">Sabit Bileşen Fiyatı</button>
+                            <button type="button" data-mode="ListPackage">Liste Paket Fiyatı</button>
+                            <button type="button" data-mode="ListComponent">Liste Bileşen Fiyatı</button>
                         </div>
                         <div class="ke-hint" id="kePriceModeHint">Kit kendi sabit satış fiyatıyla satılır; sipariş/teklife bu fiyat gelir.</div>
                     </div>
@@ -218,6 +233,10 @@
                         <input type="text" id="keCompName" class="ke-input" readonly placeholder="Otomatik gelir..." />
                     </div>
                     <div class="ke-field">
+                        <span>Kombinasyon</span>
+                        <button type="button" id="keCompCombo" class="ke-btn ke-btn--sm ke-combo-btn" disabled title="Önce stok kodu seçin">Seç...</button>
+                    </div>
+                    <div class="ke-field">
                         <span>Miktar *</span>
                         <input type="number" id="keCompQty" class="ke-input" value="1" min="0" step="any" />
                     </div>
@@ -243,13 +262,14 @@
                     <span class="ke-badge" id="keCount" style="margin-left:8px;">0 bileşen</span>
                 </p>
                 <div class="ke-table-wrap">
-                    <table class="ke-table">
+                    <table class="ke-table" id="keTable">
                         <thead>
                             <tr>
                                 <th style="width:36px;">#</th>
                                 <th style="width:150px;">Kod</th>
                                 <th>Ad</th>
                                 <th style="width:120px;">Miktar</th>
+                                <th class="ke-col-price" style="width:130px;">Birim Fiyat</th>
                                 <th>Açıklama</th>
                                 <th style="width:48px;"></th>
                             </tr>
@@ -276,8 +296,8 @@
     var KIT_NAME = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(kitName));
 
     var $ = function (id) { return document.getElementById(id); };
-    var lines = [];              // { code, name, quantity, note }
-    var priceMode = 'Fixed';
+    var lines = [];              // { code, name, quantity, note, configId, configCode, unitPrice }
+    var priceMode = 'FixedPackage';
 
     // ── Toast ──
     var msgTimer = null;
@@ -290,22 +310,31 @@
         msgTimer = setTimeout(function () { el.classList.remove('is-show'); }, 2600);
     }
 
-    // ── Fiyat modu ──
+    // ── Fiyat modu (Seq 1078 — 4 mod, backend KitPriceMode ile birebir) ──
+    var KIT_PRICE_MODES = ['FixedPackage', 'FixedComponent', 'ListPackage', 'ListComponent'];
+    var KIT_PRICE_MODE_LEGACY = { 'Fixed': 'FixedPackage', 'RollUp': 'ListComponent' };  // eski 2-modlu UI degerleri
+    var KIT_PRICE_MODE_HINTS = {
+        FixedPackage:   'Kit kendi sabit satış fiyatıyla satılır; sipariş/teklife bu fiyat gelir.',
+        FixedComponent: 'Kit fiyatı, her bileşen için burada elle girilen birim fiyat × miktar toplamından hesaplanır.',
+        ListPackage:    'Kit fiyatı, kit kartının kendi (Genel Liste) satış fiyatından, satış anında çözülür.',
+        ListComponent:  'Kit fiyatı, bileşenlerin fiyat listesindeki satış fiyatları × miktar toplamından, satış anında çözülür.'
+    };
     function setPriceMode(mode) {
-        priceMode = (mode === 'RollUp') ? 'RollUp' : 'Fixed';
+        mode = KIT_PRICE_MODE_LEGACY[mode] || mode;
+        if (KIT_PRICE_MODES.indexOf(mode) === -1) mode = 'FixedPackage';
+        priceMode = mode;
         Array.prototype.forEach.call($('kePriceModeSeg').children, function (b) {
             b.classList.toggle('is-active', b.getAttribute('data-mode') === priceMode);
         });
-        var isFixed = priceMode === 'Fixed';
-        $('keFixedPriceLabel').style.display = isFixed ? '' : 'none';
-        $('keFixedPriceWrap').style.display = isFixed ? '' : 'none';
-        $('kePriceModeHint').textContent = isFixed
-            ? 'Kit kendi sabit satış fiyatıyla satılır; sipariş/teklife bu fiyat gelir.'
-            : 'Kit fiyatı, bileşenlerin satış fiyatları × miktar toplamından hesaplanır.';
+        var isFixedPackage = priceMode === 'FixedPackage';
+        $('keFixedPriceLabel').style.display = isFixedPackage ? '' : 'none';
+        $('keFixedPriceWrap').style.display = isFixedPackage ? '' : 'none';
+        $('kePriceModeHint').textContent = KIT_PRICE_MODE_HINTS[priceMode];
+        $('keTable').classList.toggle('ke-mode-fixedcomponent', priceMode === 'FixedComponent');
     }
     $('kePriceModeSeg').addEventListener('click', function (e) {
         var b = e.target.closest('button[data-mode]');
-        if (b) { setPriceMode(b.getAttribute('data-mode')); if (priceMode === 'Fixed') keAutofillFixedPriceFromList(false); }
+        if (b) { setPriceMode(b.getAttribute('data-mode')); if (priceMode === 'FixedPackage') keAutofillFixedPriceFromList(false); }
     });
 
     // Seq 1073: Sabit Paket birim fiyatı, Genel (varsayılan) fiyat listesinden OTOMATİK
@@ -345,7 +374,31 @@
             var tdNo = document.createElement('td'); tdNo.textContent = (i + 1); tr.appendChild(tdNo);
             var tdCode = document.createElement('td'); tdCode.innerHTML = '<span class="ke-code"></span>';
             tdCode.querySelector('.ke-code').textContent = l.code; tr.appendChild(tdCode);
-            var tdName = document.createElement('td'); tdName.textContent = l.name || ''; tr.appendChild(tdName);
+
+            var tdName = document.createElement('td');
+            tdName.textContent = l.name || '';
+            // Seq 1076: satırda kombinasyon seçiliyse rozet gösterilir; tıklanınca aynı
+            // picker ile değiştirilebilir (yalnız zaten kombinasyon atanmış satırlarda).
+            if (l.configCode) {
+                tdName.appendChild(document.createElement('br'));
+                var badge = document.createElement('span');
+                badge.className = 'ke-comb-badge';
+                badge.textContent = 'Kombinasyon: ' + l.configCode;
+                badge.title = 'Değiştirmek için tıklayın';
+                badge.style.cursor = 'pointer';
+                badge.addEventListener('click', function () {
+                    keOpenComboPicker(l.code, {
+                        materialName: l.name || '',
+                        currentCode: l.configCode,
+                        onApply: function (configId, code) {
+                            l.configId = configId; l.configCode = code;
+                            renderLines();
+                        }
+                    });
+                });
+                tdName.appendChild(badge);
+            }
+            tr.appendChild(tdName);
 
             var tdQty = document.createElement('td'); tdQty.className = 'ke-qty-cell';
             var qtyInput = document.createElement('input');
@@ -357,6 +410,20 @@
                 qtyInput.value = l.quantity;
             });
             tdQty.appendChild(qtyInput); tr.appendChild(tdQty);
+
+            // Seq 1078: yalnız FixedComponent modda görünür (CSS .ke-col-price), her satırda
+            // elle girilen bileşen birim fiyatı.
+            var tdPrice = document.createElement('td'); tdPrice.className = 'ke-col-price ke-qty-cell';
+            var priceInput = document.createElement('input');
+            priceInput.type = 'number'; priceInput.className = 'ke-input'; priceInput.step = 'any'; priceInput.min = '0';
+            priceInput.placeholder = '0,00'; priceInput.style.padding = '5px 8px';
+            priceInput.value = (l.unitPrice != null) ? l.unitPrice : '';
+            priceInput.addEventListener('change', function () {
+                var v = parseFloat(priceInput.value.replace(',', '.'));
+                l.unitPrice = (isFinite(v) && v >= 0) ? v : null;
+                priceInput.value = (l.unitPrice != null) ? l.unitPrice : '';
+            });
+            tdPrice.appendChild(priceInput); tr.appendChild(tdPrice);
 
             var tdNote = document.createElement('td');
             var noteInput = document.createElement('input');
@@ -389,9 +456,79 @@
             .catch(function () { cb(null); });
     }
 
+    // ── Kombinasyon seçimi (Seq 1076) ──────────────────────────────────────
+    // Bileşen ekleme satırındaki kod seçimi + kombinasyon seçimi, DocumentEdit'teki
+    // satış kalemi kombinasyon seçimiyle AYNI mekanizmayı (window.CalibraHub.openCombinationPicker
+    // → React CombinationPickerModal, "Mevcut"/"Yeni" sekmeleri) kullanır. _Layout.cshtml
+    // bundle'ı (react/calibrahub-widgets.js) her sayfada zaten yükler; küçük retry burada
+    // yalnız ilk birkaç yüz ms'lik yükleme yarışına karşı (referans: BOMEdit.ptOpenComboPicker).
+    var keCompSelectedMaterial = null;   // { id, code, name, hasConfig, unitId, unitCode } — StockLookup satırı
+    var keCompCombo = null;              // { configId, code, details } — seçilen kombinasyon
+
+    function keOpenComboPicker(materialCode, opts, retriesLeft) {
+        if (retriesLeft === undefined) retriesLeft = 15;
+        if (!window.CalibraHub || typeof window.CalibraHub.openCombinationPicker !== 'function') {
+            if (retriesLeft > 0) { setTimeout(function () { keOpenComboPicker(materialCode, opts, retriesLeft - 1); }, 200); return; }
+            showMsg('Kombinasyon seçici yüklenemedi, sayfayı yenileyin.', true);
+            return;
+        }
+        window.CalibraHub.openCombinationPicker(materialCode, opts);
+    }
+
+    function updateComboButton() {
+        var btn = $('keCompCombo');
+        var trackable = !!(keCompSelectedMaterial && keCompSelectedMaterial.hasConfig);
+        btn.disabled = !trackable;
+        btn.classList.toggle('is-set', trackable && !!keCompCombo);
+        if (!trackable) {
+            btn.textContent = 'Seç...';
+            btn.title = keCompSelectedMaterial ? 'Bu malzemede kombinasyon takibi yok' : 'Önce stok kodu seçin';
+        } else if (keCompCombo) {
+            btn.textContent = keCompCombo.code;
+            btn.title = 'Seçili kombinasyon: ' + keCompCombo.code + ' — değiştirmek için tıklayın';
+        } else {
+            btn.textContent = 'Kombinasyon Seç...';
+            btn.title = 'Kombinasyon seçmek için tıklayın';
+        }
+    }
+
+    // autoOpen — dropdown'dan malzeme seçilince (kod+ad ile mouse/klavye ile bulunan
+    // asıl akış), satış teklifindeki guided-workflow davranışına benzer şekilde malzeme
+    // kombinasyon takipliyse picker otomatik açılır. Elle kod yazıp blur ile çözümlenen
+    // yolda (keCompCode 'change') otomatik açma YOK — her blur'da modal açılmasın diye.
+    function setSelectedMaterial(m, autoOpen) {
+        keCompSelectedMaterial = m || null;
+        keCompCombo = null;
+        updateComboButton();
+        if (autoOpen && m && m.hasConfig) {
+            keOpenComboPicker(m.code, {
+                materialName: m.name || '',
+                onApply: function (configId, code, details) {
+                    keCompCombo = { configId: configId, code: code, details: details || [] };
+                    updateComboButton();
+                    var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
+                }
+            });
+        }
+    }
+
+    $('keCompCombo').addEventListener('click', function () {
+        if (!keCompSelectedMaterial || !keCompSelectedMaterial.hasConfig) return;
+        keOpenComboPicker(keCompSelectedMaterial.code, {
+            materialName: keCompSelectedMaterial.name || '',
+            currentCode: keCompCombo ? keCompCombo.code : null,
+            currentDetails: keCompCombo ? keCompCombo.details : [],
+            onApply: function (configId, code, details) {
+                keCompCombo = { configId: configId, code: code, details: details || [] };
+                updateComboButton();
+            }
+        });
+    });
+
     $('keCompCode').addEventListener('change', function () {
         resolveComp($('keCompCode').value, function (m) {
             $('keCompName').value = m ? (m.name || '') : '';
+            setSelectedMaterial(m, false);
         });
     });
 
@@ -434,7 +571,12 @@
         $('keCompCode').value = m.code || '';
         $('keCompName').value = m.name || '';
         closeDD();
-        var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
+        // Seq 1076: kombinasyon takipli malzemede picker otomatik açılır (satış teklifindeki
+        // guided-workflow ile aynı davranış); takipsizse doğrudan Miktar'a odaklan.
+        setSelectedMaterial(m, true);
+        if (!m.hasConfig) {
+            var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
+        }
     }
 
     function searchDD(q) {
@@ -464,6 +606,7 @@
 
     $('keCompCode').addEventListener('input', function () {
         $('keCompName').value = '';   // kod değişti → eski ad artık geçersiz
+        setSelectedMaterial(null);    // kombinasyon seçimi de gecersiz — yeniden coz
         var v = $('keCompCode').value;
         clearTimeout(ddTimer);
         ddTimer = setTimeout(function () { searchDD(v); }, 160);
@@ -501,9 +644,21 @@
         // Kod → ad çözümle, sonra ekle (ad boşsa yine ekle, backend doğrular)
         resolveComp(code, function (m) {
             if (!m) { showMsg('"' + code + '" kodlu stok bulunamadı.', true); return; }
-            lines.push({ code: m.code || code, name: m.name || $('keCompName').value || '', quantity: qty, note: note });
+            // Seq 1076: seçili kombinasyon yalnız hâlâ AYNI malzemeye aitse taşınır — kod
+            // elle değiştirilip Enter'a doğrudan basılırsa (dropdown/blur atlanırsa) eski
+            // malzemenin kombinasyonu yanlışlıkla yeni satıra sızmaz.
+            var combo = (keCompCombo && keCompSelectedMaterial &&
+                         (keCompSelectedMaterial.code || '').toLowerCase() === (m.code || '').toLowerCase())
+                ? keCompCombo : null;
+            lines.push({
+                code: m.code || code, name: m.name || $('keCompName').value || '', quantity: qty, note: note,
+                configId: combo ? combo.configId : null,
+                configCode: combo ? combo.code : null,
+                unitPrice: null
+            });
             renderLines();
             $('keCompCode').value = ''; $('keCompName').value = ''; $('keCompQty').value = '1'; $('keCompNote').value = '';
+            setSelectedMaterial(null);
             $('keCompCode').focus();
         });
     }
