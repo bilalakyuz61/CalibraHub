@@ -1,5 +1,5 @@
 @*
-    ShipmentPlanningCenter — Yükleme Planlama Merkezi (Faz 1, 2026-07-28 · Faz 2, 2026-07-31).
+    ShipmentPlanningCenter — Yükleme Planlama Merkezi (Faz 1, 2026-07-28 · Faz 2, 2026-07-31 · Faz 1.5 Kit, 2026-08-03).
     İhtiyaç Karşılama Merkezi'nin (Views/Purchase/FulfillmentCenter.cshtml, prefix fc3-) satış-tarafı
     analoğu. Prefix: sp- (shipment planning). Kapsam:
       1) Açık satış sipariş kalemlerini listele + "Depodan Rezerve Et" (mantıksal rezervasyon) — Faz 1.
@@ -7,6 +7,13 @@
       3) Rezervasyonu irsaliyeye çevir ("Yükle") — Faz 2. Tekil (satır bazlı Yükle butonu) veya
          rezervasyon detay panelinde checkbox ile çoklu seçim + "Seçilenleri Yükle". Destrüktif/geri
          alınamaz işlem olduğu için ekran-ortası onay modalı zorunlu (showConfirm).
+      4) Kit (Paket Ürün) satırları — Faz 1.5. Kit kalemleri artık seçilebilir/rezerve edilebilir; miktarlar
+         SET bazındadır (isKit=true satırlarda availableStock/openQty/reservedQty backend'de zaten set
+         sayısını taşır; availableSets/reservedSets aynı değerleri açıkça etiketler). CreateReservation'a
+         kit'in kendi orderLineId'si + qty=set sayısı gönderilir, backend bileşenleri atomik rezerve eder.
+         OrderReservations kit bileşenlerini AYNI kitOrderLineId altında N ayrı satır döner — ekran bunları
+         gruplayıp tek "kit seti" kartı gösterir; kart üzerindeki Yükle/İptal o grubun TÜM reservationId'lerini
+         gönderir (bkz. spRenderKitGroupCard / spShipKitGroup / spCancelKitGroup).
     Sunucu tarafı render etmez; tüm veri client-side fetch ile GET /Sales/OpenOrderLinesForReservation,
     GET /Sales/OrderReservations, POST /Sales/CreateReservation, POST /Sales/CancelReservation,
     POST /Sales/ShipReservations üzerinden gelir (kesin sözleşme — bkz. SalesController.cs ilgili action'lar).
@@ -109,7 +116,8 @@
     }
     .sp-flat-row:hover { background:rgba(255,255,255,.025); }
     .sp-flat-row.sel   { background:rgba(99,102,241,.09); }
-    .sp-flat-row.is-kit { opacity:.72; }
+    .sp-flat-row.is-kit { background:rgba(139,92,246,.045); }
+    .sp-flat-row.is-kit.sel { background:rgba(99,102,241,.12); }
     .sp-cb { accent-color:#6366f1; width:15px; height:15px; cursor:pointer; margin:0; }
     .sp-cb:disabled { opacity:.35; cursor:not-allowed; }
     .sp-flat-num { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.79rem; font-weight:700; color:#818cf8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:none; border:none; padding:0; text-align:left; cursor:pointer; }
@@ -173,6 +181,15 @@
     }
     .sp-sub-toolbar-cnt { font-size:.74rem; font-weight:700; color:#a5b4fc; }
     .sp-btn--xs { padding:4px 10px; font-size:.73rem; }
+
+    /* ── Kit seti grup kartı (Faz 1.5) — bileşen rezervasyonları tek kart altında toplanır ── */
+    .sp-sub-kit-group { background:rgba(139,92,246,.04); border-bottom:1px solid rgba(255,255,255,.04); }
+    .sp-sub-kit-group:last-child { border-bottom:none; }
+    .sp-sub-kit-items { padding:2px 14px 8px 74px; display:flex; flex-direction:column; gap:3px; }
+    .sp-sub-kit-item { display:flex; align-items:center; gap:10px; font-size:.72rem; }
+    .sp-sub-kit-item .sp-sub-loc  { min-width:120px; }
+    .sp-sub-kit-item .sp-sub-qty { min-width:70px; }
+    .sp-sub-kit-item .sp-sub-date { min-width:80px; }
 
     /* ── Seçim aksiyon bar ── */
     .sp-selbar {
@@ -299,6 +316,8 @@
     body.app-theme-light .sp-row-wrap { border-bottom-color:#f1f5f9; }
     body.app-theme-light .sp-flat-row:hover { background:#f8fafc; }
     body.app-theme-light .sp-flat-row.sel { background:rgba(99,102,241,.08); }
+    body.app-theme-light .sp-flat-row.is-kit { background:rgba(139,92,246,.055); }
+    body.app-theme-light .sp-flat-row.is-kit.sel { background:rgba(99,102,241,.1); }
     body.app-theme-light .sp-flat-num { color:#4338ca; }
     body.app-theme-light .sp-flat-mat-name { color:#0f172a; }
     body.app-theme-light .sp-flat-mat-code { color:#94a3b8; }
@@ -318,6 +337,7 @@
     body.app-theme-light .sp-sub-ship:hover { background:rgba(99,102,241,.14); border-color:rgba(99,102,241,.38); }
     body.app-theme-light .sp-sub-toolbar { background:rgba(99,102,241,.05); border-bottom-color:rgba(99,102,241,.16); }
     body.app-theme-light .sp-sub-toolbar-cnt { color:#4338ca; }
+    body.app-theme-light .sp-sub-kit-group { background:rgba(139,92,246,.045); border-bottom-color:#f1f5f9; }
 
     body.app-theme-light .sp-selbar { background:#ffffff; border-color:#e2e8f0; box-shadow:0 16px 40px rgba(15,23,42,.14); }
     body.app-theme-light .sp-sb-cnt { color:#4338ca; }
@@ -500,6 +520,20 @@
     function fmtN(n) {
         return parseFloat(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    // Kit setleri tam sayı olarak gösterilir (ör. "3 set") — ondalık gösterim kafa karıştırır.
+    function fmtSet(n) {
+        return Math.round(parseFloat(n || 0)).toLocaleString('tr-TR');
+    }
+    // Faz 1.5: kit satırlarında availableStock/reservedQty backend'de zaten SET sayısını taşır;
+    // availableSets/reservedSets aynı değeri açık isimle etiketler — varsa onu tercih et.
+    function spAvailable(line) {
+        if (line.isKit) return (line.availableSets != null ? line.availableSets : line.availableStock);
+        return line.availableStock;
+    }
+    function spReservedForLine(line) {
+        if (line.isKit) return (line.reservedSets != null ? line.reservedSets : line.reservedQty);
+        return line.reservedQty;
+    }
     function fmtDate(iso) {
         if (!iso) return '';
         var d = new Date(iso);
@@ -581,8 +615,9 @@
     }
 
     function spStockClass(line) {
-        if (line.availableStock <= 0) return 'sp-stock--none';
-        if (line.availableStock < line.openQty) return 'sp-stock--warn';
+        var avail = spAvailable(line);
+        if (avail <= 0) return 'sp-stock--none';
+        if (avail < line.openQty) return 'sp-stock--warn';
         return 'sp-stock--ok';
     }
 
@@ -596,14 +631,17 @@
         }
         var html = LINES.map(function(l) {
             var checked = !!SELECTED[l.lineId];
-            var disabled = l.isKit;
-            var kitBadge = l.isKit ? '<span class="sp-kit-badge" title="Kit satırları Faz 1\'de rezerve edilemez">Kit — sonraki faz</span>' : '';
+            var isKit = !!l.isKit;
+            var avail = spAvailable(l);
+            var reserved = spReservedForLine(l);
+            var kitBadge = isKit ? '<span class="sp-kit-badge" title="Kit ürün — miktarlar set bazındadır">Kit</span>' : '';
+            var unitLabel = isKit ? 'set' : esc(l.unitCode || '');
             var expOpen = !!EXPANDED[l.lineId];
             return ''
                 + '<div class="sp-row-wrap" data-line-id="' + l.lineId + '">'
-                +   '<div class="sp-flat-row' + (checked ? ' sel' : '') + (l.isKit ? ' is-kit' : '') + '">'
+                +   '<div class="sp-flat-row' + (checked ? ' sel' : '') + (isKit ? ' is-kit' : '') + '">'
                 +     '<input type="checkbox" class="sp-cb" data-line-id="' + l.lineId + '"'
-                +       (checked ? ' checked' : '') + (disabled ? ' disabled title="Kit satırı rezerve edilemez"' : '')
+                +       (checked ? ' checked' : '') + (isKit && avail <= 0 ? ' title="Yetersiz set stoğu — yine de seçilip talep edilebilir"' : '')
                 +       ' onchange="spToggleLine(' + l.lineId + ', this.checked)">'
                 +     '<button type="button" class="sp-flat-num" onclick="spOpenOrderTab(event, ' + l.orderDocumentId + ')" title="Siparişi aç">' + esc(l.orderNumber) + '</button>'
                 +     '<div class="sp-flat-mat">'
@@ -612,10 +650,10 @@
                 +     '</div>'
                 +     '<span class="sp-qty">' + fmtN(l.orderQty) + '</span>'
                 +     '<span class="sp-qty">' + fmtN(l.deliveredQty) + '</span>'
-                +     '<span class="sp-qty">' + fmtN(l.reservedQty) + '</span>'
-                +     '<span class="sp-qty sp-qty--open">' + fmtN(l.openQty) + '</span>'
-                +     '<span class="sp-stock ' + spStockClass(l) + '">' + fmtN(l.availableStock) + '</span>'
-                +     '<span class="sp-unit">' + esc(l.unitCode || '') + '</span>'
+                +     '<span class="sp-qty">' + (isKit ? fmtSet(reserved) : fmtN(l.reservedQty)) + '</span>'
+                +     '<span class="sp-qty sp-qty--open">' + (isKit ? fmtSet(l.openQty) : fmtN(l.openQty)) + '</span>'
+                +     '<span class="sp-stock ' + spStockClass(l) + '">' + (isKit ? fmtSet(avail) : fmtN(l.availableStock)) + '</span>'
+                +     '<span class="sp-unit">' + unitLabel + '</span>'
                 +     '<button type="button" class="sp-exp-btn' + (expOpen ? ' active' : '') + '" onclick="spToggleDetail(' + l.lineId + ')" title="Rezervasyonlar">'
                 +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
                 +     '</button>'
@@ -647,7 +685,8 @@
     // ── Seçim ────────────────────────────────────────────────────────────────
     window.spToggleLine = function(lineId, checked) {
         var line = LINES.find(function(l) { return l.lineId === lineId; });
-        if (!line || line.isKit) return;
+        if (!line) return;
+        // Faz 1.5: kit satırları da seçilebilir — qty=set sayısı olarak CreateReservation'a gider.
         if (checked) SELECTED[lineId] = line; else delete SELECTED[lineId];
         spUpdateCounts();
         spUpdateSelBar();
@@ -685,6 +724,66 @@
         }
     };
 
+    // Tekil (kit-dışı) rezervasyon satırı — mevcut Faz 1/2 görünümü.
+    function spRenderSingleResRow(r, lineId) {
+        return ''
+            + '<div class="sp-sub-row" data-res-id="' + r.id + '">'
+            +   '<input type="checkbox" class="sp-sub-cb" data-res-id="' + r.id + '" onchange="spUpdateSubToolbar(' + lineId + ')">'
+            +   '<span class="sp-sub-loc">' + esc(r.locationName || ('#' + r.locationId)) + '</span>'
+            +   '<span class="sp-sub-qty">' + fmtN(r.quantity) + '</span>'
+            +   '<span class="sp-sub-date">' + (r.plannedShipDate ? fmtDate(r.plannedShipDate) : '—') + '</span>'
+            +   '<span class="sp-sub-notes">' + esc(r.notes || '') + '</span>'
+            +   '<span class="sp-sub-actions">'
+            +     '<button type="button" class="sp-sub-ship" onclick="spShipReservation(' + r.id + ', ' + lineId + ')" title="Bu rezervasyonu irsaliyeye çevir">'
+            +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>'
+            +       'Yükle'
+            +     '</button>'
+            +     '<button type="button" class="sp-sub-cancel" onclick="spCancelReservation(' + r.id + ', ' + lineId + ')">'
+            +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
+            +       'İptal'
+            +     '</button>'
+            +   '</span>'
+            + '</div>';
+    }
+
+    // Faz 1.5: kit bileşen rezervasyonları AYNI kitOrderLineId altında N ayrı satır gelir (her bileşen
+    // ayrı reservationId) — tek bileşen listesi göstermek yerine hepsini tek "kit seti" kartında toplar.
+    // Kart üzerindeki Yükle/İptal grubun TÜM reservationId'lerini gönderir (bkz. spShipKitGroup/spCancelKitGroup).
+    function spRenderKitGroupCard(group, lineId) {
+        var kitLine = LINES.find(function(l) { return l.lineId === group.kitOrderLineId; });
+        var matLabel = kitLine ? (kitLine.materialName || kitLine.materialCode || ('#' + group.kitOrderLineId)) : ('Kit #' + group.kitOrderLineId);
+        var kitSets = group.kitSets != null ? group.kitSets : group.items.length;
+        var resIds = group.items.map(function(i) { return i.id; }).join(',');
+        var itemsHtml = group.items.map(function(r) {
+            return ''
+                + '<div class="sp-sub-kit-item">'
+                +   '<span class="sp-sub-loc">' + esc(r.locationName || ('#' + r.locationId)) + '</span>'
+                +   '<span class="sp-sub-qty">' + fmtN(r.quantity) + '</span>'
+                +   '<span class="sp-sub-date">' + (r.plannedShipDate ? fmtDate(r.plannedShipDate) : '—') + '</span>'
+                +   '<span class="sp-sub-notes">' + esc(r.notes || '') + '</span>'
+                + '</div>';
+        }).join('');
+        return ''
+            + '<div class="sp-sub-kit-group" data-kit-line-id="' + group.kitOrderLineId + '" data-res-ids="' + resIds + '">'
+            +   '<div class="sp-sub-row">'
+            +     '<input type="checkbox" class="sp-sub-cb sp-sub-cb--kit" data-kit-line-id="' + group.kitOrderLineId + '" onchange="spUpdateSubToolbar(' + lineId + ')">'
+            +     '<span class="sp-kit-badge" title="Kit seti">Kit</span>'
+            +     '<span class="sp-sub-loc">' + esc(matLabel) + ' — ' + fmtSet(kitSets) + ' set (' + group.items.length + ' bileşen)</span>'
+            +     '<span class="sp-sub-actions">'
+            +       '<button type="button" class="sp-sub-ship" onclick="spShipKitGroup(' + group.kitOrderLineId + ', ' + lineId + ')" title="Bu kit setini irsaliyeye çevir">'
+            +         '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>'
+            +         'Yükle'
+            +       '</button>'
+            +       '<button type="button" class="sp-sub-cancel" onclick="spCancelKitGroup(' + group.kitOrderLineId + ', ' + lineId + ')">'
+            +         '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
+            +         'İptal'
+            +       '</button>'
+            +     '</span>'
+            +   '</div>'
+            +   '<div class="sp-sub-kit-items">' + itemsHtml + '</div>'
+            + '</div>';
+    }
+
     function spLoadDetail(lineId) {
         var sub = document.getElementById('spSub-' + lineId);
         if (!sub) return;
@@ -699,32 +798,26 @@
                     sub.innerHTML = '<div class="sp-sub-empty">Bu kalem için aktif rezervasyon yok.</div>';
                     return;
                 }
+                // Kit bileşen rezervasyonlarını kitOrderLineId'ye göre grupla — her grup TEK kart olur.
+                var kitGroups = {};
+                var singles = [];
+                data.forEach(function(r) {
+                    if (r.kitOrderLineId != null) {
+                        var key = r.kitOrderLineId;
+                        if (!kitGroups[key]) kitGroups[key] = { kitOrderLineId: key, kitSets: r.kitSets, items: [] };
+                        kitGroups[key].items.push(r);
+                    } else {
+                        singles.push(r);
+                    }
+                });
                 var toolbar = ''
                     + '<div class="sp-sub-toolbar" id="spSubToolbar-' + lineId + '" style="display:none;">'
                     +   '<span class="sp-sub-toolbar-cnt" id="spSubToolbarCnt-' + lineId + '"></span>'
                     +   '<button type="button" class="sp-btn sp-btn--p sp-btn--xs" onclick="spShipSelected(' + lineId + ')">Seçilenleri Yükle</button>'
                     + '</div>';
-                var rows = data.map(function(r) {
-                    return ''
-                        + '<div class="sp-sub-row" data-res-id="' + r.id + '">'
-                        +   '<input type="checkbox" class="sp-sub-cb" data-res-id="' + r.id + '" onchange="spUpdateSubToolbar(' + lineId + ')">'
-                        +   '<span class="sp-sub-loc">' + esc(r.locationName || ('#' + r.locationId)) + '</span>'
-                        +   '<span class="sp-sub-qty">' + fmtN(r.quantity) + '</span>'
-                        +   '<span class="sp-sub-date">' + (r.plannedShipDate ? fmtDate(r.plannedShipDate) : '—') + '</span>'
-                        +   '<span class="sp-sub-notes">' + esc(r.notes || '') + '</span>'
-                        +   '<span class="sp-sub-actions">'
-                        +     '<button type="button" class="sp-sub-ship" onclick="spShipReservation(' + r.id + ', ' + lineId + ')" title="Bu rezervasyonu irsaliyeye çevir">'
-                        +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>'
-                        +       'Yükle'
-                        +     '</button>'
-                        +     '<button type="button" class="sp-sub-cancel" onclick="spCancelReservation(' + r.id + ', ' + lineId + ')">'
-                        +       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'
-                        +       'İptal'
-                        +     '</button>'
-                        +   '</span>'
-                        + '</div>';
-                }).join('');
-                sub.innerHTML = toolbar + rows;
+                var kitCards = Object.keys(kitGroups).map(function(key) { return spRenderKitGroupCard(kitGroups[key], lineId); }).join('');
+                var singleRows = singles.map(function(r) { return spRenderSingleResRow(r, lineId); }).join('');
+                sub.innerHTML = toolbar + kitCards + singleRows;
             })
             .catch(function() {
                 sub.innerHTML = '<div class="sp-sub-empty">Bağlantı hatası.</div>';
@@ -764,13 +857,31 @@
     };
 
     // ── Yükle (Faz 2: rezervasyonu satış irsaliyesine çevirir + stoktan çıkış yazar) ───────────
+    // Faz 1.5: tekil rezervasyon checkbox'ları (data-res-id) + kit grup checkbox'ları (data-kit-line-id,
+    // seçilince grubun TÜM bileşen id'lerini genişletir) birlikte toplanır.
+    function spCollectSelectedResIds(lineId) {
+        var ids = [];
+        document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb[data-res-id]:checked').forEach(function(cb) {
+            ids.push(parseInt(cb.getAttribute('data-res-id'), 10));
+        });
+        document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb--kit:checked').forEach(function(cb) {
+            var group = document.querySelector('.sp-sub-kit-group[data-kit-line-id="' + cb.getAttribute('data-kit-line-id') + '"]');
+            if (group) {
+                (group.getAttribute('data-res-ids') || '').split(',').filter(Boolean).forEach(function(idStr) {
+                    ids.push(parseInt(idStr, 10));
+                });
+            }
+        });
+        return ids;
+    }
+
     window.spUpdateSubToolbar = function(lineId) {
         var box = document.getElementById('spSubToolbar-' + lineId);
         if (!box) return;
-        var n = document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb:checked').length;
-        box.style.display = n > 0 ? 'flex' : 'none';
+        var ids = spCollectSelectedResIds(lineId);
+        box.style.display = ids.length > 0 ? 'flex' : 'none';
         var cnt = document.getElementById('spSubToolbarCnt-' + lineId);
-        if (cnt) cnt.textContent = n + ' rezervasyon seçili';
+        if (cnt) cnt.textContent = ids.length + ' rezervasyon seçili';
     };
 
     // Silme onay standardı (CLAUDE.md): "Yükle" geri alınamaz (stok çıkışı + irsaliye) — ekran-ortası
@@ -841,12 +952,56 @@
         spExecuteShip([reservationId], [lineId]);
     };
 
-    // Rezervasyon detay panelindeki checkbox seçimiyle toplu "Seçilenleri Yükle".
+    // Rezervasyon detay panelindeki checkbox seçimiyle toplu "Seçilenleri Yükle" (tekil + kit grup).
     window.spShipSelected = function(lineId) {
-        var checked = document.querySelectorAll('#spSub-' + lineId + ' .sp-sub-cb:checked');
-        var ids = Array.prototype.map.call(checked, function(cb) { return parseInt(cb.getAttribute('data-res-id'), 10); });
+        var ids = spCollectSelectedResIds(lineId);
         if (!ids.length) return;
         spExecuteShip(ids, [lineId]);
+    };
+
+    // Kit seti kartındaki "Yükle" — grubun TÜM bileşen reservationId'lerini gönderir.
+    window.spShipKitGroup = function(kitLineId, lineId) {
+        var group = document.querySelector('.sp-sub-kit-group[data-kit-line-id="' + kitLineId + '"]');
+        if (!group) return;
+        var ids = (group.getAttribute('data-res-ids') || '').split(',').filter(Boolean).map(function(s) { return parseInt(s, 10); });
+        if (!ids.length) return;
+        spExecuteShip(ids, [lineId]);
+    };
+
+    // Kit seti kartındaki "İptal" — grubun TÜM bileşen reservationId'lerini gönderir; backend zaten tek
+    // bir bileşen id'si gelse bile aynı kitOrderLineId'nin tüm grubunu iptal eder (netlik için tümü gönderilir).
+    window.spCancelKitGroup = function(kitLineId, lineId) {
+        var group = document.querySelector('.sp-sub-kit-group[data-kit-line-id="' + kitLineId + '"]');
+        if (!group) return;
+        var ids = (group.getAttribute('data-res-ids') || '').split(',').filter(Boolean).map(function(s) { return parseInt(s, 10); });
+        if (!ids.length) return;
+        showConfirm({
+            title: 'Kit Seti Rezervasyonu İptali',
+            message: 'Bu kit setinin tüm bileşen rezervasyonları iptal edilecek. Kullanılabilir stok tekrar serbest kalır. Devam edilsin mi?',
+            okLabel: 'Evet, İptal Et',
+            cancelLabel: 'Vazgeç',
+            danger: true
+        }).then(function(ok) {
+            if (!ok) return;
+            fetch('/Sales/CancelReservation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': spCsrf() },
+                body: JSON.stringify({ reservationIds: ids }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.ok) {
+                    CalibraAlert.show('Kit seti rezervasyonu iptal edildi.', { type: 'success', autoDismissMs: 2000 });
+                    spLoadDetail(lineId);
+                    spLoadLines(); // in-place refresh — reservedQty/openQty/availableStock değişti
+                } else {
+                    CalibraAlert.show(d.error || 'Kit seti rezervasyonu iptal edilemedi.', { type: 'error' });
+                }
+            })
+            .catch(function() {
+                CalibraAlert.show('Bağlantı hatası — kit seti rezervasyonu iptal edilemedi.', { type: 'error' });
+            });
+        });
     };
 
     // ── Depo dropdown (lazy, cache) ─────────────────────────────────────────────
@@ -872,19 +1027,32 @@
         });
         var tbody = document.getElementById('spResTbody');
         tbody.innerHTML = lines.map(function(l) {
-            var warn = l.availableStock < l.openQty;
+            var isKit = !!l.isKit;
+            var avail = spAvailable(l);
+            var warn = avail < l.openQty;
+            var unitLabel = isKit ? 'set' : esc(l.unitCode || '');
+            var openStr = isKit ? fmtSet(l.openQty) : fmtN(l.openQty);
+            // Kit: varsayılan miktar openQty(set), availableSets'e clamp edilir, tam sayı.
+            var defaultQty = isKit ? Math.min(Math.round(l.openQty), Math.max(0, Math.round(avail))) : l.openQty;
+            var defaultQtyStr = isKit ? fmtSet(defaultQty) : fmtN(l.openQty);
+            var warnTitle = warn
+                ? (isKit
+                    ? 'Kullanılabilir set (' + fmtSet(avail) + ') açık set sayısından az — sunucu yetersiz kısmı atlayabilir'
+                    : 'Kullanılabilir stok (' + fmtN(l.availableStock) + ') açık miktardan az — sunucu yetersiz kısmı atlayabilir')
+                : '';
+            var kitBadge = isKit ? ' <span class="sp-kit-badge" title="Kit ürün — miktar set bazındadır">Kit</span>' : '';
             return ''
-                + '<tr data-line-id="' + l.lineId + '">'
+                + '<tr data-line-id="' + l.lineId + '" data-is-kit="' + (isKit ? '1' : '0') + '">'
                 +   '<td><button type="button" class="sp-modal-rm" onclick="spModalRemoveRow(' + l.lineId + ')" title="Bu kalemi çıkar">'
                 +     '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
                 +   '</button></td>'
-                +   '<td class="sp-modal-mat">' + esc(l.materialName || l.materialCode || ('#' + l.itemId)) + '<small>' + esc(l.orderNumber || '') + '</small></td>'
-                +   '<td style="text-align:right;">' + fmtN(l.openQty) + '</td>'
+                +   '<td class="sp-modal-mat">' + esc(l.materialName || l.materialCode || ('#' + l.itemId)) + kitBadge + '<small>' + esc(l.orderNumber || '') + '</small></td>'
+                +   '<td style="text-align:right;">' + openStr + '</td>'
                 +   '<td style="text-align:right;">'
-                +     '<input type="text" class="sp-modal-qty-input' + (warn ? ' sp-qty-warn' : '') + '" data-line-id="' + l.lineId + '" value="' + fmtN(l.openQty) + '"'
-                +     ' title="' + (warn ? 'Kullanılabilir stok (' + fmtN(l.availableStock) + ') açık miktardan az — sunucu yetersiz kısmı atlayabilir' : '') + '">'
+                +     '<input type="text" class="sp-modal-qty-input' + (warn ? ' sp-qty-warn' : '') + '" data-line-id="' + l.lineId + '" value="' + defaultQtyStr + '"'
+                +     ' title="' + warnTitle + '">'
                 +   '</td>'
-                +   '<td>' + esc(l.unitCode || '') + '</td>'
+                +   '<td>' + unitLabel + '</td>'
                 + '</tr>';
         }).join('');
         document.getElementById('spResShipDate').value = '';
@@ -940,8 +1108,10 @@
         var lines = [];
         rows.forEach(function(tr) {
             var lineId = parseInt(tr.getAttribute('data-line-id'), 10);
+            var isKit = tr.getAttribute('data-is-kit') === '1';
             var inp = tr.querySelector('.sp-modal-qty-input');
             var q = inp ? parseFloat((inp.value || '0').replace(',', '.')) : 0;
+            if (isKit) q = Math.round(q); // set sayısı tam sayı olmalı
             if (q > 0) lines.push({ orderLineId: lineId, qty: q });
         });
         if (!lines.length) { spModalShowMsg('Lütfen en az bir kalem için miktar girin.', 'err'); return; }
