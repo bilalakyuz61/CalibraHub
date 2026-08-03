@@ -101,6 +101,7 @@ public static class AuditFieldLabels
             ["Currency"] = "Para Birimi",
             ["CurrencyCode"] = "Para Birimi",
             ["ExchangeRate"] = "Kur",
+            ["IsVatIncluded"] = "KDV Dahil",
             ["SalesRepId"] = "Satış Temsilcisi",
             ["SalesRepName"] = "Satış Temsilcisi",
             ["PaymentTerm"] = "Ödeme Koşulu",

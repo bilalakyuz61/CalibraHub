@@ -124,6 +124,21 @@ public sealed class DocumentService : IDocumentService
             entity: entity, entityId: documentId);
     }
 
+    /// <summary>
+    /// PageComment Seq 1068 — "KDV Dahil" net-out yardımcısı. IsVatIncluded=true iken satırda
+    /// girilen UnitPrice KDV dahil (brüt) kabul edilir; hesaplamalarda (LineTotal/SubTotal)
+    /// kullanılacak net birim fiyatı header TaxRate ile geri hesaplar. Switch kapalıyken veya
+    /// TaxRate 0/negatifse no-op (UnitPrice zaten net kabul edilir). Persist edilen
+    /// DocumentLine.UnitPrice kullanıcının girdiği ham (brüt) değerdir — yalnız hesap bu neti kullanır.
+    /// Clone/dönüştürme akışlarında da (SaveQuoteAsync ile) aynı sonucu vermesi için tek kaynak.
+    /// </summary>
+    private static decimal NetUnitPrice(decimal unitPrice, decimal taxRate, bool isVatIncluded)
+    {
+        if (!isVatIncluded || taxRate <= 0) return unitPrice;
+        var divisor = 1m + (taxRate / 100m);
+        return divisor == 0 ? unitPrice : unitPrice / divisor;
+    }
+
     /// <summary>Header diff snapshot'ı — yalnızca kullanıcı tarafından düzenlenen alanlar
     /// (türetilmiş SubTotal/TaxAmount/DiscountAmount gürültü olmasın diye dışarıda).</summary>
     private static object SnapHeader(Document d) => new
@@ -138,6 +153,8 @@ public sealed class DocumentService : IDocumentService
         d.RequesterPersonnelId,
         d.LocationId,
         d.CurrencyId,
+        d.ExchangeRate,
+        d.IsVatIncluded,
         d.DiscountRate,
         d.TaxRate,
         d.GrandTotal,
@@ -627,7 +644,10 @@ public sealed class DocumentService : IDocumentService
         foreach (var ln in lineRequests)
         {
             var lineDiscountMultiplier = 1m - (ln.DiscountRate / 100m);
-            var lineTotal = decimals.RoundAmount(ln.Quantity * ln.UnitPrice * lineDiscountMultiplier);
+            // PageComment Seq 1068 — IsVatIncluded=true iken UnitPrice brüt kabul edilir;
+            // LineTotal/SubTotal header TaxRate ile geri hesaplanan net birim üzerinden hesaplanır.
+            var netUnitPrice = NetUnitPrice(ln.UnitPrice, request.TaxRate, request.IsVatIncluded);
+            var lineTotal = decimals.RoundAmount(ln.Quantity * netUnitPrice * lineDiscountMultiplier);
             subTotal += lineTotal;
             lineEntities.Add(new DocumentLine
             {
@@ -679,6 +699,8 @@ public sealed class DocumentService : IDocumentService
                 RequesterPersonnelId = request.RequesterPersonnelId,
                 LocationId = request.LocationId,
                 CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1,
+                ExchangeRate = request.ExchangeRate > 0 ? request.ExchangeRate : 1m,
+                IsVatIncluded = request.IsVatIncluded,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = request.DiscountRate,
                 DiscountAmount = discountAmount,
@@ -722,6 +744,8 @@ public sealed class DocumentService : IDocumentService
             existing.RequesterPersonnelId = request.RequesterPersonnelId;
             existing.LocationId = request.LocationId;
             existing.CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1;
+            existing.ExchangeRate = request.ExchangeRate > 0 ? request.ExchangeRate : 1m;
+            existing.IsVatIncluded = request.IsVatIncluded;
             existing.SubTotal = Math.Round(subTotal, 4);
             existing.DiscountRate = request.DiscountRate;
             existing.DiscountAmount = discountAmount;
@@ -757,6 +781,8 @@ public sealed class DocumentService : IDocumentService
                 SalesRepId = quote.SalesRepId,
                 RequesterPersonnelId = quote.RequesterPersonnelId,
                 CurrencyId = quote.CurrencyId,
+                ExchangeRate = quote.ExchangeRate,
+                IsVatIncluded = quote.IsVatIncluded,
                 SubTotal = quote.SubTotal,
                 DiscountRate = quote.DiscountRate,
                 DiscountAmount = quote.DiscountAmount,
@@ -1137,7 +1163,8 @@ public sealed class DocumentService : IDocumentService
         q.DeliveryDays,        // Faz M
         q.CurrencyCode, q.CurrencySymbol,
         q.RequesterPersonnelId, q.RequesterPersonnelName,
-        q.LocationId, q.LocationName);
+        q.LocationId, q.LocationName,
+        q.ExchangeRate, q.IsVatIncluded);
 
     /// <summary>
     /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin
@@ -1386,6 +1413,12 @@ public sealed class DocumentService : IDocumentService
                 ContactAddress = first.ContactAddress,
                 SalesRepId = first.SalesRepId,
                 CurrencyId = first.CurrencyId,
+                // PageComment Seq 1067/1068 — kur + KDV Dahil kaynak teklifin header'ından taşınır.
+                // LineTotal'ler zaten kaynak satırdan aynen kopyalanıyor (aşağıda), o toplamlar
+                // kaynak kaydedilirken NetUnitPrice ile netlenmişti — burada yeniden net-out
+                // uygulanmaz (çift netleme sapması yaratmasın diye).
+                ExchangeRate = first.ExchangeRate,
+                IsVatIncluded = first.IsVatIncluded,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = discountRate,
                 DiscountAmount = discountAmount,
@@ -1564,6 +1597,11 @@ public sealed class DocumentService : IDocumentService
                 ContactAddress = first.ContactAddress,
                 SalesRepId = first.SalesRepId,
                 CurrencyId = first.CurrencyId,
+                // PageComment Seq 1067/1068 — kur + KDV Dahil kaynak belgenin header'ından taşınır.
+                // LineTotal'ler kaynak satırdan aynen kopyalanır (aşağıda) — kaynak kaydedilirken
+                // NetUnitPrice ile zaten netlenmişti, burada yeniden net-out uygulanmaz.
+                ExchangeRate = first.ExchangeRate,
+                IsVatIncluded = first.IsVatIncluded,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = discountRate,
                 DiscountAmount = discountAmount,

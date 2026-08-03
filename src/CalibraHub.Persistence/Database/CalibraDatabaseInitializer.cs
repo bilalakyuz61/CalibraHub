@@ -8245,6 +8245,14 @@ END;";
             IF COL_LENGTH(N'[{s}].[Document]', N'ExternalRefNumber') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [ExternalRefNumber] NVARCHAR(50) NULL;
 
+            -- PageComment Seq 1067/1068 (2026-08-03): belge başı elle kur + KDV Dahil switch.
+            -- ExchangeRate: 1 birim belge dövizi = ExchangeRate TL (TRY belgede 1 kalır).
+            -- IsVatIncluded: aktifse UnitPrice KDV dahil (brüt) girilir, net geri-hesap header TaxRate ile yapılır.
+            IF COL_LENGTH(N'[{s}].[Document]', N'ExchangeRate') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [ExchangeRate] DECIMAL(18,6) NOT NULL CONSTRAINT [DF_Document_ExchangeRate] DEFAULT(1);
+            IF COL_LENGTH(N'[{s}].[Document]', N'IsVatIncluded') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [IsVatIncluded] BIT NOT NULL CONSTRAINT [DF_Document_IsVatIncluded] DEFAULT(0);
+
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NULL
             BEGIN
                 -- Satir tablosu — material/unit/combination/location display degerleri

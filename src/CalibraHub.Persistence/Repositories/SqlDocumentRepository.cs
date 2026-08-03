@@ -235,6 +235,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[ExchangeRate],q.[IsVatIncluded],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
@@ -282,6 +283,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[ExchangeRate],q.[IsVatIncluded],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count],
@@ -347,6 +349,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[ExchangeRate],q.[IsVatIncluded],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[Id]) AS [line_count]
@@ -377,6 +380,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    q.[SalesRepId],q.[RequesterPersonnelId],p.[FullName] AS RequesterPersonnelName,
                    q.[LocationId],hloc.[LocationName] AS HeaderLocationName,
                    q.[CurrencyId],cur.[Code] AS CurrencyCode,cur.[Symbol] AS CurrencySymbol,q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
+                   q.[ExchangeRate],q.[IsVatIncluded],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[Status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[Notes],q.[CreatedById],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
                    ca.[AccountCode] AS customer_code
@@ -444,7 +448,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     [SalesRepId]=@SalesRepId, [RequesterPersonnelId]=@RequesterPersonnelId, [LocationId]=@LocationId,
                     [CurrencyId]=@CurrencyId, [SubTotal]=@SubTotal, [DiscountRate]=@DiscountRate,
                     [DiscountAmount]=@DiscountAmount, [TaxRate]=@TaxRate, [TaxAmount]=@TaxAmount,
-                    [GrandTotal]=@GrandTotal, [PaymentTerms]=@PaymentTerms, [DeliveryTerms]=@DeliveryTerms,
+                    [GrandTotal]=@GrandTotal, [ExchangeRate]=@ExchangeRate, [IsVatIncluded]=@IsVatIncluded,
+                    [PaymentTerms]=@PaymentTerms, [DeliveryTerms]=@DeliveryTerms,
                     [DeliveryAddress]=@DeliveryAddress, [Status]=@Status, [RevisionNo]=@RevisionNo,
                     [ParentDocumentId]=@ParentDocumentId,
                     [Notes]=@Notes, [Updated]=@UpdatedAt
@@ -459,11 +464,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 INSERT INTO {_quoteTable}
                     ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[ValidUntil],[DeliveryDate],[DeliveryDays],[ContactId],[ContactAddress],
                      [SalesRepId],[RequesterPersonnelId],[LocationId],[CurrencyId],[SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
+                     [ExchangeRate],[IsVatIncluded],
                      [PaymentTerms],[DeliveryTerms],[DeliveryAddress],[Status],[RevisionNo],[ParentDocumentId],
                      [Notes],[CreatedById],[Created],[Updated],[IsActive])
                 VALUES
                     (@CompanyId,@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@DeliveryDate,@DeliveryDays,@ContactId,@ContactAddress,
                      @SalesRepId,@RequesterPersonnelId,@LocationId,@CurrencyId,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
+                     @ExchangeRate,@IsVatIncluded,
                      @PaymentTerms,@DeliveryTerms,@DeliveryAddress,@Status,@RevisionNo,@ParentDocumentId,
                      @Notes,@CreatedById,@CreatedAt,@UpdatedAt,@IsActive);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
@@ -494,6 +501,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@TaxRate", q.TaxRate));
         cmd.Parameters.Add(new SqlParameter("@TaxAmount", q.TaxAmount));
         cmd.Parameters.Add(new SqlParameter("@GrandTotal", q.GrandTotal));
+        cmd.Parameters.Add(new SqlParameter("@ExchangeRate", q.ExchangeRate > 0 ? q.ExchangeRate : 1m));
+        cmd.Parameters.Add(new SqlParameter("@IsVatIncluded", q.IsVatIncluded));
         cmd.Parameters.Add(new SqlParameter("@PaymentTerms", (object?)q.PaymentTerms ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DeliveryTerms", (object?)q.DeliveryTerms ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DeliveryAddress", (object?)q.DeliveryAddress ?? DBNull.Value));
@@ -967,6 +976,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         TaxRate = r.GetDecimal(r.GetOrdinal("TaxRate")),
         TaxAmount = r.GetDecimal(r.GetOrdinal("TaxAmount")),
         GrandTotal = r.GetDecimal(r.GetOrdinal("GrandTotal")),
+        ExchangeRate = TryGetOrdinal(r, "ExchangeRate") is int exrOrd && exrOrd >= 0 && !r.IsDBNull(exrOrd)
+            ? r.GetDecimal(exrOrd) : 1m,
+        IsVatIncluded = TryGetOrdinal(r, "IsVatIncluded") is int vatOrd && vatOrd >= 0 && !r.IsDBNull(vatOrd)
+            && r.GetBoolean(vatOrd),
         PaymentTerms = r.IsDBNull(r.GetOrdinal("PaymentTerms")) ? null : r.GetString(r.GetOrdinal("PaymentTerms")),
         DeliveryTerms = r.IsDBNull(r.GetOrdinal("DeliveryTerms")) ? null : r.GetString(r.GetOrdinal("DeliveryTerms")),
         DeliveryAddress = r.IsDBNull(r.GetOrdinal("DeliveryAddress")) ? null : r.GetString(r.GetOrdinal("DeliveryAddress")),

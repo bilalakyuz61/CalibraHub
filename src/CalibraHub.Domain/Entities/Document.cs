@@ -70,6 +70,12 @@ public sealed class Document
     /// <summary>Para birimi simgesi (₺/$/€). Salt-okunur, INSERT/UPDATE'te kullanilmaz.</summary>
     public string? CurrencySymbol { get; set; }
 
+    [Description("Belge başında elle girilen kur — 1 birim belge dövizi = ExchangeRate TL. Belge dövizi TRY (CurrencyId=1) ise 1 kalır. TL karşılıkları gösterim/rapor için türetilir; DocumentLine'da TL kolonu YOK.")]
+    public decimal ExchangeRate { get; set; } = 1m;
+
+    [Description("'KDV Dahil' başlık switch'i. true ise satırlarda girilen UnitPrice KDV dahil (brüt) kabul edilir; net birim fiyat = UnitPrice / (1 + TaxRate/100) ile geri hesaplanır.")]
+    public bool IsVatIncluded { get; set; }
+
     public decimal SubTotal { get; set; }
     public decimal DiscountRate { get; set; }
     public decimal DiscountAmount { get; set; }

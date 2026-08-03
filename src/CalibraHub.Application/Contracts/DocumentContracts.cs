@@ -22,7 +22,11 @@ public sealed record DocumentDto(
     string? RequesterPersonnelName = null,   // Personnel.FullName (JOIN ile gelir)
     // Hedef Lokasyon — Location.Id FK (İhtiyaç Kaydı başlık düzeyi).
     int? LocationId = null,
-    string? LocationName = null);            // Location.LocationName (JOIN ile gelir)
+    string? LocationName = null,             // Location.LocationName (JOIN ile gelir)
+    // PageComment Seq 1067 — belge başında elle girilen kur. 1 birim belge dövizi = ExchangeRate TL.
+    decimal ExchangeRate = 1m,
+    // PageComment Seq 1068 — "KDV Dahil" başlık switch'i. true ise satır UnitPrice brüt (KDV dahil) kabul edilir.
+    bool IsVatIncluded = false);
 
 /// <summary>
 /// Sipariş → İrsaliye kısmi teslimat modalı için açık (teslim edilmemiş) sipariş kalemi.
@@ -133,7 +137,11 @@ public sealed record SaveDocumentRequest(
     // Yeni belge kaydedilince document_source köprüsü otomatik eklenir.
     int? FromRequestId = null,
     // Hedef Lokasyon — Location.Id FK (İhtiyaç Kaydı başlık düzeyi).
-    int? LocationId = null);
+    int? LocationId = null,
+    // PageComment Seq 1067 — belge başında elle girilen kur. 1 birim belge dövizi = ExchangeRate TL.
+    decimal ExchangeRate = 1m,
+    // PageComment Seq 1068 — "KDV Dahil" başlık switch'i. true ise satır UnitPrice brüt (KDV dahil) kabul edilir.
+    bool IsVatIncluded = false);
 
 /// <summary>
 /// Client'tan gelen kayit istegi. ItemId zorunludur — malzeme kodu/adi tabloda tutulmaz,

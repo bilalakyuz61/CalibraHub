@@ -754,22 +754,41 @@
         color: rgba(255,255,255,.78);
     }
     /* Seq 1066: yetki varsa "Temsilci" etiketi link — tanımlama ekranını açar.
-       Etiket görünümünü korur (ayni font/renk), yalnız tıklanabilirlik ipucu ekler. */
+       Seq 1070: alt-çizgi border-bottom DEĞİL text-decoration ile verilir — etiket
+       .sqe-hlabel flex-basis:150px olduğu için border tüm sütun boyunca uzayıp metni
+       AŞIYORDU; text-decoration yalnız metin glyph'lerinin altına gelir (taşmaz). */
     a.sqe-hlabel--link {
-        display: inline-block;
         cursor: pointer;
-        text-decoration: none;
-        border-bottom: 1px dashed color-mix(in srgb, var(--app-text-muted, #64748b) 55%, transparent);
-        transition: color .15s ease, border-color .15s ease;
+        text-decoration: underline;
+        text-decoration-style: dashed;
+        text-decoration-color: color-mix(in srgb, var(--app-text-muted, #64748b) 55%, transparent);
+        text-underline-offset: 4px;
+        transition: color .15s ease, text-decoration-color .15s ease;
     }
     a.sqe-hlabel--link:hover {
         color: var(--app-accent, #6366f1);
-        border-bottom-color: var(--app-accent, #6366f1);
+        text-decoration-color: var(--app-accent, #6366f1);
     }
     body.app-theme-dark a.sqe-hlabel--link:hover {
         color: #a5b4fc;
-        border-bottom-color: #a5b4fc;
+        text-decoration-color: #a5b4fc;
     }
+    /* Seq 1068: KDV Dahil switch (track + kayan thumb) — native checkbox yerine. */
+    .sqe-switch { display: inline-flex; align-items: center; cursor: pointer; user-select: none; }
+    .sqe-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .sqe-switch-track {
+        position: relative; display: inline-block; width: 38px; height: 22px;
+        background: var(--app-border, #cbd5e1); border-radius: 999px; transition: background .18s ease;
+    }
+    .sqe-switch-thumb {
+        position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+        background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s ease;
+    }
+    .sqe-switch input:checked + .sqe-switch-track { background: var(--app-accent, #6366f1); }
+    .sqe-switch input:checked + .sqe-switch-track .sqe-switch-thumb { transform: translateX(16px); }
+    .sqe-switch input:focus-visible + .sqe-switch-track { outline: 2px solid var(--app-accent, #6366f1); outline-offset: 2px; }
+    body.app-theme-dark .sqe-switch-track { background: rgba(255,255,255,.22); }
+    body.app-theme-dark .sqe-switch input:checked + .sqe-switch-track { background: #6366f1; }
     /* Cari Isim: input degil, salt-okunur etiket (span) */
     .sqe-hlabel-value {
         display: inline-block;
@@ -2748,6 +2767,27 @@
                         <option value="1" data-code="TRY">TRY</option>
                     </select>
                 </div>
+                @if (!isPurchaseRequest)
+                {
+                    @* Seq 1067: belge dövizi TRY değilse elle kur girişi (1 birim döviz = kaç TL).
+                       Yalnız CurrencyId≠1 iken görünür; sq:currency event'i show/hide eder. *@
+                    <div class="sqe-hrow" id="sqExchangeRateRow" style="display:none;">
+                        <label class="sqe-hlabel">Kur (TL)</label>
+                        <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
+                               style="max-width:120px;" value="1" min="0" step="0.000001"
+                               title="1 birim belge dövizinin TL karşılığı"
+                               oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<0)el.value=1;sqRecalc();})(this)" />
+                        <span class="sqe-hlabel-value" id="sqExchangeRateHint" style="margin-left:8px;opacity:.7;"></span>
+                    </div>
+                    @* Seq 1068: KDV Dahil switch — aktifse girilen birim fiyat KDV dahil kabul edilir. *@
+                    <div class="sqe-hrow">
+                        <label class="sqe-hlabel">KDV Dahil</label>
+                        <label class="sqe-switch" title="Aktifse birim fiyatlar KDV dahil girilir, net geriye hesaplanır">
+                            <input type="checkbox" id="sqVatIncluded" onchange="sqRecalc()" />
+                            <span class="sqe-switch-track"><span class="sqe-switch-thumb"></span></span>
+                        </label>
+                    </div>
+                }
                 <div class="sqe-hrow" style="@(isPurchaseRequest ? "display:none;" : "")">
                     @* 2026-05-23: Satin alma belgelerinde label "Tedarikci", satista "Cari Kod".
                        Element id'leri (sqCustomerDisplay/sqCustomerId) bilincli olarak ayni —
@@ -2877,6 +2917,11 @@
                 <span class="sqe-total-label sqe-grand-total">Genel Toplam:</span>
                 <span class="sqe-total-control"></span>
                 <span class="sqe-total-value sqe-grand-total" id="sqGrandTotal">0,00</span>
+
+                @* Seq 1067: belge dövizi TRY değilse Genel Toplam'ın TL karşılığı (kur ile). sqRecalc doldurur/gösterir. *@
+                <span class="sqe-total-label" id="sqGrandTotalTLLabel" style="display:none;">Genel Toplam (TL):</span>
+                <span class="sqe-total-control" id="sqGrandTotalTLCtrl" style="display:none;"></span>
+                <span class="sqe-total-value" id="sqGrandTotalTL" style="display:none;">0,00</span>
             </div>
             }
         </div>
@@ -4019,6 +4064,23 @@
     }
     window.sqSetCurrencyById = sqSetCurrencyById;
 
+    // Seq 1067: belge dövizi değişince Kur satırını göster/gizle (TRY=gizli, diğerleri=görünür)
+    // + kur ipucu metnini güncelle. Kur alanı yalnız döviz belgede anlamlı.
+    window.addEventListener('sq:currency', function (e) {
+        var code = (e && e.detail && e.detail.code) || 'TRY';
+        var id   = (e && e.detail && e.detail.id) || 1;
+        var isForeign = (String(code).toUpperCase() !== 'TRY') && (id !== 1);
+        var row  = document.getElementById('sqExchangeRateRow');
+        var hint = document.getElementById('sqExchangeRateHint');
+        if (row) row.style.display = isForeign ? '' : 'none';
+        if (!isForeign) {
+            var rateEl = document.getElementById('sqExchangeRate');
+            if (rateEl) rateEl.value = 1;   // TRY belge → kur 1
+        }
+        if (hint) hint.textContent = isForeign ? ('1 ' + code + ' = ? TL') : '';
+        if (typeof sqRecalc === 'function') sqRecalc();
+    });
+
     function sqLoadCurrencies() {
         return fetch('/PriceList/GetCurrencies', { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : []; })
@@ -4147,6 +4209,11 @@
             // Backend artik currencyId (FK) gonderir; geri uyum icin string currency
             // alani da gelir ama biz ID'yi authoritative sayariz.
             sqSetCurrencyById(q.currencyId || 1);
+            // Seq 1067/1068: kur + KDV Dahil yükle (sqSetCurrencyById sonrası — o TRY'de kuru 1'e sıfırlar).
+            var _rateEl = document.getElementById('sqExchangeRate');
+            if (_rateEl && q.exchangeRate != null && (q.currencyId || 1) !== 1) _rateEl.value = q.exchangeRate;
+            var _vatIncEl = document.getElementById('sqVatIncluded');
+            if (_vatIncEl) _vatIncEl.checked = !!q.isVatIncluded;
             var _drEl2 = document.getElementById('sqDiscountRate'); if (_drEl2) _drEl2.value = q.discountRate ?? 0;
             document.getElementById('sqPaymentTerms').value = q.paymentTerms || '';
             document.getElementById('sqDeliveryTerms').value = q.deliveryTerms || '';
@@ -4420,6 +4487,11 @@
             if (!r) return false;
             return r.revisedFromId == null || Number(r.revisedFromId) <= 0;
         });
+        // Seq 1068: KDV Dahil ise girilen birim fiyat brüt (KDV dahil) kabul edilir;
+        // net birim = fiyat / (1 + oran/100). Net üzerinden brüt/iskonto/KDV hesaplanır
+        // (böylece Genel Toplam = girilen KDV-dahil tutar). Satır-bazlı oran kullanılır
+        // (ekranda görünen); backend header TaxRate ile net-out yapar → tek-oranlı belgede eşit.
+        var vatIncluded = (function(){ var el = document.getElementById('sqVatIncluded'); return el ? !!el.checked : false; })();
         var grossSubTotal = 0;
         var lineDiscountTotal = 0;
         var perLineAfterLine = [];  // [{ afterLine, taxRate }]
@@ -4434,7 +4506,8 @@
             var disc  = Number(r.discountRate) || 0;
             var tax   = Number(r.taxRate);
             if (!isFinite(tax)) tax = 20;
-            var gross     = qty * price;
+            var netPrice  = vatIncluded ? (price / (1 + tax / 100)) : price;
+            var gross     = qty * netPrice;
             var lineDisc  = gross * (disc / 100);
             var afterLine = gross - lineDisc;
             grossSubTotal     += gross;
@@ -4467,6 +4540,23 @@
         document.getElementById('sqLineDiscountAmount').textContent = formatMoney(lineDiscountTotal);
         document.getElementById('sqDiscountAmount').textContent     = formatMoney(globalDiscAmount);
         document.getElementById('sqGrandTotal').textContent         = formatMoney(grandTotal);
+
+        // Seq 1067: belge dövizi TRY değilse Genel Toplam'ın TL karşılığını (kur ile) göster.
+        (function () {
+            var curId  = parseInt((document.getElementById('sqCurrency') || {}).value) || 1;
+            var rateEl = document.getElementById('sqExchangeRate');
+            var rate   = rateEl ? parseFloat(rateEl.value) : 1;
+            var lbl  = document.getElementById('sqGrandTotalTLLabel');
+            var ctrl = document.getElementById('sqGrandTotalTLCtrl');
+            var val  = document.getElementById('sqGrandTotalTL');
+            var show = (curId !== 1) && isFinite(rate) && rate > 0;
+            if (lbl && ctrl && val) {
+                lbl.style.display  = show ? '' : 'none';
+                ctrl.style.display = show ? '' : 'none';
+                val.style.display  = show ? '' : 'none';
+                if (show) val.textContent = formatMoney(grandTotal * rate) + ' TL';
+            }
+        })();
 
         // KDV satirlarini render et — artan oran siralamasi
         var kdvHost = document.getElementById('sqKdvRows');
@@ -4652,6 +4742,9 @@
             requesterPersonnelId: (function(){ var el = document.getElementById('sqRequesterId'); return el && el.value ? parseInt(el.value) || null : null; })(),
             locationId:           (function(){ var el = document.getElementById('sqLocationId');  return el && el.value ? parseInt(el.value) || null : null; })(),
             currencyId:      parseInt(document.getElementById('sqCurrency').value) || 1,
+            // Seq 1067: elle kur (TRY belgede daima 1). Seq 1068: KDV Dahil bayrağı.
+            exchangeRate:    (function(){ var cur = parseInt(document.getElementById('sqCurrency').value) || 1; var el = document.getElementById('sqExchangeRate'); if (cur === 1 || !el) return 1; var v = parseFloat(el.value); return (isFinite(v) && v > 0) ? v : 1; })(),
+            isVatIncluded:   (function(){ var el = document.getElementById('sqVatIncluded'); return el ? !!el.checked : false; })(),
             discountRate:    (function(){ var el = document.getElementById('sqDiscountRate'); return el ? parseFloat(el.value || 0) : 0; })(),
             // Satir bazli KDV hesaplandigi icin belge basligindaki TaxRate legacy —
             // ilk satirin orani, yoksa 20 gonder (sunucu hala bu alani bekliyor).
