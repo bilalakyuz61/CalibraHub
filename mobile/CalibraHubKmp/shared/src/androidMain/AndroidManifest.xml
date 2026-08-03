@@ -1,3 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Barkod tarama (ZXing CaptureActivity kamerayı kullanır) — bkz.
+         com.calibrahub.mobile.barcode.BarcodeScanner (androidMain actual), CalibraHubAndroid
+         AndroidManifest.xml ile AYNI gerekce (kütüphane kendi manifest'inde de deklare eder ama
+         açık deklarasyon burada da şart). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <application>
+        <!-- ZXing'in yatay-kilitli varsayılan CaptureActivity'sinin yerine geçer (fullSensor:
+             dikey + yatay serbest) — CalibraHubAndroid FlexibleCaptureActivity ile BİREBİR aynı
+             gerekçe/tema. Tam nitelikli class adı: bu manifest'in sahibi olan `shared` modülünün
+             namespace'i (com.calibrahub.mobile.shared) İLE class'ın gerçek paketi
+             (com.calibrahub.mobile.barcode) FARKLI olduğundan göreli ".FlexibleCaptureActivity"
+             adı YANLIŞ sınıfa çözülür — tam nitelikli ad ZORUNLU. -->
+        <activity
+            android:name="com.calibrahub.mobile.barcode.FlexibleCaptureActivity"
+            android:screenOrientation="fullSensor"
+            android:theme="@style/zxing_CaptureTheme"
+            android:windowSoftInputMode="stateAlwaysHidden" />
+    </application>
 </manifest>

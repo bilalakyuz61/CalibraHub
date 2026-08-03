@@ -6,6 +6,15 @@ ktor = "3.0.3"
 coroutines = "1.9.0"
 activity-compose = "1.9.3"
 datastore-preferences = "1.1.1"
+# JetBrains'in gercek multiplatform (Android+iOS+desktop) navigation-compose fork'u — Google'in
+# resmi androidx.navigation:navigation-compose'u (2.9.x dahil) YALNIZ android+jvmstubs+linuxx64stubs
+# variant'lari yayinliyor (iOS klib YOK, ios hedefinde derleme cozulemez); org.jetbrains.androidx.navigation
+# grubu ise uikitarm64/uikitsimarm64/uikitx64 klib'lerini de yayinliyor (dogrulandi: Maven Central
+# .module dosyasi, 2026-08-04). 2.8.0-alpha10 JetBrains'in resmi Compose Multiplatform Navigation
+# dokumantasyonunda "minimum desteklenen surum" olarak belirtilir ve minimum gereksinimleri
+# (compose.ui >=1.7.0-beta02, kotlin-stdlib-common >=1.9.24) projedeki 1.7.3/2.1.0 ile UYUMLUDUR.
+navigation-compose = "2.8.0-alpha10"
+zxing-android-embedded = "4.3.0"
 compileSdk = "34"
 minSdk = "26"
 targetSdk = "34"
@@ -19,6 +28,8 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore-preferences" }
+jetbrains-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigation-compose" }
+zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-android-embedded" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

@@ -30,8 +30,11 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 
@@ -39,10 +42,13 @@ import kotlinx.serialization.json.Json
  * Kullanicinin koyu/acik tema tercihi — CalibraHubAndroid `SessionManager.ThemeMode` ile AYNI
  * uc degerli model + storageKey deseni. [SYSTEM] (varsayilan) cihaz ayarini izler.
  *
- * BILINCLI SADELESTIRME (Faz 1): Android tarafinda bu alan CANLI bir [kotlinx.coroutines.flow.Flow]
- * olarak disari acilir (DataStore Flow ile ekranlar arasi aninda senkron); burada [SecureStorage]
- * arayuzu suspend get/put'tan ibaret oldugu icin (gorev talimati) reaktif Flow YOK — suspend
- * getter/setter yeterli (Faz 2 UI katmaninda gerekirse StateFlow sarmalayicisi eklenir).
+ * Faz 2a guncellemesi: [SecureStorage] hala suspend get/put'tan ibaret (DataStore Flow
+ * multiplatform'da yok), bu yuzden CANLI reaktiflik [SessionManager.themeMode] alaninda bir
+ * [MutableStateFlow] ile SIMULE edilir — `init` bloğunda [storage]'dan bir kez okunup tohumlanir,
+ * [SessionManager.setThemeMode] hem storage'a yazar hem StateFlow'u gunceller. Boylece
+ * [com.calibrahub.mobile.ui.AppRoot] `collectAsState` ile dinleyip SettingsScreen'deki degisikligi
+ * Activity/ComposeUIViewController restart OLMADAN aninda yansitir — Android SessionManager'daki
+ * DataStore Flow'un davranissal esdegeri (bkz. CalibraHubAndroid SessionManager.themeMode KDoc).
  */
 enum class ThemeMode(val storageKey: String) {
     SYSTEM("system"),
@@ -94,6 +100,19 @@ class SessionManager(private val storage: SecureStorage) {
     val warehouseRepository: WarehouseRepository by lazy { WarehouseRepository(this) }
     val productionRepository: ProductionRepository by lazy { ProductionRepository(this) }
 
+    private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
+
+    /** Reaktif tema tercihi — bkz. [ThemeMode] sinifi ustundeki KDoc. */
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    private val _pinnedRoutes = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Ana ekrana sabitlenen (pinned) drawer route'lari — CalibraHubAndroid
+     * `SessionManager.pinnedRoutes` DataStore Flow'unun KMP karsiligi (bkz. [themeMode] ile AYNI
+     * StateFlow-simulasyon deseni). [com.calibrahub.mobile.ui.home.HomeScreen] kisayol izgarasini
+     * BUNDAN besler, [com.calibrahub.mobile.ui.nav.AppDrawerContent] pin ikonuyla degistirir. */
+    val pinnedRoutes: StateFlow<Set<String>> = _pinnedRoutes.asStateFlow()
+
     init {
         // Uygulama acilisinda son kaydedilen "beni hatirla" tercihini cookie jar'a senkronla —
         // Android SessionManager.init ile AYNI davranis (senkron, tek seferlik runBlocking;
@@ -101,6 +120,11 @@ class SessionManager(private val storage: SecureStorage) {
         // hic kaydedilmemisse (ilk kurulum) varsayilan ACIK.
         val remembered = runBlocking { storage.getString(REMEMBER_ME_KEY)?.toBooleanStrictOrNull() ?: true }
         cookiesStorage.setPersistenceEnabled(remembered)
+        // Tema/pin StateFlow'larini AYNI tek seferlik runBlocking ile tohumla (bkz. themeMode KDoc).
+        runBlocking {
+            _themeMode.value = ThemeMode.fromStorageKey(storage.getString(THEME_MODE_KEY))
+            _pinnedRoutes.value = storage.getStringSet(PINNED_ROUTES_KEY) ?: emptySet()
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -138,11 +162,26 @@ class SessionManager(private val storage: SecureStorage) {
 
     suspend fun currentCompanyId(): Int? = storage.getString(COMPANY_ID_KEY)?.toIntOrNull()
 
-    suspend fun themeMode(): ThemeMode = ThemeMode.fromStorageKey(storage.getString(THEME_MODE_KEY))
-
+    /** Tema tercihini kaydeder — [themeMode] StateFlow'u ayni cagrida gunceller (bkz. yukarida
+     * ThemeMode KDoc'u); AppRoot bunu dinledigi icin degisiklik ANINDA tum agaca yansir. */
     suspend fun setThemeMode(mode: ThemeMode) {
         storage.putString(THEME_MODE_KEY, mode.storageKey)
+        _themeMode.value = mode
     }
+
+    /** Bir drawer route'unu ana ekran kisayol izgarasina sabitler/kaldirir — [pinnedRoutes]
+     * StateFlow'u ayni cagrida gunceller (bkz. [pinnedRoutes] KDoc'u). */
+    suspend fun togglePinnedRoute(route: String) {
+        val current = _pinnedRoutes.value
+        val updated = if (route in current) current - route else current + route
+        storage.putStringSet(PINNED_ROUTES_KEY, updated)
+        _pinnedRoutes.value = updated
+    }
+
+    /** Acilista "beni hatirla" otomatik-giris karari icin — CalibraHubAndroid
+     * `session.cookieJar.hasStoredCookies()` ile AYNI sozlesme (bkz. [AppNavHost] KDoc'u,
+     * com.calibrahub.mobile.ui.nav paketi). */
+    suspend fun hasStoredCookies(): Boolean = cookiesStorage.hasStoredCookies()
 
     /** Basarili login/acilis probe'u sonrasi oturum goruntu alanlarini kaydeder — cookie'nin
      * kendisi bu fonksiyonun isi DEGIL (bkz. Android KDoc, ayni gerekce). */
@@ -273,6 +312,7 @@ class SessionManager(private val storage: SecureStorage) {
         private const val COMPANY_ID_KEY = "company_id"
         private const val COMPANY_NAME_KEY = "company_name"
         private const val THEME_MODE_KEY = "theme_mode"
+        private const val PINNED_ROUTES_KEY = "pinned_routes"
 
         /** Emulator varsayilani (10.0.2.2 host loopback) — fiziksel cihazda kullanici LAN IP'sine
          * degistirir (bkz. gorev talimati). */

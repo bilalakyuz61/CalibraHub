@@ -1,0 +1,251 @@
+package com.calibrahub.mobile.ui.nav
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.calibrahub.mobile.session.SessionManager
+import com.calibrahub.mobile.session.SessionProbeResult
+import com.calibrahub.mobile.ui.StockScreen
+import com.calibrahub.mobile.ui.common.PlaceholderScreen
+import com.calibrahub.mobile.ui.home.HomeScreen
+import com.calibrahub.mobile.ui.login.LoginScreen
+import com.calibrahub.mobile.ui.settings.SettingsScreen
+import kotlinx.coroutines.launch
+
+/**
+ * Sol menü (navigation drawer) + tüm NavHost — CalibraHubAndroid `MainActivity.AppNav` ile
+ * BİREBİR aynı akış/karar (sadik port), navigation-compose Multiplatform (bkz. gorev talimati
+ * NAVİGASYON KARARI) üzerine kurulu. TEK [ModalNavigationDrawer] instance'ı NavHost'un TAMAMINI
+ * sarar (LoginScreen dahil); [gesturesEnabled] ve hamburger giriş noktası yalnız
+ * [drawerTopLevelRoutes] route'larında aktiftir.
+ *
+ * "Beni hatırla" otomatik giriş — İKİ koşul birden sağlanmalı: (1) kullanıcı "beni hatırla"yı
+ * AÇIK bırakmış ([SessionManager.isRememberMeEnabled]), (2) kalıcı çerez var
+ * ([SessionManager.hasStoredCookies]). İKİSİ de DEĞİLSE GET /api/mobile/session hiç ÇAĞRILMADAN
+ * doğrudan login'e düşülür. İKİSİ de DOĞRUYSA sunucudan sor ([SessionManager.probeSession]):
+ * 200 → oturum bilgisi restore + home; 401/hata → login.
+ *
+ * Faz 2a KAPSAM NOTU: Depo (Stok Sorgu hariç)/Üretim/Satın Alma/Satış/Sevkiyat/Sohbetler
+ * rotalarının hedefi [PlaceholderScreen]'dir (Faz 2b/2c'de gerçek ekranla değiştirilecek) —
+ * bkz. [AppRoutes] KDoc'u. "Stok Sorgu" (WAREHOUSE_STOCK_QUERY) POC'un mevcut [StockScreen]'i
+ * ile GEÇİCİ olarak dolu (gorev talimati "POC'un mevcut StockScreen'ini stok-sorgu placeholder'ı
+ * olarak geçici tutabilirsin").
+ */
+@Composable
+fun AppNavHost(session: SessionManager) {
+    val navController = rememberNavController()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    var startRoute by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val canAutoLogin = session.isRememberMeEnabled() && session.hasStoredCookies()
+        startRoute = if (!canAutoLogin) {
+            "login"
+        } else {
+            when (val probe = session.probeSession()) {
+                is SessionProbeResult.Success -> {
+                    val dto = probe.dto
+                    session.persistSessionDisplay(
+                        email = dto.email,
+                        displayName = dto.displayName,
+                        companyId = dto.companyId,
+                        companyName = dto.companyName,
+                    )
+                    AppRoutes.HOME
+                }
+                is SessionProbeResult.Unauthorized -> {
+                    // Kimlik yok/expired — authExpiryInterceptor (SessionManager) kalıcı çerezi
+                    // zaten temizledi; burada YİNE de çağırmak (idempotent) bu fonksiyonu tek
+                    // başına da doğru kılar.
+                    session.clearSession()
+                    "login"
+                }
+                is SessionProbeResult.Error -> {
+                    // Network/diğer hata — GEÇİCİ olabilir, kalıcı çerez SİLİNMEZ; bu
+                    // çalıştırmada yalnız login'e düşülür.
+                    "login"
+                }
+            }
+        }
+    }
+
+    if (startRoute == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Kontrol ediliyor…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
+    }
+
+    // navigation-compose Multiplatform'da NavGraph.id (Android'in int resource-id kokenli
+    // kimligi) yerine ROTA-tabanli popUpTo kullanilir (bkz. gorev talimati NAVİGASYON KARARI —
+    // org.jetbrains.androidx.navigation route-first tasarim). [startRoute] NavHost'un
+    // startDestination'i olarak zaten sabit/bilinen tek string oldugundan (bu noktada non-null,
+    // yukarida erken-return ile garanti edilir) "tum back stack'i temizle" ayni GEREKÇEYLE
+    // bununla ifade edilir — CalibraHubAndroid `navController.graph.id` ile AYNI etki (grafiğin
+    // KOKUNE kadar inclusive pop).
+    val clearStackToLogin: () -> Unit = {
+        navController.navigate("login") {
+            popUpTo(startRoute!!) { inclusive = true }
+        }
+    }
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    LaunchedEffect(Unit) {
+        session.sessionExpiredEvents.collect {
+            if (currentRoute != "login") clearStackToLogin()
+        }
+    }
+
+    var displayName by remember { mutableStateOf<String?>(null) }
+    var companyName by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == AppRoutes.HOME) {
+            displayName = session.currentDisplayName()
+            companyName = session.currentCompanyName()
+        }
+    }
+
+    val topLevelRoutes = drawerTopLevelRoutes
+
+    val navigateToTopLevel: (String) -> Unit = { route ->
+        scope.launch { drawerState.close() }
+        if (route != currentRoute) {
+            navController.navigate(route) {
+                popUpTo(AppRoutes.HOME) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = currentRoute != null && currentRoute in topLevelRoutes,
+        drawerContent = {
+            AppDrawerContent(
+                session = session,
+                currentRoute = currentRoute,
+                displayName = displayName,
+                companyName = companyName,
+                onNavigate = navigateToTopLevel,
+                onLogout = {
+                    scope.launch { drawerState.close() }
+                    scope.launch {
+                        // session.logout() basarisiz (network) olsa bile yerel oturumu KESIN
+                        // temizle — kullanici acikca "Cikis" dedi, sunucuya ulasilamamasi yerel
+                        // cookie/goruntu alanlarinin kalmasini haklı çıkarmaz.
+                        session.logout()
+                        session.clearSession()
+                        clearStackToLogin()
+                    }
+                },
+            )
+        },
+    ) {
+        NavHost(navController = navController, startDestination = startRoute!!) {
+            composable("login") {
+                LoginScreen(
+                    sessionManager = session,
+                    onLoggedIn = {
+                        navController.navigate(AppRoutes.HOME) {
+                            popUpTo("login") { inclusive = true }
+                        }
+                    },
+                )
+            }
+            composable(AppRoutes.HOME) {
+                HomeScreen(
+                    session = session,
+                    displayName = displayName,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) { launchSingleTop = true } },
+                    onNavigate = navigateToTopLevel,
+                )
+            }
+            composable(AppRoutes.SETTINGS) {
+                SettingsScreen(session = session, onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.CHATS) {
+                PlaceholderScreen(
+                    title = "Sohbetler",
+                    message = "WhatsApp entegrasyonu bu fazda ertelendi.",
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(AppRoutes.WAREHOUSE_STOCK_QUERY) {
+                StockScreen(
+                    sessionManager = session,
+                    displayName = null,
+                    onLogout = { navController.popBackStack() },
+                )
+            }
+            composable(AppRoutes.WAREHOUSE_STOCK_IN) {
+                PlaceholderScreen("Giriş", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.WAREHOUSE_STOCK_OUT) {
+                PlaceholderScreen("Çıkış", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.WAREHOUSE_TRANSFER) {
+                PlaceholderScreen("Transfer", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.WAREHOUSE_COUNT) {
+                PlaceholderScreen("Sayım", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.WAREHOUSE_DRAFT_COUNTS) {
+                PlaceholderScreen("Taslak Sayımlar", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.PRODUCTION_WORK_ORDERS) {
+                PlaceholderScreen("İş Emirleri", "Yakında — Faz 2c", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.PURCHASE_DELIVERY) {
+                PlaceholderScreen("Alış İrsaliyesi", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.PURCHASE_OPEN_ORDERS) {
+                PlaceholderScreen("Açık Alış Siparişleri", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            composable(AppRoutes.SALES_DELIVERY) {
+                PlaceholderScreen("Satış İrsaliyesi", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+            // NOT: AppRoutes.SHIPPING_OPEN_ORDERS == AppRoutes.SALES_OPEN_ORDERS (BİLİNÇLİ kısmi
+            // örtüşme, bkz. AppDrawer.kt KDoc'u) — AYNI route string'i için İKİNCİ bir composable(...)
+            // kaydı NavGraph'ta "duplicate destination" hatası verir; bu yüzden TEK kayıt yeterli.
+            composable(AppRoutes.SALES_OPEN_ORDERS) {
+                PlaceholderScreen("Açık Satış Siparişleri", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+            }
+        }
+    }
+}
