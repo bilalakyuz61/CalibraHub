@@ -4,6 +4,7 @@
     var isMachine = Model.IsMachineBacked;
     ViewData["Title"] = isNew ? "Yeni Varlık" : $"Varlık: {Model.AssetName}";
     ViewData["FormCode"] = "ASSETS";
+    ViewData["HelpKey"] = "asset-edit";
     ViewData["BodyClass"] = "page-asset-edit";
 
     string D(DateTime? d) => d?.ToString("yyyy-MM-dd") ?? "";
