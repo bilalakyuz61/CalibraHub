@@ -120,6 +120,7 @@ public sealed class KitController : Controller
             componentConfigCode   = l.ConfigCode,
             quantity              = l.Quantity,
             note                  = l.Note,
+            unitPrice             = l.UnitPrice,   // yalniz PriceMode=FixedComponent iken dolu
         }),
     };
 }

@@ -3532,7 +3532,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         try
         {
             foreach (var l in resolvedLines)
-                entity.AddLine(ItemKitLine.Create(l.ItemId, l.ConfigId, l.Qty, userId, l.Note));
+                entity.AddLine(ItemKitLine.Create(l.ItemId, l.ConfigId, l.Qty, userId, l.Note, l.UnitPrice));
             entity.EnsureValid();
         }
         catch (CalibraHub.Domain.Common.DomainException dex)
@@ -3540,11 +3540,81 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException(dex.Message, dex);
         }
 
+        var kitTitle = activeById.TryGetValue(kitItemId, out var kitItem)
+            ? (kitItem.Name ?? kitItem.Code ?? ("#" + kitItemId))
+            : ("#" + kitItemId);
+
         if (entity.Id <= 0)
-            return await _repository.AddKitAsync(entity, cancellationToken);
+        {
+            var newId = await _repository.AddKitAsync(entity, cancellationToken);
+            _audit?.LogInsert("ItemKit", newId, kitTitle,
+                snapshot: new { entity.PriceMode, entity.FixedPrice, entity.Description, LineCount = entity.Lines.Count });
+            return newId;
+        }
+
+        // Guncelleme oncesi eski header + kalem durumunu logla (CLAUDE.md audit kurali: yalnizca
+        // degisen alanlar). Kalemler DELETE+INSERT ile degistigi icin (ItemKitLine sinif dokumani)
+        // ID eslesmesi yerine (ItemId,ConfigId) icerik anahtariyla diff'lenir (ID-tabanli eslestirme
+        // kurali — ItemId/ConfigId, kod/ad DEGIL).
+        var oldHeader = existing is null ? null : new { existing.PriceMode, existing.FixedPrice, existing.Description };
+        var newHeader = new { entity.PriceMode, entity.FixedPrice, entity.Description };
+        if (_audit is not null)
+        {
+            var headerChanges = AuditDiff.Compute(oldHeader, newHeader, "ItemKit");
+            var lineChanges = BuildKitLineChanges(existing?.Lines, resolvedLines, activeById);
+            var allChanges = headerChanges.Concat(lineChanges).ToList();
+            if (allChanges.Count > 0)
+                _audit.LogChanges("ItemKit", entity.Id, kitTitle, allChanges);
+        }
 
         await _repository.UpdateKitAsync(entity, cancellationToken);
         return entity.Id;
+    }
+
+    /// <summary>
+    /// Kit bilesen satirlarinin ESKI (ItemKitLineDto) ile YENI (resolvedLines) halini
+    /// (ItemId, ConfigId) icerik anahtariyla karsilastirir — UpdateKitAsync DELETE+INSERT
+    /// yaptigindan satir Id'leri kalici degildir (ItemKitLine sinif dokumani). Yalniz
+    /// Quantity/UnitPrice degisimi veya ekleme/silme raporlanir (CLAUDE.md audit kurali #3).
+    /// </summary>
+    private static List<AuditFieldChange> BuildKitLineChanges(
+        IReadOnlyCollection<ItemKitLineDto>? oldLines,
+        IReadOnlyList<(int ItemId, int? ConfigId, decimal Qty, string? Note, decimal? UnitPrice)> newLines,
+        IReadOnlyDictionary<int, Item> itemsById)
+    {
+        var changes = new List<AuditFieldChange>();
+        var oldByKey = (oldLines ?? Array.Empty<ItemKitLineDto>())
+            .ToDictionary(l => (l.ItemId, ConfigId: l.ConfigId ?? 0));
+        var newByKey = newLines.ToDictionary(l => (l.ItemId, ConfigId: l.ConfigId ?? 0));
+
+        string CompLabel(int itemId) =>
+            itemsById.TryGetValue(itemId, out var it) ? (it.Name ?? it.Code ?? ("#" + itemId)) : ("#" + itemId);
+        static string Summary(decimal qty, decimal? unitPrice) =>
+            unitPrice.HasValue
+                ? $"{AuditDiff.Normalize(qty)} adet × {AuditDiff.Normalize(unitPrice.Value)}"
+                : $"{AuditDiff.Normalize(qty)} adet";
+
+        foreach (var (key, nl) in newByKey)
+        {
+            if (!oldByKey.TryGetValue(key, out var ol))
+            {
+                changes.Add(new AuditFieldChange("Lines", $"Bileşen Eklendi — {CompLabel(key.ItemId)}",
+                    null, Summary(nl.Qty, nl.UnitPrice)));
+                continue;
+            }
+            if (ol.Quantity != nl.Qty || (ol.UnitPrice ?? 0) != (nl.UnitPrice ?? 0))
+            {
+                changes.Add(new AuditFieldChange("Lines", $"Bileşen Değişti — {CompLabel(key.ItemId)}",
+                    Summary(ol.Quantity, ol.UnitPrice), Summary(nl.Qty, nl.UnitPrice)));
+            }
+        }
+        foreach (var (key, ol) in oldByKey)
+        {
+            if (!newByKey.ContainsKey(key))
+                changes.Add(new AuditFieldChange("Lines", $"Bileşen Silindi — {CompLabel(key.ItemId)}",
+                    Summary(ol.Quantity, ol.UnitPrice), null));
+        }
+        return changes;
     }
 
     public async Task DeleteKitAsync(int itemId, int? userId, CancellationToken cancellationToken)

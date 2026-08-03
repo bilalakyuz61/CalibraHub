@@ -3,7 +3,7 @@ using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
-[Description("Kit (paket urun) baslik. ItemId FK -> Items.id (TypeId=10 Kit tipindeki karti). Bilesenler ItemKitLine tablosunda 1-N. Kit fiziksel stok DEGIL, birden fazla stogu tek kod altinda toplayan mantiksal gruplama (phantom bundle) — stok/seri/lot etkisi bilesen seviyesindedir. PriceMode: Fixed (kit kendi sabit fiyati, FixedPrice) / RollUp (bilesen fiyatlari toplami, runtime hesap). VersionNo her revizyonda artar; belge kit'i kullandiginda o anki icerik belge satirina snapshot'lanir, sonraki revizyon gecmis belgeleri etkilemez. IsActive=0 soft-delete (gecmis belgeler orphan kalmasin).")]
+[Description("Kit (paket urun) baslik. ItemId FK -> Items.id (TypeId=10 Kit tipindeki karti). Bilesenler ItemKitLine tablosunda 1-N. Kit fiziksel stok DEGIL, birden fazla stogu tek kod altinda toplayan mantiksal gruplama (phantom bundle) — stok/seri/lot etkisi bilesen seviyesindedir. PriceMode (4 mod, 2026-08-03): FixedPackage (kit kendi sabit fiyati, FixedPrice) / FixedComponent (bilesenlerin kit tanimindaki elle fiyati x miktar toplami, ItemKitLine.UnitPrice) / ListPackage (kit kartinin kendi fiyat listesi fiyati, satis aninda) / ListComponent (bilesenlerin fiyat listesi fiyatlari x miktar toplami, satis aninda). VersionNo her revizyonda artar; belge kit'i kullandiginda o anki icerik belge satirina snapshot'lanir, sonraki revizyon gecmis belgeleri etkilemez. IsActive=0 soft-delete (gecmis belgeler orphan kalmasin).")]
 public class ItemKit
 {
     public int Id { get; init; }

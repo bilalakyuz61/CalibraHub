@@ -38,6 +38,7 @@ public static class AuditFieldLabels
             ["Contact"]        = "Cari Hesap",
             ["WorkOrder"]      = "İş Emri",
             ["Bom"]            = "Ürün Ağacı",
+            ["ItemKit"]        = "Kit (Paket Ürün)",
             ["Personnel"]      = "Personel",
             ["Machine"]        = "Makine",
             ["Department"]     = "Departman",
@@ -152,6 +153,9 @@ public static class AuditFieldLabels
             ["SerialNumber"] = "Seri No",
             ["UnitCost"] = "Birim Maliyet",
             ["ArgeProjectId"] = "AR-GE Projesi",
+            // Kit (Paket Ürün) alanları (2026-08-03, PageComment Seq 1078)
+            ["PriceMode"] = "Fiyat Modu",
+            ["FixedPrice"] = "Sabit Paket Fiyatı",
             // Proje görevi alanları (ProjectTask)
             ["OrderNo"] = "Sıra",
             ["AssignedUserId"] = "Atanan Kullanıcı",
@@ -385,6 +389,17 @@ public static class AuditFieldLabels
             ["Serial"] = "Seri",
         };
 
+    /// <summary>ItemKit.PriceMode — 4 sabit değer (2026-08-03, PageComment Seq 1078). Kaynak:
+    /// Domain/Entities/ItemKit.cs KitPriceMode sınıfı.</summary>
+    private static readonly Dictionary<string, string> KitPriceModeValueLabels =
+        new(StringComparer.Ordinal)
+        {
+            ["FixedPackage"] = "Sabit Paket Fiyatı",
+            ["FixedComponent"] = "Sabit Bileşen Fiyatı",
+            ["ListPackage"] = "Fiyat Listesi Paket Fiyatı",
+            ["ListComponent"] = "Fiyat Listesi Bileşen Fiyatı",
+        };
+
     /// <summary>DocumentLine.FulfillmentStatus (int). Bugün bu alan HAM diff'lenmiyor —
     /// DocumentService.LogFulfillmentAuditAsync zaten kendi formatlanmış metnini üretiyor
     /// ("25 (Karşılandı)"), bkz. DocumentService.FulfillmentStatusLabel (aynı değerler, tek kaynak
@@ -455,6 +470,9 @@ public static class AuditFieldLabels
                 break;
             case "TrackingType":
                 if (TrackingTypeValueLabels.TryGetValue(raw, out var tracking)) return tracking;
+                break;
+            case "PriceMode":
+                if (KitPriceModeValueLabels.TryGetValue(raw, out var kitMode)) return kitMode;
                 break;
             case "FulfillmentStatus":
                 if (FulfillmentStatusValueLabels.TryGetValue(raw, out var fulfillment)) return fulfillment;
