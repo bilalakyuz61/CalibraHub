@@ -15,12 +15,15 @@ public class ItemKit
     /// ("bu belge kit v3'u kullandi"). Kit v4'e cikinca eski belge hala v3 icerigini tasir.</summary>
     public int VersionNo { get; init; } = 1;
 
-    /// <summary>Fiyat modu — <see cref="KitPriceMode"/>. Fixed = kit kendi fiyati (FixedPrice);
-    /// RollUp = bilesen satis fiyatlari x miktar toplami (runtime hesaplanir).</summary>
-    public string PriceMode { get; init; } = KitPriceMode.Fixed;
+    /// <summary>Fiyat modu — <see cref="KitPriceMode"/>. 4 mod (2026-08-03 genisleme):
+    /// FixedPackage = kit'in tek elle girilen sabit fiyati (FixedPrice, eski "Fixed");
+    /// FixedComponent = bilesenlerin kit tanimindaki elle fiyatlari x miktar toplami (ItemKitLine.UnitPrice);
+    /// ListPackage = kit kartinin KENDI fiyat listesi (Genel Liste) fiyati, satis aninda cozulur;
+    /// ListComponent = bilesenlerin fiyat listesi fiyatlari x miktar toplami, satis aninda (eski "RollUp").</summary>
+    public string PriceMode { get; init; } = KitPriceMode.FixedPackage;
 
-    /// <summary>Fixed modda kit'in varsayilan birim satis fiyati. Belgeye eklenince
-    /// kalem satirina otomatik gelir. RollUp modda NULL (sistem hesaplar).</summary>
+    /// <summary>FixedPackage modda kit'in varsayilan birim satis fiyati. Belgeye eklenince
+    /// kalem satirina otomatik gelir. Diger 3 modda NULL (sistem/tanim hesaplar).</summary>
     public decimal? FixedPrice { get; init; }
 
     public string? Description { get; init; }
@@ -62,9 +65,8 @@ public class ItemKit
             "Kit malzeme karti secilmelidir.");
         DomainException.ThrowIf(Lines.Count == 0,
             "Kit icerisinde en az bir bilesen olmalidir.");
-        DomainException.ThrowIf(
-            PriceMode != KitPriceMode.Fixed && PriceMode != KitPriceMode.RollUp,
-            "Fiyat modu yalniz 'Fixed' (sabit) veya 'RollUp' (bilesen toplami) olabilir.");
+        DomainException.ThrowIf(!KitPriceMode.All.Contains(PriceMode),
+            "Fiyat modu yalniz Sabit Paket, Sabit Bilesen, Liste Paket veya Liste Bilesen olabilir.");
         DomainException.ThrowIf(FixedPrice.HasValue && FixedPrice.Value < 0,
             "Kit fiyati negatif olamaz.");
 
@@ -79,12 +81,32 @@ public class ItemKit
     }
 }
 
-/// <summary>Kit fiyatlandirma modlari. DB'de ItemKit.PriceMode NVARCHAR(20) olarak tutulur.</summary>
+/// <summary>
+/// Kit fiyatlandirma modlari. DB'de ItemKit.PriceMode NVARCHAR(20) olarak tutulur.
+/// 2026-08-03 genisleme (PageComment Seq 1078): 2 moddan 4 moda cikildi. Eski DB degerleri
+/// ('Fixed'/'RollUp') CalibraDatabaseInitializer.EnsureItemKitTablesAsync icindeki idempotent
+/// UPDATE ile yeni degerlere (FixedPackage/ListComponent) migrate edilir — kodda alias/parse
+/// katmani YOK, DB tek dogru kaynaktir.
+/// </summary>
 public static class KitPriceMode
 {
-    /// <summary>Kit kendi sabit birim satis fiyati (ItemKit.FixedPrice) ile satilir.</summary>
-    public const string Fixed = "Fixed";
+    /// <summary>Kit kendi sabit birim satis fiyati (ItemKit.FixedPrice) ile satilir. Sunucu bu
+    /// degeri hic ezmez — belgeye eklenirken client'in tasidigi deger aynen kullanilir. Eski adi "Fixed".</summary>
+    public const string FixedPackage = "FixedPackage";
 
-    /// <summary>Kit fiyati bilesenlerin satis fiyatlari x miktar toplamindan hesaplanir.</summary>
-    public const string RollUp = "RollUp";
+    /// <summary>Her bilesenin kit tanimindaki ELLE girilmis birim fiyati (ItemKitLine.UnitPrice)
+    /// x miktar toplami. Fiyat listesi cagrisi YOK — tamamen kit tanimindan gelir. YENI (2026-08-03).</summary>
+    public const string FixedComponent = "FixedComponent";
+
+    /// <summary>Kit kartinin KENDI fiyat listesi (Genel Liste/cari) fiyati — satis aninda
+    /// IPriceListService.ResolveLinePricesAsync ile kit ItemId'si uzerinden cozulur. YENI (2026-08-03).</summary>
+    public const string ListPackage = "ListPackage";
+
+    /// <summary>Kit fiyati bilesenlerin fiyat listesi (Genel Liste/cari) fiyatlari x miktar
+    /// toplamindan, satis aninda hesaplanir. Eski adi "RollUp".</summary>
+    public const string ListComponent = "ListComponent";
+
+    /// <summary>Whitelist — SaveKitAsync normalize + ItemKit.EnsureValid burada tek kaynaktan okur.</summary>
+    public static readonly IReadOnlyCollection<string> All = new[]
+        { FixedPackage, FixedComponent, ListPackage, ListComponent };
 }

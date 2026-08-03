@@ -25,6 +25,13 @@ public sealed class DocumentLineKitComponent
     /// <summary>1 kit icin gereken bilesen adedi.</summary>
     public decimal Quantity { get; init; }
 
+    /// <summary>2026-08-03 (Seq 1078) — kit PriceMode=FixedComponent iken donduruldugu anki
+    /// bilesen elle birim fiyati (ItemKitLine.UnitPrice). Kit tanimi sonradan revize edilse
+    /// (fiyat degisse veya bilesen kaldirilsa) bile bu belge dondugu andaki fiyati tasir —
+    /// ListComponent modunda oldugu gibi "canli fiyat listesinden yeniden coz" YAPILMAZ, cunku
+    /// elle fiyat dis kaynak degil kit tanimina ait statik bir degerdir. Diger modlarda NULL.</summary>
+    public decimal? UnitPrice { get; init; }
+
     public DateTime Created { get; init; } = DateTime.UtcNow;
 
     // ── Transient display (Items JOIN ile; tabloya yazilmaz) ──

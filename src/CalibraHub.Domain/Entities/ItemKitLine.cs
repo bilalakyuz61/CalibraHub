@@ -18,6 +18,12 @@ public sealed class ItemKitLine
     // Quantity mutable — ChangeQuantity domain davranisi yerinde gunceller.
     public decimal Quantity { get; set; } = 1;
 
+    /// <summary>Bilesenin kit tanimindaki ELLE girilmis birim fiyati — yalniz kit
+    /// PriceMode=FixedComponent iken anlamlidir (KitPriceMode.FixedComponent). Diger
+    /// modlarda NULL tutulur (SaveKitAsync normalize eder). Fiyat listesi degil, dogrudan
+    /// bu deger kitUnitPrice = Sum(UnitPrice * Quantity) formulunde kullanilir.</summary>
+    public decimal? UnitPrice { get; init; }
+
     public Guid LineGuid { get; init; }
 
     /// <summary>Satir aciklamasi (opsiyonel, max 1000) — kullanicinin bilesene not dusmesi icin.</summary>
@@ -36,6 +42,8 @@ public sealed class ItemKitLine
             "Her bilesen icin bir malzeme secmek zorunludur.");
         DomainException.ThrowIf(Quantity <= 0,
             "Bilesen miktari sifirdan buyuk olmalidir.");
+        DomainException.ThrowIf(UnitPrice.HasValue && UnitPrice.Value < 0,
+            "Bilesen birim fiyati negatif olamaz.");
     }
 
     /// <summary>Miktari guvenli sekilde guncelle — invariant'tan gecirir.</summary>
@@ -46,14 +54,18 @@ public sealed class ItemKitLine
         Quantity = newQuantity;
     }
 
-    /// <summary>Yeni satir uretici — invariant'tan gecmis bir ItemKitLine doner.</summary>
-    public static ItemKitLine Create(int itemId, int? configId, decimal quantity, int? createdById = null, string? note = null)
+    /// <summary>Yeni satir uretici — invariant'tan gecmis bir ItemKitLine doner.
+    /// <paramref name="unitPrice"/> yalniz kit PriceMode=FixedComponent iken doldurulur
+    /// (SaveKitAsync diger modlarda null gecirir).</summary>
+    public static ItemKitLine Create(int itemId, int? configId, decimal quantity, int? createdById = null,
+        string? note = null, decimal? unitPrice = null)
     {
         var line = new ItemKitLine
         {
             ItemId      = itemId,
             ConfigId    = configId,
             Quantity    = quantity,
+            UnitPrice   = unitPrice,
             LineGuid    = Guid.NewGuid(),
             CreatedById = createdById,
             Note        = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),

@@ -447,14 +447,19 @@ public sealed record BOMComponentLineRow(
 // Kit = birden fazla stogu tek kod altinda toplayan phantom bundle. ItemKit (versiyonlu
 // baslik) + ItemKitLine (bilesen). BOM deseninin satis klonu — rota/fire yok, versiyon +
 // fiyat modu var. Kit'in kendisi Items'ta TypeId=10 (Kit) tipinde bir malzeme kartidir.
+// PriceMode 4 deger alir (2026-08-03, PageComment Seq 1078 — KitPriceMode ile birebir):
+//   "FixedPackage"   — kit'in tek elle girilen sabit fiyati (FixedPrice). Sunucu ezmez.
+//   "FixedComponent" — her bilesenin kit tanimindaki ELLE fiyati (ItemKitLineDto.UnitPrice) x miktar toplami.
+//   "ListPackage"    — kit kartinin KENDI fiyat listesi (Genel Liste) fiyati, satis aninda cozulur.
+//   "ListComponent"  — bilesenlerin fiyat listesi fiyatlari x miktar toplami, satis aninda (eski "RollUp").
 public sealed record ItemKitDto(
     int Id,
     int ItemId,                // kit'in kendisi (Items.id, TypeId=10)
     string ItemCode,
     string ItemName,
     int VersionNo,
-    string PriceMode,          // KitPriceMode: "Fixed" | "RollUp"
-    decimal? FixedPrice,
+    string PriceMode,          // KitPriceMode: yukaridaki 4 deger
+    decimal? FixedPrice,       // yalniz FixedPackage modda dolu
     string? Description,
     IReadOnlyCollection<ItemKitLineDto> Lines);
 
@@ -468,7 +473,8 @@ public sealed record ItemKitLineDto(
     string? ConfigCode,
     decimal Quantity,
     Guid LineGuid,
-    string? Note = null);
+    string? Note = null,
+    decimal? UnitPrice = null);   // yalniz kit PriceMode=FixedComponent iken dolu (elle bilesen fiyati)
 
 // Frontend submit — backend ItemId/ConfigId ile calisir. ItemId 0 gelirse service
 // materialCode uzerinden lookup eder (legacy UI); yeni UI dogrudan ItemId gonderir.
@@ -476,8 +482,8 @@ public sealed record SaveItemKitRequest(
     int? Id,
     int ItemId,
     string? MaterialCode,       // legacy: ItemId 0 ise kit karti lookup'i icin
-    string PriceMode,           // KitPriceMode: "Fixed" | "RollUp"
-    decimal? FixedPrice,        // yalniz Fixed modda anlamli
+    string PriceMode,           // KitPriceMode: FixedPackage | FixedComponent | ListPackage | ListComponent
+    decimal? FixedPrice,        // yalniz FixedPackage modda anlamli
     string? Description,
     IReadOnlyCollection<SaveItemKitLineRequest> Lines);
 
@@ -487,22 +493,28 @@ public sealed record SaveItemKitLineRequest(
     string? ComponentMaterialCode,  // legacy: ItemId 0 ise lookup icin
     string? ComponentConfigCode,    // legacy: ConfigId null ise lookup icin
     decimal Quantity,
-    string? Note = null);
+    string? Note = null,
+    decimal? UnitPrice = null);     // yalniz kit PriceMode=FixedComponent iken anlamli (elle bilesen fiyati)
 
 // ── Kit snapshot kaynagi (Faz 2) — belge kaydinda aktif ItemKit icerigi ────
 // Bir kit belge kalemine eklendiginde bu icerik DocumentLineKitComponent'e dondurulur.
-// PriceMode (Seq 1073 Part B) — RollUp modundaki kit'lerin birim fiyati DocumentService'te
-// bilesen fiyatlari toplamindan server-truth olarak hesaplanir; Fixed modda kullanilmaz.
+// PriceMode (Seq 1073 Part B, genisletildi Seq 1078) — ListComponent/ListPackage modundaki
+// kit'lerin birim fiyati DocumentService'te server-truth olarak hesaplanir; FixedPackage
+// modda kullanilmaz.
 public sealed record KitSnapshotSourceDto(
     int KitItemId,
     int VersionNo,
     string PriceMode,
     IReadOnlyList<KitSnapshotComponentDto> Components);
 
+// UnitPrice — yalniz kaynak kit PriceMode=FixedComponent iken dolu (ItemKitLine.UnitPrice,
+// elle bilesen fiyati); ListComponent/ListPackage/FixedPackage'da NULL (fiyat listesinden
+// veya kit'in kendi fiyatindan canli cozulur).
 public sealed record KitSnapshotComponentDto(
     int ComponentItemId,
     int? ConfigId,
-    decimal Quantity);
+    decimal Quantity,
+    decimal? UnitPrice = null);
 
 // ── BOM Explode (multi-level patlatma) sonuclari (rapor 2026-05-17 madde 3.3) ──
 
