@@ -305,8 +305,34 @@
     }
     $('kePriceModeSeg').addEventListener('click', function (e) {
         var b = e.target.closest('button[data-mode]');
-        if (b) setPriceMode(b.getAttribute('data-mode'));
+        if (b) { setPriceMode(b.getAttribute('data-mode')); if (priceMode === 'Fixed') keAutofillFixedPriceFromList(false); }
     });
+
+    // Seq 1073: Sabit Paket birim fiyatı, Genel (varsayılan) fiyat listesinden OTOMATİK
+    // doldurulur ama DÜZENLENEBİLİR — alan boşsa yazılır, kayıtlı/elle girilmiş değer EZİLMEZ.
+    // Kit'in kendi malzeme kartı için satış yönünde ResolveLinePrices (satış grid'iyle AYNI
+    // endpoint, aynı Genel Liste çözümlemesi) çağrılır. (Bileşen Toplamı modunda bileşen
+    // fiyatları satış anında yine standart listeden gelir — o taraf backend patlatmada.)
+    function keAutofillFixedPriceFromList(force) {
+        if (typeof KIT_ITEM_ID === 'undefined' || KIT_ITEM_ID <= 0) return;
+        var el = $('keFixedPrice');
+        if (!el) return;
+        if (!force && String(el.value || '').trim() !== '') return;   // dolu → dokunma
+        var csrf = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+        fetch('/Sales/ResolveLinePrices', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf },
+            body: JSON.stringify({ currencyId: 1, direction: 's', keys: [{ itemId: KIT_ITEM_ID }] })
+        })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (rows) {
+            if (!Array.isArray(rows) || !rows.length) return;
+            var p = rows[0] ? rows[0].price : null;
+            if (p == null) return;
+            if (force || String(el.value || '').trim() === '') el.value = p;
+        })
+        .catch(function () { /* liste yoksa/erisilemezse sessiz — elle giris serbest */ });
+    }
 
     // ── Bileşen listesi render ──
     function renderLines() {
@@ -568,6 +594,8 @@
                     setPriceMode('Fixed');
                 }
                 renderLines();
+                // Seq 1073: Sabit modda fiyat boşsa Genel Liste'den otomatik doldur (kayıtlı değer ezilmez).
+                if (priceMode === 'Fixed') keAutofillFixedPriceFromList(false);
             })
             .catch(function () { setPriceMode('Fixed'); renderLines(); });
     }
