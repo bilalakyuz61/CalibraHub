@@ -1169,8 +1169,23 @@ export default function CalibraLineItemsGrid(props) {
                   </div>
                 )
               }
+              // Kit tam-set kismi teslimat (Faz 4a — SADECE GORSEL grupla):
+              // Kit BASLIK satirinin id'sini isaret eden bilesen satirlari
+              // (row.kitParentLineId) varsa, o id'yi "kitHeaderIds" isaretleyip
+              // basligi rozetle + bilesenleri girintili/silik goster. Backend bu
+              // alani yalniz kit tam-set teslimatinda doldurur (bkz. DocumentLineDto.
+              // KitParentLineId) — normal teklif/siparis/irsaliye satirlarinda hep
+              // null gelir, dolayisiyla bu blok o ekranlarda tamamen no-op'tur.
+              var kitHeaderIds = {}
+              visibleRows.forEach(function (r) {
+                if (r.kitParentLineId != null && Number(r.kitParentLineId) > 0) {
+                  kitHeaderIds[Number(r.kitParentLineId)] = true
+                }
+              })
               return visibleRows.map(function(row) {
               var isPending = pendingDelete[row._uid] === true
+              var isKitHeader = row.id != null && Number(row.id) > 0 && kitHeaderIds[Number(row.id)] === true
+              var isKitComponent = row.kitParentLineId != null && Number(row.kitParentLineId) > 0
               return (
                 <motion.div
                   key={row._uid}
@@ -1179,10 +1194,21 @@ export default function CalibraLineItemsGrid(props) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4, height: 0 }}
                   transition={{ duration: 0.18 }}
-                  className="border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors"
+                  className={'border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors' +
+                    (isKitComponent ? ' bg-indigo-50/40 dark:bg-indigo-500/[0.03]' : '')}
                   style={{ position: 'relative' }}
                 >
                   <div className="flex items-stretch" style={{ position: 'relative' }}>
+                    {isKitComponent && (
+                      <div
+                        title="Kit bileseni — kit baslik satirinin teslim edilen bir parcasi"
+                        style={{
+                          position: 'absolute', left: 0, top: 0, bottom: 0,
+                          width: 3, zIndex: 3, pointerEvents: 'none',
+                          background: 'linear-gradient(180deg, rgba(99,102,241,.55), rgba(99,102,241,.15))',
+                        }}
+                      />
+                    )}
                     {/* Aksiyon seridi (sadelesti): ••• kisayol + Kombinasyon + Ek Alanlar (⚙) + Sil.
                         Not ve Revize butonlari ••• icine tasindi — tek dropdown'dan erisilir. */}
                     <div className="w-[140px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
@@ -1308,13 +1334,31 @@ export default function CalibraLineItemsGrid(props) {
                     {columns.map(function(col) {
                       // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
                       var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
+                      // Kit gorsel gruplama rozetleri — yalniz malzeme hucresinde, salt-gosterim
+                      // overlay (LineGridCell'in ic mantigina dokunmaz, tiklanamaz).
+                      var isMaterialCell = col.key === 'materialCode'
                       return (
                         <div
                           key={col.key}
                           data-cell-key={col.key}
-                          className="flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04]"
+                          className={'flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04]' +
+                            (isKitComponent ? ' opacity-80' : '')}
                           style={Object.assign({}, widthCss(col), { position: 'relative' }, lockedStyle)}
                         >
+                          {isMaterialCell && isKitComponent && (
+                            <span
+                              className="absolute left-0.5 top-0.5 text-[11px] leading-none text-indigo-400 dark:text-indigo-300/70 pointer-events-none select-none"
+                              style={{ zIndex: 2 }}
+                              title="Kit bileseni"
+                            >↳</span>
+                          )}
+                          {isMaterialCell && isKitHeader && (
+                            <span
+                              className="absolute right-1 top-1 inline-flex items-center rounded px-1 py-[1px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 pointer-events-none select-none"
+                              style={{ zIndex: 2 }}
+                              title="Kit — bilesenleri asagida listelenir"
+                            >KİT</span>
+                          )}
                           <LineGridCell
                             column={col}
                             row={row}
