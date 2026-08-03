@@ -100,6 +100,15 @@ public sealed class CapaService : ICapaService
             if (!Enum.IsDefined(typeof(RootCauseMethod), x.Method)) return (false, "Geçersiz kök neden yöntemi (yapısal analiz).", 0);
             if (x.Category.HasValue && !Enum.IsDefined(typeof(IshikawaCategory), x.Category.Value))
                 return (false, "Geçersiz Ishikawa (6M) kategorisi.", 0);
+            // method↔category invaryantı — yapısal satır TEKNİĞE aittir (5 Neden veya Ishikawa; 8D bir teknik değil,
+            // kapsayıcı yöntemdir). Aksi kombinasyonlar load'da hiçbir editöre render edilmeyip sonraki save'de
+            // sessizce silinirdi → server-side reddet (code review 2026-08-03 fix).
+            if (x.Method == (byte)RootCauseMethod.SekizD)
+                return (false, "Yapısal kök neden satırı 5 Neden veya Ishikawa tekniğine ait olmalı.", 0);
+            if (x.Method == (byte)RootCauseMethod.Ishikawa && !x.Category.HasValue)
+                return (false, "Ishikawa (6M) satırında kategori zorunludur.", 0);
+            if (x.Method == (byte)RootCauseMethod.FiveWhy && x.Category.HasValue)
+                return (false, "5 Neden satırında 6M kategorisi olmamalıdır.", 0);
             rootCauseEntities.Add(new CapaRootCauseItem
             {
                 Id = x.Id,

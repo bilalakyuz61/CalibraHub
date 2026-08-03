@@ -394,21 +394,30 @@
 
     function collectRootCauseItems(){
         var out=[];
-        Array.prototype.forEach.call(rcFiveWhyRows.querySelectorAll('.rc-row'),function(row,i){
-            var text=row.querySelector('.rc-text').value.trim();
-            if(!text)return; // boş satır gönderilmez
-            out.push({ id: parseInt(row.getAttribute('data-id'),10)||0, method:1, category:null, sequence:i+1, text:text });
-        });
-        (ISHIKAWA_CATEGORIES||[]).forEach(function(cat){
-            var rowsHost=rcCategoryRowsById[cat.id];
-            var seq=0;
-            Array.prototype.forEach.call(rowsHost.querySelectorAll('.rc-row'),function(row){
+        // WYSIWYG: yalnız GÖRÜNÜR tekniklerin satırları kaydedilir. Yöntem 5 Neden→sadece 5 Neden,
+        // Ishikawa→sadece Ishikawa, 8D→ikisi (ikisi de görünür). Gizli bloğun satırları toplanmaz →
+        // seçili RootCauseMethod ile DB item method'ları tutarlı kalır (code review 2026-08-03 fix).
+        if(rcFiveWhyBlock.style.display!=='none'){
+            var wseq=0;
+            Array.prototype.forEach.call(rcFiveWhyRows.querySelectorAll('.rc-row'),function(row){
                 var text=row.querySelector('.rc-text').value.trim();
                 if(!text)return; // boş satır gönderilmez
-                seq++;
-                out.push({ id: parseInt(row.getAttribute('data-id'),10)||0, method:2, category:cat.id, sequence:seq, text:text });
+                wseq++; // boş satırlar atlandıktan sonra bitişik sıra (Ishikawa ile tutarlı)
+                out.push({ id: parseInt(row.getAttribute('data-id'),10)||0, method:1, category:null, sequence:wseq, text:text });
             });
-        });
+        }
+        if(rcIshikawaBlock.style.display!=='none'){
+            (ISHIKAWA_CATEGORIES||[]).forEach(function(cat){
+                var rowsHost=rcCategoryRowsById[cat.id];
+                var seq=0;
+                Array.prototype.forEach.call(rowsHost.querySelectorAll('.rc-row'),function(row){
+                    var text=row.querySelector('.rc-text').value.trim();
+                    if(!text)return; // boş satır gönderilmez
+                    seq++;
+                    out.push({ id: parseInt(row.getAttribute('data-id'),10)||0, method:2, category:cat.id, sequence:seq, text:text });
+                });
+            });
+        }
         return out;
     }
 
