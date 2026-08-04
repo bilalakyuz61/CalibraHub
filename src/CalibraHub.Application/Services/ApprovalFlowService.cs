@@ -141,6 +141,15 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         return null;
     }
 
+    public async Task<bool> HasActiveFlowForKindAsync(string documentKind, CancellationToken ct)
+    {
+        // GetByDocumentKindAsync zaten SQL'de WHERE [IsActive]=1 filtreler → dönen her akış
+        // aktiftir. Kural (tutar/VKN/departman) DEĞERLENDİRİLMEZ: yalnızca "bu tür için tanımlı
+        // aktif akış var mı" sorusu. Wildcard ('Document'/'All') akışlar da kapsam içindedir.
+        var flows = await _flowRepo.GetByDocumentKindAsync(documentKind, ct);
+        return flows.Any();
+    }
+
     public async Task<ApprovalInstanceDto> StartAsync(StartApprovalRequest request, CancellationToken ct)
     {
         // Duplicate guard: aynı belge için bekleyen bir onay süreci varken ikinci bir

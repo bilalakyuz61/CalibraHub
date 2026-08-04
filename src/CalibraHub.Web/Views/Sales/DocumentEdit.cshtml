@@ -2677,14 +2677,20 @@
             <span class="sqe-actions-item__dot sqe-status-dot--sent"></span>
             <span>Gonderildi</span>
         </button>
-        <button type="button" role="menuitem" class="sqe-actions-item" data-status="Approved"  onclick="sqActionStatus('Approved', event)">
-            <span class="sqe-actions-item__dot sqe-status-dot--approved"></span>
-            <span>Onaylandi</span>
-        </button>
-        <button type="button" role="menuitem" class="sqe-actions-item" data-status="Rejected"  onclick="sqActionStatus('Rejected', event)">
-            <span class="sqe-actions-item__dot sqe-status-dot--rejected"></span>
-            <span>Reddedildi</span>
-        </button>
+        @* Hibrit governance (2026-08-04): belge türünde tanımlı+aktif onay akışı varsa
+           Onaylandı/Reddedildi ELLE seçilemez — yalnız onay akışından gelir. Asıl zorlama
+           ChangeQuoteStatus sunucu gate'inde; burası UI gizlemesidir. *@
+        @if (!Model.ApprovalGoverned)
+        {
+            <button type="button" role="menuitem" class="sqe-actions-item" data-status="Approved"  onclick="sqActionStatus('Approved', event)">
+                <span class="sqe-actions-item__dot sqe-status-dot--approved"></span>
+                <span>Onaylandi</span>
+            </button>
+            <button type="button" role="menuitem" class="sqe-actions-item" data-status="Rejected"  onclick="sqActionStatus('Rejected', event)">
+                <span class="sqe-actions-item__dot sqe-status-dot--rejected"></span>
+                <span>Reddedildi</span>
+            </button>
+        }
         <button type="button" role="menuitem" class="sqe-actions-item" data-status="Cancelled" onclick="sqActionStatus('Cancelled', event)">
             <span class="sqe-actions-item__dot sqe-status-dot--cancelled"></span>
             <span>Iptal</span>

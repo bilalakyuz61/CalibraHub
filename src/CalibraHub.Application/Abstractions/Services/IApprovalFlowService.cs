@@ -19,6 +19,14 @@ public interface IApprovalFlowService
     // departmentId null gönderildiyse Department kuralı uygulanmış akışlar bu belgeye eşlemez.
     Task<ApprovalFlowDto?> MatchFlowAsync(string documentKind, decimal? totalAmount, string? senderTaxNo, int? departmentId, CancellationToken ct);
 
+    /// <summary>
+    /// Bu belge türü (kind) için TANIMLI ve aktif bir onay akışı var mı — TUTAR/VKN/departman
+    /// KURALLARINA BAKMAKSIZIN. Elle "Onaylandı/Reddedildi" durum kilidinin (hibrit governance)
+    /// tip-seviyesi sinyali. MatchFlowAsync KULLANILMAZ: o, null tutarda tutar-kurallı akışları
+    /// eşleştirmez (FlowMatchesRules) → yalnız-tutar-kurallı bir akış varsa "yok" der ve kilit delinir.
+    /// </summary>
+    Task<bool> HasActiveFlowForKindAsync(string documentKind, CancellationToken ct);
+
     // İşleme alma ve adım onay/red
     Task<ApprovalInstanceDto> StartAsync(StartApprovalRequest request, CancellationToken ct);
     Task<ApprovalInstanceDto> ApproveStepAsync(ApproveStepRequest request, CancellationToken ct);

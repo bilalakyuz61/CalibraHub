@@ -33,6 +33,13 @@ public sealed class DocumentEditViewModel
     /// <summary>Belge tipi DB ID'si — SaveDocument body'sinde gonderilir.</summary>
     public int? DocumentTypeId { get; set; }
 
+    /// <summary>
+    /// Hibrit governance (2026-08-04): bu belge türünde tanımlı+aktif bir onay akışı varsa true.
+    /// True iken "Durum Değiştir" submenüsünde "Onaylandı"/"Reddedildi" butonları render EDİLMEZ —
+    /// bu durumlar yalnız onay akışından gelir. Asıl zorlama ChangeQuoteStatus sunucu gate'indedir.
+    /// </summary>
+    public bool ApprovalGoverned { get; set; }
+
     // ── Belge Tipi Metadata Hub (Faz N) — DocumentType tablosundan okunur ─────
     // View tarafı hard-code kontrol yapmaz; her şey bu alanlardan beslenir.
     // Yeni belge tipi (alış irsaliyesi, satınalma siparişi vb.) eklenince DB seed'i

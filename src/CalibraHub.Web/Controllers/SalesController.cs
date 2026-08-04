@@ -147,6 +147,40 @@ public sealed class SalesController : Controller
         return await HasFormPermissionAsync(formCode, actionCodes, ct);
     }
 
+    /// <summary>
+    /// Belge Id'sinden onay-akışı kind'ını **DB'den** çözer (istemci beyanına güvenmez —
+    /// HasDocumentPermissionAsync ile aynı yol). Tip çözülemezse (legacy tipsiz belge)
+    /// WildcardKind döner; auto-start (SaveQuoteAsync) ile aynı davranış.
+    /// </summary>
+    private async Task<string> ResolveDocumentKindAsync(int documentId, CancellationToken ct)
+    {
+        var doc = await _quoteService.GetQuoteByIdAsync(documentId, ct);
+        string? typeCode = null;
+        if (doc?.DocumentTypeId is int typeId)
+            typeCode = (await _documentTypeRepo.GetByIdAsync(typeId, ct))?.Code;
+        return CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.ResolveKind(typeCode);
+    }
+
+    /// <summary>
+    /// Hibrit governance (2026-08-04, kullanıcı kararı): belge türünde TANIMLI+aktif bir onay
+    /// akışı varsa "Onaylandı"/"Reddedildi" durumu ELLE değiştirilemez — yalnız onay akışından
+    /// gelir. Akış yoksa (veya belge türünde onay kapalıysa) elle onay serbest kalır (eski davranış).
+    /// approvalEnabled kontrolü auto-start (SaveQuoteAsync :1130-1135) ile BİREBİR aynı; akış tespiti
+    /// tutar-BAĞIMSIZ (HasActiveFlowForKindAsync — null-tutar under-detection tuzağına düşmez).
+    /// Board menüsü ve DocumentEdit VM flag'ı da bu predicate'i kullanır.
+    /// </summary>
+    private async Task<bool> IsApprovalGovernedAsync(string kind, CancellationToken ct)
+    {
+        var approvalEnabled = true;
+        if (kind != CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.WildcardKind)
+        {
+            approvalEnabled = await _companyParams.GetBoolAsync(
+                ApprovalParameters.FormCode, ApprovalParameters.EnabledKey(kind), ct) ?? true;
+        }
+        if (!approvalEnabled) return false;
+        return await _approvalFlowService.HasActiveFlowForKindAsync(kind, ct);
+    }
+
     private int? CurrentUserId()
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -188,10 +222,14 @@ public sealed class SalesController : Controller
     // inlineStatusMenu: Seq 1071 inline durum menüsü YALNIZ Satış Teklifi listesinde
     // (kullanıcının istediği ekran). Sipariş/İrsaliye listeleri eski deep-link davranışını
     // korur — C-Grid değişikliği açık talep olmadan diğer ekranlara YAYILMAZ (feedback_cgrid_propagation).
-    private static object[] BuildRecordOperationActions(int id, bool inlineStatusMenu) => new object[]
+    // approvalGoverned: belge türünde tanımlı+aktif onay akışı varsa (hibrit governance) inline
+    // durum menüsünden "Onaylandı"/"Reddedildi" seçenekleri GİZLENİR (yalnız onay akışından gelir).
+    // UI gizlemedir; asıl zorlama ChangeQuoteStatus sunucu gate'indedir. Deep-link (inlineStatusMenu
+    // false) yolu DocumentEdit'e gider, orada kendi VM flag'ıyla gizler.
+    private static object[] BuildRecordOperationActions(int id, bool inlineStatusMenu, bool approvalGoverned = false) => new object[]
     {
         inlineStatusMenu
-            ? (object)BuildChangeStatusAction()
+            ? (object)BuildChangeStatusAction(approvalGoverned)
             : (object)new { label = "Durum Değiştir", icon = "Clock", color = "violet", url = $"/Sales/DocumentEdit?id={id}&autoAction=status" },
         new { label = "Tüm Ürünlerin Maliyeti", icon = "Receipt",   color = "amber",  url = $"/Sales/DocumentEdit?id={id}&autoAction=costs" },
         new { label = "Onay Süreci",            icon = "GitBranch", color = "sky",    url = $"/Sales/DocumentEdit?id={id}&autoAction=approval" },
@@ -208,21 +246,29 @@ public sealed class SalesController : Controller
     /// BİREBİR aynı (satır 2649-2668) — akış/izin mantığı değişmedi, sadece tetikleme
     /// yolu (deep-link → inline menü) değişti.
     /// </summary>
-    private static object BuildChangeStatusAction() => new
+    private static object BuildChangeStatusAction(bool approvalGoverned) => new
     {
         label = "Durum Değiştir",
         icon = "Clock",
         color = "violet",
         type = "status-menu",
         apiUrl = "/Sales/ChangeQuoteStatus",
-        options = new object[]
-        {
-            new { value = "Draft",     label = "Taslak",     color = "slate" },
-            new { value = "Sent",      label = "Gönderildi", color = "blue" },
-            new { value = "Approved",  label = "Onaylandı",  color = "emerald" },
-            new { value = "Rejected",  label = "Reddedildi", color = "rose" },
-            new { value = "Cancelled", label = "İptal",      color = "amber" },
-        },
+        // governed türde Onaylandı/Reddedildi çıkarılır — onay akışından gelmelidir.
+        options = approvalGoverned
+            ? new object[]
+            {
+                new { value = "Draft",     label = "Taslak",     color = "slate" },
+                new { value = "Sent",      label = "Gönderildi", color = "blue" },
+                new { value = "Cancelled", label = "İptal",      color = "amber" },
+            }
+            : new object[]
+            {
+                new { value = "Draft",     label = "Taslak",     color = "slate" },
+                new { value = "Sent",      label = "Gönderildi", color = "blue" },
+                new { value = "Approved",  label = "Onaylandı",  color = "emerald" },
+                new { value = "Rejected",  label = "Reddedildi", color = "rose" },
+                new { value = "Cancelled", label = "İptal",      color = "amber" },
+            },
     };
 
     [HttpGet]
@@ -272,6 +318,11 @@ public sealed class SalesController : Controller
         var quotes = await _quoteService.GetByTypeAsync("satis_teklifi", search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
         var quoteAuditFormCode = DocumentTypeFormMap.Resolve("satis_teklifi").Header;
+
+        // Hibrit governance (2026-08-04): Satış Teklifi türünde tanımlı+aktif onay akışı varsa
+        // inline durum menüsünde Onaylandı/Reddedildi gizlenir. Tek tip board → bir kez hesapla.
+        var quotesKind = CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.ResolveKind("satis_teklifi");
+        var quotesApprovalGoverned = await IsApprovalGovernedAsync(quotesKind, ct);
 
         // 2026-05-24: SmartBoardFilterHelpers ile standardize.
         var sqSchema = await _widgetService.GetFormSchemaByCodeAsync("SALES_QUOTE_EDIT", ct);
@@ -450,7 +501,7 @@ public sealed class SalesController : Controller
                         submitLabel = "Gonder",
                         successMessage = "Mail kuyruga alindi",
                     },
-                }.Concat(BuildRecordOperationActions(quote.Id, inlineStatusMenu: true)).Append(BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode)).ToArray(),
+                }.Concat(BuildRecordOperationActions(quote.Id, inlineStatusMenu: true, approvalGoverned: quotesApprovalGoverned)).Append(BuildAuditLogAction("satis_teklifi", quote.Id, quoteAuditFormCode)).ToArray(),
             });
         }
 
@@ -996,9 +1047,14 @@ public sealed class SalesController : Controller
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
         };
+        // Hibrit governance (2026-08-04): bu belge türünde tanımlı+aktif onay akışı varsa
+        // durum submenüsünde Onaylandı/Reddedildi gizlenir (yalnız onay akışından gelir).
+        var _docKind = CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.ResolveKind(typeCode);
+        var _approvalGoverned = await IsApprovalGovernedAsync(_docKind, ct);
         var vm = new DocumentEditViewModel
         {
             DocumentId = id,
+            ApprovalGoverned = _approvalGoverned,
             LineGridConfigJson = System.Text.Json.JsonSerializer.Serialize(lineGridConfig, jsonOpts),
             DocumentTypeCode = typeCode,
             DocumentTypeId = typeId,
@@ -1997,6 +2053,18 @@ public sealed class SalesController : Controller
         // belgenin durumunu giris yapmis herkes degistirebiliyordu).
         if (!await HasDocumentPermissionAsync(body.Id, WriteActionCodes, ct))
             return Json(new { success = false, message = "Bu belgenin durumunu değiştirmek için yetkiniz bulunmuyor." });
+
+        // Hibrit governance (2026-08-04): belge türünde tanımlı+aktif onay akışı varsa
+        // "Onaylandı"/"Reddedildi" ELLE yapılamaz — governance'ı atlayıp durumu elle çekmek
+        // engellenir; onay akışından ilerlenmelidir. Frontend bu seçenekleri zaten gizler,
+        // ama asıl (otoriter) zorlama BURADADIR (kaba tip-seviyesi UI gizlemesine güvenilmez).
+        if (string.Equals(body.Status, "Approved", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(body.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+        {
+            var kind = await ResolveDocumentKindAsync(body.Id, ct);
+            if (await IsApprovalGovernedAsync(kind, ct))
+                return Json(new { success = false, message = "Bu belge türü onay süreciyle yönetiliyor. 'Onaylandı'/'Reddedildi' durumu elle değiştirilemez; onay akışından ilerlemelidir." });
+        }
 
         var (success, error) = await _quoteService.ChangeStatusAsync(body.Id, body.Status, ct);
         if (!success) return Json(new { success = false, message = error });
