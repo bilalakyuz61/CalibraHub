@@ -4211,3 +4211,21 @@ body.app-theme-dark .cst-root {
    yorum bloguna bak. ══════════ */
 .scs-panel { color-scheme: light; }
 body.app-theme-dark .scs-panel { color-scheme: dark; }
+
+/* ══════════ Seq 1081: Kalem KART koyu tema uyumu ══════════
+   Kart görünümü (CalibraLineItemsGrid --cards) Tailwind `bg-white` utility'si
+   kullanıyor; yukarıdaki .scs-panel ile AYNI sınıf bug — utility'ler dark:
+   override'ı eziyor, kartlar KOYU temada BEYAZ kalıyordu ("tema uyum sorunu").
+   Kanonik body.app-theme-dark ile net koyu yüzey/kenar (Tailwind'i geçmek için
+   !important, dosyadaki mevcut desenle tutarlı). Açık tema etkilenmez. */
+body.app-theme-dark .calibra-line-grid--cards {
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}
+body.app-theme-dark .calibra-line-card {
+  background: rgba(148,163,184,0.07) !important;
+  border-color: rgba(255,255,255,0.11) !important;
+}
+body.app-theme-dark .calibra-line-card:hover {
+  border-color: rgba(129,140,248,0.35) !important;
+}
