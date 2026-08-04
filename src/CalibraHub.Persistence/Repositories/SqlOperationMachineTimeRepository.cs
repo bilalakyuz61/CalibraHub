@@ -185,6 +185,7 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
             SELECT TOP 1 [Id], [MachineId], [ItemId], [RoutingId], [Quantity], [DurationPerUnit], [DurationUnit]
             FROM {_table}
             WHERE [CompanyId] = @CompanyId AND [OperationId] = @OperationId AND [IsActive] = 1
+              AND [MachineGroupId] IS NULL AND [ItemGroupId] IS NULL  -- Faz 1: grup satırları (MachineId/ItemId NULL) her makineye 'genel' gibi yanlış eşleşmesin
               AND ([MachineId] = @MachineId OR [MachineId] IS NULL)
               AND ([ItemId] = @ItemId OR [ItemId] IS NULL)
               AND ([RoutingId] = @RoutingId OR [RoutingId] IS NULL)

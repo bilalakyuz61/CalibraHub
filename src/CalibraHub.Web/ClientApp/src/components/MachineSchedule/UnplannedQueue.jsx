@@ -20,7 +20,7 @@ function OpCard({ op }) {
       <div className="ms-op-meta">
         <span className="ms-op-badge"><Layers size={11} /> {op.operationName}</span>
         {op.estimatedMinutes ? (
-          <span className="ms-op-badge"><Clock size={11} /> {op.estimatedMinutes} dk</span>
+          <span className="ms-op-badge"><Clock size={11} /> {Math.round(op.estimatedMinutes)} dk</span>
         ) : null}
       </div>
     </div>

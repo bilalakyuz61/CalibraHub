@@ -37,6 +37,7 @@ public static class AuditFieldLabels
             ["Item"]           = "Malzeme Kartı",
             ["Contact"]        = "Cari Hesap",
             ["WorkOrder"]      = "İş Emri",
+            ["MachineScheduleBlock"] = "Makine Planlama Bloğu",
             ["Bom"]            = "Ürün Ağacı",
             ["ItemKit"]        = "Kit (Paket Ürün)",
             ["Personnel"]      = "Personel",

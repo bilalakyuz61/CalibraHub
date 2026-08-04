@@ -53,6 +53,7 @@ public sealed class ProductionController : Controller
     private readonly ILogger<ProductionController> _logger;
     // 2026-08-04 — Makine Planlama (Üretim Çizelgeleme) Faz 1 Manuel.
     private readonly IMachineScheduleRepository _machineSchedule;
+    private readonly CalibraHub.Application.Auditing.IAuditTrailService _audit;
 
     public ProductionController(
         IWorkOrderService service,
@@ -72,6 +73,7 @@ public sealed class ProductionController : Controller
         CalibraHub.Application.Services.ShopFloorLockoutTracker shopFloorLockout,
         CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
         IMachineScheduleRepository machineSchedule,
+        CalibraHub.Application.Auditing.IAuditTrailService audit,
         ILogger<ProductionController> logger)
     {
         _service = service;
@@ -91,8 +93,17 @@ public sealed class ProductionController : Controller
         _shopFloorLockout = shopFloorLockout;
         _connectionFactory = connectionFactory;
         _machineSchedule = machineSchedule;
+        _audit = audit;
         _logger = logger;
     }
+
+    private static string BlockTypeLabel(byte t) => t switch
+    {
+        2 => "Hazırlık",
+        3 => "Bakım",
+        4 => "Duruş",
+        _ => "Üretim",
+    };
 
     private int ResolveCurrentCompanyIdSafe()
     {
@@ -1459,8 +1470,12 @@ public sealed class ProductionController : Controller
     {
         try
         {
-            var fromUtc = DateTime.SpecifyKind(from, DateTimeKind.Utc);
-            var toUtc = DateTime.SpecifyKind(to, DateTimeKind.Utc);
+            // Frontend UTC "...Z" ISO gönderir; MVC query binder bunu yerel saate çevirip
+            // Kind=Local (doğru instant, yanlış etiket) döner. SpecifyKind saat rakamını
+            // değiştirmeden etiketi UTC yaparsa pencere sunucu offset'i kadar kayar ve kenardaki
+            // bloklar sessizce düşer. ToUniversalTime doğru instant'ı verir (Utc ise no-op).
+            var fromUtc = from.ToUniversalTime();
+            var toUtc = to.ToUniversalTime();
             var data = await _machineSchedule.GetScheduleDataAsync(fromUtc, toUtc, ct);
             return Json(new { ok = true, machines = data.Machines, blocks = data.Blocks, unplanned = data.Unplanned });
         }
@@ -1482,7 +1497,16 @@ public sealed class ProductionController : Controller
             return Json(new { ok = false, error = "Bitiş zamanı başlangıçtan sonra olmalı." });
         try
         {
+            var isNew = req.Id <= 0;
             var result = await _machineSchedule.SaveBlockAsync(req, CurrentUserId(), ct);
+            // Audit: yalnız yeni blok oluşturmayı logla. Taşıma/yeniden-boyutlandırma (req.Id>0)
+            // Gantt'ta sık update ürettiğinden bilinçli olarak loglanmaz (gürültü önleme).
+            if (isNew)
+            {
+                _audit.LogInsert("MachineScheduleBlock", result.Id,
+                    $"{BlockTypeLabel(req.BlockType)} bloğu — Makine #{req.MachineId}",
+                    detail: $"{req.StartUtc:yyyy-MM-dd HH:mm} → {req.EndUtc:yyyy-MM-dd HH:mm} (UTC)");
+            }
             return Json(new { ok = result.Ok, id = result.Id, conflicts = result.Conflicts });
         }
         catch (Exception ex)
@@ -1504,6 +1528,7 @@ public sealed class ProductionController : Controller
         try
         {
             await _machineSchedule.DeleteBlockAsync(req.Id, CurrentUserId(), ct);
+            _audit.LogDelete("MachineScheduleBlock", req.Id, $"Planlama bloğu #{req.Id}");
             return Json(new { ok = true });
         }
         catch (Exception ex)

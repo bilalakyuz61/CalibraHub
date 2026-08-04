@@ -35,6 +35,7 @@ export default function BlockEditPopover({ block, clientX, clientY, onClose, onS
       title: 'Planı Sil',
       message: `"${label}" planlama bloğunu silmek istediğinize emin misiniz?`,
       okLabel: 'Evet, Sil',
+      danger: true,
     })
     if (!ok) return
     setSaving(true)
