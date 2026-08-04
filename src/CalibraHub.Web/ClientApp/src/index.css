@@ -3270,10 +3270,14 @@ body.app-theme-dark .nw-col-editor .tiptap blockquote.nw-callout {
   box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important;
 }
 
-/* CalibraLineItemsGrid — satir-ici silme geri sayim cubugu (Gmail "Undo" patterni) */
-@keyframes lgDeleteCountdown {
-  from { width: 100%; }
-  to   { width: 0%; }
+/* CalibraLineItemsGrid — Kur (döviz kuru) input'u, grid footer (PageComment Seq 1083).
+   Native input color-scheme sinyali olmadan light modda bile beyaz/light render
+   olabilir (bkz. CLAUDE.md "color-scheme zorunluluğu") — light default, dark override. */
+.calibra-line-exrate-input {
+  color-scheme: light;
+}
+body.app-theme-dark .calibra-line-exrate-input {
+  color-scheme: dark;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -171,12 +171,13 @@ export default function CalibraLineItemsGrid(props) {
   useEffect(function () { rowsRef.current = rows }, [rows])
   var priceManualRef = useRef({})
 
-  // ── Silme: modal yerine satir-ici geri sayim (Gmail "Undo" patterni) ──
-  // pendingDelete[rowUid] = true ise satir 3 saniye icinde silinir; kullanici
-  // "İptal" tuşuna basarsa silme iptal edilir. Timeout ID'leri ref'te tutulur.
-  var DELETE_COUNTDOWN_MS = 3000
-  var [pendingDelete, setPendingDelete] = useState(function () { return {} })
-  var deleteTimeoutsRef = useRef({})
+  // ── Silme: ekran-ortasi onay modali (PageComment Seq 1082) ──
+  // Onceki surumde satir-ici geri sayim (Gmail "Undo") kullaniliyordu; kullanici
+  // suresiz bekleme yerine standart silme onay modali istedi (CLAUDE.md "Silme
+  // onay standardi"). deleteConfirmUid dolu ise ilgili satir icin modal acik —
+  // "Sil" ile ANINDA silinir (geri sayim yok), "Vazgec"te modal kapanir.
+  var [deleteConfirmUid, setDeleteConfirmUid] = useState(null)
+  var deleteConfirmBtnRef = useRef(null)
   // ── Duzeltme modu per satir (kilit/unlock mantigi icin altyapi) ──
   var [editingRowUid, setEditingRowUid] = useState(null)
   // ── "Not ekle" ile acilan satirlar (row-below kolonlarini gostermek icin) ──
@@ -285,6 +286,42 @@ export default function CalibraLineItemsGrid(props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // Kur alanının okunabilir gösterimi — TR yerel ayarı, 2-6 ondalık (32 → "32,00",
+  // 32,4567 → "32,4567"). Kullanıcı odaktan çıkana (blur) veya Enter'a kadar
+  // exchangeRateInput serbestçe düzenlenir; commit sonrası bu format ile eşitlenir.
+  function formatExchangeRateDisplay(n) {
+    var x = Number(n)
+    if (!isFinite(x) || x <= 0) x = 1
+    return x.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 6 })
+  }
+  // ── Kur alanı (grid footer, PageComment Seq 1083) — #sqExchangeRate ile İKİ YÖNLÜ köprü ──
+  //   Kullanıcı grid'deki "Kur" input'unu değiştirince #sqExchangeRate.value yazılır +
+  //   input/change event'i FIRLATILIR (DocumentEdit'in kendi sqRecalc/TCMB dinleyicileri
+  //   tetiklensin diye). #sqExchangeRate DIŞARIDAN (TCMB fetch, sqLoadQuote) değişirse
+  //   yukarıdaki sync() efekti exchangeRate state'ini zaten günceller — bu useEffect de
+  //   input'un gösterdiği metni o an kullanıcı yazmıyorsa yeniden formatlar.
+  var [exchangeRateInput, setExchangeRateInput] = useState(function () { return formatExchangeRateDisplay(exchangeRate) })
+  var exchangeRateEditingRef = useRef(false)
+  useEffect(function () {
+    if (exchangeRateEditingRef.current) return
+    setExchangeRateInput(formatExchangeRateDisplay(exchangeRate))
+  }, [exchangeRate])
+  function commitExchangeRate(raw) {
+    exchangeRateEditingRef.current = false
+    var n = parseFloat(String(raw == null ? '' : raw).replace(',', '.'))
+    if (!isFinite(n) || n <= 0) {
+      setExchangeRateInput(formatExchangeRateDisplay(exchangeRate))
+      return
+    }
+    var el = (typeof document !== 'undefined') ? document.getElementById('sqExchangeRate') : null
+    if (el) {
+      el.value = String(n)
+      try { el.dispatchEvent(new Event('input', { bubbles: true })) } catch (_) {}
+      try { el.dispatchEvent(new Event('change', { bubbles: true })) } catch (_) {}
+    }
+    setExchangeRate(n)
+    setExchangeRateInput(formatExchangeRateDisplay(n))
+  }
   // TL kolonlari (unitPriceTL/lineTotalTL, config'te tlMirror:true) yalniz belge dovizi
   // TRY disiyken gorunur — TRY belgede TL karsiligi gereksiz kolon olur.
   var showTlColumns = !!docCurrency && docCurrency !== 'TRY'
@@ -299,10 +336,11 @@ export default function CalibraLineItemsGrid(props) {
   // ekleyip kaldirmak yerine, "columns" var zaten reassignable — bkz. yukarida tanimi).
   columns = columns.filter(function (c) { return !c.tlMirror || showTlColumns })
 
-  // ── Kart duzeni (PageComment Seq 1079) — kolonlari kart bolgelerine ayir ──
-  //   tlMirror kolonlari (unitPriceTL/lineTotalTL) artik ayri alan DEGIL; kaynak
-  //   alanin (unitPrice/lineTotal) hemen altinda kucuk ikinci satir olarak
-  //   gosterilir (bkz. tlMirrorBySource + kart alan grid'i asagida).
+  // ── Kart duzeni (PageComment Seq 1079, TL yerlesimi Seq 1083'te guncellendi) ──
+  //   kolonlari kart bolgelerine ayir. tlMirror kolonlari (unitPriceTL/lineTotalTL)
+  //   ayri alan DEGIL; kaynak alanin (unitPrice/lineTotal) HEMEN YANINDA (yatay,
+  //   ayni satirda) kucuk bir TL rozeti olarak gosterilir (bkz. tlMirrorBySource +
+  //   kart alan grid'i asagida — showMirror ile gridColumn:'span 2').
   //   materialCode/materialName kartin ust kimlik bolgesine, geri kalanlar
   //   (miktar/birim/fiyat/iskonto/kdv/toplam/seri vb.) alan izgarasina gider.
   //   LineGridCell'in kendisi DEGISMEDI — sadece dis yerlesim (tablo -> kart).
@@ -861,70 +899,55 @@ export default function CalibraLineItemsGrid(props) {
     })
   }
 
-  // ── Satir sil — geri sayim ile (modal yok) ──
+  // ── Satir sil — ekran-ortasi onay modali (PageComment Seq 1082) ──
+  // Sil butonu once onay modalini acar (performDeleteRow HENUZ cagrilmaz).
   function handleDeleteRow(rowUid) {
-    // Zaten beklemede ise tekrar baslatmaya gerek yok
-    if (pendingDelete[rowUid]) return
-    setPendingDelete(function (prev) {
-      var next = Object.assign({}, prev)
-      next[rowUid] = true
-      return next
-    })
-    // Sure dolunca gercek silmeyi yap.
-    // ONEMLI: Silinen satir aktif (revisedFromId=null) satirsa, ona isaret eden
-    // eski revizyon satirlari da zincir boyunca silinmeli. Aksi halde kayit
-    // silinince eski surum gorunur hale gelir. Save sirasinda da getRows()
-    // listesinden cikan tum id'ler backend tarafindan DELETE edilir.
-    var tid = setTimeout(function () {
-      setRows(function (prev) {
-        var target = prev.find(function (r) { return r._uid === rowUid })
-        if (!target) return prev
-        // Zinciri BFS ile topla: hedef + hedefin id'sine isaret eden eski surumleri bul
-        var removeUids = {}
-        removeUids[target._uid] = true
-        var queue = [target]
-        var guard = 0
-        while (queue.length > 0 && guard < 50) {
-          var cur = queue.shift()
-          guard++
-          if (!cur.id || Number(cur.id) <= 0) continue
-          var curId = Number(cur.id)
-          prev.forEach(function (r) {
-            if (r.revisedFromId != null && Number(r.revisedFromId) === curId && !removeUids[r._uid]) {
-              removeUids[r._uid] = true
-              queue.push(r)
-            }
-          })
-        }
-        return prev.filter(function (r) { return !removeUids[r._uid] })
-      })
-      setPendingDelete(function (prev) {
-        var next = Object.assign({}, prev)
-        delete next[rowUid]
-        return next
-      })
-      delete deleteTimeoutsRef.current[rowUid]
-    }, DELETE_COUNTDOWN_MS)
-    deleteTimeoutsRef.current[rowUid] = tid
+    setDeleteConfirmUid(rowUid)
   }
-  function cancelPendingDelete(rowUid) {
-    if (deleteTimeoutsRef.current[rowUid]) {
-      clearTimeout(deleteTimeoutsRef.current[rowUid])
-      delete deleteTimeoutsRef.current[rowUid]
-    }
-    setPendingDelete(function (prev) {
-      var next = Object.assign({}, prev)
-      delete next[rowUid]
-      return next
+  // Gercek silme islemi — modalda "Sil" onaylandiginda ANINDA calisir.
+  // ONEMLI: Silinen satir aktif (revisedFromId=null) satirsa, ona isaret eden
+  // eski revizyon satirlari da zincir boyunca silinmeli. Aksi halde kayit
+  // silinince eski surum gorunur hale gelir. Save sirasinda da getRows()
+  // listesinden cikan tum id'ler backend tarafindan DELETE edilir.
+  function performDeleteRow(rowUid) {
+    setRows(function (prev) {
+      var target = prev.find(function (r) { return r._uid === rowUid })
+      if (!target) return prev
+      // Zinciri BFS ile topla: hedef + hedefin id'sine isaret eden eski surumleri bul
+      var removeUids = {}
+      removeUids[target._uid] = true
+      var queue = [target]
+      var guard = 0
+      while (queue.length > 0 && guard < 50) {
+        var cur = queue.shift()
+        guard++
+        if (!cur.id || Number(cur.id) <= 0) continue
+        var curId = Number(cur.id)
+        prev.forEach(function (r) {
+          if (r.revisedFromId != null && Number(r.revisedFromId) === curId && !removeUids[r._uid]) {
+            removeUids[r._uid] = true
+            queue.push(r)
+          }
+        })
+      }
+      return prev.filter(function (r) { return !removeUids[r._uid] })
     })
   }
-  // Component unmount oldugunda tum bekleyen timer'lari temizle
+  // Silme onay modali acikken Esc = vazgec, Enter = sil (odak modal disinda
+  // olsa bile calisir — shortcutsMenu Esc deseniyle tutarli).
   useEffect(function () {
-    return function () {
-      Object.values(deleteTimeoutsRef.current).forEach(clearTimeout)
-      deleteTimeoutsRef.current = {}
+    if (!deleteConfirmUid) return undefined
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); setDeleteConfirmUid(null) }
+      else if (e.key === 'Enter') { e.preventDefault(); performDeleteRow(deleteConfirmUid); setDeleteConfirmUid(null) }
     }
-  }, [])
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [deleteConfirmUid])
+  // Modal acilinca "Sil" butonuna odak (silme onay standardi: Ok butonu varsayilan focus'ta)
+  useEffect(function () {
+    if (deleteConfirmUid && deleteConfirmBtnRef.current) deleteConfirmBtnRef.current.focus()
+  }, [deleteConfirmUid])
 
   // Shortcuts menu — Esc kapatir, scroll pozisyondan ayrilma sorunu yasatmamak
   // icin scroll'da da kapatilir (yeniden konumlamaktansa kapatmak daha tutarli).
@@ -1239,7 +1262,6 @@ export default function CalibraLineItemsGrid(props) {
                 }
               })
               return visibleRows.map(function(row) {
-              var isPending = pendingDelete[row._uid] === true
               var isKitHeader = row.id != null && Number(row.id) > 0 && kitHeaderIds[Number(row.id)] === true
               var isKitComponent = row.kitParentLineId != null && Number(row.kitParentLineId) > 0
               return (
@@ -1269,7 +1291,7 @@ export default function CalibraLineItemsGrid(props) {
                       kirmizi cizgi. Sadece satirda icerik (materialCode) varken ve bir
                       requirePositive kolonu bos/<=0 iken gorunur (bkz. rowHasInvalidRequiredQty).
                       Uzun listede sorunlu karti hucrelere tek tek bakmadan taramaya yarar. */}
-                  {rowHasInvalidRequiredQty(row) && !isPending && (
+                  {rowHasInvalidRequiredQty(row) && (
                     <div
                       style={{
                         position: 'absolute', left: 0, top: 0, bottom: 0,
@@ -1278,27 +1300,6 @@ export default function CalibraLineItemsGrid(props) {
                         boxShadow: '0 0 6px rgba(239,68,68,.6)',
                       }}
                     />
-                  )}
-                  {/* Silme geri sayim cubugu — kartin alt kenarinda tam genislikte,
-                      3 saniyede 0'a kuculur (sagdan sola, Gmail "Undo" patterni). */}
-                  {isPending && (
-                    <div
-                      style={{
-                        position: 'absolute', left: 0, right: 0, bottom: 0,
-                        height: 3, zIndex: 5, pointerEvents: 'none',
-                        background: 'rgba(239,68,68,.15)',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: '100%',
-                          background: '#ef4444',
-                          animation: 'lgDeleteCountdown ' + DELETE_COUNTDOWN_MS + 'ms linear forwards',
-                          boxShadow: '0 0 8px rgba(239,68,68,.8)',
-                        }}
-                      />
-                    </div>
                   )}
 
                   <div
@@ -1367,16 +1368,21 @@ export default function CalibraLineItemsGrid(props) {
                       </div>
 
                     {/* ── Kart alan izgarasi: kalan kolonlar (miktar/birim/fiyat/iskonto/
-                        kdv/toplam/seri vb.), her biri kendi etiketiyle. TL karsiligi
-                        (Seq 1077b, tlMirror) olan alanlarda kucuk ikinci satir olarak
-                        alt tarafta gosterilir — ayri kolon DEGIL. DOM'da kimlik alanindan
-                        (materialCode/materialName) hemen sonra gelir — Enter-nav bu
-                        alanlari aksiyon butonlarindan ONCE gezer (bkz. asagidaki not). */}
+                        kdv/toplam/seri vb.), her biri kendi etiketiyle. Sabit min-genislik
+                        + esit sutunlar (auto-fill/minmax) tum alanlarin ayni hiza/genislikte
+                        durmasini saglar; her hucrenin etiketi tek satirda kirpilir (truncate)
+                        boylece giris kutulari hep ayni dikey hizada baslar (PageComment
+                        Seq 1083 "simetrik duzen"). TL karsiligi (tlMirror) olan alanlarda
+                        (birim fiyat/satir toplami) doviz kutusunun HEMEN YANINDA kucuk bir
+                        TL rozeti gosterilir — artik alt satir DEGIL (Seq 1083 "TL yaninda");
+                        bu alanlar 2 sutun kaplar (daha fazla yer gerektigi icin). DOM'da
+                        kimlik alanindan (materialCode/materialName) hemen sonra gelir —
+                        Enter-nav bu alanlari aksiyon butonlarindan ONCE gezer (bkz. asagidaki not). */}
                     <div
                       style={{
                         gridArea: 'fields', display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(108px, 1fr))',
-                        columnGap: 12, rowGap: 10,
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
+                        columnGap: 12, rowGap: 10, alignItems: 'start',
                       }}
                       className={isKitComponent ? 'opacity-90' : ''}
                     >
@@ -1385,28 +1391,35 @@ export default function CalibraLineItemsGrid(props) {
                         var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
                         var Icon = resolveIcon(col.icon)
                         var mirror = tlMirrorBySource[col.key]
+                        var showMirror = mirror && showTlColumns
+                        var cellStyle = showMirror ? Object.assign({ gridColumn: 'span 2' }, lockedStyle) : lockedStyle
                         return (
-                          <div key={col.key} data-cell-key={col.key} style={lockedStyle}>
+                          <div key={col.key} data-cell-key={col.key} style={cellStyle}>
                             <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
                               <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
                               <span className="truncate">{col.label}</span>
                               {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
                             </div>
-                            <div className="rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]">
-                              <LineGridCell
-                                column={col}
-                                row={row}
-                                value={tlCellValue(col, row)}
-                                onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                                siblingColumns={allColumns}
-                              />
-                            </div>
-                            {mirror && showTlColumns && (
-                              <div className="mt-0.5 px-0.5 flex items-center gap-1 text-[10.5px] font-mono tabular-nums text-slate-500 dark:text-white/40">
-                                <span className="opacity-70">₺</span>
-                                <span>{TR_FMT(tlCellValue(mirror, row), mirror.precision)}</span>
+                            <div className="flex items-stretch gap-1.5">
+                              <div className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]">
+                                <LineGridCell
+                                  column={col}
+                                  row={row}
+                                  value={tlCellValue(col, row)}
+                                  onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                  siblingColumns={allColumns}
+                                />
                               </div>
-                            )}
+                              {showMirror && (
+                                <div
+                                  className="flex-shrink-0 flex items-center gap-1 px-2 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03] text-[11px] font-mono tabular-nums text-slate-500 dark:text-white/45"
+                                  title="Belge kuruyla TL karşılığı"
+                                >
+                                  <span className="opacity-70">₺</span>
+                                  <span>{TR_FMT(tlCellValue(mirror, row), mirror.precision)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )
                       })}
@@ -1522,23 +1535,18 @@ export default function CalibraLineItemsGrid(props) {
                       <button
                         type="button"
                         onClick={function() {
-                          // Silme bekleme konumunda tekrar basarsa silme IPTAL
-                          if (isPending) { cancelPendingDelete(row._uid); return }
                           if (canDelete(row)) handleDeleteRow(row._uid)
                         }}
-                        disabled={!canDelete(row) && !isPending}
+                        disabled={!canDelete(row)}
                         className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                          (!canDelete(row) && !isPending)
+                          !canDelete(row)
                             ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                            : (isPending
-                                ? 'text-white bg-rose-600 ring-2 ring-rose-400 animate-pulse'
-                                : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500')
+                            : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500'
                         )}
-                        title={isPending ? 'Silmeyi iptal et'
-                               : ((isKitHeader || isKitComponent) ? 'Kit teslimat satiri — kit bilesenleriyle birlikte yonetilir, tek tek duzenlenemez/silinemez'
-                                  : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil')))}
+                        title={(isKitHeader || isKitComponent) ? 'Kit teslimat satiri — kit bilesenleriyle birlikte yonetilir, tek tek duzenlenemez/silinemez'
+                               : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? (row.__deleteLockReason || 'Bu satir silinemez') : 'Sil'))}
                       >
-                        {canDelete(row) || isPending ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
+                        {canDelete(row) ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
                       </button>
                     </div>
                   </div>
@@ -1623,6 +1631,28 @@ export default function CalibraLineItemsGrid(props) {
           )
         })()}
 
+        {/* Belge kuru (Seq 1083) — #sqExchangeRate ile iki yonlu senkron; sadece
+            belge dovizi TRY disiyken anlamli oldugu icin showTlColumns'a bagli. */}
+        {showTlColumns && (
+          <div className="flex items-center gap-1.5 text-[12px]">
+            <span className="text-slate-500 dark:text-white/40 uppercase tracking-wider font-semibold text-[10px]">
+              Kur
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={exchangeRateInput}
+              onFocus={function () { exchangeRateEditingRef.current = true }}
+              onChange={function (e) { setExchangeRateInput(e.target.value) }}
+              onBlur={function (e) { commitExchangeRate(e.target.value) }}
+              onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+              className="calibra-line-exrate-input w-[76px] px-2 py-1 rounded-md border text-right font-mono tabular-nums text-[12px] border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-white/15 dark:bg-white/[0.04] dark:text-white/85"
+              title={'Belge kuru — 1 ' + docCurrency + ' = kaç TL (değiştirilebilir)'}
+            />
+            <span className="text-slate-400 dark:text-white/30 text-[10.5px]">₺</span>
+          </div>
+        )}
+
         {footer.showSubtotal && rows.length > 0 && (
           <div className="flex items-center gap-3 text-[12px]">
             <span className="text-slate-500 dark:text-white/40 uppercase tracking-wider font-semibold text-[10px]">
@@ -1648,8 +1678,58 @@ export default function CalibraLineItemsGrid(props) {
         )}
       </div>
 
-      {/* Modal kaldirildi — silme artik satir-ici geri sayim ile yapiliyor.
-          Bkz. handleDeleteRow + pendingDelete state + row icindeki overlay. */}
+      {/* Silme onay modali (PageComment Seq 1082) — CLAUDE.md "Silme onay standardi":
+          tam ekran backdrop + ortalanmis card + danger ikon + Vazgec/Sil. Native
+          confirm() KULLANILMAZ. Esc/backdrop = vazgec, Enter = onay (bkz. yukaridaki
+          deleteConfirmUid useEffect'i); Sil butonu acilista odakta (autoFocus + ref). */}
+      {deleteConfirmUid && (function () {
+        var drow = rows.find(function (r) { return r._uid === deleteConfirmUid }) || null
+        if (!drow) return null
+        function doCancel() { setDeleteConfirmUid(null) }
+        function doConfirm() { performDeleteRow(deleteConfirmUid); setDeleteConfirmUid(null) }
+        return createPortal(
+          <div
+            onClick={function (e) { if (e.target === e.currentTarget) doCancel() }}
+            className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+            style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+          >
+            <div
+              className="w-full max-w-[380px] rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#171c2a] overflow-hidden"
+              onClick={function (e) { e.stopPropagation() }}
+            >
+              <div className="p-5 flex flex-col items-center text-center gap-3">
+                <div className="w-11 h-11 rounded-full flex items-center justify-center bg-rose-50 text-rose-500 dark:bg-rose-500/15 dark:text-rose-300">
+                  <Trash2 size={20} strokeWidth={2} />
+                </div>
+                <div>
+                  <div className="text-[14px] font-bold text-slate-800 dark:text-white">Kalemi Sil</div>
+                  <div className="text-[12.5px] text-slate-500 dark:text-white/50 mt-1 leading-snug">
+                    {'"' + (drow.materialName || drow.materialCode || 'Bu kalem') + '" satırı silinecek. Bu işlem geri alınamaz.'}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-5 pb-5">
+                <button
+                  type="button"
+                  onClick={doCancel}
+                  className="flex-1 px-3 py-2 rounded-lg text-[12.5px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-white/70 dark:hover:bg-white/5"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="button"
+                  ref={deleteConfirmBtnRef}
+                  onClick={doConfirm}
+                  className="flex-1 px-3 py-2 rounded-lg text-[12.5px] font-bold text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-500 dark:hover:bg-rose-400"
+                >
+                  Sil
+                </button>
+              </div>
+            </div>
+          </div>,
+          (document.querySelector('.sqe-body') || document.body)
+        )
+      })()}
 
       {/* Satir-basi Ek Alanlar modali — SALES_QUOTE_LINES formunun widget'lari.
           Sadece kayitli satirlarda (row.id > 0) acilir; recordId = line.id.
