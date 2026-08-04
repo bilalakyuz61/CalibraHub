@@ -3,6 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"]    = isNew ? "Yeni Görev" : $"Görev: {Model.Name}";
     ViewData["FormCode"] = "SCHEDULED_TASKS";
+    ViewData["HelpKey"]  = "scheduled-task-edit";
     ViewData["BodyClass"] = "page-st-edit workspace-frame-body";
 }
 

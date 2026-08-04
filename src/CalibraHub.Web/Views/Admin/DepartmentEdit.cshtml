@@ -2,6 +2,7 @@
 @{
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni Departman" : $"Departman: {Model!.Name}";
+    ViewData["HelpKey"] = "department-edit";
     ViewData["BodyClass"] = "page-department-edit workspace-frame-body";
     var companies = (System.Collections.Generic.IReadOnlyCollection<CalibraHub.Application.Contracts.CompanyDto>)
         (ViewBag.Companies ?? System.Array.Empty<CalibraHub.Application.Contracts.CompanyDto>());

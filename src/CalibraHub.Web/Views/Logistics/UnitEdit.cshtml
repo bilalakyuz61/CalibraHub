@@ -3,6 +3,7 @@
     var isNew = Model.Id == null;
     ViewData["Title"] = isNew ? "Yeni Ölçü Birimi" : $"Ölçü Birimi: {Model.UnitCode}";
     ViewData["FormCode"] = "MEASURE_UNITS";
+    ViewData["HelpKey"] = "unit-edit";
     ViewData["BodyClass"] = "page-unit-edit workspace-frame-body";
 }
 

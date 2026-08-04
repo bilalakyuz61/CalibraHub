@@ -1,5 +1,6 @@
 @{
     ViewData["Title"] = "Şirket Parametreleri";
+    ViewData["HelpKey"] = "parameters";
     ViewData["BodyClass"] = "page-admin-parameters";
     var isEDocApproval = (ViewData["IsEDocumentApprovalEnabled"] is bool b) && b;
     var shopFloorMaxPinAttempts = ViewData["ShopFloorMaxPinAttempts"] as int? ?? 5;

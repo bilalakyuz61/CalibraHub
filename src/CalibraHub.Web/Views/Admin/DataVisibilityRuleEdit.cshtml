@@ -4,6 +4,7 @@
     var isNew = Model.IsNew;
     ViewData["Title"]     = isNew ? "Yeni Veri Perdeleme Kuralı" : $"Kural: {Model.Name}";
     ViewData["FormCode"]  = "DATA_VISIBILITY";
+    ViewData["HelpKey"]   = "data-visibility-edit";
     ViewData["BodyClass"] = "page-dv-edit workspace-frame-body";
 
     var valuesJson = JsonSerializer.Serialize(Model.Values ?? new List<string>());
