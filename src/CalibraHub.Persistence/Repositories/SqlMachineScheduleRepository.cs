@@ -38,7 +38,7 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
 
-        var machines = new List<MachineDto>();
+        var machines = new List<ScheduleMachineDto>();
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = $"""
@@ -51,7 +51,7 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
             await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
-                machines.Add(new MachineDto(
+                machines.Add(new ScheduleMachineDto(
                     Id: r.GetInt32(0),
                     Code: r.GetString(1),
                     Name: r.IsDBNull(2) ? null : r.GetString(2),

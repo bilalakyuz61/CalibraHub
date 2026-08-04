@@ -39,7 +39,7 @@ public sealed record UnplannedOperationDto(
     decimal? EstimatedMinutes);
 
 public sealed record MachineScheduleDataDto(
-    IReadOnlyList<MachineDto> Machines,
+    IReadOnlyList<ScheduleMachineDto> Machines,
     IReadOnlyList<ScheduleBlockDto> Blocks,
     IReadOnlyList<UnplannedOperationDto> Unplanned);
 
