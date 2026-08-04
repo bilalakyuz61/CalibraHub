@@ -100,6 +100,17 @@ object AppRoutes {
     // kismi ortusme (CalibraHubAndroid ile AYNI karar, bkz. orada AppRoutes KDoc'u).
     const val SHIPPING_OPEN_ORDERS = SALES_OPEN_ORDERS
 
+    // Acik siparis detayi (Faz 2b, 2026-08-04 EK) — drawer'da YOK, yalniz OpenOrderListScreen'den
+    // navigate edilir. Android path-parametreli tek route ("warehouse_open_order_detail/{docType}/{id}")
+    // kullanirken, burada BILINCLI olarak iki AYRI literal route (PURCHASE/SALES icin PURCHASE_OPEN_ORDERS/
+    // SALES_OPEN_ORDERS'la AYNI "iki yon = iki route" deseni) + AppNavHost'ta hoisted `pendingOrderId`
+    // state'i tercih edildi — navigation-compose Multiplatform 2.8.0-alpha10'un path-argument (NavType/
+    // navArgument) API yuzeyi bu erken alfa surumde dogrulanmadi (risk); literal route + basit Int state
+    // KISS, derleme riskini sifirlar. Sonuc: process-death sonrasi (cok nadir, derin bir alt-ekran) id
+    // kaybolursa kullanici listeye geri duser (bkz. AppNavHost fallback).
+    const val PURCHASE_OPEN_ORDER_DETAIL = "warehouse_open_order_detail/purchase"
+    const val SALES_OPEN_ORDER_DETAIL = "warehouse_open_order_detail/sales"
+
     // Ayarlar — TEK giris noktasi HomeScreen ust cubugundaki disli ikonu; drawerEntries'in
     // DISINDA tutulur (bkz. Android AppRoutes.SETTINGS KDoc'u, ayni karar).
     const val SETTINGS = "settings"

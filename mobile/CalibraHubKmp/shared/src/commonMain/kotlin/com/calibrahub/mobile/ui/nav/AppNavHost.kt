@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,11 +28,20 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.calibrahub.mobile.session.SessionManager
 import com.calibrahub.mobile.session.SessionProbeResult
-import com.calibrahub.mobile.ui.StockScreen
 import com.calibrahub.mobile.ui.common.PlaceholderScreen
 import com.calibrahub.mobile.ui.home.HomeScreen
 import com.calibrahub.mobile.ui.login.LoginScreen
 import com.calibrahub.mobile.ui.settings.SettingsScreen
+import com.calibrahub.mobile.ui.warehouse.CountScreen
+import com.calibrahub.mobile.ui.warehouse.DeliveryDocType
+import com.calibrahub.mobile.ui.warehouse.DeliveryScreen
+import com.calibrahub.mobile.ui.warehouse.DraftCountsScreen
+import com.calibrahub.mobile.ui.warehouse.OpenOrderDetailScreen
+import com.calibrahub.mobile.ui.warehouse.OpenOrderListScreen
+import com.calibrahub.mobile.ui.warehouse.StockDocMode
+import com.calibrahub.mobile.ui.warehouse.StockDocScreen
+import com.calibrahub.mobile.ui.warehouse.StockQueryScreen
+import com.calibrahub.mobile.ui.warehouse.TransferScreen
 import kotlinx.coroutines.launch
 
 /**
@@ -47,11 +57,11 @@ import kotlinx.coroutines.launch
  * doğrudan login'e düşülür. İKİSİ de DOĞRUYSA sunucudan sor ([SessionManager.probeSession]):
  * 200 → oturum bilgisi restore + home; 401/hata → login.
  *
- * Faz 2a KAPSAM NOTU: Depo (Stok Sorgu hariç)/Üretim/Satın Alma/Satış/Sevkiyat/Sohbetler
- * rotalarının hedefi [PlaceholderScreen]'dir (Faz 2b/2c'de gerçek ekranla değiştirilecek) —
- * bkz. [AppRoutes] KDoc'u. "Stok Sorgu" (WAREHOUSE_STOCK_QUERY) POC'un mevcut [StockScreen]'i
- * ile GEÇİCİ olarak dolu (gorev talimati "POC'un mevcut StockScreen'ini stok-sorgu placeholder'ı
- * olarak geçici tutabilirsin").
+ * Faz 2b GÜNCELLEMESİ (2026-08-04): Depo (Stok Sorgu/Giriş/Çıkış/Transfer/Sayım/Taslak Sayımlar/
+ * Alış+Satış İrsaliyesi/Açık Alış+Satış Siparişleri+Detay) tüm rotaları artık GERÇEK ekranlara
+ * bağlıdır (bkz. `com.calibrahub.mobile.ui.warehouse` paketi). KAPSAM DIŞI kalan tek grup:
+ * Üretim (İş Emirleri, Faz 2c'ye ertelendi) + Sohbetler (WhatsApp, ertelendi) — bunların hedefi
+ * hâlâ [PlaceholderScreen]'dir.
  */
 @Composable
 fun AppNavHost(session: SessionManager) {
@@ -60,6 +70,10 @@ fun AppNavHost(session: SessionManager) {
     val scope = rememberCoroutineScope()
 
     var startRoute by remember { mutableStateOf<String?>(null) }
+
+    // Acik Siparisler -> Detay akisi icin hoisted id tasiyici — bkz. AppRoutes.PURCHASE_OPEN_ORDER_DETAIL/
+    // SALES_OPEN_ORDER_DETAIL KDoc'u (literal route + Int state tercihinin gerekcesi).
+    var pendingOrderId by rememberSaveable { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) {
         val canAutoLogin = session.isRememberMeEnabled() && session.hasStoredCookies()
@@ -207,44 +221,92 @@ fun AppNavHost(session: SessionManager) {
                 )
             }
             composable(AppRoutes.WAREHOUSE_STOCK_QUERY) {
-                StockScreen(
-                    sessionManager = session,
-                    displayName = null,
-                    onLogout = { navController.popBackStack() },
-                )
+                StockQueryScreen(session = session, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.WAREHOUSE_STOCK_IN) {
-                PlaceholderScreen("Giriş", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                StockDocScreen(session = session, mode = StockDocMode.IN, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.WAREHOUSE_STOCK_OUT) {
-                PlaceholderScreen("Çıkış", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                StockDocScreen(session = session, mode = StockDocMode.OUT, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.WAREHOUSE_TRANSFER) {
-                PlaceholderScreen("Transfer", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                TransferScreen(session = session, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.WAREHOUSE_COUNT) {
-                PlaceholderScreen("Sayım", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                CountScreen(session = session, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.WAREHOUSE_DRAFT_COUNTS) {
-                PlaceholderScreen("Taslak Sayımlar", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                DraftCountsScreen(session = session, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.PRODUCTION_WORK_ORDERS) {
                 PlaceholderScreen("İş Emirleri", "Yakında — Faz 2c", onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.PURCHASE_DELIVERY) {
-                PlaceholderScreen("Alış İrsaliyesi", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                DeliveryScreen(session = session, docType = DeliveryDocType.PURCHASE, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.PURCHASE_OPEN_ORDERS) {
-                PlaceholderScreen("Açık Alış Siparişleri", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                OpenOrderListScreen(
+                    session = session,
+                    docType = DeliveryDocType.PURCHASE,
+                    onOpenDetail = { id ->
+                        pendingOrderId = id
+                        navController.navigate(AppRoutes.PURCHASE_OPEN_ORDER_DETAIL) { launchSingleTop = true }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(AppRoutes.PURCHASE_OPEN_ORDER_DETAIL) {
+                val id = pendingOrderId
+                if (id != null) {
+                    OpenOrderDetailScreen(
+                        session = session,
+                        orderId = id,
+                        docType = DeliveryDocType.PURCHASE,
+                        onBack = { navController.popBackStack() },
+                    )
+                } else {
+                    // Savunma — id kayboldu (ör. process-death sonrasi derin deep-link, cok nadir):
+                    // listeye geri don, cokme.
+                    PlaceholderScreen(
+                        "Sipariş Detayı",
+                        "Sipariş bulunamadı, listeden tekrar seçin.",
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
             composable(AppRoutes.SALES_DELIVERY) {
-                PlaceholderScreen("Satış İrsaliyesi", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                DeliveryScreen(session = session, docType = DeliveryDocType.SALES, onBack = { navController.popBackStack() })
             }
             // NOT: AppRoutes.SHIPPING_OPEN_ORDERS == AppRoutes.SALES_OPEN_ORDERS (BİLİNÇLİ kısmi
             // örtüşme, bkz. AppDrawer.kt KDoc'u) — AYNI route string'i için İKİNCİ bir composable(...)
             // kaydı NavGraph'ta "duplicate destination" hatası verir; bu yüzden TEK kayıt yeterli.
             composable(AppRoutes.SALES_OPEN_ORDERS) {
-                PlaceholderScreen("Açık Satış Siparişleri", "Yakında — Faz 2b", onBack = { navController.popBackStack() })
+                OpenOrderListScreen(
+                    session = session,
+                    docType = DeliveryDocType.SALES,
+                    onOpenDetail = { id ->
+                        pendingOrderId = id
+                        navController.navigate(AppRoutes.SALES_OPEN_ORDER_DETAIL) { launchSingleTop = true }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(AppRoutes.SALES_OPEN_ORDER_DETAIL) {
+                val id = pendingOrderId
+                if (id != null) {
+                    OpenOrderDetailScreen(
+                        session = session,
+                        orderId = id,
+                        docType = DeliveryDocType.SALES,
+                        onBack = { navController.popBackStack() },
+                    )
+                } else {
+                    PlaceholderScreen(
+                        "Sipariş Detayı",
+                        "Sipariş bulunamadı, listeden tekrar seçin.",
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
         }
     }
