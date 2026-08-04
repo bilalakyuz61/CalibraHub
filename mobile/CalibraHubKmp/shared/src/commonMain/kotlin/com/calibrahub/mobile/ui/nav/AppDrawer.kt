@@ -90,6 +90,13 @@ object AppRoutes {
 
     const val PRODUCTION_WORK_ORDERS = "production_work_orders"
 
+    // İş emri detayı (Faz 2c EK) — drawer'da YOK, yalnız WorkOrderListScreen'den navigate edilir.
+    // AYNI KISS gerekçesiyle PURCHASE/SALES_OPEN_ORDER_DETAIL ile AYNI desen: literal route +
+    // AppNavHost'ta hoisted `pendingWorkOrderId` Int state (navigation-compose Multiplatform
+    // 2.8.0-alpha10'un path-argument API yüzeyi bu erken alfa sürümde doğrulanmadı — risk).
+    // Sonuç: process-death sonrası (çok nadir) id kaybolursa kullanıcı listeye geri düşer.
+    const val PRODUCTION_WORK_ORDER_DETAIL = "production_work_order_detail"
+
     const val PURCHASE_DELIVERY = "warehouse_delivery/purchase"
     const val PURCHASE_OPEN_ORDERS = "warehouse_open_orders/purchase"
 

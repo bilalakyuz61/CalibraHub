@@ -31,6 +31,8 @@ import com.calibrahub.mobile.session.SessionProbeResult
 import com.calibrahub.mobile.ui.common.PlaceholderScreen
 import com.calibrahub.mobile.ui.home.HomeScreen
 import com.calibrahub.mobile.ui.login.LoginScreen
+import com.calibrahub.mobile.ui.production.WorkOrderDetailScreen
+import com.calibrahub.mobile.ui.production.WorkOrderListScreen
 import com.calibrahub.mobile.ui.settings.SettingsScreen
 import com.calibrahub.mobile.ui.warehouse.CountScreen
 import com.calibrahub.mobile.ui.warehouse.DeliveryDocType
@@ -59,9 +61,12 @@ import kotlinx.coroutines.launch
  *
  * Faz 2b GÜNCELLEMESİ (2026-08-04): Depo (Stok Sorgu/Giriş/Çıkış/Transfer/Sayım/Taslak Sayımlar/
  * Alış+Satış İrsaliyesi/Açık Alış+Satış Siparişleri+Detay) tüm rotaları artık GERÇEK ekranlara
- * bağlıdır (bkz. `com.calibrahub.mobile.ui.warehouse` paketi). KAPSAM DIŞI kalan tek grup:
- * Üretim (İş Emirleri, Faz 2c'ye ertelendi) + Sohbetler (WhatsApp, ertelendi) — bunların hedefi
- * hâlâ [PlaceholderScreen]'dir.
+ * bağlıdır (bkz. `com.calibrahub.mobile.ui.warehouse` paketi).
+ *
+ * Faz 2c GÜNCELLEMESİ (2026-08-04): Üretim (İş Emirleri listesi + Detay, PIN operatör auth ile
+ * operasyon başlat/tamamla) artık GERÇEK ekranlara bağlıdır (bkz.
+ * `com.calibrahub.mobile.ui.production` paketi). KAPSAM DIŞI kalan TEK grup: Sohbetler (WhatsApp,
+ * ertelendi) — hedefi hâlâ [PlaceholderScreen]'dir.
  */
 @Composable
 fun AppNavHost(session: SessionManager) {
@@ -74,6 +79,10 @@ fun AppNavHost(session: SessionManager) {
     // Acik Siparisler -> Detay akisi icin hoisted id tasiyici — bkz. AppRoutes.PURCHASE_OPEN_ORDER_DETAIL/
     // SALES_OPEN_ORDER_DETAIL KDoc'u (literal route + Int state tercihinin gerekcesi).
     var pendingOrderId by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    // Is Emirleri -> Detay akisi icin hoisted id tasiyici — AYNI desen, bkz.
+    // AppRoutes.PRODUCTION_WORK_ORDER_DETAIL KDoc'u (Faz 2c EK).
+    var pendingWorkOrderId by rememberSaveable { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) {
         val canAutoLogin = session.isRememberMeEnabled() && session.hasStoredCookies()
@@ -239,7 +248,32 @@ fun AppNavHost(session: SessionManager) {
                 DraftCountsScreen(session = session, onBack = { navController.popBackStack() })
             }
             composable(AppRoutes.PRODUCTION_WORK_ORDERS) {
-                PlaceholderScreen("İş Emirleri", "Yakında — Faz 2c", onBack = { navController.popBackStack() })
+                WorkOrderListScreen(
+                    session = session,
+                    onOpenDetail = { id ->
+                        pendingWorkOrderId = id
+                        navController.navigate(AppRoutes.PRODUCTION_WORK_ORDER_DETAIL) { launchSingleTop = true }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(AppRoutes.PRODUCTION_WORK_ORDER_DETAIL) {
+                val id = pendingWorkOrderId
+                if (id != null) {
+                    WorkOrderDetailScreen(
+                        session = session,
+                        workOrderId = id,
+                        onBack = { navController.popBackStack() },
+                    )
+                } else {
+                    // Savunma — id kayboldu (ör. process-death sonrasi derin deep-link, cok nadir):
+                    // listeye geri don, cokme.
+                    PlaceholderScreen(
+                        "İş Emri Detayı",
+                        "İş emri bulunamadı, listeden tekrar seçin.",
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
             composable(AppRoutes.PURCHASE_DELIVERY) {
                 DeliveryScreen(session = session, docType = DeliveryDocType.PURCHASE, onBack = { navController.popBackStack() })
