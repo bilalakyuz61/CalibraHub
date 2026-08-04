@@ -1305,8 +1305,8 @@ export default function CalibraLineItemsGrid(props) {
                     className="p-2.5 sm:p-3"
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '1fr auto',
-                      gridTemplateAreas: '"identity actions" "fields fields"',
+                      gridTemplateColumns: 'auto 1fr',
+                      gridTemplateAreas: '"actions identity" "fields fields"',
                       columnGap: 12, rowGap: 10, alignItems: 'start',
                     }}
                   >
@@ -1418,9 +1418,9 @@ export default function CalibraLineItemsGrid(props) {
                         (handleGridKeyDown) DOM sirasini takip eder — boylece kullanici
                         miktar/fiyat/iskonto gibi veri alanlarini gezerken araya giren bir
                         butona (ozellikle Sil'e) yanlislikla odaklanip Enter'a basmaz. Gorsel
-                        yerlesim grid-area:"actions" ile kimlik satirinin sagina sabitlenir —
-                        DOM sirasindan bagimsizdir. */}
-                    <div style={{ gridArea: 'actions' }} className="flex items-center gap-1 flex-shrink-0 justify-self-end">
+                        yerlesim grid-area:"actions" ile kimlik satirinin SOLUNA sabitlenir
+                        (Seq 1081 kullanici istegi) — DOM sirasindan bagimsizdir. */}
+                    <div style={{ gridArea: 'actions' }} className="flex items-center gap-1 flex-shrink-0 justify-self-start">
                       {/* Satir kisayol menusu — MoreHorizontal ikonu, tiklayinca liste acilir */}
                       <button
                         type="button"
