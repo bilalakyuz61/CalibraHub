@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
@@ -79,7 +78,6 @@ import kotlinx.coroutines.launch
  */
 object AppRoutes {
     const val HOME = "home"
-    const val CHATS = "chats"
 
     const val WAREHOUSE_STOCK_QUERY = "warehouse_stock_query"
     const val WAREHOUSE_STOCK_IN = "warehouse_stock_in"
@@ -142,7 +140,7 @@ data class DrawerGroup(
     val leaves: List<DrawerLeaf>,
 )
 
-/** Drawer'in ust seviye girisi — ya dogrudan bir [DrawerLeaf] (Ana Sayfa, Sohbetler) ya da
+/** Drawer'in ust seviye girisi — ya dogrudan bir [DrawerLeaf] (Ana Sayfa) ya da
  * akordeon [DrawerGroup] (Depo, Uretim, Satin Alma, Satis, Sevkiyat). */
 sealed class DrawerEntry {
     data class Single(val leaf: DrawerLeaf) : DrawerEntry()
@@ -151,7 +149,7 @@ sealed class DrawerEntry {
 
 /**
  * Drawer icerigi — CalibraHubAndroid ile BIREBIR ayni sira/etiket/ikon: Ana Sayfa (yaprak) →
- * Depo/Uretim/Satin Alma/Satis/Sevkiyat (akordeon gruplari) → Sohbetler (yaprak).
+ * Depo/Uretim/Satin Alma/Satis/Sevkiyat (akordeon gruplari).
  */
 val drawerEntries: List<DrawerEntry> = listOf(
     DrawerEntry.Single(DrawerLeaf(AppRoutes.HOME, "Ana Sayfa", Icons.Default.Home)),
@@ -212,10 +210,6 @@ val drawerEntries: List<DrawerEntry> = listOf(
             ),
         ),
     ),
-    // Sohbetler (2026-08-04, Faz 2a): WhatsApp/sohbet ekranlari bu Faz'da ERTELENDI (gorev
-    // talimati) — yaprak drawer'da GORUNUR ama hedefi PlaceholderScreen'dir (bkz. AppNavHost),
-    // chat/{phone} gibi parametreli alt-rota YOKTUR (henuz implement edilmedigi icin gereksiz).
-    DrawerEntry.Single(DrawerLeaf(AppRoutes.CHATS, "Sohbetler", Icons.Default.Chat)),
 )
 
 /** Drawer'dan DOGRUDAN erisilebilen tum route'lar — edge-swipe + flat navigasyon icin

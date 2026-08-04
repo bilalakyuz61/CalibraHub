@@ -101,9 +101,6 @@ dependencies {
     // ── DataStore (cookie + token persistence) ────────────────────────────
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // ── WorkManager (background polling) ──────────────────────────────────
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-
     // ── Network: Retrofit + OkHttp + Moshi ────────────────────────────────
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-moshi:2.9.0")
@@ -111,9 +108,6 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.squareup.moshi:moshi:1.15.1")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
-
-    // ── Image loading (Coil) ──────────────────────────────────────────────
-    implementation("io.coil-kt:coil-compose:2.5.0")
 
     // ── Barkod tarama (ZXing embedded — MaterialPickerField kamera taraması) ──
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")

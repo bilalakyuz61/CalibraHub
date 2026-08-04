@@ -1,14 +1,10 @@
 package com.calibrahub.app.data
 
 import com.squareup.moshi.JsonClass
-import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
-import retrofit2.http.Multipart
 import retrofit2.http.POST
-import retrofit2.http.Part
 import retrofit2.http.Query
 
 /**
@@ -45,32 +41,9 @@ interface CalibraApi {
     // "Beni hatırla" otomatik giriş probe'u (2026-07-17, session-backend kontratı KİLİTLİ —
     // paralel ajan tarafından kuruldu). 200 → oturum geçerli, gövde userId/displayName/email/
     // companyId/companyName ile dolu. 401 → kimlik yok/expired; kontrat gövde ÜRETMEZ, yalnızca
-    // status koduna bakılır (bkz. WhatsAppRepository.fetchSession — resp.code() kontrolü).
+    // status koduna bakılır (bkz. AuthRepository.fetchSession — resp.code() kontrolü).
     @GET("api/mobile/session")
     suspend fun session(): Response<SessionDto>
-
-    @GET("api/mobile/whatsapp/conversations")
-    suspend fun conversations(@Query("limit") limit: Int = 200): Response<List<ConversationDto>>
-
-    @GET("api/mobile/whatsapp/messages")
-    suspend fun messages(
-        @Query("phone") phone: String,
-        @Query("limit") limit: Int = 200
-    ): Response<List<MessageDto>>
-
-    @POST("api/mobile/whatsapp/send")
-    suspend fun sendText(@Body req: SendTextRequest): Response<SendResponse>
-
-    @Multipart
-    @POST("api/mobile/whatsapp/send-media")
-    suspend fun sendMedia(
-        @Part("phone") phone: RequestBody,
-        @Part("caption") caption: RequestBody?,
-        @Part file: MultipartBody.Part
-    ): Response<SendResponse>
-
-    @POST("api/mobile/whatsapp/mark-read")
-    suspend fun markRead(@Query("phone") phone: String): Response<Unit>
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -102,7 +75,7 @@ data class WhoAmIResponse(val ok: Boolean, val userName: String? = null)
 // displayName, email, companyId, companyName }. PingResponse'taki gibi savunmacı nullable/
 // default alanlar — backend kontrat gereği hepsini doldurur ama Moshi'nin eksik-alan
 // JsonDataException riskine karşı tümü opsiyonel tanımlandı. 401 durumunda bu tip HİÇ parse
-// edilmez (bkz. WhatsAppRepository.fetchSession).
+// edilmez (bkz. AuthRepository.fetchSession).
 @JsonClass(generateAdapter = true)
 data class SessionDto(
     val ok: Boolean = false,
@@ -112,33 +85,3 @@ data class SessionDto(
     val companyId: Int = 0,
     val companyName: String? = null
 )
-
-@JsonClass(generateAdapter = true)
-data class ConversationDto(
-    val phone: String,
-    val displayName: String?,
-    val contactCode: String?,
-    val lastMessage: String?,
-    val lastMessageAt: String?,
-    val unreadCount: Int = 0,
-    val lastMediaType: String? = null
-)
-
-@JsonClass(generateAdapter = true)
-data class MessageDto(
-    val id: Long,
-    val direction: Int,          // 0 = incoming, 1 = outgoing
-    val body: String?,
-    val mediaType: String?,      // chat | image | video | audio | document | sticker
-    val mediaPath: String?,      // /uploads/whatsapp/...
-    val mediaMime: String?,
-    val mediaFilename: String?,
-    val mediaSize: Int?,
-    val receivedAt: String?
-)
-
-@JsonClass(generateAdapter = true)
-data class SendTextRequest(val phone: String, val text: String)
-
-@JsonClass(generateAdapter = true)
-data class SendResponse(val ok: Boolean, val messageId: String? = null, val error: String? = null)

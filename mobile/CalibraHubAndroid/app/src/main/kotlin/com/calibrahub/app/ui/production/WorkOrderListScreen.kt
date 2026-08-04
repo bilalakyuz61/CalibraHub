@@ -56,7 +56,7 @@ import kotlinx.coroutines.delay
  * Üretim → İş Emirleri listesi. Arama kutusu MaterialPickerField ile aynı debounce deseni
  * (~300ms) kullanır, ama sonuç açılır liste değil tam ekran karttır — her karakter
  * değişiminde GET work-orders?q=&take=50 sunucu taraması yapılır (backend LIKE araması,
- * ChatListScreen'in client-side filter'ından FARKLI — koordinatör talimatı).
+ * client-side filtre DEĞİL — koordinatör talimatı).
  *
  * reloadTick hem "Tekrar Dene" hem query değişimiyle aynı LaunchedEffect'i tetikler; ilk
  * yükleme ve boşa dönüş (query temizlenince) debounce beklemeden hemen ateşlenir, dolu

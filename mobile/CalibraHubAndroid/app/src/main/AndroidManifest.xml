@@ -5,22 +5,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- WorkManager arka plan + bildirim için (Android 13+) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
     <!-- Barkod tarama (ZXing CaptureActivity kamerayı kullanır; embedded kütüphane kendi
          manifest'inde de deklare eder ama açık deklarasyon burada da şart) -->
     <uses-permission android:name="android.permission.CAMERA" />
-
-    <!-- WhatsApp Business app intent kuyruğu (Android 11+ paket görünürlüğü) -->
-    <queries>
-        <package android:name="com.whatsapp" />
-        <package android:name="com.whatsapp.w4b" />
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" android:host="wa.me" />
-        </intent>
-    </queries>
 
     <application
         android:name=".CalibraApp"

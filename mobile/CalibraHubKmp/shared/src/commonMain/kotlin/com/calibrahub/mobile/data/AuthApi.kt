@@ -10,9 +10,10 @@ import io.ktor.http.contentType
 
 /**
  * `api/mobile` altindaki auth/session/whoami uc noktalarini tuketen ince Ktor istemcisi —
- * CalibraHubAndroid `CalibraApi.kt`'nin WhatsApp DISI kismi (bkz. gorev talimati "bilincli
- * erteleme"). CalibraApi/WarehouseApi/ProductionApi ile AYNI auth deseni: cookie +
- * X-Requested-With (bkz. [com.calibrahub.mobile.net.createHttpClient]).
+ * CalibraHubAndroid `CalibraApi.kt`'nin WhatsApp DISI kismi (WhatsApp/sohbet mobil kapsamdan
+ * TAMAMEN CIKARILDI, 2026-08-04 kullanici karari — bkz. CLAUDE.md). CalibraApi/WarehouseApi/
+ * ProductionApi ile AYNI auth deseni: cookie + X-Requested-With
+ * (bkz. [com.calibrahub.mobile.net.createHttpClient]).
  */
 class AuthApi(
     private val baseUrl: String,

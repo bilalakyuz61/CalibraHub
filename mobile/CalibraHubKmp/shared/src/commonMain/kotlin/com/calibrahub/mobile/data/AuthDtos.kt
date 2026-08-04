@@ -4,8 +4,9 @@ import kotlinx.serialization.Serializable
 
 /**
  * `api/mobile` altindaki auth/session sozlesme DTO'lari — CalibraHubAndroid `CalibraApi.kt`'nin
- * WhatsApp DISI (bkz. gorev talimati "bilincli erteleme") kismiyla BIREBIR alan adi/opsiyonellik
- * eslesir (bkz. CLAUDE.md — sessiz kirilma sinifi 1). Enum-benzeri alan yok (auth taraf sade).
+ * WhatsApp DISI (WhatsApp/sohbet mobil kapsamdan TAMAMEN CIKARILDI, 2026-08-04 kullanici karari)
+ * kismiyla BIREBIR alan adi/opsiyonellik eslesir (bkz. CLAUDE.md — sessiz kirilma sinifi 1).
+ * Enum-benzeri alan yok (auth taraf sade).
  */
 
 @Serializable

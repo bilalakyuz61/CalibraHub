@@ -65,8 +65,8 @@ import kotlinx.coroutines.launch
  *
  * Faz 2c GÜNCELLEMESİ (2026-08-04): Üretim (İş Emirleri listesi + Detay, PIN operatör auth ile
  * operasyon başlat/tamamla) artık GERÇEK ekranlara bağlıdır (bkz.
- * `com.calibrahub.mobile.ui.production` paketi). KAPSAM DIŞI kalan TEK grup: Sohbetler (WhatsApp,
- * ertelendi) — hedefi hâlâ [PlaceholderScreen]'dir.
+ * `com.calibrahub.mobile.ui.production` paketi). Sohbetler (WhatsApp) grubu bu app'in kapsamından
+ * TAMAMEN ÇIKARILDI (kullanıcı kararı, 2026-08-04) — drawer'da ve NavHost'ta karşılığı yoktur.
  */
 @Composable
 fun AppNavHost(session: SessionManager) {
@@ -221,13 +221,6 @@ fun AppNavHost(session: SessionManager) {
             }
             composable(AppRoutes.SETTINGS) {
                 SettingsScreen(session = session, onBack = { navController.popBackStack() })
-            }
-            composable(AppRoutes.CHATS) {
-                PlaceholderScreen(
-                    title = "Sohbetler",
-                    message = "WhatsApp entegrasyonu bu fazda ertelendi.",
-                    onBack = { navController.popBackStack() },
-                )
             }
             composable(AppRoutes.WAREHOUSE_STOCK_QUERY) {
                 StockQueryScreen(session = session, onBack = { navController.popBackStack() })

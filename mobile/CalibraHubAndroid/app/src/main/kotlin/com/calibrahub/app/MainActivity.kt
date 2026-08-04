@@ -36,8 +36,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.calibrahub.app.data.ThemeMode
-import com.calibrahub.app.ui.chat.ChatDetailScreen
-import com.calibrahub.app.ui.chat.ChatListScreen
 import com.calibrahub.app.ui.home.HomeScreen
 import com.calibrahub.app.ui.login.LoginScreen
 import com.calibrahub.app.ui.nav.AppDrawerContent
@@ -112,7 +110,7 @@ private fun CalibraRoot() {
 /**
  * Sol menü (navigation drawer) + tüm NavHost. TEK [ModalNavigationDrawer] instance'ı burada
  * kurulur ve NavHost'un TAMAMINI sarar (LoginScreen dahil) — ama [gesturesEnabled] (edge-swipe)
- * ve hamburger giriş noktası yalnız [drawerTopLevelRoutes] (Ana Sayfa/Sohbetler yaprakları + 5
+ * ve hamburger giriş noktası yalnız [drawerTopLevelRoutes] (Ana Sayfa yaprağı + 5
  * akordeon grubunun TÜM yaprakları — bkz. AppDrawer.kt) route'larında aktif olduğu için
  * LoginScreen/alt ekranlarda görsel/işlevsel HİÇBİR fark yok (drawerState hep Closed kalır, kimse
  * açmaz).
@@ -130,7 +128,7 @@ private fun AppNav() {
     val scope = rememberCoroutineScope()
 
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val repo = ctx.app.repository
+    val repo = ctx.app.authRepository
     val session = ctx.app.session
 
     // "Beni hatırla" otomatik giriş (2026-07-17) — İKİ koşul birden sağlanmalı: (1) kullanıcı
@@ -139,7 +137,7 @@ private fun AppNav() {
     // PersistentCookieJar.persistenceEnabled). İKİSİ de DEĞİLSE GET /api/mobile/session'ı hiç
     // ÇAĞIRMADAN doğrudan login'e düşülür (gereksiz ağ çağrısı yok, "kontrol ediliyor" flaşı yok).
     // İKİSİ de DOĞRUYSA sunucudan sor: 200 → yanıttan displayName/şirket restore + home; 401/hata →
-    // login (401 ise kalıcı çerez ayrıca temizlenir, bkz. fetchSession + WhatsAppRepository KDoc).
+    // login (401 ise kalıcı çerez ayrıca temizlenir, bkz. fetchSession + AuthRepository KDoc).
     var startRoute by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -191,7 +189,7 @@ private fun AppNav() {
         return
     }
 
-    // Logout: home/chats/warehouse/production her neredeyse, TÜM back stack'i temizleyip
+    // Logout: home/warehouse/production her neredeyse, TÜM back stack'i temizleyip
     // login'e döner (graph.id'ye kadar inclusive pop — stale authenticated ekran kalmaz).
     val clearStackToLogin: () -> Unit = {
         navController.navigate("login") {
@@ -215,7 +213,7 @@ private fun AppNav() {
     }
 
     // Drawer başlığında gösterilen kullanıcı adı + şirket adı — SessionManager'da login()
-    // sırasında (bkz. WhatsAppRepository.login + LoginScreen.doLogin) ya da açılış otomatik-giriş
+    // sırasında (bkz. AuthRepository.login + LoginScreen.doLogin) ya da açılış otomatik-giriş
     // restore'unda (yukarıdaki LaunchedEffect) set edilir. "home" rotasına her girişte tazelenir:
     // hem soğuk açılışta hem de LoginScreen.onLoggedIn → "home" geçişinde (yeniden login farklı
     // kullanıcı/şirket olabilir) — startRoute'u çözen LaunchedEffect(Unit)'e bu amaçla
@@ -299,19 +297,6 @@ private fun AppNav() {
             // KDoc'u); flat/top-level SET DIŞINDA, normal push+popBackStack.
             composable(AppRoutes.SETTINGS) {
                 SettingsScreen(onBack = { navController.popBackStack() })
-            }
-            composable(AppRoutes.CHATS) {
-                ChatListScreen(
-                    onOpenChat = { phone -> navController.navigate("chat/${phone}") },
-                    onOpenDrawer = { scope.launch { drawerState.open() } }
-                )
-            }
-            composable("chat/{phone}") { entry ->
-                val phone = entry.arguments?.getString("phone") ?: ""
-                ChatDetailScreen(
-                    phone = phone,
-                    onBack = { navController.popBackStack() }
-                )
             }
             composable("warehouse_stock_query") {
                 StockQueryScreen(onBack = { navController.popBackStack() })

@@ -296,7 +296,7 @@ class SessionManager(private val context: Context) {
         }
 
         // Global 401 yakalama (2026-07-17) — /api/mobile/ altındaki HERHANGİ bir authed çağrı
-        // (WhatsApp/Warehouse/Production repository'lerinin tümü [buildApi]/[buildRetrofit]
+        // (Auth/Warehouse/Production repository'lerinin tümü [buildApi]/[buildRetrofit]
         // üzerinden BURAYA akar) 401 dönerse: kalıcı oturum çerezi + oturum-bazlı alanlar
         // temizlenir ve [sessionExpiredEvents]'e bir event basılır (AppNav dinleyip login'e
         // yönlendirir). OkHttp interceptor'ları arka plan thread'inde çalışır (UI thread'i
@@ -307,7 +307,7 @@ class SessionManager(private val context: Context) {
         // alanları temizlenir — [clearSession] ile AYNI netice, iç içe runBlocking riski olmadan.
         // /api/mobile/login, /api/mobile/login-companies, /api/mobile/ping gibi [AllowAnonymous]
         // endpoint'ler kimlik hatasını HTTP 401 ile DEĞİL (200 + ok:false gövdesiyle) döndürür —
-        // bu interceptor onlarla ÇAKIŞMAZ (bkz. WhatsAppRepository.login/loginCompanies).
+        // bu interceptor onlarla ÇAKIŞMAZ (bkz. AuthRepository.login/loginCompanies).
         val authExpiryInterceptor = Interceptor { chain ->
             val response = chain.proceed(chain.request())
             if (response.code == 401) {

@@ -4,7 +4,7 @@ import org.json.JSONObject
 import retrofit2.Response
 
 /**
- * Depo modülü için thin Result<T> repository wrapper — WhatsAppRepository ile aynı desen.
+ * Depo modülü için thin Result<T> repository wrapper — AuthRepository ile aynı desen.
  * ViewModel/Composable'lar buradan çağırır; HTTP/Retrofit detayları gizli kalır.
  */
 class WarehouseRepository(private val session: SessionManager) {

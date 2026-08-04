@@ -1,16 +1,15 @@
 package com.calibrahub.app.data
 
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.File
-
 /**
- * UI'ya temiz Result<T> arayüzü sunan thin repository wrapper.
+ * UI'ya temiz Result<T> arayüzü sunan thin repository wrapper — login/session/whoami akışları.
  * ViewModel'ler buradan çağırır; HTTP detayları gizli kalır.
+ *
+ * 2026-08-04: WhatsApp/sohbet uç noktaları (conversations/messages/sendText/sendMedia/markRead)
+ * bu sınıftan (eski adıyla `WhatsAppRepository`) kullanıcı kararıyla TAMAMEN kaldırıldı — mobil
+ * kapsamdan WhatsApp çıkarıldı (bkz. CLAUDE.md). Login/session kısmı işlevsel olarak AYNI kaldı,
+ * yalnızca sınıf adı `AuthRepository` olarak netleştirildi (isim artık içeriğiyle örtüşüyor).
  */
-class WhatsAppRepository(private val session: SessionManager) {
+class AuthRepository(private val session: SessionManager) {
 
     suspend fun companies(): Result<List<CompanyDto>> = runCatchingApi {
         val resp = session.buildApi().companies()
@@ -64,44 +63,6 @@ class WhatsAppRepository(private val session: SessionManager) {
     suspend fun logout(): Result<Unit> = runCatchingApi {
         runCatching { session.buildApi().logout() }
         session.clearSession()
-    }
-
-    suspend fun conversations(): Result<List<ConversationDto>> = runCatchingApi {
-        val resp = session.buildApi().conversations()
-        if (!resp.isSuccessful) error("HTTP ${resp.code()}")
-        resp.body() ?: emptyList()
-    }
-
-    suspend fun messages(phone: String): Result<List<MessageDto>> = runCatchingApi {
-        val resp = session.buildApi().messages(phone)
-        if (!resp.isSuccessful) error("HTTP ${resp.code()}")
-        resp.body() ?: emptyList()
-    }
-
-    suspend fun sendText(phone: String, text: String): Result<String?> = runCatchingApi {
-        val resp = session.buildApi().sendText(SendTextRequest(phone, text))
-        if (!resp.isSuccessful) error("HTTP ${resp.code()}")
-        val body = resp.body() ?: error("Boş yanıt")
-        if (!body.ok) error(body.error ?: "Mesaj gönderilemedi")
-        body.messageId
-    }
-
-    suspend fun sendMedia(phone: String, file: File, mimeType: String, caption: String?): Result<String?> = runCatchingApi {
-        val phoneBody   = phone.toRequestBody("text/plain".toMediaTypeOrNull())
-        val captionBody = caption?.toRequestBody("text/plain".toMediaTypeOrNull())
-        val filePart    = MultipartBody.Part.createFormData(
-            "file", file.name, file.asRequestBody(mimeType.toMediaTypeOrNull())
-        )
-        val resp = session.buildApi().sendMedia(phoneBody, captionBody, filePart)
-        if (!resp.isSuccessful) error("HTTP ${resp.code()}")
-        val body = resp.body() ?: error("Boş yanıt")
-        if (!body.ok) error(body.error ?: "Dosya gönderilemedi")
-        body.messageId
-    }
-
-    suspend fun markRead(phone: String): Result<Unit> = runCatchingApi {
-        session.buildApi().markRead(phone)
-        Unit
     }
 
     /**

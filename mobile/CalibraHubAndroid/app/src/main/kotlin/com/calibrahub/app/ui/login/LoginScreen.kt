@@ -45,7 +45,7 @@ import kotlin.random.Random
 @Composable
 fun LoginScreen(onLoggedIn: () -> Unit) {
     val context = LocalContext.current
-    val repo    = context.app.repository
+    val repo    = context.app.authRepository
     val session = context.app.session
     val scope   = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }

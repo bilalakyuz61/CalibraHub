@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.FactCheck
 import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
@@ -84,7 +83,6 @@ import kotlinx.coroutines.launch
  */
 object AppRoutes {
     const val HOME  = "home"
-    const val CHATS = "chats"
 
     const val WAREHOUSE_STOCK_QUERY  = "warehouse_stock_query"
     const val WAREHOUSE_STOCK_IN     = "warehouse_stock_in"
@@ -135,7 +133,7 @@ data class DrawerGroup(
     val leaves: List<DrawerLeaf>
 )
 
-/** Drawer'ın üst seviye girişi — ya doğrudan bir [DrawerLeaf] (Ana Sayfa, Sohbetler) ya da
+/** Drawer'ın üst seviye girişi — ya doğrudan bir [DrawerLeaf] (Ana Sayfa) ya da
  * akordeon [DrawerGroup] (Depo, Üretim, Satın Alma, Satış, Sevkiyat). */
 sealed class DrawerEntry {
     data class Single(val leaf: DrawerLeaf) : DrawerEntry()
@@ -145,7 +143,8 @@ sealed class DrawerEntry {
 /**
  * Drawer içeriği — 2026-07-17 akordeon migration (koordinatör spesifikasyonu). Sıra = drawer'da
  * üstten alta görünüm sırası: Ana Sayfa (yaprak) → Depo/Üretim/Satın Alma/Satış/Sevkiyat
- * (akordeon grupları) → Sohbetler (yaprak).
+ * (akordeon grupları). Sohbetler (WhatsApp) yaprağı 2026-08-04'te kullanıcı kararıyla mobil
+ * kapsamdan TAMAMEN kaldırıldı.
  */
 val drawerEntries: List<DrawerEntry> = listOf(
     DrawerEntry.Single(DrawerLeaf(AppRoutes.HOME, "Ana Sayfa", Icons.Default.Home)),
@@ -206,7 +205,6 @@ val drawerEntries: List<DrawerEntry> = listOf(
             )
         )
     ),
-    DrawerEntry.Single(DrawerLeaf(AppRoutes.CHATS, "Sohbetler", Icons.Default.Chat)),
 )
 
 /**
@@ -261,7 +259,7 @@ val pinnableDrawerLeaves: List<DrawerLeaf> = drawerEntries.flatMap { entry ->
  * AYNI tek kaynaktan ([drawerEntries]) türetilen ek bir arama tablosu tutulur — drawer
  * yapısı değişirse bu da otomatik senkron kalır.
  *
- * Akordeon grubu ALTINDA olmayan yapraklar (ör. "Sohbetler" — [DrawerEntry.Single])
+ * Akordeon grubu ALTINDA olmayan yapraklar (ör. "Ana Sayfa" — [DrawerEntry.Single])
  * bu haritada YER ALMAZ; kutucukta üst satır hiç çizilmez (boş satır bırakılmaz).
  */
 // NOT: ayni rota birden fazla grupta gecebilir (bkz. pinnableDrawerLeaves distinctBy notu).
@@ -287,7 +285,7 @@ val leafGroupLabels: Map<String, String> = drawerEntries.flatMap { entry ->
  * sorumluluğudur, dışarı sızmaz.
  *
  * Düzen: üstte logo + "CalibraHub" + kullanıcı adı + şirket adı, ortada kaydırılabilir modül
- * listesi (Ana Sayfa yaprağı + 5 akordeon grubu + Sohbetler yaprağı — [currentRoute] ile eşleşen
+ * listesi (Ana Sayfa yaprağı + 5 akordeon grubu — [currentRoute] ile eşleşen
  * yaprak vurgulanır), altta ayraç + sürüm bilgisi + Çıkış. 2026-07-19 tekilleştirme: "Ayarlar"
  * girişi buradan KALDIRILDI — tek giriş noktası artık [com.calibrahub.app.ui.home.HomeScreen]'in
  * üst çubuğundaki dişli ikonu (bkz. [AppRoutes.SETTINGS] KDoc'u).
