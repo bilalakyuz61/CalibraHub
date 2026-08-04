@@ -616,6 +616,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IOper
     CalibraHub.Persistence.Repositories.SqlOperationMachineTimeRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IOperationMachineTimeService,
     CalibraHub.Application.Services.OperationMachineTimeService>();
+// Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMachineScheduleRepository,
+    CalibraHub.Persistence.Repositories.SqlMachineScheduleRepository>();
 
 // Is Emri Operasyonlari (Faz 3a — shop-floor temel)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderOperationRepository,

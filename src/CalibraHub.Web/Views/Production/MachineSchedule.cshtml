@@ -1,0 +1,62 @@
+@{
+    ViewData["Title"] = "Makine Planlama";
+    ViewData["FormCode"] = "MACHINE_SCHEDULE";
+    ViewData["BodyClass"] = "page-machineschedule";
+}
+
+@section Styles {
+<link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
+<style>
+    .page-machineschedule .workspace-action-bar { display: none !important; }
+    .page-machineschedule .integrator-dashboard,
+    .page-machineschedule .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .machineschedule-mount {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="machineschedule-mount" id="machineScheduleRoot"></div>
+</section>
+
+@section Scripts {
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
+<script>
+    (function () {
+        var el = document.getElementById('machineScheduleRoot')
+        if (!el) return
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountMachineSchedule) {
+                console.error('[MachineSchedule] mount fonksiyonu bulunamadi'); return
+            }
+            try { window.CalibraHub.mountMachineSchedule(el) }
+            catch (ex) { console.error('[MachineSchedule] mount hatasi:', ex) }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountMachineSchedule) { doMount(); return }
+        var tries = 0
+        var timer = setInterval(function () {
+            tries++
+            if (window.CalibraHub && window.CalibraHub.mountMachineSchedule) { clearInterval(timer); doMount() }
+            else if (tries >= 30) { clearInterval(timer); console.error('[MachineSchedule] timeout') }
+        }, 100)
+    })()
+</script>
+}

@@ -206,6 +206,8 @@ public static class MenuDefinition
                     PermissionFormCode: FormCodes.WorkOrders),
                 new("production.shopfloor",   isEn ? "Production Terminal"       : "Üretim Terminali",       "Tablet",        "/Production/ShopFloor",    null,
                     PermissionFormCode: FormCodes.ShopFloor),
+                new("production.machineschedule", isEn ? "Machine Scheduling"    : "Makine Planlama",        "CalendarClock", "/Production/MachineSchedule", null,
+                    PermissionFormCode: FormCodes.MachineSchedule),
                 new("production.definitions", isEn ? "Production Definitions"    : "Üretim Tanımlamaları",   "Settings2",     "/Production/Definitions",  null,
                     PermissionFormCode: FormCodes.ProductionDefs),
             }),

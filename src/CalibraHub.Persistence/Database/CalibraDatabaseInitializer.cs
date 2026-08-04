@@ -731,6 +731,8 @@ END;";
             await EnsureBOMTablesAsync(connection, cancellationToken);
             await EnsureItemKitTablesAsync(connection, cancellationToken);
             await EnsureStockReservationTablesAsync(connection, cancellationToken);
+            // Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04).
+            await EnsureMachineScheduleTablesAsync(connection, cancellationToken);
             await EnsureMaterialGroupTablesAsync(connection, cancellationToken);
             await EnsureFinanceTablesAsync(connection, cancellationToken);
             await EnsureAddressTablesAsync(connection, cancellationToken);
@@ -5867,6 +5869,62 @@ END;";
                     CREATE INDEX [IX_StockReservation_KitOrderLine]
                         ON [{s}].[StockReservation]([KitOrderLineId])
                         WHERE [KitOrderLineId] IS NOT NULL AND [IsActive] = 1;
+                ';
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04). Bir WorkOrderOperation'ın
+    /// bir makinede planlı zaman bloğunu tutar (StockReservation deseni: FK'siz soft-ref, filtered
+    /// index ayrı EXEC batch, per-company DB → CompanyId kolonu yok). WorkOrderOperationId NULL
+    /// olabilir (bakım/duruş/setup bloğu — bir iş emri operasyonuna bağlı değil).
+    /// </summary>
+    private async Task EnsureMachineScheduleTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[MachineScheduleBlock]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[MachineScheduleBlock]
+                (
+                    [Id]                   INT           NOT NULL IDENTITY(1,1) CONSTRAINT [PK_MachineScheduleBlock] PRIMARY KEY,
+                    [MachineId]            INT           NOT NULL,
+                    [WorkOrderOperationId] INT           NULL,
+                    [StartUtc]             DATETIME      NOT NULL,
+                    [EndUtc]               DATETIME      NOT NULL,
+                    [BlockType]            TINYINT       NOT NULL CONSTRAINT [DF_MachineScheduleBlock_BlockType] DEFAULT 1,
+                    [Status]               TINYINT       NOT NULL CONSTRAINT [DF_MachineScheduleBlock_Status] DEFAULT 1,
+                    [Notes]                NVARCHAR(500) NULL,
+                    [IsActive]             BIT           NOT NULL CONSTRAINT [DF_MachineScheduleBlock_IsActive] DEFAULT 1,
+                    [CreatedById]          INT           NULL,
+                    [Created]              DATETIME      NOT NULL CONSTRAINT [DF_MachineScheduleBlock_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]          INT           NULL,
+                    [Updated]              DATETIME      NULL,
+                    CONSTRAINT [CK_MachineScheduleBlock_BlockType] CHECK ([BlockType] BETWEEN 1 AND 4),
+                    CONSTRAINT [CK_MachineScheduleBlock_Status] CHECK ([Status] BETWEEN 1 AND 3)
+                );
+            END;
+
+            -- Çakışma kontrolü + makine×tarih aralığı listeleme (SaveScheduleBlock, MachineScheduleData).
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[MachineScheduleBlock]') AND name = N'IX_MachineScheduleBlock_Machine_Start')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_MachineScheduleBlock_Machine_Start]
+                        ON [{s}].[MachineScheduleBlock]([MachineId],[StartUtc])
+                        WHERE [IsActive] = 1;
+                ';
+
+            -- WorkOrderOperation'ın hâlihazırda aktif bloğu olup olmadığını bulmak (unplanned listesi).
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[MachineScheduleBlock]') AND name = N'IX_MachineScheduleBlock_WorkOrderOperation')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_MachineScheduleBlock_WorkOrderOperation]
+                        ON [{s}].[MachineScheduleBlock]([WorkOrderOperationId])
+                        WHERE [WorkOrderOperationId] IS NOT NULL AND [IsActive] = 1;
                 ';
             """;
 
@@ -13015,6 +13073,9 @@ END;";
             ("WORK_ORDERS",         "İş Emirleri",                      "Üretim",               "İş Emirleri",              510,  true),  // SmartBoard liste
             ("WORK_ORDER_EDIT",     "Düzenleme",                        "Üretim",               "İş Emirleri",              515,  true),
             ("SHOP_FLOOR",          "Üretim Terminali",                  "Üretim",               null,                       518,  false),
+            // 2026-08-04: Makine Planlama (Üretim Çizelgeleme, Faz 1 Manuel) — Gantt canvas UI,
+            // ShopFloor gibi widget hedefi olmayan özel ekran.
+            ("MACHINE_SCHEDULE",    "Makine Planlama",                  "Üretim",               null,                       519,  false),
             ("PRODUCTION_DEFS",     "Üretim Tanımlamaları",              "Üretim",               null,                       575,  false),
             ("OPERATIONS",          "Operasyonlar",                     "Üretim",               "Operasyonlar",             520,  true),  // SmartBoard liste
             ("OPERATION_EDIT",      "Düzenleme",                        "Üretim",               "Operasyonlar",             525,  true),

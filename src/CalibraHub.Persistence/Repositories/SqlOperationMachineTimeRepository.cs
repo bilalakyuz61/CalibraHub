@@ -169,4 +169,81 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null && result != DBNull.Value && Convert.ToInt32(result) == 1;
     }
+
+    // ── Makine Planlama süre resolver (Faz 1, 2026-08-04) ──────────────────────────────────
+
+    public async Task<OperationMachineTimeMatchDto?> FindBestMachineTimeMatchAsync(
+        int operationId, int? machineId, int? itemId, int? routingId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        // 3-degerli eslesme (ListByOperationAsync ile ayni desen): MachineId/ItemId/RoutingId NULL
+        // ise "genel" satir olarak her zaman eslesir; dolu ise ya @param'a esit ya NULL (genel) olmali.
+        // Siralama: en spesifik (NULL olmayan alan sayisi en fazla) satir ONCE gelir.
+        cmd.CommandText = $@"
+            SELECT TOP 1 [Id], [MachineId], [ItemId], [RoutingId], [Quantity], [DurationPerUnit], [DurationUnit]
+            FROM {_table}
+            WHERE [CompanyId] = @CompanyId AND [OperationId] = @OperationId AND [IsActive] = 1
+              AND ([MachineId] = @MachineId OR [MachineId] IS NULL)
+              AND ([ItemId] = @ItemId OR [ItemId] IS NULL)
+              AND ([RoutingId] = @RoutingId OR [RoutingId] IS NULL)
+            ORDER BY
+              CASE WHEN [MachineId] IS NOT NULL THEN 0 ELSE 1 END,
+              CASE WHEN [ItemId] IS NOT NULL THEN 0 ELSE 1 END,
+              CASE WHEN [RoutingId] IS NOT NULL THEN 0 ELSE 1 END;";
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@OperationId", operationId);
+        cmd.Parameters.AddWithValue("@MachineId", (object?)machineId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ItemId", (object?)itemId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@RoutingId", (object?)routingId ?? DBNull.Value);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        return new OperationMachineTimeMatchDto(
+            Id: r.GetInt32(0),
+            MachineId: r.IsDBNull(1) ? null : r.GetInt32(1),
+            ItemId: r.IsDBNull(2) ? null : r.GetInt32(2),
+            RoutingId: r.IsDBNull(3) ? null : r.GetInt32(3),
+            Quantity: r.GetDecimal(4),
+            DurationPerUnit: r.GetDecimal(5),
+            DurationUnit: (DurationUnit)r.GetByte(6));
+    }
+
+    public async Task<decimal?> GetRoutingOperationOverrideMinutesAsync(int routingId, int operationId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT TOP 1 [OverrideDuration], [DurationUnit]
+            FROM [{_schema}].[RoutingOperation]
+            WHERE [RoutingId] = @RoutingId AND [OperationId] = @OperationId AND [OverrideDuration] IS NOT NULL;";
+        cmd.Parameters.AddWithValue("@RoutingId", routingId);
+        cmd.Parameters.AddWithValue("@OperationId", operationId);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        var duration = r.GetDecimal(0);
+        var unit = (DurationUnit)r.GetByte(1);
+        return unit == DurationUnit.Hour ? duration * 60m : duration;
+    }
+
+    public async Task<decimal?> GetOperationStandardMinutesAsync(int operationId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT [StandardDuration], [DurationUnit]
+            FROM [{_schema}].[Operation]
+            WHERE [Id] = @OperationId AND [CompanyId] = @CompanyId AND [StandardDuration] IS NOT NULL;";
+        cmd.Parameters.AddWithValue("@OperationId", operationId);
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        var duration = r.GetDecimal(0);
+        var unit = (DurationUnit)r.GetByte(1);
+        return unit == DurationUnit.Hour ? duration * 60m : duration;
+    }
 }

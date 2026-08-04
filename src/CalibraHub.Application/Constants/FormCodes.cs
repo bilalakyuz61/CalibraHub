@@ -123,6 +123,9 @@ public static class FormCodes
     public const string ShopFloor      = "SHOP_FLOOR";
     public const string ProductionDefs = "PRODUCTION_DEFS";
 
+    // Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04).
+    public const string MachineSchedule = "MACHINE_SCHEDULE";
+
     public const string Operations   = "OPERATIONS";
     public const string OperationEdit = "OPERATION_EDIT";
 

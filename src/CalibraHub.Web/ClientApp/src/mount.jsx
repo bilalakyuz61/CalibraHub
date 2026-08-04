@@ -54,6 +54,7 @@ import './components/ViewBuilder/ViewBuilder.css'
 import CapaDashboard from './components/CapaDashboard/CapaDashboard'
 import './components/CapaDashboard/CapaDashboard.css'
 import OperationGrid from './components/OperationGrid/OperationGrid'
+import MachineSchedule from './components/MachineSchedule/MachineSchedule'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
 import CombinationPickerModal from './components/CalibraLineItemsGrid/CombinationPickerModal'
@@ -1412,6 +1413,28 @@ function mountOperationGrid(element, config) {
   }
 }
 window.CalibraHub.mountOperationGrid = mountOperationGrid
+
+/**
+ * MachineSchedule mount — Makine Planlama (Üretim Çizelgeleme) konva Gantt.
+ * @param {HTMLElement} element
+ */
+function mountMachineSchedule(element) {
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(MachineSchedule, null)
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountMachineSchedule = mountMachineSchedule
 
 /**
  * LocationTree mount — Lokasyon Tanımlamaları kart-ağaç görünümü.

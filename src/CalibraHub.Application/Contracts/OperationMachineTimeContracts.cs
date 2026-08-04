@@ -41,3 +41,18 @@ public sealed record SaveOperationMachineTimeRequest(
     decimal DurationPerUnit,
     DurationUnit DurationUnit,
     bool IsActive);
+
+/// <summary>
+/// Makine Planlama süre resolver (Faz 1, 2026-08-04) — en spesifik <c>OperationMachineTime</c> eşleşmesi.
+/// YAGNI basitleştirmesi: yalnız <c>MachineId</c>/<c>ItemId</c>/<c>RoutingId</c> tam eşleşme aranır;
+/// <c>MachineGroupId</c>/<c>ItemGroupId</c> (makine/ürün grubu) eşleştirmesi KAPSAM DIŞI bırakıldı
+/// (Machine entity'sinde grup referansı yok — CardGroup üyelik tablosu ayrı bir keşif gerektirir).
+/// </summary>
+public sealed record OperationMachineTimeMatchDto(
+    int Id,
+    int? MachineId,
+    int? ItemId,
+    int? RoutingId,
+    decimal Quantity,
+    decimal DurationPerUnit,
+    DurationUnit DurationUnit);

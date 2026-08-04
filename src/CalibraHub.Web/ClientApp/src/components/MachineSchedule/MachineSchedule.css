@@ -1,0 +1,515 @@
+/* Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel Gantt
+   Tema: light = default değişkenler, body.app-theme-dark override eder (CLAUDE.md kuralı). */
+
+.ms-root {
+  color-scheme: light;
+  --ms-bg: #f4f6fa;
+  --ms-surface: #ffffff;
+  --ms-surface-2: #f8fafc;
+  --ms-border: #e2e8f0;
+  --ms-text: #0f172a;
+  --ms-text-muted: #64748b;
+  --ms-accent: #6366f1;
+  --ms-accent-soft: rgba(99, 102, 241, 0.12);
+  --ms-danger: #ef4444;
+  --ms-row-alt: #f8fafc;
+  --ms-header-bg: #eef1f8;
+  --ms-grid-line: #e5e9f0;
+
+  /* Blok tipleri (BlockType 1..4) */
+  --ms-block-production: #6366f1;
+  --ms-block-production-text: #ffffff;
+  --ms-block-setup: #f59e0b;
+  --ms-block-setup-text: #3a2405;
+  --ms-block-maintenance: #8b5cf6;
+  --ms-block-maintenance-text: #ffffff;
+  --ms-block-down: #94a3b8;
+  --ms-block-down-text: #1e293b;
+  --ms-block-conflict: #ef4444;
+
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--ms-bg);
+  color: var(--ms-text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+body.app-theme-dark .ms-root {
+  color-scheme: dark;
+  --ms-bg: #0b1220;
+  --ms-surface: #111a2c;
+  --ms-surface-2: #0f1830;
+  --ms-border: #223050;
+  --ms-text: #e2e8f0;
+  --ms-text-muted: #8b9bbd;
+  --ms-accent: #818cf8;
+  --ms-accent-soft: rgba(129, 140, 248, 0.18);
+  --ms-danger: #f87171;
+  --ms-row-alt: #101a30;
+  --ms-header-bg: #0f1a34;
+  --ms-grid-line: #1c2947;
+
+  --ms-block-production: #6366f1;
+  --ms-block-production-text: #ffffff;
+  --ms-block-setup: #d97706;
+  --ms-block-setup-text: #fff7ed;
+  --ms-block-maintenance: #a78bfa;
+  --ms-block-maintenance-text: #1e1240;
+  --ms-block-down: #475569;
+  --ms-block-down-text: #e2e8f0;
+  --ms-block-conflict: #f87171;
+}
+
+/* ── Layout: sol kuyruk + sağ Gantt ─────────────────────── */
+.ms-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* ── Sol: planlanmamış operasyon kuyruğu ────────────────── */
+.ms-queue {
+  flex: 0 0 268px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--ms-border);
+  background: var(--ms-surface);
+}
+
+.ms-queue-header {
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid var(--ms-border);
+}
+
+.ms-queue-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.ms-queue-count {
+  margin-left: auto;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--ms-text-muted);
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.ms-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: var(--ms-text-muted);
+}
+
+.ms-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--ms-text);
+  font-size: 12.5px;
+  width: 100%;
+}
+
+.ms-queue-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ms-queue-empty {
+  color: var(--ms-text-muted);
+  text-align: center;
+  padding: 24px 8px;
+  font-size: 12.5px;
+}
+
+.ms-op-card {
+  border: 1px solid var(--ms-border);
+  background: var(--ms-surface-2);
+  border-radius: 10px;
+  padding: 9px 10px;
+  cursor: grab;
+  transition: border-color .12s, box-shadow .12s, opacity .12s;
+}
+
+.ms-op-card:hover {
+  border-color: var(--ms-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+}
+
+.ms-op-card--dragging {
+  opacity: .35;
+}
+
+.ms-op-card--ghost {
+  cursor: grabbing;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+}
+
+.ms-op-wo {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ms-accent);
+}
+
+.ms-op-item {
+  font-size: 12.5px;
+  margin-top: 2px;
+  color: var(--ms-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-op-meta {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ms-text-muted);
+}
+
+.ms-op-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* ── Sağ: Gantt paneli ───────────────────────────────────── */
+.ms-gantt {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ms-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ms-border);
+  background: var(--ms-surface);
+  flex-wrap: wrap;
+}
+
+.ms-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  margin-right: 8px;
+}
+
+.ms-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ms-toolbar-label {
+  font-size: 11.5px;
+  color: var(--ms-text-muted);
+}
+
+.ms-date-input {
+  color-scheme: inherit;
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--ms-text);
+  font-size: 12.5px;
+}
+
+.ms-zoom-btn,
+.ms-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--ms-border);
+  background: var(--ms-surface-2);
+  color: var(--ms-text);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+
+.ms-zoom-btn:hover,
+.ms-icon-btn:hover {
+  border-color: var(--ms-accent);
+  color: var(--ms-accent);
+}
+
+.ms-zoom-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+.ms-zoom-label {
+  font-size: 11.5px;
+  color: var(--ms-text-muted);
+  min-width: 62px;
+  text-align: center;
+}
+
+.ms-spacer { flex: 1 1 auto; }
+
+.ms-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--ms-text-muted);
+}
+
+.ms-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ms-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+/* ── Konva scroll alanı ─────────────────────────────────── */
+.ms-gantt-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  background: var(--ms-bg);
+}
+
+.ms-gantt-grid {
+  display: grid;
+  grid-template-columns: var(--ms-col-w, 176px) 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+.ms-corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  background: var(--ms-header-bg);
+  border-right: 1px solid var(--ms-border);
+  border-bottom: 1px solid var(--ms-border);
+}
+
+.ms-header-stage-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--ms-header-bg);
+  border-bottom: 1px solid var(--ms-border);
+}
+
+.ms-machine-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--ms-surface);
+  border-right: 1px solid var(--ms-border);
+}
+
+.ms-machine-row {
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--ms-border);
+}
+
+.ms-machine-row:nth-child(even) {
+  background: var(--ms-row-alt);
+}
+
+.ms-machine-name {
+  font-weight: 600;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-machine-sub {
+  font-size: 11px;
+  color: var(--ms-text-muted);
+  margin-top: 2px;
+}
+
+.ms-body-stage-wrap {
+  position: relative;
+}
+
+.ms-empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ms-text-muted);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+
+/* ── Blok düzenleme popover ──────────────────────────────── */
+.ms-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+}
+
+.ms-popover {
+  position: fixed;
+  z-index: 5001;
+  width: 268px;
+  background: var(--ms-surface);
+  border: 1px solid var(--ms-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .25);
+  padding: 12px;
+}
+
+.ms-popover-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.ms-popover-title small {
+  font-weight: 400;
+  color: var(--ms-text-muted);
+  font-size: 11px;
+}
+
+.ms-popover-close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--ms-text-muted);
+  cursor: pointer;
+  display: flex;
+}
+
+.ms-field {
+  margin-bottom: 9px;
+}
+
+.ms-field label {
+  display: block;
+  font-size: 11px;
+  color: var(--ms-text-muted);
+  margin-bottom: 4px;
+}
+
+.ms-field select,
+.ms-field textarea {
+  width: 100%;
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--ms-text);
+  font-size: 12.5px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.ms-popover-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ms-btn {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity .12s;
+}
+
+.ms-btn:hover { opacity: .9; }
+
+.ms-btn--primary {
+  background: var(--ms-accent);
+  color: #fff;
+}
+
+.ms-btn--secondary {
+  background: var(--ms-surface-2);
+  border-color: var(--ms-border);
+  color: var(--ms-text);
+}
+
+.ms-btn--danger {
+  background: transparent;
+  border-color: var(--ms-danger);
+  color: var(--ms-danger);
+  flex: 0 0 auto;
+  width: 34px;
+}
+
+.ms-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--ms-text-muted);
+}
+
+.ms-spin {
+  animation: ms-spin-kf 0.9s linear infinite;
+}
+
+@keyframes ms-spin-kf {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

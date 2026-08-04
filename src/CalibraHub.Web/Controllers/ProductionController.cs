@@ -51,6 +51,8 @@ public sealed class ProductionController : Controller
     private readonly CalibraHub.Application.Services.ShopFloorLockoutTracker _shopFloorLockout;
     private readonly CalibraHub.Persistence.Database.SqlServerConnectionFactory _connectionFactory;
     private readonly ILogger<ProductionController> _logger;
+    // 2026-08-04 — Makine Planlama (Üretim Çizelgeleme) Faz 1 Manuel.
+    private readonly IMachineScheduleRepository _machineSchedule;
 
     public ProductionController(
         IWorkOrderService service,
@@ -69,6 +71,7 @@ public sealed class ProductionController : Controller
         ICompanyParameterService companyParameters,
         CalibraHub.Application.Services.ShopFloorLockoutTracker shopFloorLockout,
         CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
+        IMachineScheduleRepository machineSchedule,
         ILogger<ProductionController> logger)
     {
         _service = service;
@@ -87,6 +90,7 @@ public sealed class ProductionController : Controller
         _companyParameters = companyParameters;
         _shopFloorLockout = shopFloorLockout;
         _connectionFactory = connectionFactory;
+        _machineSchedule = machineSchedule;
         _logger = logger;
     }
 
@@ -1434,6 +1438,77 @@ public sealed class ProductionController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[WorkOrder.UpdateComponentLocation] componentId={ComponentId} lokasyon güncellenemedi.", req?.ComponentId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    // ─── Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04) ────────
+    // API sözleşmesi KİLİTLİ (bkz. plan glittery-finding-comet.md) — frontend
+    // machineScheduleService.js bu üç endpoint'e göre yazıldı, alan adı/tipini değiştirme.
+    // GET  /Production/MachineSchedule                           → Gantt canvas view (React mount)
+    // GET  /Production/MachineScheduleData?from=&to=             → makineler + bloklar + planlanacak kuyruğu
+    // POST /Production/SaveScheduleBlock                         → oluştur/taşı (çakışma uyarı olarak döner)
+    // POST /Production/DeleteScheduleBlock                       → soft-delete
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public IActionResult MachineSchedule() => View();
+
+    [HttpGet("Production/MachineScheduleData")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> MachineScheduleData(DateTime from, DateTime to, CancellationToken ct)
+    {
+        try
+        {
+            var fromUtc = DateTime.SpecifyKind(from, DateTimeKind.Utc);
+            var toUtc = DateTime.SpecifyKind(to, DateTimeKind.Utc);
+            var data = await _machineSchedule.GetScheduleDataAsync(fromUtc, toUtc, ct);
+            return Json(new { ok = true, machines = data.Machines, blocks = data.Blocks, unplanned = data.Unplanned });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineSchedule.Data] from={From} to={To} veri alınamadı.", from, to);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> SaveScheduleBlock([FromBody] SaveScheduleBlockRequest req, CancellationToken ct)
+    {
+        if (req is null || req.MachineId <= 0)
+            return Json(new { ok = false, error = "Makine zorunlu." });
+        if (req.EndUtc <= req.StartUtc)
+            return Json(new { ok = false, error = "Bitiş zamanı başlangıçtan sonra olmalı." });
+        try
+        {
+            var result = await _machineSchedule.SaveBlockAsync(req, CurrentUserId(), ct);
+            return Json(new { ok = result.Ok, id = result.Id, conflicts = result.Conflicts });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineSchedule.SaveBlock] id={Id} machineId={MachineId} kaydedilemedi.", req.Id, req.MachineId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record DeleteScheduleBlockRequest(int Id);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> DeleteScheduleBlock([FromBody] DeleteScheduleBlockRequest req, CancellationToken ct)
+    {
+        if (req is null || req.Id <= 0)
+            return Json(new { ok = false, error = "Kayıt belirtilmedi." });
+        try
+        {
+            await _machineSchedule.DeleteBlockAsync(req.Id, CurrentUserId(), ct);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineSchedule.DeleteBlock] id={Id} silinemedi.", req.Id);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }

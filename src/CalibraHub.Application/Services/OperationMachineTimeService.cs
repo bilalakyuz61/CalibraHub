@@ -2,6 +2,7 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
+using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Application.Services;
 
@@ -81,4 +82,26 @@ public sealed class OperationMachineTimeService : IOperationMachineTimeService
     }
 
     public Task DeleteAsync(int id, CancellationToken ct) => _repo.DeleteAsync(id, ct);
+
+    public async Task<decimal?> ResolveDurationMinutesAsync(
+        int operationId, int? machineId, int? itemId, int? routingId, decimal quantity, CancellationToken ct)
+    {
+        if (operationId <= 0) return null;
+
+        var match = await _repo.FindBestMachineTimeMatchAsync(operationId, machineId, itemId, routingId, ct);
+        if (match is not null)
+        {
+            var perUnit = match.Quantity != 0m ? match.DurationPerUnit / match.Quantity : match.DurationPerUnit;
+            var totalRaw = perUnit * (quantity > 0m ? quantity : 1m);
+            return match.DurationUnit == DurationUnit.Hour ? totalRaw * 60m : totalRaw;
+        }
+
+        if (routingId is > 0)
+        {
+            var routingMinutes = await _repo.GetRoutingOperationOverrideMinutesAsync(routingId.Value, operationId, ct);
+            if (routingMinutes is not null) return routingMinutes;
+        }
+
+        return await _repo.GetOperationStandardMinutesAsync(operationId, ct);
+    }
 }
