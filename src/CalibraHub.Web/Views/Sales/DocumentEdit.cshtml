@@ -2789,19 +2789,15 @@
                             })(this)">
                         <option value="1" data-code="TRY">TRY</option>
                     </select>
+                    @* Seq 1084: kur, para biriminin HEMEN YANINDA (ayrı satır değil); "1 GBP = ? TL"
+                       ipucu kaldırıldı. TRY seçiliyken gizli — sq:currency event'i show/hide eder. *@
+                    <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
+                           style="max-width:110px; margin-left:10px; display:none;" value="1" min="0" step="0.000001"
+                           title="Kur — 1 birim belge dövizinin TL karşılığı"
+                           oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
                 </div>
                 @if (!isPurchaseRequest)
                 {
-                    @* Seq 1067: belge dövizi TRY değilse elle kur girişi (1 birim döviz = kaç TL).
-                       Yalnız CurrencyId≠1 iken görünür; sq:currency event'i show/hide eder. *@
-                    <div class="sqe-hrow" id="sqExchangeRateRow" style="display:none;">
-                        <label class="sqe-hlabel">Kur (TL)</label>
-                        <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
-                               style="max-width:120px;" value="1" min="0" step="0.000001"
-                               title="1 birim belge dövizinin TL karşılığı"
-                               oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
-                        <span class="sqe-hlabel-value" id="sqExchangeRateHint" style="margin-left:8px;opacity:.7;"></span>
-                    </div>
                     @* Seq 1068: KDV Dahil switch — aktifse girilen birim fiyat KDV dahil kabul edilir. *@
                     <div class="sqe-hrow">
                         <label class="sqe-hlabel">KDV Dahil</label>
@@ -4087,20 +4083,17 @@
     }
     window.sqSetCurrencyById = sqSetCurrencyById;
 
-    // Seq 1067: belge dövizi değişince Kur satırını göster/gizle (TRY=gizli, diğerleri=görünür)
-    // + kur ipucu metnini güncelle. Kur alanı yalnız döviz belgede anlamlı.
+    // Seq 1067/1084: belge dövizi değişince Kur alanını (para biriminin yanında) göster/gizle.
+    // TRY=gizli+kur 1, diğerleri=görünür. Seq 1084: ayrı "1 GBP = ? TL" ipucu KALDIRILDI.
     window.addEventListener('sq:currency', function (e) {
         var code = (e && e.detail && e.detail.code) || 'TRY';
         var id   = (e && e.detail && e.detail.id) || 1;
         var isForeign = (String(code).toUpperCase() !== 'TRY') && (id !== 1);
-        var row  = document.getElementById('sqExchangeRateRow');
-        var hint = document.getElementById('sqExchangeRateHint');
-        if (row) row.style.display = isForeign ? '' : 'none';
-        if (!isForeign) {
-            var rateEl = document.getElementById('sqExchangeRate');
-            if (rateEl) rateEl.value = 1;   // TRY belge → kur 1
+        var rateEl = document.getElementById('sqExchangeRate');
+        if (rateEl) {
+            rateEl.style.display = isForeign ? '' : 'none';
+            if (!isForeign) rateEl.value = 1;   // TRY belge → kur 1
         }
-        if (hint) hint.textContent = isForeign ? ('1 ' + code + ' = ? TL') : '';
         if (typeof sqRecalc === 'function') sqRecalc();
         // Seq 1074: kullanıcı döviz belge seçince kuru TCMB tablosundan otomatik çek.
         // Yalnız kullanıcı-tetiklemeli seçimde (load'da kayıtlı kur korunur, ezilmez).
@@ -4112,7 +4105,6 @@
     // (fallback backend'de). Kur tablosunda hiç yoksa alan boş kalır, kullanıcı elle girer (1067).
     function sqFetchTcmbRate(currencyId, code) {
         var rateEl = document.getElementById('sqExchangeRate');
-        var hint   = document.getElementById('sqExchangeRateHint');
         if (!rateEl) return;
         var dateEl  = document.getElementById('sqQuoteDate');
         var docDate = (dateEl && dateEl.value) ? dateEl.value : '';
@@ -4121,16 +4113,10 @@
         fetch(url, { credentials: 'same-origin' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
+                // Seq 1084: ipucu metni yok — kur doğrudan alana yazılır (yoksa mevcut/elle değer kalır).
                 if (d && d.rate != null) {
                     rateEl.value = d.rate;
-                    if (hint) {
-                        var rd = d.rateDate ? String(d.rateDate).split('T')[0] : '';
-                        hint.textContent = '1 ' + code + ' = ' + d.rate + ' TL' +
-                            (rd ? (' (' + rd + (d.source ? ' · ' + d.source : '') + ')') : '');
-                    }
                     if (typeof sqRecalc === 'function') sqRecalc();
-                } else if (hint) {
-                    hint.textContent = '1 ' + code + ' = ? TL (kur tablosunda yok — elle girin)';
                 }
             })
             .catch(function () { /* sessiz — elle giriş serbest */ });
