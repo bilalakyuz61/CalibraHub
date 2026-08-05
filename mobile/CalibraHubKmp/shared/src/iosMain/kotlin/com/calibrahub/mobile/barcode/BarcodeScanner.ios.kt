@@ -146,13 +146,13 @@ private class BarcodeCaptureDelegate(
 ) : NSObject(), AVCaptureMetadataOutputObjectsDelegateProtocol {
 
     override fun captureOutput(
-        output: AVCaptureOutput?,
-        didOutputMetadataObjects: List<*>?,
-        fromConnection: AVCaptureConnection?,
+        output: AVCaptureOutput,
+        didOutputMetadataObjects: List<*>,
+        fromConnection: AVCaptureConnection,
     ) {
         val code = didOutputMetadataObjects
-            ?.filterIsInstance<AVMetadataMachineReadableCodeObject>()
-            ?.firstOrNull()
+            .filterIsInstance<AVMetadataMachineReadableCodeObject>()
+            .firstOrNull()
             ?.stringValue
             ?: return
         onCode(code)
@@ -223,23 +223,31 @@ private class BarcodeScannerViewController(
             width = guideSize,
             height = guideSize,
         )
-        frameGuideView?.frame = guideFrame
+        frameGuideView?.let { it.setFrame(guideFrame) }
         val guideBottom = (height - guideSize) / 2.0 + guideSize
 
-        hintLabel?.frame = CGRectMake(
-            x = 16.0,
-            y = guideBottom + 16.0,
-            width = width - 32.0,
-            height = 24.0,
-        )
+        hintLabel?.let {
+            it.setFrame(
+                CGRectMake(
+                    x = 16.0,
+                    y = guideBottom + 16.0,
+                    width = width - 32.0,
+                    height = 24.0,
+                )
+            )
+        }
 
         val topInset = view.safeAreaInsets.useContents { top }
-        closeButton?.frame = CGRectMake(
-            x = width - 96.0,
-            y = topInset + 12.0,
-            width = 80.0,
-            height = 40.0,
-        )
+        closeButton?.let {
+            it.setFrame(
+                CGRectMake(
+                    x = width - 96.0,
+                    y = topInset + 12.0,
+                    width = 80.0,
+                    height = 40.0,
+                )
+            )
+        }
     }
 
     private fun configureSession() {
@@ -308,7 +316,7 @@ private class BarcodeScannerViewController(
         view.addSubview(hint)
         hintLabel = hint
 
-        val close = UIButton.buttonWithType(platform.UIKit.UIButtonType.UIButtonTypeSystem) as UIButton
+        val close = UIButton()
         close.setTitle("Kapat", forState = UIControlStateNormal)
         close.setTitleColor(UIColor.whiteColor, forState = UIControlStateNormal)
         close.backgroundColor = UIColor.colorWithWhite(0.0, alpha = 0.4)
@@ -327,7 +335,7 @@ private class BarcodeScannerViewController(
      * icin (UIViewController -> UIResponder -> NSObject) Objective-C runtime'inda gorunurdur.
      * Imza, standart UIKit target-action konvansiyonuna uyar (`sender` parametresi). */
     @ObjCAction
-    fun onCloseTapped(sender: Any?) {
+    fun onCloseTapped(sender: UIButton?) {
         finishWithResult(null)
     }
 
