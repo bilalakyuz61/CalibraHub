@@ -69,12 +69,18 @@
     }
 
     /* Sağ kenardaki takvim ikonu bölgesine mi tıklandı/mouse üzerinde mi?
-       Bölge genişliği CSS'teki padding-right'tan (computed style) okunur —
-       ikon boşluğu ekran bazlı override edilse bile tıklama alanı otomatik
-       uyar (bkz. calibra-datepicker.css .calibra-date-input padding-right). */
+       İkon her zaman sağ 10px + 15px genişlik (calibra-datepicker.css:
+       background-position:right 10px, size:15px) → fromRight ~10-25px'i kaplar.
+       Tıklama bölgesi EN AZ ~28px olmalı ki ikonun tam üzeri çalışsın.
+       2026-08-06 fix: yalnız computed padding-right'a bağlanınca, ekranların genel
+       input padding'i (ör. .sqe-hinput `padding:9px 12px`) date altInput'un
+       padding-right'ını 12px'e ezip bölgeyi daraltıyordu → ikonun üzeri değil yalnız
+       sağ kenarı tetikliyordu. Math.max ile 28px taban veririz; bilinçli daha geniş
+       ikon boşluğu olan ekranlarda (padding-right > 28) o değer korunur. */
     function isIconZoneHit(el, clientX) {
         var rect = el.getBoundingClientRect();
-        var zone = parseFloat(window.getComputedStyle(el).paddingRight) || 34;
+        var pr = parseFloat(window.getComputedStyle(el).paddingRight) || 0;
+        var zone = Math.max(pr, 28);
         var fromRight = rect.right - clientX;
         return fromRight >= 0 && fromRight <= zone;
     }
