@@ -50,6 +50,7 @@ public static class AuditFieldLabels
             ["Routing"]        = "Rota",
             ["Location"]       = "Lokasyon",
             ["PriceList"]      = "Fiyat Listesi",
+            ["LineCardLayout"] = "Kalem Kartı Düzeni",
             ["ApprovalFlow"]   = "Onay Akışı",
             ["Asset"]          = "Varlık",
             ["Session"]        = "Oturum",

@@ -277,6 +277,8 @@ export default function AdminWidgetRegistryPanel(props) {
         isPlainField: payload.isPlainField || false,
         isRequired: payload.isRequired === true,
         isPermissionControlled: payload.isPermissionControlled === true,
+        // 2026-08-05 — Kalem kartında inline göster (yalnız *_LINES formlarında anlamlı).
+        showOnCard: payload.showOnCard === true,
         rules: payload.rules || null,     // Faz G — kural & formul JSON objesi
         // Form uzerinde kaplayacagi 24-col grid span degeri (1-24). Runtime
         // renderer CSS grid-column span'ine cevirir.
@@ -962,6 +964,7 @@ export default function AdminWidgetRegistryPanel(props) {
               <div className="overflow-y-auto min-h-0 pr-1">
                 <WidgetBuilderForm
                   editingField={editingField}
+                  formCode={currentFormCode}
                   onSubmit={handleSubmit}
                   onCancel={handleCancelEdit}
                   saving={savingGlobal}

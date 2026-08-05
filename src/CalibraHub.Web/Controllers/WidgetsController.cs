@@ -301,6 +301,36 @@ public sealed class WidgetsController : ControllerBase
         return Ok(record);
     }
 
+    // POST /api/widgets/forms/{formCode}/records/batch-values
+    // Kalem kartlari (CalibraLineItemsGrid "kartta goster" alanlari — 2026-08-05):
+    // tum satirlarin widget degerlerini TEK round-trip'te dondurur.
+    // Body: { recordIds: ["12","13",...] } → { ok, values: { "12": { w_code: value } } }
+    [HttpPost("forms/{formCode}/records/batch-values")]
+    public async Task<IActionResult> GetBatchRecordValues(
+        string formCode,
+        [FromBody] BatchRecordValuesRequest? request,
+        CancellationToken ct)
+    {
+        if (request?.RecordIds is null || request.RecordIds.Count == 0)
+            return Ok(new { ok = true, values = new Dictionary<string, object>() });
+
+        var ids = request.RecordIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(500)
+            .ToArray();
+
+        var models = await _widgetService.GetBatchRenderModelsAsync(formCode, ids, ct);
+        var values = models.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value.ToDictionary(w => w.WidgetId, w => w.Value, StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        return Ok(new { ok = true, values });
+    }
+
+    public sealed record BatchRecordValuesRequest(IReadOnlyCollection<string> RecordIds);
+
     // GET /api/widgets/forms/{formCode}/records/{recordId}/history
     // Alan bazli degisiklik gecmisi (audit) — eski deger → yeni deger + kim + ne zaman.
     // Grid child satirlarinin degisiklikleri de dahildir (childRecordId dolu gelir).

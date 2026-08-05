@@ -78,7 +78,8 @@ public sealed class WidgetService : IWidgetService
                 LabelStyle: w.LabelStyle ?? "standard",
                 IsSystemField: w.IsSystemField,
                 EntityColumn: w.EntityColumn,
-                IsPermissionControlled: w.IsPermissionControlled))
+                IsPermissionControlled: w.IsPermissionControlled,
+                ShowOnCard: w.ShowOnCard))
             .ToArray();
 
         return new WidgetFormSchemaDto(
@@ -539,6 +540,8 @@ public sealed class WidgetService : IWidgetService
             // 2026-06-08 — Yetkilendirilebilir alan flag'i. Admin UI'da "Yetkilendirilebilir"
             // switch'i bunu set eder; startup discovery FIELD:<WidgetCode> izni seed eder.
             IsPermissionControlled = request.IsPermissionControlled,
+            // 2026-08-05 — Kalem kartinda inline goster (yalnizca *_LINES formlarinda anlamli).
+            ShowOnCard = request.ShowOnCard,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -757,7 +760,8 @@ public sealed class WidgetService : IWidgetService
                 w.ColorValue,
                 w.ColSpan,
                 w.LabelStyle,
-                w.IsPermissionControlled))
+                w.IsPermissionControlled,
+                w.ShowOnCard))
             .ToArray();
 
         return new WidgetPackageDto(
@@ -891,6 +895,7 @@ public sealed class WidgetService : IWidgetService
                 IsSystemField  = false,
                 EntityColumn   = null,
                 IsPermissionControlled = item.IsPermissionControlled,
+                ShowOnCard     = item.ShowOnCard,
                 CreatedAt      = target?.CreatedAt ?? now,
                 UpdatedAt      = now,
             };
@@ -976,6 +981,7 @@ public sealed class WidgetService : IWidgetService
             IsSystemField  = w.IsSystemField,
             EntityColumn   = w.EntityColumn,
             IsPermissionControlled = w.IsPermissionControlled,
+            ShowOnCard     = w.ShowOnCard,
             CreatedAt      = w.CreatedAt,
             UpdatedAt      = DateTime.Now,
         };

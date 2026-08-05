@@ -773,6 +773,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
             IsSystemField = hasSysField && !r.IsDBNull(r.GetOrdinal("IsSystemField")) && r.GetBoolean(r.GetOrdinal("IsSystemField")),
             EntityColumn  = (hasEntCol && !r.IsDBNull(r.GetOrdinal("EntityColumn"))) ? r.GetString(r.GetOrdinal("EntityColumn")) : null,
             IsPermissionControlled = hasPermCtl && !r.IsDBNull(r.GetOrdinal("IsPermissionControlled")) && r.GetBoolean(r.GetOrdinal("IsPermissionControlled")),
+            ShowOnCard = HasColumn(r, "ShowOnCard") && !r.IsDBNull(r.GetOrdinal("ShowOnCard")) && r.GetBoolean(r.GetOrdinal("ShowOnCard")),
             CreatedAt = r.GetDateTime(r.GetOrdinal("CreatedAt")),
             UpdatedAt = r.GetDateTime(r.GetOrdinal("UpdatedAt")),
         };
@@ -828,6 +829,8 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         // Sprint 1 — Universal Form Engine. EntityColumn null olabilir.
         cmd.Parameters.Add(new SqlParameter("@IsSystemField", w.IsSystemField));
         cmd.Parameters.Add(new SqlParameter("@EntityColumn", (object?)w.EntityColumn ?? DBNull.Value));
+        // 2026-08-05 — Kalem kartinda inline goster (kolon initializer ile garanti).
+        cmd.Parameters.Add(new SqlParameter("@ShowOnCard", w.ShowOnCard));
         // 2026-06-08 — Yetkilendirilebilir alan flag'i. Sadece DB'de IsPermissionControlled
         // kolonu varsa bağlanır (graceful: ALTER TABLE çalıştırılmadığında SQL atılmaz).
         if (includePermControlled)

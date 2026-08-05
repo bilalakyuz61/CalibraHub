@@ -576,6 +576,10 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.INume
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.INumeratorService,
     CalibraHub.Application.Services.NumeratorService>();
 
+// Kalem karti duzeni (belge kalem karti konum/boyut — 2026-08-05)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILineCardLayoutRepository,
+    CalibraHub.Persistence.Repositories.SqlLineCardLayoutRepository>();
+
 // Ondalik ayarlari (form bazinda hane hassasiyeti — 2026-07-05)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDecimalSettingRepository,
     CalibraHub.Persistence.Repositories.SqlDecimalSettingRepository>();

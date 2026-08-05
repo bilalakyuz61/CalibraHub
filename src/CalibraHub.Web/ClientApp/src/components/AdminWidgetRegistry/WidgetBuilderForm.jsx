@@ -279,6 +279,10 @@ export default function WidgetBuilderForm(props) {
   var parentFormWidgets = Array.isArray(props.parentFormWidgets) ? props.parentFormWidgets : []
   var activeLayer = props.activeLayer || null
   var activeLayerLabel = props.activeLayerLabel || null
+  // 2026-08-05 — Aktif form kodu. Yalnizca kalem (satir) formlarinda (*_LINES)
+  // "Kartta Goster" secenegi sunulur; ust-bilgi formunda anlamsiz.
+  var formCode = props.formCode || ''
+  var isLineForm = /_LINES$/i.test(formCode)
 
   // Internal state isimleri UI ile uyumlu kalmaya devam ediyor, ama
   // submit payload'u ve editingField hydration'i artik Faz B API alanlarini
@@ -388,6 +392,9 @@ export default function WidgetBuilderForm(props) {
   // seed eder; Yetki Yönetimi'nde "Alan: <Label>" satırı görünür. İzni olmayan kullanıcı
   // alanı hiç görmez (server-side filter).
   var [isPermissionControlled, setIsPermissionControlled] = useState(false)
+  // 2026-08-05 — Kalem kartinda inline goster (WidgetMas.ShowOnCard). Kart
+  // duzeninde "w_{WidgetCode}" key'i ile yer alir; deger row.__extras'a baglanir.
+  var [showOnCard, setShowOnCard] = useState(false)
   var [errors, setErrors]               = useState({})
   // Shake animation — zorunlu alan bos biraktirildiginda Widget Ekle
   // tiklaninca kirmizi cerceveli titresim (metin yerine sadece gorsel).
@@ -479,6 +486,7 @@ export default function WidgetBuilderForm(props) {
       setIsActive(editingField.isActive !== false)
       setIsRequired(editingField.isRequired === true)
       setIsPermissionControlled(editingField.isPermissionControlled === true)
+      setShowOnCard(editingField.showOnCard === true)
       // Lookup: guideCode metadata'da saklanir (options degil)
       // Grid: childFormCode metadata'da saklanir
       var existingOpts = []
@@ -544,6 +552,7 @@ export default function WidgetBuilderForm(props) {
       setIsActive(true)
       setIsRequired(false)
       setIsPermissionControlled(false)
+      setShowOnCard(false)
       setOptions([])
       setRuleVisibleIf('')
       setRuleDisabledIf('')
@@ -893,6 +902,9 @@ export default function WidgetBuilderForm(props) {
         // 2026-06-08 — Yetkilendirilebilir alan flag'i. Backend WidgetService bunu
         // domain'e (WidgetDefinition.IsPermissionControlled) bag layip discovery'ye taşıyor.
         isPermissionControlled: isPermissionControlled,
+        // 2026-08-05 — Kalem kartinda inline goster. Yalnizca *_LINES formunda
+        // toggle sunulur; diger formlarda false gider.
+        showOnCard: isLineForm && showOnCard,
         rules: rulesPayload,
         colorType: colorType,
         colorValue: colorValue.trim() || null,
@@ -1547,6 +1559,33 @@ export default function WidgetBuilderForm(props) {
           />
         </button>
       </div>
+
+      {/* Kartta Goster toggle — 2026-08-05, yalnizca kalem (*_LINES) formlarinda */}
+      {isLineForm && (
+        <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
+            Kartta Göster
+            <span className="ml-2 normal-case font-normal" style={{ color: '#94a3b8', fontSize: '9px' }}>
+              · kalem kartında inline alan
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={function() { setShowOnCard(function(v) { return !v }) }}
+            title="Açık ise bu alan belge kalem kartının üzerinde doğrudan düzenlenebilir olarak görünür; kapalıysa yalnızca ⚙ Ek Alanlar penceresinde kalır."
+            className={
+              'relative w-10 h-5 rounded-full transition-colors ' +
+              (showOnCard ? 'bg-sky-500/70' : 'bg-slate-300 dark:bg-white/10')
+            }
+          >
+            <motion.div
+              className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
+              animate={{ left: showOnCard ? 22 : 2 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            />
+          </button>
+        </div>
+      )}
 
       {/* Aktif toggle */}
       <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">

@@ -23,9 +23,11 @@ import {
   Percent, Calculator, StickyNote, CircleDot, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
   MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode, Warehouse, Layers,
+  LayoutGrid,
 } from 'lucide-react'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, SerialBreakdownModal, TraceEntryCell } from './LineGridCell'
+import LineCardLayoutEditor from './LineCardLayoutEditor'
 import CostViewerModal from './CostViewerModal'
 import QuoteCostSummaryModal from './QuoteCostSummaryModal'
 import FulfillmentDetailModal from './FulfillmentDetailModal'
@@ -102,6 +104,51 @@ export default function CalibraLineItemsGrid(props) {
   // (gear kirmizi kaliyordu cunku backend dogru formu kontrol edip eksik
   // goruyordu). Config'ten gelmezse legacy 'SALES_QUOTE_LINES' fallback.
   var __lineFormCode = String(config.lineFormCode || 'SALES_QUOTE_LINES')
+  // Kart duzeni (LineCardLayout) icin form kodu — fallback KULLANILMAZ: config
+  // lineFormCode tasimayan gridlerde (orn. is emri sarf) baska formun duzeninin
+  // yanlislikla uygulanmasini engeller.
+  var __layoutFormCode = config.lineFormCode ? String(config.lineFormCode) : null
+
+  // ── "Kartta Goster" widget'lari + kart duzeni (2026-08-05) ─────────────────
+  //   cardWidgets  : WidgetMas.ShowOnCard=1 + inline-uyumlu tipteki kalem widget'lari.
+  //                  Kart alan izgarasinda dogrudan duzenlenir; degerler row.__extras'a
+  //                  yazilir (⚙ Ek Alanlar modaliyla ayni buffer → senkron kalirlar).
+  //   cardLayout   : /api/line-card-layout/{formCode} → [{key, span, order, visible}].
+  //                  null = varsayilan duzen (mevcut auto-fill izgara aynen korunur).
+  //   canEditLayout: admin (DepartmentManager/SystemAdmin) — footer'da duzen butonu.
+  var [cardWidgets, setCardWidgets] = useState([])
+  var [cardLayout, setCardLayout] = useState(null)
+  var [canEditLayout, setCanEditLayout] = useState(false)
+  var [layoutEditorOpen, setLayoutEditorOpen] = useState(false)
+  // Dar konteynerde (tablet dikey / bolunmus ekran) 24-kolon span'lar okunmaz
+  // kucuklukte alan uretir — genislik esiginin altinda varsayilan auto-fill'e don.
+  var [gridNarrow, setGridNarrow] = useState(false)
+
+  // Widget → LineGridCell kolon adaptasyonu. Sadece inline-uyumlu tipler:
+  // text/numeric/date/dropdown. Karmasik tipler (textarea, lookup, dosya, grid...)
+  // kartta gosterilmez — ⚙ Ek Alanlar modalinde kalir.
+  var widgetCardColumns = useMemo(function () {
+    return cardWidgets.map(function (w) {
+      var dt = String(w.dataType || '').toLowerCase()
+      var col = {
+        key: 'w_' + w.code,
+        __isWidget: true,
+        __widgetCode: w.code,
+        __widgetType: dt,
+        label: w.label,
+        icon: 'Tag',
+        required: w.isRequired === true,
+      }
+      if (dt === 'numeric') { col.type = 'number'; col.precision = 2 }
+      else if (dt === 'dropdown') {
+        col.type = 'select'
+        col.options = (w.options || []).map(function (s) { return { code: s, name: s } })
+      }
+      else if (dt === 'date') { col.type = 'date' }
+      else { col.type = 'text' }
+      return col
+    })
+  }, [cardWidgets])
 
   // ── Ondalık ayarları (form bazında) — kolon precision'larını override eder ──
   // Ayar formu: config.decimalFormCode (açık bildirim) → lineFormCode fallback.
@@ -352,6 +399,41 @@ export default function CalibraLineItemsGrid(props) {
   var cardBodyColumns = mainFieldColumns.filter(function (c) {
     return c !== materialCodeCol && c !== materialNameCol
   })
+
+  // ── Kart duzeni uygulamasi (2026-08-05) ───────────────────────────────────
+  //   Alan izgarasindaki ogeler = sistem kolonlari (cardBodyColumns) + kartta
+  //   gosterilen widget'lar. Kayitli duzen varsa: layout sirasi + span (24-kolon)
+  //   + gorunurluk uygulanir. Bilinmeyen key yok sayilir; duzende olmayan yeni
+  //   kolon varsayilan span ile SONA eklenir (additive-safe — yeni kolon gelince
+  //   duzen kirilmaz). Zorunlu/miktar kolonlari duzenle GIZLENEMEZ (veri girisi
+  //   sessizce kaybolmasin — CLAUDE.md sessiz-kirik kurali 3).
+  var allCardFieldColumns = cardBodyColumns.concat(widgetCardColumns)
+  var hasCustomLayout = !!(cardLayout && cardLayout.length > 0)
+  var useCustomLayout = hasCustomLayout && !gridNarrow
+  var cardItems = (function () {
+    if (!hasCustomLayout) {
+      return allCardFieldColumns.map(function (c) { return { col: c, span: 6, visible: true } })
+    }
+    var ordered = []
+    var seen = {}
+    cardLayout.forEach(function (it) {
+      if (!it || !it.key || seen[it.key]) return
+      var col = allCardFieldColumns.find(function (c) { return c.key === it.key })
+      if (!col) return // bilinmeyen key (kolon kaldirilmis / baska belge tipi) → yok say
+      seen[it.key] = true
+      var vis = it.visible !== false
+      if (col.required || col.requirePositive) vis = true
+      ordered.push({
+        col: col,
+        span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
+        visible: vis,
+      })
+    })
+    allCardFieldColumns.forEach(function (c) {
+      if (!seen[c.key]) ordered.push({ col: c, span: 6, visible: true })
+    })
+    return ordered
+  })()
 
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
@@ -978,19 +1060,200 @@ export default function CalibraLineItemsGrid(props) {
   var hasRequiredLineWidgetsRef = useRef(false)
   useEffect(function () {
     var alive = true
-    fetch('/api/widgets/forms/' + encodeURIComponent(__lineFormCode) + '/schema', { credentials: 'same-origin' })
-      .then(function (r) { return r.ok ? r.json() : null })
-      .then(function (schema) {
-        if (!alive || !schema || !Array.isArray(schema.widgets)) return
-        // ASP.NET Core JSON camelCase'e cevirir; Pascal fallback'i de dusuruyoruz.
-        var any = schema.widgets.some(function (w) {
-          return w && (w.isRequired === true || w.IsRequired === true)
+    function loadSchema() {
+      fetch('/api/widgets/forms/' + encodeURIComponent(__lineFormCode) + '/schema', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null })
+        .then(function (schema) {
+          if (!alive || !schema || !Array.isArray(schema.widgets)) return
+          // ASP.NET Core JSON camelCase'e cevirir; Pascal fallback'i de dusuruyoruz.
+          var any = schema.widgets.some(function (w) {
+            return w && (w.isRequired === true || w.IsRequired === true)
+          })
+          hasRequiredLineWidgetsRef.current = any
+          // ── "Kartta Goster" widget'lari (2026-08-05) ──
+          // ShowOnCard=1 + aktif + inline-uyumlu tip → kart alan izgarasina girer.
+          var INLINE_TYPES = { text: 1, numeric: 1, date: 1, dropdown: 1 }
+          var cw = schema.widgets
+            .filter(function (w) {
+              if (!w) return false
+              var show = w.showOnCard === true || w.ShowOnCard === true
+              var active = w.isActive !== false && w.IsActive !== false
+              var dt = String(w.dataType || w.DataType || '').toLowerCase()
+              return show && active && INLINE_TYPES[dt] === 1
+            })
+            .map(function (w) {
+              return {
+                code: w.widgetCode || w.WidgetCode,
+                label: w.label || w.Label || w.widgetCode,
+                dataType: String(w.dataType || w.DataType || 'text').toLowerCase(),
+                options: Array.isArray(w.options) ? w.options : (Array.isArray(w.Options) ? w.Options : []),
+                isRequired: w.isRequired === true || w.IsRequired === true,
+                sortOrder: w.sortOrder != null ? w.sortOrder : (w.SortOrder != null ? w.SortOrder : 0),
+              }
+            })
+            .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0) })
+          setCardWidgets(cw)
         })
-        hasRequiredLineWidgetsRef.current = any
-      })
-      .catch(function () { /* sessiz — schema yoksa otomatik acma yapma */ })
-    return function () { alive = false }
+        .catch(function () { /* sessiz — schema yoksa otomatik acma yapma */ })
+    }
+    loadSchema()
+    // Alan Yonetimi'nde tanim degisince canli tazele (ayni sekmede CustomEvent,
+    // diger sekmede storage event'i).
+    function onSchemaChanged() { loadSchema() }
+    function onStorage(e) { if (e && e.key === 'calibra:widget-schema-changed') loadSchema() }
+    window.addEventListener('calibra:widget-schema-changed', onSchemaChanged)
+    window.addEventListener('storage', onStorage)
+    return function () {
+      alive = false
+      window.removeEventListener('calibra:widget-schema-changed', onSchemaChanged)
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
+
+  // ── Kart duzeni yukle (form bazli, herkese ortak) ──
+  useEffect(function () {
+    if (!__layoutFormCode) return undefined
+    var alive = true
+    fetch('/api/line-card-layout/' + encodeURIComponent(__layoutFormCode), { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!alive || !data || data.ok !== true) return
+        setCardLayout(Array.isArray(data.items) && data.items.length > 0 ? data.items : null)
+        setCanEditLayout(data.canEdit === true)
+      })
+      .catch(function () { /* sessiz — duzen yoksa varsayilan izgara */ })
+    return function () { alive = false }
+  }, [__layoutFormCode])
+
+  // ── Dar konteyner tespiti — 640px altinda custom span'lar devre disi ──
+  useEffect(function () {
+    var el = gridRootRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    var ro = new ResizeObserver(function (entries) {
+      var w = entries && entries[0] && entries[0].contentRect ? entries[0].contentRect.width : 0
+      setGridNarrow(w > 0 && w < 640)
+    })
+    ro.observe(el)
+    return function () { ro.disconnect() }
+  }, [])
+
+  // ── Kayitli satirlarin widget degerlerini TEK istekle yukle ──
+  //   __widgetValues: server'daki mevcut degerler (source of truth gosterim icin;
+  //   __extras varsa o kazanir — henuz kaydedilmemis kullanici girisi).
+  //   Yukleme isareti satirin KENDISINDE (__widgetValues != null) tutulur; boylece
+  //   dis setRows ile satirlar topluca degistirildiginde (save sonrasi refresh)
+  //   deger yuklemesi otomatik tekrarlanir. Istek atilan id'ye deger donmese bile
+  //   bos obje yazilir — sonsuz refetch dongusu olusmaz.
+  var widgetValuesFetchingRef = useRef(false)
+  useEffect(function () {
+    if (cardWidgets.length === 0 || widgetValuesFetchingRef.current) return
+    var missingIds = []
+    rows.forEach(function (r) {
+      if (r.id != null && Number(r.id) > 0 && r.__widgetValues == null) missingIds.push(String(r.id))
+    })
+    if (missingIds.length === 0) return
+    widgetValuesFetchingRef.current = true
+    fetch('/api/widgets/forms/' + encodeURIComponent(__lineFormCode) + '/records/batch-values', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ recordIds: missingIds }),
+    })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        var byId = (data && data.ok === true && data.values) ? data.values : {}
+        setRows(function (prev) {
+          return prev.map(function (r) {
+            if (r.id == null || Number(r.id) <= 0 || r.__widgetValues != null) return r
+            if (missingIds.indexOf(String(r.id)) < 0) return r
+            return Object.assign({}, r, { __widgetValues: byId[String(r.id)] || {} })
+          })
+        })
+      })
+      .catch(function () {
+        // Yukleme hatasi — bos degerle isaretle ki dongusel refetch olmasin;
+        // kullanici karti yine duzenleyebilir (__extras uzerinden).
+        setRows(function (prev) {
+          return prev.map(function (r) {
+            if (r.id == null || Number(r.id) <= 0 || r.__widgetValues != null) return r
+            if (missingIds.indexOf(String(r.id)) < 0) return r
+            return Object.assign({}, r, { __widgetValues: {} })
+          })
+        })
+      })
+      .then(function () { widgetValuesFetchingRef.current = false })
+  }, [rows, cardWidgets])
+
+  // ── Kart ustu inline widget degisikligi ──
+  //   Deger row.__extras'a MERGE edilerek yazilir (mevcut server degerleri +
+  //   onceki edit'ler korunur) — ana Kaydet akisi ve ⚙ modal ayni buffer'i
+  //   gordugu icin uc taraf senkron kalir.
+  function handleWidgetValueChange(rowUid, widgetCode, val) {
+    setRows(function (prev) {
+      return prev.map(function (r) {
+        if (r._uid !== rowUid) return r
+        var merged = Object.assign({}, r.__widgetValues || {}, r.__extras || {})
+        merged[widgetCode] = val
+        return Object.assign({}, r, { __extras: merged })
+      })
+    })
+  }
+
+  // ── Kayitli satirda inline widget edit'ini otomatik kalicilastir ──
+  //   ⚙ modal kayitli satirda aninda backend'e yazar; inline edit'in de ayni
+  //   garantiyi vermesi icin 1.2sn debounce ile widget API'sine flush edilir.
+  //   (Kaydedilmemis satirlar ana belge Kaydet akisiyla senkronlanir.)
+  //   Basarisiz flush'ta __extras SILINMEZ (veri kaybi olmaz) ve satir invalid
+  //   isaretlenir — gear kirmizi olur, kullanici modaldan tamamlar.
+  var widgetFlushTimerRef = useRef(null)
+  useEffect(function () {
+    if (cardWidgets.length === 0) return undefined
+    var pending = rows.filter(function (r) {
+      return r.id != null && Number(r.id) > 0 && r.__extras && Object.keys(r.__extras).length > 0
+    })
+    if (pending.length === 0) return undefined
+    if (widgetFlushTimerRef.current) clearTimeout(widgetFlushTimerRef.current)
+    widgetFlushTimerRef.current = setTimeout(function () {
+      pending.forEach(function (r) {
+        var snapshot = JSON.stringify(r.__extras)
+        fetch('/api/widgets/forms/' + encodeURIComponent(__lineFormCode) + '/records/' + encodeURIComponent(String(r.id)), {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ values: r.__extras, grids: null }),
+        })
+          .then(function (resp) { return resp.ok ? resp.json() : { success: false } })
+          .then(function (result) {
+            if (result && result.success !== false) {
+              // Basari: __extras → __widgetValues'a tasi (o esnada yeni edit
+              // gelmediyse). Yeni edit geldiyse buffer durur, sonraki flush alir.
+              setRows(function (prev) {
+                return prev.map(function (rr) {
+                  if (rr._uid !== r._uid || !rr.__extras) return rr
+                  if (JSON.stringify(rr.__extras) !== snapshot) return rr
+                  var copy = Object.assign({}, rr, { __widgetValues: Object.assign({}, rr.__extras) })
+                  delete copy.__extras
+                  return copy
+                })
+              })
+              setInvalidLineIds(function (prev) {
+                return prev.filter(function (x) { return x !== Number(r.id) })
+              })
+            } else {
+              // Zorunlu alan eksik vb. — deger lokalde durur, gear kirmizi olur.
+              setInvalidLineIds(function (prev) {
+                var idNum = Number(r.id)
+                return prev.indexOf(idNum) >= 0 ? prev : prev.concat([idNum])
+              })
+            }
+          })
+          .catch(function () { /* ag hatasi — buffer korunur, sonraki flush/kaydet dener */ })
+      })
+    }, 1200)
+    return function () {
+      if (widgetFlushTimerRef.current) clearTimeout(widgetFlushTimerRef.current)
+    }
+  }, [rows, cardWidgets])
 
   useEffect(function () {
     function onAutoOpen(e) {
@@ -1379,20 +1642,41 @@ export default function CalibraLineItemsGrid(props) {
                         kimlik alanindan (materialCode/materialName) hemen sonra gelir —
                         Enter-nav bu alanlari aksiyon butonlarindan ONCE gezer (bkz. asagidaki not). */}
                     <div
-                      style={{
-                        gridArea: 'fields', display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
-                        columnGap: 12, rowGap: 10, alignItems: 'start',
-                      }}
+                      style={useCustomLayout
+                        ? {
+                            gridArea: 'fields', display: 'grid',
+                            gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
+                            columnGap: 12, rowGap: 10, alignItems: 'start',
+                          }
+                        : {
+                            gridArea: 'fields', display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
+                            columnGap: 12, rowGap: 10, alignItems: 'start',
+                          }}
                       className={isKitComponent ? 'opacity-90' : ''}
                     >
-                      {cardBodyColumns.map(function(col) {
+                      {cardItems.map(function(item) {
+                        var col = item.col
+                        if (!item.visible) return null
                         // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
                         var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
                         var Icon = resolveIcon(col.icon)
-                        var mirror = tlMirrorBySource[col.key]
+                        var mirror = col.__isWidget ? null : tlMirrorBySource[col.key]
                         var showMirror = mirror && showTlColumns
-                        var cellStyle = showMirror ? Object.assign({ gridColumn: 'span 2' }, lockedStyle) : lockedStyle
+                        var cellStyle = Object.assign({}, lockedStyle)
+                        if (useCustomLayout) {
+                          cellStyle.gridColumn = 'span ' + Math.min(Math.max(item.span || 6, 1), 24)
+                        } else if (showMirror) {
+                          cellStyle.gridColumn = 'span 2'
+                        }
+                        // Widget hucre degeri: __extras (bekleyen edit) > __widgetValues (server)
+                        var widgetValue = null
+                        if (col.__isWidget) {
+                          var wc = col.__widgetCode
+                          widgetValue = (row.__extras && (wc in row.__extras))
+                            ? row.__extras[wc]
+                            : ((row.__widgetValues || {})[wc])
+                        }
                         return (
                           <div key={col.key} data-cell-key={col.key} style={cellStyle}>
                             <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
@@ -1402,13 +1686,32 @@ export default function CalibraLineItemsGrid(props) {
                             </div>
                             <div className="flex items-stretch gap-1.5">
                               <div className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]">
-                                <LineGridCell
-                                  column={col}
-                                  row={row}
-                                  value={tlCellValue(col, row)}
-                                  onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                                  siblingColumns={allColumns}
-                                />
+                                {col.__isWidget ? (
+                                  col.__widgetType === 'date' ? (
+                                    <input
+                                      type="date"
+                                      data-native-date
+                                      value={widgetValue == null ? '' : String(widgetValue)}
+                                      onChange={function(e) { handleWidgetValueChange(row._uid, col.__widgetCode, e.target.value) }}
+                                      className="w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/85 focus:bg-indigo-50/60 dark:focus:bg-white/[0.08] focus:ring-2 focus:ring-indigo-400/60 focus:ring-inset transition-colors rounded"
+                                    />
+                                  ) : (
+                                    <LineGridCell
+                                      column={col}
+                                      row={row}
+                                      value={widgetValue}
+                                      onChange={function(k, v) { handleWidgetValueChange(row._uid, col.__widgetCode, v) }}
+                                    />
+                                  )
+                                ) : (
+                                  <LineGridCell
+                                    column={col}
+                                    row={row}
+                                    value={tlCellValue(col, row)}
+                                    onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                                    siblingColumns={allColumns}
+                                  />
+                                )}
                               </div>
                               {showMirror && (
                                 <div
@@ -1631,6 +1934,20 @@ export default function CalibraLineItemsGrid(props) {
           )
         })()}
 
+        {/* Kart Duzeni editoru (2026-08-05) — yalnizca admin. Form bazli ortak duzen:
+            alan sirasi + genislik (24 kolon) + gorunurluk burada tasarlanir. */}
+        {canEditLayout && __layoutFormCode && (
+          <button
+            type="button"
+            onClick={function () { setLayoutEditorOpen(true) }}
+            title="Kart Düzeni — kalem kartındaki alanların konum ve genişliğini düzenle (tüm kullanıcılar için geçerli)"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold border transition-colors bg-white text-slate-500 border-slate-200 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 dark:bg-white/[0.04] dark:text-white/50 dark:border-white/10 dark:hover:text-indigo-300 dark:hover:border-indigo-400/30 dark:hover:bg-indigo-500/10"
+          >
+            <LayoutGrid size={13} strokeWidth={2} />
+            <span>Kart Düzeni</span>
+          </button>
+        )}
+
         {/* Belge kuru (Seq 1083) — #sqExchangeRate ile iki yonlu senkron; sadece
             belge dovizi TRY disiyken anlamli oldugu icin showTlColumns'a bagli. */}
         {showTlColumns && (
@@ -1762,6 +2079,27 @@ export default function CalibraLineItemsGrid(props) {
         }
         return null
       })()}
+
+      {/* Kart Duzeni editoru (2026-08-05) */}
+      {layoutEditorOpen && (
+        <LineCardLayoutEditor
+          formCode={__layoutFormCode}
+          items={cardItems.map(function (it) {
+            return {
+              key: it.col.key,
+              label: it.col.label,
+              span: it.span || 6,
+              visible: it.visible !== false,
+              locked: it.col.required === true || it.col.requirePositive === true,
+              isWidget: it.col.__isWidget === true,
+            }
+          })}
+          hasCustomLayout={hasCustomLayout}
+          onClose={function () { setLayoutEditorOpen(false) }}
+          onSaved={function (items) { setCardLayout(items); setLayoutEditorOpen(false) }}
+          onReset={function () { setCardLayout(null); setLayoutEditorOpen(false) }}
+        />
+      )}
 
       {extrasModalRow && (function () {
         // Tema detection — kisayol menusuyle ayni chain (iframe parent fallback, default light).
