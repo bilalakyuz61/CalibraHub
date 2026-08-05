@@ -74,6 +74,8 @@ export default function AdminWidgetRegistryPanel(props) {
   var [searchQuery, setSearchQuery]     = useState('')
   var [pendingDelete, setPendingDelete] = useState(null)   // { id, label } — silme onay modalı
   var [groupModalOpen, setGroupModalOpen] = useState(false)
+  // Kart Düzeni editörü (2026-08-05) — yalnizca *_LINES formlarinda acilabilir.
+  var [cardLayoutOpen, setCardLayoutOpen] = useState(false)
   // Tanim transport — { package, fileName } dolu ise onay modalı acik
   var [importPending, setImportPending] = useState(null)
   var [importing, setImporting] = useState(false)
@@ -1031,6 +1033,23 @@ export default function AdminWidgetRegistryPanel(props) {
         }}
         saving={savingGlobal}
       />
+
+      {/* ── Kart Düzeni editörü (2026-08-05) — autoLoad modu ─────────── */}
+      {cardLayoutOpen && (
+        <LineCardLayoutEditor
+          formCode={currentFormCode}
+          autoLoad
+          onClose={function() { setCardLayoutOpen(false) }}
+          onSaved={function() {
+            setCardLayoutOpen(false)
+            showToast('success', 'Kart düzeni kaydedildi')
+          }}
+          onReset={function() {
+            setCardLayoutOpen(false)
+            showToast('success', 'Kart düzeni varsayılana döndürüldü')
+          }}
+        />
+      )}
 
       {/* ── İçe aktarım onay modalı ──────────────── */}
       <AdminMiniModal
