@@ -5,15 +5,32 @@ import { ZOOM_LEVELS } from './timeScale'
 export default function GanttToolbar({
   dateFrom, dateTo, onDateFromChange, onDateToChange,
   zoomIndex, onZoomIn, onZoomOut, onRefresh, isDark, refreshing,
-  onAutoSchedule,
+  onAutoSchedule, scenarios, selectedScenarioId, onScenarioChange,
 }) {
   var palette = getPalette(isDark)
+  var selectedScenario = (scenarios || []).find(function (s) { return s.id === selectedScenarioId })
 
   return (
     <div className="ms-toolbar">
       <div className="ms-toolbar-title">
         <GanttChartSquare size={17} /> Makine Planlama
       </div>
+
+      {scenarios && scenarios.length > 0 && (
+        <div className="ms-toolbar-group">
+          <span className="ms-toolbar-label">Senaryo</span>
+          <select
+            className="ms-select"
+            value={selectedScenarioId || ''}
+            title="Gölgeleme ve otomatik çizelgeleme bu senaryoya göre hesaplanır"
+            onChange={function (e) { onScenarioChange(parseInt(e.target.value, 10)) }}
+          >
+            {scenarios.map(function (s) {
+              return <option key={s.id} value={s.id}>{s.name}{s.isDefault ? ' (Varsayılan)' : ''}</option>
+            })}
+          </select>
+        </div>
+      )}
 
       <div className="ms-toolbar-group">
         <CalendarRange size={13} className="ms-toolbar-label" />

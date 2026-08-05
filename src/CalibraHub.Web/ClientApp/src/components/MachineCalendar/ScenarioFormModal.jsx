@@ -55,7 +55,7 @@ export default function ScenarioFormModal({ initial, onClose, onSave, saving }) 
         </div>
         <div className="mcal-modal__footer">
           <button type="button" className="mcal-btn mcal-btn--ghost" disabled={saving} onClick={onClose}>Vazgeç</button>
-          <button type="button" className="mcal-btn mcal-btn--primary" disabled={saving} onClick={handleSave} autoFocus={false}>
+          <button type="button" className="mcal-btn mcal-btn--primary" disabled={saving} onClick={handleSave}>
             {saving ? <Loader2 size={14} className="mcal-spin" /> : <Save size={14} />}
             Kaydet
           </button>

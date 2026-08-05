@@ -47,6 +47,11 @@ body.app-theme-dark .mcal-root {
   color: var(--mcal-text-muted);
 }
 
+.mcal-loading--inline {
+  height: auto;
+  padding: 28px 8px;
+}
+
 .mcal-spin { animation: mcal-spin-kf 0.9s linear infinite; }
 @keyframes mcal-spin-kf {
   from { transform: rotate(0deg); }
@@ -112,6 +117,12 @@ body.app-theme-dark .mcal-root {
   color: var(--mcal-text-muted);
 }
 
+.mcal-label--block {
+  display: block;
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
 .mcal-select,
 .mcal-text-input {
   background: var(--mcal-surface-2);
@@ -161,60 +172,12 @@ body.app-theme-dark .mcal-root {
   padding: 12px 4px;
 }
 
-/* ── Haftalık çalışma penceresi ─────────────────────────── */
-.mcal-ww-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
 .mcal-select { min-width: 220px; }
-
-.mcal-ww-days {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.mcal-ww-day {
-  background: var(--mcal-surface-2);
-  border: 1px solid var(--mcal-border);
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 128px;
-}
-
-.mcal-ww-day__title {
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.mcal-ww-day__list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1 1 auto;
-}
+.mcal-select--sm { min-width: 200px; }
 
 .mcal-ww-day__empty {
   font-size: 11px;
   color: var(--mcal-text-muted);
-}
-
-.mcal-ww-chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--mcal-accent-soft);
-  border: 1px solid var(--mcal-border);
-  border-radius: 6px;
-  padding: 4px 6px;
-  font-size: 11.5px;
-  color: var(--mcal-text);
 }
 
 .mcal-ww-chip__del {
@@ -228,18 +191,297 @@ body.app-theme-dark .mcal-root {
   padding: 2px;
 }
 
-.mcal-ww-day__add {
+.mcal-time-input { width: 78px; flex: 0 0 auto; }
+
+/* ── Senaryo şeridi ───────────────────────────────────────── */
+.mcal-scenario-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--mcal-border);
+}
+
+.mcal-scenario-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mcal-scenario-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--mcal-border);
+  background: var(--mcal-surface-2);
+  color: var(--mcal-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+
+.mcal-scenario-tab:hover { border-color: var(--mcal-accent); }
+
+.mcal-scenario-tab--active {
+  background: var(--mcal-accent-soft);
+  border-color: var(--mcal-accent);
+  color: var(--mcal-accent);
+}
+
+.mcal-scenario-tab__star {
+  color: #f59e0b;
+  fill: #f59e0b;
+}
+
+.mcal-scenario-actions {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.mcal-ww-day__sep {
-  color: var(--mcal-text-muted);
-  font-size: 11px;
+.mcal-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: var(--mcal-accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
-.mcal-time-input { width: 78px; flex: 0 0 auto; }
+.mcal-link-btn:hover { background: var(--mcal-accent-soft); }
+.mcal-link-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.mcal-link-btn--danger { color: var(--mcal-danger); }
+.mcal-link-btn--danger:hover { background: rgba(239, 68, 68, 0.12); }
+
+/* ── Makine × Vardiya × Gün matrisi ──────────────────────────── */
+.mcal-matrix {
+  display: flex;
+  flex-direction: column;
+}
+
+.mcal-matrix__machine {
+  border-bottom: 1px solid var(--mcal-border);
+  padding: 10px 0;
+}
+
+.mcal-matrix__machine:last-child { border-bottom: none; }
+
+.mcal-matrix__machine-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mcal-matrix__machine-name {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.mcal-matrix__empty-row { padding: 2px 0 8px; }
+
+.mcal-matrix__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcal-matrix__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--mcal-surface-2);
+  border: 1px solid var(--mcal-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.mcal-matrix__row--draft {
+  gap: 8px;
+  background: var(--mcal-accent-soft);
+  border-style: dashed;
+}
+
+.mcal-matrix__days {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.mcal-shift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--mcal-text);
+  background: var(--mcal-surface);
+  border: 1px solid var(--mcal-border);
+  border-left: 4px solid var(--mcal-shift-color, var(--mcal-accent));
+  min-width: 150px;
+  flex: 0 0 auto;
+}
+
+.mcal-shift-badge__time {
+  font-weight: 400;
+  font-size: 10.5px;
+  color: var(--mcal-text-muted);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.mcal-day-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mcal-day-check input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mcal-day-check span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--mcal-border);
+  background: var(--mcal-surface);
+  color: var(--mcal-text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  transition: background .12s, color .12s, border-color .12s;
+}
+
+.mcal-day-check--on span {
+  background: var(--mcal-accent);
+  border-color: var(--mcal-accent);
+  color: #fff;
+}
+
+/* ── Senaryo formu modalı (Yeni / Yeniden Adlandır) ──────────── */
+.mcal-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5100;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.mcal-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5101;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  background: var(--mcal-surface);
+  border: 1px solid var(--mcal-border);
+  border-radius: 12px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, .3);
+  color: var(--mcal-text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+.mcal-modal__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--mcal-border);
+}
+
+.mcal-modal__title { font-weight: 700; font-size: 14.5px; }
+
+.mcal-modal__close {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--mcal-text-muted);
+  cursor: pointer;
+  display: flex;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.mcal-modal__close:hover { background: var(--mcal-surface-2); color: var(--mcal-text); }
+
+.mcal-modal__body { padding: 14px 16px; }
+
+.mcal-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--mcal-border);
+}
+
+.mcal-text-input--full { width: 100%; box-sizing: border-box; }
+
+.mcal-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--mcal-surface-2);
+  border: 1px solid var(--mcal-border);
+  border-radius: 6px;
+  padding: 8px 9px;
+  color: var(--mcal-text);
+  font-size: 12.5px;
+  font-family: inherit;
+  resize: vertical;
+  color-scheme: inherit;
+}
+
+.mcal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity .12s;
+}
+
+.mcal-btn:hover { opacity: .9; }
+.mcal-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.mcal-btn--primary { background: var(--mcal-accent); color: #fff; }
+
+.mcal-btn--ghost {
+  background: var(--mcal-surface-2);
+  border-color: var(--mcal-border);
+  color: var(--mcal-text-muted);
+}
 
 /* ── Resmi tatiller ──────────────────────────────────────── */
 .mcal-hol-add {
