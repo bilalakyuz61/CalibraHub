@@ -1798,13 +1798,20 @@ public sealed class ProductionController : Controller
         try
         {
             var isNew = req.Id <= 0;
+            // Update'te eski kaydı mutasyondan ÖNCE çek (CLAUDE.md audit kuralı) — tekil-get metodu
+            // yok, mevcut liste zaten senaryo başına küçük (matris grid), id'ye göre filtrelenir.
+            ScenarioMachineShiftDto? oldSnapshot = null;
+            if (!isNew)
+            {
+                var existing = await _machineCalendar.ListScenarioMachineShiftsAsync(req.ScenarioId, ct);
+                oldSnapshot = existing.FirstOrDefault(x => x.Id == req.Id);
+            }
             var id = await _machineCalendar.SaveScenarioMachineShiftAsync(req, CurrentUserId(), ct);
             var title = $"Senaryo #{req.ScenarioId} — Makine #{req.MachineId} × Vardiya #{req.ShiftId}";
             if (isNew)
                 _audit.LogInsert("ScenarioMachineShift", id, title, snapshot: req);
-            else
-                _audit.LogEvent("ScenarioMachineShift.Update", detail: $"{title} güncellendi (DaysMask={req.DaysMask}).",
-                    entity: "ScenarioMachineShift", entityId: id, title: title);
+            else if (oldSnapshot is not null)
+                _audit.LogUpdate("ScenarioMachineShift", id, title, oldSnapshot, req);
             return Json(new { ok = true, id });
         }
         catch (ArgumentException ex) { return Json(new { ok = false, error = ex.Message }); }
