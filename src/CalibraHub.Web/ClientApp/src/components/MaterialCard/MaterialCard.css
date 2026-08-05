@@ -1,0 +1,107 @@
+/* MaterialCard / DraggableWidget — renk paleti (status badge + widget chip).
+   Light = varsayilan, body.app-theme-dark override. Dark degerler onceki
+   inline stillerle AYNI (gorunum degismiyor); light degerler kontrast icin
+   daha koyu/doygun secildi (pastel metin near-white zeminde okunmuyordu). */
+
+/* ── Durum rozeti (Aktif / Pasif / Kritik) ───────────────────────────── */
+.mc-status-badge[data-status="active"] {
+  background: rgba(16,185,129,0.10);
+  border: 1px solid rgba(16,185,129,0.35);
+  color: #047857;
+}
+body.app-theme-dark .mc-status-badge[data-status="active"] {
+  background: rgba(16,185,129,0.15);
+  border-color: rgba(16,185,129,0.3);
+  color: #6ee7b7;
+}
+.mc-status-badge[data-status="passive"] {
+  background: rgba(245,158,11,0.10);
+  border: 1px solid rgba(245,158,11,0.35);
+  color: #92400e;
+}
+body.app-theme-dark .mc-status-badge[data-status="passive"] {
+  background: rgba(245,158,11,0.15);
+  border-color: rgba(245,158,11,0.3);
+  color: #fcd34d;
+}
+.mc-status-badge[data-status="critical"] {
+  background: rgba(239,68,68,0.10);
+  border: 1px solid rgba(239,68,68,0.35);
+  color: #b91c1c;
+}
+body.app-theme-dark .mc-status-badge[data-status="critical"] {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.3);
+  color: #fca5a5;
+}
+
+/* ── Widget chip renkleri (DraggableWidget) ──────────────────────────── */
+.mc-chip[data-color="emerald"] { background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.28); }
+.mc-chip[data-color="emerald"] .mc-chip-icon { color: #059669; }
+.mc-chip[data-color="emerald"] .mc-chip-value { color: #047857; }
+body.app-theme-dark .mc-chip[data-color="emerald"] { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.25); }
+body.app-theme-dark .mc-chip[data-color="emerald"] .mc-chip-icon { color: #34d399; }
+body.app-theme-dark .mc-chip[data-color="emerald"] .mc-chip-value { color: #6ee7b7; }
+
+.mc-chip[data-color="amber"] { background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.28); }
+.mc-chip[data-color="amber"] .mc-chip-icon { color: #b45309; }
+.mc-chip[data-color="amber"] .mc-chip-value { color: #92400e; }
+body.app-theme-dark .mc-chip[data-color="amber"] { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.25); }
+body.app-theme-dark .mc-chip[data-color="amber"] .mc-chip-icon { color: #fbbf24; }
+body.app-theme-dark .mc-chip[data-color="amber"] .mc-chip-value { color: #fcd34d; }
+
+.mc-chip[data-color="blue"] { background: rgba(59,130,246,0.10); border: 1px solid rgba(59,130,246,0.28); }
+.mc-chip[data-color="blue"] .mc-chip-icon { color: #2563eb; }
+.mc-chip[data-color="blue"] .mc-chip-value { color: #1d4ed8; }
+body.app-theme-dark .mc-chip[data-color="blue"] { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.25); }
+body.app-theme-dark .mc-chip[data-color="blue"] .mc-chip-icon { color: #60a5fa; }
+body.app-theme-dark .mc-chip[data-color="blue"] .mc-chip-value { color: #93c5fd; }
+
+.mc-chip[data-color="violet"] { background: rgba(139,92,246,0.10); border: 1px solid rgba(139,92,246,0.28); }
+.mc-chip[data-color="violet"] .mc-chip-icon { color: #7c3aed; }
+.mc-chip[data-color="violet"] .mc-chip-value { color: #6d28d9; }
+body.app-theme-dark .mc-chip[data-color="violet"] { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.25); }
+body.app-theme-dark .mc-chip[data-color="violet"] .mc-chip-icon { color: #a78bfa; }
+body.app-theme-dark .mc-chip[data-color="violet"] .mc-chip-value { color: #c4b5fd; }
+
+.mc-chip[data-color="cyan"] { background: rgba(6,182,212,0.10); border: 1px solid rgba(6,182,212,0.28); }
+.mc-chip[data-color="cyan"] .mc-chip-icon { color: #0891b2; }
+.mc-chip[data-color="cyan"] .mc-chip-value { color: #0e7490; }
+body.app-theme-dark .mc-chip[data-color="cyan"] { background: rgba(6,182,212,0.12); border-color: rgba(6,182,212,0.25); }
+body.app-theme-dark .mc-chip[data-color="cyan"] .mc-chip-icon { color: #22d3ee; }
+body.app-theme-dark .mc-chip[data-color="cyan"] .mc-chip-value { color: #67e8f9; }
+
+.mc-chip[data-color="rose"] { background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.28); }
+.mc-chip[data-color="rose"] .mc-chip-icon { color: #e11d48; }
+.mc-chip[data-color="rose"] .mc-chip-value { color: #be123c; }
+body.app-theme-dark .mc-chip[data-color="rose"] { background: rgba(244,63,94,0.12); border-color: rgba(244,63,94,0.25); }
+body.app-theme-dark .mc-chip[data-color="rose"] .mc-chip-icon { color: #fb7185; }
+body.app-theme-dark .mc-chip[data-color="rose"] .mc-chip-value { color: #fda4af; }
+
+.mc-chip[data-color="slate"] { background: rgba(100,116,139,0.10); border: 1px solid rgba(100,116,139,0.28); }
+.mc-chip[data-color="slate"] .mc-chip-icon { color: #475569; }
+.mc-chip[data-color="slate"] .mc-chip-value { color: #334155; }
+body.app-theme-dark .mc-chip[data-color="slate"] { background: rgba(100,116,139,0.12); border-color: rgba(100,116,139,0.25); }
+body.app-theme-dark .mc-chip[data-color="slate"] .mc-chip-icon { color: #94a3b8; }
+body.app-theme-dark .mc-chip[data-color="slate"] .mc-chip-value { color: #cbd5e1; }
+
+.mc-chip[data-color="indigo"] { background: rgba(99,102,241,0.10); border: 1px solid rgba(99,102,241,0.28); }
+.mc-chip[data-color="indigo"] .mc-chip-icon { color: #4f46e5; }
+.mc-chip[data-color="indigo"] .mc-chip-value { color: #4338ca; }
+body.app-theme-dark .mc-chip[data-color="indigo"] { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.25); }
+body.app-theme-dark .mc-chip[data-color="indigo"] .mc-chip-icon { color: #818cf8; }
+body.app-theme-dark .mc-chip[data-color="indigo"] .mc-chip-value { color: #a5b4fc; }
+
+.mc-chip[data-color="teal"] { background: rgba(20,184,166,0.10); border: 1px solid rgba(20,184,166,0.28); }
+.mc-chip[data-color="teal"] .mc-chip-icon { color: #0d9488; }
+.mc-chip[data-color="teal"] .mc-chip-value { color: #0f766e; }
+body.app-theme-dark .mc-chip[data-color="teal"] { background: rgba(20,184,166,0.12); border-color: rgba(20,184,166,0.25); }
+body.app-theme-dark .mc-chip[data-color="teal"] .mc-chip-icon { color: #2dd4bf; }
+body.app-theme-dark .mc-chip[data-color="teal"] .mc-chip-value { color: #5eead4; }
+
+.mc-chip[data-color="orange"] { background: rgba(249,115,22,0.10); border: 1px solid rgba(249,115,22,0.28); }
+.mc-chip[data-color="orange"] .mc-chip-icon { color: #ea580c; }
+.mc-chip[data-color="orange"] .mc-chip-value { color: #c2410c; }
+body.app-theme-dark .mc-chip[data-color="orange"] { background: rgba(249,115,22,0.12); border-color: rgba(249,115,22,0.25); }
+body.app-theme-dark .mc-chip[data-color="orange"] .mc-chip-icon { color: #fb923c; }
+body.app-theme-dark .mc-chip[data-color="orange"] .mc-chip-value { color: #fdba74; }

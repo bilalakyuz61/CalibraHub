@@ -27,6 +27,18 @@ var NODE_TYPES_META = [
 
 var NODE_TYPE_MAP = Object.fromEntries(NODE_TYPES_META.map(m => [m.type, m]))
 
+// Secili node vurgusu icin yari-saydam tint — sabit pastel bg (meta.bg) hem
+// dark hem light temada ayni kalirsa dark'ta .wf-node'un acik metin rengiyle
+// (color:#e2e8f0) kontrast kaybi olusuyordu. rgba tint her iki temada da
+// okunabilir kaliyor.
+function hexToRgba(hex, alpha) {
+  var h = (hex || '#6366f1').replace('#', '')
+  var r = parseInt(h.slice(0, 2), 16)
+  var g = parseInt(h.slice(2, 4), 16)
+  var b = parseInt(h.slice(4, 6), 16)
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')'
+}
+
 function getCsrf() {
   var el = document.querySelector('input[name="__RequestVerificationToken"]')
   return el ? el.value : ''
@@ -61,7 +73,7 @@ function WfNode({ data, selected }) {
     transition: 'border-color .15s, box-shadow .15s',
   }
   if (selected) {
-    style.background = meta.bg
+    style.background = hexToRgba(meta.color, 0.16)
     style.border = `2px solid ${meta.color}`
     style.boxShadow = `0 0 0 3px ${meta.color}33`
   }

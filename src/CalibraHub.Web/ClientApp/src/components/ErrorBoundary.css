@@ -1,0 +1,28 @@
+/* ErrorBoundary — fallback ekrani. Light = varsayilan, body.app-theme-dark
+   override (onceki sabit koyu degerler dark dalinda aynen korunuyor). */
+.eb-fallback {
+  background: #f8fafc;
+  color: #475569;
+}
+body.app-theme-dark .eb-fallback {
+  background: #0c0f1a;
+  color: #94a3b8;
+}
+
+.eb-fallback-detail {
+  color: #64748b;
+}
+body.app-theme-dark .eb-fallback-detail {
+  color: #64748b;
+}
+
+.eb-fallback-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+}
+body.app-theme-dark .eb-fallback-btn {
+  border-color: #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+}

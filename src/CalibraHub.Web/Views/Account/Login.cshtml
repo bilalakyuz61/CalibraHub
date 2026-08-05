@@ -2220,6 +2220,8 @@
             function renderBars() {
                 var ai = activeIdx();
                 for (var q = 0; q < PTS.length; q++) {
+                    // Aktif hedef nokta: hem kadran işareti kırmızı yanar hem grafik yuvası vurgulanır
+                    calMarkEls[q].setAttribute('class', 'rig-calmark' + (q === ai ? ' is-active' : ''));
                     slotEls[q].setAttribute('class', 'rig-err-slot' + (q === ai ? ' is-active' : ''));
                     var e = errs[q];
                     if (e === undefined) { barEls[q].setAttribute('height', 0); barEls[q].setAttribute('y', EB_ZERO); continue; }

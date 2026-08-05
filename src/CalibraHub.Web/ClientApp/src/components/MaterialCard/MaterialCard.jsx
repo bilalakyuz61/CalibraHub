@@ -6,11 +6,12 @@ import { arrayMove, SortableContext, horizontalListSortingStrategy } from '@dnd-
 import { motion } from 'framer-motion'
 import { CircleDot, Pencil, Trash2, Settings2 } from 'lucide-react'
 import DraggableWidget from './DraggableWidget'
+import './MaterialCard.css'
 
 var statusConfig = {
-  active:   { bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.3)', text: '#6ee7b7', label: 'Aktif' },
-  passive:  { bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.3)', text: '#fcd34d', label: 'Pasif' },
-  critical: { bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)',  text: '#fca5a5', label: 'Kritik' },
+  active:   { label: 'Aktif' },
+  passive:  { label: 'Pasif' },
+  critical: { label: 'Kritik' },
 }
 
 export default function MaterialCard(props) {
@@ -82,12 +83,8 @@ export default function MaterialCard(props) {
                 </span>
                 {/* Durum badge — tiklaninca toggle */}
                 <span
-                  className="text-[9px] font-bold px-1.5 py-px rounded-full uppercase tracking-wider cursor-pointer hover:brightness-110 dark:hover:brightness-125 transition-all"
-                  style={{
-                    background: statusStyle.bg,
-                    border: '1px solid ' + statusStyle.border,
-                    color: statusStyle.text,
-                  }}
+                  className="mc-status-badge text-[9px] font-bold px-1.5 py-px rounded-full uppercase tracking-wider cursor-pointer hover:brightness-110 dark:hover:brightness-125 transition-all"
+                  data-status={status}
                   title="Durumu degistirmek icin tikla"
                   onClick={function(e) {
                     e.stopPropagation()
