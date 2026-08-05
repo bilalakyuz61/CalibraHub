@@ -565,15 +565,51 @@
            şeffaflaşır, böylece marka logosu ve sloganı net kalır. *@
         <div class="login-hero-blur"></div>
 
-        @* ── Canlı kalibrasyon düzeneği: komparatör (dial indicator) ile salgı (runout)
-              ölçümü. Granit tabla + sütun + kol/kelepçe + 0,001 mm komparatör + V-blok
-              içinde dönen eksantrik parça. Parça dönerken temas ucu iner-kalkar, ibre
-              sapmayı gösterir, dijital okuma + TIR + kayan trend grafiği eşzamanlı
-              güncellenir. Tüm hareket tek rAF döngüsünden sürülür (sayfa sonundaki
-              script) → ibre/uç/grafik birbirinden ASLA ayrışmaz. Salt dekoratif:
-              login akışına hiçbir bağı yoktur. ── *@
+        @* ── Canlı kalibrasyon düzenekleri — CİHAZ SEÇİMLİ (2026-08-05 kullanıcı isteği).
+              Soldaki ray (rig-devices) üç sahne arasında geçiş yapar:
+              (1) Komparatör — salgı (runout) ölçümü: dönen eksantrik parça, temas ucu,
+                  ibre, TIR + kayan trend.
+              (2) Mikrometre — dış çap ölçümü: tambur döner, mil parçaya iner, okuma
+                  oturur, sapma raporlanır; parça değişir, çevrim yinelenir.
+              (3) Manometre — basınç kalibrasyonu: el pompası basıncı kalibrasyon
+                  noktalarında (0/25/50/75/100 bar) gezdirir, Ref/Cihaz/Hata izlenir.
+              Her sahnenin kendi fizik state'i var; yalnız AKTİF sahne tick alır (sayfa
+              sonundaki rig script'i, tek rAF). Salt dekoratif: login akışına bağı yok. ── *@
         <div class="login-rig">
-            <svg id="rigSvg" class="login-rig-svg" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <div class="rig-devices" id="rigDevices">
+                <button type="button" class="rig-dev-btn is-active" data-rig="komp" title="Komparatör — salgı ölçümü">
+                    <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="11" y1="11" x2="14.2" y2="5.8" />
+                        <line x1="11" y1="19" x2="11" y2="21" />
+                        <circle cx="11" cy="11" r="1" fill="currentColor" stroke="none" />
+                    </svg>
+                    <span>Komparatör</span>
+                </button>
+                <button type="button" class="rig-dev-btn" data-rig="mik" title="Mikrometre — dış çap ölçümü">
+                    <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                        <path d="M13.5 6.5 A6.8 6.8 0 1 0 13.5 15.5" />
+                        <line x1="4.5" y1="8" x2="20" y2="8" />
+                        <line x1="16" y1="5.6" x2="16" y2="10.4" />
+                        <line x1="19" y1="5.6" x2="19" y2="10.4" />
+                    </svg>
+                    <span>Mikrometre</span>
+                </button>
+                <button type="button" class="rig-dev-btn" data-rig="man" title="Manometre — basınç kalibrasyonu">
+                    <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                        <path d="M4 14.5 A7.6 7.6 0 0 1 18 14.5" />
+                        <line x1="11" y1="14" x2="14.4" y2="9.2" />
+                        <line x1="7" y1="18" x2="15" y2="18" />
+                        <circle cx="11" cy="14" r="1" fill="currentColor" stroke="none" />
+                    </svg>
+                    <span>Manometre</span>
+                </button>
+            </div>
+
+            <div class="rig-main">
+            @* Ortak gradient/clip tanımları — üç sahne de url(#...) ile buradan besleniyor
+               (inline SVG'de paint server'lar belge genelinde çözülür; id'ler tekildir). *@
+            <svg class="rig-defs" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
                 <defs>
                     <linearGradient id="rigSteel" x1="0" y1="0" x2="1" y2="0">
                         <stop offset="0" stop-color="#42506a" />
@@ -608,8 +644,14 @@
                         <stop offset="0" stop-color="rgba(99,102,241,.38)" />
                         <stop offset="1" stop-color="rgba(99,102,241,0)" />
                     </radialGradient>
+                    <clipPath id="mikThimbleClip">
+                        <rect x="316" y="228" width="38" height="44" rx="6" />
+                    </clipPath>
                 </defs>
+            </svg>
 
+            @* ── Sahne 1: Komparatör — salgı (runout) ölçümü ── *@
+            <svg id="rigSvg" class="login-rig-svg rig-scene is-active" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 @* Durum şeridi *@
                 <g class="rig-badge">
                     <rect x="28" y="20" width="204" height="28" rx="14" />
