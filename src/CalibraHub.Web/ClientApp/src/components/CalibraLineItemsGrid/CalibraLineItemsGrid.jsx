@@ -1851,6 +1851,10 @@ export default function CalibraLineItemsGrid(props) {
                           cellStyle.gridColumn = 'span ' + Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
                         } else if (showMirror) {
                           cellStyle.gridColumn = 'span 2'
+                        } else if (col.type === 'percent') {
+                          // Seq 1085: İskonto/KDV % alanları en fazla 3 karakter (0-100) — ayrılan
+                          // alan gereksiz genişti; dar tutulur (custom layout'ta admin span'i geçerli).
+                          cellStyle.maxWidth = 104
                         }
                         // Widget hucre degeri: __extras (bekleyen edit) > __widgetValues (server)
                         var widgetValue = null

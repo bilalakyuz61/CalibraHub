@@ -1215,7 +1215,12 @@ export default function WidgetBuilderForm(props) {
         var toggleLocked = dataType === 'guide-list'
         return (
           <Row label="Rehber" hint={(dataType === 'lookup' || dataType === 'guide-list') ? 'zorunlu' : 'opsiyonel'}>
-            <div className="flex items-center justify-between gap-2">
+            {/* min-h-[32px]: Ayarlar butonu (h-8=32px) yalnizca guideEnabled=true iken
+                render edilir; buton yokken satir yuksekligi switch'in (h-5=20px) kendi
+                yuksekligine duserdi, items-center de bu degisimde switch'i dikeyde
+                kaydiriyordu (buton belirince satir 32px'e buyuyup switch'i asagi itiyordu).
+                Satir yuksekligini butonun varliğindan bagimsiz sabitleyip kaymayi onler. */}
+            <div className="flex items-center justify-between gap-2 min-h-[32px]">
               <button
                 type="button"
                 disabled={toggleLocked}

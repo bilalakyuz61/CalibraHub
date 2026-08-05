@@ -17,6 +17,32 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Check } from 'lucide-react'
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 
+// Tema algilama — GroupSelector.jsx ile ayni pattern (body.app-theme-dark +
+// html.dark, MutationObserver). Acilir panel INLINE stille ciziliyor (Tailwind
+// dark: variant kullanilmiyordu) — bu yuzden acik temada da sabit koyu arka
+// plan/renk cikiyordu (Seq 1088 fix). Panel artik isDark'a gore dallanir.
+function useIsDark() {
+  var [isDark, setIsDark] = useState(function () {
+    if (typeof document === 'undefined') return true
+    return document.body.classList.contains('app-theme-dark') ||
+           document.documentElement.classList.contains('dark')
+  })
+  useEffect(function () {
+    function sync() {
+      setIsDark(
+        document.body.classList.contains('app-theme-dark') ||
+        document.documentElement.classList.contains('dark')
+      )
+    }
+    sync()
+    var obs = new MutationObserver(sync)
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return function () { obs.disconnect() }
+  }, [])
+  return isDark
+}
+
 /**
  * Veri tipleri — Yeni EAV (WidgetMas) API key'leri, kucuk harfli.
  * Her biri icin icon + renk + Turkce label.
@@ -46,6 +72,7 @@ export default function DataTypeDropdown(props) {
 
   var [open, setOpen] = useState(false)
   var wrapperRef = useRef(null)
+  var isDark = useIsDark()
 
   // Disari tiklama -> kapat
   useEffect(function() {

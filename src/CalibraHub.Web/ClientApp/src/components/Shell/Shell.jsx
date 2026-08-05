@@ -82,6 +82,9 @@ var SHELL_I18N = {
   notif_delete:            { TR: 'Sil',                              EN: 'Delete' },
   notif_delete_confirm:    { TR: 'Bildirim silinsin mi?',            EN: 'Delete this notification?' },
   notif_delete_yes:        { TR: 'Sil',                              EN: 'Delete' },
+  notif_tab_unread:        { TR: 'Okunmayan',                        EN: 'Unread' },
+  notif_tab_read:          { TR: 'Okunan',                           EN: 'Read' },
+  notif_tab_all:           { TR: 'Tümü',                             EN: 'All' },
   open_pages:              { TR: 'Açık Sayfalar',                    EN: 'Open Pages' },
   // OpenTabsPopover
   pages_open_suffix:       { TR: 'sayfa açık',                       EN: 'pages open' },
@@ -1877,6 +1880,9 @@ function Header(props) {
   var [notifOpen, setNotifOpen] = useState(false)
   var [notifItems, setNotifItems] = useState([])
   var [notifUnread, setNotifUnread] = useState(0)
+  // Okunmayan / Okunan / Tümü segment filtresi — client-side (backend her zaman tam listeyi döner).
+  // Iğnelenen (pinned) bildirimler filtreden bağımsız her zaman görünür kalır (aşağıdaki filteredNotifItems).
+  var [notifFilter, setNotifFilter] = useState('unread')
   // Panel-ici mini sil-onayi (tam ekran modal degil) — pending id, panel kapaninca sifirlanir.
   var [confirmDeleteId, setConfirmDeleteId] = useState(null)
   var notifBtnRef = useRef(null)
@@ -1921,6 +1927,14 @@ function Header(props) {
       return a.createdAt < b.createdAt ? 1 : -1
     })
   }
+
+  // Segment filtresine göre görünür liste — iğnelenmiş bildirim filtreden bağımsız her zaman görünür.
+  var filteredNotifItems = notifItems.filter(function (n) {
+    if (n.isPinned) return true
+    if (notifFilter === 'unread') return !n.isRead
+    if (notifFilter === 'read') return !!n.isRead
+    return true
+  })
 
   function handleNotifClick(n) {
     setConfirmDeleteId(null)
@@ -2089,13 +2103,37 @@ function Header(props) {
                     </button>
                   )}
                 </div>
+                <div className={'flex items-center gap-1 px-3 py-2 border-b ' + (isDark ? 'border-white/10' : 'border-slate-100')}>
+                  {[
+                    { key: 'unread', label: tShell('notif_tab_unread', lang) },
+                    { key: 'read', label: tShell('notif_tab_read', lang) },
+                    { key: 'all', label: tShell('notif_tab_all', lang) },
+                  ].map(function (opt) {
+                    var isActive = notifFilter === opt.key
+                    return (
+                      <button
+                        key={opt.key}
+                        onClick={function () { setNotifFilter(opt.key) }}
+                        className={
+                          'px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ' +
+                          (isActive
+                            ? 'text-white'
+                            : (isDark ? 'text-white/50 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'))
+                        }
+                        style={isActive ? { background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' } : undefined}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
                 <div className="flex-1 overflow-y-auto">
-                  {notifItems.length === 0 && (
+                  {filteredNotifItems.length === 0 && (
                     <div className={'px-4 py-10 text-center text-[12px] italic ' + (isDark ? 'text-white/40' : 'text-slate-400')}>
                       {tShell('no_notifications', lang)}
                     </div>
                   )}
-                  {notifItems.map(function (n) {
+                  {filteredNotifItems.map(function (n) {
                     var isConfirmingDelete = confirmDeleteId === n.id
                     return (
                       <div
