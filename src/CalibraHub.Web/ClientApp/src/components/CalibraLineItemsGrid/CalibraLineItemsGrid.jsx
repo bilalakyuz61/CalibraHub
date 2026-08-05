@@ -23,12 +23,10 @@ import {
   Percent, Calculator, StickyNote, CircleDot, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
   MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode, Warehouse, Layers,
-  LayoutGrid,
 } from 'lucide-react'
 import { Parser as ExprParser } from 'expr-eval'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, SerialBreakdownModal, TraceEntryCell } from './LineGridCell'
-import LineCardLayoutEditor from './LineCardLayoutEditor'
 import CostViewerModal from './CostViewerModal'
 import QuoteCostSummaryModal from './QuoteCostSummaryModal'
 import FulfillmentDetailModal from './FulfillmentDetailModal'
@@ -164,8 +162,8 @@ export default function CalibraLineItemsGrid(props) {
   // Form Davranış Katmanı — kalem kolonu davranışları (key → {isVisible, isRequired,
   // defaultValue, visibleIf, requiredIf}). Kayıt yoksa null = bugünkü davranış.
   var [lineBehaviors, setLineBehaviors] = useState(null)
-  var [canEditLayout, setCanEditLayout] = useState(false)
-  var [layoutEditorOpen, setLayoutEditorOpen] = useState(false)
+  // NOT: Kart Düzeni editörü grid'den kaldırıldı (2026-08-05) — düzen yönetimi
+  // yalnızca Alan Yönetimi → "Kart Düzeni" üzerinden; grid düzeni yalnız UYGULAR.
   // Dar konteynerde (tablet dikey / bolunmus ekran) 24-kolon span'lar okunmaz
   // kucuklukte alan uretir — genislik esiginin altinda varsayilan auto-fill'e don.
   var [gridNarrow, setGridNarrow] = useState(false)
@@ -529,11 +527,6 @@ export default function CalibraLineItemsGrid(props) {
     })
     return ordered
   })()
-  // Editor her zaman TAM listeyi gorur (kimlik dahil) — duzen henuz yokken de
-  // admin malzeme kodu/adini tasiyip boyutlandirabilsin.
-  var layoutEditorItems = hasCustomLayout
-    ? cardItems
-    : identityColumns.map(function (c) { return { col: c, span: 16, visible: true } }).concat(cardItems)
 
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
@@ -1239,7 +1232,6 @@ export default function CalibraLineItemsGrid(props) {
       .then(function (data) {
         if (!alive || !data || data.ok !== true) return
         setCardLayout(Array.isArray(data.items) && data.items.length > 0 ? data.items : null)
-        setCanEditLayout(data.canEdit === true)
       })
       .catch(function () { /* sessiz — duzen yoksa varsayilan izgara */ })
     return function () { alive = false }
@@ -1919,7 +1911,8 @@ export default function CalibraLineItemsGrid(props) {
                             )}
                             {labelMode === 'modern' && (
                               <div
-                                className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-white dark:bg-slate-900 ' + labelColorCls}
+                                className={/* bg-[#fff]: Bootstrap'in .bg-white!important utility'si Tailwind dark: varyantini eziyor — ayni gorunum, cakismayan ad */
+                                  'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-[#fff] dark:bg-slate-900 ' + labelColorCls}
                                 style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
                               >
                                 {labelInner}
@@ -2179,41 +2172,13 @@ export default function CalibraLineItemsGrid(props) {
           )
         })()}
 
-        {/* Kart Duzeni editoru (2026-08-05) — yalnizca admin. Form bazli ortak duzen:
-            alan sirasi + genislik (24 kolon) + gorunurluk burada tasarlanir. */}
-        {canEditLayout && __layoutFormCode && (
-          <button
-            type="button"
-            onClick={function () { setLayoutEditorOpen(true) }}
-            title="Kart Düzeni — kalem kartındaki alanların konum ve genişliğini düzenle (tüm kullanıcılar için geçerli)"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold border transition-colors bg-white text-slate-500 border-slate-200 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 dark:bg-white/[0.04] dark:text-white/50 dark:border-white/10 dark:hover:text-indigo-300 dark:hover:border-indigo-400/30 dark:hover:bg-indigo-500/10"
-          >
-            <LayoutGrid size={13} strokeWidth={2} />
-            <span>Kart Düzeni</span>
-          </button>
-        )}
+        {/* Kart Düzeni butonu buradan KALDIRILDI (2026-08-05 kullanici istegi) —
+            duzen yonetimi yalnizca Alan Yönetimi → "Kart Düzeni" uzerinden yapilir. */}
 
-        {/* Belge kuru (Seq 1083) — #sqExchangeRate ile iki yonlu senkron; sadece
-            belge dovizi TRY disiyken anlamli oldugu icin showTlColumns'a bagli. */}
-        {showTlColumns && (
-          <div className="flex items-center gap-1.5 text-[12px]">
-            <span className="text-slate-500 dark:text-white/40 uppercase tracking-wider font-semibold text-[10px]">
-              Kur
-            </span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={exchangeRateInput}
-              onFocus={function () { exchangeRateEditingRef.current = true }}
-              onChange={function (e) { setExchangeRateInput(e.target.value) }}
-              onBlur={function (e) { commitExchangeRate(e.target.value) }}
-              onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
-              className="calibra-line-exrate-input w-[76px] px-2 py-1 rounded-md border text-right font-mono tabular-nums text-[12px] border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-white/15 dark:bg-white/[0.04] dark:text-white/85"
-              title={'Belge kuru — 1 ' + docCurrency + ' = kaç TL (değiştirilebilir)'}
-            />
-            <span className="text-slate-400 dark:text-white/30 text-[10.5px]">₺</span>
-          </div>
-        )}
+        {/* Kur girisi buradan KALDIRILDI (2026-08-05 kullanici istegi) — kur,
+            ust bilgide Para Birimi'nin yanindaki #sqExchangeRate ile yonetilir;
+            grid'in exchangeRate state'i o inputla senkron kalmaya devam eder
+            (TL karsiligi kolon/toplamlari icin). */}
 
         {footer.showSubtotal && rows.length > 0 && (
           <div className="flex items-center gap-3 text-[12px]">
@@ -2324,34 +2289,6 @@ export default function CalibraLineItemsGrid(props) {
         }
         return null
       })()}
-
-      {/* Kart Duzeni editoru (2026-08-05) */}
-      {layoutEditorOpen && (
-        <LineCardLayoutEditor
-          formCode={__layoutFormCode}
-          items={layoutEditorItems.map(function (it) {
-            return {
-              key: it.col.key,
-              label: it.col.label,
-              icon: it.col.icon || null,
-              span: it.span || 6,
-              visible: it.visible !== false,
-              locked: it.col.required === true || it.col.requirePositive === true || it.col.key === 'materialCode',
-              isWidget: it.col.__isWidget === true,
-              // Baslik override'lari — editor "Secili Alan" panelinde duzenlenir.
-              labelText: it.label || '',
-              labelSize: it.labelSize || null,
-              labelWeight: it.labelWeight || null,
-              labelColor: it.labelColor || null,
-              labelStyle: it.labelStyle || null,
-            }
-          })}
-          hasCustomLayout={hasCustomLayout}
-          onClose={function () { setLayoutEditorOpen(false) }}
-          onSaved={function (items) { setCardLayout(items); setLayoutEditorOpen(false) }}
-          onReset={function () { setCardLayout(null); setLayoutEditorOpen(false) }}
-        />
-      )}
 
       {extrasModalRow && (function () {
         // Tema detection — kisayol menusuyle ayni chain (iframe parent fallback, default light).

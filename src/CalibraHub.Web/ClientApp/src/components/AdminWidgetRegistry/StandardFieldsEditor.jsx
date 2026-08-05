@@ -52,7 +52,9 @@ function Switch(props) {
   )
 }
 
-var inputCls = 'w-full px-2 py-1 rounded-md text-[11.5px] border border-slate-200 bg-white text-slate-700 ' +
+/* bg-[#fff]: Bootstrap'in .bg-white{...!important} utility'si Tailwind dark:
+   varyantini eziyordu (karanlik temada beyaz bloklar) — ayni gorunum, cakismayan ad. */
+var inputCls = 'w-full px-2 py-1 rounded-md text-[11.5px] border border-slate-200 bg-[#fff] text-slate-700 ' +
   'placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 ' +
   'dark:border-white/[0.14] dark:bg-slate-900/60 dark:text-white/85 dark:placeholder:text-white/45'
 var ruleInputCls = inputCls + ' font-mono'
@@ -180,7 +182,7 @@ export default function StandardFieldsEditor(props) {
       style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}
     >
       <div
-        className="w-full max-w-[1060px] max-h-[90vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900"
+        className="w-full max-w-[1060px] max-h-[90vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-slate-900"
         role="dialog"
         aria-label="Standart Alanlar"
       >
@@ -372,7 +374,7 @@ export default function StandardFieldsEditor(props) {
             type="button"
             onClick={function () { if (!saving) onClose() }}
             disabled={saving}
-            className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-white text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
+            className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-[#fff] text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
           >
             Vazgeç
           </button>

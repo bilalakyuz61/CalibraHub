@@ -290,7 +290,7 @@ export default function LineCardLayoutEditor(props) {
       style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}
     >
       <div
-        className="w-full max-w-[860px] max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-slate-900"
+        className="w-full max-w-[860px] max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-slate-900"
         role="dialog"
         aria-label="Kart Düzeni"
       >
@@ -324,7 +324,7 @@ export default function LineCardLayoutEditor(props) {
             </div>
           )}
           {!loading && (
-          <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.025] p-3">
+          <div className="rounded-xl border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025] p-3">
           <div
             ref={gridRef}
             style={{ display: 'grid', gridTemplateColumns: 'repeat(' + GRID_UNITS + ', minmax(0, 1fr))', gap: 10, alignItems: 'end' }}
@@ -396,7 +396,7 @@ export default function LineCardLayoutEditor(props) {
                   {pvMode === 'modern' && (
                     <div style={{ position: 'relative' }} className="mt-1.5">
                       <div
-                        className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-white dark:bg-slate-900 ' + pvColorCls}
+                        className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-[#fff] dark:bg-slate-900 ' + pvColorCls}
                         style={Object.assign({ top: -7, left: 8, zIndex: 2, lineHeight: '12px' }, pvStyle)}
                       >
                         {pvLabelInner}
@@ -453,7 +453,7 @@ export default function LineCardLayoutEditor(props) {
                       maxLength={60}
                       placeholder={sel.label + ' (varsayılan)'}
                       onChange={function (e) { patchItem(sel.key, { labelText: e.target.value }) }}
-                      className="w-full px-2.5 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 dark:placeholder:text-white/25"
+                      className="w-full px-2.5 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 dark:placeholder:text-white/25"
                     />
                   </div>
                   <div>
@@ -462,7 +462,7 @@ export default function LineCardLayoutEditor(props) {
                       value={sel.labelStyle || ''}
                       onChange={function (e) { patchItem(sel.key, { labelStyle: e.target.value || null }) }}
                       title="Alan Yönetimi'ndeki etiket stilleriyle aynı: Standart (başlık üstte), Modern (kutunun üstünde yüzer), Sade (başlık solda)"
-                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
+                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
                     >
                       <option value="">Standart</option>
                       <option value="modern">Modern</option>
@@ -474,7 +474,7 @@ export default function LineCardLayoutEditor(props) {
                     <select
                       value={sel.labelSize || ''}
                       onChange={function (e) { patchItem(sel.key, { labelSize: e.target.value ? parseInt(e.target.value, 10) : null }) }}
-                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
+                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
                     >
                       <option value="">Varsayılan</option>
                       {[9, 10, 11, 12, 13, 14].map(function (s) {
@@ -487,7 +487,7 @@ export default function LineCardLayoutEditor(props) {
                     <select
                       value={sel.labelWeight || ''}
                       onChange={function (e) { patchItem(sel.key, { labelWeight: e.target.value ? parseInt(e.target.value, 10) : null }) }}
-                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
+                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
                     >
                       <option value="">Varsayılan</option>
                       <option value="400">Normal</option>
@@ -549,7 +549,7 @@ export default function LineCardLayoutEditor(props) {
               type="button"
               onClick={function () { setConfirmReset(true) }}
               disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-semibold border transition-colors bg-white text-slate-500 border-slate-200 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:bg-white/[0.04] dark:text-white/50 dark:border-white/10 dark:hover:text-rose-300 dark:hover:border-rose-400/30 dark:hover:bg-rose-500/10"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-semibold border transition-colors bg-[#fff] text-slate-500 border-slate-200 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:bg-white/[0.04] dark:text-white/50 dark:border-white/10 dark:hover:text-rose-300 dark:hover:border-rose-400/30 dark:hover:bg-rose-500/10"
             >
               <RotateCcw size={12} strokeWidth={2} />
               <span>Varsayılana Dön</span>
@@ -564,7 +564,7 @@ export default function LineCardLayoutEditor(props) {
                 type="button"
                 onClick={function () { setConfirmReset(false) }}
                 disabled={saving}
-                className="px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-white text-slate-500 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/60 dark:border-white/10 dark:hover:bg-white/[0.08]"
+                className="px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-[#fff] text-slate-500 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/60 dark:border-white/10 dark:hover:bg-white/[0.08]"
               >
                 Vazgeç
               </button>
@@ -583,7 +583,7 @@ export default function LineCardLayoutEditor(props) {
             type="button"
             onClick={function () { if (!saving) onClose() }}
             disabled={saving}
-            className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-white text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
+            className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-[#fff] text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
           >
             Vazgeç
           </button>
