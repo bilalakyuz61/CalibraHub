@@ -139,7 +139,7 @@ export default function AdminMiniModal(props) {
                   {title}
                 </h3>
                 {subtitle && (
-                  <p className="text-[11px] text-slate-500 dark:text-white/40 mt-0.5 truncate">
+                  <p className="text-[11px] text-slate-500 dark:text-white/60 mt-0.5 truncate">
                     {subtitle}
                   </p>
                 )}
@@ -147,7 +147,7 @@ export default function AdminMiniModal(props) {
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors text-slate-400 dark:text-white/40 hover:text-slate-700 dark:hover:text-white/80"
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors text-slate-500 dark:text-white/60 hover:text-slate-700 dark:hover:text-white/85"
                 title="Kapat (ESC)"
               >
                 <X size={16} strokeWidth={2} />

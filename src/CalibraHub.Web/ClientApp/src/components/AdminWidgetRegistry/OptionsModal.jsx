@@ -216,10 +216,10 @@ function GlassSelect(props) {
         onClick={handleOpen}
         className={
           'w-full h-9 flex items-center gap-2 px-3 rounded-lg text-xs transition-all ' +
-          'bg-white/60 dark:bg-white/[0.04] border ' +
+          'bg-white/60 dark:bg-slate-900/60 border ' +
           (open
             ? 'border-indigo-400/60 dark:border-white/20 shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
-            : 'border-slate-200 dark:border-white/[0.08] hover:border-indigo-400/60 dark:hover:border-white/15') +
+            : 'border-slate-200 dark:border-white/[0.14] hover:border-indigo-400/60 dark:hover:border-white/25') +
           ' ' + (disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer') + ' ' + triggerClass
         }
       >
@@ -227,14 +227,14 @@ function GlassSelect(props) {
           'flex-1 text-left truncate ' +
           (selected
             ? 'text-slate-800 dark:text-white/85 font-medium'
-            : 'text-slate-400 dark:text-white/50')
+            : 'text-slate-500 dark:text-white/65')
         }>
           {selected ? selected.label : placeholder}
         </span>
         <ChevronDown
           size={14}
           className={
-            'text-slate-400 dark:text-white/40 transition-transform duration-150 ' +
+            'text-slate-500 dark:text-white/55 transition-transform duration-150 ' +
             (open ? 'rotate-180' : '')
           }
         />
@@ -426,16 +426,16 @@ export default function OptionsModal(props) {
 
   // Input stil helper'lari (WidgetBuilderForm ile tutarli)
   var inputBase = 'w-full h-9 px-3 rounded-lg text-xs transition-all ' +
-    'bg-white/60 dark:bg-white/[0.04] ' +
+    'bg-white/60 dark:bg-slate-900/60 ' +
     'text-slate-800 dark:text-white/90 ' +
-    'placeholder:text-slate-400 dark:placeholder:text-white/40 ' +
+    'placeholder:text-slate-500 dark:placeholder:text-white/45 ' +
     'focus:outline-none '
-  var inputOk = 'border border-slate-200 dark:border-white/[0.08] focus:border-indigo-400/60 dark:focus:border-white/20 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
+  var inputOk = 'border border-slate-200 dark:border-white/[0.14] focus:border-indigo-400/60 dark:focus:border-white/30 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
   var inputErr = 'border border-red-400/60 focus:border-red-400/80 focus:shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'
 
   var footer = (
     <>
-      <span className="text-[11px] text-slate-400 dark:text-white/50">
+      <span className="text-[11px] text-slate-500 dark:text-white/65">
         {mode === 'link'
           ? (linkUrl ? 'URL tanimli' : 'URL bos')
           : mode === 'lookup'
@@ -448,7 +448,7 @@ export default function OptionsModal(props) {
       <button
         type="button"
         onClick={onClose}
-        className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-xs font-medium text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white/85 transition-all"
+        className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.14] text-xs font-medium text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white/85 transition-all"
       >
         İptal
       </button>
@@ -489,7 +489,7 @@ export default function OptionsModal(props) {
 
           {/* Hazir Sablonlar — GlassSelect ile */}
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-white/50">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               Hazır Şablonlar
             </label>
             <GlassSelect
@@ -503,7 +503,7 @@ export default function OptionsModal(props) {
 
           {/* Secilen URL - readonly goster */}
           {linkUrl && (
-            <div className="text-[10px] leading-relaxed text-slate-500 dark:text-white/40 bg-violet-500/5 border border-violet-400/20 rounded-lg px-3 py-2 break-all">
+            <div className="text-[10px] leading-relaxed text-slate-600 dark:text-white/60 bg-violet-500/5 border border-violet-400/20 rounded-lg px-3 py-2 break-all">
               <strong className="text-violet-600 dark:text-violet-300">URL:</strong>{' '}
               <code className="text-[10px]">{linkUrl}</code>
             </div>
@@ -538,11 +538,11 @@ export default function OptionsModal(props) {
           )}
 
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-white/50">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               Rehber
             </label>
             {loadingGuides ? (
-              <div className="text-[12px] text-slate-400 dark:text-white/50 py-2">
+              <div className="text-[12px] text-slate-500 dark:text-white/65 py-2">
                 Rehberler yukleniyor…
               </div>
             ) : guides.length === 0 ? (
@@ -564,7 +564,7 @@ export default function OptionsModal(props) {
           </div>
 
           {selectedGuide && (
-            <div className="text-[10px] leading-relaxed text-slate-500 dark:text-white/40 bg-amber-500/5 border border-amber-400/20 rounded-lg px-3 py-2">
+            <div className="text-[10px] leading-relaxed text-slate-600 dark:text-white/60 bg-amber-500/5 border border-amber-400/20 rounded-lg px-3 py-2">
               <div><strong className="text-amber-600 dark:text-amber-300">Gosterim:</strong> {selectedGuide.displayColumn}</div>
               <div><strong className="text-amber-600 dark:text-amber-300">Kaydedilen:</strong> {selectedGuide.valueColumn}</div>
               <div><strong className="text-amber-600 dark:text-amber-300">Kolonlar:</strong> {(selectedGuide.columns || []).join(', ')}</div>
@@ -600,11 +600,11 @@ export default function OptionsModal(props) {
           )}
 
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-white/50">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               Alt Form
             </label>
             {loadingForms ? (
-              <div className="text-[12px] text-slate-400 dark:text-white/50 py-2">
+              <div className="text-[12px] text-slate-500 dark:text-white/65 py-2">
                 Formlar yukleniyor…
               </div>
             ) : forms.length === 0 ? (
@@ -626,12 +626,12 @@ export default function OptionsModal(props) {
           </div>
 
           {selectedForm && (
-            <div className="text-[10px] leading-relaxed text-slate-500 dark:text-white/40 bg-blue-500/5 border border-blue-400/20 rounded-lg px-3 py-2">
+            <div className="text-[10px] leading-relaxed text-slate-600 dark:text-white/60 bg-blue-500/5 border border-blue-400/20 rounded-lg px-3 py-2">
               <div><strong className="text-blue-600 dark:text-blue-300">Modul:</strong> {selectedForm.module}</div>
               {selectedForm.subModule && (
                 <div><strong className="text-blue-600 dark:text-blue-300">Alt Modul:</strong> {selectedForm.subModule}</div>
               )}
-              <div className="mt-1 text-slate-500 dark:text-white/35">
+              <div className="mt-1 text-slate-600 dark:text-white/55">
                 Ana form kaydedildiginde, bu tablodaki her satir alt form'a ait bir child kayit olarak yazilir.
               </div>
             </div>
@@ -662,19 +662,19 @@ export default function OptionsModal(props) {
         )}
 
         {options.length === 0 ? (
-          <div className="text-center py-10 border-2 border-dashed border-slate-200 dark:border-white/[0.08] rounded-xl">
-            <List size={24} className="mx-auto text-slate-300 dark:text-white/40 mb-2" strokeWidth={1.5} />
-            <p className="text-[12px] text-slate-400 dark:text-white/50">
+          <div className="text-center py-10 border-2 border-dashed border-slate-200 dark:border-white/[0.14] rounded-xl">
+            <List size={24} className="mx-auto text-slate-400 dark:text-white/45 mb-2" strokeWidth={1.5} />
+            <p className="text-[12px] text-slate-500 dark:text-white/65">
               Henüz seçenek eklenmemiş
             </p>
-            <p className="text-[10px] text-slate-400 dark:text-white/45 mt-0.5">
+            <p className="text-[10px] text-slate-500 dark:text-white/60 mt-0.5">
               Aşağıdaki butonla en az bir seçenek ekleyin
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-2" data-options-list>
             {/* Header row — tek sutun (sadece Seçenek Adı) */}
-            <div className="flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-white/50">
+            <div className="flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               <span className="flex-1">Seçenek Adı</span>
               <span className="w-7" />
             </div>
@@ -706,7 +706,7 @@ export default function OptionsModal(props) {
                     <button
                       type="button"
                       onClick={function () { removeOption(i) }}
-                      className="w-7 h-9 flex items-center justify-center rounded-lg bg-white/[0.04] hover:bg-red-500/15 border border-slate-200 dark:border-white/[0.08] hover:border-red-400/40 text-slate-400 hover:text-red-500 transition-all flex-shrink-0"
+                      className="w-7 h-9 flex items-center justify-center rounded-lg bg-white/[0.04] hover:bg-red-500/15 border border-slate-200 dark:border-white/[0.14] hover:border-red-400/40 text-slate-500 hover:text-red-500 transition-all flex-shrink-0"
                       title="Sil"
                     >
                       <X size={12} strokeWidth={2.4} />

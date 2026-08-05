@@ -89,13 +89,13 @@ export default function GroupModal(props) {
 
   // Input stil helper'lari (WidgetBuilderForm ile ayni)
   var inputBase = 'w-full h-10 px-3 rounded-lg text-sm transition-all ' +
-    'bg-white/60 dark:bg-white/[0.04] ' +
+    'bg-white/60 dark:bg-slate-900/60 ' +
     'text-slate-800 dark:text-white/90 ' +
-    'placeholder:text-slate-400 dark:placeholder:text-white/25 ' +
+    'placeholder:text-slate-500 dark:placeholder:text-white/45 ' +
     'focus:outline-none '
-  var inputOk = 'border border-slate-200 dark:border-white/[0.08] focus:border-indigo-400/60 dark:focus:border-white/20 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
+  var inputOk = 'border border-slate-200 dark:border-white/[0.14] focus:border-indigo-400/60 dark:focus:border-white/30 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
   var inputErr = 'border border-red-400/60 focus:border-red-400/80 focus:shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'
-  var labelCls = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/40 mb-1.5'
+  var labelCls = 'block text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5'
 
   var footer = (
     <>
@@ -104,7 +104,7 @@ export default function GroupModal(props) {
         type="button"
         onClick={onClose}
         disabled={saving}
-        className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-xs font-medium text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white/85 transition-all disabled:opacity-50"
+        className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.14] text-xs font-medium text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white/85 transition-all disabled:opacity-50"
       >
         İptal
       </button>
@@ -159,7 +159,7 @@ export default function GroupModal(props) {
           <datalist id="cw-group-tab-names">
             {existingTabNames.map(function (n) { return <option key={n} value={n} /> })}
           </datalist>
-          <p className="mt-1.5 text-[10.5px] text-slate-400 dark:text-white/35">
+          <p className="mt-1.5 text-[10.5px] text-slate-500 dark:text-white/55">
             Aynı sekme adını taşıyan gruplar Ek Alanlar'da tek sekmede birleşir; boş bırakılırsa grup kendi sekmesi olur.
           </p>
         </div>
