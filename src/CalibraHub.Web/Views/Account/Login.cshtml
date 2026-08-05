@@ -358,6 +358,104 @@
             .cald-wrap.is-measuring .cald-stage { animation: none; }
             .cald-wrap.cald-shake .cald-stage { animation: none; }
         }
+
+        /* ── Sol hero: canlı kalibrasyon düzeneği (komparatör + salgı ölçümü) ──────
+           Hero görseli her iki temada da koyu (#0a0d17 zemin) olduğundan düzenek
+           doğrudan koyu zemine göre renklendirilir — body tema sınıfından bağımsız.
+           .login-hero-blur: arka plan görselinin SOL bölgesini backdrop-filter ile
+           flulaştırır + hafif koyulaştırır (maske sağa doğru şeffaflaşır, logo net
+           kalır). .login-rig: düzeneği panelin SOL kısmına yaslar. Tüm hareket
+           sayfa sonundaki rig script'inden (tek rAF) sürülür — CSS keyframe yok. */
+        .login-hero-blur {
+            position: absolute; inset: 0;
+            width: 62%;
+            backdrop-filter: blur(14px) brightness(.72) saturate(1.05);
+            -webkit-backdrop-filter: blur(14px) brightness(.72) saturate(1.05);
+            background: linear-gradient(90deg, rgba(7,10,20,.42), rgba(7,10,20,.18) 70%, transparent);
+            -webkit-mask-image: linear-gradient(90deg, #000 72%, transparent);
+            mask-image: linear-gradient(90deg, #000 72%, transparent);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .login-rig {
+            position: absolute;
+            left: clamp(16px, 4.5%, 64px);
+            top: 50%;
+            transform: translateY(-50%);
+            width: min(400px, 46%);
+            z-index: 2;
+            pointer-events: none;
+            filter: drop-shadow(0 22px 40px rgba(2, 6, 23, .55));
+        }
+        .login-rig-svg { display: block; width: 100%; height: auto; }
+
+        .rig-badge rect {
+            fill: rgba(15, 23, 42, .62); stroke: rgba(148, 163, 184, .3); stroke-width: 1;
+        }
+        .rig-badge-dot { fill: #34d399; animation: rigBlink 1.6s ease-in-out infinite; }
+        .rig-badge-text {
+            fill: #e2e8f0; font-size: 12.5px; font-weight: 600;
+            letter-spacing: .3px; dominant-baseline: middle;
+        }
+        .rig-caption {
+            fill: rgba(148, 163, 184, .85); font-size: 10.5px; font-weight: 500; letter-spacing: .4px;
+        }
+        .rig-vblock { fill: #1d2940; stroke: rgba(148, 163, 184, .25); stroke-width: 1; }
+        .rig-col-tick { stroke: rgba(15, 23, 42, .5); stroke-width: 1; }
+        .rig-col-tick.maj { stroke-width: 1.6; }
+        .rig-part-notch { stroke: rgba(15, 23, 42, .4); stroke-width: 1.6; stroke-linecap: round; }
+        .rig-dial-tick { stroke: #64748b; stroke-width: 1; }
+        .rig-dial-tick.maj { stroke: #334155; stroke-width: 1.8; }
+        .rig-dial-num {
+            fill: #334155; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 8.5px; font-weight: 600; text-anchor: middle; dominant-baseline: middle;
+        }
+        .rig-face-brand {
+            fill: #64748b; font-size: 8px; font-weight: 700; letter-spacing: 2px; text-anchor: middle;
+        }
+        .rig-face-unit {
+            fill: #94a3b8; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 7.5px; font-weight: 600; text-anchor: middle;
+        }
+        /* Tolerans yayları: alt %80 yeşil (uygun), üstteki dar dilim amber (tolerans dışı) */
+        .rig-tol-ok  { fill: none; stroke: rgba(16, 185, 129, .3);  stroke-width: 4; }
+        .rig-tol-out { fill: none; stroke: rgba(245, 158, 11, .38); stroke-width: 4; }
+        .rig-needle { stroke: #e11d48; stroke-width: 2.4; stroke-linecap: round; }
+        .rig-needle-tail { fill: #e11d48; }
+        .rig-counter-needle { stroke: #6366f1; stroke-width: 1.6; stroke-linecap: round; }
+        .rig-counter-tick { stroke: #94a3b8; stroke-width: 1; }
+        .rig-glass { fill: rgba(255, 255, 255, .3); }
+        .rig-hud rect {
+            fill: rgba(10, 15, 28, .78); stroke: rgba(99, 102, 241, .3); stroke-width: 1;
+        }
+        .rig-hud line { stroke: rgba(148, 163, 184, .18); stroke-width: 1; }
+        .rig-hud-label {
+            fill: rgba(148, 163, 184, .8); font-size: 9.5px; font-weight: 600;
+            letter-spacing: 1.1px;
+        }
+        .rig-hud-value {
+            fill: #7dd3fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 17px; font-weight: 600; letter-spacing: .4px;
+        }
+        .rig-hud-sub {
+            fill: #a5b4fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 14px; font-weight: 600;
+        }
+        .rig-trace-axis { stroke: rgba(148, 163, 184, .28) !important; stroke-dasharray: 3 3; }
+        .rig-trace {
+            fill: none; stroke: #22d3ee; stroke-width: 1.6;
+            stroke-linejoin: round; stroke-linecap: round;
+            filter: drop-shadow(0 0 3px rgba(34, 211, 238, .55));
+        }
+        @@keyframes rigBlink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+        /* Dar hero'da (tek kolon mobil düzen) düzenek kartla çakışır — gizle */
+        @@media (max-width: 900px) {
+            .login-rig, .login-hero-blur { display: none; }
+        }
+        @@media (prefers-reduced-motion: reduce) {
+            .rig-badge-dot { animation: none; }
+        }
     </style>
 </head>
 <body class="login-page app-theme-@runtime.ThemeCode"
@@ -407,6 +505,146 @@
            ile panel tamamen kaplanır, sağ-alt sparkle filigranı doğal olarak kırpılır. *@
         <div class="login-hero-frame">
             <img src="~/Document/CalibraHubLoginLogo.png" alt="CalibraHub Software" />
+        </div>
+
+        @* Görselin SOL bölgesini flulaştıran/koyulaştıran katman — maske sağa doğru
+           şeffaflaşır, böylece marka logosu ve sloganı net kalır. *@
+        <div class="login-hero-blur"></div>
+
+        @* ── Canlı kalibrasyon düzeneği: komparatör (dial indicator) ile salgı (runout)
+              ölçümü. Granit tabla + sütun + kol/kelepçe + 0,001 mm komparatör + V-blok
+              içinde dönen eksantrik parça. Parça dönerken temas ucu iner-kalkar, ibre
+              sapmayı gösterir, dijital okuma + TIR + kayan trend grafiği eşzamanlı
+              güncellenir. Tüm hareket tek rAF döngüsünden sürülür (sayfa sonundaki
+              script) → ibre/uç/grafik birbirinden ASLA ayrışmaz. Salt dekoratif:
+              login akışına hiçbir bağı yoktur. ── *@
+        <div class="login-rig">
+            <svg id="rigSvg" class="login-rig-svg" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <defs>
+                    <linearGradient id="rigSteel" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0" stop-color="#42506a" />
+                        <stop offset=".22" stop-color="#cbd5e1" />
+                        <stop offset=".5" stop-color="#94a3b8" />
+                        <stop offset="1" stop-color="#2f3b4f" />
+                    </linearGradient>
+                    <linearGradient id="rigSteelV" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#cbd5e1" />
+                        <stop offset=".55" stop-color="#8b98ab" />
+                        <stop offset="1" stop-color="#3a4658" />
+                    </linearGradient>
+                    <linearGradient id="rigGranite" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#26334a" />
+                        <stop offset="1" stop-color="#0a111e" />
+                    </linearGradient>
+                    <radialGradient id="rigBezel" cx=".34" cy=".24" r=".95">
+                        <stop offset="0" stop-color="#eef2f7" />
+                        <stop offset=".52" stop-color="#94a1b4" />
+                        <stop offset="1" stop-color="#2f3b4f" />
+                    </radialGradient>
+                    <radialGradient id="rigFace" cx=".36" cy=".26" r=".92">
+                        <stop offset="0" stop-color="#ffffff" />
+                        <stop offset="1" stop-color="#dde5ef" />
+                    </radialGradient>
+                    <linearGradient id="rigPartG" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#8f9db1" />
+                        <stop offset=".42" stop-color="#e6ecf4" />
+                        <stop offset="1" stop-color="#5b697f" />
+                    </linearGradient>
+                    <radialGradient id="rigFloor" cx=".5" cy=".5" r=".5">
+                        <stop offset="0" stop-color="rgba(99,102,241,.38)" />
+                        <stop offset="1" stop-color="rgba(99,102,241,0)" />
+                    </radialGradient>
+                </defs>
+
+                @* Durum şeridi *@
+                <g class="rig-badge">
+                    <rect x="28" y="20" width="204" height="28" rx="14" />
+                    <circle class="rig-badge-dot" cx="45" cy="34" r="4" />
+                    <text class="rig-badge-text" x="58" y="34.5">Kalibrasyon Sürüyor</text>
+                </g>
+                <text class="rig-caption" x="29" y="64">Komparatör · Salgı (Runout) Ölçümü</text>
+
+                @* Zemin ışığı + granit tabla *@
+                <ellipse cx="205" cy="424" rx="178" ry="26" fill="url(#rigFloor)" />
+                <path class="rig-vblock" d="M162 392 V350 H193 L250 386 L307 350 H338 V392 Z" />
+                <rect x="30" y="392" width="330" height="30" rx="5" fill="url(#rigGranite)" />
+                <rect x="30" y="392" width="330" height="2.6" rx="1.3" fill="rgba(226,232,240,.22)" />
+                <rect x="40" y="422" width="310" height="6" rx="3" fill="rgba(2,6,23,.6)" />
+
+                @* Sütun + taban bloğu + ince ayar kolu *@
+                <rect x="52" y="366" width="60" height="28" rx="4" fill="url(#rigSteelV)" />
+                <rect x="70" y="120" width="22" height="248" rx="3" fill="url(#rigSteel)" />
+                <g class="rig-col-scale" id="rigColScale"></g>
+                <circle cx="81" cy="304" r="13" fill="url(#rigBezel)" />
+                <circle cx="81" cy="304" r="5" fill="#334155" />
+
+                @* Kol + kelepçe (kadranın gövdesini taşır) *@
+                <rect x="88" y="224" width="132" height="16" rx="4" fill="url(#rigSteelV)" />
+                <rect x="244" y="208" width="12" height="50" rx="3" fill="url(#rigSteel)" />
+
+                @* Pinol (temas ucu) — JS ile dikey ötelenir *@
+                <g id="rigPlunger">
+                    <rect x="247" y="246" width="6" height="31" rx="3" fill="#cbd5e1" />
+                    <circle cx="250" cy="277" r="5" fill="#eef2f7" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                </g>
+
+                <rect x="212" y="212" width="52" height="42" rx="7" fill="url(#rigSteelV)" />
+                <circle cx="238" cy="206" r="5" fill="#94a3b8" stroke="rgba(15,23,42,.4)" stroke-width="1" />
+
+                @* Ölçülen parça — V-blok içinde dönen eksantrik disk.
+                   Disk merkezi (255,330), dönme ekseni (250,330): 5 px'lik eksantriklik
+                   dönerken tepe noktasını sinüzoidal olarak oynatır = gerçek salgı. *@
+                <g id="rigPartSpin">
+                    <circle cx="255" cy="330" r="48" fill="url(#rigPartG)" stroke="rgba(15,23,42,.55)" stroke-width="1.2" />
+                    <circle cx="255" cy="330" r="41" fill="none" stroke="rgba(15,23,42,.18)" stroke-width="1" />
+                    <g id="rigPartNotches"></g>
+                    <circle cx="255" cy="330" r="13" fill="#1b2637" stroke="rgba(226,232,240,.32)" stroke-width="1.2" />
+                    <rect x="251" y="309" width="8" height="9" rx="1.5" fill="#1b2637" />
+                    <circle cx="255" cy="300" r="3" fill="#e11d48" />
+                </g>
+
+                @* Komparatör gövdesi *@
+                <rect x="242" y="76" width="16" height="12" rx="2.5" fill="url(#rigSteelV)" />
+                <circle cx="250" cy="150" r="66" fill="url(#rigBezel)" />
+                <circle cx="250" cy="150" r="60" fill="none" stroke="rgba(15,23,42,.35)" stroke-width="1.2" />
+                <circle cx="250" cy="150" r="58" fill="url(#rigFace)" />
+                <path class="rig-tol-ok" d="M208.74 180 A51 51 0 1 1 291.26 180" />
+                <path class="rig-tol-out" d="M291.26 180 A51 51 0 0 1 208.74 180" />
+                <g id="rigDialTicks"></g>
+                <g id="rigDialNums"></g>
+                <text class="rig-face-brand" x="250" y="118">CALIBRA</text>
+                <text class="rig-face-unit" x="250" y="131">0,001 mm</text>
+
+                @* Tur sayacı (küçük kadran) *@
+                <circle cx="250" cy="192" r="16" fill="#eef2f7" stroke="rgba(15,23,42,.35)" stroke-width="1" />
+                <g id="rigCounterTicks"></g>
+                <g id="rigCounter">
+                    <line class="rig-counter-needle" x1="250" y1="194" x2="250" y2="181" />
+                </g>
+                <circle cx="250" cy="192" r="2" fill="#334155" />
+
+                @* Ana ibre *@
+                <g id="rigNeedle">
+                    <line class="rig-needle" x1="250" y1="159" x2="250" y2="97" />
+                    <circle class="rig-needle-tail" cx="250" cy="159" r="3.4" />
+                </g>
+                <circle cx="250" cy="150" r="5.6" fill="#475569" />
+                <circle cx="250" cy="150" r="2.4" fill="#cbd5e1" />
+                <ellipse class="rig-glass" cx="226" cy="120" rx="36" ry="17" transform="rotate(-28 226 120)" />
+
+                @* Dijital okuma paneli — sapma / TIR / kayan trend *@
+                <g class="rig-hud">
+                    <rect x="28" y="436" width="362" height="70" rx="12" />
+                    <line x1="168" y1="448" x2="168" y2="494" />
+                    <line x1="240" y1="448" x2="240" y2="494" />
+                    <text class="rig-hud-label" x="46" y="459">Sapma</text>
+                    <text class="rig-hud-value" id="rigDev" x="46" y="486">+0,000 mm</text>
+                    <text class="rig-hud-label" x="184" y="459">TIR</text>
+                    <text class="rig-hud-sub" id="rigTir" x="184" y="483">0,000</text>
+                    <line class="rig-trace-axis" x1="252" y1="471" x2="378" y2="471" />
+                    <polyline class="rig-trace" id="rigTrace" points="" />
+                </g>
+            </svg>
         </div>
     </section>
 
@@ -1074,6 +1312,156 @@
         // hatasıyla yeniden render edildiyse kadran ilk açılışta hizasız/kırmızı başlar.
         var serverHadError = @(ViewData.ModelState.IsValid ? "false" : "true");
         if (serverHadError) window.CalibraLoginDial.fail('Giriş başarısız');
+    })();
+</script>
+<script>
+    /* ── Sol hero: canlı kalibrasyon düzeneği (komparatör + salgı ölçümü) ──
+       Fizik tek yerde: parça dönme açısı th → eksantriklik ECC_PX'ten sapma
+       d_px = ECC_PX * sin(th), ölçek üzerinden d_mm. Aynı d değerinden ibre açısı,
+       temas ucunun ötelenmesi, dijital okuma ve trend grafiği TÜREtilir → hiçbir öğe
+       diğerinden ayrışamaz (CSS keyframe kullanılmamasının sebebi bu).
+       Salt dekoratif: login/kadran (CalibraLoginDial) mantığıyla hiçbir bağı yoktur.
+       prefers-reduced-motion'da tek sabit poz çizilir, rAF hiç başlamaz;
+       sekme arka plana düşünce döngü durur (visibilitychange). */
+    (function () {
+        var svg = document.getElementById('rigSvg');
+        if (!svg) return;
+
+        var NS = 'http://www.w3.org/2000/svg';
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        // Geometri / ölçek sabitleri
+        var DIAL_CX = 250, DIAL_CY = 150;      // komparatör kadran merkezi
+        var ECC_PX  = 5;                        // parçanın eksantrikliği (px)
+        var MM_PER_PX = 0.024 / ECC_PX;         // 5 px tepe sapma = 0,024 mm
+        var REV_PER_MM = 0.1;                   // 0,001 mm'lik komparatör: 1 tur = 0,10 mm
+        var RPS = 0.28;                         // parça devri (tur/sn) ≈ 17 dev/dk
+        var TRACE_N = 64, TRACE_MS = 60;        // trend grafiği: örnek sayısı + örnekleme aralığı
+        var TRACE_X0 = 252, TRACE_X1 = 378, TRACE_Y = 471, TRACE_AMP = 20;
+
+        function mkLine(x1, y1, x2, y2, cls) {
+            var ln = document.createElementNS(NS, 'line');
+            ln.setAttribute('x1', x1.toFixed(2)); ln.setAttribute('y1', y1.toFixed(2));
+            ln.setAttribute('x2', x2.toFixed(2)); ln.setAttribute('y2', y2.toFixed(2));
+            ln.setAttribute('class', cls);
+            return ln;
+        }
+        // Kadran merkezli kutupsal yardımcı: 0° = yukarı, saat yönünde artar.
+        function polar(cx, cy, r, deg) {
+            var a = (deg - 90) * Math.PI / 180;
+            return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+        }
+
+        // ── Kadran çentikleri: 100 bölme (0,001 mm/bölme), her 10.'su uzun + rakamlı ──
+        (function buildDial() {
+            var ticks = document.getElementById('rigDialTicks');
+            var nums  = document.getElementById('rigDialNums');
+            for (var i = 0; i < 100; i++) {
+                var deg = i * 3.6, major = (i % 10 === 0);
+                var o = polar(DIAL_CX, DIAL_CY, 55, deg);
+                var n = polar(DIAL_CX, DIAL_CY, major ? 45 : 50, deg);
+                ticks.appendChild(mkLine(o[0], o[1], n[0], n[1], 'rig-dial-tick' + (major ? ' maj' : '')));
+                if (major) {
+                    var p = polar(DIAL_CX, DIAL_CY, 36, deg);
+                    var t = document.createElementNS(NS, 'text');
+                    t.setAttribute('x', p[0].toFixed(2));
+                    t.setAttribute('y', p[1].toFixed(2));
+                    t.setAttribute('class', 'rig-dial-num');
+                    t.textContent = String(i);
+                    nums.appendChild(t);
+                }
+            }
+            // Tur sayacı çentikleri (küçük kadran)
+            var ct = document.getElementById('rigCounterTicks');
+            for (var k = 0; k < 10; k++) {
+                var a = polar(250, 192, 14, k * 36), b = polar(250, 192, 11, k * 36);
+                ct.appendChild(mkLine(a[0], a[1], b[0], b[1], 'rig-counter-tick'));
+            }
+            // Sütun skalası (yükseklik ayarı) + parça çevresindeki taşlama izleri
+            var cs = document.getElementById('rigColScale');
+            for (var y = 140; y <= 350; y += 12) {
+                var lng = ((y - 140) % 60 === 0);
+                cs.appendChild(mkLine(92, y, lng ? 101 : 97, y, 'rig-col-tick' + (lng ? ' maj' : '')));
+            }
+            var pn = document.getElementById('rigPartNotches');
+            for (var j = 0; j < 12; j++) {
+                var q1 = polar(255, 330, 48, j * 30), q2 = polar(255, 330, 42, j * 30);
+                pn.appendChild(mkLine(q1[0], q1[1], q2[0], q2[1], 'rig-part-notch'));
+            }
+        })();
+
+        var spinEl    = document.getElementById('rigPartSpin');
+        var plungerEl = document.getElementById('rigPlunger');
+        var needleEl  = document.getElementById('rigNeedle');
+        var counterEl = document.getElementById('rigCounter');
+        var devEl     = document.getElementById('rigDev');
+        var tirEl     = document.getElementById('rigTir');
+        var traceEl   = document.getElementById('rigTrace');
+
+        function fmt(v, dec) { return v.toFixed(dec).replace('.', ','); }
+
+        var trace = [];
+        var tirMin = 0, tirMax = 0, tirShown = 0;
+
+        // Tek kare çizimi: tüm öğeler aynı d (sapma) değerinden türetilir.
+        function render(th, dPx) {
+            var dMm = dPx * MM_PER_PX;
+            spinEl.setAttribute('transform', 'rotate(' + th.toFixed(2) + ' 250 330)');
+            plungerEl.setAttribute('transform', 'translate(0 ' + dPx.toFixed(2) + ')');
+            needleEl.setAttribute('transform',
+                'rotate(' + (dMm / REV_PER_MM * 360).toFixed(2) + ' ' + DIAL_CX + ' ' + DIAL_CY + ')');
+            counterEl.setAttribute('transform', 'rotate(' + (dMm * 360).toFixed(2) + ' 250 192)');
+            devEl.textContent = (dMm >= 0 ? '+' : '−') + fmt(Math.abs(dMm), 3) + ' mm';
+            tirEl.textContent = fmt(tirShown, 3) + ' mm';
+            if (trace.length > 1) {
+                var step = (TRACE_X1 - TRACE_X0) / (TRACE_N - 1), pts = '';
+                for (var i = 0; i < trace.length; i++) {
+                    var x = TRACE_X0 + (TRACE_N - trace.length + i) * step;
+                    var y = TRACE_Y - (trace[i] / (ECC_PX * MM_PER_PX)) * TRACE_AMP;
+                    pts += x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+                }
+                traceEl.setAttribute('points', pts.trim());
+            }
+        }
+
+        if (reduce) {
+            // Hareketsiz poz: parça 40°'de, ibre buna karşılık gelen sapmayı gösterir.
+            var d0 = ECC_PX * Math.sin(40 * Math.PI / 180);
+            tirShown = 2 * ECC_PX * MM_PER_PX;
+            render(40, d0);
+            return;
+        }
+
+        var t0 = null, last = null, sampleAcc = 0, revAcc = 0, raf = null;
+        function frame(ts) {
+            if (t0 === null) { t0 = ts; last = ts; }
+            var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
+            var th = ((ts - t0) / 1000) * RPS * 360;
+            var dPx = ECC_PX * Math.sin(th * Math.PI / 180);
+            var dMm = dPx * MM_PER_PX;
+
+            // TIR (toplam gösterge sapması) = 2 turda bir kilitlenip sıfırlanan tepe-tepe.
+            if (dMm < tirMin) tirMin = dMm;
+            if (dMm > tirMax) tirMax = dMm;
+            tirShown = tirMax - tirMin;
+            revAcc += RPS * dt;
+            if (revAcc >= 2) { revAcc = 0; tirMin = dMm; tirMax = dMm; }
+
+            sampleAcc += dt * 1000;
+            if (sampleAcc >= TRACE_MS) {
+                sampleAcc = 0;
+                trace.push(dMm);
+                if (trace.length > TRACE_N) trace.shift();
+            }
+            render(th, dPx);
+            raf = requestAnimationFrame(frame);
+        }
+        function start() { if (raf === null) { last = null; t0 = null; raf = requestAnimationFrame(frame); } }
+        function stop()  { if (raf !== null) { cancelAnimationFrame(raf); raf = null; } }
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) stop(); else start();
+        });
+        start();
     })();
 </script>
 </body>

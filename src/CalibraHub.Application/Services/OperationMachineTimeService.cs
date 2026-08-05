@@ -42,6 +42,7 @@ public sealed class OperationMachineTimeService : IOperationMachineTimeService
         if (req.Quantity <= 0) throw new ArgumentException("Miktar 0'dan büyük olmalı.");
         if (req.DurationPerUnit < 0) throw new ArgumentException("Süre negatif olamaz.");
         if (req.SetupDuration is < 0) throw new ArgumentException("Hazırlık süresi negatif olamaz.");
+        if (req.RequiredOperators < 1) throw new ArgumentException("Gerekli operatör sayısı en az 1 olmalı.");
 
         // CardGroup tip doğrulaması (ID-tabanlı): makine grubu CardType=3, ürün grubu CardType=1 olmalı.
         if (hasMachineGroup)
@@ -78,6 +79,7 @@ public sealed class OperationMachineTimeService : IOperationMachineTimeService
             DurationPerUnit = req.DurationPerUnit,
             DurationUnit = req.DurationUnit,
             SetupDuration = req.SetupDuration,
+            RequiredOperators = req.RequiredOperators,
             IsActive = req.IsActive,
         };
         return await _repo.SaveAsync(entity, ct);
@@ -116,5 +118,14 @@ public sealed class OperationMachineTimeService : IOperationMachineTimeService
         if (match?.SetupDuration is not > 0m) return null;
 
         return match.DurationUnit == DurationUnit.Hour ? match.SetupDuration.Value * 60m : match.SetupDuration.Value;
+    }
+
+    public async Task<byte> ResolveRequiredOperatorsAsync(
+        int operationId, int? machineId, int? itemId, int? routingId, CancellationToken ct)
+    {
+        if (operationId <= 0) return 1;
+
+        var match = await _repo.FindBestMachineTimeMatchAsync(operationId, machineId, itemId, routingId, ct);
+        return match is not null && match.RequiredOperators > 0 ? match.RequiredOperators : (byte)1;
     }
 }

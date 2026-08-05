@@ -73,4 +73,22 @@ public interface IMachineCalendarRepository
 
     /// <summary>Soft-delete (IsActive=0).</summary>
     Task DeleteScenarioMachineShiftAsync(int id, int? userId, CancellationToken ct);
+
+    // ── Vardiya Senaryoları Faz 2 — Personel kısıtı (2026-08-05) ──────────────────
+
+    /// <summary>
+    /// <see cref="ListWorkWindowsAsync"/> ile AYNI senaryo→pencere türetmesi, ama <c>ShiftId</c>
+    /// taşıyan motor-özel (internal) sözleşmede (<see cref="MachineShiftWindowDto"/>).
+    /// Yalnızca <c>MachineAutoScheduleService</c> personel sonlu-kapasite kısıtı için kullanılır.
+    /// Legacy fallback / senaryoda atama yoksa <c>ShiftId=null</c> döner (fail-open).
+    /// </summary>
+    Task<IReadOnlyList<MachineShiftWindowDto>> ListScenarioMachineShiftWindowsAsync(int? scenarioId, CancellationToken ct);
+
+    /// <summary>
+    /// (ShiftId, DayOfWeek) → o vardiya/günde aktif üretim-operatörü (<c>Personnel.IsProductionOperator=1</c>,
+    /// <c>IsActive=1</c>) sayısı (<c>ShiftAssignment.IsActive=1</c>, DISTINCT PersonnelId). Sözlükte
+    /// bulunmayan (ShiftId, DayOfWeek) çifti = "personel verisi tanımsız" → çağıran fail-open
+    /// uygular (kısıt yok). <c>EffectiveFrom/EffectiveTo</c> v1'de yok sayılır (KISS).
+    /// </summary>
+    Task<IReadOnlyDictionary<(int ShiftId, byte DayOfWeek), int>> GetShiftOperatorPoolAsync(CancellationToken ct);
 }

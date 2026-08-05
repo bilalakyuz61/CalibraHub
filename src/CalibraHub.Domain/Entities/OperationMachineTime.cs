@@ -29,6 +29,10 @@ public sealed class OperationMachineTime
     /// <summary>Makine Planlama Faz 2 (2026-08-05) — operasyon setup (hazırlık) süresi, satırın
     /// kendi <see cref="DurationUnit"/>'i ile yorumlanır (ayrı birim yok). NULL/0 = setup yok.</summary>
     public decimal? SetupDuration { get; init; }
+    /// <summary>Vardiya Senaryoları Faz 2 (2026-08-05) — bu operasyon×makine kombinasyonunun aynı
+    /// anda kaç operatör tükettiği. Otomatik çizelgeleme personel sonlu-kapasite kısıtında kullanılır
+    /// (bkz. <c>MachineAutoScheduleService.PlaceOnMachine</c>). Varsayılan 1.</summary>
+    public byte RequiredOperators { get; init; } = 1;
     public bool IsActive { get; init; } = true;
     public DateTime Created { get; init; }
     public DateTime? Updated { get; init; }

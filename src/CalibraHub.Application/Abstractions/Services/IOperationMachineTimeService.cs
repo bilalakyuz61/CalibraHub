@@ -25,4 +25,13 @@ public interface IOperationMachineTimeService
     /// </summary>
     Task<decimal?> ResolveSetupMinutesAsync(
         int operationId, int? machineId, int? itemId, int? routingId, CancellationToken ct);
+
+    /// <summary>
+    /// Vardiya Senaryoları Faz 2 (2026-08-05) — <see cref="ResolveDurationMinutesAsync"/> ile AYNI
+    /// en-spesifik <c>OperationMachineTime</c> eşleşmesinin <c>RequiredOperators</c> alanı. Eşleşme
+    /// yoksa (RoutingOperation/Operation fallback zincirine RequiredOperators taşınmaz — yalnız
+    /// OperationMachineTime'da tanımlıdır) varsayılan 1 döner.
+    /// </summary>
+    Task<byte> ResolveRequiredOperatorsAsync(
+        int operationId, int? machineId, int? itemId, int? routingId, CancellationToken ct);
 }

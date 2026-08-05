@@ -624,4 +624,112 @@ public sealed class SqlMachineCalendarRepository : IMachineCalendarRepository
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    // ── Vardiya Senaryoları Faz 2 — Personel kısıtı (2026-08-05) ──────────────────────
+
+    /// <summary>
+    /// <see cref="ListWorkWindowsAsync"/> ile BİREBİR AYNI türetme (senaryo çöz → ScenarioMachineShift
+    /// × Shift join → DaysMask set-bit'lerine göre gün başına pencere, overnight ise iki güne böl),
+    /// tek fark: <c>ShiftId</c> her türetilmiş pencereye iliştirilir (kilitli <see cref="MachineWorkWindowDto"/>
+    /// bunu taşımaz). Legacy fallback'te <c>ShiftId=null</c> — motor bu pencerelerde personel kısıtını
+    /// hiç uygulamaz (fail-open).
+    /// </summary>
+    public async Task<IReadOnlyList<MachineShiftWindowDto>> ListScenarioMachineShiftWindowsAsync(int? scenarioId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        var resolvedScenarioId = scenarioId;
+        if (resolvedScenarioId is null)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"SELECT TOP 1 [Id] FROM {T("ShiftScenario")} WHERE [IsDefault] = 1 AND [IsActive] = 1;";
+            var found = await cmd.ExecuteScalarAsync(ct);
+            resolvedScenarioId = found is int i ? i : (int?)null;
+        }
+
+        var derived = new List<MachineShiftWindowDto>();
+        if (resolvedScenarioId is > 0)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT sms.[MachineId], sms.[ShiftId], sms.[DaysMask], s.[StartTime], s.[EndTime], s.[IsOvernight]
+                FROM {T("ScenarioMachineShift")} sms
+                INNER JOIN {T("ShiftScenario")} sc ON sc.[Id] = sms.[ScenarioId] AND sc.[IsActive] = 1
+                INNER JOIN {T("Shift")} s ON s.[Id] = sms.[ShiftId] AND s.[IsActive] = 1
+                INNER JOIN {T("Machine")} m ON m.[Id] = sms.[MachineId] AND m.[CompanyId] = @CompanyId AND m.[IsActive] = 1
+                WHERE sms.[ScenarioId] = @ScenarioId AND sms.[IsActive] = 1;
+                """;
+            cmd.Parameters.AddWithValue("@CompanyId", companyId);
+            cmd.Parameters.AddWithValue("@ScenarioId", resolvedScenarioId.Value);
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var machineId = r.GetInt32(0);
+                var shiftId = r.GetInt32(1);
+                var daysMask = r.GetByte(2);
+                var start = (TimeSpan)r.GetValue(3);
+                var end = (TimeSpan)r.GetValue(4);
+                var isOvernight = r.GetBoolean(5);
+                var startMin = (short)start.TotalMinutes;
+                var endMin = (short)end.TotalMinutes;
+
+                for (var d = 0; d < 7; d++)
+                {
+                    if ((daysMask & (1 << d)) == 0) continue;
+                    var day = (byte)d;
+
+                    if (!isOvernight)
+                    {
+                        derived.Add(new MachineShiftWindowDto(machineId, day, startMin, endMin, shiftId));
+                    }
+                    else
+                    {
+                        derived.Add(new MachineShiftWindowDto(machineId, day, startMin, 1440, shiftId));
+                        if (endMin > 0)
+                        {
+                            var nextDay = (byte)((day + 1) % 7);
+                            derived.Add(new MachineShiftWindowDto(machineId, nextDay, 0, endMin, shiftId));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (derived.Count > 0) return derived;
+
+        // Legacy fallback — ShiftId=null (fail-open: personel kısıtı bu pencerelerde uygulanmaz).
+        var legacy = await ListLegacyWorkWindowsAsync(conn, companyId, ct);
+        return legacy.Select(w => new MachineShiftWindowDto(w.MachineId, w.DayOfWeek, w.StartMinute, w.EndMinute, null)).ToList();
+    }
+
+    /// <summary>
+    /// (ShiftId, DayOfWeek) → aktif üretim-operatörü sayısı. <c>ShiftAssignment.DayOfWeek</c> TINYINT
+    /// kolonu .NET <see cref="DayOfWeek"/> değerleriyle (0=Pazar..6=Cumartesi) BİREBİR aynı — motor
+    /// tarafında ayrıca dönüşüm gerekmez.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<(int ShiftId, byte DayOfWeek), int>> GetShiftOperatorPoolAsync(CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT sa.[ShiftId], sa.[DayOfWeek], COUNT(DISTINCT sa.[PersonnelId])
+            FROM {T("ShiftAssignment")} sa
+            INNER JOIN {T("Personnel")} p ON p.[Id] = sa.[PersonnelId]
+                AND p.[CompanyId] = @CompanyId AND p.[IsProductionOperator] = 1 AND p.[IsActive] = 1
+            WHERE sa.[IsActive] = 1
+            GROUP BY sa.[ShiftId], sa.[DayOfWeek];
+            """;
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+
+        var dict = new Dictionary<(int, byte), int>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            dict[(r.GetInt32(0), r.GetByte(1))] = r.GetInt32(2);
+        }
+        return dict;
+    }
 }

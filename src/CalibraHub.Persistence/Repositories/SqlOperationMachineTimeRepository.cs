@@ -39,7 +39,7 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
                    t.[ItemGroupId], ig.[Code] + ISNULL(N' - ' + NULLIF(ig.[Description], N''), N'') AS ItemGroupCode,
                    t.[UnitId], u.[Code] AS UnitCode, u.[Name] AS UnitName,
                    t.[Quantity], t.[DurationPerUnit], t.[DurationUnit],
-                   t.[IsActive], t.[Created], t.[Updated], t.[SetupDuration]
+                   t.[IsActive], t.[Created], t.[Updated], t.[SetupDuration], t.[RequiredOperators]
             FROM {_table} t
             LEFT JOIN [{_schema}].[Operation] op ON op.[Id] = t.[OperationId]
             LEFT JOIN [{_schema}].[Machine] m ON m.[Id] = t.[MachineId]
@@ -83,7 +83,8 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
                 IsActive: r.GetBoolean(21),
                 Created: r.GetDateTime(22),
                 Updated: r.IsDBNull(23) ? null : r.GetDateTime(23),
-                SetupDuration: r.IsDBNull(24) ? null : r.GetDecimal(24)));
+                SetupDuration: r.IsDBNull(24) ? null : r.GetDecimal(24),
+                RequiredOperators: r.GetByte(25)));
         }
         return list;
     }
@@ -98,9 +99,9 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
             cmd.CommandText = $@"
                 INSERT INTO {_table}
                     ([CompanyId],[OperationId],[RoutingId],[MachineId],[MachineGroupId],[ItemId],[ItemGroupId],[UnitId],
-                     [Quantity],[DurationPerUnit],[DurationUnit],[SetupDuration],[IsActive],[Created])
+                     [Quantity],[DurationPerUnit],[DurationUnit],[SetupDuration],[RequiredOperators],[IsActive],[Created])
                 VALUES (@CompanyId,@OperationId,@RoutingId,@MachineId,@MachineGroupId,@ItemId,@ItemGroupId,@UnitId,
-                        @Quantity,@DurationPerUnit,@DurationUnit,@SetupDuration,@IsActive,GETUTCDATE());
+                        @Quantity,@DurationPerUnit,@DurationUnit,@SetupDuration,@RequiredOperators,@IsActive,GETUTCDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
         else
@@ -111,7 +112,8 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
                     [MachineId]=@MachineId,[MachineGroupId]=@MachineGroupId,
                     [ItemId]=@ItemId,[ItemGroupId]=@ItemGroupId,[UnitId]=@UnitId,
                     [Quantity]=@Quantity,[DurationPerUnit]=@DurationPerUnit,[DurationUnit]=@DurationUnit,
-                    [SetupDuration]=@SetupDuration,[IsActive]=@IsActive,[Updated]=GETUTCDATE()
+                    [SetupDuration]=@SetupDuration,[RequiredOperators]=@RequiredOperators,
+                    [IsActive]=@IsActive,[Updated]=GETUTCDATE()
                 WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", e.Id);
@@ -128,6 +130,7 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
         cmd.Parameters.AddWithValue("@DurationPerUnit", e.DurationPerUnit);
         cmd.Parameters.AddWithValue("@DurationUnit", (byte)e.DurationUnit);
         cmd.Parameters.AddWithValue("@SetupDuration", (object?)e.SetupDuration ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@RequiredOperators", e.RequiredOperators);
         cmd.Parameters.AddWithValue("@IsActive", e.IsActive);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
@@ -184,7 +187,7 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
         // ise "genel" satir olarak her zaman eslesir; dolu ise ya @param'a esit ya NULL (genel) olmali.
         // Siralama: en spesifik (NULL olmayan alan sayisi en fazla) satir ONCE gelir.
         cmd.CommandText = $@"
-            SELECT TOP 1 [Id], [MachineId], [ItemId], [RoutingId], [Quantity], [DurationPerUnit], [DurationUnit], [SetupDuration]
+            SELECT TOP 1 [Id], [MachineId], [ItemId], [RoutingId], [Quantity], [DurationPerUnit], [DurationUnit], [SetupDuration], [RequiredOperators]
             FROM {_table}
             WHERE [CompanyId] = @CompanyId AND [OperationId] = @OperationId AND [IsActive] = 1
               AND [MachineGroupId] IS NULL AND [ItemGroupId] IS NULL  -- Faz 1: grup satırları (MachineId/ItemId NULL) her makineye 'genel' gibi yanlış eşleşmesin
@@ -211,7 +214,8 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
             Quantity: r.GetDecimal(4),
             DurationPerUnit: r.GetDecimal(5),
             DurationUnit: (DurationUnit)r.GetByte(6),
-            SetupDuration: r.IsDBNull(7) ? null : r.GetDecimal(7));
+            SetupDuration: r.IsDBNull(7) ? null : r.GetDecimal(7),
+            RequiredOperators: r.GetByte(8));
     }
 
     public async Task<decimal?> GetRoutingOperationOverrideMinutesAsync(int routingId, int operationId, CancellationToken ct)

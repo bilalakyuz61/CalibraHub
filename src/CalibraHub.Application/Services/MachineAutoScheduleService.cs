@@ -112,19 +112,27 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
         var machines = await _calendar.ListActiveMachinesAsync(ct);
         var machineNames = machines.ToDictionary(m => m.Id, m => m.Name ?? m.Code);
 
-        var windowsRaw = await _calendar.ListWorkWindowsAsync(ct, scenarioId);
-        var windowsByMachine = new Dictionary<int, Dictionary<byte, List<(short Start, short End)>>>();
+        // Personel kısıtı Faz 2 (2026-08-05): ListWorkWindowsAsync (kilitli, Gantt-tüketimi) yerine
+        // motor-özel ShiftId'li türetme kullanılır — birebir aynı pencereler, sadece ShiftId taşır.
+        var windowsRaw = await _calendar.ListScenarioMachineShiftWindowsAsync(scenarioId, ct);
+        var windowsByMachine = new Dictionary<int, Dictionary<byte, List<(short Start, short End, int? ShiftId)>>>();
         foreach (var w in windowsRaw)
         {
             if (!windowsByMachine.TryGetValue(w.MachineId, out var byDay))
-                windowsByMachine[w.MachineId] = byDay = new Dictionary<byte, List<(short, short)>>();
+                windowsByMachine[w.MachineId] = byDay = new Dictionary<byte, List<(short, short, int?)>>();
             if (!byDay.TryGetValue(w.DayOfWeek, out var list))
-                byDay[w.DayOfWeek] = list = new List<(short, short)>();
-            list.Add((w.StartMinute, w.EndMinute));
+                byDay[w.DayOfWeek] = list = new List<(short, short, int?)>();
+            list.Add((w.StartMinute, w.EndMinute, w.ShiftId));
         }
         foreach (var byDay in windowsByMachine.Values)
             foreach (var list in byDay.Values)
                 list.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+        // Personel havuzu (ShiftId,DayOfWeek)→aktif üretim-operatörü sayısı. Anahtar yoksa = "tanımsız"
+        // → fail-open (kısıt uygulanmaz). Ledger makineler-arası PAYLAŞILAN, COMMIT edilen tüketim
+        // defteri (LOCAL zaman — PlaceOnMachine'in tüm gün/pencere hesabıyla aynı zaman tabanında).
+        var personnelPool = await _calendar.GetShiftOperatorPoolAsync(ct);
+        var personnelLedger = new Dictionary<(int ShiftId, DateTime LocalDate), List<(DateTime Start, DateTime End, int Ops)>>();
 
         var holidaysRaw = await _calendar.ListHolidaysAsync(ct);
         var holidayDates = new HashSet<DateTime>();
