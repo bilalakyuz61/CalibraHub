@@ -182,13 +182,15 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         // Grup satırları (MachineGroupId dolu) hariç — kullanıcı kararı: "grup-satırı hariç,
-        // distinct MachineId". Makine grubu genişletmesi Faz 3 kapsamı dışında.
+        // distinct MachineId". Makine grubu genişletmesi Faz 3 kapsamı dışında. Machine.IsActive
+        // ile join edilir — pasifleştirilmiş bir makineye öneri üretilmesin (defansif doğrulama).
         cmd.CommandText = $"""
-            SELECT DISTINCT [MachineId]
-            FROM {T("OperationMachineTime")}
-            WHERE [CompanyId] = @CompanyId AND [OperationId] = @OperationId AND [IsActive] = 1
-              AND [MachineId] IS NOT NULL AND [MachineGroupId] IS NULL
-            ORDER BY [MachineId];
+            SELECT DISTINCT t.[MachineId]
+            FROM {T("OperationMachineTime")} t
+            INNER JOIN {T("Machine")} m ON m.[Id] = t.[MachineId] AND m.[CompanyId] = @CompanyId AND m.[IsActive] = 1
+            WHERE t.[CompanyId] = @CompanyId AND t.[OperationId] = @OperationId AND t.[IsActive] = 1
+              AND t.[MachineId] IS NOT NULL AND t.[MachineGroupId] IS NULL
+            ORDER BY t.[MachineId];
             """;
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@OperationId", operationId);
