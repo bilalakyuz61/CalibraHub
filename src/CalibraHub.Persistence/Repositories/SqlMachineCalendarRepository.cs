@@ -52,10 +52,84 @@ public sealed class SqlMachineCalendarRepository : IMachineCalendarRepository
         return list;
     }
 
-    public async Task<IReadOnlyList<MachineWorkWindowDto>> ListWorkWindowsAsync(CancellationToken ct)
+    /// <summary>
+    /// Vardiya Senaryoları (2026-08-05) — bkz. <c>IMachineCalendarRepository.ListWorkWindowsAsync</c>
+    /// XML doc'u. Akış: (1) scenarioId null ise IsDefault=1 senaryoyu çöz, (2) senaryonun
+    /// ScenarioMachineShift atamalarını Shift ile join'le oku, (3) C# tarafında her atamayı
+    /// DaysMask'in set-bit'i olan günler için MachineWorkWindowDto'ya TÜRET (overnight ise iki
+    /// güne böl), (4) hiç türetilmiş satır yoksa eski MachineWorkWindow okumasına LEGACY FALLBACK.
+    /// </summary>
+    public async Task<IReadOnlyList<MachineWorkWindowDto>> ListWorkWindowsAsync(CancellationToken ct, int? scenarioId = null)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        var resolvedScenarioId = scenarioId;
+        if (resolvedScenarioId is null)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"SELECT TOP 1 [Id] FROM {T("ShiftScenario")} WHERE [IsDefault] = 1 AND [IsActive] = 1;";
+            var found = await cmd.ExecuteScalarAsync(ct);
+            resolvedScenarioId = found is int i ? i : (int?)null;
+        }
+
+        var derived = new List<MachineWorkWindowDto>();
+        if (resolvedScenarioId is > 0)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT sms.[MachineId], sms.[DaysMask], s.[StartTime], s.[EndTime], s.[IsOvernight]
+                FROM {T("ScenarioMachineShift")} sms
+                INNER JOIN {T("Shift")} s ON s.[Id] = sms.[ShiftId] AND s.[IsActive] = 1
+                INNER JOIN {T("Machine")} m ON m.[Id] = sms.[MachineId] AND m.[CompanyId] = @CompanyId AND m.[IsActive] = 1
+                WHERE sms.[ScenarioId] = @ScenarioId AND sms.[IsActive] = 1;
+                """;
+            cmd.Parameters.AddWithValue("@CompanyId", companyId);
+            cmd.Parameters.AddWithValue("@ScenarioId", resolvedScenarioId.Value);
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var machineId = r.GetInt32(0);
+                var daysMask = r.GetByte(1);
+                var start = (TimeSpan)r.GetValue(2);
+                var end = (TimeSpan)r.GetValue(3);
+                var isOvernight = r.GetBoolean(4);
+                var startMin = (short)start.TotalMinutes;
+                var endMin = (short)end.TotalMinutes;
+
+                for (var d = 0; d < 7; d++)
+                {
+                    if ((daysMask & (1 << d)) == 0) continue;
+                    var day = (byte)d;
+
+                    if (!isOvernight)
+                    {
+                        derived.Add(new MachineWorkWindowDto(0, machineId, day, startMin, endMin));
+                    }
+                    else
+                    {
+                        // Gece vardiyası: (start,1440)@gün + (0,end)@gün+1. end==0 → tam gün ilk
+                        // pencere (00:00'da biten vardiya) — ikinci pencere sıfır uzunlukta olurdu, atlanır.
+                        derived.Add(new MachineWorkWindowDto(0, machineId, day, startMin, 1440));
+                        if (endMin > 0)
+                        {
+                            var nextDay = (byte)((day + 1) % 7);
+                            derived.Add(new MachineWorkWindowDto(0, machineId, nextDay, 0, endMin));
+                        }
+                    }
+                }
+            }
+        }
+
+        if (derived.Count > 0) return derived;
+
+        // Legacy fallback — senaryoda hiç atama yoksa (veya hiç senaryo yoksa) eski takvim çalışmaya devam eder.
+        return await ListLegacyWorkWindowsAsync(conn, companyId, ct);
+    }
+
+    private async Task<IReadOnlyList<MachineWorkWindowDto>> ListLegacyWorkWindowsAsync(SqlConnection conn, int companyId, CancellationToken ct)
+    {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT w.[Id], w.[MachineId], w.[DayOfWeek], w.[StartMinute], w.[EndMinute]

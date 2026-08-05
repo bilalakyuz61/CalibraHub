@@ -440,10 +440,10 @@ body.app-theme-dark .wf-guide-list-table td {
   margin-top: 1px;
 }
 .wf-toast-body { flex: 1; min-width: 0; }
-.wf-toast-title { font-weight: 600; color: rgba(255,255,255,0.95); }
+.wf-toast-title { font-weight: 600; color: #0f172a; }
 .wf-toast-detail {
   font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  color: #64748b;
   margin-top: 2px;
   word-break: break-word;
 }
@@ -451,13 +451,13 @@ body.app-theme-dark .wf-guide-list-table td {
   flex-shrink: 0;
   background: transparent;
   border: none;
-  color: rgba(255,255,255,0.45);
+  color: #94a3b8;
   cursor: pointer;
   padding: 0 4px;
   font-size: 16px;
   line-height: 1;
 }
-.wf-toast-close:hover { color: rgba(255,255,255,0.85); }
+.wf-toast-close:hover { color: #1e293b; }
 .wf-toast.is-leaving { animation: wf-toast-out 0.18s ease-in forwards; }
 @keyframes wf-toast-in {
   from { opacity: 0; transform: translateX(20px); }
@@ -467,14 +467,18 @@ body.app-theme-dark .wf-guide-list-table td {
   to { opacity: 0; transform: translateX(20px); }
 }
 
-/* Light tema */
-body.app-theme-light .wf-toast {
-  background: #ffffff;
-  color: #1e293b;
-  border-color: rgba(239,68,68,0.4);
+/* Dark tema (CLAUDE.md: light default, body.app-theme-dark override) —
+   .wf-toast-close daha once hicbir temada override edilmiyordu; near-white
+   renk acik temada beyaz toast zemininde gorunmez kaliyordu (fix). */
+body.app-theme-dark .wf-toast {
+  background: rgba(15, 18, 28, 0.96);
+  color: rgba(255,255,255,0.92);
+  border-color: rgba(239,68,68,0.45);
 }
-body.app-theme-light .wf-toast-title { color: #0f172a; }
-body.app-theme-light .wf-toast-detail { color: #64748b; }
+body.app-theme-dark .wf-toast-title { color: rgba(255,255,255,0.95); }
+body.app-theme-dark .wf-toast-detail { color: rgba(255,255,255,0.6); }
+body.app-theme-dark .wf-toast-close { color: rgba(255,255,255,0.45); }
+body.app-theme-dark .wf-toast-close:hover { color: rgba(255,255,255,0.85); }
 
 /* Sayisal — saga hizali, spinner yok */
 .wf-input[type="number"],
@@ -509,15 +513,15 @@ body.app-theme-light .wf-toast-detail { color: #64748b; }
 .mce-select option,
 .sqe-select option,
 .ca-select option {
-  background: #0d1117;
-  color: rgba(255,255,255,0.85);
-}
-body.app-theme-light .wf-select option,
-body.app-theme-light .mce-select option,
-body.app-theme-light .sqe-select option,
-body.app-theme-light .ca-select option {
   background: #ffffff;
   color: #1e293b;
+}
+body.app-theme-dark .wf-select option,
+body.app-theme-dark .mce-select option,
+body.app-theme-dark .sqe-select option,
+body.app-theme-dark .ca-select option {
+  background: #0d1117;
+  color: rgba(255,255,255,0.85);
 }
 
 
@@ -704,16 +708,16 @@ body.app-theme-dark .wf-grid { color-scheme: dark; }
 .wf-multicheck-item, .mce-multicheck-item, .sqe-multicheck-item, .ca-multicheck-item {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 10px; border-radius: 6px; cursor: pointer;
-  font-size: 0.8rem; color: rgba(255,255,255,0.65);
-  background: rgba(255,255,255,0.04);
+  font-size: 0.8rem; color: #475569;
+  background: #fff;
   border: 1px solid var(--wf-border);
   transition: all 0.12s; user-select: none;
 }
-body.app-theme-light .wf-multicheck-item,
-body.app-theme-light .mce-multicheck-item,
-body.app-theme-light .sqe-multicheck-item,
-body.app-theme-light .ca-multicheck-item {
-  color: #475569; background: #fff; border-color: #e2e8f0;
+body.app-theme-dark .wf-multicheck-item,
+body.app-theme-dark .mce-multicheck-item,
+body.app-theme-dark .sqe-multicheck-item,
+body.app-theme-dark .ca-multicheck-item {
+  color: rgba(255,255,255,0.65); background: rgba(255,255,255,0.04); border-color: var(--wf-border);
 }
 .wf-multicheck-item:hover,  .mce-multicheck-item:hover,
 .sqe-multicheck-item:hover, .ca-multicheck-item:hover {
@@ -722,17 +726,17 @@ body.app-theme-light .ca-multicheck-item {
 }
 .wf-multicheck-item.is-checked,  .mce-multicheck-item.is-checked,
 .sqe-multicheck-item.is-checked, .ca-multicheck-item.is-checked {
-  background: rgba(99,102,241,0.12);
-  border-color: rgba(99,102,241,0.35);
-  color: #a5b4fc;
-}
-body.app-theme-light .wf-multicheck-item.is-checked,
-body.app-theme-light .mce-multicheck-item.is-checked,
-body.app-theme-light .sqe-multicheck-item.is-checked,
-body.app-theme-light .ca-multicheck-item.is-checked {
   background: rgba(99,102,241,0.08);
   border-color: rgba(99,102,241,0.3);
   color: #4f46e5;
+}
+body.app-theme-dark .wf-multicheck-item.is-checked,
+body.app-theme-dark .mce-multicheck-item.is-checked,
+body.app-theme-dark .sqe-multicheck-item.is-checked,
+body.app-theme-dark .ca-multicheck-item.is-checked {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.35);
+  color: #a5b4fc;
 }
 .wf-multicheck-item input[type="checkbox"],
 .mce-multicheck-item input[type="checkbox"],
@@ -742,13 +746,13 @@ body.app-theme-light .ca-multicheck-item.is-checked {
 }
 .wf-multicheck-empty,  .mce-multicheck-empty,
 .sqe-multicheck-empty, .ca-multicheck-empty {
-  font-size: 0.76rem; color: rgba(255,255,255,0.5);
+  font-size: 0.76rem; color: #94a3b8;
   font-style: italic; padding: 4px;
 }
-body.app-theme-light .wf-multicheck-empty,
-body.app-theme-light .mce-multicheck-empty,
-body.app-theme-light .sqe-multicheck-empty,
-body.app-theme-light .ca-multicheck-empty { color: #94a3b8; }
+body.app-theme-dark .wf-multicheck-empty,
+body.app-theme-dark .mce-multicheck-empty,
+body.app-theme-dark .sqe-multicheck-empty,
+body.app-theme-dark .ca-multicheck-empty { color: rgba(255,255,255,0.5); }
 
 
 /* ═══════════════════════════════════════════════════
@@ -770,9 +774,9 @@ body.app-theme-light .ca-multicheck-empty { color: #94a3b8; }
   gap: 6px; padding: 0 14px; min-height: 34px;
   border-radius: var(--wf-radius);
   font-size: 0.78rem; font-weight: 600;
-  color: #c4b5fd; text-decoration: none;
-  background: rgba(139, 92, 246, 0.14);
-  border: 1px solid rgba(139, 92, 246, 0.45);
+  color: #6d28d9; text-decoration: none;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.4);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transition: all 0.18s ease; cursor: pointer; flex-shrink: 0;
@@ -781,9 +785,8 @@ body.app-theme-light .ca-multicheck-empty { color: #94a3b8; }
 .mce-link-btn:hover:not(.is-disabled),
 .sqe-link-btn:hover:not(.is-disabled),
 .ca-link-btn:hover:not(.is-disabled) {
-  background: rgba(139, 92, 246, 0.25);
-  border-color: rgba(139, 92, 246, 0.65);
-  color: #e9d5ff; transform: translateY(-1px);
+  background: rgba(139, 92, 246, 0.22);
+  color: #5b21b6; transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
 }
 .wf-link-btn.is-disabled,
@@ -792,20 +795,21 @@ body.app-theme-light .ca-multicheck-empty { color: #94a3b8; }
 .ca-link-btn.is-disabled {
   opacity: 0.35; cursor: not-allowed; pointer-events: none;
 }
-body.app-theme-light .wf-link-btn,
-body.app-theme-light .mce-link-btn,
-body.app-theme-light .sqe-link-btn,
-body.app-theme-light .ca-link-btn {
-  color: #6d28d9;
-  background: rgba(139, 92, 246, 0.12);
-  border-color: rgba(139, 92, 246, 0.4);
+body.app-theme-dark .wf-link-btn,
+body.app-theme-dark .mce-link-btn,
+body.app-theme-dark .sqe-link-btn,
+body.app-theme-dark .ca-link-btn {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.45);
 }
-body.app-theme-light .wf-link-btn:hover:not(.is-disabled),
-body.app-theme-light .mce-link-btn:hover:not(.is-disabled),
-body.app-theme-light .sqe-link-btn:hover:not(.is-disabled),
-body.app-theme-light .ca-link-btn:hover:not(.is-disabled) {
-  background: rgba(139, 92, 246, 0.22);
-  color: #5b21b6;
+body.app-theme-dark .wf-link-btn:hover:not(.is-disabled),
+body.app-theme-dark .mce-link-btn:hover:not(.is-disabled),
+body.app-theme-dark .sqe-link-btn:hover:not(.is-disabled),
+body.app-theme-dark .ca-link-btn:hover:not(.is-disabled) {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.65);
+  color: #e9d5ff;
 }
 
 
@@ -861,14 +865,14 @@ body.app-theme-light .ca-link-btn:hover:not(.is-disabled) {
 
 .wf-rule-error, .mce-rule-error, .sqe-rule-error, .ca-rule-error {
   font-size: 0.72rem;
-  color: #f87171;
+  color: #dc2626;
   margin-top: 4px;
   letter-spacing: 0.01em;
 }
-body.app-theme-light .wf-rule-error,
-body.app-theme-light .mce-rule-error,
-body.app-theme-light .sqe-rule-error,
-body.app-theme-light .ca-rule-error { color: #dc2626; }
+body.app-theme-dark .wf-rule-error,
+body.app-theme-dark .mce-rule-error,
+body.app-theme-dark .sqe-rule-error,
+body.app-theme-dark .ca-rule-error { color: #f87171; }
 
 /* ═══════════════════════════════════════════════════
    Sidetabs layout (DynamicWidgetRenderer layout="sidetabs")

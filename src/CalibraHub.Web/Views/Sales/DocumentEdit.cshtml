@@ -927,10 +927,13 @@
        kurali bu ID kuralini (specificity yuksek ama !important'siz) EZIYORDU: "Tarih" alani
        combonun tum genisligine yayilip deger ile takvim ikonu arasinda buyuk bosluk biraktiriyordu.
        #sqValidUntil ile ayni sekilde !important eklenerek 176px standardina sabitlenir. */
+    /* 2026-08-05 (kullanıcı isteği): "Tarih" alanı, altındaki [Tarih+Gün] combosuyla
+       aynı 280px alan kolonunu doldurur → sağ kenarda boşluk kalmaz; iki tarih sol
+       kenardan alt alta gelir (validite combosunda tarih artık ÖNCE geliyor). */
     #sqQuoteDate,
     #sqQuoteDate + input.calibra-date-input {
-        flex: 0 0 176px !important;
-        max-width: 176px !important;
+        flex: 0 0 280px !important;
+        max-width: 280px !important;
     }
     /* PageComment Seq 1059: "Gecerlilik/Vade/Teslim Gun/Tarih" combosu icindeki
        tarih alani (#sqValidUntil) asagidaki genel `.sqe-hcombo > input.sqe-hinput`
@@ -2756,9 +2759,11 @@
                        sadece JS calisana kadarki ilk render'da tutarli gorunsun diyedir). *@
                     <div class="sqe-hrow" data-field-key="validUntil">
                         <label class="sqe-hlabel">Teslim Gun/Tarih</label>
+                        @* 2026-08-05: Tarih ONCE, Gun SONRA — ustteki "Tarih" ile tarihler
+                           sol kenardan alt alta gelsin. *@
                         <div class="sqe-hcombo">
-                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
                             <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
+                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
                         </div>
                     </div>
                 }
@@ -2771,9 +2776,11 @@
                        JS'te yapilir (bkz. asagida); buradaki value ilk render icindir. *@
                     <div class="sqe-hrow" data-field-key="validUntil">
                         <label class="sqe-hlabel">@(isDelivery ? "Vade Gun/Tarih" : "Gecerlilik Gun/Tarih")</label>
+                        @* 2026-08-05: Tarih ONCE, Gun SONRA — ustteki "Tarih" ile tarihler
+                           sol kenardan alt alta gelsin. *@
                         <div class="sqe-hcombo">
-                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
                             <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
+                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="0" oninput="sqRecalcValidFromDays()" />
                         </div>
                     </div>
                 }

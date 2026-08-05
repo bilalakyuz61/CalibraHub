@@ -447,6 +447,9 @@ function SelectCell(props) {
 
   var valueKey = column.optionsValueKey || 'code'
   var labelKey = column.optionsLabelKey || 'name'
+  var isLight = useIsLight()
+  var optionBg = isLight ? '#ffffff' : '#0c0f1a'
+  var optionColor = isLight ? '#0f172a' : '#fff'
 
   // autoSelectFirst=true olan kolonlar (ornegin Birim): options yuklendiginde
   // ve hucre bos ise, ilk secenek (master birim) varsayilan olarak atanir.
@@ -469,13 +472,13 @@ function SelectCell(props) {
       className={props.baseInputClass + ' appearance-none cursor-pointer'}
       style={{ backgroundImage: 'none' }}
     >
-      <option value="" style={{ background: '#0c0f1a' }}>—</option>
+      <option value="" style={{ background: optionBg, color: optionColor }}>—</option>
       {options.map(function(opt, idx) {
         return (
           <option
             key={opt[valueKey] + '-' + idx}
             value={opt[valueKey]}
-            style={{ background: '#0c0f1a', color: '#fff' }}
+            style={{ background: optionBg, color: optionColor }}
           >
             {opt[labelKey] || opt[valueKey]}
           </option>
