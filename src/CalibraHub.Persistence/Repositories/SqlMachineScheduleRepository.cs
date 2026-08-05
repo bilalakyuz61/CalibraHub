@@ -233,10 +233,35 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
 
             if (request.BlockType == (byte)MachineScheduleBlockType.Production)
                 await ReanchorSetupChildAsync(conn, id, request.MachineId, request.StartUtc, userId, ct);
+            else
+                // Blok Production'dan başka bir türe (Bakım/Duruş/Hazırlık) çevrildiyse bağlı
+                // setup child anlamsızlaşır — yetim "Hazırlık" bloğu bırakmamak için soft-delete et.
+                await SoftDeleteSetupChildrenAsync(conn, id, userId, ct);
         }
 
         if (isNewProductionBlock)
             await CreateSetupChildIfNeededAsync(conn, id, request, userId, ct);
+
+        // Bağlı setup child (varsa) üretim bloğundan ÖNCEye uzanır; çakışma taraması onun erken
+        // aralığını da kapsamalı ve child'ın kendisi hariç tutulmalı (yoksa setup bloğu başka bir
+        // bloğun üstüne binse bile uyarı dönmezdi — MEDIUM review bulgusu).
+        int? childId = null;
+        var scanStart = request.StartUtc;
+        await using (var cs = conn.CreateCommand())
+        {
+            cs.CommandText = $"""
+                SELECT TOP 1 [Id], [StartUtc] FROM {T("MachineScheduleBlock")}
+                WHERE [ParentBlockId] = @Id AND [IsActive] = 1;
+                """;
+            cs.Parameters.AddWithValue("@Id", id);
+            await using var cr = await cs.ExecuteReaderAsync(ct);
+            if (await cr.ReadAsync(ct))
+            {
+                childId = cr.GetInt32(0);
+                var childStart = DateTime.SpecifyKind(cr.GetDateTime(1), DateTimeKind.Utc);
+                if (childStart < scanStart) scanStart = childStart;
+            }
+        }
 
         // Çakışma: aynı makinede zaman örtüşen DİĞER aktif bloklar. Manuel planlamada bilinçli olarak
         // engellenmez — kayıt her koşulda yapılır, çakışma yalnızca uyarı olarak döner.
@@ -249,12 +274,14 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
                 LEFT JOIN {T("WorkOrderOperation")} woo ON woo.[Id] = b.[WorkOrderOperationId]
                 LEFT JOIN {T("WorkOrder")} wo ON wo.[Id] = woo.[WorkOrderId]
                 LEFT JOIN {T("Document")} d ON d.[Id] = wo.[DocumentId]
-                WHERE b.[MachineId] = @MachineId AND b.[Id] <> @Id AND b.[IsActive] = 1
-                  AND b.[StartUtc] < @EndUtc AND b.[EndUtc] > @StartUtc;
+                WHERE b.[MachineId] = @MachineId AND b.[Id] <> @Id
+                  AND (@ChildId IS NULL OR b.[Id] <> @ChildId) AND b.[IsActive] = 1
+                  AND b.[StartUtc] < @EndUtc AND b.[EndUtc] > @ScanStart;
                 """;
             cf.Parameters.AddWithValue("@MachineId", request.MachineId);
             cf.Parameters.AddWithValue("@Id", id);
-            cf.Parameters.AddWithValue("@StartUtc", request.StartUtc);
+            cf.Parameters.Add(new SqlParameter("@ChildId", (object?)childId ?? DBNull.Value));
+            cf.Parameters.AddWithValue("@ScanStart", scanStart);
             cf.Parameters.AddWithValue("@EndUtc", request.EndUtc);
             await using var r = await cf.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
@@ -360,6 +387,21 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
         upd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
         upd.Parameters.AddWithValue("@Id", childId.Value);
         await upd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Faz 2 (2026-08-05) — bir bloğa bağlı aktif setup child'ları soft-delete eder
+    /// (blok Production dışı türe çevrildiğinde yetim "Hazırlık" bloğu kalmasın).</summary>
+    private async Task SoftDeleteSetupChildrenAsync(SqlConnection conn, int parentBlockId, int? userId, CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {T("MachineScheduleBlock")}
+            SET [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+            WHERE [ParentBlockId] = @ParentId AND [IsActive] = 1;
+            """;
+        cmd.Parameters.AddWithValue("@ParentId", parentBlockId);
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>Faz 2 (2026-08-05) — WorkOrderOperation → (OperationId, ItemId, RoutingId) bağlamı,
