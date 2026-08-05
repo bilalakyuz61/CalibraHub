@@ -15,8 +15,21 @@
  */
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { LayoutGrid, GripVertical, Eye, EyeOff, X as XIcon, RotateCcw, Tag, AlertTriangle } from 'lucide-react'
+import {
+  LayoutGrid, GripVertical, Eye, EyeOff, X as XIcon, RotateCcw, AlertTriangle,
+  Hash, FileText, Ruler, Sigma, DollarSign, Percent, Calculator, StickyNote,
+  CircleDot, Tag, Barcode, Warehouse,
+} from 'lucide-react'
 import { getTopBody } from '../../utils/topPortal'
+
+// CalibraLineItemsGrid.ICON_MAP ile ayni eslesme — onizleme kart etiketiyle
+// birebir ayni ikonu gosterir ("kalemde nasil gorunuyorsa oyle" ilkesi).
+var ICON_MAP = {
+  Hash: Hash, FileText: FileText, Ruler: Ruler, Sigma: Sigma,
+  DollarSign: DollarSign, Percent: Percent, Calculator: Calculator,
+  StickyNote: StickyNote, Tag: Tag, Barcode: Barcode, Warehouse: Warehouse,
+}
+function resolveIcon(name) { return ICON_MAP[name] || CircleDot }
 
 function readCsrfToken() {
   try {
@@ -43,6 +56,7 @@ export default function LineCardLayoutEditor(props) {
       return {
         key: it.key,
         label: it.label || it.key,
+        icon: it.icon || null,
         span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
         visible: it.visible !== false,
         locked: it.locked === true,
@@ -225,8 +239,10 @@ export default function LineCardLayoutEditor(props) {
           </button>
         </div>
 
-        {/* Body — 24 kolonlu onizleme izgarasi */}
+        {/* Body — 24 kolonlu onizleme izgarasi. Dis kabuk gercek kalem karti
+            gorunumundedir (ayni border/arka plan) — WYSIWYG onizleme. */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+          <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.025] p-3">
           <div
             ref={gridRef}
             style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))', gap: 10 }}
@@ -234,6 +250,7 @@ export default function LineCardLayoutEditor(props) {
             {items.map(function (it, idx) {
               var hiddenCls = !it.visible ? ' opacity-40' : ''
               var dragCls = dragOverIndex === idx ? ' ring-2 ring-indigo-400/70' : ''
+              var Icon = resolveIcon(it.icon)
               return (
                 <div
                   key={it.key}
@@ -242,17 +259,16 @@ export default function LineCardLayoutEditor(props) {
                   onDragOver={function (e) { handleDragOver(e, idx) }}
                   onDragEnd={handleDragEnd}
                   style={{ gridColumn: 'span ' + it.span, position: 'relative' }}
-                  className={'group select-none rounded-lg border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/[0.04] px-2 py-2 cursor-grab active:cursor-grabbing' + hiddenCls + dragCls}
+                  className={'group select-none rounded-lg px-1.5 pt-1 pb-1.5 cursor-grab active:cursor-grabbing border border-transparent hover:border-indigo-200/70 dark:hover:border-indigo-400/25' + hiddenCls + dragCls}
                 >
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <GripVertical size={12} className="text-slate-300 dark:text-white/25 flex-shrink-0" />
+                  {/* Kontrol satiri — tut/genislik/goz. Kart gorunumunu bozmasin
+                      diye kucuk; blok hover'inda belirginlesir. */}
+                  <div className="flex items-center gap-1 mb-0.5 opacity-50 group-hover:opacity-100 transition-opacity">
+                    <GripVertical size={11} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
                     {it.isWidget && (
-                      <Tag size={10} className="text-sky-500 dark:text-sky-300 flex-shrink-0" title="Özel alan (Alan Yönetimi)" />
+                      <span className="text-[8.5px] font-bold px-1 rounded bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300 flex-shrink-0" title="Özel alan (Alan Yönetimi)">EK</span>
                     )}
-                    <span className="truncate text-[11.5px] font-semibold text-slate-600 dark:text-white/70">
-                      {it.label}
-                    </span>
-                    <span className="ml-auto text-[9.5px] font-mono tabular-nums text-slate-400 dark:text-white/35 flex-shrink-0">
+                    <span className="ml-auto text-[9px] font-mono tabular-nums text-slate-400 dark:text-white/35 flex-shrink-0">
                       {it.span}/24
                     </span>
                     <button
@@ -269,6 +285,13 @@ export default function LineCardLayoutEditor(props) {
                       {it.visible ? <Eye size={11} strokeWidth={2} /> : <EyeOff size={11} strokeWidth={2} />}
                     </button>
                   </div>
+                  {/* Kartla birebir ayni etiket + hucre kutusu (canli onizleme) */}
+                  <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
+                    <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
+                    <span className="truncate">{it.label}</span>
+                    {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
+                  </div>
+                  <div className="h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
                   {/* Sag kenar resize tutamaci */}
                   <div
                     onPointerDown={function (e) { handleResizeStart(e, idx) }}
@@ -282,6 +305,7 @@ export default function LineCardLayoutEditor(props) {
                 </div>
               )
             })}
+          </div>
           </div>
 
           <div className="mt-3 text-[10.5px] text-slate-400 dark:text-white/35">

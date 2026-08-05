@@ -401,18 +401,29 @@ export default function CalibraLineItemsGrid(props) {
   })
 
   // ── Kart duzeni uygulamasi (2026-08-05) ───────────────────────────────────
-  //   Alan izgarasindaki ogeler = sistem kolonlari (cardBodyColumns) + kartta
-  //   gosterilen widget'lar. Kayitli duzen varsa: layout sirasi + span (24-kolon)
-  //   + gorunurluk uygulanir. Bilinmeyen key yok sayilir; duzende olmayan yeni
-  //   kolon varsayilan span ile SONA eklenir (additive-safe — yeni kolon gelince
-  //   duzen kirilmaz). Zorunlu/miktar kolonlari duzenle GIZLENEMEZ (veri girisi
-  //   sessizce kaybolmasin — CLAUDE.md sessiz-kirik kurali 3).
-  var allCardFieldColumns = cardBodyColumns.concat(widgetCardColumns)
+  //   Duzenlenebilir ogeler = kimlik kolonlari (materialCode/materialName) +
+  //   sistem kolonlari (cardBodyColumns) + kartta gosterilen widget'lar.
+  //   Kayitli duzen varsa: layout sirasi + span (24-kolon) + gorunurluk uygulanir
+  //   ve kimlik kolonlari da ALAN IZGARASININ icinde layout'a gore cizilir
+  //   (sabit kimlik bolgesi kalkar — 2026-08-05 kullanici istegi: "malzeme kodu
+  //   alanini dahil yonetebilmeliyim"). Duzen yokken eski gorunum aynen korunur.
+  //   Bilinmeyen key yok sayilir; duzende olmayan yeni kolon varsayilan span ile
+  //   SONA eklenir (additive-safe) — kimlik kolonlari ise BASA eklenir (en kritik
+  //   alan listenin sonuna gomulmesin). Zorunlu/miktar kolonlari duzenle
+  //   GIZLENEMEZ (veri girisi sessizce kaybolmasin — sessiz-kirik kurali 3).
+  var identityColumns = []
+  if (materialCodeCol) identityColumns.push(materialCodeCol)
+  if (materialNameCol) identityColumns.push(materialNameCol)
+  var allCardFieldColumns = identityColumns.concat(cardBodyColumns, widgetCardColumns)
   var hasCustomLayout = !!(cardLayout && cardLayout.length > 0)
   var useCustomLayout = hasCustomLayout && !gridNarrow
   var cardItems = (function () {
     if (!hasCustomLayout) {
-      return allCardFieldColumns.map(function (c) { return { col: c, span: 6, visible: true } })
+      // Varsayilan gorunum: kimlik kolonlari sabit bolgede cizilir, alan
+      // izgarasina girmez (mevcut davranis birebir korunur).
+      return cardBodyColumns.concat(widgetCardColumns).map(function (c) {
+        return { col: c, span: 6, visible: true }
+      })
     }
     var ordered = []
     var seen = {}
@@ -422,18 +433,34 @@ export default function CalibraLineItemsGrid(props) {
       if (!col) return // bilinmeyen key (kolon kaldirilmis / baska belge tipi) → yok say
       seen[it.key] = true
       var vis = it.visible !== false
-      if (col.required || col.requirePositive) vis = true
+      // materialCode config'te required tasimasa bile veri girisinin kapisidir
+      // (lookup + hasEmptyRow + guided chain) — duzenle ASLA gizlenemez.
+      if (col.required || col.requirePositive || col === materialCodeCol) vis = true
       ordered.push({
         col: col,
         span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
         visible: vis,
       })
     })
+    // Duzende olmayan kimlik kolonlari basa (materialCode once) —
+    // ters iterasyon + unshift sirayi korur.
+    for (var ii = identityColumns.length - 1; ii >= 0; ii--) {
+      var idCol = identityColumns[ii]
+      if (!seen[idCol.key]) {
+        seen[idCol.key] = true
+        ordered.unshift({ col: idCol, span: 8, visible: true })
+      }
+    }
     allCardFieldColumns.forEach(function (c) {
       if (!seen[c.key]) ordered.push({ col: c, span: 6, visible: true })
     })
     return ordered
   })()
+  // Editor her zaman TAM listeyi gorur (kimlik dahil) — duzen henuz yokken de
+  // admin malzeme kodu/adini tasiyip boyutlandirabilsin.
+  var layoutEditorItems = hasCustomLayout
+    ? cardItems
+    : identityColumns.map(function (c) { return { col: c, span: 8, visible: true } }).concat(cardItems)
 
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
@@ -1570,7 +1597,12 @@ export default function CalibraLineItemsGrid(props) {
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'auto 1fr',
-                      gridTemplateAreas: '"actions identity" "fields fields"',
+                      // Ozel duzen aktifken kimlik kolonlari alan izgarasinin ICINDE
+                      // layout'a gore cizilir — sabit kimlik bolgesi kalkar, aksiyon
+                      // seridi kendi satirinda kalir.
+                      gridTemplateAreas: useCustomLayout
+                        ? '"actions actions" "fields fields"'
+                        : '"actions identity" "fields fields"',
                       columnGap: 12, rowGap: 10, alignItems: 'start',
                     }}
                   >
@@ -1580,7 +1612,10 @@ export default function CalibraLineItemsGrid(props) {
                         Gorsel yerlesim ise CSS grid-area ile bagimsiz kontrol edilir —
                         aksiyonlar DOM'da sonda olsa da saga-usta gorunur, boylece
                         Enter tuşuyla ilerlerken Sil butonuna erken takilmaz. */}
-                    {/* ── Kart kimlik bolgesi: malzeme kodu + adi. ── */}
+                    {/* ── Kart kimlik bolgesi: malzeme kodu + adi. Ozel duzen aktifken
+                        render EDILMEZ — kimlik kolonlari alan izgarasinda layout'a
+                        gore cizilir (KIT rozetleri de oraya tasinir). ── */}
+                    {!useCustomLayout && (
                     <div style={{ gridArea: 'identity' }} className="min-w-[180px]">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {isKitComponent && (
@@ -1629,6 +1664,7 @@ export default function CalibraLineItemsGrid(props) {
                           </div>
                         )}
                       </div>
+                    )}
 
                     {/* ── Kart alan izgarasi: kalan kolonlar (miktar/birim/fiyat/iskonto/
                         kdv/toplam/seri vb.), her biri kendi etiketiyle. Sabit min-genislik
@@ -1677,12 +1713,24 @@ export default function CalibraLineItemsGrid(props) {
                             ? row.__extras[wc]
                             : ((row.__widgetValues || {})[wc])
                         }
+                        var isMaterialCodeCell = col === materialCodeCol
                         return (
                           <div key={col.key} data-cell-key={col.key} style={cellStyle}>
                             <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
+                              {/* Kit süsleri — kimlik bolgesi ozel duzende kalktigi icin
+                                  ↳ oku ve KIT rozeti malzeme kodu hucresinin etiketine tasinir. */}
+                              {isMaterialCodeCell && isKitComponent && (
+                                <span className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0" title="Kit bileseni">↳</span>
+                              )}
                               <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
                               <span className="truncate">{col.label}</span>
                               {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
+                              {isMaterialCodeCell && isKitHeader && (
+                                <span
+                                  className="inline-flex items-center rounded px-1.5 py-[2px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 select-none flex-shrink-0"
+                                  title="Kit — bilesenleri asagida listelenir"
+                                >KİT</span>
+                              )}
                             </div>
                             <div className="flex items-stretch gap-1.5">
                               <div className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]">
@@ -2084,13 +2132,14 @@ export default function CalibraLineItemsGrid(props) {
       {layoutEditorOpen && (
         <LineCardLayoutEditor
           formCode={__layoutFormCode}
-          items={cardItems.map(function (it) {
+          items={layoutEditorItems.map(function (it) {
             return {
               key: it.col.key,
               label: it.col.label,
+              icon: it.col.icon || null,
               span: it.span || 6,
               visible: it.visible !== false,
-              locked: it.col.required === true || it.col.requirePositive === true,
+              locked: it.col.required === true || it.col.requirePositive === true || it.col.key === 'materialCode',
               isWidget: it.col.__isWidget === true,
             }
           })}
