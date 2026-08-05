@@ -13,8 +13,6 @@ import kotlinx.cinterop.useContents
 import kotlinx.cinterop.value
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
-import platform.AVFoundation.AVAuthorizationStatusAuthorized
-import platform.AVFoundation.AVAuthorizationStatusNotDetermined
 import platform.AVFoundation.AVCaptureConnection
 import platform.AVFoundation.AVCaptureDevice
 import platform.AVFoundation.AVCaptureDeviceInput
@@ -91,31 +89,21 @@ actual class BarcodeScanner internal constructor() {
             return@suspendCancellableCoroutine
         }
 
-        fun presentScanner() {
-            var scannerVc: BarcodeScannerViewController? = null
-            scannerVc = BarcodeScannerViewController { result ->
-                if (cont.isActive) cont.resume(result)
-            }
-            scannerVc.modalPresentationStyle = UIModalPresentationFullScreen
-            presenter.presentViewController(scannerVc, animated = true, completion = null)
-            cont.invokeOnCancellation {
-                dispatch_async(dispatch_get_main_queue()) {
-                    scannerVc?.dismissViewControllerAnimated(true, completion = null)
-                }
-            }
+        // Kamera izni AYRICA kontrol edilmez: NSCameraUsageDescription (Info.plist) mevcut
+        // oldugundan, AVCaptureSession ilk kez baslatildiginda iOS izin dialogunu OTOMATIK
+        // gosterir. Izin reddedilirse onizleme siyah kalir; kullanici "Kapat" ile null doner.
+        // (Explicit authorizationStatusForMediaType/requestAccessForMediaType K/N binding'i bu
+        // SDK surumunde cozulmedi -> implicit izin yoluna gecildi; Faz 3 sadeligi.)
+        var scannerVc: BarcodeScannerViewController? = null
+        scannerVc = BarcodeScannerViewController { result ->
+            if (cont.isActive) cont.resume(result)
         }
-
-        when (AVCaptureDevice.authorizationStatusForMediaType(AVMediaTypeVideo)) {
-            AVAuthorizationStatusAuthorized -> presentScanner()
-            AVAuthorizationStatusNotDetermined -> {
-                AVCaptureDevice.requestAccessForMediaType(AVMediaTypeVideo) { granted ->
-                    dispatch_async(dispatch_get_main_queue()) {
-                        if (granted) presentScanner() else cont.resume(null)
-                    }
-                }
+        scannerVc.modalPresentationStyle = UIModalPresentationFullScreen
+        presenter.presentViewController(scannerVc, animated = true, completion = null)
+        cont.invokeOnCancellation {
+            dispatch_async(dispatch_get_main_queue()) {
+                scannerVc?.dismissViewControllerAnimated(true, completion = null)
             }
-            // Denied / Restricted (veya bilinmeyen bir gelecek deger).
-            else -> cont.resume(null)
         }
     }
 }
