@@ -804,6 +804,8 @@ END;";
             await EnsureFormsTableAsync(connection, cancellationToken);
             await SeedFormsAsync(connection, cancellationToken);
             await EnsureWidgetEavTablesAsync(connection, cancellationToken);
+            // 2026-08-05 — Kalem kartı düzeni (konum/boyut) tablosu.
+            await EnsureLineCardLayoutTableAsync(connection, cancellationToken);
             // 2026-06-12 — Veri Görünürlük Kuralları (satır bazlı güvenlik) tabloları.
             // Widget'lardan sonra: widget alanı kuralları WidgetMas.Id'ye referans verebilir.
             await EnsureDataVisibilityTablesAsync(connection, cancellationToken);
@@ -13638,6 +13640,17 @@ END;";
                         CONSTRAINT [df_WidgetMas_PermCtl] DEFAULT(0);
             END;
 
+            -- 2026-08-05 — ShowOnCard: kalem (satir) form kodlarina bagli widget'in
+            -- belge kalem KARTI uzerinde inline gosterilip gosterilmeyecegi.
+            -- Ust-bilgi formlarinda anlamsiz; yalnizca *_LINES formlarinda UI sunar.
+            IF OBJECT_ID(N'[{s}].[WidgetMas]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[WidgetMas]', N'ShowOnCard') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[WidgetMas]
+                    ADD [ShowOnCard] BIT NOT NULL
+                        CONSTRAINT [df_WidgetMas_ShowOnCard] DEFAULT(0);
+            END;
+
             -- Unique index guncelle: eski (FormId, WidgetCode) → yeni (CompanyId, FormId, WidgetCode)
             -- Sadece eski indeks varsa ve CompanyId henuz dahil edilmemisse yeniden olustur.
             IF EXISTS (
@@ -13689,6 +13702,53 @@ END;";
             indexCmd.CommandText = indexSql;
             await indexCmd.ExecuteNonQueryAsync(cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// LineCardLayout — belge kalem KARTI duzen tanimi (2026-08-05).
+    /// Form bazli (kalem form kodu, orn. SALES_QUOTE_LINES) tek aktif duzen;
+    /// admin tasarlar, tum kullanicilar ayni karti gorur.
+    /// LayoutJson: {"items":[{"key":"quantity","span":6,"order":3,"visible":true}, ...]}
+    /// key = sistem kolonu key'i veya "w_{WidgetCode}" (kartta gosterilen widget).
+    /// Bilinmeyen key'ler runtime'da yok sayilir; eksik key'ler varsayilanla eklenir
+    /// (yeni kolon/widget geldiginde duzen kirilmaz — additive-safe).
+    /// Idempotent: OBJECT_ID guard.
+    /// </summary>
+    private async Task EnsureLineCardLayoutTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[LineCardLayout]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[LineCardLayout]
+                (
+                    [Id]          INT            NOT NULL IDENTITY(1,1) CONSTRAINT [PK_LineCardLayout] PRIMARY KEY,
+                    [FormCode]    NVARCHAR(50)   NOT NULL,
+                    [LayoutJson]  NVARCHAR(MAX)  NOT NULL,
+                    [IsActive]    BIT            NOT NULL CONSTRAINT [DF_LineCardLayout_IsActive] DEFAULT 1,
+                    [CreatedById] INT            NULL,
+                    [CreatedBy]   NVARCHAR(120)  NULL,
+                    [Created]     DATETIME       NOT NULL CONSTRAINT [DF_LineCardLayout_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById] INT            NULL,
+                    [UpdatedBy]   NVARCHAR(120)  NULL,
+                    [Updated]     DATETIME       NULL
+                );
+            END;
+
+            IF OBJECT_ID(N'[{s}].[LineCardLayout]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N'[{s}].[LineCardLayout]')
+                                 AND name = N'UX_LineCardLayout_FormCode')
+            BEGIN
+                EXEC sp_executesql N'
+                    CREATE UNIQUE INDEX [UX_LineCardLayout_FormCode]
+                        ON [{s}].[LineCardLayout]([FormCode])
+                        WHERE [IsActive] = 1;';
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

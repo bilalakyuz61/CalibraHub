@@ -45,7 +45,10 @@ public sealed record WidgetDefinitionDto(
     // 2026-06-08 — Yetkilendirilebilir alan flag'i. Admin UI'da "Yetkilendirilebilir" switch'i
     // bunu set eder; discovery FIELD:<WidgetCode> izni seed eder. Form render zamanında
     // yetkisiz kullanıcı için alan filtrelenir.
-    bool IsPermissionControlled = false);
+    bool IsPermissionControlled = false,
+    // 2026-08-05 — Kalem form kodlarinda (SALES_QUOTE_LINES vb.) widget'in belge kalem
+    // KARTI uzerinde inline gosterilip gosterilmeyecegi. Ust-bilgi formlarinda anlamsiz.
+    bool ShowOnCard = false);
 
 /// <summary>
 /// Faz G — Kural ve formul motoru payload'i. Tum alanlar opsiyonel string ifade.
@@ -242,7 +245,9 @@ public sealed record UpsertWidgetRequest(
     string? EntityColumn = null,
     // 2026-06-08 — Yetkilendirilebilir alan flag'i. true ise discovery FIELD:<WidgetCode>
     // izni seed eder; izin verilmemiş kullanıcılar form render'da alanı görmez.
-    bool IsPermissionControlled = false);
+    bool IsPermissionControlled = false,
+    // 2026-08-05 — Kalem kartinda inline goster (yalnizca *_LINES formlarinda anlamli).
+    bool ShowOnCard = false);
 
 public sealed record UpsertWidgetResponse(int Id);
 
@@ -314,7 +319,9 @@ public sealed record WidgetPackageItemDto(
     string? ColorValue,
     int ColSpan,
     string? LabelStyle,
-    bool IsPermissionControlled);
+    bool IsPermissionControlled,
+    // 2026-08-05 — Kalem kartinda inline goster. Eski paketlerde alan yoksa false okunur.
+    bool ShowOnCard = false);
 
 /// <summary>
 /// Import sonucu — kac widget olustu/guncellendi, hangileri neden atlandi.

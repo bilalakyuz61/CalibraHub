@@ -191,7 +191,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],
                    [MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],[SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],
-                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn]{permCol},[CreatedAt],[UpdatedAt]
+                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn],[ShowOnCard]{permCol},[CreatedAt],[UpdatedAt]
             FROM {_widgetMasTable}
             WHERE [FormId] = @FormId
               AND (@IncludeInactive = 1 OR [IsActive] = 1)
@@ -217,7 +217,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         cmd.CommandText = $"""
             SELECT TOP (1) [Id],[CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],
                    [MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],[SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],
-                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn]{permCol},[CreatedAt],[UpdatedAt]
+                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn],[ShowOnCard]{permCol},[CreatedAt],[UpdatedAt]
             FROM {_widgetMasTable}
             WHERE [Id] = @Id
               AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
@@ -266,7 +266,8 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                     [ColSpan]      = @ColSpan,
                     [LabelStyle]   = @LabelStyle,
                     [IsSystemField] = @IsSystemField,
-                    [EntityColumn]  = @EntityColumn{permSetClause},
+                    [EntityColumn]  = @EntityColumn,
+                    [ShowOnCard]    = @ShowOnCard{permSetClause},
                     [UpdatedAt]    = @UpdatedAt
                 WHERE [Id] = @Id
                   AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
@@ -283,11 +284,11 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         ins.CommandText = $"""
             INSERT INTO {_widgetMasTable}
                 ([CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],[MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],
-                 [SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],[ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn]{permInsCol},[CreatedAt],[UpdatedAt])
+                 [SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],[ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn],[ShowOnCard]{permInsCol},[CreatedAt],[UpdatedAt])
             OUTPUT INSERTED.[Id]
             VALUES
                 (@CompanyId, @FormId, @ParentId, @WidgetCode, @Label, @DataType, @MaxLength, @MinLength, @ExpectedLength, @MinValue, @MaxValue,
-                 @SortOrder, @OptionsJson, @RulesJson, @IsPlainField, @IsRequired, @IsActive, @ColorType, @ColorValue, @ColSpan, @LabelStyle, @IsSystemField, @EntityColumn{permInsVal}, @CreatedAt, @UpdatedAt);
+                 @SortOrder, @OptionsJson, @RulesJson, @IsPlainField, @IsRequired, @IsActive, @ColorType, @ColorValue, @ColSpan, @LabelStyle, @IsSystemField, @EntityColumn, @ShowOnCard{permInsVal}, @CreatedAt, @UpdatedAt);
             """;
         BindWidgetParams(ins, widget, hasPerm);
         ins.Parameters.Add(new SqlParameter("@CompanyId", companyId));

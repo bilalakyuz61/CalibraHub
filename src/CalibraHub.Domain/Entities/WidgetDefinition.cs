@@ -100,6 +100,13 @@ public sealed class WidgetDefinition
     /// </summary>
     public bool IsPermissionControlled { get; init; } = false;
 
+    /// <summary>
+    /// 2026-08-05 — Kalem (satir) form kodlarina bagli widget'in belge kalem KARTI
+    /// uzerinde inline gosterilip gosterilmeyecegi. Yalnizca *_LINES formlarinda
+    /// anlamli; ust-bilgi formlarinda UI bu secenegi sunmaz.
+    /// </summary>
+    public bool ShowOnCard { get; init; } = false;
+
     public DateTime CreatedAt { get; init; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }
