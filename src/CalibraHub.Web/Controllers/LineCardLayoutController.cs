@@ -32,11 +32,16 @@ public sealed partial class LineCardLayoutController : Controller
     private static readonly JsonSerializerOptions StoreJson = new(JsonSerializerDefaults.Web);
 
     private readonly ILineCardLayoutRepository _repository;
+    private readonly CalibraHub.Application.Abstractions.Services.IWidgetService _widgetService;
     private readonly IAuditTrailService? _audit;
 
-    public LineCardLayoutController(ILineCardLayoutRepository repository, IAuditTrailService? audit = null)
+    public LineCardLayoutController(
+        ILineCardLayoutRepository repository,
+        CalibraHub.Application.Abstractions.Services.IWidgetService widgetService,
+        IAuditTrailService? audit = null)
     {
         _repository = repository;
+        _widgetService = widgetService;
         _audit = audit;
     }
 
@@ -76,6 +81,110 @@ public sealed partial class LineCardLayoutController : Controller
         }
         return Json(new { ok = true, formCode = formCode.Trim(), items, canEdit = IsAdmin() });
     }
+
+    /// <summary>
+    /// Alan katalogu + mevcut duzen (2026-08-05) — Alan Yönetimi ekranindaki
+    /// "Kart Düzeni" editörünün self-load kaynagi. Belge grid config'i olmadan
+    /// duzenlenebilir ogelerin tam listesini dondurur:
+    ///   sistem kolonlari (SalesController.BuildDocumentLineGridConfig ile SENKRON
+    ///   tutulmasi gereken iskelet — yeni layoutlanabilir kolon eklenirse buraya da
+    ///   ekle) + ShowOnCard=1 inline-uyumlu widget'lar, kayitli duzenle merge edilmis.
+    /// </summary>
+    [HttpGet("/api/line-card-layout/{formCode}/fields")]
+    public async Task<IActionResult> GetFields(string formCode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(formCode) || !FormCodeRegex().IsMatch(formCode.Trim()))
+            return Json(new { ok = false, error = "Geçersiz form kodu." });
+        formCode = formCode.Trim();
+
+        var docType = Models.Sales.DocumentTypeFormMap.FindDocTypeByLinesFormCode(formCode);
+        if (docType is null)
+            return Json(new { ok = false, error = "Bu form için kart düzeni desteklenmiyor (yalnızca ticari belge kalemleri)." });
+
+        var hidePricing = string.Equals(docType, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+
+        // Layoutlanabilir sistem kolonlari — tlMirror/aksiyon/row-below kolonlari
+        // kart alan izgarasina girmez, burada da yer almaz.
+        var catalog = new List<FieldCatalogItem>
+        {
+            new("materialCode", "Malzeme Kodu", "Hash", true,  false),
+            new("materialName", "Malzeme Adi",  "FileText", false, false),
+            new("unitId",       "Birim",        "Ruler", false, false),
+            new("quantity",     "Miktar",       "Sigma", true,  false),
+        };
+        if (!hidePricing)
+        {
+            catalog.Add(new("unitPrice",    "Birim Fiyat",   "DollarSign", false, false));
+            catalog.Add(new("discountRate", "Iskonto %",     "Percent",    false, false));
+            catalog.Add(new("taxRate",      "KDV %",         "Percent",    false, false));
+            catalog.Add(new("lineTotal",    "Satir Toplami", "Calculator", false, false));
+        }
+
+        // ShowOnCard widget'lari (inline-uyumlu tipler — CalibraLineItemsGrid ile ayni set)
+        var schema = await _widgetService.GetFormSchemaByCodeAsync(formCode, ct);
+        if (schema?.Widgets is not null)
+        {
+            string[] inlineTypes = ["text", "numeric", "date", "dropdown"];
+            foreach (var w in schema.Widgets)
+            {
+                if (!w.ShowOnCard || !w.IsActive) continue;
+                if (!inlineTypes.Contains((w.DataType ?? "").Trim().ToLowerInvariant())) continue;
+                catalog.Add(new("w_" + w.WidgetCode, w.Label, "Tag", w.IsRequired, true));
+            }
+        }
+
+        // Kayitli duzenle merge — grid'in cardItems mantigiyla ayni: layout sirasi,
+        // bilinmeyen key yok say, eksik kimlik kolonlari basa, digerleri sona.
+        var layout = await _repository.GetActiveAsync(formCode, ct);
+        List<LayoutItemDto>? saved = null;
+        if (layout is not null)
+        {
+            try { saved = JsonSerializer.Deserialize<List<LayoutItemDto>>(layout.LayoutJson, StoreJson); }
+            catch (JsonException) { saved = null; }
+        }
+
+        var ordered = new List<object>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        object ToItem(FieldCatalogItem c, LayoutItemDto? li, int defaultSpan) => new
+        {
+            key = c.Key,
+            label = c.Label,
+            icon = c.Icon,
+            locked = c.Locked,
+            isWidget = c.IsWidget,
+            span = li is not null && li.Span is >= 1 and <= 24 ? li.Span : defaultSpan,
+            visible = c.Locked || li is null || li.Visible,
+            labelText = li?.Label ?? "",
+            labelSize = li?.LabelSize,
+            labelWeight = li?.LabelWeight,
+            labelColor = li?.LabelColor,
+        };
+        if (saved is not null)
+        {
+            foreach (var li in saved)
+            {
+                var cat = catalog.FirstOrDefault(c => string.Equals(c.Key, li.Key, StringComparison.OrdinalIgnoreCase));
+                if (cat is null || !seen.Add(cat.Key)) continue;
+                ordered.Add(ToItem(cat, li, 6));
+            }
+        }
+        // Eksik kimlik kolonlari basa (materialCode once), digerleri sona
+        var missingIdentity = catalog
+            .Where(c => (c.Key == "materialCode" || c.Key == "materialName") && !seen.Contains(c.Key))
+            .ToList();
+        for (var i = missingIdentity.Count - 1; i >= 0; i--)
+        {
+            seen.Add(missingIdentity[i].Key);
+            ordered.Insert(0, ToItem(missingIdentity[i], null, 8));
+        }
+        foreach (var c in catalog)
+            if (seen.Add(c.Key))
+                ordered.Add(ToItem(c, null, 6));
+
+        return Json(new { ok = true, formCode, canEdit = IsAdmin(), hasCustomLayout = saved is { Count: > 0 }, items = ordered });
+    }
+
+    private sealed record FieldCatalogItem(string Key, string Label, string Icon, bool Locked, bool IsWidget);
 
     [HttpPost("/api/line-card-layout/save")]
     [ValidateAntiForgeryToken]

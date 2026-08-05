@@ -17,10 +17,11 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus, Download, Upload } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus, Download, Upload, LayoutGrid } from 'lucide-react'
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 import WidgetBuilderForm from './WidgetBuilderForm'
 import WidgetRegistryList from './WidgetRegistryList'
+import LineCardLayoutEditor from '../CalibraLineItemsGrid/LineCardLayoutEditor'
 import AdminMiniModal from './AdminMiniModal'
 import GroupModal from './GroupModal'
 import { buildEntitiesFromForms, findEntityByFormCodeInForms, getDefaultFormCode } from './entityRegistry'
@@ -910,6 +911,21 @@ export default function AdminWidgetRegistryPanel(props) {
               </button>
             )}
           </div>
+
+          {/* Kart Düzeni (2026-08-05) — yalnizca kalem (*_LINES) formlarinda.
+              Editor autoLoad ile alan katalogunu + mevcut duzeni kendisi ceker;
+              belge ekranindaki "Kart Düzeni" butonuyla AYNI editordur. */}
+          {/_LINES$/i.test(currentFormCode || '') && (
+            <button
+              type="button"
+              onClick={function() { setCardLayoutOpen(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-[11px] font-semibold text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-all flex-shrink-0"
+              title="Kart Düzeni — kalem kartındaki alanların konum, genişlik ve başlıklarını düzenle (tüm kullanıcılar için geçerli)"
+            >
+              <LayoutGrid size={13} strokeWidth={2} />
+              Kart Düzeni
+            </button>
+          )}
 
           {/* Tanim transport — dışa/içe aktar */}
           <input

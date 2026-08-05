@@ -13,7 +13,7 @@
  * Kaydedilen duzen additive-safe'tir: duzende olmayan yeni kolonlar runtime'da
  * varsayilan genislikle sona eklenir (CalibraLineItemsGrid.cardItems).
  */
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   LayoutGrid, GripVertical, Eye, EyeOff, X as XIcon, RotateCcw, AlertTriangle,
@@ -61,35 +61,63 @@ function readCsrfToken() {
   }
 }
 
+function normalizeEditorItems(arr) {
+  return (arr || []).map(function (it) {
+    return {
+      key: it.key,
+      label: it.label || it.key,
+      icon: it.icon || null,
+      span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
+      visible: it.visible !== false,
+      locked: it.locked === true,
+      isWidget: it.isWidget === true,
+      // Baslik override'lari — bos/null = varsayilan
+      labelText: typeof it.labelText === 'string' ? it.labelText : '',
+      labelSize: it.labelSize || null,
+      labelWeight: it.labelWeight || null,
+      labelColor: LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
+    }
+  })
+}
+
 export default function LineCardLayoutEditor(props) {
   var formCode = props.formCode
   var onClose = props.onClose
   var onSaved = props.onSaved
   var onReset = props.onReset
-  var hasCustomLayout = props.hasCustomLayout === true
+  // autoLoad: items prop'suz kullanim (Alan Yönetimi) — katalog + mevcut duzen
+  // /api/line-card-layout/{formCode}/fields endpoint'inden cekilir.
+  var autoLoad = props.autoLoad === true
 
   // Calisma kopyasi — Kaydet'e basilana kadar grid'e dokunulmaz.
   var [items, setItems] = useState(function () {
-    return (props.items || []).map(function (it) {
-      return {
-        key: it.key,
-        label: it.label || it.key,
-        icon: it.icon || null,
-        span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
-        visible: it.visible !== false,
-        locked: it.locked === true,
-        isWidget: it.isWidget === true,
-        // Baslik override'lari — bos/null = varsayilan
-        labelText: typeof it.labelText === 'string' ? it.labelText : '',
-        labelSize: it.labelSize || null,
-        labelWeight: it.labelWeight || null,
-        labelColor: LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
-      }
-    })
+    return autoLoad ? [] : normalizeEditorItems(props.items)
   })
+  var [hasCustomLayout, setHasCustomLayout] = useState(props.hasCustomLayout === true)
+  var [loading, setLoading] = useState(autoLoad)
   var [saving, setSaving] = useState(false)
   var [error, setError] = useState(null)
   var [confirmReset, setConfirmReset] = useState(false)
+
+  useEffect(function () {
+    if (!autoLoad) return undefined
+    var alive = true
+    fetch('/api/line-card-layout/' + encodeURIComponent(formCode) + '/fields', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!alive) return
+        if (!data || data.ok !== true) {
+          setError((data && data.error) || 'Alan kataloğu yüklenemedi.')
+          return
+        }
+        setItems(normalizeEditorItems(data.items))
+        setHasCustomLayout(data.hasCustomLayout === true)
+      })
+      .catch(function (e) { if (alive) setError('Hata: ' + (e && e.message ? e.message : String(e))) })
+      .then(function () { if (alive) setLoading(false) })
+    return function () { alive = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoad, formCode])
   // Secili alan (baslik metni/stili paneli icin) — key ile izlenir ki
   // surukle-birak sonrasi secim kaybolmasin.
   var [selectedKey, setSelectedKey] = useState(null)
@@ -282,6 +310,12 @@ export default function LineCardLayoutEditor(props) {
         {/* Body — 24 kolonlu onizleme izgarasi. Dis kabuk gercek kalem karti
             gorunumundedir (ayni border/arka plan) — WYSIWYG onizleme. */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+          {loading && (
+            <div className="py-10 text-center text-[12px] text-slate-400 dark:text-white/35">
+              Alanlar yükleniyor…
+            </div>
+          )}
+          {!loading && (
           <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.025] p-3">
           <div
             ref={gridRef}
@@ -355,6 +389,7 @@ export default function LineCardLayoutEditor(props) {
             })}
           </div>
           </div>
+          )}
 
           {/* Secili Alan paneli — baslik metni + stil override'lari (2026-08-05) */}
           {(function () {

@@ -48,4 +48,19 @@ public static class DocumentTypeFormMap
     /// <summary>true ise belge satin alma tarafindan (alis_*).</summary>
     public static bool IsPurchase(string? documentTypeCode)
         => (documentTypeCode ?? "").StartsWith("alis_", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Ters cozumleme: kalem (Lines) form kodundan belge tipi kodu (2026-08-05,
+    /// kart duzeni alan katalogu icin). Eslesme yoksa null — fallback YOK,
+    /// cagiran taraf "desteklenmiyor" davranisini kendisi verir.
+    /// </summary>
+    public static string? FindDocTypeByLinesFormCode(string? linesFormCode)
+    {
+        var code = (linesFormCode ?? "").Trim();
+        if (code.Length == 0) return null;
+        foreach (var kv in _map)
+            if (string.Equals(kv.Value.Lines, code, StringComparison.OrdinalIgnoreCase))
+                return kv.Key;
+        return null;
+    }
 }
