@@ -790,6 +790,8 @@
             if (isNaN(dur) || dur < 0) { oeMtSetFormErr('Süre geçerli bir sayı olmalıdır.'); return; }
             var setupDur = parseFloat(document.getElementById('oeMtSetup').value);
             if (isNaN(setupDur) || setupDur < 0) { oeMtSetFormErr('Hazırlık süresi geçerli bir sayı olmalıdır.'); return; }
+            var reqOps = parseInt(document.getElementById('oeMtReqOps').value, 10);
+            if (!reqOps || reqOps < 1) { oeMtSetFormErr('Gerekli operatör en az 1 olmalıdır.'); return; }
 
             var rowId = parseInt(document.getElementById('oeMtFRowId').value, 10) || 0;
             var payload = {
@@ -798,6 +800,7 @@
                 itemId: itemId, itemGroupId: itemGroupId, unitId: unitId,
                 quantity: qty, durationPerUnit: dur, setupDuration: setupDur,
                 durationUnit: parseInt(document.getElementById('oeMtDurUnit').value, 10) || 1,
+                requiredOperators: reqOps,
                 isActive: document.getElementById('oeMtActive').checked,
             };
 
@@ -825,7 +828,7 @@
                 machineId: row.machineId, machineGroupId: row.machineGroupId,
                 itemId: row.itemId, itemGroupId: row.itemGroupId, unitId: row.unitId,
                 quantity: row.quantity, durationPerUnit: row.durationPerUnit, setupDuration: row.setupDuration || 0,
-                durationUnit: row.durationUnit, isActive: !row.isActive,
+                durationUnit: row.durationUnit, requiredOperators: row.requiredOperators || 1, isActive: !row.isActive,
             };
             fetch('/Production/SaveOperationMachineTime', {
                 method: 'POST',
