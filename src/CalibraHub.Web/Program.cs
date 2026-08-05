@@ -580,6 +580,10 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.INumerat
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILineCardLayoutRepository,
     CalibraHub.Persistence.Repositories.SqlLineCardLayoutRepository>();
 
+// Form Davranis Katmani — standart alan davranislari (2026-08-05)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IFormFieldBehaviorRepository,
+    CalibraHub.Persistence.Repositories.SqlFormFieldBehaviorRepository>();
+
 // Ondalik ayarlari (form bazinda hane hassasiyeti — 2026-07-05)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDecimalSettingRepository,
     CalibraHub.Persistence.Repositories.SqlDecimalSettingRepository>();

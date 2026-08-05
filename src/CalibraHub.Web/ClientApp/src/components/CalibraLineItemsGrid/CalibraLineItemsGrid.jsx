@@ -25,6 +25,7 @@ import {
   MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode, Warehouse, Layers,
   LayoutGrid,
 } from 'lucide-react'
+import { Parser as ExprParser } from 'expr-eval'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell, SerialEntryModal, LotBreakdownModal, SerialBreakdownModal, TraceEntryCell } from './LineGridCell'
 import LineCardLayoutEditor from './LineCardLayoutEditor'
@@ -59,6 +60,32 @@ function resolveIcon(name) {
 /* Kart duzeni izgara cozunurlugu — server GridUnits ile ayni (48; v1'de 24'tu,
    eski kayitlari server okuma yolunda x2 olcekleyip normalize eder). */
 var CARD_GRID_UNITS = 48
+
+/* ── Form Davranış Katmanı — satır-scope kural değerlendirme (2026-08-05) ──
+   Kural ifadeleri admin tarafından tanımlanır ve server'da RuleExpr süzgecinden
+   geçmiştir. Fail-open: parse/eval hatası null döner (görünür + zorunlu değil).
+   Davranış katmanı gizleyemeyeceği çekirdek kolonlar: */
+var BEHAVIOR_LOCKED_KEYS = { materialCode: 1, quantity: 1 }
+
+function behaviorRowScope(row) {
+  function num(v) { var n = typeof v === 'number' ? v : parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(n) ? 0 : n }
+  return {
+    quantity: num(row.quantity),
+    unitPrice: num(row.unitPrice),
+    discountRate: num(row.discountRate),
+    taxRate: num(row.taxRate),
+    lineTotal: num(row.lineTotal),
+    materialCode: String(row.materialCode || ''),
+    unitId: String(row.unitId || ''),
+    notes: String(row.notes || ''),
+  }
+}
+
+function evalRowRule(expr, row) {
+  if (!expr) return null
+  try { return ExprParser.parse(expr).evaluate(behaviorRowScope(row)) === true }
+  catch (e) { return null }
+}
 
 var CARD_LABEL_COLOR_CLS = {
   slate:   'text-slate-500 dark:text-white/45',
@@ -134,6 +161,9 @@ export default function CalibraLineItemsGrid(props) {
   //   canEditLayout: admin (DepartmentManager/SystemAdmin) — footer'da duzen butonu.
   var [cardWidgets, setCardWidgets] = useState([])
   var [cardLayout, setCardLayout] = useState(null)
+  // Form Davranış Katmanı — kalem kolonu davranışları (key → {isVisible, isRequired,
+  // defaultValue, visibleIf, requiredIf}). Kayıt yoksa null = bugünkü davranış.
+  var [lineBehaviors, setLineBehaviors] = useState(null)
   var [canEditLayout, setCanEditLayout] = useState(false)
   var [layoutEditorOpen, setLayoutEditorOpen] = useState(false)
   // Dar konteynerde (tablet dikey / bolunmus ekran) 24-kolon span'lar okunmaz
@@ -398,6 +428,27 @@ export default function CalibraLineItemsGrid(props) {
   // TRY belgede tlMirror kolonlari header/body render'indan dusur (gecici olarak
   // ekleyip kaldirmak yerine, "columns" var zaten reassignable — bkz. yukarida tanimi).
   columns = columns.filter(function (c) { return !c.tlMirror || showTlColumns })
+
+  // ── Form Davranış Katmanı overlay (2026-08-05) ─────────────────────────────
+  //   Statik gizleme (çekirdek kolonlar hariç) + zorunluluk işareti + satır-scope
+  //   kurallar (__behavior — cardItems render'ında değerlendirilir). Davranış
+  //   kaydı yoksa (lineBehaviors=null) hiçbir şey değişmez.
+  if (lineBehaviors) {
+    columns = columns
+      .filter(function (c) {
+        var b = lineBehaviors[c.key]
+        if (!b || BEHAVIOR_LOCKED_KEYS[c.key] || c.tlMirror) return true
+        return b.isVisible !== false
+      })
+      .map(function (c) {
+        var b = lineBehaviors[c.key]
+        if (!b || c.tlMirror) return c
+        var out = Object.assign({}, c)
+        if (b.isRequired) out.required = true
+        out.__behavior = b
+        return out
+      })
+  }
 
   // ── Kart duzeni (PageComment Seq 1079, TL yerlesimi Seq 1083'te guncellendi) ──
   //   kolonlari kart bolgelerine ayir. tlMirror kolonlari (unitPriceTL/lineTotalTL)
@@ -1017,6 +1068,19 @@ export default function CalibraLineItemsGrid(props) {
           blank[c.key] = ''
         }
       })
+      // Form Davranış Katmanı — kolon varsayılan değerleri (yeni satırda).
+      if (lineBehaviors) {
+        Object.keys(lineBehaviors).forEach(function (k) {
+          var b = lineBehaviors[k]
+          if (!b.defaultValue) return
+          var col = allColumns.find(function (c) { return c.key === k })
+          if (!col) return
+          var isNum = col.type === 'number' || col.type === 'currency' || col.type === 'percent'
+          blank[k] = isNum
+            ? (parseFloat(String(b.defaultValue).replace(',', '.')) || 0)
+            : b.defaultValue
+        })
+      }
       return prev.concat([applyComputed(blank, allColumns)])
     })
     // React state commit + cell mount sonrasinda listener'lar hazir olsun diye kisa gecikme.
@@ -1178,6 +1242,37 @@ export default function CalibraLineItemsGrid(props) {
         setCanEditLayout(data.canEdit === true)
       })
       .catch(function () { /* sessiz — duzen yoksa varsayilan izgara */ })
+    return function () { alive = false }
+  }, [__layoutFormCode])
+
+  // ── Form Davranış Katmanı — kalem kolonu davranışları (2026-08-05) ──
+  //   Varsayılandan farklı davranışı olan kolonlar döner; fail-open: istek
+  //   düşerse / kayıt yoksa davranış katmanı hiç devreye girmez.
+  useEffect(function () {
+    if (!__layoutFormCode) return undefined
+    var alive = true
+    fetch('/api/form-behavior/' + encodeURIComponent(__layoutFormCode), { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data) {
+        if (!alive || !data || data.ok !== true || !Array.isArray(data.fields)) return
+        var map = {}
+        var any = false
+        data.fields.forEach(function (f) {
+          var hasBehavior = f.isVisible === false || f.isRequired === true
+            || f.defaultValue || f.visibleIf || f.requiredIf
+          if (!hasBehavior) return
+          any = true
+          map[f.key] = {
+            isVisible: f.isVisible !== false,
+            isRequired: f.isRequired === true,
+            defaultValue: f.defaultValue || null,
+            visibleIf: f.visibleIf || null,
+            requiredIf: f.requiredIf || null,
+          }
+        })
+        setLineBehaviors(any ? map : null)
+      })
+      .catch(function () { /* sessiz — fail-open */ })
     return function () { alive = false }
   }, [__layoutFormCode])
 
@@ -1726,6 +1821,26 @@ export default function CalibraLineItemsGrid(props) {
                       {cardItems.map(function(item) {
                         var col = item.col
                         if (!item.visible) return null
+                        // ── Form Davranış Katmanı: satır-scope kurallar ──
+                        //   visibleIf false → hücre bu SATIRDA gizli; requiredIf true →
+                        //   dinamik zorunlu (yıldız + boşsa kırmızı çerçeve). Eval hatası
+                        //   fail-open (görünür / zorunlu değil).
+                        var beh = col.__behavior || null
+                        if (beh && beh.visibleIf && evalRowRule(beh.visibleIf, row) === false) return null
+                        var behReqNow = !!(beh && ((beh.isRequired) || (beh.requiredIf && evalRowRule(beh.requiredIf, row) === true)))
+                        var behEmpty = false
+                        if (behReqNow) {
+                          var __bRaw = row[col.key]
+                          var __bIsNum = col.type === 'number' || col.type === 'currency' || col.type === 'percent'
+                          if (__bIsNum) {
+                            var __bN = typeof __bRaw === 'number' ? __bRaw : parseFloat(String(__bRaw == null ? '' : __bRaw).replace(',', '.'))
+                            behEmpty = isNaN(__bN) || __bN <= 0
+                          } else {
+                            behEmpty = __bRaw == null || String(__bRaw).trim() === ''
+                          }
+                        }
+                        var __rowHasContent = !!(row.materialCode && String(row.materialCode).trim() !== '')
+                        var behInvalid = behReqNow && behEmpty && __rowHasContent
                         // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
                         var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
                         var Icon = resolveIcon(col.icon)
@@ -1769,7 +1884,7 @@ export default function CalibraLineItemsGrid(props) {
                             )}
                             <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
                             <span className="truncate">{labelText}</span>
-                            {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
+                            {(col.required || col.requirePositive || behReqNow) && <span className="text-rose-500 dark:text-rose-400">*</span>}
                             {isMaterialCodeCell && isKitHeader && (
                               <span
                                 className="inline-flex items-center rounded px-1.5 py-[2px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 select-none flex-shrink-0"
@@ -1807,7 +1922,11 @@ export default function CalibraLineItemsGrid(props) {
                               </div>
                             )}
                             <div className={'flex items-stretch gap-1.5' + (labelMode === 'inline' ? ' flex-1 min-w-0' : '') + (labelMode === 'modern' ? ' mt-1.5' : '')}>
-                              <div className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]">
+                              <div
+                                className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]"
+                                style={behInvalid ? { boxShadow: 'inset 0 0 0 1.5px #ef4444', backgroundColor: 'rgba(239,68,68,0.06)' } : undefined}
+                                title={behInvalid ? 'Bu alan zorunlu' : undefined}
+                              >
                                 {col.__isWidget ? (
                                   col.__widgetType === 'date' ? (
                                     <input

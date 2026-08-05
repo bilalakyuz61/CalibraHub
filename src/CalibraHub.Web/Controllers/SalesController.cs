@@ -43,6 +43,7 @@ public sealed class SalesController : Controller
     private readonly IPriceListService _priceListService;
     private readonly IStockReservationRepository _stockReservationRepo;
     private readonly ILogger<SalesController> _logger;
+    private readonly IFormFieldBehaviorRepository? _formBehaviorRepo;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
 
@@ -80,7 +81,9 @@ public sealed class SalesController : Controller
         IStockReservationRepository stockReservationRepo,
         ILogger<SalesController> logger,
         SqlServerConnectionFactory connectionFactory,
-        CalibraDatabaseOptions dbOptions)
+        CalibraDatabaseOptions dbOptions,
+        // Form Davranış Katmanı (2026-08-05) — opsiyonel: kayıt yoksa fail-open.
+        IFormFieldBehaviorRepository? formBehaviorRepo = null)
     {
         _quoteService = quoteService;
         _financeService = financeService;
@@ -103,6 +106,7 @@ public sealed class SalesController : Controller
         _stockReservationRepo = stockReservationRepo;
         _logger = logger;
         _connectionFactory = connectionFactory;
+        _formBehaviorRepo = formBehaviorRepo;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
@@ -1794,6 +1798,39 @@ public sealed class SalesController : Controller
             if (!await _permService.CheckAnyAsync(GetUserId(), _sRole, _sDept, _sPfc,
                     new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" }, ct))
                 return Json(new { success = false, message = "Bu belge için yetkiniz bulunmuyor." });
+        }
+
+        // ── Form Davranış Katmanı: header zorunlulukları (2026-08-05) ──
+        // Client validasyonunun sunucu paritesi. Davranış kaydı yoksa no-op (fail-open);
+        // altyapı hatası kaydı ASLA bloklamaz (yalnız zorunlu-eksik bloklar).
+        if (_formBehaviorRepo is not null)
+        {
+            IReadOnlyList<string>? _fbMissing = null;
+            try
+            {
+                var _fbForms = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_sDocType?.Code);
+                var _fbRows = await _formBehaviorRepo.GetByFormCodeAsync(_fbForms.Header, ct);
+                var _fbAll = new List<string>();
+                if (_fbRows.Count > 0)
+                {
+                    var _fbCatalog = CalibraHub.Web.Models.Sales.DocumentHeaderFieldCatalog.Resolve(_fbForms.Header);
+                    var _fbIsOrder = string.Equals(_sDocType?.Code, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(_sDocType?.Code, "alis_siparisi", StringComparison.OrdinalIgnoreCase);
+                    _fbAll.AddRange(CalibraHub.Web.Models.Sales.FormBehaviorHeaderCheck.FindMissing(
+                        _fbRows, _fbCatalog, request, _fbIsOrder));
+                }
+                // Kalem (satır) zorunlulukları — Lines form kodundaki davranışlar.
+                var _fbLineRows = await _formBehaviorRepo.GetByFormCodeAsync(_fbForms.Lines, ct);
+                if (_fbLineRows.Count > 0)
+                    _fbAll.AddRange(CalibraHub.Web.Models.Sales.FormBehaviorHeaderCheck.FindMissingLineFields(_fbLineRows, request));
+                if (_fbAll.Count > 0) _fbMissing = _fbAll;
+            }
+            catch (Exception fbEx)
+            {
+                _logger.LogWarning(fbEx, "Form davranış kontrolü atlandı (fail-open).");
+            }
+            if (_fbMissing is { Count: > 0 })
+                return Json(new { success = false, message = "Zorunlu alanlar boş bırakılamaz: " + string.Join(", ", _fbMissing) });
         }
 
         try

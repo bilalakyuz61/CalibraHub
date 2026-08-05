@@ -126,28 +126,13 @@ public sealed partial class LineCardLayoutController : Controller
             return Json(new { ok = false, error = "Geçersiz form kodu." });
         formCode = formCode.Trim();
 
-        var docType = Models.Sales.DocumentTypeFormMap.FindDocTypeByLinesFormCode(formCode);
-        if (docType is null)
+        // Layoutlanabilir sistem kolonlari — DocumentLineFieldCatalog tek kaynak
+        // (Form Davranış Katmanı ile paylaşılır; BuildDocumentLineGridConfig
+        // iskeletiyle elle senkron tutulur).
+        var lineFields = Models.Sales.DocumentLineFieldCatalog.Resolve(formCode);
+        if (lineFields is null)
             return Json(new { ok = false, error = "Bu form için kart düzeni desteklenmiyor (yalnızca ticari belge kalemleri)." });
-
-        var hidePricing = string.Equals(docType, "alis_talebi", StringComparison.OrdinalIgnoreCase);
-
-        // Layoutlanabilir sistem kolonlari — tlMirror/aksiyon/row-below kolonlari
-        // kart alan izgarasina girmez, burada da yer almaz.
-        var catalog = new List<FieldCatalogItem>
-        {
-            new("materialCode", "Malzeme Kodu", "Hash", true,  false),
-            new("materialName", "Malzeme Adi",  "FileText", false, false),
-            new("unitId",       "Birim",        "Ruler", false, false),
-            new("quantity",     "Miktar",       "Sigma", true,  false),
-        };
-        if (!hidePricing)
-        {
-            catalog.Add(new("unitPrice",    "Birim Fiyat",   "DollarSign", false, false));
-            catalog.Add(new("discountRate", "Iskonto %",     "Percent",    false, false));
-            catalog.Add(new("taxRate",      "KDV %",         "Percent",    false, false));
-            catalog.Add(new("lineTotal",    "Satir Toplami", "Calculator", false, false));
-        }
+        var catalog = lineFields.Select(f => new FieldCatalogItem(f.Key, f.Label, f.Icon, f.Locked, false)).ToList();
 
         // ShowOnCard widget'lari (inline-uyumlu tipler — CalibraLineItemsGrid ile ayni set)
         var schema = await _widgetService.GetFormSchemaByCodeAsync(formCode, ct);

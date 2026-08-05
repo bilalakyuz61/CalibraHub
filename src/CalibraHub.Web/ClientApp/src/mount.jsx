@@ -10,6 +10,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import ErrorBoundary from './components/ErrorBoundary'
 import { loadDecimalSettings, roundTo as roundDecimalTo } from './utils/decimalSettings'
+import { applyFormBehavior, validateFormBehavior } from './services/formBehavior'
 import MaterialListEmbed from './components/MaterialCard/MaterialListEmbed'
 import { SmartBoard } from './components/CalibraSmartBoard'
 import { DocDesignerApp, DocDesignerList } from './components/DocDesigner'
@@ -986,6 +987,12 @@ window.CalibraHub.mountWorkflowEditor = mountWorkflowEditor
 window.CalibraHub.mountFixedFieldLookups = mountFixedFieldLookups
 window.CalibraHub.mountLookupForInput = mountLookupForInput
 window.CalibraHub.openCombinationPicker = openCombinationPicker
+
+// ── Form Davranış Katmanı (2026-08-05) ──
+// Sabit Razor formlarına standart alan davranışlarını (görünürlük/zorunluluk/
+// varsayılan/başlık/sekme) uygular. Bkz. services/formBehavior.js.
+window.CalibraHub.applyFormBehavior = applyFormBehavior
+window.CalibraHub.formBehaviorValidate = validateFormBehavior
 
 /**
  * openConvertToOrdersModal — Onayli teklifleri siparise donusturen modal'i acar.

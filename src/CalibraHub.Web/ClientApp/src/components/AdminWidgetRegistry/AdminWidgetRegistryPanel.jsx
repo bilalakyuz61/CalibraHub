@@ -17,11 +17,12 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus, Download, Upload, LayoutGrid } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus, Download, Upload, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 import WidgetBuilderForm from './WidgetBuilderForm'
 import WidgetRegistryList from './WidgetRegistryList'
 import LineCardLayoutEditor from '../CalibraLineItemsGrid/LineCardLayoutEditor'
+import StandardFieldsEditor from './StandardFieldsEditor'
 import AdminMiniModal from './AdminMiniModal'
 import GroupModal from './GroupModal'
 import { buildEntitiesFromForms, findEntityByFormCodeInForms, getDefaultFormCode } from './entityRegistry'
@@ -76,6 +77,8 @@ export default function AdminWidgetRegistryPanel(props) {
   var [groupModalOpen, setGroupModalOpen] = useState(false)
   // Kart Düzeni editörü (2026-08-05) — yalnizca *_LINES formlarinda acilabilir.
   var [cardLayoutOpen, setCardLayoutOpen] = useState(false)
+  // Standart Alanlar (Form Davranış Katmanı, 2026-08-05) — yalnizca *_EDIT (header) formlarinda.
+  var [stdFieldsOpen, setStdFieldsOpen] = useState(false)
   // Tanim transport — { package, fileName } dolu ise onay modalı acik
   var [importPending, setImportPending] = useState(null)
   var [importing, setImporting] = useState(false)
@@ -929,6 +932,22 @@ export default function AdminWidgetRegistryPanel(props) {
             </button>
           )}
 
+          {/* Standart Alanlar (Form Davranış Katmanı, 2026-08-05) — yalnizca üst
+              bilgi (*_EDIT) formlarinda. Görünür/Zorunlu/Varsayılan/Başlık/Kural
+              davranışları + sekme yönetimi. Desteklenmeyen form kodu için editör
+              kendi hata mesajını gösterir (katalog server'da). */}
+          {/(_EDIT|_LINES)$/i.test(currentFormCode || '') && (
+            <button
+              type="button"
+              onClick={function() { setStdFieldsOpen(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.08] text-[11px] font-semibold text-slate-500 dark:text-white/50 hover:text-indigo-600 dark:hover:text-indigo-300 transition-all flex-shrink-0"
+              title="Standart Alanlar — üst bilgi sabit alanlarının görünürlük, zorunluluk, varsayılan değer, başlık ve koşullu kurallarını yönet"
+            >
+              <SlidersHorizontal size={13} strokeWidth={2} />
+              Standart Alanlar
+            </button>
+          )}
+
           {/* Tanim transport — dışa/içe aktar */}
           <input
             ref={importFileRef}
@@ -1047,6 +1066,18 @@ export default function AdminWidgetRegistryPanel(props) {
           onReset={function() {
             setCardLayoutOpen(false)
             showToast('success', 'Kart düzeni varsayılana döndürüldü')
+          }}
+        />
+      )}
+
+      {/* ── Standart Alanlar davranış editörü (2026-08-05) ───────────── */}
+      {stdFieldsOpen && (
+        <StandardFieldsEditor
+          formCode={currentFormCode}
+          onClose={function() { setStdFieldsOpen(false) }}
+          onSaved={function() {
+            setStdFieldsOpen(false)
+            showToast('success', 'Standart alan davranışları kaydedildi')
           }}
         />
       )}

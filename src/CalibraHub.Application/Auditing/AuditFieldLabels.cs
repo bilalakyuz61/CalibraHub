@@ -51,6 +51,7 @@ public static class AuditFieldLabels
             ["Location"]       = "Lokasyon",
             ["PriceList"]      = "Fiyat Listesi",
             ["LineCardLayout"] = "Kalem Kartı Düzeni",
+            ["FormFieldBehavior"] = "Form Alan Davranışı",
             ["ApprovalFlow"]   = "Onay Akışı",
             ["Asset"]          = "Varlık",
             ["Session"]        = "Oturum",

@@ -806,6 +806,9 @@ END;";
             await EnsureWidgetEavTablesAsync(connection, cancellationToken);
             // 2026-08-05 — Kalem kartı düzeni (konum/boyut) tablosu.
             await EnsureLineCardLayoutTableAsync(connection, cancellationToken);
+            // 2026-08-05 — Form Davranış Katmanı: standart alan davranışları
+            // (Görünür/Zorunlu/Varsayılan/Başlık/Kural) tablosu.
+            await EnsureFormFieldBehaviorTableAsync(connection, cancellationToken);
             // 2026-06-12 — Veri Görünürlük Kuralları (satır bazlı güvenlik) tabloları.
             // Widget'lardan sonra: widget alanı kuralları WidgetMas.Id'ye referans verebilir.
             await EnsureDataVisibilityTablesAsync(connection, cancellationToken);
@@ -13744,6 +13747,48 @@ END;";
                     CREATE UNIQUE INDEX [UX_LineCardLayout_FormCode]
                         ON [{s}].[LineCardLayout]([FormCode])
                         WHERE [IsActive] = 1;';
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// FormFieldBehavior — Form Davranış Katmanı (2026-08-05).
+    /// Standart alanların (ve sekmelerin — FieldKey='tab:...' pseudo-key) davranış
+    /// metadata'sı: Görünür/Zorunlu/Varsayılan/Başlık metni-stili/RulesJSON
+    /// (visibleIf/requiredIf). Form kodu başına full-replace; satır yoksa alan
+    /// varsayılan davranışta (fail-open). Idempotent: OBJECT_ID guard.
+    /// </summary>
+    private async Task EnsureFormFieldBehaviorTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[FormFieldBehavior]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[FormFieldBehavior]
+                (
+                    [Id]           INT            NOT NULL IDENTITY(1,1) CONSTRAINT [PK_FormFieldBehavior] PRIMARY KEY,
+                    [FormCode]     NVARCHAR(50)   NOT NULL,
+                    [FieldKey]     NVARCHAR(120)  NOT NULL,
+                    [IsVisible]    BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_Visible] DEFAULT 1,
+                    [IsRequired]   BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_Required] DEFAULT 0,
+                    [DefaultValue] NVARCHAR(400)  NULL,
+                    [LabelText]    NVARCHAR(200)  NULL,
+                    [LabelStyle]   NVARCHAR(20)   NULL,
+                    [RulesJSON]    NVARCHAR(MAX)  NULL,
+                    [SortOrder]    INT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_Sort] DEFAULT 0,
+                    [IsActive]     BIT            NOT NULL CONSTRAINT [DF_FormFieldBehavior_IsActive] DEFAULT 1,
+                    [CreatedById]  INT            NULL,
+                    [CreatedBy]    NVARCHAR(120)  NULL,
+                    [Created]      DATETIME       NOT NULL CONSTRAINT [DF_FormFieldBehavior_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]  INT            NULL,
+                    [UpdatedBy]    NVARCHAR(120)  NULL,
+                    [Updated]      DATETIME       NULL
+                );
+                CREATE UNIQUE INDEX [UX_FormFieldBehavior_Form_Field]
+                    ON [{s}].[FormFieldBehavior]([FormCode],[FieldKey]);
             END;
             """;
         await using var cmd = connection.CreateCommand();
