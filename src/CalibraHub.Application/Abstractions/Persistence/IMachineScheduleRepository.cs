@@ -9,8 +9,10 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 public interface IMachineScheduleRepository
 {
     /// <summary>Verilen UTC pencere için: aktif makineler, pencereyle kesişen aktif bloklar,
-    /// henüz bloğu olmayan açık iş emri operasyonları (unplanned kuyruğu — pencereden bağımsız).</summary>
-    Task<MachineScheduleDataDto> GetScheduleDataAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+    /// henüz bloğu olmayan açık iş emri operasyonları (unplanned kuyruğu — pencereden bağımsız).
+    /// <paramref name="scenarioId"/> (Vardiya Senaryoları, 2026-08-05) Gantt gölgeleme verisi
+    /// (WorkWindows) için hangi senaryonun kullanılacağını belirler; null ise varsayılan senaryo.</summary>
+    Task<MachineScheduleDataDto> GetScheduleDataAsync(DateTime fromUtc, DateTime toUtc, int? scenarioId, CancellationToken ct);
 
     /// <summary>Blok oluştur/güncelle (Id&lt;=0 → yeni). Çakışma = aynı makinede zaman örtüşen
     /// DİĞER aktif bloklar; manuel planlamada çakışmaya rağmen kaydedilir, sonuçta uyarı olarak döner.</summary>

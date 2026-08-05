@@ -1474,7 +1474,7 @@ public sealed class ProductionController : Controller
 
     [HttpGet("Production/MachineScheduleData")]
     [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
-    public async Task<IActionResult> MachineScheduleData(DateTime from, DateTime to, CancellationToken ct)
+    public async Task<IActionResult> MachineScheduleData(DateTime from, DateTime to, int? scenarioId, CancellationToken ct)
     {
         try
         {
@@ -1484,7 +1484,8 @@ public sealed class ProductionController : Controller
             // bloklar sessizce düşer. ToUniversalTime doğru instant'ı verir (Utc ise no-op).
             var fromUtc = from.ToUniversalTime();
             var toUtc = to.ToUniversalTime();
-            var data = await _machineSchedule.GetScheduleDataAsync(fromUtc, toUtc, ct);
+            // Vardiya Senaryoları (2026-08-05) — scenarioId null ise varsayılan senaryo türetilir.
+            var data = await _machineSchedule.GetScheduleDataAsync(fromUtc, toUtc, scenarioId, ct);
             return Json(new {
                 ok = true, machines = data.Machines, blocks = data.Blocks, unplanned = data.Unplanned,
                 // Faz 2 (2026-08-05) — Gantt gölgeleme (müsaitlik dışı + tatil) ham verisi.
@@ -1573,7 +1574,13 @@ public sealed class ProductionController : Controller
             var machines = await _machineCalendar.ListActiveMachinesAsync(ct);
             var windows = await _machineCalendar.ListWorkWindowsAsync(ct);
             var holidays = await _machineCalendar.ListHolidaysAsync(ct);
-            return Json(new { ok = true, machines, windows, holidays });
+            // Vardiya Senaryoları (2026-08-05) — matris editörü için senaryo listesi + vardiya paleti.
+            // machines/windows/holidays geri-uyum için AYNEN kalır (legacy alan adları).
+            var scenarios = await _machineCalendar.ListScenariosAsync(ct);
+            var shifts = (await _shifts.ListAsync(includeInactive: false, ct))
+                .Select(s => new { id = s.Id, name = s.Name, code = s.Code, startTime = s.StartTime, endTime = s.EndTime, colorHex = s.ColorHex })
+                .ToArray();
+            return Json(new { ok = true, machines, windows, holidays, scenarios, shifts });
         }
         catch (Exception ex)
         {
@@ -1689,6 +1696,147 @@ public sealed class ProductionController : Controller
         }
     }
 
+    // ─── Vardiya Senaryoları (2026-08-05) — Makine Çalışma Takvimi'nin senaryo-tabanlı yükseltmesi ───
+    // GET  /Production/ShiftScenariosList                        → JSON senaryo listesi
+    // POST /Production/SaveShiftScenario                         → oluştur/güncelle
+    // POST /Production/DeleteShiftScenario                       → soft-delete (varsayılan silinemez)
+    // GET  /Production/ScenarioMachineShiftsList?scenarioId=     → JSON senaryonun makine×vardiya×gün ataması
+    // POST /Production/SaveScenarioMachineShift                  → oluştur/güncelle
+    // POST /Production/DeleteScenarioMachineShift                → soft-delete
+    [HttpGet("Production/ShiftScenariosList")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> ShiftScenariosList(CancellationToken ct)
+    {
+        try
+        {
+            var items = await _machineCalendar.ListScenariosAsync(ct);
+            return Json(new { ok = true, items });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShiftScenario.List] senaryo listesi alınamadı.");
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> SaveShiftScenario([FromBody] SaveShiftScenarioRequest req, CancellationToken ct)
+    {
+        if (req is null || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { ok = false, error = "Senaryo adı zorunludur." });
+        try
+        {
+            var isNew = req.Id <= 0;
+            var oldSnapshot = isNew ? null : await _machineCalendar.GetScenarioAsync(req.Id, ct);
+            var id = await _machineCalendar.SaveScenarioAsync(req, CurrentUserId(), ct);
+            if (isNew)
+                _audit.LogInsert("ShiftScenario", id, req.Name, snapshot: req);
+            else if (oldSnapshot is not null)
+                _audit.LogUpdate("ShiftScenario", id, req.Name, oldSnapshot, req);
+            return Json(new { ok = true, id });
+        }
+        catch (ArgumentException ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShiftScenario.Save] id={Id} senaryo kaydedilemedi.", req.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record DeleteShiftScenarioRequest(int Id);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> DeleteShiftScenario([FromBody] DeleteShiftScenarioRequest req, CancellationToken ct)
+    {
+        if (req is null || req.Id <= 0)
+            return Json(new { ok = false, error = "Kayıt belirtilmedi." });
+        try
+        {
+            await _machineCalendar.DeleteScenarioAsync(req.Id, CurrentUserId(), ct);
+            _audit.LogDelete("ShiftScenario", req.Id, $"Senaryo #{req.Id}");
+            return Json(new { ok = true });
+        }
+        catch (ArgumentException ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ShiftScenario.Delete] id={Id} silinemedi.", req.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpGet("Production/ScenarioMachineShiftsList")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> ScenarioMachineShiftsList(int scenarioId, CancellationToken ct)
+    {
+        if (scenarioId <= 0)
+            return Json(new { ok = false, error = "Senaryo belirtilmedi." });
+        try
+        {
+            var items = await _machineCalendar.ListScenarioMachineShiftsAsync(scenarioId, ct);
+            return Json(new { ok = true, items });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ScenarioMachineShift.List] scenarioId={ScenarioId} atama listesi alınamadı.", scenarioId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> SaveScenarioMachineShift([FromBody] SaveScenarioMachineShiftRequest req, CancellationToken ct)
+    {
+        if (req is null || req.ScenarioId <= 0 || req.MachineId <= 0 || req.ShiftId <= 0)
+            return Json(new { ok = false, error = "Senaryo, makine ve vardiya zorunlu." });
+        if (req.DaysMask > 127)
+            return Json(new { ok = false, error = "Geçersiz gün maskesi." });
+        try
+        {
+            var isNew = req.Id <= 0;
+            var id = await _machineCalendar.SaveScenarioMachineShiftAsync(req, CurrentUserId(), ct);
+            var title = $"Senaryo #{req.ScenarioId} — Makine #{req.MachineId} × Vardiya #{req.ShiftId}";
+            if (isNew)
+                _audit.LogInsert("ScenarioMachineShift", id, title, snapshot: req);
+            else
+                _audit.LogEvent("ScenarioMachineShift.Update", detail: $"{title} güncellendi (DaysMask={req.DaysMask}).",
+                    entity: "ScenarioMachineShift", entityId: id, title: title);
+            return Json(new { ok = true, id });
+        }
+        catch (ArgumentException ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ScenarioMachineShift.Save] id={Id} scenarioId={ScenarioId} kaydedilemedi.", req.Id, req.ScenarioId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record DeleteScenarioMachineShiftRequest(int Id);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> DeleteScenarioMachineShift([FromBody] DeleteScenarioMachineShiftRequest req, CancellationToken ct)
+    {
+        if (req is null || req.Id <= 0)
+            return Json(new { ok = false, error = "Kayıt belirtilmedi." });
+        try
+        {
+            await _machineCalendar.DeleteScenarioMachineShiftAsync(req.Id, CurrentUserId(), ct);
+            _audit.LogDelete("ScenarioMachineShift", req.Id, $"Atama #{req.Id}");
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[ScenarioMachineShift.Delete] id={Id} silinemedi.", req.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
     // ─── Makine Planlama Faz 3 — Otomatik Çizelgeleme Önerisi (forward, sonlu-kapasite) (2026-08-05) ───
     // API sözleşmesi KİLİTLİ — frontend "Otomatik Yerleştir" akışı + machineScheduleService.js bu üç
     // endpoint'e göre yazılır, alan adı/tipini değiştirme. GET aday listesi döner, POST Preview yalnız
@@ -1726,7 +1874,7 @@ public sealed class ProductionController : Controller
             // ToUniversalTime() no-op olarak güvenli bir ek katman (bkz. MachineScheduleData'daki
             // aynı savunma — query-string binder'daki Kind kayması riskine karşı).
             var fromUtc = req.FromUtc.ToUniversalTime();
-            var result = await _autoSchedule.PreviewAsync(req.IncludedWorkOrderIds, fromUtc, ct);
+            var result = await _autoSchedule.PreviewAsync(req.IncludedWorkOrderIds, fromUtc, req.ScenarioId, ct);
             return Json(new { ok = true, proposals = result.Proposals, unplaceable = result.Unplaceable });
         }
         catch (Exception ex)
@@ -1746,7 +1894,7 @@ public sealed class ProductionController : Controller
         try
         {
             var fromUtc = req.FromUtc.ToUniversalTime();
-            var result = await _autoSchedule.ApplyAsync(req.IncludedWorkOrderIds, fromUtc, CurrentUserId(), ct);
+            var result = await _autoSchedule.ApplyAsync(req.IncludedWorkOrderIds, fromUtc, req.ScenarioId, CurrentUserId(), ct);
             // Toplu özet — her blok tek tek loglanmaz (gürültü önleme, bkz. CLAUDE.md audit kuralı).
             _audit.LogEvent("MachineAutoSchedule.Apply",
                 detail: $"{result.CreatedCount} blok oluşturuldu, {result.UnplaceableCount} operasyon yerleştirilemedi " +

@@ -360,4 +360,260 @@ public sealed class SqlMachineCalendarRepository : IMachineCalendarRepository
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    // ── Vardiya Senaryoları (2026-08-05) ──────────────────────────────────────────
+
+    public async Task<IReadOnlyList<ShiftScenarioDto>> ListScenariosAsync(CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [Id], [Name], [Description], [IsDefault], [IsActive]
+            FROM {T("ShiftScenario")}
+            WHERE [IsActive] = 1
+            ORDER BY [IsDefault] DESC, [Name];
+            """;
+        var list = new List<ShiftScenarioDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new ShiftScenarioDto(
+                Id: r.GetInt32(0),
+                Name: r.GetString(1),
+                Description: r.IsDBNull(2) ? null : r.GetString(2),
+                IsDefault: r.GetBoolean(3),
+                IsActive: r.GetBoolean(4)));
+        }
+        return list;
+    }
+
+    public async Task<ShiftScenarioDto?> GetScenarioAsync(int id, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [Id], [Name], [Description], [IsDefault], [IsActive]
+            FROM {T("ShiftScenario")}
+            WHERE [Id] = @Id AND [IsActive] = 1;
+            """;
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        return new ShiftScenarioDto(
+            Id: r.GetInt32(0),
+            Name: r.GetString(1),
+            Description: r.IsDBNull(2) ? null : r.GetString(2),
+            IsDefault: r.GetBoolean(3),
+            IsActive: r.GetBoolean(4));
+    }
+
+    public async Task<int> SaveScenarioAsync(SaveShiftScenarioRequest request, int? userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Senaryo adı zorunludur.");
+
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            if (request.IsDefault)
+            {
+                // Tek varsayılan — önce diğerlerini 0'a çek (UX_ShiftScenario_Default filtered
+                // unique ile uyumlu; kendisi zaten güncelleniyorsa aşağıdaki UPDATE tekrar 1 yapar).
+                await using var clear = conn.CreateCommand();
+                clear.Transaction = tx;
+                clear.CommandText = $"UPDATE {T("ShiftScenario")} SET [IsDefault] = 0 WHERE [IsDefault] = 1;";
+                await clear.ExecuteNonQueryAsync(ct);
+            }
+
+            int id;
+            if (request.Id <= 0)
+            {
+                await using var ins = conn.CreateCommand();
+                ins.Transaction = tx;
+                ins.CommandText = $"""
+                    INSERT INTO {T("ShiftScenario")}
+                        ([Name],[Description],[IsDefault],[IsActive],[CreatedById],[Created])
+                    VALUES
+                        (@Name,@Description,@IsDefault,1,@CreatedById,SYSUTCDATETIME());
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
+                    """;
+                ins.Parameters.AddWithValue("@Name", request.Name.Trim());
+                ins.Parameters.Add(new SqlParameter("@Description", (object?)request.Description ?? DBNull.Value));
+                ins.Parameters.AddWithValue("@IsDefault", request.IsDefault);
+                ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+                id = (int)(await ins.ExecuteScalarAsync(ct))!;
+            }
+            else
+            {
+                await using var upd = conn.CreateCommand();
+                upd.Transaction = tx;
+                upd.CommandText = $"""
+                    UPDATE {T("ShiftScenario")}
+                    SET [Name] = @Name, [Description] = @Description, [IsDefault] = @IsDefault,
+                        [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+                    WHERE [Id] = @Id AND [IsActive] = 1;
+                    """;
+                upd.Parameters.AddWithValue("@Name", request.Name.Trim());
+                upd.Parameters.Add(new SqlParameter("@Description", (object?)request.Description ?? DBNull.Value));
+                upd.Parameters.AddWithValue("@IsDefault", request.IsDefault);
+                upd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+                upd.Parameters.AddWithValue("@Id", request.Id);
+                await upd.ExecuteNonQueryAsync(ct);
+                id = request.Id;
+            }
+
+            await tx.CommitAsync(ct);
+            return id;
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(ct); } catch { /* ignore */ }
+            throw;
+        }
+    }
+
+    public async Task DeleteScenarioAsync(int id, int? userId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        await using (var chk = conn.CreateCommand())
+        {
+            chk.CommandText = $"SELECT [IsDefault] FROM {T("ShiftScenario")} WHERE [Id] = @Id AND [IsActive] = 1;";
+            chk.Parameters.AddWithValue("@Id", id);
+            var result = await chk.ExecuteScalarAsync(ct);
+            if (result is null) return; // zaten yok/pasif — no-op
+            if ((bool)result)
+                throw new ArgumentException("Varsayılan senaryo silinemez. Önce başka bir senaryoyu varsayılan yapın.");
+        }
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {T("ShiftScenario")}
+            SET [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+            WHERE [Id] = @Id AND [IsActive] = 1;
+            """;
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ScenarioMachineShiftDto>> ListScenarioMachineShiftsAsync(int scenarioId, CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT sms.[Id], sms.[ScenarioId], sms.[MachineId], sms.[ShiftId], sms.[DaysMask],
+                   m.[Name] AS MachineName, s.[Name] AS ShiftName
+            FROM {T("ScenarioMachineShift")} sms
+            INNER JOIN {T("Machine")} m ON m.[Id] = sms.[MachineId] AND m.[CompanyId] = @CompanyId
+            INNER JOIN {T("Shift")} s ON s.[Id] = sms.[ShiftId]
+            WHERE sms.[ScenarioId] = @ScenarioId AND sms.[IsActive] = 1
+            ORDER BY m.[Name], s.[SortOrder];
+            """;
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        cmd.Parameters.AddWithValue("@ScenarioId", scenarioId);
+
+        var list = new List<ScenarioMachineShiftDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new ScenarioMachineShiftDto(
+                Id: r.GetInt32(0),
+                ScenarioId: r.GetInt32(1),
+                MachineId: r.GetInt32(2),
+                ShiftId: r.GetInt32(3),
+                DaysMask: r.GetByte(4),
+                MachineName: r.IsDBNull(5) ? null : r.GetString(5),
+                ShiftName: r.IsDBNull(6) ? null : r.GetString(6)));
+        }
+        return list;
+    }
+
+    public async Task<int> SaveScenarioMachineShiftAsync(SaveScenarioMachineShiftRequest request, int? userId, CancellationToken ct)
+    {
+        if (request.ScenarioId <= 0) throw new ArgumentException("Senaryo seçilmelidir.");
+        if (request.MachineId <= 0) throw new ArgumentException("Makine seçilmelidir.");
+        if (request.ShiftId <= 0) throw new ArgumentException("Vardiya seçilmelidir.");
+        if (request.DaysMask > 127) throw new ArgumentException("Geçersiz gün maskesi.");
+
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        // Cross-company id guessing savunması + referans doğrulama (SaveWorkWindowAsync deseni).
+        await using (var chk = conn.CreateCommand())
+        {
+            chk.CommandText = $"SELECT 1 FROM {T("Machine")} WHERE [Id] = @MachineId AND [CompanyId] = @CompanyId AND [IsActive] = 1;";
+            chk.Parameters.AddWithValue("@MachineId", request.MachineId);
+            chk.Parameters.AddWithValue("@CompanyId", companyId);
+            if (await chk.ExecuteScalarAsync(ct) is null) throw new ArgumentException("Seçilen makine bulunamadı.");
+        }
+        await using (var chk = conn.CreateCommand())
+        {
+            chk.CommandText = $"SELECT 1 FROM {T("ShiftScenario")} WHERE [Id] = @ScenarioId AND [IsActive] = 1;";
+            chk.Parameters.AddWithValue("@ScenarioId", request.ScenarioId);
+            if (await chk.ExecuteScalarAsync(ct) is null) throw new ArgumentException("Seçilen senaryo bulunamadı.");
+        }
+        await using (var chk = conn.CreateCommand())
+        {
+            chk.CommandText = $"SELECT 1 FROM {T("Shift")} WHERE [Id] = @ShiftId AND [IsActive] = 1;";
+            chk.Parameters.AddWithValue("@ShiftId", request.ShiftId);
+            if (await chk.ExecuteScalarAsync(ct) is null) throw new ArgumentException("Seçilen vardiya bulunamadı.");
+        }
+
+        int id;
+        if (request.Id <= 0)
+        {
+            await using var ins = conn.CreateCommand();
+            ins.CommandText = $"""
+                INSERT INTO {T("ScenarioMachineShift")}
+                    ([ScenarioId],[MachineId],[ShiftId],[DaysMask],[IsActive],[CreatedById],[Created])
+                VALUES
+                    (@ScenarioId,@MachineId,@ShiftId,@DaysMask,1,@CreatedById,SYSUTCDATETIME());
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
+                """;
+            AddScenarioMachineShiftParams(ins, request);
+            ins.Parameters.Add(new SqlParameter("@CreatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+            id = (int)(await ins.ExecuteScalarAsync(ct))!;
+        }
+        else
+        {
+            await using var upd = conn.CreateCommand();
+            upd.CommandText = $"""
+                UPDATE {T("ScenarioMachineShift")}
+                SET [ScenarioId] = @ScenarioId, [MachineId] = @MachineId, [ShiftId] = @ShiftId,
+                    [DaysMask] = @DaysMask, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+                WHERE [Id] = @Id AND [IsActive] = 1;
+                """;
+            AddScenarioMachineShiftParams(upd, request);
+            upd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+            upd.Parameters.AddWithValue("@Id", request.Id);
+            await upd.ExecuteNonQueryAsync(ct);
+            id = request.Id;
+        }
+        return id;
+    }
+
+    private static void AddScenarioMachineShiftParams(SqlCommand cmd, SaveScenarioMachineShiftRequest r)
+    {
+        cmd.Parameters.AddWithValue("@ScenarioId", r.ScenarioId);
+        cmd.Parameters.AddWithValue("@MachineId", r.MachineId);
+        cmd.Parameters.AddWithValue("@ShiftId", r.ShiftId);
+        cmd.Parameters.AddWithValue("@DaysMask", r.DaysMask);
+    }
+
+    public async Task DeleteScenarioMachineShiftAsync(int id, int? userId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            UPDATE {T("ScenarioMachineShift")}
+            SET [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+            WHERE [Id] = @Id AND [IsActive] = 1;
+            """;
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }

@@ -52,9 +52,9 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
         => _repo.GetCandidateWorkOrdersAsync(ct);
 
     public async Task<AutoSchedulePreviewResultDto> PreviewAsync(
-        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, CancellationToken ct)
+        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, CancellationToken ct)
     {
-        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, ct);
+        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, scenarioId, ct);
         var proposals = segments.Select(s => new AutoScheduleProposalDto(
             TempId: $"{s.WorkOrderOperationId}:{s.BlockType}:{s.SegmentIndex}",
             MachineId: s.MachineId,
@@ -72,9 +72,9 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
     }
 
     public async Task<AutoScheduleApplyResultDto> ApplyAsync(
-        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? userId, CancellationToken ct)
+        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, int? userId, CancellationToken ct)
     {
-        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, ct);
+        var (segments, unplaceable) = await RunEngineAsync(includedWorkOrderIds, fromUtc, scenarioId, ct);
 
         var operations = segments
             .GroupBy(s => s.WorkOrderOperationId)
@@ -97,7 +97,7 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
     /// <summary>Motor çekirdeği. Preview ve Apply tarafından AYNI şekilde çağrılır (bkz. sınıf
     /// XML doc'u — determinizm notu).</summary>
     private async Task<(List<EngineSegment> Segments, List<AutoScheduleUnplaceableDto> Unplaceable)> RunEngineAsync(
-        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, CancellationToken ct)
+        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, CancellationToken ct)
     {
         var result = new List<EngineSegment>();
         var unplaceable = new List<AutoScheduleUnplaceableDto>();
@@ -112,7 +112,7 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
         var machines = await _calendar.ListActiveMachinesAsync(ct);
         var machineNames = machines.ToDictionary(m => m.Id, m => m.Name ?? m.Code);
 
-        var windowsRaw = await _calendar.ListWorkWindowsAsync(ct);
+        var windowsRaw = await _calendar.ListWorkWindowsAsync(ct, scenarioId);
         var windowsByMachine = new Dictionary<int, Dictionary<byte, List<(short Start, short End)>>>();
         foreach (var w in windowsRaw)
         {

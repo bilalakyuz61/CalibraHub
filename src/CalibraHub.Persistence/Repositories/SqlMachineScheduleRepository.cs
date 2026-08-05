@@ -38,7 +38,7 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
 
     private string T(string table) => $"[{_schema}].[{table}]";
 
-    public async Task<MachineScheduleDataDto> GetScheduleDataAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    public async Task<MachineScheduleDataDto> GetScheduleDataAsync(DateTime fromUtc, DateTime toUtc, int? scenarioId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -182,7 +182,8 @@ public sealed class SqlMachineScheduleRepository : IMachineScheduleRepository
         }
 
         // Faz 2 (2026-08-05) — Gantt gölgeleme verisi (frontend hesaplar, burada yalnız ham veri).
-        var workWindows = await _calendar.ListWorkWindowsAsync(ct);
+        // Vardiya Senaryoları (2026-08-05) eklentisi: scenarioId null ise varsayılan senaryo türetilir.
+        var workWindows = await _calendar.ListWorkWindowsAsync(ct, scenarioId);
         var holidays = await _calendar.ListHolidaysAsync(ct);
 
         return new MachineScheduleDataDto(machines, blocks, unplanned, workWindows, holidays);

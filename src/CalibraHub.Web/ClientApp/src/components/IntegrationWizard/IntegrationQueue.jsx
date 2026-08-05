@@ -578,6 +578,13 @@ function QueueDetail({ apiBase, integration, onMutated }) {
 // Modallar
 // ────────────────────────────────────────────────────────────────────────────
 function ErrorDetailModal({ row, onClose }) {
+  // rgba/hex kacamayan tek iki deger — .iq-err-bg/.iq-err-bdr CSS degiskeni var
+  // ama metin rengi icin karsilik henuz tanimli degil (bkz. IntegrationWizard.css);
+  // light temada acik pembe (#fecaca) acik pembe zemin (#fef2f2) uzerinde neredeyse
+  // gorunmuyordu — body class'indan tema okuyup lokal dallandiriyoruz.
+  var isDark = typeof document !== 'undefined' && document.body.classList.contains('app-theme-dark')
+  var errAccent = isDark ? '#fca5a5' : '#b91c1c'
+  var errText = isDark ? '#fecaca' : '#991b1b'
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
@@ -590,7 +597,7 @@ function ErrorDetailModal({ row, onClose }) {
           padding: '14px 18px', borderBottom: '1px solid var(--iq-border)',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          <AlertCircle size={18} color="#fca5a5" />
+          <AlertCircle size={18} color={errAccent} />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 14 }}>Aktarım Hatası</div>
             <div style={{ fontSize: 11, color: 'var(--iq-muted2)' }}>
@@ -609,11 +616,11 @@ function ErrorDetailModal({ row, onClose }) {
               <div style={{ color: 'var(--iq-muted2)' }}>Run ID: <code>{row.lastRunId}</code></div>
             )}
           </div>
-          <div style={{ color: '#fca5a5', fontWeight: 600, marginBottom: 6 }}>Hata mesajı:</div>
+          <div style={{ color: errAccent, fontWeight: 600, marginBottom: 6 }}>Hata mesajı:</div>
           <pre style={{
             background: 'var(--iq-err-bg)', border: '1px solid var(--iq-err-bdr)', borderRadius: 6,
             padding: 12, margin: 0, fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 11,
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#fecaca',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: errText,
           }}>{row.lastError}</pre>
         </div>
       </div>

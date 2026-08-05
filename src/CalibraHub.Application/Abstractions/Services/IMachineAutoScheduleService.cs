@@ -13,11 +13,12 @@ public interface IMachineAutoScheduleService
     /// <summary>Aday iş emri listesi (kullanıcı bu listeden hariç tutacaklarını çıkarır).</summary>
     Task<IReadOnlyList<AutoScheduleCandidateWorkOrderDto>> GetCandidatesAsync(CancellationToken ct);
 
-    /// <summary>Önizleme — hesaplar, PERSIST ETMEZ.</summary>
+    /// <summary>Önizleme — hesaplar, PERSIST ETMEZ. <paramref name="scenarioId"/> null ise
+    /// varsayılan Vardiya Senaryosu kullanılır (bkz. <c>IMachineCalendarRepository.ListWorkWindowsAsync</c>).</summary>
     Task<AutoSchedulePreviewResultDto> PreviewAsync(
-        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, CancellationToken ct);
+        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, CancellationToken ct);
 
     /// <summary>Uygula — aynı girdiden yeniden hesaplar ve Status=Planned olarak persist eder.</summary>
     Task<AutoScheduleApplyResultDto> ApplyAsync(
-        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? userId, CancellationToken ct);
+        IReadOnlyList<int> includedWorkOrderIds, DateTime fromUtc, int? scenarioId, int? userId, CancellationToken ct);
 }

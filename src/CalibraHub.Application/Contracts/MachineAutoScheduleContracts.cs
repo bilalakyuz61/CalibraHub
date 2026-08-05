@@ -16,9 +16,13 @@ public sealed record AutoScheduleCandidateWorkOrderDto(
     int UnplannedOpCount,
     decimal TotalMinutes);
 
+/// <summary><c>ScenarioId</c> Vardiya Senaryoları (2026-08-05) eklentisi — null ise motor
+/// varsayılan senaryoyu kullanır (bkz. <c>IMachineCalendarRepository.ListWorkWindowsAsync</c>).
+/// Sona eklendi, positional record — mevcut client payload'ları (alan yok) kırılmaz.</summary>
 public sealed record AutoScheduleRequest(
     IReadOnlyList<int> IncludedWorkOrderIds,
-    DateTime FromUtc);
+    DateTime FromUtc,
+    int? ScenarioId = null);
 
 public sealed record AutoScheduleProposalDto(
     string TempId,
