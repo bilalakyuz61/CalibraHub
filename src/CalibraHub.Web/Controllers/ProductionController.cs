@@ -1546,6 +1546,153 @@ public sealed class ProductionController : Controller
         }
     }
 
+    // ─── Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) — Faz 2 (2026-08-05) ───────
+    // GET  /Production/MachineCalendar                            → admin ekran (React mount)
+    // GET  /Production/MachineCalendarData                        → makineler + haftalık pencereler + tatiller
+    // POST /Production/SaveMachineWorkWindow                      → oluştur/güncelle
+    // POST /Production/DeleteMachineWorkWindow                    → soft-delete
+    // POST /Production/SaveHoliday                                → oluştur/güncelle
+    // POST /Production/DeleteHoliday                              → soft-delete
+    // Sözleşme KİLİTLİ: dayOfWeek 0=Pazar..6=Cumartesi (JS Date.getDay()); startMinute/endMinute
+    // yerel gün-ortası dakikası 0..1440 (duvar saati — UTC DEĞİL, haftalık tekrar); tatil
+    // date="yyyy-MM-dd" (yerel DATE).
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public IActionResult MachineCalendar() => View();
+
+    [HttpGet("Production/MachineCalendarData")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> MachineCalendarData(CancellationToken ct)
+    {
+        try
+        {
+            var machines = await _machineCalendar.ListActiveMachinesAsync(ct);
+            var windows = await _machineCalendar.ListWorkWindowsAsync(ct);
+            var holidays = await _machineCalendar.ListHolidaysAsync(ct);
+            return Json(new { ok = true, machines, windows, holidays });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineCalendar.Data] veri alınamadı.");
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> SaveMachineWorkWindow([FromBody] SaveMachineWorkWindowRequest req, CancellationToken ct)
+    {
+        if (req is null || req.MachineId <= 0)
+            return Json(new { ok = false, error = "Makine zorunlu." });
+        if (req.DayOfWeek > 6)
+            return Json(new { ok = false, error = "Geçersiz gün." });
+        if (req.StartMinute < 0 || req.EndMinute > 1440 || req.EndMinute <= req.StartMinute)
+            return Json(new { ok = false, error = "Geçersiz saat aralığı." });
+        try
+        {
+            var isNew = req.Id <= 0;
+            var oldSnapshot = isNew ? null : await _machineCalendar.GetWorkWindowAsync(req.Id, ct);
+            var id = await _machineCalendar.SaveWorkWindowAsync(req, CurrentUserId(), ct);
+            if (isNew)
+            {
+                _audit.LogInsert("MachineWorkWindow", id, $"Çalışma Penceresi — Makine #{req.MachineId}",
+                    detail: $"{DayOfWeekLabel(req.DayOfWeek)} {MinuteLabel(req.StartMinute)}-{MinuteLabel(req.EndMinute)}");
+            }
+            else if (oldSnapshot is not null)
+            {
+                _audit.LogUpdate("MachineWorkWindow", id, $"Çalışma Penceresi — Makine #{req.MachineId}", oldSnapshot, req);
+            }
+            return Json(new { ok = true, id });
+        }
+        catch (ArgumentException ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineCalendar.SaveWorkWindow] id={Id} machineId={MachineId} kaydedilemedi.", req.Id, req.MachineId);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record DeleteMachineWorkWindowRequest(int Id);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> DeleteMachineWorkWindow([FromBody] DeleteMachineWorkWindowRequest req, CancellationToken ct)
+    {
+        if (req is null || req.Id <= 0)
+            return Json(new { ok = false, error = "Kayıt belirtilmedi." });
+        try
+        {
+            await _machineCalendar.DeleteWorkWindowAsync(req.Id, CurrentUserId(), ct);
+            _audit.LogDelete("MachineWorkWindow", req.Id, $"Çalışma Penceresi #{req.Id}");
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineCalendar.DeleteWorkWindow] id={Id} silinemedi.", req.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> SaveHoliday([FromBody] SaveHolidayRequest req, CancellationToken ct)
+    {
+        if (req is null || string.IsNullOrWhiteSpace(req.Date))
+            return Json(new { ok = false, error = "Tarih zorunlu." });
+        if (!DateTime.TryParseExact(req.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            return Json(new { ok = false, error = "Geçersiz tarih formatı." });
+        try
+        {
+            var isNew = req.Id <= 0;
+            var oldSnapshot = isNew ? null : await _machineCalendar.GetHolidayAsync(req.Id, ct);
+            var id = await _machineCalendar.SaveHolidayAsync(req, CurrentUserId(), ct);
+            if (isNew)
+                _audit.LogInsert("CompanyHoliday", id, req.Name ?? req.Date, detail: req.Date);
+            else if (oldSnapshot is not null)
+                _audit.LogUpdate("CompanyHoliday", id, req.Name ?? req.Date, oldSnapshot, req);
+            return Json(new { ok = true, id });
+        }
+        catch (ArgumentException ex) { return Json(new { ok = false, error = ex.Message }); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineCalendar.SaveHoliday] id={Id} kaydedilemedi.", req.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    public sealed record DeleteHolidayRequest(int Id);
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineCalendar)]
+    public async Task<IActionResult> DeleteHoliday([FromBody] DeleteHolidayRequest req, CancellationToken ct)
+    {
+        if (req is null || req.Id <= 0)
+            return Json(new { ok = false, error = "Kayıt belirtilmedi." });
+        try
+        {
+            await _machineCalendar.DeleteHolidayAsync(req.Id, CurrentUserId(), ct);
+            _audit.LogDelete("CompanyHoliday", req.Id, $"Tatil #{req.Id}");
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[MachineCalendar.DeleteHoliday] id={Id} silinemedi.", req.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    private static string DayOfWeekLabel(byte d) => d switch
+    {
+        0 => "Pazar", 1 => "Pazartesi", 2 => "Salı", 3 => "Çarşamba", 4 => "Perşembe", 5 => "Cuma", 6 => "Cumartesi",
+        _ => d.ToString(),
+    };
+
+    private static string MinuteLabel(short m) => $"{m / 60:D2}:{m % 60:D2}";
+
     // ─── Faz 3b: Shop-floor tablet kiosk ─────────────────────────────────────────
     // GET  /Production/ShopFloor                              → kiosk view (tek SPA)
     // POST /Production/AuthOperator                           → PIN/NFC ile Personnel doğrulama (Faz 3a-7)
