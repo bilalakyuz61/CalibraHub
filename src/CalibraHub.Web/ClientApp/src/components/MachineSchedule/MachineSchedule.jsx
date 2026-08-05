@@ -4,6 +4,7 @@ import {
 } from '@dnd-kit/core'
 import { Loader2 } from 'lucide-react'
 import * as api from '../../services/machineScheduleService'
+import * as calendarApi from '../../services/machineCalendarService'
 import UnplannedQueue, { OpDragGhost } from './UnplannedQueue'
 import GanttToolbar from './GanttToolbar'
 import GanttBoard from './GanttBoard'
@@ -27,6 +28,10 @@ export default function MachineSchedule() {
   var [dateTo, setDateTo] = useState(todayInputValue(3))
   var [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX)
   var [isDark, setIsDark] = useState(function () { return document.body.classList.contains('app-theme-dark') })
+
+  // ── Vardiya Senaryoları (Faz 1) — Gantt gölgeleme + otomatik çizelgeleme seçili senaryoya göre çalışır ──
+  var [scenarios, setScenarios] = useState([])
+  var [selectedScenarioId, setSelectedScenarioId] = useState(null)
 
   var [machines, setMachines] = useState([])
   var [blocks, setBlocks] = useState([])
@@ -56,6 +61,21 @@ export default function MachineSchedule() {
     return function () { obs.disconnect() }
   }, [])
 
+  var [scenariosLoaded, setScenariosLoaded] = useState(false)
+
+  useEffect(function () {
+    calendarApi.listScenarios()
+      .then(function (res) {
+        if (!res || !res.ok) return
+        var list = res.items || []
+        setScenarios(list)
+        var def = list.find(function (s) { return s.isDefault })
+        setSelectedScenarioId(def ? def.id : (list.length > 0 ? list[0].id : null))
+      })
+      .catch(function (e) { console.error('[MachineSchedule] scenarios fetch error:', e) })
+      .finally(function () { setScenariosLoaded(true) })
+  }, [])
+
   var rangeStart = useMemo(function () { return new Date(dateFrom + 'T00:00:00') }, [dateFrom])
   var rangeEnd = useMemo(function () { return new Date(dateTo + 'T23:59:59') }, [dateTo])
 
@@ -63,7 +83,7 @@ export default function MachineSchedule() {
     if (showSpinner) setRefreshing(true)
     var fromIso = localDateInputToUtcIso(dateFrom, false)
     var toIso = localDateInputToUtcIso(dateTo, true)
-    return api.getScheduleData(fromIso, toIso)
+    return api.getScheduleData(fromIso, toIso, selectedScenarioId)
       .then(function (res) {
         if (!res || !res.ok) {
           window.CalibraHub?.toast?.('Plan verisi yüklenemedi.', 'err')
@@ -83,13 +103,14 @@ export default function MachineSchedule() {
         setLoading(false)
         setRefreshing(false)
       })
-  }, [dateFrom, dateTo])
+  }, [dateFrom, dateTo, selectedScenarioId])
 
   useEffect(function () {
+    if (!scenariosLoaded) return
     setLoading(true)
     fetchSchedule(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo])
+  }, [dateFrom, dateTo, selectedScenarioId, scenariosLoaded])
 
   function applySaveResult(res, successMessage) {
     if (!res || !res.ok) {
@@ -263,6 +284,9 @@ export default function MachineSchedule() {
           isDark={isDark}
           refreshing={refreshing}
           onAutoSchedule={function () { setWizardOpen(true) }}
+          scenarios={scenarios}
+          selectedScenarioId={selectedScenarioId}
+          onScenarioChange={setSelectedScenarioId}
         />
         <div className="ms-body">
           <UnplannedQueue unplanned={unplanned} loading={refreshing} />
@@ -305,6 +329,8 @@ export default function MachineSchedule() {
       {wizardOpen && (
         <AutoScheduleWizard
           fromUtc={localDateInputToUtcIso(dateFrom, false)}
+          scenarioId={selectedScenarioId}
+          scenarioName={(scenarios.find(function (s) { return s.id === selectedScenarioId }) || {}).name}
           onClose={function () { setWizardOpen(false); setPreviewProposals([]) }}
           onApplied={handleAutoScheduleApplied}
           onPreviewChange={setPreviewProposals}

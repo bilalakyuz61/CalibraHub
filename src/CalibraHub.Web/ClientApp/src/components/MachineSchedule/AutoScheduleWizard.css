@@ -107,6 +107,17 @@ body.app-theme-dark .asw-modal {
   color: var(--asw-accent);
 }
 
+.asw-scenario-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--asw-accent);
+  background: var(--asw-accent-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
 .asw-body {
   flex: 1 1 auto;
   min-height: 0;

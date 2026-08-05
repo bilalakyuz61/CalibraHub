@@ -23,7 +23,7 @@ function formatMinutes(total) {
  * GanttBoard previewProposals prop'u; bu bileşen sadece listeyi yönetir).
  * Persist YOK — yalnız "Uygula" backend'e aynı girdiyi POST eder.
  */
-export default function AutoScheduleWizard({ fromUtc, onClose, onApplied, onPreviewChange }) {
+export default function AutoScheduleWizard({ fromUtc, scenarioId, scenarioName, onClose, onApplied, onPreviewChange }) {
   var [step, setStep] = useState(1)
   var [loadingCandidates, setLoadingCandidates] = useState(true)
   var [candidates, setCandidates] = useState([])
@@ -81,7 +81,7 @@ export default function AutoScheduleWizard({ fromUtc, onClose, onApplied, onPrev
       return
     }
     setComputing(true)
-    api.autoSchedulePreview({ includedWorkOrderIds: includedWorkOrderIds, fromUtc: fromUtc })
+    api.autoSchedulePreview({ includedWorkOrderIds: includedWorkOrderIds, fromUtc: fromUtc, scenarioId: scenarioId })
       .then(function (res) {
         if (!res || !res.ok) {
           window.CalibraHub?.toast?.('Öneri hesaplanamadı.', 'err')
@@ -103,7 +103,7 @@ export default function AutoScheduleWizard({ fromUtc, onClose, onApplied, onPrev
   function handleApply() {
     var includedWorkOrderIds = Array.from(selectedIds)
     setApplying(true)
-    api.autoScheduleApply({ includedWorkOrderIds: includedWorkOrderIds, fromUtc: fromUtc })
+    api.autoScheduleApply({ includedWorkOrderIds: includedWorkOrderIds, fromUtc: fromUtc, scenarioId: scenarioId })
       .then(function (res) {
         if (!res || !res.ok) {
           window.CalibraHub?.toast?.('Otomatik yerleştirme uygulanamadı.', 'err')
@@ -148,6 +148,7 @@ export default function AutoScheduleWizard({ fromUtc, onClose, onApplied, onPrev
         <div className="asw-steps">
           <span className={'asw-step' + (step === 1 ? ' asw-step--active' : '')}>1. Aday Seçimi</span>
           <span className={'asw-step' + (step === 2 ? ' asw-step--active' : '')}>2. Önizleme</span>
+          {scenarioName && <span className="asw-scenario-badge">{scenarioName} senaryosuna göre planlanacak</span>}
         </div>
 
         {step === 1 && (
