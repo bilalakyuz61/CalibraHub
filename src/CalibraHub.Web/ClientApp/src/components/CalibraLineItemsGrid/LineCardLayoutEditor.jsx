@@ -322,7 +322,7 @@ export default function LineCardLayoutEditor(props) {
           <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.025] p-3">
           <div
             ref={gridRef}
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))', gap: 10 }}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))', gap: 10, alignItems: 'end' }}
           >
             {items.map(function (it, idx) {
               var hiddenCls = !it.visible ? ' opacity-40' : ''

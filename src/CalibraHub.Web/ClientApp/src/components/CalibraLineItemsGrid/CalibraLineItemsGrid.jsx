@@ -1622,12 +1622,12 @@ export default function CalibraLineItemsGrid(props) {
                     style={{
                       display: 'grid',
                       gridTemplateColumns: 'auto 1fr',
-                      // Ozel duzen aktifken kimlik kolonlari alan izgarasinin ICINDE
-                      // layout'a gore cizilir — sabit kimlik bolgesi kalkar, aksiyon
-                      // seridi kendi satirinda kalir.
+                      // Aksiyon seridi kartin SOLUNDA dikey sutun (2026-08-05 kullanici
+                      // istegi). Ozel duzen aktifken kimlik kolonlari alan izgarasinin
+                      // ICINDE layout'a gore cizilir — sabit kimlik bolgesi kalkar.
                       gridTemplateAreas: useCustomLayout
-                        ? '"actions actions" "fields fields"'
-                        : '"actions identity" "fields fields"',
+                        ? '"actions fields"'
+                        : '"actions identity" "actions fields"',
                       columnGap: 12, rowGap: 10, alignItems: 'start',
                     }}
                   >
@@ -1705,14 +1705,17 @@ export default function CalibraLineItemsGrid(props) {
                     <div
                       style={useCustomLayout
                         ? {
+                            // alignItems 'end': farkli baslik stillerinde (standart ustte /
+                            // modern yuzer / sade solda) hucre yukseklikleri degisir —
+                            // taban hizasi giris kutularini ayni satirda ayni cizgiye oturtur.
                             gridArea: 'fields', display: 'grid',
                             gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
-                            columnGap: 12, rowGap: 10, alignItems: 'start',
+                            columnGap: 12, rowGap: 10, alignItems: 'end',
                           }
                         : {
                             gridArea: 'fields', display: 'grid',
                             gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))',
-                            columnGap: 12, rowGap: 10, alignItems: 'start',
+                            columnGap: 12, rowGap: 10, alignItems: 'end',
                           }}
                       className={isKitComponent ? 'opacity-90' : ''}
                     >
@@ -1851,7 +1854,7 @@ export default function CalibraLineItemsGrid(props) {
                         butona (ozellikle Sil'e) yanlislikla odaklanip Enter'a basmaz. Gorsel
                         yerlesim grid-area:"actions" ile kimlik satirinin SOLUNA sabitlenir
                         (Seq 1081 kullanici istegi) — DOM sirasindan bagimsizdir. */}
-                    <div style={{ gridArea: 'actions' }} className="flex items-center gap-1 flex-shrink-0 justify-self-start">
+                    <div style={{ gridArea: 'actions', alignSelf: 'start' }} className="flex flex-col items-center gap-1 flex-shrink-0 justify-self-start">
                       {/* Satir kisayol menusu — MoreHorizontal ikonu, tiklayinca liste acilir */}
                       <button
                         type="button"
