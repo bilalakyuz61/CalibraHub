@@ -355,15 +355,15 @@ body.app-theme-dark .woe-row select {
 }
 .woe-input--code { max-width: 240px; flex: 0 0 240px; }
 /* PageComment Seq 1052 — Is Emri Tarihi (f-orderDate) proje tarih standardina gore dar
-   (176px, calibra-datepicker.css degeri) kalsin; .woe-input--code'un 240px flex-basis'i
+   (150px, calibra-datepicker.css degeri) kalsin; .woe-input--code'un 240px flex-basis'i
    .woe-inline-fields (display:flex) icinde width'i ezdigi icin flex-basis'i de override
    etmek gerekiyor (Sales/DocumentEdit sqQuoteDate Seq 49 ile ayni gerekce). flatpickr
    orijinal input'u type=hidden yapip class'lari (woe-input--code dahil) alt input'a
    kopyaladigi icin id'siz kardes secici kullaniliyor. */
 #f-orderDate,
 #f-orderDate + input.calibra-date-input {
-    flex: 0 0 176px;
-    max-width: 176px;
+    flex: 0 0 150px;
+    max-width: 150px;
 }
 .woe-input--qty  {
     max-width: 130px; flex: 0 0 130px;
@@ -915,7 +915,7 @@ body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
                    PageComment Seq 1052: Is Emri Tarihi artik proje tarih standardina (type="date"
                    + global calibra-datepicker.js enhancer) uyuyor — deger ISO (yyyy-MM-dd), gorunum
                    flatpickr altInput uzerinden gg.aa.yyyy + sag kenarda takvim ikonu. Dar genislik
-                   (176px) icin #f-orderDate + input.calibra-date-input CSS override'i asagida
+                   (150px) icin #f-orderDate + input.calibra-date-input CSS override'i asagida
                    (bkz. .woe-input--code max-width:240px'i ezer — Sales/DocumentEdit sqQuoteDate
                    Seq 49 ile ayni pattern). 2026-08-01: kullanici karariyla duzenlenebilir yapildi —
                    readonly kaldirildi, deger artik payload()'da orderDate olarak save'e gonderiliyor

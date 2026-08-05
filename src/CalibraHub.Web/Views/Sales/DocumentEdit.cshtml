@@ -918,7 +918,7 @@
     }
     /* 2026-07-28 PageComment Seq 49: "Tarih" alani (sqQuoteDate) genel .sqe-hinput
        flex:1 / max-width:280px form-hizalama kuralindan cikar — proje capindaki
-       standart tarih input genisligine (calibra-datepicker.css: 176px) don,
+       standart tarih input genisligine (calibra-datepicker.css: 150px) don,
        boylece deger genisligine sigan dar alan + sag kenarda takvim ikonu (buton)
        gorunur. Flatpickr altInput orijinal input'un hemen ardina eklenir (bkz.
        calibra-datepicker.js) — bu yuzden bitisik kardes secici kullanilir. */
@@ -926,26 +926,26 @@
        `.sqe-hinput` sinifini devraliyor -> genel `.sqe-hinput { flex:1; max-width:none !important }`
        kurali bu ID kuralini (specificity yuksek ama !important'siz) EZIYORDU: "Tarih" alani
        combonun tum genisligine yayilip deger ile takvim ikonu arasinda buyuk bosluk biraktiriyordu.
-       #sqValidUntil ile ayni sekilde !important eklenerek 176px standardina sabitlenir. */
-    /* 2026-08-05 (kullanıcı isteği v2): "Tarih" alanı global 176px standardına — kısa +
-       standart genişlik. Altındaki combo tarihi (#sqValidUntil) de 176px → iki tarih
+       #sqValidUntil ile ayni sekilde !important eklenerek 150px standardina sabitlenir. */
+    /* 2026-08-05 (kullanıcı isteği v2): "Tarih" alanı global 150px standardına — kısa +
+       standart genişlik. Altındaki combo tarihi (#sqValidUntil) de 150px → iki tarih
        birebir aynı genişlik, sol+sağ kenar hizalı (combo'da tarih ÖNCE geliyor). */
     #sqQuoteDate,
     #sqQuoteDate + input.calibra-date-input {
-        flex: 0 0 176px !important;
-        max-width: 176px !important;
+        flex: 0 0 150px !important;
+        max-width: 150px !important;
     }
     /* PageComment Seq 1059: "Gecerlilik/Vade/Teslim Gun/Tarih" combosu icindeki
        tarih alani (#sqValidUntil) asagidaki genel `.sqe-hcombo > input.sqe-hinput`
        kuralindan (flex:1 1 0 + max-width:none !important, ~line 1004) etkilenip
        combonun kalan tum genisligini (~202px) dolduruyordu -> deger ile takvim
-       ikonu arasinda buyuk bos alan. #sqQuoteDate ile ayni 176px standardina
+       ikonu arasinda buyuk bos alan. #sqQuoteDate ile ayni 150px standardina
        sabitleniyor. ID secici (specificity: id > class) + !important o genel
        kuralin !important'ini de her zaman gecer. */
     #sqValidUntil,
     #sqValidUntil + input.calibra-date-input {
-        flex: 0 0 176px !important;
-        max-width: 176px !important;
+        flex: 0 0 150px !important;
+        max-width: 150px !important;
     }
     .sqe-hinput.is-locked {
         background-color: rgba(148, 163, 184, 0.12) !important;
