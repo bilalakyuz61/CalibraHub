@@ -76,6 +76,8 @@ function normalizeEditorItems(arr) {
       labelSize: it.labelSize || null,
       labelWeight: it.labelWeight || null,
       labelColor: LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
+      // Alan Yonetimi sozlugu: null=Standart, 'modern'=Modern, 'inline'=Sade
+      labelStyle: (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : null,
     }
   })
 }
@@ -217,6 +219,7 @@ export default function LineCardLayoutEditor(props) {
             labelSize: it.labelSize || null,
             labelWeight: it.labelWeight || null,
             labelColor: it.labelColor || null,
+            labelStyle: it.labelStyle || null,
           }
         }),
       }
@@ -329,9 +332,17 @@ export default function LineCardLayoutEditor(props) {
               // Onizleme etiketinde override'lar CANLI uygulanir — kartla birebir.
               var pvText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
               var pvColorCls = it.labelColor ? LABEL_COLOR_CLS[it.labelColor] : 'text-slate-500 dark:text-white/45'
+              var pvMode = (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : 'standard'
               var pvStyle = {}
               if (it.labelSize) pvStyle.fontSize = it.labelSize
               if (it.labelWeight) pvStyle.fontWeight = it.labelWeight
+              var pvLabelInner = (
+                <>
+                  <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
+                  <span className="truncate">{pvText}</span>
+                  {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
+                </>
+              )
               return (
                 <div
                   key={it.key}
@@ -367,13 +378,35 @@ export default function LineCardLayoutEditor(props) {
                       {it.visible ? <Eye size={11} strokeWidth={2} /> : <EyeOff size={11} strokeWidth={2} />}
                     </button>
                   </div>
-                  {/* Kartla birebir ayni etiket + hucre kutusu (canli onizleme) */}
-                  <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + pvColorCls} style={pvStyle}>
-                    <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
-                    <span className="truncate">{pvText}</span>
-                    {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
-                  </div>
-                  <div className="h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
+                  {/* Kartla birebir ayni etiket + hucre kutusu (canli onizleme) —
+                      stil moduna gore: ustte / yuzer (modern) / solda (Sade). */}
+                  {pvMode === 'standard' && (
+                    <>
+                      <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + pvColorCls} style={pvStyle}>
+                        {pvLabelInner}
+                      </div>
+                      <div className="h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
+                    </>
+                  )}
+                  {pvMode === 'modern' && (
+                    <div style={{ position: 'relative' }} className="mt-1.5">
+                      <div
+                        className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-white dark:bg-slate-900 ' + pvColorCls}
+                        style={Object.assign({ top: -7, left: 8, zIndex: 2, lineHeight: '12px' }, pvStyle)}
+                      >
+                        {pvLabelInner}
+                      </div>
+                      <div className="h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
+                    </div>
+                  )}
+                  {pvMode === 'inline' && (
+                    <div className="flex items-center gap-2">
+                      <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] ' + pvColorCls} style={pvStyle}>
+                        {pvLabelInner}
+                      </div>
+                      <div className="flex-1 min-w-0 h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
+                    </div>
+                  )}
                   {/* Sag kenar resize tutamaci */}
                   <div
                     onPointerDown={function (e) { handleResizeStart(e, idx) }}
@@ -406,7 +439,7 @@ export default function LineCardLayoutEditor(props) {
                     className="ml-auto text-[10.5px] text-slate-400 hover:text-slate-600 dark:text-white/35 dark:hover:text-white/60"
                   >Kapat</button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
                   <div>
                     <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Başlık Metni</div>
                     <input
@@ -417,6 +450,19 @@ export default function LineCardLayoutEditor(props) {
                       onChange={function (e) { patchItem(sel.key, { labelText: e.target.value }) }}
                       className="w-full px-2.5 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 dark:placeholder:text-white/25"
                     />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Başlık Stili</div>
+                    <select
+                      value={sel.labelStyle || ''}
+                      onChange={function (e) { patchItem(sel.key, { labelStyle: e.target.value || null }) }}
+                      title="Alan Yönetimi'ndeki etiket stilleriyle aynı: Standart (başlık üstte), Modern (kutunun üstünde yüzer), Sade (başlık solda)"
+                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
+                    >
+                      <option value="">Standart</option>
+                      <option value="modern">Modern</option>
+                      <option value="inline">Sade</option>
+                    </select>
                   </div>
                   <div>
                     <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Boyut</div>

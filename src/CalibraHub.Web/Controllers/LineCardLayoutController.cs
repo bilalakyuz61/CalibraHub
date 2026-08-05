@@ -53,10 +53,14 @@ public sealed partial class LineCardLayoutController : Controller
     ///   LabelWeight — 400/500/600/700, null = varsayılan (bold)
     ///   LabelColor  — semantik token (slate/indigo/emerald/amber/rose/blue/violet),
     ///                 null = varsayılan. HEX asla saklanmaz — tema uyumu.
+    ///   LabelStyle  — Alan Yönetimi'ndeki etiket stili sözlüğüyle aynı:
+    ///                 "standard" (etiket üstte — varsayılan), "modern" (kutunun
+    ///                 üst kenarında yüzer), "inline" (Sade — etiket solda, giriş sağda).
     /// </summary>
     public sealed record LayoutItemDto(
         string Key, int Span, int Order, bool Visible = true,
-        string? Label = null, int? LabelSize = null, int? LabelWeight = null, string? LabelColor = null);
+        string? Label = null, int? LabelSize = null, int? LabelWeight = null, string? LabelColor = null,
+        string? LabelStyle = null);
 
     private static readonly HashSet<string> AllowedLabelColors =
         new(StringComparer.OrdinalIgnoreCase) { "slate", "indigo", "emerald", "amber", "rose", "blue", "violet" };
@@ -158,6 +162,7 @@ public sealed partial class LineCardLayoutController : Controller
             labelSize = li?.LabelSize,
             labelWeight = li?.LabelWeight,
             labelColor = li?.LabelColor,
+            labelStyle = li?.LabelStyle,
         };
         if (saved is not null)
         {
@@ -214,9 +219,13 @@ public sealed partial class LineCardLayoutController : Controller
             int? weight = it.LabelWeight is 400 or 500 or 600 or 700 ? it.LabelWeight : null;
             var color = !string.IsNullOrWhiteSpace(it.LabelColor) && AllowedLabelColors.Contains(it.LabelColor.Trim())
                 ? it.LabelColor.Trim().ToLowerInvariant() : null;
+            // WidgetMas.LabelStyle whitelist'i ile ayni: modern/inline disi her sey
+            // varsayilan (null=standard) kabul edilir.
+            var style = it.LabelStyle?.Trim().ToLowerInvariant();
+            if (style is not ("modern" or "inline")) style = null;
 
             items.Add(new LayoutItemDto(key, Math.Clamp(it.Span, 1, 24), items.Count, it.Visible,
-                label, size, weight, color));
+                label, size, weight, color, style));
         }
         if (items.Count == 0)
             return Json(new { ok = false, error = "Geçerli düzen öğesi yok." });

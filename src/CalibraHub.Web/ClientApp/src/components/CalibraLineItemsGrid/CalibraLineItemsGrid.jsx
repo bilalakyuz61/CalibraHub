@@ -457,6 +457,7 @@ export default function CalibraLineItemsGrid(props) {
         labelSize: (typeof it.labelSize === 'number' && it.labelSize >= 9 && it.labelSize <= 15) ? it.labelSize : null,
         labelWeight: (it.labelWeight === 400 || it.labelWeight === 500 || it.labelWeight === 600 || it.labelWeight === 700) ? it.labelWeight : null,
         labelColor: CARD_LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
+        labelStyle: (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : null,
       })
     })
     // Duzende olmayan kimlik kolonlari basa (materialCode once) —
@@ -1739,36 +1740,66 @@ export default function CalibraLineItemsGrid(props) {
                         }
                         var isMaterialCodeCell = col === materialCodeCol
                         // Baslik override'lari (duzen editorunden): metin + boyut +
-                        // kalinlik (inline) + renk (semantik token → Tailwind sinifi).
+                        // kalinlik (inline) + renk (semantik token → Tailwind sinifi)
+                        // + stil (Alan Yonetimi sozlugu: standard/modern/inline).
                         var labelText = item.label || col.label
+                        var labelMode = (item.labelStyle === 'modern' || item.labelStyle === 'inline') ? item.labelStyle : 'standard'
                         var labelColorCls = item.labelColor
                           ? CARD_LABEL_COLOR_CLS[item.labelColor]
                           : 'text-slate-500 dark:text-white/45'
                         var labelStyleOv = {}
                         if (item.labelSize) labelStyleOv.fontSize = item.labelSize
                         if (item.labelWeight) labelStyleOv.fontWeight = item.labelWeight
+                        // Modern (yuzer) etiket absolute konumlanir — hucre anchor olmali.
+                        if (labelMode === 'modern') cellStyle = Object.assign({}, cellStyle, { position: 'relative' })
+                        // Etiket icerigi — uc stil modunda da ayni (kit susleri dahil).
+                        var labelInner = (
+                          <>
+                            {/* Kit süsleri — kimlik bolgesi ozel duzende kalktigi icin
+                                ↳ oku ve KIT rozeti malzeme kodu hucresinin etiketine tasinir. */}
+                            {isMaterialCodeCell && isKitComponent && (
+                              <span className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0" title="Kit bileseni">↳</span>
+                            )}
+                            <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
+                            <span className="truncate">{labelText}</span>
+                            {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
+                            {isMaterialCodeCell && isKitHeader && (
+                              <span
+                                className="inline-flex items-center rounded px-1.5 py-[2px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 select-none flex-shrink-0"
+                                title="Kit — bilesenleri asagida listelenir"
+                              >KİT</span>
+                            )}
+                          </>
+                        )
                         return (
-                          <div key={col.key} data-cell-key={col.key} style={cellStyle}>
-                            <div
-                              className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls}
-                              style={labelStyleOv}
-                            >
-                              {/* Kit süsleri — kimlik bolgesi ozel duzende kalktigi icin
-                                  ↳ oku ve KIT rozeti malzeme kodu hucresinin etiketine tasinir. */}
-                              {isMaterialCodeCell && isKitComponent && (
-                                <span className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0" title="Kit bileseni">↳</span>
-                              )}
-                              <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
-                              <span className="truncate">{labelText}</span>
-                              {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
-                              {isMaterialCodeCell && isKitHeader && (
-                                <span
-                                  className="inline-flex items-center rounded px-1.5 py-[2px] text-[9px] font-bold tracking-wide bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 select-none flex-shrink-0"
-                                  title="Kit — bilesenleri asagida listelenir"
-                                >KİT</span>
-                              )}
-                            </div>
-                            <div className="flex items-stretch gap-1.5">
+                          <div key={col.key} data-cell-key={col.key} style={cellStyle} className={labelMode === 'inline' ? 'flex items-center gap-2' : undefined}>
+                            {/* standard: etiket ustte · inline (Sade): etiket solda ·
+                                modern: etiket kutunun ust kenarinda yuzer (asagida). */}
+                            {labelMode === 'standard' && (
+                              <div
+                                className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls}
+                                style={labelStyleOv}
+                              >
+                                {labelInner}
+                              </div>
+                            )}
+                            {labelMode === 'inline' && (
+                              <div
+                                className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] ' + labelColorCls}
+                                style={labelStyleOv}
+                              >
+                                {labelInner}
+                              </div>
+                            )}
+                            {labelMode === 'modern' && (
+                              <div
+                                className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-white dark:bg-slate-900 ' + labelColorCls}
+                                style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
+                              >
+                                {labelInner}
+                              </div>
+                            )}
+                            <div className={'flex items-stretch gap-1.5' + (labelMode === 'inline' ? ' flex-1 min-w-0' : '') + (labelMode === 'modern' ? ' mt-1.5' : '')}>
                               <div className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]">
                                 {col.__isWidget ? (
                                   col.__widgetType === 'date' ? (
@@ -2182,6 +2213,7 @@ export default function CalibraLineItemsGrid(props) {
               labelSize: it.labelSize || null,
               labelWeight: it.labelWeight || null,
               labelColor: it.labelColor || null,
+              labelStyle: it.labelStyle || null,
             }
           })}
           hasCustomLayout={hasCustomLayout}
