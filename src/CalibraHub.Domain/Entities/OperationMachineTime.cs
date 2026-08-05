@@ -26,6 +26,9 @@ public sealed class OperationMachineTime
     /// <summary>Quantity birimi için toplam süre. Birim/dakika hesabı: DurationPerUnit / Quantity.</summary>
     public decimal DurationPerUnit { get; init; }
     public DurationUnit DurationUnit { get; init; } = DurationUnit.Minute;
+    /// <summary>Makine Planlama Faz 2 (2026-08-05) — operasyon setup (hazırlık) süresi, satırın
+    /// kendi <see cref="DurationUnit"/>'i ile yorumlanır (ayrı birim yok). NULL/0 = setup yok.</summary>
+    public decimal? SetupDuration { get; init; }
     public bool IsActive { get; init; } = true;
     public DateTime Created { get; init; }
     public DateTime? Updated { get; init; }

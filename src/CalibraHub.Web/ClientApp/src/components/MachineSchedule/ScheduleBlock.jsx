@@ -13,16 +13,20 @@ var MIN_W = 18
  *  - Sol/sağ kenar handle → yeniden boyutlandır (süre değiştir)
  *  - Tıkla (sürüklemeden) → onClick(block, clientX, clientY) — popover açılır
  * Status=2 (Locked) ise taşıma/boyutlandırma devre dışı.
+ * readOnly=true (setup child — parentBlockId dolu) ise blok üretim bloğuna bağlıdır:
+ * bağımsız sürüklenemez/resize edilemez ve tıklanınca popover AÇILMAZ (salt-görüntü).
+ * Kullanıcı üretim bloğunu taşıyınca backend child'ı otomatik günceller (refetch'te yansır).
  * onMove(block, newStartDate) / onResize(block, newStartDate, newEndDate) — piksel
  * yerine Date nesnesi ile çağrılır (15dk snap uygulanmış).
  */
 export default function ScheduleBlock({
   block, x, y, width, height, isDark, isConflict,
-  onMove, onResize, onClick, minX, rangeStart, pxPerHour,
+  onMove, onResize, onClick, minX, rangeStart, pxPerHour, readOnly,
 }) {
   var palette = getPalette(isDark)
   var typeColors = palette.block[block.blockType] || palette.block[1]
-  var locked = block.status === 2
+  var showLockIcon = block.status === 2
+  var locked = showLockIcon || !!readOnly
 
   var [localX, setLocalX] = useState(x)
   var [localW, setLocalW] = useState(width)
@@ -62,6 +66,7 @@ export default function ScheduleBlock({
 
   function handleClick(e) {
     if (movedRef.current) { movedRef.current = false; return }
+    if (readOnly) return // setup child — düzenleme/silme popover'ı açılmaz (salt-görüntü)
     var evt = e.evt
     if (typeof onClick === 'function') onClick(block, evt.clientX, evt.clientY)
   }
@@ -102,8 +107,8 @@ export default function ScheduleBlock({
     }
   }
 
-  var label = (block.workOrderNo ? block.workOrderNo + ' · ' : '') + (block.operationName || '')
-  var sub = block.itemName || ''
+  var label = readOnly ? 'Hazırlık' : (block.workOrderNo ? block.workOrderNo + ' · ' : '') + (block.operationName || '')
+  var sub = readOnly ? (block.operationName || '') : (block.itemName || '')
 
   return (
     <Group
@@ -159,7 +164,7 @@ export default function ScheduleBlock({
           wrap="none"
         />
       )}
-      {locked && (
+      {showLockIcon && (
         <Text text="🔒" x={localW - 18} y={height - 17} fontSize={11} />
       )}
 

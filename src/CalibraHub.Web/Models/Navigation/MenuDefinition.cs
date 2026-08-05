@@ -208,6 +208,8 @@ public static class MenuDefinition
                     PermissionFormCode: FormCodes.ShopFloor),
                 new("production.machineschedule", isEn ? "Machine Scheduling"    : "Makine Planlama",        "CalendarClock", "/Production/MachineSchedule", null,
                     PermissionFormCode: FormCodes.MachineSchedule),
+                new("production.machinecalendar", isEn ? "Machine Work Calendar" : "Makine Çalışma Takvimi", "CalendarDays",  "/Production/MachineCalendar", null,
+                    PermissionFormCode: FormCodes.MachineCalendar),
                 new("production.definitions", isEn ? "Production Definitions"    : "Üretim Tanımlamaları",   "Settings2",     "/Production/Definitions",  null,
                     PermissionFormCode: FormCodes.ProductionDefs),
             }),

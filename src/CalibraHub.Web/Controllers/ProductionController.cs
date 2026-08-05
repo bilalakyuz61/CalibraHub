@@ -53,6 +53,8 @@ public sealed class ProductionController : Controller
     private readonly ILogger<ProductionController> _logger;
     // 2026-08-04 — Makine Planlama (Üretim Çizelgeleme) Faz 1 Manuel.
     private readonly IMachineScheduleRepository _machineSchedule;
+    // 2026-08-05 — Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) Faz 2.
+    private readonly IMachineCalendarRepository _machineCalendar;
     private readonly CalibraHub.Application.Auditing.IAuditTrailService _audit;
 
     public ProductionController(
@@ -73,6 +75,7 @@ public sealed class ProductionController : Controller
         CalibraHub.Application.Services.ShopFloorLockoutTracker shopFloorLockout,
         CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
         IMachineScheduleRepository machineSchedule,
+        IMachineCalendarRepository machineCalendar,
         CalibraHub.Application.Auditing.IAuditTrailService audit,
         ILogger<ProductionController> logger)
     {
@@ -93,6 +96,7 @@ public sealed class ProductionController : Controller
         _shopFloorLockout = shopFloorLockout;
         _connectionFactory = connectionFactory;
         _machineSchedule = machineSchedule;
+        _machineCalendar = machineCalendar;
         _audit = audit;
         _logger = logger;
     }
@@ -1477,7 +1481,11 @@ public sealed class ProductionController : Controller
             var fromUtc = from.ToUniversalTime();
             var toUtc = to.ToUniversalTime();
             var data = await _machineSchedule.GetScheduleDataAsync(fromUtc, toUtc, ct);
-            return Json(new { ok = true, machines = data.Machines, blocks = data.Blocks, unplanned = data.Unplanned });
+            return Json(new {
+                ok = true, machines = data.Machines, blocks = data.Blocks, unplanned = data.Unplanned,
+                // Faz 2 (2026-08-05) — Gantt gölgeleme (müsaitlik dışı + tatil) ham verisi.
+                workWindows = data.WorkWindows, holidays = data.Holidays,
+            });
         }
         catch (Exception ex)
         {

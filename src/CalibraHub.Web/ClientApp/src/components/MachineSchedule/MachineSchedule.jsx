@@ -30,6 +30,8 @@ export default function MachineSchedule() {
   var [machines, setMachines] = useState([])
   var [blocks, setBlocks] = useState([])
   var [unplanned, setUnplanned] = useState([])
+  var [workWindows, setWorkWindows] = useState([])
+  var [holidays, setHolidays] = useState([])
   var [loading, setLoading] = useState(true)
   var [refreshing, setRefreshing] = useState(false)
   var [conflictIds, setConflictIds] = useState(function () { return new Set() })
@@ -65,6 +67,8 @@ export default function MachineSchedule() {
         setMachines(res.machines || [])
         setBlocks(res.blocks || [])
         setUnplanned(res.unplanned || [])
+        setWorkWindows(res.workWindows || [])
+        setHolidays(res.holidays || [])
       })
       .catch(function (e) {
         console.error('[MachineSchedule] fetch error:', e)
@@ -258,6 +262,8 @@ export default function MachineSchedule() {
               pxPerHour={ZOOM_LEVELS[zoomIndex]}
               isDark={isDark}
               conflictIds={conflictIds}
+              workWindows={workWindows}
+              holidays={holidays}
               onBlockClick={handleBlockClick}
               onBlockMove={handleBlockMove}
               onBlockResize={handleBlockResize}

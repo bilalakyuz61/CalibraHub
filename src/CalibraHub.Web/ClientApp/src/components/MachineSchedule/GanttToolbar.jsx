@@ -57,6 +57,14 @@ export default function GanttToolbar({
             </span>
           )
         })}
+        <span className="ms-legend-item">
+          <span className="ms-legend-dot" style={{ background: palette.shade }} />
+          Çalışma Dışı
+        </span>
+        <span className="ms-legend-item">
+          <span className="ms-legend-dot" style={{ background: palette.holiday }} />
+          Resmi Tatil
+        </span>
       </div>
     </div>
   )

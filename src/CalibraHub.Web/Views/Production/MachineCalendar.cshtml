@@ -1,0 +1,62 @@
+@{
+    ViewData["Title"] = "Makine Çalışma Takvimi";
+    ViewData["FormCode"] = "MACHINE_CALENDAR";
+    ViewData["BodyClass"] = "page-machinecalendar";
+}
+
+@section Styles {
+<link rel="stylesheet" href="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")" />
+<style>
+    .page-machinecalendar .workspace-action-bar { display: none !important; }
+    .page-machinecalendar .integrator-dashboard,
+    .page-machinecalendar .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .machinecalendar-mount {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="machinecalendar-mount" id="machineCalendarRoot"></div>
+</section>
+
+@section Scripts {
+<script src="@FileVersioner.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")"></script>
+<script>
+    (function () {
+        var el = document.getElementById('machineCalendarRoot')
+        if (!el) return
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountMachineCalendar) {
+                console.error('[MachineCalendar] mount fonksiyonu bulunamadi'); return
+            }
+            try { window.CalibraHub.mountMachineCalendar(el) }
+            catch (ex) { console.error('[MachineCalendar] mount hatasi:', ex) }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountMachineCalendar) { doMount(); return }
+        var tries = 0
+        var timer = setInterval(function () {
+            tries++
+            if (window.CalibraHub && window.CalibraHub.mountMachineCalendar) { clearInterval(timer); doMount() }
+            else if (tries >= 30) { clearInterval(timer); console.error('[MachineCalendar] timeout') }
+        }, 100)
+    })()
+</script>
+}

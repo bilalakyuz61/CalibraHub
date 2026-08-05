@@ -25,7 +25,9 @@ public sealed record ScheduleBlockDto(
     string? ItemName,
     string? OperationName,
     decimal? Quantity,
-    string? Notes);
+    string? Notes,
+    // Faz 2 (2026-08-05): setup child bloğunda bağlı olduğu üretim bloğunun Id'si; normal blokta null.
+    int? ParentBlockId = null);
 
 public sealed record UnplannedOperationDto(
     int WorkOrderOperationId,
@@ -41,7 +43,14 @@ public sealed record UnplannedOperationDto(
 public sealed record MachineScheduleDataDto(
     IReadOnlyList<ScheduleMachineDto> Machines,
     IReadOnlyList<ScheduleBlockDto> Blocks,
-    IReadOnlyList<UnplannedOperationDto> Unplanned);
+    IReadOnlyList<UnplannedOperationDto> Unplanned,
+    // Faz 2 (2026-08-05): Gantt gölgeleme için — aktif tüm makinelerin haftalık müsaitlik
+    // pencereleri + aktif resmi tatiller. Frontend gölgelemeyi kendisi hesaplar, burada yalnız
+    // ham veri döner. Not: MachineWorkWindowDto/HolidayDto burada da "id" alanını taşır (admin
+    // CRUD ekranıyla aynı DTO paylaşılıyor) — kilitli sözleşmedeki minimum alan setine ek,
+    // frontend'in yok sayması güvenli (bilinçli DRY tercihi, bkz. backend raporu).
+    IReadOnlyList<MachineWorkWindowDto> WorkWindows,
+    IReadOnlyList<HolidayDto> Holidays);
 
 public sealed record SaveScheduleBlockRequest(
     int Id,

@@ -1,0 +1,285 @@
+/* Makine Çalışma Takvimi (Faz 2 admin ekranı)
+   Tema: light = default değişkenler, body.app-theme-dark override eder (CLAUDE.md kuralı). */
+
+.mcal-root {
+  color-scheme: light;
+  --mcal-bg: #f4f6fa;
+  --mcal-surface: #ffffff;
+  --mcal-surface-2: #f8fafc;
+  --mcal-border: #e2e8f0;
+  --mcal-text: #0f172a;
+  --mcal-text-muted: #64748b;
+  --mcal-accent: #6366f1;
+  --mcal-accent-soft: rgba(99, 102, 241, 0.12);
+  --mcal-danger: #ef4444;
+
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--mcal-bg);
+  color: var(--mcal-text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  overflow: auto;
+}
+
+body.app-theme-dark .mcal-root {
+  color-scheme: dark;
+  --mcal-bg: #0b1220;
+  --mcal-surface: #111a2c;
+  --mcal-surface-2: #0f1830;
+  --mcal-border: #223050;
+  --mcal-text: #e2e8f0;
+  --mcal-text-muted: #8b9bbd;
+  --mcal-accent: #818cf8;
+  --mcal-accent-soft: rgba(129, 140, 248, 0.18);
+  --mcal-danger: #f87171;
+}
+
+.mcal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--mcal-text-muted);
+}
+
+.mcal-spin { animation: mcal-spin-kf 0.9s linear infinite; }
+@keyframes mcal-spin-kf {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.mcal-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--mcal-border);
+  background: var(--mcal-surface);
+}
+
+.mcal-header__title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.mcal-header__subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--mcal-text-muted);
+}
+
+.mcal-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  padding: 16px 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.mcal-section {
+  flex: 1 1 640px;
+  min-width: 420px;
+  background: var(--mcal-surface);
+  border: 1px solid var(--mcal-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.mcal-section--holidays {
+  flex: 0 0 340px;
+  min-width: 300px;
+}
+
+.mcal-section__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.mcal-label {
+  font-size: 11.5px;
+  color: var(--mcal-text-muted);
+}
+
+.mcal-select,
+.mcal-text-input {
+  background: var(--mcal-surface-2);
+  border: 1px solid var(--mcal-border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: var(--mcal-text);
+  font-size: 12.5px;
+  color-scheme: inherit;
+}
+
+.mcal-time-input,
+.mcal-date-input {
+  color-scheme: inherit;
+  background: var(--mcal-surface-2);
+  border: 1px solid var(--mcal-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--mcal-text);
+  font-size: 12.5px;
+}
+
+.mcal-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--mcal-border);
+  background: var(--mcal-accent-soft);
+  color: var(--mcal-accent);
+  cursor: pointer;
+  transition: opacity .12s;
+  flex: 0 0 auto;
+}
+
+.mcal-icon-btn:hover { opacity: .85; }
+.mcal-icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.mcal-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mcal-text-muted);
+  font-size: 12.5px;
+  padding: 12px 4px;
+}
+
+/* ── Haftalık çalışma penceresi ─────────────────────────── */
+.mcal-ww-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.mcal-select { min-width: 220px; }
+
+.mcal-ww-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.mcal-ww-day {
+  background: var(--mcal-surface-2);
+  border: 1px solid var(--mcal-border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 128px;
+}
+
+.mcal-ww-day__title {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.mcal-ww-day__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.mcal-ww-day__empty {
+  font-size: 11px;
+  color: var(--mcal-text-muted);
+}
+
+.mcal-ww-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--mcal-accent-soft);
+  border: 1px solid var(--mcal-border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 11.5px;
+  color: var(--mcal-text);
+}
+
+.mcal-ww-chip__del {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--mcal-danger);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.mcal-ww-day__add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mcal-ww-day__sep {
+  color: var(--mcal-text-muted);
+  font-size: 11px;
+}
+
+.mcal-time-input { width: 78px; flex: 0 0 auto; }
+
+/* ── Resmi tatiller ──────────────────────────────────────── */
+.mcal-hol-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.mcal-date-input { flex: 0 0 140px; }
+.mcal-text-input { flex: 1 1 auto; }
+
+.mcal-hol-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.mcal-hol-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--mcal-surface-2);
+  border: 1px solid var(--mcal-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.mcal-hol-row__date {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: var(--mcal-text-muted);
+  flex: 0 0 auto;
+}
+
+.mcal-hol-row__name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

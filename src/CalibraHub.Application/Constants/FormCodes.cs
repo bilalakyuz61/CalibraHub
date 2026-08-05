@@ -125,6 +125,8 @@ public static class FormCodes
 
     // Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04).
     public const string MachineSchedule = "MACHINE_SCHEDULE";
+    // Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) — Faz 2 (2026-08-05).
+    public const string MachineCalendar = "MACHINE_CALENDAR";
 
     public const string Operations   = "OPERATIONS";
     public const string OperationEdit = "OPERATION_EDIT";

@@ -27,6 +27,111 @@
         Silme sonrası liste yalnız ilgili kartı günceller (sayfa yenilenmez).</li>
   </ul>
 
+  <!-- ── Animasyonlu demo: kart üzerinde Düzenle / Sil akışı (saf CSS, döngülü) ── -->
+  <style>
+    .hlp-demo {
+      position: relative; margin: 6px 0 14px; padding: 18px;
+      border: 1px solid var(--app-border, #e2e8f0); border-radius: 12px;
+      background: var(--app-surface-2, #f8fafc); overflow: hidden;
+    }
+    .hlp-demo-cap { font-size: .72rem; color: var(--bs-secondary-color, #94a3b8); margin-bottom: 10px; }
+    .hlp-card {
+      position: relative; width: 240px; padding: 12px 14px; border-radius: 10px;
+      background: var(--app-surface, #fff); border: 1px solid var(--app-border, #e2e8f0);
+      box-shadow: 0 2px 8px rgba(15,23,42,.06);
+      animation: hlpCardGlow 9s infinite;
+    }
+    .hlp-card-title { font-weight: 700; font-size: .82rem; color: var(--bs-body-color, #0f172a); }
+    .hlp-card-sub { font-size: .72rem; color: var(--bs-secondary-color, #64748b); font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .hlp-chip {
+      display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px;
+      font-size: .66rem; font-weight: 600; background: rgba(16,185,129,.14); color: #059669;
+    }
+    .hlp-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .hlp-btn {
+      padding: 4px 10px; border-radius: 7px; font-size: .7rem; font-weight: 600;
+      border: 1px solid var(--app-border, #e2e8f0); color: var(--bs-body-color, #334155);
+      background: var(--app-surface-2, #f1f5f9);
+    }
+    .hlp-btn-edit { animation: hlpEditGlow 9s infinite; }
+    .hlp-btn-del  { animation: hlpDelGlow 9s infinite; }
+    .hlp-cursor {
+      position: absolute; width: 14px; height: 14px; border-radius: 50%;
+      background: rgba(99,102,241,.85); box-shadow: 0 0 0 4px rgba(99,102,241,.25);
+      left: 12px; top: 90%; pointer-events: none; z-index: 3;
+      animation: hlpCursorPath 9s infinite;
+    }
+    .hlp-confirm {
+      position: absolute; right: 14px; top: 16px; width: 168px; padding: 10px 12px;
+      border-radius: 10px; background: var(--app-surface, #fff);
+      border: 1px solid #fda4af; box-shadow: 0 10px 26px rgba(190,18,60,.18);
+      font-size: .68rem; color: var(--bs-body-color, #334155);
+      opacity: 0; transform: translateY(6px); animation: hlpConfirmPop 9s infinite; z-index: 2;
+    }
+    .hlp-confirm b { color: #be123c; display: block; margin-bottom: 4px; font-size: .7rem; }
+    .hlp-confirm-btns { display: flex; gap: 6px; margin-top: 8px; }
+    .hlp-confirm-btns span {
+      flex: 1; text-align: center; padding: 3px 0; border-radius: 6px; font-weight: 600; font-size: .64rem;
+    }
+    .hlp-cf-cancel { border: 1px solid var(--app-border, #e2e8f0); }
+    .hlp-cf-del { background: #e11d48; color: #fff; }
+    /* Zaman çizgisi (9s): 0-2.2s imleç Düzenle'ye gider → 2.2s tık (kart parlar)
+       → 4.2-5.2s imleç Sil'e gider → 5.5s tık → onay penceresi 5.7-8.3s görünür. */
+    @keyframes hlpCursorPath {
+      0%   { left: 12px;  top: 92%;  }
+      22%  { left: 46px;  top: 74%;  }
+      26%  { left: 46px;  top: 74%; transform: scale(.72); }
+      30%  { left: 46px;  top: 74%; transform: scale(1); }
+      46%  { left: 46px;  top: 74%;  }
+      58%  { left: 118px; top: 74%;  }
+      61%  { left: 118px; top: 74%; transform: scale(.72); }
+      65%  { left: 118px; top: 74%; transform: scale(1); }
+      92%  { left: 118px; top: 74%;  }
+      100% { left: 12px;  top: 92%;  }
+    }
+    @keyframes hlpEditGlow {
+      0%, 21% { background: var(--app-surface-2, #f1f5f9); color: var(--bs-body-color, #334155); border-color: var(--app-border, #e2e8f0); }
+      24%, 40% { background: #6366f1; color: #fff; border-color: #4f46e5; }
+      46%, 100% { background: var(--app-surface-2, #f1f5f9); color: var(--bs-body-color, #334155); border-color: var(--app-border, #e2e8f0); }
+    }
+    @keyframes hlpCardGlow {
+      0%, 23% { border-color: var(--app-border, #e2e8f0); box-shadow: 0 2px 8px rgba(15,23,42,.06); }
+      27%, 40% { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.22); }
+      46%, 100% { border-color: var(--app-border, #e2e8f0); box-shadow: 0 2px 8px rgba(15,23,42,.06); }
+    }
+    @keyframes hlpDelGlow {
+      0%, 58% { background: var(--app-surface-2, #f1f5f9); color: var(--bs-body-color, #334155); border-color: var(--app-border, #e2e8f0); }
+      62%, 88% { background: #e11d48; color: #fff; border-color: #be123c; }
+      94%, 100% { background: var(--app-surface-2, #f1f5f9); color: var(--bs-body-color, #334155); border-color: var(--app-border, #e2e8f0); }
+    }
+    @keyframes hlpConfirmPop {
+      0%, 62% { opacity: 0; transform: translateY(6px); }
+      66%, 90% { opacity: 1; transform: translateY(0); }
+      95%, 100% { opacity: 0; transform: translateY(6px); }
+    }
+    body.app-theme-dark .hlp-demo { background: rgba(255,255,255,.03); }
+    body.app-theme-dark .hlp-card { background: #151e2e; }
+    body.app-theme-dark .hlp-confirm { background: #1b2436; }
+  </style>
+  <div class="hlp-demo">
+    <div class="hlp-demo-cap">Örnek: kart üzerinde Düzenle ve Sil akışı</div>
+    <div class="hlp-card">
+      <div class="hlp-card-title">Ahşap Masa 120cm</div>
+      <div class="hlp-card-sub">MAMUL-01</div>
+      <div class="hlp-chip">Aktif</div>
+      <div class="hlp-actions">
+        <span class="hlp-btn hlp-btn-edit">Düzenle</span>
+        <span class="hlp-btn hlp-btn-del">Sil</span>
+      </div>
+    </div>
+    <div class="hlp-confirm">
+      <b>Silmek istediğinize emin misiniz?</b>
+      Ahşap Masa 120cm kaldırılacak.
+      <div class="hlp-confirm-btns"><span class="hlp-cf-cancel">Vazgeç</span><span class="hlp-cf-del">Sil</span></div>
+    </div>
+    <div class="hlp-cursor"></div>
+  </div>
+
   <h3>İpuçları</h3>
   <ul>
     <li>Belirli bir tipe (ör. yalnız Mamul) odaklanmak için Filtre panelini kullanın.</li>

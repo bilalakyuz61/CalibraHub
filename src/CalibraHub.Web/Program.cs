@@ -617,6 +617,10 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IOper
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IOperationMachineTimeService,
     CalibraHub.Application.Services.OperationMachineTimeService>();
 // Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04).
+// Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) — Faz 2 (2026-08-05). SqlMachineScheduleRepository
+// bu repoya bağımlı (Gantt gölgeleme verisi) — önce kaydedilmeli.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMachineCalendarRepository,
+    CalibraHub.Persistence.Repositories.SqlMachineCalendarRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMachineScheduleRepository,
     CalibraHub.Persistence.Repositories.SqlMachineScheduleRepository>();
 

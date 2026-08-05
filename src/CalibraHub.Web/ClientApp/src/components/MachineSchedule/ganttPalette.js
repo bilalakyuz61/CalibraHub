@@ -20,6 +20,10 @@ export var LIGHT_PALETTE = {
     4: { fill: '#94a3b8', text: '#1e293b', stroke: '#64748b' }, // Down
   },
   conflict: '#ef4444',
+  // Faz 2 — çalışma-dışı saat + resmi tatil gölgeleme
+  shade: 'rgba(100,116,139,0.16)',
+  holiday: 'rgba(244,63,94,0.14)',
+  holidayBorder: '#fda4af',
 }
 
 export var DARK_PALETTE = {
@@ -39,6 +43,9 @@ export var DARK_PALETTE = {
     4: { fill: '#475569', text: '#e2e8f0', stroke: '#94a3b8' },
   },
   conflict: '#f87171',
+  shade: 'rgba(148,163,184,0.14)',
+  holiday: 'rgba(248,113,113,0.16)',
+  holidayBorder: '#7f1d1d',
 }
 
 export function getPalette(isDark) {

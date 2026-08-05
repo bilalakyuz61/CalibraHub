@@ -26,7 +26,11 @@ public sealed record OperationMachineTimeDto(
     DurationUnit DurationUnit,
     bool IsActive,
     DateTime Created,
-    DateTime? Updated);
+    DateTime? Updated,
+    // Makine Planlama Faz 2 (2026-08-05) — operasyon setup (hazırlık) süresi. Satırın kendi
+    // DurationUnit'i ile yorumlanır (ayrı birim yok). Yerleşince otomatik "Hazırlık" bloğu
+    // (BlockType=2) üretilir — bkz. SqlMachineScheduleRepository.SaveBlockAsync.
+    decimal? SetupDuration = null);
 
 public sealed record SaveOperationMachineTimeRequest(
     int Id,
@@ -40,7 +44,8 @@ public sealed record SaveOperationMachineTimeRequest(
     decimal Quantity,
     decimal DurationPerUnit,
     DurationUnit DurationUnit,
-    bool IsActive);
+    bool IsActive,
+    decimal? SetupDuration = null);
 
 /// <summary>
 /// Makine Planlama süre resolver (Faz 1, 2026-08-04) — en spesifik <c>OperationMachineTime</c> eşleşmesi.
@@ -55,4 +60,6 @@ public sealed record OperationMachineTimeMatchDto(
     int? RoutingId,
     decimal Quantity,
     decimal DurationPerUnit,
-    DurationUnit DurationUnit);
+    DurationUnit DurationUnit,
+    // Faz 2 (2026-08-05) — setup resolver bu alanı kullanır (bkz. IOperationMachineTimeService.ResolveSetupMinutesAsync).
+    decimal? SetupDuration = null);

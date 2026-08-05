@@ -27,6 +27,11 @@
   --ms-block-down-text: #1e293b;
   --ms-block-conflict: #ef4444;
 
+  /* Faz 2 — çalışma-dışı saat + resmi tatil gölgeleme */
+  --ms-shade: rgba(100, 116, 139, 0.16);
+  --ms-holiday: rgba(244, 63, 94, 0.14);
+  --ms-holiday-border: #fda4af;
+
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -63,6 +68,10 @@ body.app-theme-dark .ms-root {
   --ms-block-down: #475569;
   --ms-block-down-text: #e2e8f0;
   --ms-block-conflict: #f87171;
+
+  --ms-shade: rgba(148, 163, 184, 0.14);
+  --ms-holiday: rgba(248, 113, 113, 0.16);
+  --ms-holiday-border: #7f1d1d;
 }
 
 /* ── Layout: sol kuyruk + sağ Gantt ─────────────────────── */
@@ -336,6 +345,16 @@ body.app-theme-dark .ms-root {
   z-index: 3;
   background: var(--ms-header-bg);
   border-bottom: 1px solid var(--ms-border);
+}
+
+/* Faz 2 — resmi tatil şeridi (header üstünde HTML overlay; native title= tooltip) */
+.ms-holiday-marker {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  background: var(--ms-holiday);
+  border-bottom: 2px solid var(--ms-holiday-border);
+  cursor: help;
 }
 
 .ms-machine-col {

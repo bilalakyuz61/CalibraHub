@@ -55,6 +55,7 @@ import CapaDashboard from './components/CapaDashboard/CapaDashboard'
 import './components/CapaDashboard/CapaDashboard.css'
 import OperationGrid from './components/OperationGrid/OperationGrid'
 import MachineSchedule from './components/MachineSchedule/MachineSchedule'
+import MachineCalendar from './components/MachineCalendar/MachineCalendar'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
 import CombinationPickerModal from './components/CalibraLineItemsGrid/CombinationPickerModal'
@@ -1435,6 +1436,28 @@ function mountMachineSchedule(element) {
   }
 }
 window.CalibraHub.mountMachineSchedule = mountMachineSchedule
+
+/**
+ * MachineCalendar mount — Makine Çalışma Takvimi (haftalık pencere + resmi tatil) admin ekranı.
+ * @param {HTMLElement} element
+ */
+function mountMachineCalendar(element) {
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(MachineCalendar, null)
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountMachineCalendar = mountMachineCalendar
 
 /**
  * LocationTree mount — Lokasyon Tanımlamaları kart-ağaç görünümü.

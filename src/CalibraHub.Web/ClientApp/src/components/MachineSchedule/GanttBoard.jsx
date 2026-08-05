@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { Stage, Layer, Rect, Line, Text } from 'react-konva'
 import ScheduleBlock from './ScheduleBlock'
 import { getPalette } from './ganttPalette'
+import { buildWorkWindowShades, buildHolidayColumns } from './scheduleShading'
 import {
   ROW_HEIGHT, HEADER_HEIGHT, MACHINE_COL_WIDTH,
   dateToX, hoursBetween, formatHm,
@@ -40,6 +41,7 @@ function buildTicks(rangeStart, rangeEnd, pxPerHour) {
 export default function GanttBoard({
   machines, blocks, rangeStart, rangeEnd, pxPerHour, isDark,
   conflictIds, onBlockClick, onBlockMove, onBlockResize, loading,
+  workWindows, holidays,
 }) {
   var palette = getPalette(isDark)
   var { setNodeRef: setDropRef } = useDroppable({ id: 'gantt-body' })
@@ -59,6 +61,15 @@ export default function GanttBoard({
     machines.forEach(function (m, i) { map[m.id] = i })
     return map
   }, [machines])
+
+  // ── Faz 2: çalışma-dışı saat + resmi tatil gölgeleme ────────
+  var workWindowShades = useMemo(function () {
+    return buildWorkWindowShades(machines, workWindows, rangeStart, rangeEnd, pxPerHour, ROW_HEIGHT)
+  }, [machines, workWindows, rangeStart, rangeEnd, pxPerHour])
+
+  var holidayCols = useMemo(function () {
+    return buildHolidayColumns(holidays, rangeStart, rangeEnd, pxPerHour)
+  }, [holidays, rangeStart, rangeEnd, pxPerHour])
 
   return (
     <div className="ms-gantt-scroll">
@@ -96,6 +107,17 @@ export default function GanttBoard({
               })}
             </Layer>
           </Stage>
+          {/* Tatil şeridi — HTML overlay (native title tooltip; Konva canvas'ta gerçek tooltip yok) */}
+          {holidayCols.map(function (c) {
+            return (
+              <div
+                key={'hol-hdr-' + c.key}
+                className="ms-holiday-marker"
+                title={c.name}
+                style={{ left: c.x, width: c.width, height: HEADER_HEIGHT }}
+              />
+            )
+          })}
         </div>
 
         {/* Makine adı kolonu */}
@@ -123,6 +145,32 @@ export default function GanttBoard({
                     width={timelineWidth}
                     height={ROW_HEIGHT}
                     fill={i % 2 === 1 ? palette.rowAlt : 'transparent'}
+                  />
+                )
+              })}
+              {/* Faz 2: resmi tatil — tüm makine satırlarında tam-yükseklik gölge (bloklardan ALTTA) */}
+              {holidayCols.map(function (c) {
+                return (
+                  <Rect
+                    key={'holbody-' + c.key}
+                    x={c.x}
+                    y={0}
+                    width={c.width}
+                    height={bodyHeight}
+                    fill={palette.holiday}
+                  />
+                )
+              })}
+              {/* Faz 2: makine çalışma-dışı saatleri — yarı-saydam gölge (bloklardan ALTTA) */}
+              {workWindowShades.map(function (s) {
+                return (
+                  <Rect
+                    key={'shade-' + s.key}
+                    x={s.x}
+                    y={s.y}
+                    width={s.width}
+                    height={s.height}
+                    fill={palette.shade}
                   />
                 )
               })}
@@ -174,6 +222,7 @@ export default function GanttBoard({
                     onMove={onBlockMove}
                     onResize={onBlockResize}
                     onClick={onBlockClick}
+                    readOnly={b.parentBlockId != null}
                   />
                 )
               })}
