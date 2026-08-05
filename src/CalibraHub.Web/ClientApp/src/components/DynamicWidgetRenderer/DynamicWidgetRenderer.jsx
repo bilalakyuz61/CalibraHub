@@ -700,9 +700,13 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       return !visibility || visibility[w.widgetId] !== false
     })
     if (visibleUngrouped.length > 0) {
-      sideTabs.push({ key: '__ungrouped', label: 'Genel', children: childrenByParent['__ungrouped'] })
+      sideTabs.push({ key: '__ungrouped', label: 'Genel', children: childrenByParent['__ungrouped'], sections: null })
     }
   }
+  // 2026-08-05 — Sekme adi birlestirme: ayni metadata.tabName'i tasiyan gruplar
+  // TEK sekmede birlesir (sekme adi = tabName; grup adlari sekme icinde bolum
+  // basligi olur). tabName'siz grup eski davranista: kendi basina sekme.
+  var __tabByName = {}
   groupWidgets.forEach(function (g) {
     var childs = childrenByParent[g.id] || []
     if (childs.length === 0) return
@@ -710,8 +714,28 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       return !visibility || visibility[w.widgetId] !== false
     })
     if (visChilds.length === 0) return
-    sideTabs.push({ key: String(g.id), label: g.label, children: childs })
+    var tabName = (g.metadata && g.metadata.tabName ? String(g.metadata.tabName) : '').trim()
+    if (tabName) {
+      var tKey = 'tab:' + tabName.toLocaleLowerCase('tr')
+      if (!__tabByName[tKey]) {
+        __tabByName[tKey] = { key: tKey, label: tabName, children: [], sections: [] }
+        sideTabs.push(__tabByName[tKey])
+      }
+      __tabByName[tKey].sections.push({ label: g.label, children: childs })
+      __tabByName[tKey].children = __tabByName[tKey].children.concat(childs)
+    } else {
+      sideTabs.push({ key: String(g.id), label: g.label, children: childs, sections: null })
+    }
   })
+
+  // Bir widget'in ait oldugu sidetab key'i (hata odaklama icin) — tabName
+  // birlesmesi grubu 'tab:<ad>' anahtarina tasimis olabilir.
+  function sideTabKeyForWidget(w) {
+    if (w.parentId == null) return '__ungrouped'
+    var g = groupWidgets.find(function (x) { return x.id === w.parentId })
+    var tn = g && g.metadata && g.metadata.tabName ? String(g.metadata.tabName).trim() : ''
+    return tn ? ('tab:' + tn.toLocaleLowerCase('tr')) : String(w.parentId)
+  }
 
   // İlk render'da activeGroupKey null ise ilk tab'a düş.
   useEffect(function () {
@@ -728,7 +752,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
     var firstErrId = saveAttemptErrors[0]
     var errWidget = widgets.find(function (w) { return w.widgetId === firstErrId })
     if (!errWidget) return
-    var errKey = errWidget.parentId != null ? String(errWidget.parentId) : '__ungrouped'
+    var errKey = sideTabKeyForWidget(errWidget)
     if (errKey !== activeGroupKey) setActiveGroupKey(errKey)
     // Bir frame sonra DOM'da hatalı alan render olmuş olur → scroll.
     setTimeout(function () {
@@ -815,11 +839,30 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
         </aside>
         <section className="dwr-sidetabs__content" role="tabpanel">
           {activeTab ? (
-            <div className="wf-grid">
-              {activeTab.children.map(function (w) {
-                return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
-              })}
-            </div>
+            // Birlesik sekmede (ayni tabName'li 2+ grup) her grup kendi bolum
+            // basligiyla ayrilir; tek gruplu/duz sekmede basliksiz duz grid.
+            activeTab.sections && activeTab.sections.length > 1 ? (
+              <div>
+                {activeTab.sections.map(function (sec, si) {
+                  return (
+                    <div key={sec.label + '-' + si} className="dwr-sidetabs__section">
+                      <div className="dwr-sidetabs__section-title">{sec.label}</div>
+                      <div className="wf-grid">
+                        {sec.children.map(function (w) {
+                          return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="wf-grid">
+                {activeTab.children.map(function (w) {
+                  return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
+                })}
+              </div>
+            )
           ) : (
             <div className="dwr-sidetabs__empty">Görüntülenecek alan yok.</div>
           )}

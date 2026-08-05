@@ -409,7 +409,9 @@ export default function AdminWidgetRegistryPanel(props) {
       dataType: 'group',
       maxLength: null,
       sortOrder: maxSort + 10,
-      options: null,
+      // 2026-08-05 — Sekme adi: Options[0]=tabName; backend {"tabName": ...}
+      // metadata'si olarak saklar; ayni tabName'li gruplar sidetabs'ta birlesir.
+      options: payload.tabName ? [payload.tabName] : null,
       isActive: true,
     }
 
@@ -1048,6 +1050,22 @@ export default function AdminWidgetRegistryPanel(props) {
       {/* ── Yeni Grup Modalı ──────────────── */}
       <GroupModal
         isOpen={groupModalOpen}
+        existingTabNames={(function() {
+          // Mevcut sekme adlari: gruplarin metadata.tabName'leri (distinct, TR
+          // buyuk/kucuk harf duyarsiz) — datalist onerisi olarak GroupModal'a gider.
+          var seen = {}
+          var out = []
+          widgets.forEach(function(w) {
+            if (String(w.dataType || '').toLowerCase() !== 'group') return
+            var tn = w.metadata && w.metadata.tabName ? String(w.metadata.tabName).trim() : ''
+            if (!tn) return
+            var k = tn.toLocaleLowerCase('tr')
+            if (seen[k]) return
+            seen[k] = true
+            out.push(tn)
+          })
+          return out
+        })()}
         onClose={function() { setGroupModalOpen(false) }}
         onCreated={function(payload) {
           var result = handleCreateGroup(payload)

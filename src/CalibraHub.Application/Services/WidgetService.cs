@@ -450,6 +450,20 @@ public sealed class WidgetService : IWidgetService
                 optionsJson = JsonSerializer.Serialize(obj);
             }
         }
+        else if (isGroup)
+        {
+            // 2026-08-05 — Grup sekme adı: Options[0] = tabName (opsiyonel).
+            // Aynı tabName'i taşıyan gruplar Ek Alanlar sidetabs görünümünde TEK
+            // sekmede birleşir (DWR sideTabs merge) — yazım farkı ("Finansal" /
+            // "Fınansal") çift sekme üretmesin diye GroupModal mevcut adlardan
+            // seçtirir. Boş = grup adı sekme adıdır.
+            var tabName = request.Options?.FirstOrDefault(o => !string.IsNullOrWhiteSpace(o))?.Trim();
+            if (!string.IsNullOrWhiteSpace(tabName))
+            {
+                if (tabName.Length > 40) tabName = tabName[..40];
+                optionsJson = JsonSerializer.Serialize(new Dictionary<string, string> { ["tabName"] = tabName });
+            }
+        }
         int? maxLength      = isGroup ? null : request.MaxLength;
         int? minLength      = isGroup ? null : request.MinLength;
         int? expectedLength = isGroup ? null : request.ExpectedLength;

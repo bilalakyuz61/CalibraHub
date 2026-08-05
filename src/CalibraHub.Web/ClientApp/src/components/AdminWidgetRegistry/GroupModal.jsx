@@ -34,9 +34,13 @@ export default function GroupModal(props) {
   var onClose   = props.onClose
   var onCreated = props.onCreated
   var saving    = !!props.saving
+  // 2026-08-05 — mevcut sekme adlari (datalist onerisi): yazim farki
+  // ("Finansal" / "Fınansal") cift sekme uretmesin diye SECILEBILIR gelir.
+  var existingTabNames = Array.isArray(props.existingTabNames) ? props.existingTabNames : []
 
   var [label, setLabel] = useState('')
   var [key, setKey]     = useState('')
+  var [tabName, setTabName] = useState('')
   var [error, setError] = useState(null)
 
   // Modal her acildiginda state'i sifirla
@@ -44,6 +48,7 @@ export default function GroupModal(props) {
     if (isOpen) {
       setLabel('')
       setKey('')
+      setTabName('')
       setError(null)
     }
   }, [isOpen])
@@ -65,9 +70,19 @@ export default function GroupModal(props) {
     var e = validate()
     if (e) { setError(e); return }
     if (onCreated) {
+      // Sekme adi yazim-farki guard'i: mevcut adlardan birine buyuk/kucuk harf
+      // duyarsiz esleme varsa MEVCUT yazimi kullan (yeni varyant uretme).
+      var tn = tabName.trim()
+      if (tn) {
+        var match = existingTabNames.find(function (x) {
+          return String(x).trim().toLocaleLowerCase('tr') === tn.toLocaleLowerCase('tr')
+        })
+        if (match) tn = String(match).trim()
+      }
       onCreated({
         groupKey: key.trim(),
         groupLabel: label.trim(),
+        tabName: tn || null,
       })
     }
   }
@@ -128,6 +143,25 @@ export default function GroupModal(props) {
             className={inputBase + (error ? inputErr : inputOk)}
             onKeyDown={function (e) { if (e.key === 'Enter') handleCreate() }}
           />
+        </div>
+        <div>
+          <label className={labelCls}>Sekme Adı (Opsiyonel)</label>
+          <input
+            type="text"
+            value={tabName}
+            onChange={function (e) { setTabName(e.target.value) }}
+            list="cw-group-tab-names"
+            maxLength={40}
+            placeholder={existingTabNames.length > 0 ? 'Mevcut sekmelerden seçin veya yeni yazın' : 'Boş = grup adı sekme adı olur'}
+            className={inputBase + inputOk}
+            onKeyDown={function (e) { if (e.key === 'Enter') handleCreate() }}
+          />
+          <datalist id="cw-group-tab-names">
+            {existingTabNames.map(function (n) { return <option key={n} value={n} /> })}
+          </datalist>
+          <p className="mt-1.5 text-[10.5px] text-slate-400 dark:text-white/35">
+            Aynı sekme adını taşıyan gruplar Ek Alanlar'da tek sekmede birleşir; boş bırakılırsa grup kendi sekmesi olur.
+          </p>
         </div>
         {error && (
           <p className="text-[11px] text-red-600 dark:text-red-400/90 bg-red-500/5 border border-red-400/20 rounded-lg px-3 py-2">
