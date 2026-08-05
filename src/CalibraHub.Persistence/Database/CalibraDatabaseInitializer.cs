@@ -5998,6 +5998,64 @@ END;";
                         WHERE [IsActive] = 1;
                 ';
 
+            -- ── Vardiya Senaryoları (2026-08-05) — çalışma senaryosu başlığı + makine×vardiya×gün ataması ──
+            -- Makine çalışma pencereleri artık ScenarioMachineShift + Shift'ten TÜRETİLİR (bkz.
+            -- SqlMachineCalendarRepository.ListWorkWindowsAsync). Senaryonun hiç satırı yoksa legacy
+            -- MachineWorkWindow'a fallback edilir (kademeli geçiş). Per-company DB → CompanyId taşımaz.
+            IF OBJECT_ID(N'[{s}].[ShiftScenario]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ShiftScenario]
+                (
+                    [Id]           INT           NOT NULL IDENTITY(1,1) CONSTRAINT [PK_ShiftScenario] PRIMARY KEY,
+                    [Name]         NVARCHAR(200) NOT NULL,
+                    [Description]  NVARCHAR(500) NULL,
+                    [IsDefault]    BIT           NOT NULL CONSTRAINT [DF_ShiftScenario_IsDefault] DEFAULT 0,
+                    [IsActive]     BIT           NOT NULL CONSTRAINT [DF_ShiftScenario_IsActive] DEFAULT 1,
+                    [CreatedById]  INT           NULL,
+                    [Created]      DATETIME      NOT NULL CONSTRAINT [DF_ShiftScenario_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]  INT           NULL,
+                    [Updated]      DATETIME      NULL
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ShiftScenario]') AND name = N'UX_ShiftScenario_Default')
+                EXEC sp_executesql N'
+                    CREATE UNIQUE INDEX [UX_ShiftScenario_Default]
+                        ON [{s}].[ShiftScenario]([IsDefault])
+                        WHERE [IsDefault] = 1 AND [IsActive] = 1;
+                ';
+
+            -- Varsayılan senaryo seed (idempotent) — legacy fallback bu senaryo boşken devrede kalır.
+            IF NOT EXISTS (SELECT 1 FROM [{s}].[ShiftScenario])
+                INSERT INTO [{s}].[ShiftScenario] ([Name], [Description], [IsDefault], [IsActive])
+                VALUES (N'Varsayılan Senaryo', N'Otomatik oluşturuldu. Makine çalışma saatleri vardiya atamasından türetilir; atama yoksa mevcut takvim kullanılır.', 1, 1);
+
+            IF OBJECT_ID(N'[{s}].[ScenarioMachineShift]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ScenarioMachineShift]
+                (
+                    [Id]           INT      NOT NULL IDENTITY(1,1) CONSTRAINT [PK_ScenarioMachineShift] PRIMARY KEY,
+                    [ScenarioId]   INT      NOT NULL,
+                    [MachineId]    INT      NOT NULL,
+                    [ShiftId]      INT      NOT NULL,
+                    [DaysMask]     TINYINT  NOT NULL CONSTRAINT [DF_ScenarioMachineShift_DaysMask] DEFAULT 0,
+                    [IsActive]     BIT      NOT NULL CONSTRAINT [DF_ScenarioMachineShift_IsActive] DEFAULT 1,
+                    [CreatedById]  INT      NULL,
+                    [Created]      DATETIME NOT NULL CONSTRAINT [DF_ScenarioMachineShift_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]  INT      NULL,
+                    [Updated]      DATETIME NULL
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[ScenarioMachineShift]') AND name = N'IX_ScenarioMachineShift_Scenario')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_ScenarioMachineShift_Scenario]
+                        ON [{s}].[ScenarioMachineShift]([ScenarioId])
+                        WHERE [IsActive] = 1;
+                ';
+
             -- Setup child self-ref (Faz 2): üretim bloğu düşünce otomatik Hazırlık bloğu ParentBlockId ile bağlanır.
             IF OBJECT_ID(N'[{s}].[MachineScheduleBlock]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[MachineScheduleBlock]', N'ParentBlockId') IS NULL

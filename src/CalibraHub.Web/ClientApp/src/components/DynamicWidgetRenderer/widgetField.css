@@ -646,10 +646,15 @@ body.app-theme-light .ca-select option {
    6) 24-col grid container + karisik satir hizalama
    ═══════════════════════════════════════════════════ */
 .wf-grid {
+  /* color-scheme: native select/checkbox/scrollbar CLAUDE.md "color-scheme
+     zorunlulugu" — bu host standalone bundle olarak Razor sayfalarina
+     mount edilir, Shell.jsx'in html.style.colorScheme'ine tabi degildir. */
+  color-scheme: light;
   display: grid;
   grid-template-columns: repeat(24, 1fr);
   gap: var(--wf-row-gap);
 }
+body.app-theme-dark .wf-grid { color-scheme: dark; }
 
 /* Eski prefix grid'lerin tek noktada hizalanmasi */
 .mce-grid-2, .sqe-grid-2, .ca-grid-2 {

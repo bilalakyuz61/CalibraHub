@@ -321,16 +321,16 @@ function GuideListTableTrigger(props) {
         >
           <div
             onClick={function (e) { e.stopPropagation() }}
-            style={{ width: '100%', maxWidth: 1080, maxHeight: '85vh', background: 'rgba(13,17,27,0.98)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, boxShadow: '0 16px 48px rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 1080, maxHeight: '85vh', background: isDark ? 'rgba(13,17,27,0.98)' : 'rgba(255,255,255,0.99)', border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(15,23,42,0.1)', borderRadius: 14, boxShadow: '0 16px 48px rgba(0,0,0,0.55)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.08)' }}>
               <div style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: palette.bg, border: '1px solid ' + palette.border }}>
                 <Icon size={15} style={{ color: palette.icon }} strokeWidth={1.8} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>{column.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: isDark ? 'rgba(255,255,255,0.92)' : 'rgba(15,23,42,0.92)' }}>{column.label}</div>
                 {meta.guideCode && (
-                  <div style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.5)', marginTop: 2 }}>
                     {meta.guideCode}
                   </div>
                 )}
@@ -339,7 +339,7 @@ function GuideListTableTrigger(props) {
                 type="button"
                 onClick={function () { setOpen(false) }}
                 aria-label="Kapat"
-                style={{ width: 30, height: 30, borderRadius: 8, cursor: 'pointer', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.65)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 30, height: 30, borderRadius: 8, cursor: 'pointer', background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)', border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.08)', color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(15,23,42,0.55)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 <X size={14} />
               </button>
@@ -921,15 +921,15 @@ export default function SmartTableRow(props) {
           onClick={handleConfirmNo}
         >
           <div
-            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '32px 28px', maxWidth: 380, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
+            style={{ background: isDark ? '#1e293b' : '#ffffff', border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(15,23,42,0.1)', borderRadius: 16, padding: '32px 28px', maxWidth: 380, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
             onClick={function (e) { e.stopPropagation() }}
           >
             <Trash2 size={26} style={{ color: '#ef4444' }} />
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>Emin misiniz?</h3>
-            <p style={{ fontSize: '.84rem', color: '#94a3b8', margin: 0 }}>{confirmMsg}</p>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: isDark ? '#f1f5f9' : '#0f172a', margin: 0 }}>Emin misiniz?</h3>
+            <p style={{ fontSize: '.84rem', color: isDark ? '#94a3b8' : '#64748b', margin: 0 }}>{confirmMsg}</p>
             <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
               <button type="button" onClick={handleConfirmNo}
-                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, background: 'rgba(255,255,255,.07)', color: '#f1f5f9', border: '1px solid rgba(255,255,255,.1)', cursor: 'pointer' }}>
+                style={{ padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, background: isDark ? 'rgba(255,255,255,.07)' : 'rgba(15,23,42,.05)', color: isDark ? '#f1f5f9' : '#334155', border: isDark ? '1px solid rgba(255,255,255,.1)' : '1px solid rgba(15,23,42,.1)', cursor: 'pointer' }}>
                 İptal
               </button>
               <button type="button" onClick={handleConfirmYes} autoFocus
@@ -949,12 +949,12 @@ export default function SmartTableRow(props) {
           onClick={function () { setAlertOpen(false) }}
         >
           <div
-            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '32px 28px', maxWidth: 400, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
+            style={{ background: isDark ? '#1e293b' : '#ffffff', border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(15,23,42,0.1)', borderRadius: 16, padding: '32px 28px', maxWidth: 400, width: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}
             onClick={function (e) { e.stopPropagation() }}
           >
             <AlertTriangle size={26} style={{ color: '#f59e0b' }} />
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>İşlem Yapılamadı</h3>
-            <p style={{ fontSize: '.84rem', color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>{alertMsg}</p>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: isDark ? '#f1f5f9' : '#0f172a', margin: 0 }}>İşlem Yapılamadı</h3>
+            <p style={{ fontSize: '.84rem', color: isDark ? '#94a3b8' : '#64748b', margin: 0, lineHeight: 1.5 }}>{alertMsg}</p>
             <button type="button" onClick={function () { setAlertOpen(false) }} autoFocus
               style={{ padding: '8px 22px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600, marginTop: 8, background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', border: 'none', cursor: 'pointer' }}>
               Tamam
