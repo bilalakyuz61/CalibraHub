@@ -219,6 +219,7 @@
               <div class="oe-mt-form-row">
                 <input type="number" id="oeMtQty" class="oe-mt-fi--qty" min="0" step="any" value="1" placeholder="Miktar *" title="Miktar — süre bu miktar içindir" />
                 <input type="number" id="oeMtDur" class="oe-mt-fi--dur" min="0" step="any" value="0" placeholder="Süre *" title="Süre" />
+                <input type="number" id="oeMtSetup" class="oe-mt-fi--dur" min="0" step="any" value="0" placeholder="Hazırlık Süresi" title="Hazırlık süresi — üretim bloğundan önce bir kerelik hazırlık (aynı süre birimiyle)" />
                 <select id="oeMtDurUnit" class="oe-mt-fi--durunit" title="Süre birimi">
                   <option value="1">Dakika</option>
                   <option value="2">Saat</option>
@@ -443,6 +444,7 @@
                             itemGroupId: r.itemGroupId || null, itemGroupCode: r.itemGroupCode || '',
                             unitId: r.unitId || null, unitCode: r.unitCode || '', unitName: r.unitName || '',
                             quantity: r.quantity, durationPerUnit: r.durationPerUnit,
+                            setupDuration: r.setupDuration || 0,
                             durationUnit: oeMtNormalizeDurationUnit(r.durationUnit),
                             isActive: r.isActive,
                         };
@@ -475,6 +477,9 @@
                     machineTile + itemTile + unitTile +
                     '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Miktar</span><span class="oe-mt-tile__value">' + oeMtNum(row.quantity) + '</span></div>' +
                     '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Süre</span><span class="oe-mt-tile__value">' + oeMtNum(row.durationPerUnit) + '<span class="oe-mt-tile__detail">' + (OE_MT_DUR_LABEL[row.durationUnit] || '') + '</span></span></div>' +
+                    (row.setupDuration > 0
+                        ? '<div class="oe-mt-tile"><span class="oe-mt-tile__label">Hazırlık</span><span class="oe-mt-tile__value">' + oeMtNum(row.setupDuration) + '<span class="oe-mt-tile__detail">' + (OE_MT_DUR_LABEL[row.durationUnit] || '') + '</span></span></div>'
+                        : '') +
                     '<div class="oe-mt-row__spacer"></div>' +
                     '<label class="oe-mt-switch-mini" title="' + (row.isActive ? 'Pasife Al' : 'Aktife Al') + '">' +
                     '<input type="checkbox" data-role="toggle" ' + (row.isActive ? 'checked' : '') + ' />' +
@@ -718,6 +723,7 @@
             oeMtApplyItemMode('none');
             document.getElementById('oeMtQty').value = '1';
             document.getElementById('oeMtDur').value = '0';
+            document.getElementById('oeMtSetup').value = '0';
             document.getElementById('oeMtDurUnit').value = '1';
             document.getElementById('oeMtActive').checked = true;
             oeMtSetFormErr('');
@@ -746,6 +752,7 @@
 
             document.getElementById('oeMtQty').value = oeMtNum(row.quantity);
             document.getElementById('oeMtDur').value = oeMtNum(row.durationPerUnit);
+            document.getElementById('oeMtSetup').value = oeMtNum(row.setupDuration || 0);
             document.getElementById('oeMtDurUnit').value = row.durationUnit;
             document.getElementById('oeMtActive').checked = !!row.isActive;
             oeMtSetFormErr('');
@@ -772,13 +779,15 @@
             if (!qty || qty <= 0) { oeMtSetFormErr('Miktar 0’dan büyük olmalıdır.'); return; }
             var dur = parseFloat(document.getElementById('oeMtDur').value);
             if (isNaN(dur) || dur < 0) { oeMtSetFormErr('Süre geçerli bir sayı olmalıdır.'); return; }
+            var setupDur = parseFloat(document.getElementById('oeMtSetup').value);
+            if (isNaN(setupDur) || setupDur < 0) { oeMtSetFormErr('Hazırlık süresi geçerli bir sayı olmalıdır.'); return; }
 
             var rowId = parseInt(document.getElementById('oeMtFRowId').value, 10) || 0;
             var payload = {
                 id: rowId, operationId: parseInt(idVal, 10), routingId: null,
                 machineId: machineId, machineGroupId: machineGroupId,
                 itemId: itemId, itemGroupId: itemGroupId, unitId: unitId,
-                quantity: qty, durationPerUnit: dur,
+                quantity: qty, durationPerUnit: dur, setupDuration: setupDur,
                 durationUnit: parseInt(document.getElementById('oeMtDurUnit').value, 10) || 1,
                 isActive: document.getElementById('oeMtActive').checked,
             };
@@ -806,7 +815,7 @@
                 id: row.id, operationId: parseInt(idVal, 10), routingId: null,
                 machineId: row.machineId, machineGroupId: row.machineGroupId,
                 itemId: row.itemId, itemGroupId: row.itemGroupId, unitId: row.unitId,
-                quantity: row.quantity, durationPerUnit: row.durationPerUnit,
+                quantity: row.quantity, durationPerUnit: row.durationPerUnit, setupDuration: row.setupDuration || 0,
                 durationUnit: row.durationUnit, isActive: !row.isActive,
             };
             fetch('/Production/SaveOperationMachineTime', {
