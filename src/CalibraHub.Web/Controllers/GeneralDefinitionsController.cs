@@ -513,15 +513,38 @@ public sealed class GeneralDefinitionsController : Controller
         var date = rateDate ?? DateTime.Today;
         var rateRepo = HttpContext.RequestServices.GetRequiredService<Application.Abstractions.Persistence.IExchangeRateRepository>();
         var rate = await rateRepo.GetRateAsync(c.Code, date, ct);
+
+        // 2026-08-06: Kur tipi (Satis/Alis/Efektif) SALES_QUOTE sirket parametresinden gelir —
+        // tum dovizli belgelerde gecerli (kullanici karari). Tanimsiz → Satis (SellingRate,
+        // eski davranis). Secilen tip o gun icin 0/bos ise Satis kuruna dusulur (kur bos kalip
+        // kullaniciyi elle girise zorlamasin).
+        var companyParams = HttpContext.RequestServices
+            .GetRequiredService<Application.Abstractions.Services.ICompanyParameterService>();
+        var rateType = await companyParams.GetStringAsync(
+            CalibraHub.Application.Constants.SalesQuoteParameters.FormCode,
+            CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeKey, ct)
+            ?? CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeDefault;
+        decimal? resolvedRate = rateType switch
+        {
+            CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeBuying           => rate?.BuyingRate,
+            CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeEffectiveSelling => rate?.EffectiveSellingRate,
+            CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeEffectiveBuying  => rate?.EffectiveBuyingRate,
+            _                                                                              => rate?.SellingRate,
+        };
+        if ((resolvedRate is null || resolvedRate <= 0m) && rate is not null)
+            resolvedRate = rate.SellingRate;
+
         return Json(new {
             c.Id, c.Code, c.Name, c.Symbol, c.IsActive,
             buyingRate = rate?.BuyingRate, sellingRate = rate?.SellingRate,
             effectiveBuyingRate = rate?.EffectiveBuyingRate, effectiveSellingRate = rate?.EffectiveSellingRate,
             // Frontend sozlesmesi (lider DocumentEdit'te bunu kullanacak):
-            //   rate       -> satis kuru (default), yoksa null (kur bulunamadi)
+            //   rate       -> secili kur tipine gore deger (default Satis), yoksa null (kur bulunamadi)
+            //   rateType   -> uygulanan kur tipi (Selling/Buying/EffectiveSelling/EffectiveBuying)
             //   rateDate   -> kurun ait oldugu gercek tarih (fallback oldugunda istenenden farkli olabilir)
             //   source     -> "TCMB" veya "Manuel"
-            rate = rate?.SellingRate,
+            rate = resolvedRate,
+            rateType,
             rateDate = rate?.Date,
             source = rate?.Source,
         });

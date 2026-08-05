@@ -21,6 +21,7 @@
     var effReservation = effTracking && orderSerialReservation;
     var sessionIdle = ViewData["SessionIdleMinutes"] as int? ?? 30;
     var traceSerialScope = ViewData["TraceSerialScope"] as string ?? "Item";
+    var salesQuoteRateType = ViewData["SalesQuoteRateType"] as string ?? "Selling";
 }
 
 @section Styles {
@@ -574,12 +575,29 @@ body.app-theme-dark .ap-tab.is-active::before {
                 <h2>Satış Teklifi</h2>
                 <div class="ap-hint">Satış teklifi modülü parametreleri.</div>
 
-                <div class="ap-empty">
-                    <div class="ap-empty-icon">⚙</div>
-                    <div class="ap-empty-title">Henüz parametre tanımlanmadı</div>
-                    <div class="ap-empty-desc">
-                        Geçerlilik süresi, default vade günü, numaralandırma maskesi gibi<br/>
-                        satış teklifi davranışları burada gömülü olarak yer alacak.
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Döviz Kur Tipi</div>
+                        <div class="ap-row-desc">
+                            Belge dövizi seçildiğinde kur tarihine göre TCMB tablosundan hangi kurun
+                            getirileceğini belirler. <strong>Satış / Alış</strong> = Forex (döviz);
+                            <strong>Efektif</strong> = Banknote (nakit). Tüm dövizli belgelerde geçerlidir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <select id="ap-sq-rate-type" class="ap-select"
+                                style="min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--ap-border);background:var(--ap-input-bg);color:var(--ap-text);font-size:.85rem;">
+                            <option value="Selling">Satış</option>
+                            <option value="Buying">Alış</option>
+                            <option value="EffectiveSelling">Efektif Satış</option>
+                            <option value="EffectiveBuying">Efektif Alış</option>
+                        </select>
+                        <script>
+                            (function () {
+                                var s = document.getElementById('ap-sq-rate-type');
+                                if (s) s.value = '@salesQuoteRateType';
+                            })();
+                        </script>
                     </div>
                 </div>
             </section>
@@ -1076,7 +1094,7 @@ body.app-theme-dark .ap-tab.is-active::before {
     // NOT: Kaydedilebilir parametresi olan HER yeni sekme buraya eklenmeli,
     // yoksa o sekmede Kaydet butonu pasif kalir (bkz. satissiparis regresyonu).
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'izlenebilirlik' || activePane === 'guvenlik');
+        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac' || activePane === 'stok' || activePane === 'satissiparis' || activePane === 'salesquote' || activePane === 'izlenebilirlik' || activePane === 'guvenlik');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -1290,6 +1308,20 @@ body.app-theme-dark .ap-tab.is-active::before {
                 ok = !!data2.ok;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(data2.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'salesquote') {
+                var rtEl = document.getElementById('ap-sq-rate-type');
+                var allowed = ['Selling', 'Buying', 'EffectiveSelling', 'EffectiveBuying'];
+                var rtVal = (rtEl && allowed.indexOf(rtEl.value) >= 0) ? rtEl.value : 'Selling';
+                var rrt = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'SALES_QUOTE', paramKey: 'RATE_TYPE', paramValue: rtVal, dataType: 1 })
+                });
+                var drt = await rrt.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!drt.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(drt.error || 'Kaydetme basarisiz.', false);
             } else if (activePane === 'izlenebilirlik') {
                 var scEl = document.getElementById('ap-trace-serial-scope');
                 var scVal = (scEl && scEl.value === 'Global') ? 'Global' : 'Item';

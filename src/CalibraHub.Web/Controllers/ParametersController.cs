@@ -147,6 +147,12 @@ public sealed class ParametersController : Controller
             ? CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeGlobal
             : CalibraHub.Application.Constants.TraceabilityParameters.SerialUniqueScopeItem;
 
+        // Satış Teklifi tab: belge dövizi kur tipi (Satış/Alış/Efektif). Tanımsız → Satış.
+        ViewData["SalesQuoteRateType"] = await _companyParameters.GetStringAsync(
+            CalibraHub.Application.Constants.SalesQuoteParameters.FormCode,
+            CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeKey, cancellationToken)
+            ?? CalibraHub.Application.Constants.SalesQuoteParameters.RateTypeDefault;
+
         // Güvenlik tab: oturum atalet süresi (dk). Tanımsız → varsayılan (30). 0 = kapalı.
         ViewData["SessionIdleMinutes"] = await _companyParameters.GetIntAsync(
             CalibraHub.Application.Constants.SecurityParameters.FormCode,
