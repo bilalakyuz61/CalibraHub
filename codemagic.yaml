@@ -78,6 +78,12 @@ workflows:
         script: |
           cd "$KMP_DIR/iosApp"
           xcodegen generate
+      - name: Build numarasini ayarla (TestFlight her yuklemede tekil olmali)
+        script: |
+          cd "$KMP_DIR/iosApp"
+          # Codemagic'in artan build sayaci ($BUILD_NUMBER) -> CFBundleVersion.
+          # xcodegen Info.plist'i uretmis olmali (info.path: iosApp/Info.plist).
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER:-1}" iosApp/Info.plist
       - name: gradlew calistirilabilir yap
         script: chmod +x "$KMP_DIR/gradlew"
       - name: Kod imzalama profillerini uygula
