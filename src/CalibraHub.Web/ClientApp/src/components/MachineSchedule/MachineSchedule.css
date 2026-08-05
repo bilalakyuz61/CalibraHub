@@ -258,6 +258,17 @@ body.app-theme-dark .ms-root {
   font-size: 12.5px;
 }
 
+.ms-select {
+  color-scheme: inherit;
+  background: var(--ms-surface-2);
+  border: 1px solid var(--ms-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--ms-text);
+  font-size: 12.5px;
+  min-width: 160px;
+}
+
 .ms-zoom-btn,
 .ms-icon-btn {
   display: inline-flex;

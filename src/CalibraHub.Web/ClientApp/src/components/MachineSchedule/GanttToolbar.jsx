@@ -64,7 +64,11 @@ export default function GanttToolbar({
         <RefreshCw size={14} className={refreshing ? 'ms-spin' : ''} />
       </button>
 
-      <button className="ms-auto-btn" onClick={onAutoSchedule} title="Uygun makine/zamana otomatik yerleştir">
+      <button
+        className="ms-auto-btn"
+        onClick={onAutoSchedule}
+        title={selectedScenario ? '"' + selectedScenario.name + '" senaryosuna göre uygun makine/zamana otomatik yerleştir' : 'Uygun makine/zamana otomatik yerleştir'}
+      >
         <Wand2 size={14} /> Otomatik Yerleştir
       </button>
 
