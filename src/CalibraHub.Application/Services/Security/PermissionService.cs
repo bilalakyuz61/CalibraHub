@@ -172,17 +172,14 @@ public sealed class PermissionService : IPermissionService
             return userGrant.IsGranted;
         }
 
-        // 4.5) Grup kararı — kullanıcının üye olduğu AKTİF gruplardan gelen satırlar
-        // (ListForUserAndDepartmentAsync üyelik join'i ile getirir). Birden fazla grup
-        // çakışırsa union-allow: en az bir grup İZİN veriyorsa izin. Grup satırı hiç
-        // yoksa departmana düşülür.
-        var groupGrants = relevant.Where(g => g.GroupId.HasValue).ToList();
-        if (groupGrants.Count > 0)
-        {
-            var groupAllowed = groupGrants.Any(g => g.IsGranted);
-            _logger.LogDebug("[PERM][DIAG] {Result} u={UserId} dept={DeptId} {FormCode}:{ActionCode} → group grants ({Count} satır, union-allow)", groupAllowed ? "ALLOW" : "DENY", userId, departmentId?.ToString() ?? "-", formCode, actionCode, groupGrants.Count);
-            return groupAllowed;
-        }
+        // 4.5) Grup kararı — Seq 1090 (2026-08-05 kullanıcı kararı): GRUP YETKİ MANTIĞI KALDIRILDI.
+        // Yalnız departman + kullanıcı yetkisi geçerli. Grup grant'ları (g.GroupId.HasValue)
+        // artık ENFORCEMENT'ta DİKKATE ALINMAZ — grup satırı varsa bile atlanır, departmana
+        // düşülür. Böylece grup UI'ı kaldırıldıktan sonra (Permissions.cshtml) eski/görünmez
+        // grup üyelikleri SESSİZCE yetki vermez (silent-grant deliği kapatıldı).
+        // NOT: PermissionController grup endpoint'leri, GetGroupPermissionsAsync ve grup tabloları
+        // bilinçli olarak DORMANT bırakıldı (geri alınabilir); yalnız bu enforcement adımı devre dışı.
+        // -- Eski union-allow bloğu bilinçli olarak devre dışı bırakıldı (grup satırları yok sayılır) --
 
         // 5) Sonra departman bazlı
         if (departmentId.HasValue)
@@ -308,15 +305,9 @@ public sealed class PermissionService : IPermissionService
                 continue;
             }
 
-            // Grup birleşimi — CheckAsync 4.5 ile aynı kural (union-allow)
-            var defGroupGrants = grants.Where(g => g.PermissionDefId == d.Id && g.GroupId.HasValue).ToList();
-            if (defGroupGrants.Count > 0)
-            {
-                result.Add(new EffectivePermissionDto(
-                    d.Id, d.FormCode, d.ActionCode, d.Label, d.Category,
-                    Source: "GROUP", IsAllowed: defGroupGrants.Any(g => g.IsGranted), FormSortOrder: formSort));
-                continue;
-            }
+            // Grup birleşimi — Seq 1090: grup yetki mantığı kaldırıldı (CheckAsync 4.5 ile
+            // tutarlı). Grup kaynağı efektif izin matrisinde artık üretilmez; departmana düşülür.
+            // -- Eski "GROUP" union-allow kaydı bilinçli olarak devre dışı bırakıldı --
 
             if (departmentId.HasValue)
             {
