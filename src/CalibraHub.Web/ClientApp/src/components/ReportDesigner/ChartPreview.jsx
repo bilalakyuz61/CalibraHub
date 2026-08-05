@@ -1,6 +1,31 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
+
+// body.app-theme-dark izleyici — bkz. PanelChart.jsx useIsDark (döngüsel import'tan
+// kaçınmak için burada ayrıca tanımlandı; ChartPreview PanelChart tarafından import edilir).
+function useIsDark() {
+  const [isDark, setIsDark] = useState(() =>
+    typeof document !== 'undefined' && document.body.classList.contains('app-theme-dark')
+  )
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+    const update = () => setIsDark(document.body.classList.contains('app-theme-dark'))
+    update()
+    const obs = new MutationObserver(update)
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
+  return isDark
+}
+
+// Önizleme çerçevesi (grid/eksen/metin) renkleri — veri rengi (color prop) BUNDAN etkilenmez.
+const PREVIEW_THEME = {
+  dark:  { overlayRgb: '255,255,255', text: '#e2e8f0', muted: '#94a3b8', faint: '#475569', strong: '#f1f5f9', track: 'rgba(255,255,255,.08)' },
+  light: { overlayRgb: '15,23,42',    text: '#0f172a', muted: '#64748b', faint: '#94a3b8', strong: '#0f172a', track: 'rgba(15,23,42,.08)' },
+}
 
 export default function ChartPreview({ type, color, height = 56 }) {
+  const isDark = useIsDark()
+  const theme = isDark ? PREVIEW_THEME.dark : PREVIEW_THEME.light
   const isFull = height === 'full' || height === '100%'
   const h   = isFull ? '100%' : Math.max(56, height)
   const c   = color || '#6366f1'
@@ -46,10 +71,10 @@ export default function ChartPreview({ type, color, height = 56 }) {
 
   if (type === 'bullet') return (
     <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
-      <rect x="4"  y="22" width="112" height="12" rx="3" fill="rgba(255,255,255,.08)" />
+      <rect x="4"  y="22" width="112" height="12" rx="3" fill={theme.track} />
       <rect x="4"  y="22" width="76"  height="12" rx="3" fill={c} fillOpacity=".7" />
       <rect x="88" y="17" width="3"   height="22" rx="1.5" fill="#f59e0b" />
-      <text x="60" y="48" textAnchor="middle" fontSize="9" fill="#94a3b8">76 / 88</text>
+      <text x="60" y="48" textAnchor="middle" fontSize="9" fill={theme.muted}>76 / 88</text>
     </svg>
   )
 
@@ -69,10 +94,10 @@ export default function ChartPreview({ type, color, height = 56 }) {
   if (type === 'radar') return (
     <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
       <g transform="translate(60,30)">
-        <polygon points="0,-26 22,-8 14,20 -14,20 -22,-8" fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="1" />
-        <polygon points="0,-14 12,-4 8,10 -8,10 -12,-4" fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="1" />
+        <polygon points="0,-26 22,-8 14,20 -14,20 -22,-8" fill="none" stroke={`rgba(${theme.overlayRgb},.1)`} strokeWidth="1" />
+        <polygon points="0,-14 12,-4 8,10 -8,10 -12,-4" fill="none" stroke={`rgba(${theme.overlayRgb},.07)`} strokeWidth="1" />
         {['0,-26','22,-8','14,20','-14,20','-22,-8'].map((pt, i) => (
-          <line key={i} x1="0" y1="0" x2={pt.split(',')[0]} y2={pt.split(',')[1]} stroke="rgba(255,255,255,.08)" strokeWidth="1" />
+          <line key={i} x1="0" y1="0" x2={pt.split(',')[0]} y2={pt.split(',')[1]} stroke={`rgba(${theme.overlayRgb},.08)`} strokeWidth="1" />
         ))}
         <polygon points="0,-20 18,-6 10,16 -10,16 -16,-5" fill={c} fillOpacity=".25" stroke={c} strokeWidth="1.5" />
       </g>
@@ -82,15 +107,15 @@ export default function ChartPreview({ type, color, height = 56 }) {
   if (type === 'text') return (
     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4px 8px', height: h, gap: 4 }}>
       {['███████████████', '████████████', '██████████████████', '█████████'].map((t, i) => (
-        <div key={i} style={{ fontSize: 6, letterSpacing: 1, color: i === 0 ? '#e2e8f0' : '#475569', opacity: 1 - i * 0.15 }}>{t}</div>
+        <div key={i} style={{ fontSize: 6, letterSpacing: 1, color: i === 0 ? theme.text : theme.faint, opacity: 1 - i * 0.15 }}>{t}</div>
       ))}
     </div>
   )
 
   if (type === 'scatter') return (
     <svg viewBox="0 0 120 56" style={{ width: '100%', height: h, display: 'block' }}>
-      <line x1="8" y1="52" x2="8" y2="4" stroke="rgba(255,255,255,.12)" strokeWidth="1" />
-      <line x1="8" y1="52" x2="116" y2="52" stroke="rgba(255,255,255,.12)" strokeWidth="1" />
+      <line x1="8" y1="52" x2="8" y2="4" stroke={`rgba(${theme.overlayRgb},.12)`} strokeWidth="1" />
+      <line x1="8" y1="52" x2="116" y2="52" stroke={`rgba(${theme.overlayRgb},.12)`} strokeWidth="1" />
       {[[22,38],[42,18],[68,28],[84,12],[55,44],[30,22],[96,20],[75,38]].map(([x,y], i) => (
         <circle key={i} cx={x} cy={y} r={i % 3 === 0 ? 3.5 : 2.5} fill={c} fillOpacity={.55 + (i % 3) * .1} />
       ))}
@@ -150,7 +175,7 @@ export default function ChartPreview({ type, color, height = 56 }) {
 
   if (type === 'stat') return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: h, gap: 3 }}>
-      <div style={{ fontSize: (isFull || h > 100) ? 36 : 22, fontWeight: 600, color: '#f1f5f9', letterSpacing: '-0.03em', lineHeight: 1 }}>
+      <div style={{ fontSize: (isFull || h > 100) ? 36 : 22, fontWeight: 600, color: theme.strong, letterSpacing: '-0.03em', lineHeight: 1 }}>
         ₺2.4M
       </div>
       <div style={{ fontSize: 10, color: '#10b981', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -168,10 +193,10 @@ export default function ChartPreview({ type, color, height = 56 }) {
         <div key={i} style={{
           display: 'flex', justifyContent: 'space-between',
           padding: '4px 6px', borderRadius: 3,
-          background: i % 2 === 0 ? 'rgba(255,255,255,.04)' : 'transparent',
+          background: i % 2 === 0 ? `rgba(${theme.overlayRgb},.04)` : 'transparent',
         }}>
-          <span style={{ fontSize: 10, color: '#94a3b8' }}>{k}</span>
-          <span style={{ fontSize: 10, color: '#e2e8f0' }}>{v}</span>
+          <span style={{ fontSize: 10, color: theme.muted }}>{k}</span>
+          <span style={{ fontSize: 10, color: theme.text }}>{v}</span>
         </div>
       ))}
     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useContext, createContext } from 'react'
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps'
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -8,6 +8,57 @@ import {
   ScatterChart, Scatter, ZAxis, Legend,
 } from 'recharts'
 import ChartPreview from './ChartPreview'
+
+// ── Tema (light/dark) ───────────────────────────────────────────────────────
+// body.app-theme-dark class'ını izler (bkz. CLAUDE.md — tek dark selector kuralı).
+// Not: veri serisi renkleri (PIE_COLORS, panel.color vb.) BUNDAN etkilenmez —
+// yalnız grafik çerçevesi (eksen/grid/tooltip/legend/boş-durum/tablo chrome'u) temalanır.
+export function useIsDark() {
+  const [isDark, setIsDark] = useState(() =>
+    typeof document !== 'undefined' && document.body.classList.contains('app-theme-dark')
+  )
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+    const update = () => setIsDark(document.body.classList.contains('app-theme-dark'))
+    update()
+    const obs = new MutationObserver(update)
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
+  return isDark
+}
+
+const CHART_THEME = {
+  dark: {
+    overlayRgb: '255,255,255',
+    tick: '#4a5568', axisLine: 'rgba(255,255,255,.06)', gridStroke: 'rgba(255,255,255,.08)',
+    tooltipBg: '#0c1525', tooltipBorder: 'rgba(255,255,255,.1)', tooltipText: '#e2e8f0',
+    legendText: '#94a3b8',
+    emptyText: '#4a5568', mutedText: '#64748b', faintText: '#475569',
+    headText: '#94a3b8', strongText: '#f1f5f9', bodyText: '#e2e8f0', softText: '#cbd5e1', accentText: '#a5b4fc',
+    rowStripe: 'rgba(255,255,255,.025)',
+    panelBg: '#111827', totalsBg: '#0f1830',
+    border: 'rgba(255,255,255,.06)', border2: 'rgba(255,255,255,.08)',
+    trackBg: 'rgba(255,255,255,.08)', gaugeTrack: '#1e293b',
+    mapEmptyFill: '#172033', mapStroke: '#0c1525', mapBaseFill: '#1e293b',
+  },
+  light: {
+    overlayRgb: '15,23,42',
+    tick: '#94a3b8', axisLine: 'rgba(15,23,42,.14)', gridStroke: 'rgba(15,23,42,.1)',
+    tooltipBg: '#ffffff', tooltipBorder: 'rgba(15,23,42,.14)', tooltipText: '#0f172a',
+    legendText: '#475569',
+    emptyText: '#94a3b8', mutedText: '#64748b', faintText: '#94a3b8',
+    headText: '#475569', strongText: '#0f172a', bodyText: '#0f172a', softText: '#334155', accentText: '#4338ca',
+    rowStripe: 'rgba(15,23,42,.03)',
+    panelBg: '#f8fafc', totalsBg: '#eef2ff',
+    border: 'rgba(15,23,42,.08)', border2: 'rgba(15,23,42,.12)',
+    trackBg: 'rgba(15,23,42,.08)', gaugeTrack: '#e2e8f0',
+    mapEmptyFill: '#e2e8f0', mapStroke: '#ffffff', mapBaseFill: '#cbd5e1',
+  },
+}
+
+const ChartThemeContext = createContext(CHART_THEME.dark)
+function useChartTheme() { return useContext(ChartThemeContext) }
 
 // ── SQL üretici ───────────────────────────────────────────────────────────────
 
@@ -366,12 +417,13 @@ function detectNumericCols(apiData) {
 // ── Tooltip ─────────────────────────────────────────────────────────────────
 
 function RdTooltip({ active, payload, color }) {
+  const theme = useChartTheme()
   if (!active || !payload?.length) return null
   const v = payload[0]?.value
   return (
     <div style={{
-      background: '#0c1525', border: '1px solid rgba(255,255,255,.1)',
-      borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#e2e8f0',
+      background: theme.tooltipBg, border: `1px solid ${theme.tooltipBorder}`,
+      borderRadius: 6, padding: '5px 10px', fontSize: 11, color: theme.tooltipText,
     }}>
       <span style={{ color }}>{typeof v === 'number' ? v.toLocaleString('tr-TR') : v}</span>
     </div>
@@ -380,11 +432,13 @@ function RdTooltip({ active, payload, color }) {
 
 // ── Chart renderers ───────────────────────────────────────────────────────────
 
-const TICK = { fill: '#4a5568', fontSize: 9 }
-const axisLine = { stroke: 'rgba(255,255,255,.06)' }
+const tickStyle = theme => ({ fill: theme.tick, fontSize: 9 })
+const axisLineStyle = theme => ({ stroke: theme.axisLine })
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 
 function RdLineChart({ data, color, thickness = 2, height = 110, curve = true, dots = false }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme), axisLine = axisLineStyle(theme)
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
@@ -399,6 +453,8 @@ function RdLineChart({ data, color, thickness = 2, height = 110, curve = true, d
 }
 
 function RdAreaChart({ data, color, thickness = 2, height = 110, curve = true, fillOpacity = 0.25, dots = false }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme), axisLine = axisLineStyle(theme)
   const gid = 'rda_' + color.replace('#', '')
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -419,10 +475,12 @@ function RdAreaChart({ data, color, thickness = 2, height = 110, curve = true, f
   )
 }
 
-const valueLabelStyle = { fontSize: 9, fill: '#94a3b8' }
+const valueLabelStyleFor = theme => ({ fontSize: 9, fill: theme.legendText })
 const fmtBarLabel = v => (typeof v === 'number' ? v.toLocaleString('tr-TR') : v)
 
 function RdBarChart({ data, color, height = 110, horizontal = false, showValues = false, onClick }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme), axisLine = axisLineStyle(theme), valueLabelStyle = valueLabelStyleFor(theme)
   const barClick = onClick ? (d) => onClick(d?.label ?? d?.payload?.label) : undefined
   if (horizontal) {
     return (
@@ -453,6 +511,7 @@ function RdBarChart({ data, color, height = 110, horizontal = false, showValues 
 }
 
 function RdPieChart({ data, color, height = 110, radiusPx = 110, donut = true, showLabels = false, showPercent = false, onClick }) {
+  const theme = useChartTheme()
   const colors = data.length > 0 ? data.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]) : [color]
   const outerR = Math.round(radiusPx * 0.42)
   const innerR = donut ? Math.round(radiusPx * 0.18) : 0
@@ -463,7 +522,7 @@ function RdPieChart({ data, color, height = 110, radiusPx = 110, donut = true, s
              outerRadius={outerR} innerRadius={innerR} paddingAngle={donut ? 2 : 0}
              onClick={onClick ? (d) => onClick(d?.name ?? d?.payload?.label) : undefined} cursor={onClick ? 'pointer' : undefined}
              label={(showLabels || showPercent) ? ({ name, percent }) => showPercent ? `%${Math.round((percent || 0) * 100)}` : name : false} labelLine={false}
-             style={{ fontSize: 9, fill: '#94a3b8' }}>
+             style={{ fontSize: 9, fill: theme.legendText }}>
           {data.map((_, i) => <Cell key={i} fill={colors[i]} />)}
         </Pie>
         <Tooltip content={<RdTooltip color={color} />} />
@@ -474,6 +533,7 @@ function RdPieChart({ data, color, height = 110, radiusPx = 110, donut = true, s
 
 // Huni (Funnel) — aşama bazlı değer; çoktan aza sıralanır, her aşama bir dilim.
 function RdFunnelChart({ data, color, height = 110, onClick }) {
+  const theme = useChartTheme()
   const rows = [...data]
     .sort((a, b) => (b.value || 0) - (a.value || 0))
     .map((d, i) => ({ ...d, _fill: i === 0 ? color : PIE_COLORS[i % PIE_COLORS.length] }))
@@ -484,7 +544,7 @@ function RdFunnelChart({ data, color, height = 110, onClick }) {
         <Funnel dataKey="value" nameKey="label" data={rows} isAnimationActive={false} stroke="rgba(10,16,32,.55)"
           onClick={onClick ? (d) => onClick(d?.label ?? d?.payload?.label) : undefined} cursor={onClick ? 'pointer' : undefined}>
           {rows.map((r, i) => <Cell key={i} fill={r._fill} />)}
-          <LabelList position="right" dataKey="label" stroke="none" fill="#cbd5e1" fontSize={10} />
+          <LabelList position="right" dataKey="label" stroke="none" fill={theme.softText} fontSize={10} />
           <LabelList position="center" dataKey="value" stroke="none" fill="#ffffff" fontSize={10} formatter={fmtBarLabel} />
         </Funnel>
       </FunnelChart>
@@ -506,6 +566,8 @@ function fmtAxis(v) {
 
 // Kombi (Bar + Çizgi) — ÇİFT Y EKSENİ: bar solda, çizgi sağda (farklı ölçekler okunur).
 function RdComboChart({ data, color, color2 = '#10b981', thickness = 2, height = 110, showValues = false, curve = true, barLabel = 'Bar', lineLabel = 'Çizgi' }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme), axisLine = axisLineStyle(theme)
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={data} margin={{ top: showValues ? 16 : 6, right: 2, bottom: 0, left: -6 }}>
@@ -513,9 +575,9 @@ function RdComboChart({ data, color, color2 = '#10b981', thickness = 2, height =
         <YAxis yAxisId="left"  tick={{ ...TICK, fill: color }}  axisLine={false} tickLine={false} width={36} tickFormatter={fmtAxis} />
         <YAxis yAxisId="right" orientation="right" tick={{ ...TICK, fill: color2 }} axisLine={false} tickLine={false} width={36} tickFormatter={fmtAxis} />
         <Tooltip content={<RdTooltip color={color} />} />
-        <Legend wrapperStyle={{ fontSize: 9 }} iconSize={9} />
+        <Legend wrapperStyle={{ fontSize: 9, color: theme.legendText }} iconSize={9} />
         <Bar yAxisId="left" name={barLabel} dataKey="bar" fill={color} radius={[3, 3, 0, 0]} maxBarSize={40}>
-          {showValues && <LabelList dataKey="bar" position="top" style={{ fontSize: 8, fill: '#94a3b8' }} />}
+          {showValues && <LabelList dataKey="bar" position="top" style={{ fontSize: 8, fill: theme.legendText }} />}
         </Bar>
         <Line yAxisId="right" name={lineLabel} type={curve ? 'monotone' : 'linear'} dataKey="line" stroke={color2} strokeWidth={thickness}
               dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: color2 }} />
@@ -527,6 +589,8 @@ function RdComboChart({ data, color, color2 = '#10b981', thickness = 2, height =
 // ── Şelale (Waterfall) ────────────────────────────────────────────────────────
 
 function RdWaterfallChart({ data, height = 110 }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme), axisLine = axisLineStyle(theme)
   let base = 0
   const wData = data.map(d => {
     const entry = { label: d.label, base: d.value >= 0 ? base : base + d.value, delta: Math.abs(d.value), start: base, up: d.value >= 0 }
@@ -544,10 +608,10 @@ function RdWaterfallChart({ data, height = 110 }) {
           if (!e) return null
           const val = e.up ? e.delta : -e.delta
           return (
-            <div style={{ background: '#0c1525', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#e2e8f0' }}>
-              <div style={{ color: '#94a3b8', marginBottom: 2 }}>{label}</div>
+            <div style={{ background: theme.tooltipBg, border: `1px solid ${theme.tooltipBorder}`, borderRadius: 6, padding: '5px 10px', fontSize: 11, color: theme.tooltipText }}>
+              <div style={{ color: theme.legendText, marginBottom: 2 }}>{label}</div>
               <div style={{ color: e.up ? '#10b981' : '#ef4444' }}>{val >= 0 ? '+' : ''}{val.toLocaleString('tr-TR')}</div>
-              <div style={{ fontSize: 9, color: '#64748b' }}>{(e.start + val).toLocaleString('tr-TR')}</div>
+              <div style={{ fontSize: 9, color: theme.mutedText }}>{(e.start + val).toLocaleString('tr-TR')}</div>
             </div>
           )
         }} />
@@ -563,6 +627,8 @@ function RdWaterfallChart({ data, height = 110 }) {
 // ── %100 Yığılmış Bar ─────────────────────────────────────────────────────────
 
 function RdStacked100Chart({ stacked, height = 110 }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme), axisLine = axisLineStyle(theme)
   const { seriesKeys = [], data = [] } = stacked || {}
   if (!data.length || !seriesKeys.length) return null
   return (
@@ -583,9 +649,10 @@ function RdStacked100Chart({ stacked, height = 110 }) {
 // ── Hedef Göstergesi (Bullet) ─────────────────────────────────────────────────
 
 function RdBulletChart({ apiData, color = '#6366f1', height = 110, min, max, bulletTarget, valueField, valueAgg, fill = false }) {
+  const theme = useChartTheme()
   const actual = toStatValue(apiData, valueField, valueAgg)
   if (actual == null) return (
-    <div style={{ height: fill ? '100%' : height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 11 }}>—</div>
+    <div style={{ height: fill ? '100%' : height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.emptyText, fontSize: 11 }}>—</div>
   )
   const lo = Number.isFinite(+min) ? +min : 0
   const tgt = Number.isFinite(+bulletTarget) ? +bulletTarget : null
@@ -596,20 +663,20 @@ function RdBulletChart({ apiData, color = '#6366f1', height = 110, min, max, bul
   return (
     <div style={{ height: fill ? '100%' : height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 16px' }}>
       <svg viewBox={`0 0 ${W} ${totalH}`} style={{ width: '100%', maxWidth: 300 }}>
-        <rect x={0} y={barY} width={W} height={barH} rx={3} fill="rgba(255,255,255,.08)" />
+        <rect x={0} y={barY} width={W} height={barH} rx={3} fill={theme.trackBg} />
         <rect x={0} y={barY} width={W * pct(actual)} height={barH} rx={3} fill={color} fillOpacity=".85" />
         {tgt != null && <rect x={W * pct(tgt) - 1.5} y={barY - 6} width={3} height={barH + 12} rx={1.5} fill="#f59e0b" />}
-        <text x={0} y={totalH - 1} fontSize={8} fill="#475569">{lo.toLocaleString('tr-TR')}</text>
-        <text x={W} y={totalH - 1} textAnchor="end" fontSize={8} fill="#475569">{hi.toLocaleString('tr-TR')}</text>
+        <text x={0} y={totalH - 1} fontSize={8} fill={theme.faintText}>{lo.toLocaleString('tr-TR')}</text>
+        <text x={W} y={totalH - 1} textAnchor="end" fontSize={8} fill={theme.faintText}>{hi.toLocaleString('tr-TR')}</text>
         {tgt != null && (
           <text x={Math.min(W - 10, Math.max(10, W * pct(tgt)))} y={barY - 9} textAnchor="middle" fontSize={8} fill="#f59e0b">
             {tgt.toLocaleString('tr-TR')}
           </text>
         )}
       </svg>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', letterSpacing: '-0.02em', lineHeight: 1 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: theme.bodyText, letterSpacing: '-0.02em', lineHeight: 1 }}>
         {actual.toLocaleString('tr-TR')}
-        {tgt != null && <span style={{ fontSize: 9, color: '#64748b', marginLeft: 6, fontWeight: 400 }}>/ {tgt.toLocaleString('tr-TR')}</span>}
+        {tgt != null && <span style={{ fontSize: 9, color: theme.mutedText, marginLeft: 6, fontWeight: 400 }}>/ {tgt.toLocaleString('tr-TR')}</span>}
       </div>
     </div>
   )
@@ -618,8 +685,9 @@ function RdBulletChart({ apiData, color = '#6366f1', height = 110, min, max, bul
 // ── Isı Haritası (Heatmap) ────────────────────────────────────────────────────
 
 function RdHeatmap({ apiData, color = '#6366f1', height = 110, fill = false, labelField, seriesField, valueField }) {
+  const theme = useChartTheme()
   if (!apiData?.columns?.length || !apiData.rows?.length)
-    return <div style={{ height: fill ? '100%' : height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 11 }}>Veri yok</div>
+    return <div style={{ height: fill ? '100%' : height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.emptyText, fontSize: 11 }}>Veri yok</div>
   const cols = apiData.columns
   const ri = colIndex(cols, labelField, 0)
   const ci = colIndex(cols, seriesField, 1)
@@ -645,21 +713,21 @@ function RdHeatmap({ apiData, color = '#6366f1', height = 110, fill = false, lab
       <div style={{ display: 'inline-block', minWidth: LBL + colKeys.length * (CELL + PAD) }}>
         <div style={{ display: 'flex', marginLeft: LBL }}>
           {colKeys.map(c => (
-            <div key={c} style={{ width: CELL, marginRight: PAD, textAlign: 'center', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c}>{c}</div>
+            <div key={c} style={{ width: CELL, marginRight: PAD, textAlign: 'center', color: theme.mutedText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c}>{c}</div>
           ))}
         </div>
         {rowKeys.map(r => (
           <div key={r} style={{ display: 'flex', marginBottom: PAD }}>
-            <div style={{ width: LBL, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4, flexShrink: 0 }} title={r}>{r}</div>
+            <div style={{ width: LBL, color: theme.mutedText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 4, flexShrink: 0 }} title={r}>{r}</div>
             {colKeys.map(c => {
               const v = matrix[r]?.[c]
               const op = v != null ? 0.08 + 0.82 * ((v - minV) / range) : 0
               return (
                 <div key={c} title={v != null ? v.toLocaleString('tr-TR') : '—'}
                      style={{ width: CELL, height: CELL, marginRight: PAD, borderRadius: 3,
-                              background: v != null ? `rgba(${rgb.join(',')},${op.toFixed(2)})` : 'rgba(255,255,255,.02)',
+                              background: v != null ? `rgba(${rgb.join(',')},${op.toFixed(2)})` : `rgba(${theme.overlayRgb},.02)`,
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: op > 0.5 ? '#fff' : '#475569', fontSize: 7 }}>
+                              color: op > 0.5 ? '#fff' : theme.faintText, fontSize: 7 }}>
                   {v != null ? (v > 9999 ? (v / 1000).toFixed(1) + 'k' : v) : ''}
                 </div>
               )
@@ -675,6 +743,8 @@ function RdHeatmap({ apiData, color = '#6366f1', height = 110, fill = false, lab
 
 // Radar — tek seri ya da çoklu seri (her seri ayrı renk + legend). radar = { seriesKeys, data }
 function RdRadarChart({ radar, color, height = 110, fillOpacity = 0.25 }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme)
   const { seriesKeys = [], data = [] } = radar || {}
   if (!data.length || !seriesKeys.length) return null
   const multi = seriesKeys.length > 1
@@ -682,7 +752,7 @@ function RdRadarChart({ radar, color, height = 110, fillOpacity = 0.25 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <RadarChart data={data} margin={{ top: 8, right: 20, bottom: multi ? 2 : 8, left: 20 }}>
-        <PolarGrid stroke="rgba(255,255,255,.08)" />
+        <PolarGrid stroke={theme.gridStroke} />
         <PolarAngleAxis dataKey="label" tick={{ ...TICK, fontSize: 8 }} />
         <PolarRadiusAxis tick={false} axisLine={false} />
         {seriesKeys.map((sk, i) => (
@@ -690,7 +760,7 @@ function RdRadarChart({ radar, color, height = 110, fillOpacity = 0.25 }) {
                  fill={colors[i]} fillOpacity={multi ? 0.12 : fillOpacity} dot={false} />
         ))}
         <Tooltip content={<RdTooltip color={color} />} />
-        {multi && <Legend wrapperStyle={{ fontSize: 9 }} iconSize={9} />}
+        {multi && <Legend wrapperStyle={{ fontSize: 9, color: theme.legendText }} iconSize={9} />}
       </RadarChart>
     </ResponsiveContainer>
   )
@@ -713,25 +783,26 @@ function parseInline(text, kbase) {
   }
   return out
 }
-function renderRichText(text, base) {
+function renderRichText(text, base, theme) {
   return String(text).split('\n').map((line, i) => {
-    if (line.startsWith('## ')) return <div key={i} style={{ fontSize: base * 1.22, fontWeight: 700, color: '#f1f5f9', margin: '7px 0 2px' }}>{parseInline(line.slice(3), i)}</div>
-    if (line.startsWith('# '))  return <div key={i} style={{ fontSize: base * 1.55, fontWeight: 700, color: '#ffffff', margin: '9px 0 3px' }}>{parseInline(line.slice(2), i)}</div>
-    if (line.startsWith('- '))  return <div key={i} style={{ paddingLeft: 16, position: 'relative' }}><span style={{ position: 'absolute', left: 3, color: '#818cf8' }}>•</span>{parseInline(line.slice(2), i)}</div>
+    if (line.startsWith('## ')) return <div key={i} style={{ fontSize: base * 1.22, fontWeight: 700, color: theme.strongText, margin: '7px 0 2px' }}>{parseInline(line.slice(3), i)}</div>
+    if (line.startsWith('# '))  return <div key={i} style={{ fontSize: base * 1.55, fontWeight: 700, color: theme.strongText, margin: '9px 0 3px' }}>{parseInline(line.slice(2), i)}</div>
+    if (line.startsWith('- '))  return <div key={i} style={{ paddingLeft: 16, position: 'relative' }}><span style={{ position: 'absolute', left: 3, color: theme.accentText }}>•</span>{parseInline(line.slice(2), i)}</div>
     if (line.trim() === '')     return <div key={i} style={{ height: base * 0.55 }} />
     return <div key={i}>{parseInline(line, i)}</div>
   })
 }
 
 function RdTextCard({ panel, height, fill = false }) {
+  const theme = useChartTheme()
   const text = panel.textContent || ''
   const base = panel.textSize || 12
   return (
     <div style={{ height: fill ? '100%' : height, padding: '8px 12px', overflow: 'auto',
-                  fontSize: base, color: '#e2e8f0', lineHeight: 1.6, wordBreak: 'break-word' }}>
+                  fontSize: base, color: theme.bodyText, lineHeight: 1.6, wordBreak: 'break-word' }}>
       {text
-        ? renderRichText(text, base)
-        : <span style={{ color: '#475569', fontStyle: 'italic' }}>Metin kartı — sağ panelden içerik girin. (# Başlık · **kalın** · *italik* · - liste)</span>}
+        ? renderRichText(text, base, theme)
+        : <span style={{ color: theme.faintText, fontStyle: 'italic' }}>Metin kartı — sağ panelden içerik girin. (# Başlık · **kalın** · *italik* · - liste)</span>}
     </div>
   )
 }
@@ -740,6 +811,8 @@ function RdTextCard({ panel, height, fill = false }) {
 
 // Dağılım / Balon — z (boyut) verilirse kabarcık boyutu ona göre ölçeklenir.
 function RdScatterChart({ data, color, height = 110, xLabel = 'X', yLabel = 'Y', zLabel = '' }) {
+  const theme = useChartTheme()
+  const TICK = tickStyle(theme), axisLine = axisLineStyle(theme)
   const hasZ = data.some(d => Number.isFinite(d.z))
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -747,14 +820,14 @@ function RdScatterChart({ data, color, height = 110, xLabel = 'X', yLabel = 'Y',
         <XAxis dataKey="x" type="number" name={xLabel} tick={TICK} axisLine={axisLine} tickLine={false} tickFormatter={fmtAxis} />
         <YAxis dataKey="y" type="number" name={yLabel} tick={TICK} axisLine={false} tickLine={false} width={36} tickFormatter={fmtAxis} />
         <ZAxis dataKey="z" range={hasZ ? [40, 420] : [44, 44]} name={zLabel || 'Boyut'} />
-        <Tooltip cursor={{ strokeDasharray: '3 3', stroke: 'rgba(255,255,255,.15)' }}
+        <Tooltip cursor={{ strokeDasharray: '3 3', stroke: `rgba(${theme.overlayRgb},.15)` }}
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null
             const p = payload[0]?.payload
             if (!p) return null
             return (
-              <div style={{ background: '#0c1525', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#e2e8f0' }}>
-                {p.label != null && <div style={{ color: '#94a3b8', marginBottom: 2 }}>{p.label}</div>}
+              <div style={{ background: theme.tooltipBg, border: `1px solid ${theme.tooltipBorder}`, borderRadius: 6, padding: '5px 10px', fontSize: 11, color: theme.tooltipText }}>
+                {p.label != null && <div style={{ color: theme.legendText, marginBottom: 2 }}>{p.label}</div>}
                 <div>{xLabel}: <span style={{ color }}>{p.x?.toLocaleString('tr-TR')}</span></div>
                 <div>{yLabel}: <span style={{ color }}>{p.y?.toLocaleString('tr-TR')}</span></div>
                 {hasZ && Number.isFinite(p.z) && <div>{zLabel || 'Boyut'}: <span style={{ color }}>{p.z.toLocaleString('tr-TR')}</span></div>}
@@ -796,6 +869,7 @@ function mixColor(c1, c2, t) {
 
 function RdMapChart({ apiData, mode = 'tr', base = 'tr', color = '#6366f1', height = 110, fill = false,
                       regionField, valueField, agg, geoUrl, latField, lonField, sizeField, labelField, onClick }) {
+  const theme = useChartTheme()
   const preset = MAP_PRESETS[(mode === 'world' || (mode === 'bubble' && base === 'world')) ? 'world' : 'tr']
   const url = geoUrl || preset.url
   const cols = apiData?.columns || []
@@ -838,15 +912,15 @@ function RdMapChart({ apiData, mode = 'tr', base = 'tr', color = '#6366f1', heig
         <Geographies geography={url}>
           {({ geographies }) => geographies.map(geo => {
             if (mode === 'bubble') {
-              return <Geography key={geo.rsmKey} geography={geo} fill="#1e293b" stroke="#0c1525" strokeWidth={0.4}
+              return <Geography key={geo.rsmKey} geography={geo} fill={theme.mapBaseFill} stroke={theme.mapStroke} strokeWidth={0.4}
                        style={{ default: { outline: 'none' }, hover: { outline: 'none' }, pressed: { outline: 'none' } }} />
             }
             const nm = geoName(geo)
             const v  = valueByRegion[normRegion(nm)]
             const t  = (v != null && vMax > 0) ? Math.min(1, v / vMax) : null
-            const f  = t == null ? '#172033' : mixColor('#172033', color, 0.22 + t * 0.78)
+            const f  = t == null ? theme.mapEmptyFill : mixColor(theme.mapEmptyFill, color, 0.22 + t * 0.78)
             return (
-              <Geography key={geo.rsmKey} geography={geo} fill={f} stroke="#0c1525" strokeWidth={0.4}
+              <Geography key={geo.rsmKey} geography={geo} fill={f} stroke={theme.mapStroke} strokeWidth={0.4}
                 onClick={onClick ? () => onClick(nm) : undefined}
                 style={{ default: { outline: 'none', cursor: onClick ? 'pointer' : 'default' }, hover: { fill: color, outline: 'none' }, pressed: { outline: 'none' } }}>
                 <title>{nm}{v != null ? ': ' + v.toLocaleString('tr-TR') : ''}</title>
@@ -884,7 +958,8 @@ function toGanttData(apiData, labelField, startField, endField, catField) {
 }
 
 function RdGanttChart({ data, color, height = 110, fill = false, onClick }) {
-  if (!data.length) return <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 10, textAlign: 'center', padding: '0 8px' }}>Gantt için Görev + Başlangıç + Bitiş alanlarını seçin</div>
+  const theme = useChartTheme()
+  if (!data.length) return <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.emptyText, fontSize: 10, textAlign: 'center', padding: '0 8px' }}>Gantt için Görev + Başlangıç + Bitiş alanlarını seçin</div>
   const minT = Math.min(...data.map(t => t.start.getTime()))
   const maxT = Math.max(...data.map(t => t.end.getTime()))
   const span = Math.max(1, maxT - minT)
@@ -892,8 +967,8 @@ function RdGanttChart({ data, color, height = 110, fill = false, onClick }) {
   const catColor = c => cats.length ? PIE_COLORS[Math.max(0, cats.indexOf(c)) % PIE_COLORS.length] : color
   const fmtD = ms => new Date(ms).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })
   return (
-    <div style={{ height: fill ? '100%' : height, overflow: 'auto', fontSize: 9, color: '#94a3b8' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', padding: '0 4px 5px 116px', fontSize: 8 }}>
+    <div style={{ height: fill ? '100%' : height, overflow: 'auto', fontSize: 9, color: theme.headText }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: theme.mutedText, padding: '0 4px 5px 116px', fontSize: 8 }}>
         <span>{fmtD(minT)}</span><span>{fmtD((minT + maxT) / 2)}</span><span>{fmtD(maxT)}</span>
       </div>
       {data.map((t, i) => {
@@ -901,8 +976,8 @@ function RdGanttChart({ data, color, height = 110, fill = false, onClick }) {
         const width = Math.max(1.2, ((t.end.getTime() - t.start.getTime()) / span) * 100)
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'center', height: 19, gap: 6 }}>
-            <span style={{ width: 110, flexShrink: 0, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.label}>{t.label}</span>
-            <div style={{ position: 'relative', flex: 1, height: 12, background: 'rgba(255,255,255,.03)', borderRadius: 3 }}>
+            <span style={{ width: 110, flexShrink: 0, color: theme.softText, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.label}>{t.label}</span>
+            <div style={{ position: 'relative', flex: 1, height: 12, background: `rgba(${theme.overlayRgb},.03)`, borderRadius: 3 }}>
               <div onClick={onClick ? () => onClick(t.label) : undefined}
                    title={`${t.label}: ${fmtD(t.start.getTime())} → ${fmtD(t.end.getTime())}`}
                    style={{ position: 'absolute', left: left + '%', width: width + '%', top: 0, height: 12, background: catColor(t.cat), borderRadius: 3, opacity: 0.88, cursor: onClick ? 'pointer' : 'default' }} />
@@ -915,22 +990,24 @@ function RdGanttChart({ data, color, height = 110, fill = false, onClick }) {
 }
 
 function RdStatCard({ apiData, height = 56, big = false, prefix = '', suffix = '', decimals, valueField, valueAgg }) {
+  const theme = useChartTheme()
   const val = toStatValue(apiData, valueField, valueAgg)
-  if (val == null) return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 11 }}>—</div>
+  if (val == null) return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.emptyText, fontSize: 11 }}>—</div>
   const opts = Number.isFinite(decimals) ? { minimumFractionDigits: decimals, maximumFractionDigits: decimals } : {}
   return (
     <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-      <div style={{ fontSize: big ? 40 : 22, fontWeight: 600, color: '#f1f5f9', letterSpacing: '-0.03em', lineHeight: 1 }}>
+      <div style={{ fontSize: big ? 40 : 22, fontWeight: 600, color: theme.strongText, letterSpacing: '-0.03em', lineHeight: 1 }}>
         {prefix}{val.toLocaleString('tr-TR', opts)}{suffix ? ' ' + suffix : ''}
       </div>
-      <div style={{ fontSize: 9, color: '#64748b' }}>{valueField || apiData.columns?.[0] || 'değer'}</div>
+      <div style={{ fontSize: 9, color: theme.mutedText }}>{valueField || apiData.columns?.[0] || 'değer'}</div>
     </div>
   )
 }
 
 function RdGauge({ apiData, color, height = 110, min, max, suffix = '', valueField, valueAgg }) {
+  const theme = useChartTheme()
   const val = toStatValue(apiData, valueField, valueAgg)
-  if (val == null) return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 11 }}>—</div>
+  if (val == null) return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.emptyText, fontSize: 11 }}>—</div>
   const lo  = Number.isFinite(+min) ? +min : 0
   const hi  = Number.isFinite(+max) && +max > lo ? +max : lo + 100
   const pct = Math.min(1, Math.max(0, (val - lo) / (hi - lo)))
@@ -938,24 +1015,24 @@ function RdGauge({ apiData, color, height = 110, min, max, suffix = '', valueFie
   return (
     <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <svg viewBox="0 0 200 118" style={{ width: '100%', height: '100%', maxWidth: big ? 340 : 220 }}>
-        <path d="M14,104 A90,90 0 0 1 186,104" fill="none" stroke="#1e293b" strokeWidth="15" strokeLinecap="round" pathLength="100" />
+        <path d="M14,104 A90,90 0 0 1 186,104" fill="none" stroke={theme.gaugeTrack} strokeWidth="15" strokeLinecap="round" pathLength="100" />
         <path d="M14,104 A90,90 0 0 1 186,104" fill="none" stroke={color} strokeWidth="15" strokeLinecap="round" pathLength="100" strokeDasharray={`${pct * 100} 100`} />
-        <text x="100" y="86" textAnchor="middle" fontSize="30" fontWeight="600" fill="#f1f5f9">{val.toLocaleString('tr-TR')}</text>
-        {suffix ? <text x="100" y="103" textAnchor="middle" fontSize="11" fill="#64748b">{suffix}</text> : null}
-        <text x="16" y="116" textAnchor="middle" fontSize="9" fill="#475569">{lo.toLocaleString('tr-TR')}</text>
-        <text x="184" y="116" textAnchor="middle" fontSize="9" fill="#475569">{hi.toLocaleString('tr-TR')}</text>
+        <text x="100" y="86" textAnchor="middle" fontSize="30" fontWeight="600" fill={theme.strongText}>{val.toLocaleString('tr-TR')}</text>
+        {suffix ? <text x="100" y="103" textAnchor="middle" fontSize="11" fill={theme.mutedText}>{suffix}</text> : null}
+        <text x="16" y="116" textAnchor="middle" fontSize="9" fill={theme.faintText}>{lo.toLocaleString('tr-TR')}</text>
+        <text x="184" y="116" textAnchor="middle" fontSize="9" fill={theme.faintText}>{hi.toLocaleString('tr-TR')}</text>
       </svg>
     </div>
   )
 }
 
 function TreemapNode(props) {
-  const { x, y, width, height, name, index, colors, showLabels } = props
+  const { x, y, width, height, name, index, colors, showLabels, strokeColor } = props
   if (width <= 0 || height <= 0) return null
   const fill = colors[index % colors.length]
   return (
     <g>
-      <rect x={x} y={y} width={width} height={height} fill={fill} stroke="#0c1525" strokeWidth={2} />
+      <rect x={x} y={y} width={width} height={height} fill={fill} stroke={strokeColor || '#0c1525'} strokeWidth={2} />
       {showLabels !== false && width > 42 && height > 18 && (
         <text x={x + 5} y={y + 14} fill="#fff" fontSize={10} style={{ pointerEvents: 'none' }}>{name}</text>
       )}
@@ -964,12 +1041,13 @@ function TreemapNode(props) {
 }
 
 function RdTreemap({ data, height = 110, showLabels = true, onClick }) {
+  const theme = useChartTheme()
   const tdata = data.map(d => ({ name: d.label, size: Math.abs(d.value) || 0 }))
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <Treemap data={tdata} dataKey="size" nameKey="name" stroke="#0c1525"
+      <Treemap data={tdata} dataKey="size" nameKey="name" stroke={theme.panelBg}
                onClick={onClick ? (node) => onClick(node?.name) : undefined}
-               content={<TreemapNode colors={PIE_COLORS} showLabels={showLabels} />} isAnimationActive={false}>
+               content={<TreemapNode colors={PIE_COLORS} showLabels={showLabels} strokeColor={theme.panelBg} />} isAnimationActive={false}>
         <Tooltip content={<RdTooltip color={PIE_COLORS[0]} />} />
       </Treemap>
     </ResponsiveContainer>
@@ -979,6 +1057,7 @@ function RdTreemap({ data, height = 110, showLabels = true, onClick }) {
 // ── Filtre paneli ───────────────────────────────────────────────────────────────
 
 function RdFilterPanel({ panel, activeFilters, onFilterChange, height }) {
+  const theme = useChartTheme()
   const [vals, setVals]       = useState([])
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState(null)
@@ -1008,7 +1087,7 @@ function RdFilterPanel({ panel, activeFilters, onFilterChange, height }) {
   }, [panel.sourceType, source, field])
 
   if (panel.sourceType !== 'view' || !source || !field)
-    return <div style={{ padding: '16px 12px', fontSize: 10, color: '#475569', textAlign: 'center', lineHeight: 1.5 }}>Filtre için View modunda bir kaynak ve alan seçin.</div>
+    return <div style={{ padding: '16px 12px', fontSize: 10, color: theme.faintText, textAlign: 'center', lineHeight: 1.5 }}>Filtre için View modunda bir kaynak ve alan seçin.</div>
 
   function toggle(v) {
     const sv = String(v)
@@ -1195,6 +1274,7 @@ export function distinctVals(rows, idx) {
 }
 
 function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, sorts, sortField, sortDir, activeFilters, onRowClick }) {
+  const theme = useChartTheme()
   const { columns, rows } = toTableData(apiData)
   const cfg  = colConfig || {}
   const cols = orderColumns(columns, colOrder)
@@ -1249,16 +1329,16 @@ function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, 
   const visibleRows = fill ? 500 : (typeof maxHeight === 'number' && maxHeight > 150) ? 16 : 8
 
   if (cols.length === 0) {
-    return <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 10 }}>Raporda görünen alan yok</div>
+    return <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.emptyText, fontSize: 10 }}>Raporda görünen alan yok</div>
   }
 
   return (
-    <div style={{ maxHeight, height: fill ? '100%' : undefined, overflowY: 'auto', fontSize: 9, color: '#94a3b8' }}>
+    <div style={{ maxHeight, height: fill ? '100%' : undefined, overflowY: 'auto', fontSize: 9, color: theme.headText }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               {cols.map(c => (
-                <th key={c.name} style={{ position: 'sticky', top: 0, textAlign: cellAlign(c), padding: '2px 6px', background: '#111827', borderBottom: '1px solid rgba(255,255,255,.06)', whiteSpace: 'nowrap', ...headerStyle(c) }}>
+                <th key={c.name} style={{ position: 'sticky', top: 0, textAlign: cellAlign(c), padding: '2px 6px', background: theme.panelBg, borderBottom: `1px solid ${theme.border}`, whiteSpace: 'nowrap', ...headerStyle(c) }}>
                   {c.label || c.name}{sortInfo[c.name] ? (sortInfo[c.name].dir === 'desc' ? ' ↓' : ' ↑') + (sortList.length > 1 ? sortInfo[c.name].ord : '') : ''}
                 </th>
               ))}
@@ -1268,9 +1348,9 @@ function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, 
             {dataRows.slice(0, visibleRows).map((row, ri) => (
               <tr key={ri}
                   onClick={onRowClick && cols[0] ? () => onRowClick(row[cols[0].idx], cols[0].name) : undefined}
-                  style={{ background: ri % 2 === 0 ? 'rgba(255,255,255,.025)' : 'transparent', cursor: onRowClick ? 'pointer' : 'default' }}>
+                  style={{ background: ri % 2 === 0 ? theme.rowStripe : 'transparent', cursor: onRowClick ? 'pointer' : 'default' }}>
                 {cols.map(c => (
-                  <td key={c.name} style={{ padding: '2px 6px', color: '#e2e8f0', textAlign: cellAlign(c), whiteSpace: 'nowrap' }}>
+                  <td key={c.name} style={{ padding: '2px 6px', color: theme.bodyText, textAlign: cellAlign(c), whiteSpace: 'nowrap' }}>
                     {formatCell(row[c.idx], c)}
                   </td>
                 ))}
@@ -1281,7 +1361,7 @@ function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, 
             <tfoot>
               <tr style={{ background: 'rgba(99,102,241,.1)' }}>
                 {cols.map((c, ci) => (
-                  <td key={c.name} style={{ position: 'sticky', bottom: 0, background: '#0f1830', padding: '3px 6px', color: '#a5b4fc', fontWeight: 600, textAlign: c.total ? cellAlign(c) : (ci === 0 ? 'left' : cellAlign(c)), whiteSpace: 'nowrap', borderTop: '1px solid rgba(99,102,241,.3)' }}>
+                  <td key={c.name} style={{ position: 'sticky', bottom: 0, background: theme.totalsBg, padding: '3px 6px', color: theme.accentText, fontWeight: 600, textAlign: c.total ? cellAlign(c) : (ci === 0 ? 'left' : cellAlign(c)), whiteSpace: 'nowrap', borderTop: '1px solid rgba(99,102,241,.3)' }}>
                     {c.total ? formatCell(totals[c.name], c) : (ci === 0 ? 'Toplam' : '')}
                   </td>
                 ))}
@@ -1295,8 +1375,8 @@ function RdTable({ apiData, maxHeight = 110, fill = false, colConfig, colOrder, 
 
 // ── Pivot tablo ─────────────────────────────────────────────────────────────────
 
-function pivotHeadStyle(align) {
-  return { position: 'sticky', top: 0, textAlign: align, padding: '3px 7px', color: '#64748b', background: '#111827', borderBottom: '1px solid rgba(255,255,255,.08)', fontWeight: 600, whiteSpace: 'nowrap' }
+function pivotHeadStyle(align, theme) {
+  return { position: 'sticky', top: 0, textAlign: align, padding: '3px 7px', color: theme.mutedText, background: theme.panelBg, borderBottom: `1px solid ${theme.border2}`, fontWeight: 600, whiteSpace: 'nowrap' }
 }
 function pivotCellStyle(align, color, bold) {
   return { textAlign: align, padding: '2px 7px', color, whiteSpace: 'nowrap', fontWeight: bold ? 600 : 400 }
@@ -1419,7 +1499,8 @@ function computePivot(data, cfg) {
 }
 
 function RdPivotEx({ pivot, maxHeight = 110, fill = false, showTotals = true }) {
-  const emptyMsg = m => <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4a5568', fontSize: 10, textAlign: 'center', padding: '0 8px' }}>{m}</div>
+  const theme = useChartTheme()
+  const emptyMsg = m => <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.emptyText, fontSize: 10, textAlign: 'center', padding: '0 8px' }}>{m}</div>
   if (!pivot) return emptyMsg('Pivot için en az bir Satır ve bir Değer alanı seçin')
   const { rowFields, colFields, values, rowKeys, colKeys, truncated } = pivot
   if (!rowKeys.length) return emptyMsg('Veri yok')
@@ -1444,16 +1525,16 @@ function RdPivotEx({ pivot, maxHeight = 110, fill = false, showTotals = true }) 
     }
     return out
   }
-  const headC = { ...pivotHeadStyle('center'), textAlign: 'center' }
-  const bL = c => ({ borderLeft: '1px solid rgba(255,255,255,' + c + ')' })
+  const headC = { ...pivotHeadStyle('center', theme), textAlign: 'center' }
+  const bL = c => ({ borderLeft: `1px solid rgba(${theme.overlayRgb},${c})` })
 
   return (
-    <div style={{ maxHeight, height: fill ? '100%' : undefined, overflow: 'auto', fontSize: 9, color: '#94a3b8' }}>
+    <div style={{ maxHeight, height: fill ? '100%' : undefined, overflow: 'auto', fontSize: 9, color: theme.headText }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           {hasCols && colFields.map((cf, level) => (
             <tr key={'cl' + level}>
-              {level === 0 && <th rowSpan={colFields.length} colSpan={rowFields.length} style={pivotHeadStyle('left')} />}
+              {level === 0 && <th rowSpan={colFields.length} colSpan={rowFields.length} style={pivotHeadStyle('left', theme)} />}
               {groupsAtLevel(level).map((g, gi) => (
                 <th key={gi} colSpan={g.span} style={{ ...headC, ...bL('.06') }}>{g.label}</th>
               ))}
@@ -1461,24 +1542,24 @@ function RdPivotEx({ pivot, maxHeight = 110, fill = false, showTotals = true }) 
             </tr>
           ))}
           <tr>
-            {rowFields.map((f, fi) => <th key={'rf' + fi} style={pivotHeadStyle('left')}>{f}</th>)}
-            {leaves.map((lf, li) => <th key={'lf' + li} style={pivotHeadStyle('right')}>{values[lf.vi].label}</th>)}
-            {showTotals && hasCols && values.map((v, vi) => <th key={'tt' + vi} style={{ ...pivotHeadStyle('right'), ...(vi === 0 ? bL('.14') : {}) }}>{V > 1 ? v.label : 'Toplam'}</th>)}
+            {rowFields.map((f, fi) => <th key={'rf' + fi} style={pivotHeadStyle('left', theme)}>{f}</th>)}
+            {leaves.map((lf, li) => <th key={'lf' + li} style={pivotHeadStyle('right', theme)}>{values[lf.vi].label}</th>)}
+            {showTotals && hasCols && values.map((v, vi) => <th key={'tt' + vi} style={{ ...pivotHeadStyle('right', theme), ...(vi === 0 ? bL('.14') : {}) }}>{V > 1 ? v.label : 'Toplam'}</th>)}
           </tr>
         </thead>
         <tbody>
           {rowKeys.map((rk, ri) => (
-            <tr key={rk.key} style={{ background: ri % 2 === 0 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
-              {rk.parts.map((p, pi) => <td key={pi} style={pivotCellStyle('left', '#e2e8f0', pi < rowFields.length - 1)}>{p}</td>)}
-              {leaves.map((lf, li) => <td key={li} style={pivotCellStyle('right', '#cbd5e1')}>{fmt(pivot.cell(rk.key, lf.ck.key, lf.vi))}</td>)}
-              {showTotals && hasCols && values.map((v, vi) => <td key={'rt' + vi} style={{ ...pivotCellStyle('right', '#f1f5f9', true), ...(vi === 0 ? bL('.14') : {}) }}>{fmt(pivot.rowTotal(rk.key, vi))}</td>)}
+            <tr key={rk.key} style={{ background: ri % 2 === 0 ? theme.rowStripe : 'transparent' }}>
+              {rk.parts.map((p, pi) => <td key={pi} style={pivotCellStyle('left', theme.bodyText, pi < rowFields.length - 1)}>{p}</td>)}
+              {leaves.map((lf, li) => <td key={li} style={pivotCellStyle('right', theme.softText)}>{fmt(pivot.cell(rk.key, lf.ck.key, lf.vi))}</td>)}
+              {showTotals && hasCols && values.map((v, vi) => <td key={'rt' + vi} style={{ ...pivotCellStyle('right', theme.strongText, true), ...(vi === 0 ? bL('.14') : {}) }}>{fmt(pivot.rowTotal(rk.key, vi))}</td>)}
             </tr>
           ))}
           {showTotals && (
             <tr style={{ background: 'rgba(99,102,241,.08)' }}>
-              <td colSpan={rowFields.length} style={pivotCellStyle('left', '#a5b4fc', true)}>Genel Toplam</td>
-              {leaves.map((lf, li) => <td key={li} style={pivotCellStyle('right', '#a5b4fc', true)}>{fmt(hasCols ? pivot.colTotal(lf.ck.key, lf.vi) : pivot.grand(lf.vi))}</td>)}
-              {hasCols && values.map((v, vi) => <td key={'gt' + vi} style={{ ...pivotCellStyle('right', '#a5b4fc', true), ...(vi === 0 ? bL('.14') : {}) }}>{fmt(pivot.grand(vi))}</td>)}
+              <td colSpan={rowFields.length} style={pivotCellStyle('left', theme.accentText, true)}>Genel Toplam</td>
+              {leaves.map((lf, li) => <td key={li} style={pivotCellStyle('right', theme.accentText, true)}>{fmt(hasCols ? pivot.colTotal(lf.ck.key, lf.vi) : pivot.grand(lf.vi))}</td>)}
+              {hasCols && values.map((v, vi) => <td key={'gt' + vi} style={{ ...pivotCellStyle('right', theme.accentText, true), ...(vi === 0 ? bL('.14') : {}) }}>{fmt(pivot.grand(vi))}</td>)}
             </tr>
           )}
         </tbody>
@@ -1493,6 +1574,8 @@ function RdPivotEx({ pivot, maxHeight = 110, fill = false, showTotals = true }) 
 export default function PanelChart({ panel, chartHeight = 110, onColumns, onData, activeFilters, onFilterChange, viewFields, interactive = false }) {
   const { data, loading, error } = useReportData(panel, activeFilters, viewFields)
   const color = panel.color || '#6366f1'
+  const isDark = useIsDark()
+  const theme = isDark ? CHART_THEME.dark : CHART_THEME.light
 
   // Export için veriyi yukarı bildir (yalnız değiştiğinde)
   const lastDataRef = useRef(null)
@@ -1521,9 +1604,11 @@ export default function PanelChart({ panel, chartHeight = 110, onColumns, onData
   const statH      = isFull ? '100%' : Math.max(56, Math.round(px * 0.51))
   const bigStat    = isFull || px > 100
 
-  const fullWrap = (children) => isFull
-    ? <div style={{ height: '100%', minHeight: 0 }}>{children}</div>
-    : children
+  const fullWrap = (children) => (
+    <ChartThemeContext.Provider value={theme}>
+      {isFull ? <div style={{ height: '100%', minHeight: 0 }}>{children}</div> : children}
+    </ChartThemeContext.Provider>
+  )
 
   // Filtre paneli kendi verisini ceker (useReportData'dan bagimsiz)
   if (panel.type === 'filter')
