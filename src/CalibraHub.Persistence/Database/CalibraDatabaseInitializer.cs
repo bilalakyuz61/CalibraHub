@@ -16380,6 +16380,15 @@ END;";
                     ADD [Quantity] DECIMAL(18,4) NOT NULL CONSTRAINT [df_OpMT_Quantity] DEFAULT(1);
             END;
 
+            -- Gerekli operatör sayısı (Vardiya Senaryoları Faz 2, 2026-08-05): otomatik çizelgeleme
+            -- personel sonlu-kapasitesinde bu operasyonun aynı anda kaç operatör tükettiğini belirler.
+            IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[OperationMachineTime]', N'RequiredOperators') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[OperationMachineTime]
+                    ADD [RequiredOperators] TINYINT NOT NULL CONSTRAINT [df_OpMT_RequiredOperators] DEFAULT(1);
+            END;
+
             -- ===== OperationMachineTime genisletme (Seq 45+46, 2026-07-27) — idempotent migration =====
             -- Sira ZORUNLU: (1) eski 2 filtered unique index DROP -> (2) MachineId NULL'a cevir ->
             -- (3) 4 yeni kolon ADD -> (4) yeni tek bilesik unique index CREATE -> (5) XOR/Unit CHECK'ler ->
