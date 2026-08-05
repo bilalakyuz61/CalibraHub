@@ -301,6 +301,15 @@ export default function MachineSchedule() {
           onDelete={handlePopoverDelete}
         />
       )}
+
+      {wizardOpen && (
+        <AutoScheduleWizard
+          fromUtc={localDateInputToUtcIso(dateFrom, false)}
+          onClose={function () { setWizardOpen(false); setPreviewProposals([]) }}
+          onApplied={handleAutoScheduleApplied}
+          onPreviewChange={setPreviewProposals}
+        />
+      )}
     </DndContext>
   )
 }
