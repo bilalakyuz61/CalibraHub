@@ -29,6 +29,9 @@ targets:
         # Geliştirme backend'i HTTP (cleartext) → ATS gevşetildi. PRODUCTION'da KALDIR.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # Faz 3 — AVFoundation kamera erişimi (barkod tarama). Bu anahtar olmadan
+        # AVCaptureDevice/AVCaptureSession ilk kullanımda uygulamayı çökertir (iOS zorunlu kılar).
+        NSCameraUsageDescription: "Barkod okutmak için kamera erişimi gerekir."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.calibrahub.mobile

@@ -7,11 +7,12 @@ import androidx.compose.runtime.Composable
  * CalibraHubAndroid `ui/warehouse/MaterialPickerField.kt`) bu TEK arayuzu cagirir:
  * - androidMain: GERCEK ZXing (com.journeyapps:zxing-android-embedded) implementasyonu —
  *   [FlexibleCaptureActivity]'yi ActivityResultContract ile acar (bkz. BarcodeScanner.android.kt).
- * - iosMain: STUB — daima `null` doner (bkz. BarcodeScanner.ios.kt). TODO Faz 3: AVFoundation
- *   AVCaptureMetadataOutput ile gercek kamera taramasi.
+ * - iosMain: GERCEK AVFoundation (Faz 3, `AVCaptureSession` + `AVCaptureMetadataOutput`)
+ *   implementasyonu — modal bir `UIViewController` acar, ilk okunan barkodda / kullanici
+ *   iptalinde sonucu doner (bkz. BarcodeScanner.ios.kt).
  *
- * Boylece commonMain'deki picker ekranlari HER IKI platformda da DERLENIR: Android'de tam
- * fonksiyonel barkod okuma, iOS'ta Faz 3'e kadar "kamera yok" (null) davranisi.
+ * Boylece commonMain'deki picker ekranlari HER IKI platformda da DERLENIR ve HER IKISINDE de
+ * tam fonksiyonel barkod okuma saglar.
  *
  * TASARIM KARARI — neden `expect suspend fun scanBarcode(): String?` DEGIL, `expect class` +
  * `@Composable expect fun rememberBarcodeScanner()`: Android tarafinda ZXing/CaptureActivity
@@ -26,7 +27,7 @@ import androidx.compose.runtime.Composable
  */
 expect class BarcodeScanner {
     /** Tarayiciyi acar ve kullanici bir barkod okutana/iptal edene kadar suspend olur.
-     * Iptal edilirse veya (iOS'ta Faz 3'e kadar) kamera hic yoksa `null` doner. */
+     * Iptal edilirse, kamera izni reddedilirse veya kamera hic yoksa `null` doner. */
     suspend fun scan(): String?
 }
 
