@@ -70,7 +70,7 @@ input.calibra-date-input.cdp-invalid-flash {
    tarzı (0,2,1) kurallarını ezebilmek için aynı specificity + geç yükleme.
    (flatpickr altInput'a type="text" attribute'unu yazar.) */
 input[type="text"].calibra-date-input {
-    width: 150px;
+    width: 130px;
     max-width: 100%;
     padding-right: 34px;
 }
@@ -89,7 +89,7 @@ td input[type="text"].calibra-date-input {
 /* Henüz enhance edilmemiş veya React yöneten native tarih inputları —
    en azından genişlik standardına uysunlar (popup'ları native kalır) */
 input[type="date"]:not(.flatpickr-input) {
-    width: 150px;
+    width: 130px;
     max-width: 100%;
 }
 table input[type="date"]:not(.flatpickr-input),
