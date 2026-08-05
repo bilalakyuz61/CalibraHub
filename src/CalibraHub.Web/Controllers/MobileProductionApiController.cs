@@ -303,16 +303,21 @@ public sealed class MobileProductionApiController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Sözleşmenin zorunlu alanı `pin`dir; buna ek olarak `personnelCode` (Sicil No) da
-    /// REQUIRED olarak eklendi (alan EKLEME serbest, çıkarma yasak — görev talimatı). Gerekçe:
+    /// Sözleşmenin PIN yolu zorunlu alanları `pin` + `personnelCode` (Sicil No) idi — bu ikisi
+    /// AYNEN korunur (alan EKLEME serbest, çıkarma yasak — görev talimatı). Gerekçe:
     /// ProductionController.AuthOperator'da (web) 2026-05-22'den beri PIN-tek-başına yolu
     /// kilitli — Code+PIN ikilisi zorunlu, ShopFloorLockoutTracker de yalnızca bu yolda
-    /// çalışıyor. personnelCode'suz mobil çağrı, lockout korumasız "legacy PIN-only" yoluna
-    /// düşerdi (AYNEN reuse talimatına aykırı) — o yüzden burada da zorunlu kılındı. NFC/kart
-    /// yolu mobile taşınmadı (Android tarafında henüz kamera/NFC yok, bkz.
-    /// memory/project_mobile_modules.md) — yalnızca Code+PIN.
+    /// çalışıyor. personnelCode'suz PIN çağrısı, lockout korumasız "legacy PIN-only" yoluna
+    /// düşerdi (AYNEN reuse talimatına aykırı) — o yüzden zorunlu kılınmaya devam ediyor.
+    ///
+    /// 2026-08-05: opsiyonel `cardNo` eklendi (NFC kart hazırlığı — mobil okuma/UI ayrı iş,
+    /// bu tur yalnızca backend sözleşmesi). `cardNo` doluysa kart yolu kullanılır: Code/PIN
+    /// gerekmez, ProductionController.AuthOperator (web) ile AYNEN aynı desen — kart yolunda
+    /// ShopFloorLockoutTracker'a hiç dokunulmaz (fiziksel kart sahipliği zaten kanıt; lockout
+    /// yalnızca Code+PIN yolunda anlamlı). `cardNo` boşsa davranış birebir eskisiyle aynı
+    /// (mevcut mobil istemci PIN-only gönderir, bozulmaz).
     /// </summary>
-    public sealed record MobileAuthOperatorRequest(string? Pin, string? PersonnelCode);
+    public sealed record MobileAuthOperatorRequest(string? Pin, string? PersonnelCode, string? CardNo);
 
     [HttpPost("auth-operator")]
     public async Task<IActionResult> AuthOperator([FromBody] MobileAuthOperatorRequest? req, CancellationToken ct)
@@ -320,36 +325,55 @@ public sealed class MobileProductionApiController : ControllerBase
         if (await RequirePermissionAsync(ShopFloorFormCodes, ViewActions, ct) is { } denied)
             return denied;
 
-        if (req is null || string.IsNullOrWhiteSpace(req.Pin))
-            return BadRequest(new { error = "PIN girilmedi." });
-        if (string.IsNullOrWhiteSpace(req.PersonnelCode))
-            return BadRequest(new { error = "Sicil numarası girilmedi. Giriş için Sicil + PIN ikisi de gerekli." });
+        if (req is null)
+            return BadRequest(new { error = "Geçersiz istek." });
 
-        // ── ShopFloor PIN lockout — ProductionController.AuthOperator ile AYNEN aynı akış ──
-        var existing = await _personnelRepo.GetIdAndActiveByCodeAsync(req.PersonnelCode!, ct);
-        if (existing is not null && !existing.Value.IsActive)
-            return BadRequest(new { error = "Bu sicil bloklu. Yöneticinizle iletişime geçin." });
+        var hasCard = !string.IsNullOrWhiteSpace(req.CardNo);
+        var hasPin  = !string.IsNullOrWhiteSpace(req.Pin);
+        var hasCode = !string.IsNullOrWhiteSpace(req.PersonnelCode);
 
-        var op = await _personnel.GetByPinOrCardAsync(req.PersonnelCode, req.Pin, cardNo: null, ct);
-        if (op is null)
+        if (!hasCard)
         {
-            var companyId = ResolveCurrentCompanyIdSafe();
-            var limit = await GetShopFloorMaxPinAttemptsAsync(ct);
-            var shouldLock = _shopFloorLockout.RegisterFailure(companyId, req.PersonnelCode!, limit);
-            if (shouldLock)
+            // ── Mevcut PIN yolu — birebir eskisiyle aynı, geriye uyum ─────────────────
+            if (!hasPin)
+                return BadRequest(new { error = "PIN girilmedi." });
+            if (!hasCode)
+                return BadRequest(new { error = "Sicil numarası girilmedi. Giriş için Sicil + PIN ikisi de gerekli." });
+
+            // ── ShopFloor PIN lockout — ProductionController.AuthOperator ile AYNEN aynı akış ──
+            var existing = await _personnelRepo.GetIdAndActiveByCodeAsync(req.PersonnelCode!, ct);
+            if (existing is not null && !existing.Value.IsActive)
+                return BadRequest(new { error = "Bu sicil bloklu. Yöneticinizle iletişime geçin." });
+
+            var op = await _personnel.GetByPinOrCardAsync(req.PersonnelCode, req.Pin, cardNo: null, ct);
+            if (op is null)
             {
-                var existing2 = await _personnelRepo.GetIdAndActiveByCodeAsync(req.PersonnelCode!, ct);
-                if (existing2 is not null && existing2.Value.IsActive)
-                    await _personnelRepo.DeactivateAsync(existing2.Value.Id, ct);
-                return BadRequest(new { error = "Hatalı PIN limiti aşıldı. Sicil bloklandı, yöneticinizle iletişime geçin." });
+                var companyId = ResolveCurrentCompanyIdSafe();
+                var limit = await GetShopFloorMaxPinAttemptsAsync(ct);
+                var shouldLock = _shopFloorLockout.RegisterFailure(companyId, req.PersonnelCode!, limit);
+                if (shouldLock)
+                {
+                    var existing2 = await _personnelRepo.GetIdAndActiveByCodeAsync(req.PersonnelCode!, ct);
+                    if (existing2 is not null && existing2.Value.IsActive)
+                        await _personnelRepo.DeactivateAsync(existing2.Value.Id, ct);
+                    return BadRequest(new { error = "Hatalı PIN limiti aşıldı. Sicil bloklandı, yöneticinizle iletişime geçin." });
+                }
+                return BadRequest(new { error = "Operatör bulunamadı, sicil veya PIN hatalı (ya da operatör pasif)." });
             }
-            return BadRequest(new { error = "Operatör bulunamadı, sicil veya PIN hatalı (ya da operatör pasif)." });
+
+            if (!string.IsNullOrWhiteSpace(op.Code))
+                _shopFloorLockout.Reset(ResolveCurrentCompanyIdSafe(), op.Code);
+
+            return Ok(new { operatorId = op.Id, name = op.FullName });
         }
 
-        if (!string.IsNullOrWhiteSpace(op.Code))
-            _shopFloorLockout.Reset(ResolveCurrentCompanyIdSafe(), op.Code);
+        // ── NFC kart yolu — ProductionController.AuthOperator (web) ile AYNEN aynı desen ──
+        // Kart yolunda lockout uygulanmaz — fiziksel kart sahipliği zaten kanıt.
+        var cardOp = await _personnel.GetByPinOrCardAsync(req.PersonnelCode, req.Pin, req.CardNo, ct);
+        if (cardOp is null)
+            return BadRequest(new { error = "Operatör bulunamadı, kart tanımlı değil (ya da operatör pasif)." });
 
-        return Ok(new { operatorId = op.Id, name = op.FullName });
+        return Ok(new { operatorId = cardOp.Id, name = cardOp.FullName });
     }
 
     // ──────────────────────────────────────────────────────────────────────
