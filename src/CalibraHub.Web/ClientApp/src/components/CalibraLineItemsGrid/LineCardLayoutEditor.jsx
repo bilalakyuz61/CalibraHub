@@ -390,18 +390,19 @@ export default function LineCardLayoutEditor(props) {
                       <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + pvColorCls} style={pvStyle}>
                         {pvLabelInner}
                       </div>
-                      <div className="h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
+                      {/* Underline standardi (gercek karttaki gorunumun aynisi): kutu degil alt cizgi */}
+                      <div className="h-[34px] border-b border-slate-200 dark:border-white/[0.12]" />
                     </>
                   )}
                   {pvMode === 'modern' && (
                     <div style={{ position: 'relative' }} className="mt-1.5">
                       <div
-                        className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-[#fff] dark:bg-slate-900 ' + pvColorCls}
+                        className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + pvColorCls}
                         style={Object.assign({ top: -7, left: 8, zIndex: 2, lineHeight: '12px' }, pvStyle)}
                       >
                         {pvLabelInner}
                       </div>
-                      <div className="h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
+                      <div className="h-[34px] border-b border-slate-200 dark:border-white/[0.12]" />
                     </div>
                   )}
                   {pvMode === 'inline' && (
@@ -409,7 +410,7 @@ export default function LineCardLayoutEditor(props) {
                       <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] ' + pvColorCls} style={pvStyle}>
                         {pvLabelInner}
                       </div>
-                      <div className="flex-1 min-w-0 h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
+                      <div className="flex-1 min-w-0 h-[34px] border-b border-slate-200 dark:border-white/[0.12]" />
                     </div>
                   )}
                   {/* Sag kenar resize tutamaci */}

@@ -126,13 +126,13 @@ export default function LineGridCell(props) {
     column.align === 'right'  ? 'text-right'  :
     column.align === 'center' ? 'text-center' : 'text-left'
 
+  // Odak stili input'ta DEGIL sarmalayicida: kart hucreleri underline standardina
+  // gecti (2026-08-06) — parent div focus-within ile alt cizgiyi indigo yapar.
   var baseInputClass =
     'w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 ' +
     'text-[13px] text-slate-800 placeholder:text-slate-400 ' +
     'dark:text-white/85 dark:placeholder:text-white/40 ' +
-    'focus:bg-indigo-50/60 dark:focus:bg-white/[0.08] ' +
-    'focus:ring-2 focus:ring-indigo-400/60 focus:ring-inset ' +
-    'transition-colors rounded ' +
+    'transition-colors ' +
     alignClass
 
   // ── Readonly / Computed ────────────────────────────

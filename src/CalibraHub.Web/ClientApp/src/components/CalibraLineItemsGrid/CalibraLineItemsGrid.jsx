@@ -1750,7 +1750,9 @@ export default function CalibraLineItemsGrid(props) {
                                 <span className="truncate">{materialCodeCol.label}</span>
                                 {(materialCodeCol.required || materialCodeCol.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
                               </div>
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]">
+                              {/* Alt-cizgi (underline) standardi — ust bilgi alanlariyla ayni gorunum
+                                  (site.css .ux-edit-pane): kutu yerine yalniz border-bottom, odakta indigo. */}
+                              <div className="border-b border-slate-200 focus-within:border-indigo-500 focus-within:shadow-[0_1px_0_0_#6366f1] dark:border-white/[0.12] dark:focus-within:border-indigo-400 dark:focus-within:shadow-[0_1px_0_0_#818cf8] transition-[border-color,box-shadow]">
                                 <LineGridCell
                                   column={materialCodeCol}
                                   row={row}
@@ -1769,7 +1771,7 @@ export default function CalibraLineItemsGrid(props) {
                           )}
                         </div>
                         {materialNameCol && (
-                          <div data-cell-key={materialNameCol.key} className="min-w-0 mt-0.5">
+                          <div data-cell-key={materialNameCol.key} className="min-w-0 mt-0.5 border-b border-slate-200 focus-within:border-indigo-500 focus-within:shadow-[0_1px_0_0_#6366f1] dark:border-white/[0.12] dark:focus-within:border-indigo-400 dark:focus-within:shadow-[0_1px_0_0_#818cf8] transition-[border-color,box-shadow]">
                             <LineGridCell
                               column={materialNameCol}
                               row={row}
@@ -1911,8 +1913,8 @@ export default function CalibraLineItemsGrid(props) {
                             )}
                             {labelMode === 'modern' && (
                               <div
-                                className={/* bg-[#fff]: Bootstrap'in .bg-white!important utility'si Tailwind dark: varyantini eziyor — ayni gorunum, cakismayan ad */
-                                  'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide px-1 rounded bg-[#fff] dark:bg-slate-900 ' + labelColorCls}
+                                className={/* Underline gorunumde maskelenecek ust kenar yok — yuzer etiket zeminsiz */
+                                  'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + labelColorCls}
                                 style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
                               >
                                 {labelInner}
@@ -1920,8 +1922,8 @@ export default function CalibraLineItemsGrid(props) {
                             )}
                             <div className={'flex items-stretch gap-1.5' + (labelMode === 'inline' ? ' flex-1 min-w-0' : '') + (labelMode === 'modern' ? ' mt-1.5' : '')}>
                               <div
-                                className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]"
-                                style={behInvalid ? { boxShadow: 'inset 0 0 0 1.5px #ef4444', backgroundColor: 'rgba(239,68,68,0.06)' } : undefined}
+                                className="flex-1 min-w-0 border-b border-slate-200 focus-within:border-indigo-500 focus-within:shadow-[0_1px_0_0_#6366f1] dark:border-white/[0.12] dark:focus-within:border-indigo-400 dark:focus-within:shadow-[0_1px_0_0_#818cf8] transition-[border-color,box-shadow]"
+                                style={behInvalid ? { borderBottomColor: '#ef4444', boxShadow: '0 1px 0 0 #ef4444', backgroundColor: 'rgba(239,68,68,0.05)' } : undefined}
                                 title={behInvalid ? 'Bu alan zorunlu' : undefined}
                               >
                                 {col.__isWidget ? (
@@ -1931,7 +1933,7 @@ export default function CalibraLineItemsGrid(props) {
                                       data-native-date
                                       value={widgetValue == null ? '' : String(widgetValue)}
                                       onChange={function(e) { handleWidgetValueChange(row._uid, col.__widgetCode, e.target.value) }}
-                                      className="w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/85 focus:bg-indigo-50/60 dark:focus:bg-white/[0.08] focus:ring-2 focus:ring-indigo-400/60 focus:ring-inset transition-colors rounded"
+                                      className="w-full h-full bg-transparent border-0 outline-none px-2.5 py-2 text-[13px] text-slate-800 dark:text-white/85 transition-colors"
                                     />
                                   ) : (
                                     <LineGridCell
@@ -1953,7 +1955,7 @@ export default function CalibraLineItemsGrid(props) {
                               </div>
                               {showMirror && (
                                 <div
-                                  className="flex-shrink-0 flex items-center gap-1 px-2 rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03] text-[11px] font-mono tabular-nums text-slate-500 dark:text-white/45"
+                                  className="flex-shrink-0 flex items-center gap-1 px-1.5 text-[11px] font-mono tabular-nums text-slate-500 dark:text-white/45"
                                   title="Belge kuruyla TL karşılığı"
                                 >
                                   <span className="opacity-70">₺</span>
