@@ -390,100 +390,10 @@
     }
     body.app-theme-dark .pm-action-row__badge { background: rgba(99,102,241,.2); color: #a5b4fc; }
 
-    /* ── Grup Yönetimi (2026-07-06) ─────────────────────────────────── */
-    .pm-btn--ghost {
-        background: transparent; color: var(--bs-body-color, #334155);
-        border: 1px solid var(--app-border, #cbd5e1);
-    }
-    .pm-btn--ghost:hover { border-color: #818cf8; color: #6366f1; }
-    body.app-theme-dark .pm-btn--ghost { color: #cbd5e1; border-color: rgba(255,255,255,.16); }
-    body.app-theme-dark .pm-btn--ghost:hover { color: #a5b4fc; border-color: rgba(129,140,248,.5); }
-
-    .pmg-backdrop {
-        position: fixed; inset: 0; z-index: 9990; display: none;
-        align-items: center; justify-content: center;
-        background: rgba(15,23,42,.55); backdrop-filter: blur(4px);
-    }
-    .pmg-backdrop.open { display: flex; }
-    .pmg-modal {
-        width: min(640px, 94vw); max-height: 82vh; display: flex; flex-direction: column;
-        border-radius: 14px; overflow: hidden;
-        background: var(--app-surface, #ffffff);
-        border: 1px solid var(--app-border, #e2e8f0);
-        box-shadow: 0 20px 60px rgba(0,0,0,.35);
-    }
-    body.app-theme-dark .pmg-modal { background: #0f172a; border-color: rgba(255,255,255,.1); }
-    .pmg-head {
-        display: flex; align-items: center; gap: 10px; padding: 14px 18px;
-        border-bottom: 1px solid var(--app-border, #e2e8f0); flex-shrink: 0;
-    }
-    body.app-theme-dark .pmg-head { border-bottom-color: rgba(255,255,255,.08); }
-    .pmg-title { font-size: .95rem; font-weight: 700; flex: 1; color: var(--bs-body-color, #0f172a); }
-    body.app-theme-dark .pmg-title { color: #e2e8f0; }
-    .pmg-close {
-        width: 28px; height: 28px; border: none; background: transparent; cursor: pointer;
-        color: #64748b; border-radius: 6px; font-size: 16px; line-height: 1;
-    }
-    .pmg-close:hover { background: rgba(148,163,184,.15); }
-    .pmg-body { padding: 14px 18px; overflow-y: auto; flex: 1; }
-
-    .pmg-new { display: flex; gap: 8px; margin-bottom: 14px; }
-    .pmg-new input[type="text"] {
-        flex: 1; padding: 7px 10px; border-radius: 8px; font-size: .82rem;
-        border: 1px solid var(--app-border, #cbd5e1); background: var(--app-surface, #fff);
-        color: var(--bs-body-color, #0f172a);
-    }
-    body.app-theme-dark .pmg-new input[type="text"] { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); color: #e2e8f0; }
-    .pmg-new input[type="text"]:focus { outline: none; border-color: #818cf8; }
-
-    .pmg-row {
-        display: flex; align-items: center; gap: 10px; padding: 9px 10px;
-        border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; margin-bottom: 8px;
-    }
-    body.app-theme-dark .pmg-row { border-color: rgba(255,255,255,.08); }
-    .pmg-row--inactive { opacity: .55; }
-    .pmg-row-name { font-weight: 600; font-size: .84rem; color: var(--bs-body-color, #0f172a); }
-    body.app-theme-dark .pmg-row-name { color: #e2e8f0; }
-    .pmg-row-desc { font-size: .72rem; color: #64748b; }
-    .pmg-row-main { flex: 1; min-width: 0; }
-    .pmg-count {
-        font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
-        background: rgba(99,102,241,.12); color: #4f46e5; white-space: nowrap;
-    }
-    body.app-theme-dark .pmg-count { background: rgba(99,102,241,.2); color: #a5b4fc; }
-
-    /* Switchkey — Aktif/Pasif (native checkbox ham düşmez) */
-    .pmg-switch { position: relative; display: inline-block; width: 34px; height: 19px; flex-shrink: 0; cursor: pointer; }
-    .pmg-switch input { opacity: 0; width: 0; height: 0; }
-    .pmg-switch .tr {
-        position: absolute; inset: 0; border-radius: 999px; transition: background .15s;
-        background: #cbd5e1;
-    }
-    body.app-theme-dark .pmg-switch .tr { background: rgba(255,255,255,.18); }
-    .pmg-switch .tr::after {
-        content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px;
-        border-radius: 50%; background: #fff; transition: transform .15s;
-        box-shadow: 0 1px 3px rgba(0,0,0,.3);
-    }
-    .pmg-switch input:checked + .tr { background: #6366f1; }
-    .pmg-switch input:checked + .tr::after { transform: translateX(15px); }
-
-    .pmg-member-search { width: 100%; margin-bottom: 8px; }
-    .pmg-member-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--app-border, #e2e8f0); border-radius: 10px; padding: 6px; }
-    body.app-theme-dark .pmg-member-list { border-color: rgba(255,255,255,.08); }
-    .pmg-member {
-        display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px;
-        font-size: .8rem; cursor: pointer; color: var(--bs-body-color, #0f172a);
-    }
-    body.app-theme-dark .pmg-member { color: #e2e8f0; }
-    .pmg-member:hover { background: rgba(99,102,241,.07); }
-    .pmg-member input { accent-color: #6366f1; }
-    .pmg-member-mail { font-size: .7rem; color: #64748b; }
-    .pmg-foot {
-        display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px;
-        border-top: 1px solid var(--app-border, #e2e8f0); flex-shrink: 0;
-    }
-    body.app-theme-dark .pmg-foot { border-top-color: rgba(255,255,255,.08); }
+    /* Grup Yönetimi UI kaldırıldı (2026-08-05, PageComment Seq 1090) — bkz. CLAUDE.md
+       "grup yetki kavramı istenmiyor, departman ve kullanıcı yeterli". Backend grup
+       servis/endpoint'leri kasıtlı olarak dokunulmadı (dormant), bu yüzden .pmg-*/
+       .pm-btn--ghost CSS'i de UI ile birlikte kaldırıldı. */
 </style>
 }
 
@@ -493,12 +403,6 @@
             <label>
                 <input type="radio" name="permMode" value="dept" />
                 <span>Departman</span>
-            </label>
-            <label>
-                @* 2026-07-06 — Yetki grubu (rol): birden fazla kullanıcıya tek pakette izin.
-                   Çözümleme: Kullanıcı override > Grup birleşimi > Departman > deny. *@
-                <input type="radio" name="permMode" value="group" />
-                <span>Grup</span>
             </label>
             <label>
                 @* 2026-06-08 — Varsayılan mod: Kullanıcı. Tipik kullanım kullanıcıya yetki vermek;
@@ -516,7 +420,6 @@
         </div>
 
         <button type="button" id="permSaveBtn" class="pm-btn pm-btn--primary" disabled>Kaydet</button>
-        <button type="button" id="permGroupsBtn" class="pm-btn pm-btn--ghost" style="display:none;">Grup Yönetimi</button>
 
         <select id="permQuickFilter" class="pm-quick-filter-sel" style="display:none;">
             <option value="all">Tümü</option>
@@ -696,8 +599,6 @@
             asideEl.innerHTML = '<div class="pm-aside-empty">Yukarıdan hedef seçin.</div>';
             contentEl.innerHTML = '<div class="pm-empty"><div class="pm-empty__icon">🛡️</div><div>Soldan bir form seçin</div></div>';
             saveBtn.disabled = true;
-            var groupsBtn = document.getElementById('permGroupsBtn');
-            if (groupsBtn) groupsBtn.style.display = state.mode === 'group' ? 'inline-flex' : 'none';
             loadTargets();
         });
     });
@@ -750,27 +651,6 @@
         targetSel.innerHTML = '<option value="">— Seçiniz —</option>';
         state.userDeptMap = {};
 
-        // Grup modu: /Permission/Groups (aktifler seçilebilir, pasifler işaretli)
-        if (state.mode === 'group') {
-            try {
-                var gr = await fetch('/Permission/Groups', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
-                var gd = await gr.json();
-                if (!gd.ok) throw new Error(gd.error || 'Grup listesi alınamadı.');
-                state.groups = gd.groups || [];
-                state.groups.forEach(function (g) {
-                    var opt = document.createElement('option');
-                    opt.value = g.id;
-                    opt.textContent = g.name + ' (' + (g.memberCount || 0) + ' üye)' + (g.isActive ? '' : ' — pasif');
-                    targetSel.appendChild(opt);
-                });
-                if (state.groups.length === 0)
-                    setStatus('Henüz yetki grubu yok — "Grup Yönetimi" ile oluşturun.', '');
-            } catch (e) {
-                setStatus('Grup listesi yüklenemedi: ' + e.message, 'err');
-            }
-            return;
-        }
-
         var url = state.mode === 'user' ? '/CompanyUser/UsersLookup' : '/Admin/GetDepartmentsLookup';
         try {
             var r = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
@@ -801,9 +681,7 @@
         state.targetId = id;
         setStatus('Yükleniyor...', '');
 
-        var url = state.mode === 'user'  ? '/Permission/User/' + id
-                : state.mode === 'group' ? '/Permission/Group/' + id
-                :                          '/Permission/Department/' + id;
+        var url = state.mode === 'user' ? '/Permission/User/' + id : '/Permission/Department/' + id;
         try {
             var r = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
             if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -811,7 +689,7 @@
             if (!data.ok) throw new Error(data.error || 'Yetki listesi alınamadı.');
             // Kullanıcı modunda hedefin rolünü kaydet — AdminOnly uyarısı için
             state.targetRole = (state.mode === 'user') ? (data.role || null) : null;
-            var explicitSource = state.mode === 'user' ? 'USER' : state.mode === 'group' ? 'GROUP' : 'DEPARTMENT';
+            var explicitSource = state.mode === 'user' ? 'USER' : 'DEPARTMENT';
             state.items = (data.permissions || []).map(function (p) {
                 var isExplicit = p.source === explicitSource;
                 return {
@@ -1243,9 +1121,9 @@
                 return { permissionDefId: it.permissionDefId, isGranted: it.isGranted };
             });
 
-        var url = state.mode === 'user'  ? '/Permission/User/' + state.targetId + '/Save'
-                : state.mode === 'group' ? '/Permission/Group/' + state.targetId + '/Save'
-                :                          '/Permission/Department/' + state.targetId + '/Save';
+        var url = state.mode === 'user'
+            ? '/Permission/User/' + state.targetId + '/Save'
+            : '/Permission/Department/' + state.targetId + '/Save';
 
         saveBtn.disabled = true;
         setStatus('Kaydediliyor...', '');
