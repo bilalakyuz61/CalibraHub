@@ -303,8 +303,11 @@ body.app-theme-dark .wiz-hlabel {
 .wiz-hinput {
     flex: 1; max-width: 280px;
 }
-.wiz-hinput[type="date"] {
-    max-width: 160px;
+/* 2026-08-05: tarih alanları global 176px standardına sabit (native + flatpickr
+   altInput) — eski `[type=date]{max-width:160px}` enhance sonrası kayboluyordu. */
+#wizQuoteDate, #wizQuoteDate + input.calibra-date-input,
+#wizValidUntil, #wizValidUntil + input.calibra-date-input {
+    flex: 0 0 176px; max-width: 176px;
 }
 .wiz-hlabel--link {
     cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;

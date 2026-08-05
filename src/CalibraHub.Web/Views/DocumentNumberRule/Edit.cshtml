@@ -139,6 +139,12 @@
         background: var(--dnr-surface-2); color: var(--dnr-text);
         font-family: inherit; transition: border-color .12s, box-shadow .12s;
     }
+    /* 2026-08-05: tarih alanları global 176px standardına — grid hücresini doldurmasın
+       (yukarıdaki width:100% grubundan SONRA gelir, eşit specificity'de bunu ezer). */
+    .dnr-row input[type=date],
+    .dnr-row input[type=date] + input.calibra-date-input {
+        width: 176px; max-width: 100%; flex: none;
+    }
     .dnr-row input::placeholder, .dnr-row select option:first-child {
         color: var(--dnr-muted); opacity: 0.7;
     }
