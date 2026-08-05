@@ -40,7 +40,7 @@ var MAX_ITERATIONS = 500
  * Widget value'sunu (UI'dan gelen ham deger) expr-eval icin uygun tipe cevirir.
  * expr-eval tip duyarlidir: "5" * "3" → NaN. Bu yuzden buradaki coerce kritik.
  */
-function coerceForScope(raw, dataType) {
+export function coerceForScope(raw, dataType) {
   if (raw == null || raw === '') {
     switch (dataType) {
       case 'numeric':     return 0
@@ -95,8 +95,22 @@ export function coerceResult(value, dataType) {
  * Tum widget'lar + current values → expr-eval scope objesi.
  * Sadece field widget'larini scope'a alir (grup/grid haric).
  */
-export function buildScope(widgets, values) {
+export function buildScope(widgets, values, externalScope) {
   var scope = {}
+  // 2026-08-05 — Dis kapsam (ayni sayfadaki BASKA formun degerleri; orn. kalem
+  // formu kurallari icin ust bilgi formu). Once dis degerler yazilir (w_ alias
+  // iki yonlu), kendi form degerleri UZERINE yazar — cakisan kodda kendi formu
+  // kazanir. Dis referanslar bagimlilik DEGIL, eval anindaki sabit degerdir.
+  if (externalScope) {
+    var exKeys = Object.keys(externalScope)
+    for (var e = 0; e < exKeys.length; e++) {
+      var ek = exKeys[e]
+      var ev = externalScope[ek]
+      scope[ek] = ev
+      if (ek.slice(0, 2) !== 'w_') scope['w_' + ek] = ev
+      else if (scope[ek.slice(2)] === undefined) scope[ek.slice(2)] = ev
+    }
+  }
   for (var i = 0; i < widgets.length; i++) {
     var w = widgets[i]
     var dt = String(w.dataType || '').toLowerCase()
@@ -133,7 +147,7 @@ export function buildScope(widgets, values) {
  *     hasRules,             // herhangi bir widget'in kurali var mi?
  *   }
  */
-export function buildRuleGraph(widgets) {
+export function buildRuleGraph(widgets, externalScope) {
   var widgetByCode = {}
   var parsed = {}
   var depMap = {}            // source → Set<target>
@@ -141,6 +155,18 @@ export function buildRuleGraph(widgets) {
   var parseErrors = {}
   var fatalErrors = []
   var hasRules = false
+
+  // 2026-08-05 — Dis kapsam (ust bilgi formu vb.) referans anahtarlari,
+  // w_ alias'lariyla iki yonlu. Bu anahtarlara referans bagimlilik sayilmaz.
+  var externalKeys = null
+  if (externalScope) {
+    externalKeys = new Set()
+    Object.keys(externalScope).forEach(function (k) {
+      externalKeys.add(k)
+      if (k.slice(0, 2) !== 'w_') externalKeys.add('w_' + k)
+      else externalKeys.add(k.slice(2))
+    })
+  }
 
   for (var i = 0; i < widgets.length; i++) {
     var w = widgets[i]
@@ -177,8 +203,15 @@ export function buildRuleGraph(widgets) {
         for (var k = 0; k < vars.length; k++) {
           var v = vars[k]
           if (!validCodes.has(v)) {
-            fatalErrors.push(
-              w2.widgetId + '.' + errLabel + ": tanimsiz alan referansi '" + v + "'")
+            // Dis kapsam referansi (ust bilgi formu vb.) — bagimlilik degil,
+            // eval aninda scope'tan okunan sabit deger. Dep grafigine girmez.
+            if (externalKeys && externalKeys.has(v)) continue
+            // FAIL-OPEN (2026-08-05): bilinmeyen referans formu ARTIK BLOKLAMAZ —
+            // yalnizca bu kural yok sayilir (widget gorunur/etkin kalir), admin'e
+            // widget alti notu dusulur. Onceki fatalErrors davranisi "Kural motoru
+            // — form yuklenemiyor" banner'i ile TUM formu kilitliyordu.
+            parseErrors[w2.widgetId] = (parseErrors[w2.widgetId] ? parseErrors[w2.widgetId] + ' | ' : '') +
+              errLabel + ": tanimsiz alan referansi '" + v + "' — kural yok sayildi"
             return null
           }
           // Canonical kodu kullan: w_en → en (gercek widget kodu) — depMap/propagateChange uyumu
@@ -293,6 +326,8 @@ export function buildRuleGraph(widgets) {
     parseErrors: parseErrors,
     fatalErrors: fatalErrors,
     hasRules: hasRules,
+    // Dis kapsam degerleri — recomputeAll/propagateChange buildScope'a gecirir.
+    externalScope: externalScope || null,
   }
 }
 
@@ -345,7 +380,7 @@ export function recomputeAll(graph, inputValues) {
     var p = graph.parsed[code]
     if (!p) continue
 
-    var scope = buildScope(graph.widgets, values)
+    var scope = buildScope(graph.widgets, values, graph.externalScope)
     var w = graph.widgetByCode[code]
 
     if (p._fexpr) {
@@ -442,7 +477,7 @@ export function propagateChange(changedCode, newValue, graph, currentState) {
     var p = graph.parsed[code]
     if (!p) continue
     var w = graph.widgetByCode[code]
-    var scope = buildScope(graph.widgets, values)
+    var scope = buildScope(graph.widgets, values, graph.externalScope)
 
     // Hata tekrari onlenmesi — her recompute once bu widget'in hatalarini sil
     delete errors[code]
