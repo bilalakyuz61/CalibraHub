@@ -24,9 +24,10 @@ function getJson(url) {
   return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.json() })
 }
 
-// fromIso / toIso: UTC ISO-8601 string ("...Z")
-export function getScheduleData(fromIso, toIso) {
+// fromIso / toIso: UTC ISO-8601 string ("...Z"); scenarioId opsiyonel (yoksa backend varsayılan senaryoyu kullanır)
+export function getScheduleData(fromIso, toIso, scenarioId) {
   var qs = '?from=' + encodeURIComponent(fromIso) + '&to=' + encodeURIComponent(toIso)
+  if (scenarioId) qs += '&scenarioId=' + encodeURIComponent(scenarioId)
   return getJson(BASE + '/MachineScheduleData' + qs)
 }
 
@@ -44,12 +45,12 @@ export function getAutoScheduleCandidates() {
   return getJson(BASE + '/AutoScheduleCandidates')
 }
 
-// payload: { includedWorkOrderIds:[int], fromUtc:"...Z" }
+// payload: { includedWorkOrderIds:[int], fromUtc:"...Z", scenarioId?:int }
 export function autoSchedulePreview(payload) {
   return postJson(BASE + '/AutoSchedulePreview', payload)
 }
 
-// payload: { includedWorkOrderIds:[int], fromUtc:"...Z" }
+// payload: { includedWorkOrderIds:[int], fromUtc:"...Z", scenarioId?:int }
 export function autoScheduleApply(payload) {
   return postJson(BASE + '/AutoScheduleApply', payload)
 }

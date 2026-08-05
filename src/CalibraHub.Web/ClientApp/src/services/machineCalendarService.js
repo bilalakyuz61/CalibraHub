@@ -44,3 +44,30 @@ export function saveHoliday(payload) {
 export function deleteHoliday(id) {
   return postJson(BASE + '/DeleteHoliday', { id: id })
 }
+
+// ── Vardiya Senaryoları (Faz 1) ─────────────────────────────
+export function listScenarios() {
+  return getJson(BASE + '/ShiftScenariosList')
+}
+
+// payload: { id, name, description, isDefault }
+export function saveScenario(payload) {
+  return postJson(BASE + '/SaveShiftScenario', payload)
+}
+
+export function deleteScenario(id) {
+  return postJson(BASE + '/DeleteShiftScenario', { id: id })
+}
+
+export function listScenarioMachineShifts(scenarioId) {
+  return getJson(BASE + '/ScenarioMachineShiftsList?scenarioId=' + encodeURIComponent(scenarioId))
+}
+
+// payload: { id, scenarioId, machineId, shiftId, daysMask }
+export function saveScenarioMachineShift(payload) {
+  return postJson(BASE + '/SaveScenarioMachineShift', payload)
+}
+
+export function deleteScenarioMachineShift(id) {
+  return postJson(BASE + '/DeleteScenarioMachineShift', { id: id })
+}
