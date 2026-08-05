@@ -90,10 +90,10 @@ function humanizeFieldKey(raw) {
 function Row(props) {
   return (
     <div className="flex items-start gap-3 min-h-[32px] py-1">
-      <label className="w-[160px] flex-shrink-0 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40 leading-tight pt-[6px]">
+      <label className="w-[160px] flex-shrink-0 text-[10.5px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 leading-tight pt-[6px]">
         {props.label}
         {props.hint && (
-          <span className="block text-slate-400 dark:text-white/45 font-normal normal-case text-[9.5px] mt-0.5">
+          <span className="block text-slate-500 dark:text-white/60 font-normal normal-case text-[9.5px] mt-0.5">
             {props.hint}
           </span>
         )}
@@ -953,15 +953,15 @@ export default function WidgetBuilderForm(props) {
   // Ortak CSS — input field (sabit yukseklik 36px tum alanlar icin).
   // type="number" inputlari icin webkit/firefox spinner butonlari gizlenir.
   var inputBase = 'w-full h-8 px-3 rounded-lg text-xs transition-all ' +
-    'bg-white/60 dark:bg-white/[0.04] ' +
+    'bg-white/60 dark:bg-slate-900/60 ' +
     'text-slate-800 dark:text-white/85 ' +
-    'placeholder:text-slate-400 dark:placeholder:text-white/25 ' +
+    'placeholder:text-slate-500 dark:placeholder:text-white/45 ' +
     'focus:outline-none ' +
     '[&>option]:bg-white [&>option]:text-slate-800 dark:[&>option]:bg-[#1e293b] dark:[&>option]:text-white/85 ' +
     '[appearance:textfield] ' +
     '[&::-webkit-outer-spin-button]:appearance-none ' +
     '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 '
-  var inputOk = 'border border-slate-200 dark:border-white/[0.08] focus:border-indigo-400/60 dark:focus:border-white/20 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
+  var inputOk = 'border border-slate-200 dark:border-white/[0.14] focus:border-indigo-400/60 dark:focus:border-white/30 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
   var inputErr = 'border-2 border-red-500/80 focus:border-red-500 focus:shadow-[0_0_0_3px_rgba(239,68,68,0.22)]'
 
   return (
@@ -986,7 +986,7 @@ export default function WidgetBuilderForm(props) {
           <h3 className="text-xs font-bold text-slate-800 dark:text-white/90 leading-tight">
             {isEdit ? 'Widget Düzenle' : 'Yeni Widget Tanımla'}
           </h3>
-          <p className="text-[10px] text-slate-500 dark:text-white/30 truncate">
+          <p className="text-[10px] text-slate-500 dark:text-white/55 truncate">
             {isEdit
               ? (editingField.widgetCode || editingField.fieldKey || '')
               : (activeLayerLabel
@@ -1079,8 +1079,8 @@ export default function WidgetBuilderForm(props) {
                   className={
                     'flex-1 flex flex-col items-center gap-0.5 py-1 px-2 rounded-md text-[10px] font-semibold transition-all ' +
                     (act
-                      ? 'bg-white dark:bg-white/[0.08] shadow-sm text-indigo-600 dark:text-indigo-300'
-                      : 'text-slate-500 dark:text-white/45 hover:text-slate-700 dark:hover:text-white/70')
+                      ? 'bg-white dark:bg-indigo-400/[0.18] shadow-sm text-indigo-600 dark:text-indigo-200'
+                      : 'text-slate-600 dark:text-white/60 hover:text-slate-700 dark:hover:text-white/80')
                   }
                 >
                   {preview}
@@ -1418,7 +1418,7 @@ export default function WidgetBuilderForm(props) {
                       'flex-1 transition-colors flex items-center justify-center text-[8px] font-bold pointer-events-none ' +
                       (filled
                         ? 'bg-emerald-500 text-white'
-                        : 'bg-slate-200 dark:bg-white/[0.06] text-slate-400 dark:text-white/30')
+                        : 'bg-slate-200 dark:bg-white/[0.06] text-slate-500 dark:text-white/50')
                     }
                   >
                     {isLast ? val : ''}
@@ -1427,7 +1427,7 @@ export default function WidgetBuilderForm(props) {
               })}
             </div>
             {/* Altta kucuk fraction etiketi (24-col referans). */}
-            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-white/45">
+            <div className="flex items-center justify-between text-[10px] text-slate-600 dark:text-white/60">
               <span className="font-mono">{colSpan}/24</span>
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                 {colSpanFractionLabel(colSpan)}
@@ -1465,7 +1465,7 @@ export default function WidgetBuilderForm(props) {
               var reasonText = reasons.length > 0 ? ' · ' + reasons.join(', ') : ''
 
               return (
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-white/35 mt-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-white/55 mt-1.5">
                   <span aria-hidden="true">💡</span>
                   <span className="min-w-0 truncate">
                     Önerilen: <span className="font-mono">{rec}/24</span>
@@ -1487,7 +1487,7 @@ export default function WidgetBuilderForm(props) {
               )
             })()}
             {(dataType === 'grid' || dataType === 'group') && (
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-white/35 mt-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-white/55 mt-1.5">
                 <span aria-hidden="true">💡</span>
                 <span>Bu tip her zaman tam satır kullanır (renderer otomatik).</span>
               </div>
@@ -1535,7 +1535,7 @@ export default function WidgetBuilderForm(props) {
         var hasRequiredRule = !!(ruleRequiredIf && ruleRequiredIf.trim())
         return (
           <div className="flex items-center justify-between py-1.5 px-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               Zorunlu Alan
               {hasRequiredRule && (
                 <span className="ml-2 normal-case font-normal" style={{ color: '#fbbf24', fontSize: '9px' }}>
@@ -1567,7 +1567,7 @@ export default function WidgetBuilderForm(props) {
 
       {/* Yetkilendirilebilir toggle — 2026-06-08 */}
       <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
           Yetkilendirilebilir
           <span className="ml-2 normal-case font-normal" style={{ color: '#94a3b8', fontSize: '9px' }}>
             · Yetki Yönetimi'nde görme izni
@@ -1593,7 +1593,7 @@ export default function WidgetBuilderForm(props) {
       {/* Kartta Goster toggle — 2026-08-05, yalnizca kalem (*_LINES) formlarinda */}
       {isLineForm && (
         <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
             Kartta Göster
             <span className="ml-2 normal-case font-normal" style={{ color: '#94a3b8', fontSize: '9px' }}>
               · kalem kartında inline alan
@@ -1619,7 +1619,7 @@ export default function WidgetBuilderForm(props) {
 
       {/* Aktif toggle */}
       <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
           Aktif
         </span>
         <button

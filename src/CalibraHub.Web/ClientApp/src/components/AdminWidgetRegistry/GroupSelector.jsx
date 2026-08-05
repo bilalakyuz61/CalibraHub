@@ -74,7 +74,7 @@ export default function GroupSelector(props) {
         onClick={function() { if (!disabled) setOpen(function(o) { return !o }) }}
         className={
           'w-full h-9 flex items-center gap-2 px-2.5 rounded-lg text-xs transition-all ' +
-          'bg-white/60 dark:bg-white/[0.04] border text-slate-800 dark:text-white/85 ' +
+          'bg-white/60 dark:bg-slate-900/60 border text-slate-800 dark:text-white/85 ' +
           (open
             ? 'border-indigo-400/60 dark:border-white/20 shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
             : 'border-slate-200 dark:border-white/[0.08] hover:border-indigo-400/40 dark:hover:border-white/15') +
@@ -95,12 +95,12 @@ export default function GroupSelector(props) {
           />
         </div>
         <span className="flex-1 text-left truncate">
-          {selected ? selected.groupLabel : <span className="text-slate-400 dark:text-white/30">Genel</span>}
+          {selected ? selected.groupLabel : <span className="text-slate-500 dark:text-white/55">Genel</span>}
         </span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
           transition={{ duration: 0.2 }}
-          className="text-slate-400 dark:text-white/30"
+          className="text-slate-500 dark:text-white/55"
         >
           <ChevronDown size={14} />
         </motion.span>

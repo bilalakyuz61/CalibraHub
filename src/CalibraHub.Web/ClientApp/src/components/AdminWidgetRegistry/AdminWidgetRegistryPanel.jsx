@@ -906,20 +906,20 @@ export default function AdminWidgetRegistryPanel(props) {
 
           {/* Arama */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/60 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08]">
-            <Search size={14} className="text-slate-400 dark:text-white/30 flex-shrink-0" />
+            <Search size={14} className="text-slate-500 dark:text-white/55 flex-shrink-0" />
             <input
               type="text"
               value={searchQuery}
               onChange={function(e) { setSearchQuery(e.target.value) }}
               placeholder="Widget ara…"
               style={{ width: '130px' }}
-              className="bg-transparent text-xs text-slate-800 dark:text-white/85 placeholder:text-slate-400 dark:placeholder:text-white/25 focus:outline-none"
+              className="bg-transparent text-xs text-slate-800 dark:text-white/85 placeholder:text-slate-500 dark:placeholder:text-white/45 focus:outline-none"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={function() { setSearchQuery('') }}
-                className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:text-white/45 dark:hover:text-white/70 transition-colors"
+                className="flex-shrink-0 text-slate-500 hover:text-slate-700 dark:text-white/60 dark:hover:text-white/85 transition-colors"
                 title="Aramayı temizle"
               >
                 <X size={13} />
@@ -1003,7 +1003,7 @@ export default function AdminWidgetRegistryPanel(props) {
           {loadingSchema ? (
             <div className="h-full flex flex-col items-center justify-center gap-3">
               <Loader2 size={28} className="text-indigo-500 animate-spin" />
-              <span className="text-[11px] text-slate-500 dark:text-white/40">Yükleniyor...</span>
+              <span className="text-[11px] text-slate-500 dark:text-white/60">Yükleniyor...</span>
             </div>
           ) : (
             <div className="h-full grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 min-h-0">

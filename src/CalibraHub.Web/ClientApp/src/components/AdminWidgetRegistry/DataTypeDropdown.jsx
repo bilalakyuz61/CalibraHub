@@ -71,7 +71,7 @@ export default function DataTypeDropdown(props) {
         onClick={function() { setOpen(function(o) { return !o }) }}
         className={
           'w-full h-9 flex items-center gap-2 px-2.5 rounded-lg text-xs transition-all ' +
-          'bg-white/60 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] ' +
+          'bg-white/60 dark:bg-slate-900/60 border border-slate-200 dark:border-white/[0.14] ' +
           'text-slate-800 dark:text-white/85 ' +
           (disabled
             ? 'opacity-50 cursor-not-allowed'
@@ -89,7 +89,7 @@ export default function DataTypeDropdown(props) {
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
           transition={{ duration: 0.2 }}
-          className="text-slate-400 dark:text-white/30"
+          className="text-slate-500 dark:text-white/55"
         >
           <ChevronDown size={14} />
         </motion.span>

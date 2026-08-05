@@ -213,7 +213,7 @@ export default function WidgetRegistryCard(props) {
                     style={{ width: pct + '%' }}
                   />
                 </div>
-                <span className="font-mono text-[9px] text-slate-400 dark:text-white/35 w-8 text-right flex-shrink-0">
+                <span className="font-mono text-[9px] text-slate-500 dark:text-white/55 w-8 text-right flex-shrink-0">
                   {cs}/24
                 </span>
               </div>
@@ -239,7 +239,7 @@ export default function WidgetRegistryCard(props) {
           >
             {isActive
               ? <ToggleRight size={14} className="text-emerald-500 dark:text-emerald-400/80 transition-colors" />
-              : <ToggleLeft  size={14} className="text-slate-400 dark:text-white/35 transition-colors" />
+              : <ToggleLeft  size={14} className="text-slate-500 dark:text-white/55 transition-colors" />
             }
           </button>
 
@@ -253,7 +253,7 @@ export default function WidgetRegistryCard(props) {
           >
             <Pencil
               size={14}
-              className="text-slate-400 dark:text-white/45 group-hover:text-amber-600 dark:group-hover:text-amber-400/80 transition-colors"
+              className="text-slate-500 dark:text-white/60 group-hover:text-amber-600 dark:group-hover:text-amber-400/80 transition-colors"
             />
           </button>
 
@@ -275,7 +275,7 @@ export default function WidgetRegistryCard(props) {
             >
               <Trash2
                 size={14}
-                className="text-slate-400 dark:text-white/50 group-hover:text-red-600 dark:group-hover:text-red-400/90 transition-colors"
+                className="text-slate-500 dark:text-white/60 group-hover:text-red-600 dark:group-hover:text-red-400/90 transition-colors"
               />
             </button>
           )}

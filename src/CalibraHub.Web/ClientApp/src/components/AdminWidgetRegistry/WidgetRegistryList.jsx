@@ -138,17 +138,17 @@ export default function WidgetRegistryList(props) {
       <div className="flex-1 overflow-y-auto min-h-0 pr-1">
         {total === 0 && sections.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <LayoutGrid size={36} className="text-slate-300 dark:text-white/30 mb-3" />
-            <p className="text-sm text-slate-400 dark:text-white/45">Henüz widget tanımlanmamış</p>
-            <p className="text-[11px] text-slate-400 dark:text-white/40 mt-1">
+            <LayoutGrid size={36} className="text-slate-400 dark:text-white/40 mb-3" />
+            <p className="text-sm text-slate-500 dark:text-white/65">Henüz widget tanımlanmamış</p>
+            <p className="text-[11px] text-slate-500 dark:text-white/55 mt-1">
               Sol formdan yeni widget ekleyin
             </p>
           </div>
         ) : searchQuery && filteredTotal === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <LayoutGrid size={36} className="text-slate-300 dark:text-white/30 mb-3" />
-            <p className="text-sm text-slate-400 dark:text-white/45">Sonuç bulunamadı</p>
-            <p className="text-[11px] text-slate-400 dark:text-white/40 mt-1">
+            <LayoutGrid size={36} className="text-slate-400 dark:text-white/40 mb-3" />
+            <p className="text-sm text-slate-500 dark:text-white/65">Sonuç bulunamadı</p>
+            <p className="text-[11px] text-slate-500 dark:text-white/55 mt-1">
               "<span className="font-mono">{searchQuery}</span>" ile eşleşen widget yok
             </p>
           </div>
@@ -209,11 +209,11 @@ export default function WidgetRegistryList(props) {
                       {g.groupLabel}
                     </span>
                     {g.isActive === false && (
-                      <span className="text-[9px] font-semibold text-slate-400 dark:text-white/45 bg-slate-100 dark:bg-white/[0.04] px-1.5 py-0.5 rounded-full uppercase tracking-wide flex-shrink-0">
+                      <span className="text-[9px] font-semibold text-slate-500 dark:text-white/60 bg-slate-100 dark:bg-white/[0.04] px-1.5 py-0.5 rounded-full uppercase tracking-wide flex-shrink-0">
                         Pasif
                       </span>
                     )}
-                    <span className="text-[10px] font-semibold text-slate-400 dark:text-white/50 bg-slate-100 dark:bg-white/[0.04] px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] font-semibold text-slate-500 dark:text-white/65 bg-slate-100 dark:bg-white/[0.04] px-2 py-0.5 rounded-full">
                       {section.fields.length}
                     </span>
                     {/* Grup sırasını degistir — yukari/asagi */}
@@ -225,7 +225,7 @@ export default function WidgetRegistryList(props) {
                           var prevSection = realGroupSections[realIdx - 1]
                           if (prevSection) onGroupReorder(g, prevSection.group)
                         }}
-                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors flex-shrink-0"
+                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors flex-shrink-0"
                         title="Grubu yukarı taşı"
                       >
                         <ArrowUp size={12} strokeWidth={2.2} />
@@ -239,7 +239,7 @@ export default function WidgetRegistryList(props) {
                           var nextSection = realGroupSections[realIdx + 1]
                           if (nextSection) onGroupReorder(g, nextSection.group)
                         }}
-                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors flex-shrink-0"
+                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors flex-shrink-0"
                         title="Grubu aşağı taşı"
                       >
                         <ArrowDown size={12} strokeWidth={2.2} />
@@ -253,7 +253,7 @@ export default function WidgetRegistryList(props) {
                           e.stopPropagation()
                           onDelete({ id: g.id, label: g.groupLabel, widgetCode: g.groupKey, dataType: 'group' })
                         }}
-                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/15 transition-colors flex-shrink-0"
+                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/15 transition-colors flex-shrink-0"
                         title="Grubu sil (icinde widget varsa izin verilmez)"
                       >
                         <Trash2 size={12} strokeWidth={2} />
@@ -262,7 +262,7 @@ export default function WidgetRegistryList(props) {
                     <ChevronDown
                       size={15}
                       className={
-                        'text-slate-400 dark:text-white/50 transition-transform duration-200 flex-shrink-0 ' +
+                        'text-slate-500 dark:text-white/65 transition-transform duration-200 flex-shrink-0 ' +
                         (isOpen ? 'rotate-0' : '-rotate-90')
                       }
                       strokeWidth={2}
@@ -290,7 +290,7 @@ export default function WidgetRegistryList(props) {
                                   type="button"
                                   disabled={idx === 0}
                                   onClick={function () { if (onReorder) onReorder(field, arr[idx - 1]) }}
-                                  className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+                                  className="w-5 h-5 flex items-center justify-center rounded text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors disabled:opacity-20 disabled:pointer-events-none"
                                   title="Yukarı taşı"
                                 >
                                   <ArrowUp size={11} strokeWidth={2.5} />
@@ -299,7 +299,7 @@ export default function WidgetRegistryList(props) {
                                   type="button"
                                   disabled={idx === arr.length - 1}
                                   onClick={function () { if (onReorder) onReorder(field, arr[idx + 1]) }}
-                                  className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+                                  className="w-5 h-5 flex items-center justify-center rounded text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors disabled:opacity-20 disabled:pointer-events-none"
                                   title="Aşağı taşı"
                                 >
                                   <ArrowDown size={11} strokeWidth={2.5} />

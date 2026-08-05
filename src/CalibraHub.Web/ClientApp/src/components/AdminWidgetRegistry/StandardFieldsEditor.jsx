@@ -54,7 +54,7 @@ function Switch(props) {
 
 var inputCls = 'w-full px-2 py-1 rounded-md text-[11.5px] border border-slate-200 bg-white text-slate-700 ' +
   'placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 ' +
-  'dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 dark:placeholder:text-white/25'
+  'dark:border-white/[0.14] dark:bg-slate-900/60 dark:text-white/85 dark:placeholder:text-white/45'
 var ruleInputCls = inputCls + ' font-mono'
 
 export default function StandardFieldsEditor(props) {
@@ -191,14 +191,14 @@ export default function StandardFieldsEditor(props) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-bold text-slate-800 dark:text-white/90">Standart Alanlar — Davranış</div>
-            <div className="text-[11px] text-slate-500 dark:text-white/45">
+            <div className="text-[11px] text-slate-600 dark:text-white/60">
               Görünürlük, zorunluluk, varsayılan değer, başlık ve koşullu kurallar bu formun tüm kullanıcıları için geçerlidir.
             </div>
           </div>
           <button
             type="button"
             onClick={function () { if (!saving) onClose() }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:text-white/40 dark:hover:text-rose-300 dark:hover:bg-rose-500/10 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-white/55 dark:hover:text-rose-300 dark:hover:bg-rose-500/10 transition-colors"
             title="Kapat (Esc)"
           >
             <XIcon size={15} strokeWidth={2} />
@@ -208,7 +208,7 @@ export default function StandardFieldsEditor(props) {
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
           {loading && (
-            <div className="py-10 text-center text-[12px] text-slate-400 dark:text-white/35">Yükleniyor…</div>
+            <div className="py-10 text-center text-[12px] text-slate-500 dark:text-white/55">Yükleniyor…</div>
           )}
 
           {!loading && !error && (
@@ -223,11 +223,11 @@ export default function StandardFieldsEditor(props) {
                       <div key={t.key} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-1.5">
                         <div className="flex flex-col gap-0.5">
                           <button type="button" onClick={function () { moveTab(idx, -1) }} disabled={idx === 0}
-                            className="text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300 disabled:opacity-25">
+                            className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25">
                             <ArrowUp size={11} strokeWidth={2.2} />
                           </button>
                           <button type="button" onClick={function () { moveTab(idx, 1) }} disabled={idx === tabs.length - 1}
-                            className="text-slate-400 hover:text-indigo-600 dark:text-white/35 dark:hover:text-indigo-300 disabled:opacity-25">
+                            className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300 disabled:opacity-25">
                             <ArrowDown size={11} strokeWidth={2.2} />
                           </button>
                         </div>
@@ -245,7 +245,7 @@ export default function StandardFieldsEditor(props) {
                         />
                         <div className="flex-1" />
                         {t.locked ? (
-                          <span title="Bu sekme gizlenemez"><Lock size={12} className="text-slate-300 dark:text-white/25" /></span>
+                          <span title="Bu sekme gizlenemez"><Lock size={12} className="text-slate-400 dark:text-white/45" /></span>
                         ) : (
                           <button
                             type="button"
@@ -253,7 +253,7 @@ export default function StandardFieldsEditor(props) {
                               setTabs(function (prev) { return prev.map(function (x) { return x.key === t.key ? Object.assign({}, x, { isVisible: !x.isVisible }) : x }) })
                             }}
                             title={t.isVisible ? 'Sekmeyi gizle' : 'Sekmeyi göster'}
-                            className="text-slate-400 hover:text-indigo-600 dark:text-white/40 dark:hover:text-indigo-300"
+                            className="text-slate-500 hover:text-indigo-600 dark:text-white/55 dark:hover:text-indigo-300"
                           >
                             {t.isVisible ? <Eye size={13} strokeWidth={2} /> : <EyeOff size={13} strokeWidth={2} className="text-rose-500 dark:text-rose-300" />}
                           </button>
@@ -275,7 +275,7 @@ export default function StandardFieldsEditor(props) {
                       {tabLabels[tabKey] || tabKey}
                     </div>
                     {/* Kolon başlıkları */}
-                    <div className="hidden lg:grid grid-cols-[170px_52px_52px_1fr_1fr_100px_1fr_1fr] gap-2 px-2.5 pb-1 text-[9.5px] font-semibold text-slate-400 dark:text-white/35">
+                    <div className="hidden lg:grid grid-cols-[170px_52px_52px_1fr_1fr_100px_1fr_1fr] gap-2 px-2.5 pb-1 text-[9.5px] font-semibold text-slate-500 dark:text-white/55">
                       <span>Alan</span><span>Görünür</span><span>Zorunlu</span>
                       <span>Varsayılan Değer</span><span>Başlık Metni</span><span>Başlık Stili</span>
                       <span>Görünürlük Koşulu</span><span>Zorunluluk Koşulu</span>
@@ -285,7 +285,7 @@ export default function StandardFieldsEditor(props) {
                         return (
                           <div key={f.key} className="grid grid-cols-2 lg:grid-cols-[170px_52px_52px_1fr_1fr_100px_1fr_1fr] gap-2 items-center rounded-lg border border-slate-200 bg-slate-50/60 dark:border-white/10 dark:bg-white/[0.03] px-2.5 py-1.5">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              {f.locked && <span title="Çekirdek alan — gizlenemez"><Lock size={11} className="text-slate-300 dark:text-white/25 flex-shrink-0" /></span>}
+                              {f.locked && <span title="Çekirdek alan — gizlenemez"><Lock size={11} className="text-slate-400 dark:text-white/45 flex-shrink-0" /></span>}
                               <span className="truncate text-[11.5px] font-semibold text-slate-600 dark:text-white/70" title={f.key}>{f.label}</span>
                             </div>
                             <Switch
@@ -351,7 +351,7 @@ export default function StandardFieldsEditor(props) {
                 )
               })}
 
-              <div className="text-[10.5px] text-slate-400 dark:text-white/35">
+              <div className="text-[10.5px] text-slate-500 dark:text-white/55">
                 Koşul ifadelerinde kullanılabilir alanlar: <span className="font-mono">{scopeKeys}</span>.
                 Örnekler: <span className="font-mono">currency != 'TRY'</span> · <span className="font-mono">vatIncluded == true</span> · <span className="font-mono">discountRate &gt; 0</span>
               </div>

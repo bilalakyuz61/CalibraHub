@@ -152,7 +152,7 @@ export default function ModuleSelector(props) {
           onClick={function() { setOpen(function(o) { return !o }) }}
           className={
             'w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ' +
-            'bg-white/70 dark:bg-white/[0.04] border text-slate-800 dark:text-white/90 ' +
+            'bg-white/70 dark:bg-slate-900/60 border text-slate-800 dark:text-white/90 ' +
             (open
               ? 'border-indigo-400/60 dark:border-white/20 shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
               : 'border-slate-200 dark:border-white/[0.08] hover:border-indigo-400/40 dark:hover:border-white/15')
@@ -168,7 +168,7 @@ export default function ModuleSelector(props) {
           <motion.span
             animate={{ rotate: open ? 180 : 0 }}
             transition={{ duration: 0.2 }}
-            className="text-slate-400 dark:text-white/30 flex-shrink-0"
+            className="text-slate-500 dark:text-white/55 flex-shrink-0"
           >
             <ChevronDown size={13} />
           </motion.span>
