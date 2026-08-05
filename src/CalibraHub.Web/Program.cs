@@ -631,6 +631,11 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMach
     CalibraHub.Persistence.Repositories.SqlMachineCalendarRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMachineScheduleRepository,
     CalibraHub.Persistence.Repositories.SqlMachineScheduleRepository>();
+// Makine Planlama Faz 3 — otomatik çizelgeleme önerisi (forward, sonlu-kapasite motor) (2026-08-05).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IMachineAutoScheduleRepository,
+    CalibraHub.Persistence.Repositories.SqlMachineAutoScheduleRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IMachineAutoScheduleService,
+    CalibraHub.Application.Services.MachineAutoScheduleService>();
 
 // Is Emri Operasyonlari (Faz 3a — shop-floor temel)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderOperationRepository,

@@ -55,6 +55,8 @@ public sealed class ProductionController : Controller
     private readonly IMachineScheduleRepository _machineSchedule;
     // 2026-08-05 — Makine Çalışma Takvimi (haftalık müsaitlik + resmi tatil) Faz 2.
     private readonly IMachineCalendarRepository _machineCalendar;
+    // 2026-08-05 — Makine Planlama Faz 3: otomatik çizelgeleme önerisi (forward, sonlu-kapasite motor).
+    private readonly IMachineAutoScheduleService _autoSchedule;
     private readonly CalibraHub.Application.Auditing.IAuditTrailService _audit;
 
     public ProductionController(
@@ -76,6 +78,7 @@ public sealed class ProductionController : Controller
         CalibraHub.Persistence.Database.SqlServerConnectionFactory connectionFactory,
         IMachineScheduleRepository machineSchedule,
         IMachineCalendarRepository machineCalendar,
+        IMachineAutoScheduleService autoSchedule,
         CalibraHub.Application.Auditing.IAuditTrailService audit,
         ILogger<ProductionController> logger)
     {
@@ -97,6 +100,7 @@ public sealed class ProductionController : Controller
         _connectionFactory = connectionFactory;
         _machineSchedule = machineSchedule;
         _machineCalendar = machineCalendar;
+        _autoSchedule = autoSchedule;
         _audit = audit;
         _logger = logger;
     }
@@ -1681,6 +1685,77 @@ public sealed class ProductionController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "[MachineCalendar.DeleteHoliday] id={Id} silinemedi.", req.Id);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    // ─── Makine Planlama Faz 3 — Otomatik Çizelgeleme Önerisi (forward, sonlu-kapasite) (2026-08-05) ───
+    // API sözleşmesi KİLİTLİ — frontend "Otomatik Yerleştir" akışı + machineScheduleService.js bu üç
+    // endpoint'e göre yazılır, alan adı/tipini değiştirme. GET aday listesi döner, POST Preview yalnız
+    // hesaplar (persist ETMEZ), POST Apply AYNI girdiden yeniden hesaplayıp persist eder (client'ın
+    // gönderdiği blok koordinatlarına GÜVENMEZ). Tüm zaman UTC "…Z".
+    // GET  /Production/AutoScheduleCandidates             → aday iş emirleri (Priority↓/PlannedEndDate↑)
+    // POST /Production/AutoSchedulePreview                → önizleme (persist yok)
+    // POST /Production/AutoScheduleApply                  → uygula (Status=Planned bloklar yazılır)
+    [HttpGet("Production/AutoScheduleCandidates")]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> AutoScheduleCandidates(CancellationToken ct)
+    {
+        try
+        {
+            var workOrders = await _autoSchedule.GetCandidatesAsync(ct);
+            return Json(new { ok = true, workOrders });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AutoSchedule.Candidates] aday liste alınamadı.");
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> AutoSchedulePreview([FromBody] AutoScheduleRequest req, CancellationToken ct)
+    {
+        if (req is null || req.IncludedWorkOrderIds is null || req.IncludedWorkOrderIds.Count == 0)
+            return Json(new { ok = false, error = "Çizelgelenecek en az bir iş emri seçilmeli." });
+        try
+        {
+            // Frontend UTC "...Z" ISO gönderir; JSON body binder normalde Kind=Utc üretir ama
+            // ToUniversalTime() no-op olarak güvenli bir ek katman (bkz. MachineScheduleData'daki
+            // aynı savunma — query-string binder'daki Kind kayması riskine karşı).
+            var fromUtc = req.FromUtc.ToUniversalTime();
+            var result = await _autoSchedule.PreviewAsync(req.IncludedWorkOrderIds, fromUtc, ct);
+            return Json(new { ok = true, proposals = result.Proposals, unplaceable = result.Unplaceable });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AutoSchedule.Preview] wo sayısı={Count} önizleme hesaplanamadı.", req.IncludedWorkOrderIds?.Count);
+            return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MachineSchedule)]
+    public async Task<IActionResult> AutoScheduleApply([FromBody] AutoScheduleRequest req, CancellationToken ct)
+    {
+        if (req is null || req.IncludedWorkOrderIds is null || req.IncludedWorkOrderIds.Count == 0)
+            return Json(new { ok = false, error = "Çizelgelenecek en az bir iş emri seçilmeli." });
+        try
+        {
+            var fromUtc = req.FromUtc.ToUniversalTime();
+            var result = await _autoSchedule.ApplyAsync(req.IncludedWorkOrderIds, fromUtc, CurrentUserId(), ct);
+            // Toplu özet — her blok tek tek loglanmaz (gürültü önleme, bkz. CLAUDE.md audit kuralı).
+            _audit.LogEvent("MachineAutoSchedule.Apply",
+                detail: $"{result.CreatedCount} blok oluşturuldu, {result.UnplaceableCount} operasyon yerleştirilemedi " +
+                        $"({req.IncludedWorkOrderIds.Count} iş emri, fromUtc={fromUtc:yyyy-MM-dd HH:mm} UTC).");
+            return Json(new { ok = true, createdCount = result.CreatedCount, unplaceableCount = result.UnplaceableCount });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[AutoSchedule.Apply] wo sayısı={Count} uygulanamadı.", req.IncludedWorkOrderIds?.Count);
             return Json(new { ok = false, error = "Islem sirasinda bir hata olustu." });
         }
     }
