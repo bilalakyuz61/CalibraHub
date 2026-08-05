@@ -1896,41 +1896,155 @@
             };
         })();
 
-        /* ════ Sahne 2: Mikrometre — dış çap ölçümü ════
-           gap (mil-parça açıklığı, mm) tek state: mil/tambur ötelenmesi, tambur
-           çizgi kaydırması (0,5 mm hatve) ve okuma (D+gap) hep ondan türetilir.
-           Çevrim: yaklaş → otur (settle) → beklet (sapma raporu) → geri çek → yeni parça. */
+        /* ════ Sahne 2: Mikrometre (0-25 mm) — dış çap ölçümü ════
+           gap (mil-parça açıklığı, mm) TEK state: mil+tambur ötelenmesi, tambur skala
+           kaydırması/rakamları (0,5 mm hatve = 50 bölme/tur), LCD, HUD okuması, sapma
+           ve tolerans barı hep ondan türetilir.
+           Çevrim: yaklaş → otur (cırcır kayar) → tut (kilit kapanır, sapma raporlanır)
+           → geri çek → yeni parça. */
         scenes.mik = (function () {
             var svg = document.getElementById('rigSvgMik');
-            var PXMM = 4, GAP0 = 5, NOM = 17.45;
+            var PXMM = 3.6;          // ölçek: 1 mm = 3,6 px (parça yarıçapı da buna uyumlu)
+            var GAP0 = 5;            // tam açık konum (mm)
+            var NOM  = 17.450;       // nominal çap (mm)
+            var TOL  = 0.010;        // ± tolerans (mm)
+            var BAR_RANGE = 0.014;   // tolerans barının uç değeri (mm)
+            var PITCH = 2.8, MAJ = 5, MAJPX = PITCH * MAJ;   // tambur: 1 bölme = 2,8 px
 
+            // ── Kovan ana skalası: üstte tam mm, altta yarım mm, 5'te bir rakam ──
             var slG = document.getElementById('mikSleeveTicks');
-            for (var i = 0; i <= 12; i++) {
-                var x = 258 + i * 4.6;
-                mkLine(slG, x, 250, x, (i % 2 === 0) ? 243 : 245.5, 'rig-mik-sltick');
+            var slN = document.getElementById('mikSleeveNums');
+            for (var i = 0; i <= 20; i++) {
+                var sx = 252 + i * 3;
+                mkLine(slG, sx, 250, sx, 244, 'rig-mik-sltick');
+                if (i < 20) mkLine(slG, sx + 1.5, 250, sx + 1.5, 255, 'rig-mik-sltick');
+                if (i % 5 === 0) {
+                    var sn = document.createElementNS(NS, 'text');
+                    sn.setAttribute('x', sx.toFixed(1)); sn.setAttribute('y', '241');
+                    sn.setAttribute('class', 'rig-mik-slnum');
+                    sn.textContent = String(i);
+                    slN.appendChild(sn);
+                }
             }
+
+            // ── Parça tırtılı ──
+            var pk = document.getElementById('mikPartKnurl');
+            for (var j = 0; j < 28; j++) {
+                var k1 = polar(180, 250, 31, j * (360 / 28)), k2 = polar(180, 250, 26, j * (360 / 28));
+                mkLine(pk, k1[0], k1[1], k2[0], k2[1], 'rig-part-notch');
+            }
+
+            // ── Tambur çevresel skalası: her bölme çizgi, 5'te bir uzun + rakam.
+            //    Yandan bakışta dönüş = desenin DİKEY kayması (clip içinde). ──
             var thT = document.getElementById('mikThimbleTicks');
-            for (var y = 212; y <= 292; y += 7) mkLine(thT, 318, y, 350, y, '');
+            var thN = document.getElementById('mikThimbleNums');
+            var thNumEls = [];
+            for (var ty = 206; ty <= 296.1; ty += PITCH) {
+                var isMaj = (Math.round((ty - 206) / PITCH) % MAJ === 0);
+                mkLine(thT, 316, ty, isMaj ? 332 : 325, ty, '');
+            }
+            for (var nk = 0; nk <= 6; nk++) {
+                var tn = document.createElementNS(NS, 'text');
+                tn.setAttribute('x', '338');
+                tn.setAttribute('y', (206 + nk * MAJPX + 2.3).toFixed(1));
+                tn.setAttribute('class', 'rig-mik-thnum');
+                thN.appendChild(tn); thNumEls.push(tn);
+            }
 
-            var moveEl = document.getElementById('mikMove');
-            var readEl = document.getElementById('mikRead');
-            var devEl  = document.getElementById('mikDevi');
+            // ── Tolerans barı + son ölçüm noktaları ──
+            var tb = document.getElementById('mikTolBar');
+            function mkRect(parent, x, y, w, h, rx, cls) {
+                var r = document.createElementNS(NS, 'rect');
+                r.setAttribute('x', x); r.setAttribute('y', y);
+                r.setAttribute('width', w); r.setAttribute('height', h);
+                if (rx) r.setAttribute('rx', rx);
+                r.setAttribute('class', cls);
+                parent.appendChild(r);
+                return r;
+            }
+            var TOL_CX = 322, TOL_HW = 56;
+            mkRect(tb, TOL_CX - TOL_HW, 470, TOL_HW * 2, 8, 4, 'rig-tol-track');
+            mkRect(tb, TOL_CX - TOL_HW * TOL / BAR_RANGE, 470, TOL_HW * 2 * TOL / BAR_RANGE, 8, 4, 'rig-tol-zone');
+            mkLine(tb, TOL_CX, 466, TOL_CX, 482, 'rig-tol-center');
+            var tolMark = document.createElementNS(NS, 'path');
+            tolMark.setAttribute('d', 'M' + TOL_CX + ' 468 L' + (TOL_CX - 4) + ' 461 L' + (TOL_CX + 4) + ' 461 Z');
+            tolMark.setAttribute('class', 'rig-tol-mark');
+            tb.appendChild(tolMark);
+            var histEls = [];
+            for (var hd = 0; hd < 6; hd++) {
+                var c = document.createElementNS(NS, 'circle');
+                c.setAttribute('cx', TOL_CX); c.setAttribute('cy', '490'); c.setAttribute('r', '2');
+                c.setAttribute('class', 'rig-tol-dot'); c.setAttribute('opacity', '0');
+                tb.appendChild(c); histEls.push(c);
+            }
 
-            var D = NOM, gap = GAP0, phase = 'advance', phT = 0, spd = 40;
-            var reading = D + gap, sap = null;
+            var spinG    = document.getElementById('mikSpindleG');
+            var thimG    = document.getElementById('mikThimbleG');
+            var ratchetE = document.getElementById('mikRatchet');
+            var lockE    = document.getElementById('mikLock');
+            var lcdE     = document.getElementById('mikLcd');
+            var lcdModeE = document.getElementById('mikLcdMode');
+            var readEl   = document.getElementById('mikRead');
+            var devEl    = document.getElementById('mikDevi');
+            var verdictE = document.getElementById('mikVerdict');
+            var partTagE = document.getElementById('mikPartTag');
+
+            var D = NOM, gap = GAP0, phase = 'advance', phT = 0, spd = 40, partNo = 1;
+            var reading = D + gap, sap = null, hist = [];
             var drag = { on: false, x: 0 };
-            function newPart() { D = NOM + (Math.random() * 2 - 1) * 0.06; }
-            newPart();
+            function newPart() {
+                D = NOM + (Math.random() * 2 - 1) * 0.013;   // parça çapı sapması (± ~0,013)
+                partNo++;
+                partTagE.textContent = 'Parça P-' + ('00' + partNo).slice(-3);
+            }
+            function pushHist(v) {
+                hist.push(v);
+                if (hist.length > histEls.length) hist.shift();
+                for (var q = 0; q < histEls.length; q++) {
+                    if (q < hist.length) {
+                        var f = Math.max(-1, Math.min(1, hist[q] / BAR_RANGE));
+                        histEls[q].setAttribute('cx', (TOL_CX + f * TOL_HW).toFixed(1));
+                        histEls[q].setAttribute('opacity', (0.25 + 0.6 * (q + 1) / hist.length).toFixed(2));
+                    } else histEls[q].setAttribute('opacity', '0');
+                }
+            }
 
             function render() {
-                var gpx = gap * PXMM;
-                moveEl.setAttribute('transform', 'translate(' + gpx.toFixed(2) + ' 0)');
-                var scroll = ((GAP0 - gap) / 0.5 * 7) % 7;   // 0,5 mm hatve → 7 px desen
+                var gpx = (gap * PXMM).toFixed(2);
+                spinG.setAttribute('transform', 'translate(' + gpx + ' 0)');
+                thimG.setAttribute('transform', 'translate(' + gpx + ' 0)');
+
+                // Tambur dönüşü: 0,5 mm ilerleme = 1 tur = 50 bölme
+                var rotDiv = (GAP0 - gap) / 0.5 * 50;
+                var scroll = ((rotDiv * PITCH) % MAJPX + MAJPX) % MAJPX;
                 thT.setAttribute('transform', 'translate(0 ' + scroll.toFixed(2) + ')');
+                thN.setAttribute('transform', 'translate(0 ' + scroll.toFixed(2) + ')');
+                var base = Math.floor(rotDiv / MAJ);
+                for (var q = 0; q < thNumEls.length; q++) {
+                    var v = ((base - q) * MAJ) % 50;
+                    if (v < 0) v += 50;
+                    thNumEls[q].textContent = (v < 10 ? '0' : '') + v;
+                }
+
+                // Cırcır ölçüm otururken kayar (klik); kilit tutma fazında kapanır
+                ratchetE.setAttribute('transform',
+                    phase === 'settle' ? 'rotate(' + (Math.sin(phT * 70) * 3).toFixed(2) + ' 366 250)' : '');
+                lockE.setAttribute('transform', phase === 'hold' ? 'rotate(42 260 268)' : '');
+
+                lcdE.textContent = fmt(reading, 3);
+                lcdModeE.textContent = (phase === 'hold') ? 'HOLD' : 'ABS';
                 readEl.textContent = fmt(reading, 3) + ' mm';
                 devEl.textContent = (sap === null) ? '—'
                     : ((sap >= 0 ? '+' : '−') + fmt(Math.abs(sap), 3) + ' mm');
+                verdictE.textContent = (sap === null) ? 'ölçülüyor'
+                    : (Math.abs(sap) <= TOL ? 'uygun' : 'tolerans dışı');
+                verdictE.setAttribute('class', 'rig-hud-note' +
+                    (sap === null ? '' : (Math.abs(sap) <= TOL ? ' ok' : ' bad')));
+
+                var f = Math.max(-1, Math.min(1, (sap === null ? 0 : sap) / BAR_RANGE));
+                tolMark.setAttribute('transform', 'translate(' + (f * TOL_HW).toFixed(1) + ' 0)');
             }
+
             function tick(dt) {
                 if (drag.on) { reading = D + gap; sap = null; render(); return; }
                 var rate = 0.8 + spd / 100 * 3.6;   // mm/sn
@@ -1941,7 +2055,9 @@
                 } else if (phase === 'settle') {
                     phT += dt;
                     reading = D + (Math.random() * 2 - 1) * 0.004 * Math.max(0, 1 - phT / 0.8);
-                    if (phT >= 0.8) { reading = D; sap = D - NOM; phase = 'hold'; phT = 0; }
+                    if (phT >= 0.8) {
+                        reading = D; sap = D - NOM; phase = 'hold'; phT = 0; pushHist(sap);
+                    }
                 } else if (phase === 'hold') {
                     phT += dt;
                     if (phT >= 1.5) phase = 'retract';
@@ -1970,7 +2086,7 @@
                 var end = function () {
                     if (!drag.on) return;
                     drag.on = false;
-                    // Bırakılan yerden akışa dön: temasta ise ölçümü otursun, değilse yaklaşsın
+                    // Bırakılan yerden akışa dön: temasta ise ölçüm otursun, değilse yaklaşsın
                     if (gap <= 0) { phase = 'settle'; phT = 0; }
                     else { phase = 'advance'; sap = null; }
                 };
@@ -1979,6 +2095,7 @@
             }
 
             if (reduce) { gap = 1.4; reading = D + gap; }
+            partTagE.textContent = 'Parça P-001';
             render();
             return {
                 el: svg, hint: 'Tamburu sürükleyerek mili ilerletebilirsiniz',
@@ -1987,15 +2104,20 @@
             };
         })();
 
-        /* ════ Sahne 3: Manometre — basınç kalibrasyonu ════
-           P (bar) tek state: iğne açısı, Ref/Cihaz okumaları ve pompa kolu ondan
-           türetilir. Otomatik akış kalibrasyon noktalarını (0/25/50/75/100) yaylı
-           (hafif overshoot) rampalarla gezer; her noktada durup hata raporlar. */
+        /* ════ Sahne 3: Manometre — basınç kalibrasyon tezgâhı ════
+           P (referans basınç, bar) TEK state: iki ibre (referans + DUT), pompa volanı,
+           piston, hazne seviyesi, tahliye vanası, sürüklenen max ibre, HUD okumaları ve
+           hata çubuk grafiği hep ondan türetilir. Otomatik akış kalibrasyon noktalarını
+           (0→25→50→75→100→0) yaylı rampalarla gezer; her noktada durup hatayı kaydeder,
+           çevrim tamamlanınca grafik sıfırlanır. */
         scenes.man = (function () {
             var svg = document.getElementById('rigSvgMan');
-            var CX = 210, CY = 190, A0 = -135, SWEEP = 270, PMAX = 100;
+            var CX = 252, CY = 172, A0 = -135, SWEEP = 270, PMAX = 100;
+            var RCX = 101, RCY = 248;                 // referans standart gösterge merkezi
+            var PTS = [0, 25, 50, 75, 100];           // kalibrasyon noktaları
+            var SEQ = [0, 25, 50, 75, 100, 0];        // çevrim: yukarı tarama + sıfıra dönüş
 
-            // Tolerans yayları: 0-80 bar yeşil, 80-100 amber (r=70)
+            // Tolerans yayları (DUT): 0-80 bar yeşil, 80-100 amber
             var arcs = document.getElementById('manArcs');
             function arc(a1, a2, cls) {
                 var p1 = polar(CX, CY, 70, a1), p2 = polar(CX, CY, 70, a2);
@@ -2008,7 +2130,7 @@
             arc(A0, A0 + 0.8 * SWEEP, 'rig-tol-ok');
             arc(A0 + 0.8 * SWEEP, A0 + SWEEP, 'rig-tol-out');
 
-            // Çentikler: 5 bar aralık, 25 bar majör + rakam
+            // DUT çentikleri: 5 bar aralık, 25 bar majör + rakam
             var ticks = document.getElementById('manTicks');
             var nums  = document.getElementById('manNums');
             for (var i = 0; i <= 20; i++) {
@@ -2016,7 +2138,7 @@
                 var o = polar(CX, CY, 82, deg), n = polar(CX, CY, maj ? 72 : 77, deg);
                 mkLine(ticks, o[0], o[1], n[0], n[1], 'rig-dial-tick' + (maj ? ' maj' : ''));
                 if (maj) {
-                    var p = polar(CX, CY, 61, deg);
+                    var p = polar(CX, CY, 57, deg);
                     var t = document.createElementNS(NS, 'text');
                     t.setAttribute('x', p[0].toFixed(1)); t.setAttribute('y', p[1].toFixed(1));
                     t.setAttribute('class', 'rig-dial-num');
@@ -2025,31 +2147,106 @@
                 }
             }
 
-            var needle = document.getElementById('manNeedle');
-            var lever  = document.getElementById('manLever');
-            var refEl  = document.getElementById('manRef');
-            var dutEl  = document.getElementById('manDut');
-            var errEl  = document.getElementById('manErr');
+            // Kalibrasyon noktası işaretleri — aktif hedef kırmızı yanar
+            var cmG = document.getElementById('manCalMarks'), calMarkEls = [];
+            PTS.forEach(function (pv) {
+                var d = A0 + pv / PMAX * SWEEP;
+                var a = polar(CX, CY, 68, d), b = polar(CX, CY, 63, d - 2.4), c = polar(CX, CY, 63, d + 2.4);
+                var tri = document.createElementNS(NS, 'path');
+                tri.setAttribute('d', 'M' + a[0].toFixed(1) + ' ' + a[1].toFixed(1) +
+                    ' L' + b[0].toFixed(1) + ' ' + b[1].toFixed(1) +
+                    ' L' + c[0].toFixed(1) + ' ' + c[1].toFixed(1) + ' Z');
+                tri.setAttribute('class', 'rig-calmark');
+                cmG.appendChild(tri); calMarkEls.push(tri);
+            });
 
-            var SEQ = [0, 25, 50, 75, 100, 0], si = 1;
-            var P = 0, vel = 0, phase = 'ramp', ht = 0, spd = 40, bias = 0, tAcc = 0;
+            // Referans gösterge çentikleri (10 bar aralık) + 0/50/100 rakamları
+            var rt = document.getElementById('manRefTicks');
+            var rn = document.getElementById('manRefNums');
+            for (var r = 0; r <= 10; r++) {
+                var rd = A0 + r * (SWEEP / 10), rmaj = (r % 5 === 0);
+                var ro = polar(RCX, RCY, 40, rd), ri = polar(RCX, RCY, rmaj ? 31 : 35, rd);
+                mkLine(rt, ro[0], ro[1], ri[0], ri[1], 'rig-dial-tick' + (rmaj ? ' maj' : ''));
+                if (rmaj) {
+                    var rp = polar(RCX, RCY, 23, rd);
+                    var rtx = document.createElementNS(NS, 'text');
+                    rtx.setAttribute('x', rp[0].toFixed(1)); rtx.setAttribute('y', rp[1].toFixed(1));
+                    rtx.setAttribute('class', 'rig-mik-slnum');
+                    rtx.textContent = String(r * 10);
+                    rn.appendChild(rtx);
+                }
+            }
+
+            // Hata çubuk grafiği — 5 nokta, sıfır çizgisi 488, ±11 px = ±1,0 bar
+            var ebG = document.getElementById('manErrBars');
+            var EB_X = 270, EB_W = 16, EB_GAP = 6, EB_ZERO = 488, EB_H = 11;
+            var slotEls = [], barEls = [];
+            for (var s = 0; s < PTS.length; s++) {
+                var bx = EB_X + s * (EB_W + EB_GAP);
+                var slot = document.createElementNS(NS, 'rect');
+                slot.setAttribute('x', bx); slot.setAttribute('y', EB_ZERO - EB_H - 2);
+                slot.setAttribute('width', EB_W); slot.setAttribute('height', EB_H * 2 + 4);
+                slot.setAttribute('rx', '2'); slot.setAttribute('class', 'rig-err-slot');
+                ebG.appendChild(slot); slotEls.push(slot);
+                var bar = document.createElementNS(NS, 'rect');
+                bar.setAttribute('x', bx + 3); bar.setAttribute('width', EB_W - 6);
+                bar.setAttribute('y', EB_ZERO); bar.setAttribute('height', 0);
+                bar.setAttribute('class', 'rig-errbar');
+                ebG.appendChild(bar); barEls.push(bar);
+            }
+            mkLine(ebG, EB_X - 4, EB_ZERO, EB_X + PTS.length * (EB_W + EB_GAP) - EB_GAP + 4, EB_ZERO, 'rig-err-zero');
+
+            var needle   = document.getElementById('manNeedle');
+            var dragNdl  = document.getElementById('manDrag');
+            var refNdl   = document.getElementById('manRefNeedle');
+            var wheelE   = document.getElementById('manWheel');
+            var valveE   = document.getElementById('manValve');
+            var pistonE  = document.getElementById('manPiston');
+            var fluidE   = document.getElementById('manFluid');
+            var refEl    = document.getElementById('manRef');
+            var dutEl    = document.getElementById('manDut');
+            var errEl    = document.getElementById('manErr');
+            var pointE   = document.getElementById('manPointTxt');
+
+            var si = 1, P = 0, vel = 0, phase = 'ramp', ht = 0, spd = 40;
+            var bias = 0, maxP = 0, wheelAng = 0, valveAng = 0;
+            var errs = new Array(PTS.length);
             var drag = { on: false };
-            function nextBias() { bias = (Math.random() * 2 - 1) * 0.4; }
+            function nextBias() { bias = (Math.random() * 2 - 1) * 0.55; }
             nextBias();
+            function dutOf(p) { return Math.max(0, p + bias * (p / PMAX)); }
+            function activeIdx() { return PTS.indexOf(SEQ[si]); }
 
+            function renderBars() {
+                var ai = activeIdx();
+                for (var q = 0; q < PTS.length; q++) {
+                    slotEls[q].setAttribute('class', 'rig-err-slot' + (q === ai ? ' is-active' : ''));
+                    var e = errs[q];
+                    if (e === undefined) { barEls[q].setAttribute('height', 0); barEls[q].setAttribute('y', EB_ZERO); continue; }
+                    var h = Math.min(EB_H, Math.abs(e) / 1.0 * EB_H);
+                    barEls[q].setAttribute('y', (e >= 0 ? EB_ZERO - h : EB_ZERO).toFixed(1));
+                    barEls[q].setAttribute('height', Math.max(1, h).toFixed(1));
+                    barEls[q].setAttribute('class', 'rig-errbar' + (Math.abs(e) > 0.6 ? ' warn' : ''));
+                }
+            }
             function render() {
-                needle.setAttribute('transform', 'rotate(' + (A0 + P / PMAX * SWEEP).toFixed(2) + ' ' + CX + ' ' + CY + ')');
-                var dut = Math.max(0, P + bias * (P / PMAX));   // cihaz hatası basınçla ölçeklenir
+                var dut = dutOf(P);
+                needle.setAttribute('transform', 'rotate(' + (A0 + dut / PMAX * SWEEP).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+                dragNdl.setAttribute('transform', 'rotate(' + (A0 + dutOf(maxP) / PMAX * SWEEP).toFixed(2) + ' ' + CX + ' ' + CY + ')');
+                refNdl.setAttribute('transform', 'rotate(' + (A0 + P / PMAX * SWEEP).toFixed(2) + ' ' + RCX + ' ' + RCY + ')');
+                wheelE.setAttribute('transform', 'rotate(' + wheelAng.toFixed(1) + ' 336 359)');
+                valveE.setAttribute('transform', 'rotate(' + valveAng.toFixed(1) + ' 130 326)');
+                pistonE.setAttribute('transform', 'translate(' + (-(P / PMAX) * 14).toFixed(1) + ' 0)');
+                var drop = (P / PMAX) * 14;
+                fluidE.setAttribute('y', (341 + drop).toFixed(1));
+                fluidE.setAttribute('height', (48 - drop).toFixed(1));
                 refEl.textContent = fmt(P, 1) + ' bar';
                 dutEl.textContent = fmt(dut, 1) + ' bar';
                 errEl.textContent = (phase === 'hold')
                     ? ((dut - P >= 0 ? '+' : '−') + fmt(Math.abs(dut - P), 2) + ' bar') : '—';
-                // Pompa kolu — basınç değişirken sallanır, sabitken durur
-                var bob = Math.min(1, Math.abs(vel) / 25) * Math.sin(tAcc * 14) * 9;
-                lever.setAttribute('transform', 'rotate(' + bob.toFixed(2) + ' 271 348)');
+                pointE.textContent = 'Nokta ' + (activeIdx() + 1) + '/' + PTS.length;
             }
             function tick(dt) {
-                tAcc += dt;
                 if (!drag.on) {
                     var T = SEQ[si], s = 0.4 + spd / 100 * 1.6;
                     vel += ((T - P) * 12 * s - vel * 5.2) * dt;   // yaylı yaklaşım (hafif overshoot)
@@ -2058,11 +2255,23 @@
                     if (P > PMAX + 3) { P = PMAX + 3; vel = 0; }
                     if (phase === 'ramp' && Math.abs(T - P) < 0.2 && Math.abs(vel) < 0.5) {
                         phase = 'hold'; ht = 0; P = T; vel = 0;
+                        errs[activeIdx()] = dutOf(P) - P;   // noktayı kaydet
+                        renderBars();
                     } else if (phase === 'hold') {
                         ht += dt;
-                        if (ht >= 1.4) { si = (si + 1) % SEQ.length; nextBias(); phase = 'ramp'; }
+                        if (ht >= 1.4) {
+                            si++;
+                            if (si >= SEQ.length) {          // çevrim bitti → grafiği tazele
+                                si = 0; errs = new Array(PTS.length); maxP = 0;
+                            }
+                            nextBias(); phase = 'ramp'; renderBars();
+                        }
                     }
                 }
+                if (P > maxP) maxP = P;
+                // Volan basınç değişimiyle döner; tahliye vanası yalnız basınç düşerken
+                wheelAng += vel * 2.4 * dt;
+                if (vel < -2) valveAng += -vel * 1.6 * dt;
                 render();
             }
 
@@ -2084,15 +2293,16 @@
                 });
                 hit.addEventListener('pointermove', function (e) {
                     if (!drag.on) return;
-                    var v = angToP(e); if (v !== null) P = v;
+                    var v = angToP(e);
+                    if (v !== null) { wheelAng += (v - P) * 2.4; P = v; }
                 });
                 var end = function () { drag.on = false; vel = 0; phase = 'ramp'; };
                 hit.addEventListener('pointerup', end);
                 hit.addEventListener('pointercancel', end);
             }
 
-            if (reduce) P = 50;
-            render();
+            if (reduce) { P = 50; maxP = 50; }
+            renderBars(); render();
             return {
                 el: svg, hint: 'Kadran üzerinde sürükleyerek basıncı ayarlayabilirsiniz',
                 speed: { label: 'Hız', unit: ' %', min: 0, max: 100, val: 40 },

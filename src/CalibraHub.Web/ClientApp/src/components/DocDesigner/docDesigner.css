@@ -70,3 +70,62 @@ body.app-theme-dark .doc-designer-root {
 body.app-theme-dark .doc-designer-root .dd-select {
   color-scheme: dark;
 }
+
+/* Hata banner'i (üst bilgi çubuğunun altında) */
+.doc-designer-root .dd-error-banner {
+  background: #fef2f2;
+  border-bottom: 1px solid #fca5a5;
+  color: #dc2626;
+}
+.doc-designer-root .dd-error-banner button { color: inherit; }
+body.app-theme-dark .doc-designer-root .dd-error-banner {
+  background: rgba(220,38,38,0.14);
+  border-bottom: 1px solid rgba(220,38,38,0.4);
+  color: #f87171;
+}
+
+/* ── Şablon listesi (DocDesignerList) — bağımsız sayfa, .doc-designer-root
+   dışında mount edilir; kendi tema kapsamını taşır. ── */
+.dd-list-root { color-scheme: light; }
+body.app-theme-dark .dd-list-root { color-scheme: dark; }
+
+.dd-list-subtitle { color: #6b7280; }
+body.app-theme-dark .dd-list-subtitle { color: #94a3b8; }
+
+.dd-list-muted { color: #9ca3af; }
+body.app-theme-dark .dd-list-muted { color: #64748b; }
+
+.dd-list-error { color: #dc2626; }
+body.app-theme-dark .dd-list-error { color: #f87171; }
+
+.dd-list-empty {
+  color: #9ca3af;
+  border: 2px dashed #e5e7eb;
+}
+body.app-theme-dark .dd-list-empty {
+  color: #64748b;
+  border-color: #2a3347;
+}
+
+.dd-list-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+body.app-theme-dark .dd-list-card {
+  background: #161b27;
+  border-color: #2a3347;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.dd-list-card-code { color: #6b7280; }
+body.app-theme-dark .dd-list-card-code { color: #94a3b8; }
+
+.dd-list-badge { background: #ede9fe; color: #6366f1; }
+body.app-theme-dark .dd-list-badge { background: rgba(129,140,248,0.18); color: #a5b4fc; }
+
+.dd-list-edit-btn { background: #f3f4f6; color: #374151; }
+body.app-theme-dark .dd-list-edit-btn { background: #1c2336; color: #e2e8f0; }
+
+.dd-list-delete-btn { background: #fee2e2; color: #dc2626; }
+body.app-theme-dark .dd-list-delete-btn { background: rgba(220,38,38,0.18); color: #f87171; }

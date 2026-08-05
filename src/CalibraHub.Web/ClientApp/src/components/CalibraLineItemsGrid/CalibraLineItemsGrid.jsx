@@ -3143,12 +3143,78 @@ export default function CalibraLineItemsGrid(props) {
               })
           }
 
+          // Tema tespiti — extras modal (Kalem Ek Alanlari, ~satir 2358) ile ayni zincir.
+          var __isLight = (function () {
+            if (typeof document === 'undefined') return true
+            try {
+              if (document.body.classList.contains('app-theme-light')) return true
+              if (document.body.classList.contains('app-theme-dark'))  return false
+              if (window.parent && window.parent !== window && window.parent.document && window.parent.document.body) {
+                if (window.parent.document.body.classList.contains('app-theme-light')) return true
+                if (window.parent.document.body.classList.contains('app-theme-dark'))  return false
+              }
+            } catch (_) {}
+            return true
+          })()
+          var __overlayBg  = __isLight
+            ? 'radial-gradient(at 20% 10%, rgba(139,92,246,0.06) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(99,102,241,0.05) 0%, transparent 45%), rgba(15,23,42,0.35)'
+            : 'radial-gradient(at 20% 10%, rgba(139,92,246,0.12) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(99,102,241,0.10) 0%, transparent 45%), rgba(3,6,15,0.72)'
+          var __panelBg     = __isLight
+            ? 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)'
+            : 'linear-gradient(180deg, rgba(23,28,42,0.98) 0%, rgba(15,19,30,0.98) 100%)'
+          var __panelBorder = __isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.10)'
+          var __panelShadow = __isLight
+            ? '0 16px 48px rgba(15,23,42,0.18), 0 0 0 1px rgba(139,92,246,0.08)'
+            : '0 32px 96px rgba(0,0,0,0.65), 0 0 0 1px rgba(139,92,246,0.10)'
+          var __textColor   = __isLight ? '#0f172a' : 'rgba(255,255,255,0.92)'
+          var __mutedText   = __isLight ? '#64748b' : 'rgba(255,255,255,0.5)'
+          var __subtleText  = __isLight ? '#94a3b8' : 'rgba(255,255,255,0.35)'
+          var __sepColor    = __isLight ? '#e2e8f0' : 'rgba(255,255,255,0.06)'
+          var __headTitle   = __isLight ? '#0f172a' : '#fff'
+          var __accentText  = __isLight ? '#7c3aed' : '#c4b5fd'
+          var __chipBg      = __isLight ? 'rgba(139,92,246,0.08)' : 'rgba(139,92,246,0.14)'
+          var __chipBorder  = __isLight ? 'rgba(139,92,246,0.22)' : 'rgba(139,92,246,0.25)'
+          var __revizeBadgeBg     = __isLight ? 'rgba(99,102,241,0.10)' : 'rgba(99,102,241,0.15)'
+          var __revizeBadgeText   = __isLight ? '#4338ca' : '#a5b4fc'
+          var __revizeBadgeBorder = __isLight ? 'rgba(99,102,241,0.24)' : 'rgba(99,102,241,0.28)'
+          var __closeBtnBg    = __isLight ? 'rgba(15,23,42,0.04)' : 'rgba(255,255,255,0.04)'
+          var __closeBtnBdr   = __isLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.08)'
+          var __closeBtnClr   = __isLight ? '#475569' : 'rgba(255,255,255,0.7)'
+          var __closeHoverClr = __isLight ? '#b91c1c' : '#fca5a5'
+          var __tabBadgeActiveBg    = __isLight ? 'rgba(139,92,246,0.16)' : 'rgba(139,92,246,0.25)'
+          var __tabBadgeActiveClr   = __isLight ? '#6d28d9' : '#ddd6fe'
+          var __tabBadgeInactiveBg  = __isLight ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.08)'
+          var __tabBadgeInactiveClr = __isLight ? '#64748b' : 'rgba(255,255,255,0.65)'
+          var __inputBorder = __isLight ? '#e2e8f0' : 'rgba(255,255,255,0.14)'
+          var __inputBg     = __isLight ? '#f8fafc' : 'rgba(10,14,24,0.55)'
+          var __inputText   = __isLight ? '#0f172a' : 'rgba(255,255,255,0.95)'
+          var __focusBorder = __isLight ? 'rgba(124,58,237,0.55)' : 'rgba(139,92,246,0.65)'
+          var __focusShadow = __isLight ? '0 0 0 3px rgba(124,58,237,0.14)' : '0 0 0 3px rgba(139,92,246,0.18)'
+          var __noteBg     = __isLight ? 'rgba(15,23,42,0.03)' : 'rgba(255,255,255,0.025)'
+          var __noteBorder = __isLight ? 'rgba(15,23,42,0.14)' : 'rgba(255,255,255,0.10)'
+          var __chainCurrentBg = __isLight
+            ? 'linear-gradient(135deg, rgba(139,92,246,0.10), rgba(99,102,241,0.07))'
+            : 'linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.10))'
+          var __chainDefaultBg     = __isLight ? 'rgba(15,23,42,0.02)' : 'rgba(255,255,255,0.025)'
+          var __chainCurrentBorder = __isLight ? 'rgba(139,92,246,0.30)' : 'rgba(139,92,246,0.35)'
+          var __chainDefaultBorder = __isLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.06)'
+          var __origBadgeText   = __isLight ? '#047857' : '#86efac'
+          var __origBadgeBorder = __isLight ? 'rgba(34,197,94,0.30)' : 'rgba(34,197,94,0.28)'
+          var __violetBadgeBorder = __isLight ? 'rgba(139,92,246,0.30)' : 'rgba(139,92,246,0.28)'
+          var __currentPillBg  = __isLight ? 'rgba(139,92,246,0.16)' : 'rgba(139,92,246,0.28)'
+          var __currentPillClr = __isLight ? '#6d28d9' : '#ddd6fe'
+          var __detailText = __isLight ? '#334155' : 'rgba(255,255,255,0.75)'
+          var __cancelBtnBg = __isLight ? '#fff' : 'rgba(255,255,255,0.04)'
+          var __cancelBdr   = __isLight ? '#e2e8f0' : 'rgba(255,255,255,0.10)'
+          var __cancelClr   = __isLight ? '#475569' : 'rgba(255,255,255,0.82)'
+          var __cancelBgHov = __isLight ? '#f1f5f9' : 'rgba(255,255,255,0.09)'
+
           return (
             <div
               onClick={function (e) { if (e.target === e.currentTarget) close() }}
               style={{
                 position: 'absolute', inset: 0,
-                background: 'radial-gradient(at 20% 10%, rgba(139,92,246,0.12) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(99,102,241,0.10) 0%, transparent 45%), rgba(3,6,15,0.72)',
+                background: __overlayBg,
                 backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 zIndex: 55, padding: 16,
@@ -3159,10 +3225,10 @@ export default function CalibraLineItemsGrid(props) {
                 width: '92%', maxWidth: 720, maxHeight: '88vh',
                 display: 'flex', flexDirection: 'column', overflow: 'hidden',
                 borderRadius: 18,
-                background: 'linear-gradient(180deg, rgba(23,28,42,0.98) 0%, rgba(15,19,30,0.98) 100%)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                boxShadow: '0 32px 96px rgba(0,0,0,0.65), 0 0 0 1px rgba(139,92,246,0.10)',
-                color: 'rgba(255,255,255,0.92)',
+                background: __panelBg,
+                border: __panelBorder,
+                boxShadow: __panelShadow,
+                color: __textColor,
                 animation: 'sqExtrasPop 220ms cubic-bezier(.2,.8,.3,1)',
               }}>
                 {/* Ust gradient serit — mor/indigo tonlari */}
@@ -3177,7 +3243,7 @@ export default function CalibraLineItemsGrid(props) {
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 14,
                   padding: '16px 22px',
-                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  borderBottom: '1px solid ' + __sepColor,
                   flexShrink: 0,
                 }}>
                   <div style={{
@@ -3188,19 +3254,19 @@ export default function CalibraLineItemsGrid(props) {
                     boxShadow: '0 4px 16px rgba(139,92,246,0.18)',
                     flexShrink: 0,
                   }}>
-                    <GitBranch size={18} strokeWidth={1.9} style={{ color: '#c4b5fd' }} />
+                    <GitBranch size={18} strokeWidth={1.9} style={{ color: __accentText }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.012em', color: '#fff' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.012em', color: __headTitle }}>
                       Satir Revizyonu
                     </div>
-                    <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 11.5, color: __mutedText, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{
                         fontFamily: "'JetBrains Mono','Consolas',monospace",
                         fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em',
                         padding: '2px 8px', borderRadius: 6,
-                        background: 'rgba(139,92,246,0.14)', color: '#c4b5fd',
-                        border: '1px solid rgba(139,92,246,0.25)',
+                        background: __chipBg, color: __accentText,
+                        border: '1px solid ' + __chipBorder,
                       }}>
                         {row.materialCode || '—'}
                       </span>
@@ -3212,8 +3278,8 @@ export default function CalibraLineItemsGrid(props) {
                           <span style={{
                             fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em',
                             padding: '2px 7px', borderRadius: 6,
-                            background: 'rgba(99,102,241,0.15)', color: '#a5b4fc',
-                            border: '1px solid rgba(99,102,241,0.28)',
+                            background: __revizeBadgeBg, color: __revizeBadgeText,
+                            border: '1px solid ' + __revizeBadgeBorder,
                           }}>
                             {chain.length - 1 > 0 ? (chain.length - 1) + '. Revize' : 'Orijinal'}
                           </span>
@@ -3225,14 +3291,14 @@ export default function CalibraLineItemsGrid(props) {
                     type="button"
                     onClick={close}
                     style={{
-                      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                      color: 'rgba(255,255,255,0.7)', cursor: 'pointer',
+                      background: __closeBtnBg, border: '1px solid ' + __closeBtnBdr,
+                      color: __closeBtnClr, cursor: 'pointer',
                       width: 32, height: 32, borderRadius: 10,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all .12s',
                     }}
-                    onMouseEnter={function (e) { e.currentTarget.style.background='rgba(239,68,68,0.12)'; e.currentTarget.style.color='#fca5a5'; e.currentTarget.style.borderColor='rgba(239,68,68,0.25)' }}
-                    onMouseLeave={function (e) { e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.color='rgba(255,255,255,0.7)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)' }}
+                    onMouseEnter={function (e) { e.currentTarget.style.background='rgba(239,68,68,0.12)'; e.currentTarget.style.color=__closeHoverClr; e.currentTarget.style.borderColor='rgba(239,68,68,0.25)' }}
+                    onMouseLeave={function (e) { e.currentTarget.style.background=__closeBtnBg; e.currentTarget.style.color=__closeBtnClr; e.currentTarget.style.borderColor=__closeBtnBdr }}
                     title="Kapat (Esc)"
                   >
                     <XIcon size={15} strokeWidth={2} />
@@ -3243,7 +3309,7 @@ export default function CalibraLineItemsGrid(props) {
                 <div style={{
                   display: 'flex', gap: 6,
                   padding: '10px 22px 0',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  borderBottom: '1px solid ' + __sepColor,
                   flexShrink: 0,
                 }}>
                   {[
@@ -3261,9 +3327,9 @@ export default function CalibraLineItemsGrid(props) {
                           display: 'inline-flex', alignItems: 'center', gap: 7,
                           padding: '9px 14px',
                           border: 'none',
-                          borderBottom: active ? '2px solid #c4b5fd' : '2px solid transparent',
+                          borderBottom: active ? '2px solid ' + __accentText : '2px solid transparent',
                           background: 'transparent',
-                          color: active ? '#fff' : 'rgba(255,255,255,0.55)',
+                          color: active ? __headTitle : __mutedText,
                           fontSize: 12.5, fontWeight: active ? 700 : 600,
                           letterSpacing: '-0.005em',
                           cursor: 'pointer',
@@ -3277,8 +3343,8 @@ export default function CalibraLineItemsGrid(props) {
                           <span style={{
                             fontSize: 10, fontWeight: 700,
                             padding: '1px 6px', borderRadius: 8,
-                            background: active ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.08)',
-                            color: active ? '#ddd6fe' : 'rgba(255,255,255,0.65)',
+                            background: active ? __tabBadgeActiveBg : __tabBadgeInactiveBg,
+                            color: active ? __tabBadgeActiveClr : __tabBadgeInactiveClr,
                           }}>{t.badge}</span>
                         )}
                       </button>
@@ -3290,17 +3356,17 @@ export default function CalibraLineItemsGrid(props) {
                 <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
                   {activeTab === 'revise' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.55 }}>
-                        Yazacaginiz aciklama <strong style={{ color: '#c4b5fd' }}>bu (eski) satira</strong>
+                      <div style={{ fontSize: 12, color: __mutedText, lineHeight: 1.55 }}>
+                        Yazacaginiz aciklama <strong style={{ color: __accentText }}>bu (eski) satira</strong>
                         not olarak eklenir — eski halinin niye revize edildigini anlatir.
-                        <strong style={{ color: '#c4b5fd' }}> Revize Et</strong> dediginizde mevcut kalem
+                        <strong style={{ color: __accentText }}> Revize Et</strong> dediginizde mevcut kalem
                         aynen kopyalanarak alta yeni bir satir olarak eklenir; miktar, fiyat, iskonto ve
-                        kombinasyon degisikliklerini <strong style={{ color: '#c4b5fd' }}>yeni satir uzerinde</strong>
+                        kombinasyon degisikliklerini <strong style={{ color: __accentText }}>yeni satir uzerinde</strong>
                         gridden yapabilirsiniz. Eski revize bilgileri "Gecmis Revizeler" sekmesinden
                         goruntulenebilir.
                       </div>
                       <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: __mutedText }}>
                           Aciklama (eski kaleme ait)
                         </span>
                         <textarea
@@ -3312,13 +3378,13 @@ export default function CalibraLineItemsGrid(props) {
                             font: 'inherit', fontSize: 13,
                             padding: '10px 12px',
                             borderRadius: 10, resize: 'vertical', minHeight: 120,
-                            border: '1px solid rgba(255,255,255,0.14)',
-                            background: 'rgba(10,14,24,0.55)',
-                            color: 'rgba(255,255,255,0.95)',
+                            border: '1px solid ' + __inputBorder,
+                            background: __inputBg,
+                            color: __inputText,
                             outline: 'none', lineHeight: 1.55,
                           }}
-                          onFocus={function (e) { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.65)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.18)' }}
-                          onBlur={function (e) { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'; e.currentTarget.style.boxShadow = 'none' }}
+                          onFocus={function (e) { e.currentTarget.style.borderColor = __focusBorder; e.currentTarget.style.boxShadow = __focusShadow }}
+                          onBlur={function (e) { e.currentTarget.style.borderColor = __inputBorder; e.currentTarget.style.boxShadow = 'none' }}
                           placeholder="Ornek: Musteri ilk basta 10 adet istemisti, sonradan artirdi…"
                         />
                       </label>
@@ -3326,9 +3392,9 @@ export default function CalibraLineItemsGrid(props) {
                       {row.notes && (
                         <div style={{
                           padding: '8px 12px', borderRadius: 9,
-                          background: 'rgba(255,255,255,0.025)',
-                          border: '1px dashed rgba(255,255,255,0.10)',
-                          fontSize: 11.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5,
+                          background: __noteBg,
+                          border: '1px dashed ' + __noteBorder,
+                          fontSize: 11.5, color: __mutedText, lineHeight: 1.5,
                         }}>
                           <span style={{ fontWeight: 700, opacity: 0.75 }}>Mevcut not:</span>
                           <span style={{ fontStyle: 'italic', marginLeft: 6 }}>"{row.notes}"</span>
@@ -3343,13 +3409,13 @@ export default function CalibraLineItemsGrid(props) {
                   {activeTab === 'history' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {chain.length === 0 && (
-                        <div style={{ padding: 24, textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 12.5 }}>
+                        <div style={{ padding: 24, textAlign: 'center', color: __subtleText, fontSize: 12.5 }}>
                           Bu satirin revizyon zinciri bulunamadi.
                         </div>
                       )}
                       {chain.length > 0 && (
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 6 }}>
-                          Zincir uzunlugu: <strong style={{ color: '#c4b5fd' }}>{chain.length}</strong>
+                        <div style={{ fontSize: 12, color: __mutedText, marginBottom: 6 }}>
+                          Zincir uzunlugu: <strong style={{ color: __accentText }}>{chain.length}</strong>
                           {chain.length > 1 ? ' kayit (orijinal + ' + (chain.length - 1) + ' revize)' : ' kayit (orijinal)'}
                         </div>
                       )}
@@ -3364,10 +3430,8 @@ export default function CalibraLineItemsGrid(props) {
                               display: 'flex', alignItems: 'stretch', gap: 12,
                               padding: '12px 14px',
                               borderRadius: 12,
-                              background: isCurrent
-                                ? 'linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.10))'
-                                : 'rgba(255,255,255,0.025)',
-                              border: '1px solid ' + (isCurrent ? 'rgba(139,92,246,0.35)' : 'rgba(255,255,255,0.06)'),
+                              background: isCurrent ? __chainCurrentBg : __chainDefaultBg,
+                              border: '1px solid ' + (isCurrent ? __chainCurrentBorder : __chainDefaultBorder),
                             }}
                           >
                             <div style={{
@@ -3376,27 +3440,27 @@ export default function CalibraLineItemsGrid(props) {
                               fontSize: 11, fontWeight: 700, letterSpacing: '.03em',
                               padding: '4px 6px', borderRadius: 8,
                               background: isOriginal ? 'rgba(34,197,94,0.14)' : 'rgba(139,92,246,0.14)',
-                              color: isOriginal ? '#86efac' : '#c4b5fd',
-                              border: '1px solid ' + (isOriginal ? 'rgba(34,197,94,0.28)' : 'rgba(139,92,246,0.28)'),
+                              color: isOriginal ? __origBadgeText : __accentText,
+                              border: '1px solid ' + (isOriginal ? __origBadgeBorder : __violetBadgeBorder),
                               textAlign: 'center',
                             }}>
                               {isOriginal ? 'ORJ' : '#' + idx}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}>{label}</span>
+                                <span style={{ fontSize: 12.5, fontWeight: 700, color: __headTitle }}>{label}</span>
                                 {isCurrent && (
                                   <span style={{
                                     fontSize: 10, fontWeight: 700,
                                     padding: '1px 7px', borderRadius: 999,
-                                    background: 'rgba(139,92,246,0.28)', color: '#ddd6fe',
+                                    background: __currentPillBg, color: __currentPillClr,
                                   }}>bu satir</span>
                                 )}
-                                <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', fontFamily: "'JetBrains Mono','Consolas',monospace" }}>
+                                <span style={{ fontSize: 10.5, color: __subtleText, fontFamily: "'JetBrains Mono','Consolas',monospace" }}>
                                   {item.id ? '#' + item.id : '(kayit bekliyor)'}
                                 </span>
                               </div>
-                              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'rgba(255,255,255,0.75)', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: __detailText, flexWrap: 'wrap' }}>
                                 <span><span style={{ opacity: 0.55 }}>Miktar:</span> <strong>{fmtNum(item.quantity)}</strong></span>
                                 <span><span style={{ opacity: 0.55 }}>B.Fiyat:</span> <strong>{fmtNum(item.unitPrice)}</strong></span>
                                 <span><span style={{ opacity: 0.55 }}>Isk%:</span> <strong>{fmtNum(item.discountRate)}</strong></span>
@@ -3426,7 +3490,7 @@ export default function CalibraLineItemsGrid(props) {
                                   )
                                 })()}
                                 {item.notes && (
-                                  <span style={{ flexBasis: '100%', color: 'rgba(255,255,255,0.55)', fontStyle: 'italic', marginTop: 2 }}>
+                                  <span style={{ flexBasis: '100%', color: __mutedText, fontStyle: 'italic', marginTop: 2 }}>
                                     "{item.notes}"
                                   </span>
                                 )}
@@ -3443,7 +3507,7 @@ export default function CalibraLineItemsGrid(props) {
                 <div style={{
                   display: 'flex', justifyContent: 'flex-end', gap: 10,
                   padding: '14px 22px',
-                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  borderTop: '1px solid ' + __sepColor,
                   flexShrink: 0,
                 }}>
                   <button
@@ -3453,14 +3517,14 @@ export default function CalibraLineItemsGrid(props) {
                       padding: '9px 18px',
                       borderRadius: 9,
                       fontSize: 12.5, fontWeight: 700,
-                      color: 'rgba(255,255,255,0.82)',
-                      background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.12)',
+                      color: __cancelClr,
+                      background: __cancelBtnBg,
+                      border: '1px solid ' + __cancelBdr,
                       cursor: 'pointer',
                       transition: 'all .12s',
                     }}
-                    onMouseEnter={function (e) { e.currentTarget.style.background = 'rgba(255,255,255,0.09)'; e.currentTarget.style.color = '#fff' }}
-                    onMouseLeave={function (e) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'rgba(255,255,255,0.82)' }}
+                    onMouseEnter={function (e) { e.currentTarget.style.background = __cancelBgHov; e.currentTarget.style.color = __isLight ? __cancelClr : '#fff' }}
+                    onMouseLeave={function (e) { e.currentTarget.style.background = __cancelBtnBg; e.currentTarget.style.color = __cancelClr }}
                   >
                     Iptal
                   </button>

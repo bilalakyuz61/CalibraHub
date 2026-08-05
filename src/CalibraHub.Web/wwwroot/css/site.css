@@ -7597,6 +7597,106 @@ body.app-theme-midnight .collaboration-message.is-outgoing {
   border-color: rgba(96, 165, 250, 0.28);
 }
 
+/* body.app-theme-midnight kurallari yukarida artik canli tema kodu degil (bkz.
+   themeService.js — gercek koyu tema class'i sadece body.app-theme-dark). Asagidaki
+   blok, sohbet/presence (collaboration) ailesinin GERCEK koyu tema karsiligidir.
+   Renkler --app-surface/--app-border/--app-text/--app-text-muted (site.css ~6290) ve
+   --accent-soft-*/--warning-soft-*/--ring-color (tokens.css ~281-323) degiskenlerinden
+   turetildi — sabit hex uydurulmadi. */
+body.app-theme-dark .collaboration-launcher {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.45);
+}
+
+body.app-theme-dark .collaboration-panel {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.55);
+}
+
+body.app-theme-dark .collaboration-panel__header {
+  border-bottom-color: var(--app-border);
+  background: var(--app-muted-surface);
+}
+
+body.app-theme-dark .collaboration-panel__header h2 {
+  color: var(--app-text);
+}
+
+body.app-theme-dark .collaboration-panel__header p {
+  color: var(--app-text-muted);
+}
+
+body.app-theme-dark .collaboration-panel__close {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text-muted);
+}
+
+body.app-theme-dark .collaboration-presence {
+  border-bottom-color: var(--app-border);
+  background: var(--app-muted-surface);
+}
+
+body.app-theme-dark .collaboration-section-title {
+  color: var(--app-text-muted);
+}
+
+body.app-theme-dark .collaboration-user {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+}
+
+body.app-theme-dark .collaboration-user__meta {
+  color: var(--app-text-muted);
+}
+
+body.app-theme-dark .collaboration-empty-state {
+  color: var(--app-text-muted);
+}
+
+body.app-theme-dark .collaboration-lock-banner__message {
+  color: var(--app-text-muted);
+}
+
+/* Durum rozeti (readonly=turuncu / owned=mavi) — vurgu rengi degistirilmedi,
+   yalnizca dark yuzeyde okunurlugu bozan sabit koyu metin/dusuk-alfa arka plan
+   tokens.css'in hazir dark soft-bg/fg cifti ile degistirildi. */
+body.app-theme-dark .collaboration-lock-banner__status {
+  color: var(--warning-soft-fg);
+  background: var(--warning-soft-bg);
+}
+
+body.app-theme-dark .collaboration-lock-banner.is-owned .collaboration-lock-banner__status {
+  color: var(--accent-soft-fg);
+  background: var(--accent-soft-bg);
+}
+
+body.app-theme-dark .collaboration-message {
+  border-color: var(--app-border);
+  background: var(--app-muted-surface);
+}
+
+/* "Benim" mesaj balonu (is-outgoing) karsi tarafin balonundan (yukaridaki
+   muted-surface) ayirt edilebilir kalmasi icin tokens.css'in dark accent-soft
+   cifti kullanildi — sabit rgba(37,99,235,...) dark yuzeyde neredeyse
+   gorunmuyordu (siyaha yakin, ayirt edilemiyordu). */
+body.app-theme-dark .collaboration-message.is-outgoing {
+  background: var(--accent-soft-bg);
+  border-color: var(--ring-color);
+}
+
+body.app-theme-dark .collaboration-message__meta {
+  color: var(--app-text-muted);
+}
+
+body.app-theme-dark .collaboration-message__text {
+  color: var(--app-text);
+}
+
 .material-delete-modal .modal-dialog {
   max-width: 420px;
 }
@@ -9262,6 +9362,28 @@ body.collaboration-panel-open .utility-rail .collaboration-launcher {
     width: min(360px, calc(100vw - 58px));
     max-width: calc(100vw - 58px);
   }
+}
+
+/* .collaboration-widget--navbar (topbar icindeki varyant, ~9055-9110) BILEREK
+   koyu temaya baglanmadi: o buton her zaman .main-nav'in sabit koyu gradient
+   seridi (linear-gradient(90deg,#0f172a,#1e3a8a)) uzerinde durur — kardes
+   sinif .topbar-icon-btn ile ayni sebeple (~line 563) tema-bagimsiz kalir. */
+body.app-theme-dark .utility-rail__button,
+body.app-theme-dark .utility-rail .collaboration-launcher {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+}
+
+body.app-theme-dark .utility-rail__button:hover,
+body.app-theme-dark .utility-rail__button:focus,
+body.app-theme-dark .utility-rail .collaboration-launcher:hover,
+body.app-theme-dark .utility-rail .collaboration-launcher:focus,
+body.app-theme-dark.collaboration-panel-open .utility-rail .collaboration-launcher {
+  color: var(--accent-soft-fg);
+  background: var(--accent-soft-bg);
+  border-color: rgba(129, 140, 248, 0.75);
 }
 
 /* ===================================================================

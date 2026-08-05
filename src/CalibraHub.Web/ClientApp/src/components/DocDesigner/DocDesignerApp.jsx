@@ -175,14 +175,13 @@ export default function DocDesignerApp({ layoutId }) {
       />
 
       {state.error && (
-        <div style={{
-          background: '#fef2f2', borderBottom: '1px solid #fca5a5',
-          padding: '6px 16px', fontSize: 12, color: '#dc2626',
+        <div className="dd-error-banner" style={{
+          padding: '6px 16px', fontSize: 12,
           display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
         }}>
           <span>Hata: {state.error}</span>
           <button onClick={() => dispatch({ type: 'CLEAR_ERROR' })}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontWeight: 700, fontSize: 16 }}>×</button>
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 16 }}>×</button>
         </div>
       )}
 
