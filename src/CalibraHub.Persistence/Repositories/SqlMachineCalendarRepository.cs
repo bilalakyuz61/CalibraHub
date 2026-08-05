@@ -80,6 +80,7 @@ public sealed class SqlMachineCalendarRepository : IMachineCalendarRepository
             cmd.CommandText = $"""
                 SELECT sms.[MachineId], sms.[DaysMask], s.[StartTime], s.[EndTime], s.[IsOvernight]
                 FROM {T("ScenarioMachineShift")} sms
+                INNER JOIN {T("ShiftScenario")} sc ON sc.[Id] = sms.[ScenarioId] AND sc.[IsActive] = 1
                 INNER JOIN {T("Shift")} s ON s.[Id] = sms.[ShiftId] AND s.[IsActive] = 1
                 INNER JOIN {T("Machine")} m ON m.[Id] = sms.[MachineId] AND m.[CompanyId] = @CompanyId AND m.[IsActive] = 1
                 WHERE sms.[ScenarioId] = @ScenarioId AND sms.[IsActive] = 1;
@@ -488,10 +489,17 @@ public sealed class SqlMachineCalendarRepository : IMachineCalendarRepository
         }
 
         await using var cmd = conn.CreateCommand();
+        // Senaryo silinince ait olduğu makine-vardiya atamaları da cascade soft-delete edilir
+        // (frontend onay metni "atamalar da silinir" der + orphan satır türetmeye devam etmesin —
+        // code review 2026-08-05). Türetme sorgusu ayrıca ShiftScenario.IsActive=1 join'i ile korunur.
         cmd.CommandText = $"""
             UPDATE {T("ShiftScenario")}
             SET [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
             WHERE [Id] = @Id AND [IsActive] = 1;
+
+            UPDATE {T("ScenarioMachineShift")}
+            SET [IsActive] = 0, [UpdatedById] = @UpdatedById, [Updated] = SYSUTCDATETIME()
+            WHERE [ScenarioId] = @Id AND [IsActive] = 1;
             """;
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)(userId is > 0 ? userId : null) ?? DBNull.Value));
