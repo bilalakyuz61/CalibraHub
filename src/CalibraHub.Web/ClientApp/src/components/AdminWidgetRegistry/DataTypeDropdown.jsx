@@ -129,13 +129,20 @@ export default function DataTypeDropdown(props) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden"
+            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg overflow-hidden"
             style={{
-              background: 'rgba(8, 11, 20, 0.96)',
+              // Seq 1088: eskiden sabit koyu arka plan (rgba(8,11,20,...)) — acik
+              // temada da koyu goruyordu. isDark'a gore dallandirildi (bkz. GroupSelector
+              // ayni pattern). Padding/maxHeight: SmartTableRow "Islemler" menusuyle
+              // ayni yogunlukta compact liste (bkz. asagidaki item spacing).
+              background: isDark ? 'rgba(8, 11, 20, 0.96)' : 'rgba(255, 255, 255, 0.98)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4)',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(15, 23, 42, 0.1)',
+              boxShadow: isDark ? '0 12px 40px rgba(0, 0, 0, 0.4)' : '0 12px 40px rgba(15, 23, 42, 0.15)',
+              padding: 4,
+              maxHeight: 320,
+              overflowY: 'auto',
             }}
           >
             {DATA_TYPES.filter(function(t) { return !t.hidden }).map(function(t) {
@@ -151,18 +158,20 @@ export default function DataTypeDropdown(props) {
                     setOpen(false)
                   }}
                   className={
-                    'w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left ' +
-                    (isSel ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]')
+                    'w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors text-left ' +
+                    (isSel
+                      ? (isDark ? 'bg-white/[0.08]' : 'bg-slate-100')
+                      : (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'))
                   }
                 >
                   <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                    className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
                     style={{ background: palette.bg, border: '1px solid ' + palette.border }}
                   >
-                    <Icon size={14} style={{ color: palette.icon }} strokeWidth={1.8} />
+                    <Icon size={11} style={{ color: palette.icon }} strokeWidth={1.8} />
                   </div>
-                  <span className="text-sm text-white/85 flex-1">{t.label}</span>
-                  {isSel && <Check size={14} className="text-indigo-400 flex-shrink-0" />}
+                  <span className={'text-xs flex-1 ' + (isDark ? 'text-white/85' : 'text-slate-700')}>{t.label}</span>
+                  {isSel && <Check size={12} className="text-indigo-400 flex-shrink-0" />}
                 </button>
               )
             })}
