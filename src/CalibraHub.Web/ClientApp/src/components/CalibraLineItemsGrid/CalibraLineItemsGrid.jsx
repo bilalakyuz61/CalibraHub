@@ -54,6 +54,18 @@ function resolveIcon(name) {
   return ICON_MAP[name] || CircleDot
 }
 
+/* Kart etiketi renk token'i → Tailwind sinifi (light+dark). HEX saklanmaz/yazilmaz —
+   tema uyumu semantik token uzerinden saglanir (LineCardLayout.LabelColor). */
+var CARD_LABEL_COLOR_CLS = {
+  slate:   'text-slate-500 dark:text-white/45',
+  indigo:  'text-indigo-600 dark:text-indigo-300',
+  emerald: 'text-emerald-600 dark:text-emerald-300',
+  amber:   'text-amber-600 dark:text-amber-300',
+  rose:    'text-rose-600 dark:text-rose-300',
+  blue:    'text-blue-600 dark:text-blue-300',
+  violet:  'text-violet-600 dark:text-violet-300',
+}
+
 /* Satir icin benzersiz _uid uret (React key ve yerel takip icin) */
 var uidCounter = 0
 function makeUid() {
@@ -440,6 +452,11 @@ export default function CalibraLineItemsGrid(props) {
         col: col,
         span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
         visible: vis,
+        // Baslik override'lari (server whitelist'ten gecmis halleri)
+        label: (typeof it.label === 'string' && it.label.trim()) ? it.label.trim() : null,
+        labelSize: (typeof it.labelSize === 'number' && it.labelSize >= 9 && it.labelSize <= 15) ? it.labelSize : null,
+        labelWeight: (it.labelWeight === 400 || it.labelWeight === 500 || it.labelWeight === 600 || it.labelWeight === 700) ? it.labelWeight : null,
+        labelColor: CARD_LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
       })
     })
     // Duzende olmayan kimlik kolonlari basa (materialCode once) —
@@ -567,7 +584,9 @@ export default function CalibraLineItemsGrid(props) {
         setRows(function(prev) {
           return prev.map(function(r) {
             if (r._uid !== extrasModalRow._uid) return r
-            return Object.assign({}, r, { __extras: Object.assign({}, localValues) })
+            // MERGE — modal artik kartta gosterilen alanlari icermedigi icin
+            // localValues'i oldugu gibi yazmak karttaki inline edit'leri silerdi.
+            return Object.assign({}, r, { __extras: Object.assign({}, r.__extras || {}, localValues) })
           })
         })
         setExtrasToast({ type: 'ok', text: 'Ek alanlar hazir — satiri Kaydet ile kesinlestirin' })
@@ -1092,11 +1111,6 @@ export default function CalibraLineItemsGrid(props) {
         .then(function (r) { return r.ok ? r.json() : null })
         .then(function (schema) {
           if (!alive || !schema || !Array.isArray(schema.widgets)) return
-          // ASP.NET Core JSON camelCase'e cevirir; Pascal fallback'i de dusuruyoruz.
-          var any = schema.widgets.some(function (w) {
-            return w && (w.isRequired === true || w.IsRequired === true)
-          })
-          hasRequiredLineWidgetsRef.current = any
           // ── "Kartta Goster" widget'lari (2026-08-05) ──
           // ShowOnCard=1 + aktif + inline-uyumlu tip → kart alan izgarasina girer.
           var INLINE_TYPES = { text: 1, numeric: 1, date: 1, dropdown: 1 }
@@ -1120,6 +1134,16 @@ export default function CalibraLineItemsGrid(props) {
             })
             .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0) })
           setCardWidgets(cw)
+          // Guided-chain otomatik ⚙ acilisi: yalnizca MODALDA kalan zorunlu widget
+          // varsa gerekir — kartta inline gosterilen zorunlu alan karttan doldurulur.
+          // (ASP.NET Core JSON camelCase'e cevirir; Pascal fallback'i de dusuruyoruz.)
+          var cwSet = {}
+          cw.forEach(function (c) { cwSet[String(c.code).toLowerCase()] = 1 })
+          hasRequiredLineWidgetsRef.current = schema.widgets.some(function (w) {
+            if (!w || !(w.isRequired === true || w.IsRequired === true)) return false
+            var code = String(w.widgetCode || w.WidgetCode || '').toLowerCase()
+            return !cwSet[code]
+          })
         })
         .catch(function () { /* sessiz — schema yoksa otomatik acma yapma */ })
     }
@@ -1714,16 +1738,28 @@ export default function CalibraLineItemsGrid(props) {
                             : ((row.__widgetValues || {})[wc])
                         }
                         var isMaterialCodeCell = col === materialCodeCol
+                        // Baslik override'lari (duzen editorunden): metin + boyut +
+                        // kalinlik (inline) + renk (semantik token → Tailwind sinifi).
+                        var labelText = item.label || col.label
+                        var labelColorCls = item.labelColor
+                          ? CARD_LABEL_COLOR_CLS[item.labelColor]
+                          : 'text-slate-500 dark:text-white/45'
+                        var labelStyleOv = {}
+                        if (item.labelSize) labelStyleOv.fontSize = item.labelSize
+                        if (item.labelWeight) labelStyleOv.fontWeight = item.labelWeight
                         return (
                           <div key={col.key} data-cell-key={col.key} style={cellStyle}>
-                            <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
+                            <div
+                              className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + labelColorCls}
+                              style={labelStyleOv}
+                            >
                               {/* Kit süsleri — kimlik bolgesi ozel duzende kalktigi icin
                                   ↳ oku ve KIT rozeti malzeme kodu hucresinin etiketine tasinir. */}
                               {isMaterialCodeCell && isKitComponent && (
                                 <span className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0" title="Kit bileseni">↳</span>
                               )}
                               <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
-                              <span className="truncate">{col.label}</span>
+                              <span className="truncate">{labelText}</span>
                               {(col.required || col.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
                               {isMaterialCodeCell && isKitHeader && (
                                 <span
@@ -2141,6 +2177,11 @@ export default function CalibraLineItemsGrid(props) {
               visible: it.visible !== false,
               locked: it.col.required === true || it.col.requirePositive === true || it.col.key === 'materialCode',
               isWidget: it.col.__isWidget === true,
+              // Baslik override'lari — editor "Secili Alan" panelinde duzenlenir.
+              labelText: it.label || '',
+              labelSize: it.labelSize || null,
+              labelWeight: it.labelWeight || null,
+              labelColor: it.labelColor || null,
             }
           })}
           hasCustomLayout={hasCustomLayout}
@@ -2304,6 +2345,17 @@ export default function CalibraLineItemsGrid(props) {
                    girilmis local degerler pre-fill edilir (row.__extras). */
                 recordId={extrasModalRow.id != null && Number(extrasModalRow.id) > 0 ? String(extrasModalRow.id) : ''}
                 initialValues={extrasModalRow.__extras || null}
+                /* Kartta inline gosterilen alanlar modalda TEKRARLANMAZ; kart
+                   degerleri save payload'ina merge edilir (zorunlu-alan denetimi
+                   posted dict'e bakar — kart degeri olmadan 400 doner). */
+                excludeWidgetCodes={cardWidgets.map(function (w) { return w.code })}
+                mergeValuesOnSave={(function () {
+                  if (cardWidgets.length === 0) return null
+                  var src = Object.assign({}, extrasModalRow.__widgetValues || {}, extrasModalRow.__extras || {})
+                  var out = {}
+                  cardWidgets.forEach(function (w) { if (w.code in src) out[w.code] = src[w.code] })
+                  return out
+                })()}
                 classPrefix="sqe"
               />
             </div>

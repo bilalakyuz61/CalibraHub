@@ -40,8 +40,21 @@ public sealed partial class LineCardLayoutController : Controller
         _audit = audit;
     }
 
-    /// <summary>Tek düzen öğesi. Span 1-24 (WidgetMas.ColSpan ızgarası ile aynı).</summary>
-    public sealed record LayoutItemDto(string Key, int Span, int Order, bool Visible = true);
+    /// <summary>
+    /// Tek düzen öğesi. Span 1-24 (WidgetMas.ColSpan ızgarası ile aynı).
+    /// Label* alanları başlık override'ıdır (2026-08-05 kullanıcı isteği):
+    ///   Label       — başlık metni (boş = alanın varsayılan etiketi)
+    ///   LabelSize   — px (9-15 arası), null = varsayılan (10)
+    ///   LabelWeight — 400/500/600/700, null = varsayılan (bold)
+    ///   LabelColor  — semantik token (slate/indigo/emerald/amber/rose/blue/violet),
+    ///                 null = varsayılan. HEX asla saklanmaz — tema uyumu.
+    /// </summary>
+    public sealed record LayoutItemDto(
+        string Key, int Span, int Order, bool Visible = true,
+        string? Label = null, int? LabelSize = null, int? LabelWeight = null, string? LabelColor = null);
+
+    private static readonly HashSet<string> AllowedLabelColors =
+        new(StringComparer.OrdinalIgnoreCase) { "slate", "indigo", "emerald", "amber", "rose", "blue", "violet" };
 
     public sealed record SaveLayoutRequest(string FormCode, List<LayoutItemDto> Items);
 
@@ -77,14 +90,24 @@ public sealed partial class LineCardLayoutController : Controller
 
         var formCode = request.FormCode.Trim();
 
-        // Normalize: key trim + boş/yinelenen key at, span 1-24 clamp, order'ı sıraya bindir.
+        // Normalize: key trim + boş/yinelenen key at, span 1-24 clamp, order'ı sıraya
+        // bindir; başlık override'ları whitelist/clamp ile temizlenir.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var items = new List<LayoutItemDto>(request.Items.Count);
         foreach (var it in request.Items.OrderBy(i => i.Order))
         {
             var key = it.Key?.Trim();
             if (string.IsNullOrEmpty(key) || key.Length > 120 || !seen.Add(key)) continue;
-            items.Add(new LayoutItemDto(key, Math.Clamp(it.Span, 1, 24), items.Count, it.Visible));
+
+            var label = string.IsNullOrWhiteSpace(it.Label) ? null : it.Label.Trim();
+            if (label is { Length: > 60 }) label = label[..60];
+            int? size = it.LabelSize is >= 9 and <= 15 ? it.LabelSize : null;
+            int? weight = it.LabelWeight is 400 or 500 or 600 or 700 ? it.LabelWeight : null;
+            var color = !string.IsNullOrWhiteSpace(it.LabelColor) && AllowedLabelColors.Contains(it.LabelColor.Trim())
+                ? it.LabelColor.Trim().ToLowerInvariant() : null;
+
+            items.Add(new LayoutItemDto(key, Math.Clamp(it.Span, 1, 24), items.Count, it.Visible,
+                label, size, weight, color));
         }
         if (items.Count == 0)
             return Json(new { ok = false, error = "Geçerli düzen öğesi yok." });

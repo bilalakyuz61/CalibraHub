@@ -94,6 +94,13 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   // ile parent (GridFieldInput) degerleri cekip kendi grid state'ine pop eder.
   var initialValues = props.initialValues && typeof props.initialValues === 'object'
     ? props.initialValues : null
+  // 2026-08-05 — Kalem karti "Kartta Goster" alanlari: kartta inline duzenlenen
+  // widget'lar ⚙ Ek Alanlar modalinda TEKRAR gosterilmez. excludeWidgetCodes ile
+  // schema'dan dusurulur; mergeValuesOnSave ile kart degerleri save payload'ina
+  // merge edilir (server EnforceRequired posted dict'e bakar — dislanmis zorunlu
+  // alanin karttaki degeri olmadan save 400 doner).
+  var excludeWidgetCodes = Array.isArray(props.excludeWidgetCodes) && props.excludeWidgetCodes.length > 0
+    ? props.excludeWidgetCodes : null
 
   var [loading, setLoading]   = useState(true)
   var [widgets, setWidgets]   = useState([])      // WidgetRenderDto[]
@@ -200,6 +207,12 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           return
         }
         var ws = Array.isArray(data.widgets) ? data.widgets : []
+        // Kartta inline gosterilen alanlar modal/form gorunumune girmez.
+        if (excludeWidgetCodes) {
+          var __exSet = {}
+          excludeWidgetCodes.forEach(function (c) { __exSet[String(c).toLowerCase()] = true })
+          ws = ws.filter(function (w) { return !__exSet[String(w.widgetId || '').toLowerCase()] })
+        }
         // widgetsRef'i useEffect beklemeden hemen senkron tut — Kaydet
         // anlik basildiginda valid currentWidgets snapshot'i bulsun.
         widgetsRef.current = ws
@@ -475,7 +488,14 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           }
         })
       }
-      return saveRecord(formCode, recordId, { values: currentValues, grids: gridsPayload })
+      // mergeValuesOnSave (kart alanlari) once gelir — renderer'in kendi degeri
+      // ayni kod icin varsa (olmamali; excluded) renderer kazanir.
+      var __mergeVals = props.mergeValuesOnSave && typeof props.mergeValuesOnSave === 'object'
+        ? props.mergeValuesOnSave : null
+      var __payloadValues = __mergeVals
+        ? Object.assign({}, __mergeVals, currentValues)
+        : currentValues
+      return saveRecord(formCode, recordId, { values: __payloadValues, grids: gridsPayload })
     },
     // validate() — kaydetmeden zorunlu alan kontrolu. { valid, errors[] } doner.
     // MaterialCardEdit mceSave() icin: ana form fetch'inden ONCE cagrilir.

@@ -31,6 +31,24 @@ var ICON_MAP = {
 }
 function resolveIcon(name) { return ICON_MAP[name] || CircleDot }
 
+/* Kart etiketi renk token'i → Tailwind sinifi — CalibraLineItemsGrid.
+   CARD_LABEL_COLOR_CLS ile birebir ayni (onizleme = gercek kart). */
+var LABEL_COLOR_CLS = {
+  slate:   'text-slate-500 dark:text-white/45',
+  indigo:  'text-indigo-600 dark:text-indigo-300',
+  emerald: 'text-emerald-600 dark:text-emerald-300',
+  amber:   'text-amber-600 dark:text-amber-300',
+  rose:    'text-rose-600 dark:text-rose-300',
+  blue:    'text-blue-600 dark:text-blue-300',
+  violet:  'text-violet-600 dark:text-violet-300',
+}
+var LABEL_COLOR_TOKENS = ['slate', 'indigo', 'emerald', 'amber', 'rose', 'blue', 'violet']
+/* Renk secici yuvarlaklarinin dolgusu — semantik token'in gorsel karsiligi. */
+var LABEL_COLOR_SWATCH_CLS = {
+  slate: 'bg-slate-400', indigo: 'bg-indigo-500', emerald: 'bg-emerald-500',
+  amber: 'bg-amber-500', rose: 'bg-rose-500', blue: 'bg-blue-500', violet: 'bg-violet-500',
+}
+
 function readCsrfToken() {
   try {
     var input = document.querySelector('input[name="__RequestVerificationToken"]')
@@ -61,12 +79,28 @@ export default function LineCardLayoutEditor(props) {
         visible: it.visible !== false,
         locked: it.locked === true,
         isWidget: it.isWidget === true,
+        // Baslik override'lari — bos/null = varsayilan
+        labelText: typeof it.labelText === 'string' ? it.labelText : '',
+        labelSize: it.labelSize || null,
+        labelWeight: it.labelWeight || null,
+        labelColor: LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
       }
     })
   })
   var [saving, setSaving] = useState(false)
   var [error, setError] = useState(null)
   var [confirmReset, setConfirmReset] = useState(false)
+  // Secili alan (baslik metni/stili paneli icin) — key ile izlenir ki
+  // surukle-birak sonrasi secim kaybolmasin.
+  var [selectedKey, setSelectedKey] = useState(null)
+
+  function patchItem(key, patch) {
+    setItems(function (prev) {
+      return prev.map(function (it) {
+        return it.key === key ? Object.assign({}, it, patch) : it
+      })
+    })
+  }
 
   // ── Surukle-birak siralama ──
   var dragIndexRef = useRef(null)
@@ -149,7 +183,13 @@ export default function LineCardLayoutEditor(props) {
       var payload = {
         formCode: formCode,
         items: items.map(function (it, i) {
-          return { key: it.key, span: it.span, order: i, visible: it.visible }
+          return {
+            key: it.key, span: it.span, order: i, visible: it.visible,
+            label: (it.labelText && it.labelText.trim()) ? it.labelText.trim() : null,
+            labelSize: it.labelSize || null,
+            labelWeight: it.labelWeight || null,
+            labelColor: it.labelColor || null,
+          }
         }),
       }
       var resp = await fetch('/api/line-card-layout/save', {
@@ -250,7 +290,14 @@ export default function LineCardLayoutEditor(props) {
             {items.map(function (it, idx) {
               var hiddenCls = !it.visible ? ' opacity-40' : ''
               var dragCls = dragOverIndex === idx ? ' ring-2 ring-indigo-400/70' : ''
+              var selectedCls = selectedKey === it.key ? ' border-indigo-400/80 bg-indigo-50/50 dark:bg-indigo-500/[0.08]' : ' border-transparent'
               var Icon = resolveIcon(it.icon)
+              // Onizleme etiketinde override'lar CANLI uygulanir — kartla birebir.
+              var pvText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
+              var pvColorCls = it.labelColor ? LABEL_COLOR_CLS[it.labelColor] : 'text-slate-500 dark:text-white/45'
+              var pvStyle = {}
+              if (it.labelSize) pvStyle.fontSize = it.labelSize
+              if (it.labelWeight) pvStyle.fontWeight = it.labelWeight
               return (
                 <div
                   key={it.key}
@@ -258,8 +305,9 @@ export default function LineCardLayoutEditor(props) {
                   onDragStart={function (e) { handleDragStart(e, idx) }}
                   onDragOver={function (e) { handleDragOver(e, idx) }}
                   onDragEnd={handleDragEnd}
+                  onClick={function () { setSelectedKey(selectedKey === it.key ? null : it.key) }}
                   style={{ gridColumn: 'span ' + it.span, position: 'relative' }}
-                  className={'group select-none rounded-lg px-1.5 pt-1 pb-1.5 cursor-grab active:cursor-grabbing border border-transparent hover:border-indigo-200/70 dark:hover:border-indigo-400/25' + hiddenCls + dragCls}
+                  className={'group select-none rounded-lg px-1.5 pt-1 pb-1.5 cursor-grab active:cursor-grabbing border hover:border-indigo-200/70 dark:hover:border-indigo-400/25' + hiddenCls + dragCls + selectedCls}
                 >
                   {/* Kontrol satiri — tut/genislik/goz. Kart gorunumunu bozmasin
                       diye kucuk; blok hover'inda belirginlesir. */}
@@ -286,9 +334,9 @@ export default function LineCardLayoutEditor(props) {
                     </button>
                   </div>
                   {/* Kartla birebir ayni etiket + hucre kutusu (canli onizleme) */}
-                  <div className="calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide text-slate-500 dark:text-white/45 mb-0.5">
+                  <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + pvColorCls} style={pvStyle}>
                     <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
-                    <span className="truncate">{it.label}</span>
+                    <span className="truncate">{pvText}</span>
                     {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
                   </div>
                   <div className="h-[34px] rounded-lg border border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/[0.03]" />
@@ -308,8 +356,96 @@ export default function LineCardLayoutEditor(props) {
           </div>
           </div>
 
+          {/* Secili Alan paneli — baslik metni + stil override'lari (2026-08-05) */}
+          {(function () {
+            var sel = items.find(function (x) { return x.key === selectedKey })
+            if (!sel) return null
+            return (
+              <div className="mt-3 rounded-xl border border-indigo-200/70 bg-indigo-50/40 dark:border-indigo-400/25 dark:bg-indigo-500/[0.06] px-4 py-3">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Seçili Alan:</span>
+                  <span className="text-[11.5px] font-semibold text-indigo-600 dark:text-indigo-300">{sel.label}</span>
+                  <button
+                    type="button"
+                    onClick={function () { setSelectedKey(null) }}
+                    className="ml-auto text-[10.5px] text-slate-400 hover:text-slate-600 dark:text-white/35 dark:hover:text-white/60"
+                  >Kapat</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Başlık Metni</div>
+                    <input
+                      type="text"
+                      value={sel.labelText}
+                      maxLength={60}
+                      placeholder={sel.label + ' (varsayılan)'}
+                      onChange={function (e) { patchItem(sel.key, { labelText: e.target.value }) }}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 dark:placeholder:text-white/25"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Boyut</div>
+                    <select
+                      value={sel.labelSize || ''}
+                      onChange={function (e) { patchItem(sel.key, { labelSize: e.target.value ? parseInt(e.target.value, 10) : null }) }}
+                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
+                    >
+                      <option value="">Varsayılan</option>
+                      {[9, 10, 11, 12, 13, 14].map(function (s) {
+                        return <option key={s} value={s}>{s} px</option>
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Kalınlık</div>
+                    <select
+                      value={sel.labelWeight || ''}
+                      onChange={function (e) { patchItem(sel.key, { labelWeight: e.target.value ? parseInt(e.target.value, 10) : null }) }}
+                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-white text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
+                    >
+                      <option value="">Varsayılan</option>
+                      <option value="400">Normal</option>
+                      <option value="500">Orta</option>
+                      <option value="600">Yarı Kalın</option>
+                      <option value="700">Kalın</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Renk</div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={function () { patchItem(sel.key, { labelColor: null }) }}
+                        title="Varsayılan renk"
+                        className={'w-6 h-6 rounded-full border-2 flex items-center justify-center text-[9px] font-bold text-slate-400 dark:text-white/40 ' + (
+                          !sel.labelColor ? 'border-indigo-500' : 'border-slate-200 dark:border-white/15'
+                        )}
+                      >—</button>
+                      {LABEL_COLOR_TOKENS.map(function (tok) {
+                        return (
+                          <button
+                            key={tok}
+                            type="button"
+                            onClick={function () { patchItem(sel.key, { labelColor: tok }) }}
+                            title={tok}
+                            className={'w-6 h-6 rounded-full border-2 ' + (
+                              sel.labelColor === tok ? 'border-indigo-500' : 'border-transparent'
+                            )}
+                          >
+                            <span className={'block w-full h-full rounded-full ' + LABEL_COLOR_SWATCH_CLS[tok]} />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           <div className="mt-3 text-[10.5px] text-slate-400 dark:text-white/35">
             Toplam genişlik 24 birimdir; bir satıra sığmayan alanlar otomatik alt satıra akar.
+            Bir alana tıklayarak başlık metnini ve stilini düzenleyebilirsiniz.
             Dar ekranlarda düzen otomatik olarak varsayılan ızgaraya döner.
           </div>
 
