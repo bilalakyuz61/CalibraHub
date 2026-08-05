@@ -733,6 +733,7 @@ END;";
             await EnsureStockReservationTablesAsync(connection, cancellationToken);
             // Makine Planlama (Üretim Çizelgeleme) — Faz 1 Manuel (2026-08-04).
             await EnsureMachineScheduleTablesAsync(connection, cancellationToken);
+            await EnsureMachineCalendarTablesAsync(connection, cancellationToken);
             await EnsureMaterialGroupTablesAsync(connection, cancellationToken);
             await EnsureFinanceTablesAsync(connection, cancellationToken);
             await EnsureAddressTablesAsync(connection, cancellationToken);
@@ -5926,6 +5927,90 @@ END;";
                         ON [{s}].[MachineScheduleBlock]([WorkOrderOperationId])
                         WHERE [WorkOrderOperationId] IS NOT NULL AND [IsActive] = 1;
                 ';
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Makine Planlama Faz 2 (2026-08-05): haftalık makine çalışma penceresi (MachineWorkWindow)
+    /// + resmi tatil (CompanyHoliday) + MachineScheduleBlock.ParentBlockId (setup child self-ref).
+    /// Per-company DB → CompanyId kolonu yok. EnsureMachineScheduleTablesAsync'ten SONRA çağrılır.
+    /// </summary>
+    private async Task EnsureMachineCalendarTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[MachineWorkWindow]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[MachineWorkWindow]
+                (
+                    [Id]           INT      NOT NULL IDENTITY(1,1) CONSTRAINT [PK_MachineWorkWindow] PRIMARY KEY,
+                    [MachineId]    INT      NOT NULL,
+                    [DayOfWeek]    TINYINT  NOT NULL,
+                    [StartMinute]  SMALLINT NOT NULL,
+                    [EndMinute]    SMALLINT NOT NULL,
+                    [IsActive]     BIT      NOT NULL CONSTRAINT [DF_MachineWorkWindow_IsActive] DEFAULT 1,
+                    [CreatedById]  INT      NULL,
+                    [Created]      DATETIME NOT NULL CONSTRAINT [DF_MachineWorkWindow_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]  INT      NULL,
+                    [Updated]      DATETIME NULL,
+                    CONSTRAINT [CK_MachineWorkWindow_DayOfWeek] CHECK ([DayOfWeek] BETWEEN 0 AND 6),
+                    CONSTRAINT [CK_MachineWorkWindow_Minutes] CHECK ([StartMinute] >= 0 AND [EndMinute] <= 1440 AND [EndMinute] > [StartMinute])
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[MachineWorkWindow]') AND name = N'IX_MachineWorkWindow_Machine')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_MachineWorkWindow_Machine]
+                        ON [{s}].[MachineWorkWindow]([MachineId])
+                        WHERE [IsActive] = 1;
+                ';
+
+            IF OBJECT_ID(N'[{s}].[CompanyHoliday]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[CompanyHoliday]
+                (
+                    [Id]           INT           NOT NULL IDENTITY(1,1) CONSTRAINT [PK_CompanyHoliday] PRIMARY KEY,
+                    [HolidayDate]  DATE          NOT NULL,
+                    [Name]         NVARCHAR(200) NULL,
+                    [IsActive]     BIT           NOT NULL CONSTRAINT [DF_CompanyHoliday_IsActive] DEFAULT 1,
+                    [CreatedById]  INT           NULL,
+                    [Created]      DATETIME      NOT NULL CONSTRAINT [DF_CompanyHoliday_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedById]  INT           NULL,
+                    [Updated]      DATETIME      NULL
+                );
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[CompanyHoliday]') AND name = N'UX_CompanyHoliday_Date')
+                EXEC sp_executesql N'
+                    CREATE UNIQUE INDEX [UX_CompanyHoliday_Date]
+                        ON [{s}].[CompanyHoliday]([HolidayDate])
+                        WHERE [IsActive] = 1;
+                ';
+
+            -- Setup child self-ref (Faz 2): üretim bloğu düşünce otomatik Hazırlık bloğu ParentBlockId ile bağlanır.
+            IF OBJECT_ID(N'[{s}].[MachineScheduleBlock]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[MachineScheduleBlock]', N'ParentBlockId') IS NULL
+                ALTER TABLE [{s}].[MachineScheduleBlock] ADD [ParentBlockId] INT NULL;
+
+            IF OBJECT_ID(N'[{s}].[MachineScheduleBlock]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE object_id = OBJECT_ID(N'[{s}].[MachineScheduleBlock]') AND name = N'IX_MachineScheduleBlock_Parent')
+                EXEC sp_executesql N'
+                    CREATE INDEX [IX_MachineScheduleBlock_Parent]
+                        ON [{s}].[MachineScheduleBlock]([ParentBlockId])
+                        WHERE [ParentBlockId] IS NOT NULL AND [IsActive] = 1;
+                ';
+
+            -- Operasyon setup/hazırlık süresi (Faz 2): satırın DurationUnit'i ile yorumlanır.
+            IF OBJECT_ID(N'[{s}].[OperationMachineTime]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[OperationMachineTime]', N'SetupDuration') IS NULL
+                ALTER TABLE [{s}].[OperationMachineTime] ADD [SetupDuration] DECIMAL(18,4) NULL;
             """;
 
         await using var cmd = connection.CreateCommand();
@@ -13076,6 +13161,7 @@ END;";
             // 2026-08-04: Makine Planlama (Üretim Çizelgeleme, Faz 1 Manuel) — Gantt canvas UI,
             // ShopFloor gibi widget hedefi olmayan özel ekran.
             ("MACHINE_SCHEDULE",    "Makine Planlama",                  "Üretim",               null,                       519,  false),
+            ("MACHINE_CALENDAR",    "Makine Çalışma Takvimi",           "Üretim",               null,                       520,  false),
             ("PRODUCTION_DEFS",     "Üretim Tanımlamaları",              "Üretim",               null,                       575,  false),
             ("OPERATIONS",          "Operasyonlar",                     "Üretim",               "Operasyonlar",             520,  true),  // SmartBoard liste
             ("OPERATION_EDIT",      "Düzenleme",                        "Üretim",               "Operasyonlar",             525,  true),
