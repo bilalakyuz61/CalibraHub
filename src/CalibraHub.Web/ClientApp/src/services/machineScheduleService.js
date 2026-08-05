@@ -38,3 +38,18 @@ export function saveScheduleBlock(payload) {
 export function deleteScheduleBlock(id) {
   return postJson(BASE + '/DeleteScheduleBlock', { id: id })
 }
+
+// ── Faz 3: Otomatik Yerleştir ──────────────────────────────
+export function getAutoScheduleCandidates() {
+  return getJson(BASE + '/AutoScheduleCandidates')
+}
+
+// payload: { includedWorkOrderIds:[int], fromUtc:"...Z" }
+export function autoSchedulePreview(payload) {
+  return postJson(BASE + '/AutoSchedulePreview', payload)
+}
+
+// payload: { includedWorkOrderIds:[int], fromUtc:"...Z" }
+export function autoScheduleApply(payload) {
+  return postJson(BASE + '/AutoScheduleApply', payload)
+}

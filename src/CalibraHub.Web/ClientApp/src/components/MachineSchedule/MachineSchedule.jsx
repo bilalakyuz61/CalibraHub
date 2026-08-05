@@ -8,6 +8,7 @@ import UnplannedQueue, { OpDragGhost } from './UnplannedQueue'
 import GanttToolbar from './GanttToolbar'
 import GanttBoard from './GanttBoard'
 import BlockEditPopover from './BlockEditPopover'
+import AutoScheduleWizard from './AutoScheduleWizard'
 import {
   ZOOM_LEVELS, DEFAULT_ZOOM_INDEX, ROW_HEIGHT,
   localDateInputToUtcIso, utcIsoToLocalDateInput,
@@ -38,6 +39,10 @@ export default function MachineSchedule() {
 
   var [activeOp, setActiveOp] = useState(null)
   var [selected, setSelected] = useState(null) // { block, clientX, clientY }
+
+  // ── Faz 3: Otomatik Yerleştir sihirbazı ─────────────────────
+  var [wizardOpen, setWizardOpen] = useState(false)
+  var [previewProposals, setPreviewProposals] = useState([])
 
   var sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -221,6 +226,13 @@ export default function MachineSchedule() {
     })
   }
 
+  // ── Faz 3: Otomatik Yerleştir ────────────────────────────────
+  function handleAutoScheduleApplied() {
+    setWizardOpen(false)
+    setPreviewProposals([])
+    fetchSchedule(true)
+  }
+
   if (loading) {
     return (
       <div className="ms-root">
@@ -250,6 +262,7 @@ export default function MachineSchedule() {
           onRefresh={function () { fetchSchedule(true) }}
           isDark={isDark}
           refreshing={refreshing}
+          onAutoSchedule={function () { setWizardOpen(true) }}
         />
         <div className="ms-body">
           <UnplannedQueue unplanned={unplanned} loading={refreshing} />
@@ -268,6 +281,7 @@ export default function MachineSchedule() {
               onBlockMove={handleBlockMove}
               onBlockResize={handleBlockResize}
               loading={refreshing}
+              previewProposals={previewProposals}
             />
           </div>
         </div>

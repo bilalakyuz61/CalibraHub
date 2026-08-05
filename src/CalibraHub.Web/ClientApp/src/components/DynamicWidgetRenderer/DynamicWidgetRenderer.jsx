@@ -30,7 +30,7 @@ import GuideListField from './GuideListField'
 import GridFieldInput from './GridFieldInput'
 import WidgetFieldShell from './WidgetFieldShell'
 import AttachmentFieldInput from './AttachmentFieldInput'
-import { buildRuleGraph, recomputeAll, propagateChange } from './ruleEngine'
+import { buildRuleGraph, recomputeAll, propagateChange, coerceForScope } from './ruleEngine'
 import { resolveTokens as resolveAllTokens } from '../../utils/fieldTokens'
 
 /* ── localStorage yardımcıları ─────────────────────────────── */
@@ -267,7 +267,32 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
         // 1) Graph insa et (parse + dep map + cycle detection + topo sort)
         // 2) Cycle varsa form render etme, banner goster
         // 3) Cycle yoksa initial recomputeAll — tum formula/visibility/disabled hesapla
-        var graph = buildRuleGraph(ws)
+        //
+        // 2026-08-05 — externalScope: ayni sayfada mount olmus DIGER formlarin
+        // (orn. kalem ek alanlari modali icin ust bilgi formu) coerce edilmis
+        // degerleri. Kalem kurali ust bilgi alanina referans verebilsin diye
+        // (RuleBuilder "Ust Bilgi" secenekleri) per-form registry'den okunur.
+        // Modal acildigi anki snapshot'tir — modal kapali/acik dongusunde tazelenir.
+        var externalScope = null
+        try {
+          var __reg = (typeof window !== 'undefined' && window.__CALIBRA_WIDGETS_BY_FORM__) || null
+          if (__reg) {
+            Object.keys(__reg).forEach(function (fc) {
+              if (fc === formCode) return
+              var entry = __reg[fc]
+              if (!entry || !entry.values) return
+              var dtByCode = {}
+              ;(entry.schema || []).forEach(function (s) { if (s && s.code) dtByCode[s.code] = s.dataType })
+              Object.keys(entry.values).forEach(function (code) {
+                externalScope = externalScope || {}
+                if (externalScope[code] === undefined) {
+                  externalScope[code] = coerceForScope(entry.values[code], String(dtByCode[code] || '').toLowerCase())
+                }
+              })
+            })
+          }
+        } catch (_) { externalScope = null }
+        var graph = buildRuleGraph(ws, externalScope)
         ruleGraphRef.current = graph
         if (graph.cycle) {
           setCycleError('Sonsuz dongu: ' + graph.cycle.join(' → '))

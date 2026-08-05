@@ -1,10 +1,11 @@
-import { CalendarRange, ZoomIn, ZoomOut, RefreshCw, GanttChartSquare } from 'lucide-react'
+import { CalendarRange, ZoomIn, ZoomOut, RefreshCw, GanttChartSquare, Wand2 } from 'lucide-react'
 import { getPalette, BLOCK_TYPE_LABELS } from './ganttPalette'
 import { ZOOM_LEVELS } from './timeScale'
 
 export default function GanttToolbar({
   dateFrom, dateTo, onDateFromChange, onDateToChange,
   zoomIndex, onZoomIn, onZoomOut, onRefresh, isDark, refreshing,
+  onAutoSchedule,
 }) {
   var palette = getPalette(isDark)
 
@@ -44,6 +45,10 @@ export default function GanttToolbar({
 
       <button className="ms-icon-btn" onClick={onRefresh} title="Yenile">
         <RefreshCw size={14} className={refreshing ? 'ms-spin' : ''} />
+      </button>
+
+      <button className="ms-auto-btn" onClick={onAutoSchedule} title="Uygun makine/zamana otomatik yerleştir">
+        <Wand2 size={14} /> Otomatik Yerleştir
       </button>
 
       <div className="ms-spacer" />

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import { Stage, Layer, Rect, Line, Text } from 'react-konva'
+import { Stage, Layer, Rect, Line, Text, Group } from 'react-konva'
 import ScheduleBlock from './ScheduleBlock'
 import { getPalette } from './ganttPalette'
 import { buildWorkWindowShades, buildHolidayColumns } from './scheduleShading'
@@ -41,7 +41,7 @@ function buildTicks(rangeStart, rangeEnd, pxPerHour) {
 export default function GanttBoard({
   machines, blocks, rangeStart, rangeEnd, pxPerHour, isDark,
   conflictIds, onBlockClick, onBlockMove, onBlockResize, loading,
-  workWindows, holidays,
+  workWindows, holidays, previewProposals,
 }) {
   var palette = getPalette(isDark)
   var { setNodeRef: setDropRef } = useDroppable({ id: 'gantt-body' })
@@ -227,6 +227,65 @@ export default function GanttBoard({
                 )
               })}
             </Layer>
+            {/* Faz 3: otomatik yerleştir önizleme — ghost öneri blokları (tıklanamaz, mevcut bloklardan görsel ayrı) */}
+            {previewProposals && previewProposals.length > 0 && (
+              <Layer listening={false}>
+                {previewProposals.map(function (p) {
+                  var rowIndex = machineIndexById[p.machineId]
+                  if (rowIndex == null) return null
+                  var pStart = new Date(p.startUtc)
+                  var pEnd = new Date(p.endUtc)
+                  var px = dateToX(pStart, rangeStart, pxPerHour)
+                  var pw = Math.max(18, dateToX(pEnd, rangeStart, pxPerHour) - px)
+                  var py = rowIndex * ROW_HEIGHT + 6
+                  var ph = ROW_HEIGHT - 12
+                  var typeColors = palette.block[p.blockType] || palette.block[1]
+                  var label = (p.workOrderNo ? p.workOrderNo + ' · ' : '') + (p.operationName || '')
+                  return (
+                    <Group key={'preview-' + p.tempId}>
+                      <Rect
+                        x={px}
+                        y={py}
+                        width={pw}
+                        height={ph}
+                        cornerRadius={5}
+                        fill={palette.previewFill}
+                        stroke={palette.previewStroke}
+                        strokeWidth={1.6}
+                        dash={[6, 4]}
+                      />
+                      {pw > 40 && (
+                        <Text
+                          text={label}
+                          x={px + 8}
+                          y={py + 5}
+                          width={pw - 16}
+                          height={14}
+                          fontSize={11}
+                          fontStyle="600"
+                          fill={typeColors.stroke}
+                          ellipsis
+                          wrap="none"
+                        />
+                      )}
+                      {pw > 48 && (
+                        <Text
+                          text="ÖNERİ"
+                          x={px + pw - 44}
+                          y={py + ph - 15}
+                          width={40}
+                          height={12}
+                          fontSize={9}
+                          fontStyle="700"
+                          fill={palette.previewStroke}
+                          align="right"
+                        />
+                      )}
+                    </Group>
+                  )
+                })}
+              </Layer>
+            )}
           </Stage>
           {!loading && machines.length === 0 && (
             <div className="ms-empty-hint">Bu aralıkta tanımlı makine bulunamadı.</div>

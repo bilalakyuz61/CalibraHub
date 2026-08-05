@@ -1475,7 +1475,11 @@ export default function RuleBuilderModal(props) {
               style={{
                 width: '100%',
                 maxWidth: '820px',
-                maxHeight: '88vh',
+                // Sabit yukseklik (2026-08-05): sekmeler farkli boy icerik tasidigi
+                // icin (Gorunurluk kisa, Renk uzun) maxHeight ile panel her sekme
+                // gecisinde ziplayarak boyut degistiriyordu. Icerik alani kendi
+                // icinde scroll eder (asagida minHeight:0 + overflow).
+                height: 'min(640px, 88vh)',
                 display: 'flex',
                 flexDirection: 'column',
                 borderRadius: '18px',

@@ -24,6 +24,10 @@ export var LIGHT_PALETTE = {
   shade: 'rgba(100,116,139,0.16)',
   holiday: 'rgba(244,63,94,0.14)',
   holidayBorder: '#fda4af',
+  // Faz 3 — otomatik yerleştir önizleme (ghost öneri blokları)
+  previewFill: 'rgba(99,102,241,0.10)',
+  previewStroke: '#6366f1',
+  previewBadge: '#4338ca',
 }
 
 export var DARK_PALETTE = {
@@ -46,6 +50,9 @@ export var DARK_PALETTE = {
   shade: 'rgba(148,163,184,0.14)',
   holiday: 'rgba(248,113,113,0.16)',
   holidayBorder: '#7f1d1d',
+  previewFill: 'rgba(129,140,248,0.16)',
+  previewStroke: '#818cf8',
+  previewBadge: '#c7d2fe',
 }
 
 export function getPalette(isDark) {

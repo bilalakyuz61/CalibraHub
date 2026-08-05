@@ -291,6 +291,25 @@ body.app-theme-dark .ms-root {
   text-align: center;
 }
 
+.ms-auto-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--ms-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .12s;
+  white-space: nowrap;
+}
+
+.ms-auto-btn:hover { opacity: .9; }
+
 .ms-spacer { flex: 1 1 auto; }
 
 .ms-legend {
