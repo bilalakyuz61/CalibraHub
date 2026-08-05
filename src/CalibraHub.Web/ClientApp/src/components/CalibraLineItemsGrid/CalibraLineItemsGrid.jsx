@@ -56,6 +56,10 @@ function resolveIcon(name) {
 
 /* Kart etiketi renk token'i → Tailwind sinifi (light+dark). HEX saklanmaz/yazilmaz —
    tema uyumu semantik token uzerinden saglanir (LineCardLayout.LabelColor). */
+/* Kart duzeni izgara cozunurlugu — server GridUnits ile ayni (48; v1'de 24'tu,
+   eski kayitlari server okuma yolunda x2 olcekleyip normalize eder). */
+var CARD_GRID_UNITS = 48
+
 var CARD_LABEL_COLOR_CLS = {
   slate:   'text-slate-500 dark:text-white/45',
   indigo:  'text-indigo-600 dark:text-indigo-300',
@@ -434,7 +438,7 @@ export default function CalibraLineItemsGrid(props) {
       // Varsayilan gorunum: kimlik kolonlari sabit bolgede cizilir, alan
       // izgarasina girmez (mevcut davranis birebir korunur).
       return cardBodyColumns.concat(widgetCardColumns).map(function (c) {
-        return { col: c, span: 6, visible: true }
+        return { col: c, span: 12, visible: true }
       })
     }
     var ordered = []
@@ -450,7 +454,7 @@ export default function CalibraLineItemsGrid(props) {
       if (col.required || col.requirePositive || col === materialCodeCol) vis = true
       ordered.push({
         col: col,
-        span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
+        span: (typeof it.span === 'number' && it.span >= 1 && it.span <= CARD_GRID_UNITS) ? it.span : 12,
         visible: vis,
         // Baslik override'lari (server whitelist'ten gecmis halleri)
         label: (typeof it.label === 'string' && it.label.trim()) ? it.label.trim() : null,
@@ -466,11 +470,11 @@ export default function CalibraLineItemsGrid(props) {
       var idCol = identityColumns[ii]
       if (!seen[idCol.key]) {
         seen[idCol.key] = true
-        ordered.unshift({ col: idCol, span: 8, visible: true })
+        ordered.unshift({ col: idCol, span: 16, visible: true })
       }
     }
     allCardFieldColumns.forEach(function (c) {
-      if (!seen[c.key]) ordered.push({ col: c, span: 6, visible: true })
+      if (!seen[c.key]) ordered.push({ col: c, span: 12, visible: true })
     })
     return ordered
   })()
@@ -478,7 +482,7 @@ export default function CalibraLineItemsGrid(props) {
   // admin malzeme kodu/adini tasiyip boyutlandirabilsin.
   var layoutEditorItems = hasCustomLayout
     ? cardItems
-    : identityColumns.map(function (c) { return { col: c, span: 8, visible: true } }).concat(cardItems)
+    : identityColumns.map(function (c) { return { col: c, span: 16, visible: true } }).concat(cardItems)
 
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
@@ -1709,7 +1713,7 @@ export default function CalibraLineItemsGrid(props) {
                             // modern yuzer / sade solda) hucre yukseklikleri degisir —
                             // taban hizasi giris kutularini ayni satirda ayni cizgiye oturtur.
                             gridArea: 'fields', display: 'grid',
-                            gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
+                            gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
                             columnGap: 12, rowGap: 10, alignItems: 'end',
                           }
                         : {
@@ -1729,7 +1733,7 @@ export default function CalibraLineItemsGrid(props) {
                         var showMirror = mirror && showTlColumns
                         var cellStyle = Object.assign({}, lockedStyle)
                         if (useCustomLayout) {
-                          cellStyle.gridColumn = 'span ' + Math.min(Math.max(item.span || 6, 1), 24)
+                          cellStyle.gridColumn = 'span ' + Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
                         } else if (showMirror) {
                           cellStyle.gridColumn = 'span 2'
                         }

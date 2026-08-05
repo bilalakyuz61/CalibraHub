@@ -49,6 +49,11 @@ var LABEL_COLOR_SWATCH_CLS = {
   amber: 'bg-amber-500', rose: 'bg-rose-500', blue: 'bg-blue-500', violet: 'bg-violet-500',
 }
 
+/* Izgara cozunurlugu — CalibraLineItemsGrid.CARD_GRID_UNITS + server GridUnits ile
+   ayni (48; v1'de 24'tu, eski kayitlari server okuma yolunda olcekler). */
+var GRID_UNITS = 48
+var MIN_SPAN = 3
+
 function readCsrfToken() {
   try {
     var input = document.querySelector('input[name="__RequestVerificationToken"]')
@@ -67,7 +72,7 @@ function normalizeEditorItems(arr) {
       key: it.key,
       label: it.label || it.key,
       icon: it.icon || null,
-      span: (typeof it.span === 'number' && it.span >= 1 && it.span <= 24) ? it.span : 6,
+      span: (typeof it.span === 'number' && it.span >= 1 && it.span <= GRID_UNITS) ? it.span : 12,
       visible: it.visible !== false,
       locked: it.locked === true,
       isWidget: it.isWidget === true,
@@ -171,7 +176,7 @@ export default function LineCardLayoutEditor(props) {
       idx: idx,
       startX: e.clientX,
       startSpan: items[idx].span,
-      cellWidth: rect.width / 24,
+      cellWidth: rect.width / GRID_UNITS,
     }
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
     e.preventDefault()
@@ -180,8 +185,8 @@ export default function LineCardLayoutEditor(props) {
     var st = resizeRef.current
     if (!st || !e.currentTarget.hasPointerCapture || !e.currentTarget.hasPointerCapture(e.pointerId)) return
     e.preventDefault()
-    var deltaSpan = Math.round((e.clientX - st.startX) / Math.max(st.cellWidth, 8))
-    var nextSpan = Math.min(24, Math.max(2, st.startSpan + deltaSpan))
+    var deltaSpan = Math.round((e.clientX - st.startX) / Math.max(st.cellWidth, 4))
+    var nextSpan = Math.min(GRID_UNITS, Math.max(MIN_SPAN, st.startSpan + deltaSpan))
     setItems(function (prev) {
       if (!prev[st.idx] || prev[st.idx].span === nextSpan) return prev
       var next = prev.slice()
@@ -322,7 +327,7 @@ export default function LineCardLayoutEditor(props) {
           <div className="rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/[0.025] p-3">
           <div
             ref={gridRef}
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))', gap: 10, alignItems: 'end' }}
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(' + GRID_UNITS + ', minmax(0, 1fr))', gap: 10, alignItems: 'end' }}
           >
             {items.map(function (it, idx) {
               var hiddenCls = !it.visible ? ' opacity-40' : ''
@@ -362,7 +367,7 @@ export default function LineCardLayoutEditor(props) {
                       <span className="text-[8.5px] font-bold px-1 rounded bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300 flex-shrink-0" title="Özel alan (Alan Yönetimi)">EK</span>
                     )}
                     <span className="ml-auto text-[9px] font-mono tabular-nums text-slate-400 dark:text-white/35 flex-shrink-0">
-                      {it.span}/24
+                      {it.span}/{GRID_UNITS}
                     </span>
                     <button
                       type="button"
@@ -525,7 +530,7 @@ export default function LineCardLayoutEditor(props) {
           })()}
 
           <div className="mt-3 text-[10.5px] text-slate-400 dark:text-white/35">
-            Toplam genişlik 24 birimdir; bir satıra sığmayan alanlar otomatik alt satıra akar.
+            Toplam genişlik 48 birimdir; bir satıra sığmayan alanlar otomatik alt satıra akar.
             Bir alana tıklayarak başlık metnini ve stilini düzenleyebilirsiniz.
             Dar ekranlarda düzen otomatik olarak varsayılan ızgaraya döner.
           </div>

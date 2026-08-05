@@ -12,8 +12,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
-/// Kalem kartı düzeni API — belge kalem kartlarının konum/boyut (24 kolon ızgara)
-/// düzenini yönetir (2026-08-05).
+/// Kalem kartı düzeni API — belge kalem kartlarının konum/boyut (GridUnits=48 birim
+/// ızgara; v1 24'tü) düzenini yönetir (2026-08-05).
 ///   - GET  /api/line-card-layout/{formCode}  → aktif düzen + canEdit (tüm oturumlu kullanıcılar;
 ///     grid mount'ta okur, admin olmayanlar yalnızca uygular)
 ///   - POST /api/line-card-layout/save        → upsert (yalnız admin: DepartmentManager/SystemAdmin)
@@ -31,6 +31,37 @@ public sealed partial class LineCardLayoutController : Controller
 
     private static readonly JsonSerializerOptions StoreJson = new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// Izgara cozunurlugu. v1 duzenler 24 birimdi; daha hassas genislik icin 48'e
+    /// cikarildi (2026-08-05 kullanici istegi). Eski kayitlar (ciplak dizi JSON)
+    /// okunurken span x2 olceklenir; yeni kayitlar {"v":2,"items":[...]} zarfiyla
+    /// saklanir — bir sonraki cozunurluk artisinda ayni yol izlenir.
+    /// </summary>
+    private const int GridUnits = 48;
+
+    private sealed record LayoutEnvelope(int V, List<LayoutItemDto>? Items);
+
+    /// <summary>
+    /// LayoutJson → item listesi (surum farkindaligiyla). Bozuk JSON'da null —
+    /// ekran asla kirilmaz, varsayilan duzene duser.
+    /// </summary>
+    private static List<LayoutItemDto>? ParseLayoutItems(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            if (json.TrimStart().StartsWith('['))
+            {
+                // v1 (24 birim, ciplak dizi) → 48'e olcekle
+                var legacy = JsonSerializer.Deserialize<List<LayoutItemDto>>(json, StoreJson);
+                return legacy?.Select(it => it with { Span = Math.Clamp(it.Span * 2, 1, GridUnits) }).ToList();
+            }
+            var env = JsonSerializer.Deserialize<LayoutEnvelope>(json, StoreJson);
+            return env?.Items;
+        }
+        catch (JsonException) { return null; }
+    }
+
     private readonly ILineCardLayoutRepository _repository;
     private readonly CalibraHub.Application.Abstractions.Services.IWidgetService _widgetService;
     private readonly IAuditTrailService? _audit;
@@ -46,7 +77,7 @@ public sealed partial class LineCardLayoutController : Controller
     }
 
     /// <summary>
-    /// Tek düzen öğesi. Span 1-24 (WidgetMas.ColSpan ızgarası ile aynı).
+    /// Tek düzen öğesi. Span 1-48 (GridUnits — v1'de 24'tü, okuma yolunda ölçeklenir).
     /// Label* alanları başlık override'ıdır (2026-08-05 kullanıcı isteği):
     ///   Label       — başlık metni (boş = alanın varsayılan etiketi)
     ///   LabelSize   — px (9-15 arası), null = varsayılan (10)
@@ -76,14 +107,8 @@ public sealed partial class LineCardLayoutController : Controller
             return Json(new { ok = false, error = "Geçersiz form kodu." });
 
         var layout = await _repository.GetActiveAsync(formCode.Trim(), ct);
-        List<LayoutItemDto>? items = null;
-        if (layout is not null)
-        {
-            // Bozuk JSON düzeni ekranı asla kırmasın — null döner, grid varsayılanla çizer.
-            try { items = JsonSerializer.Deserialize<List<LayoutItemDto>>(layout.LayoutJson, StoreJson); }
-            catch (JsonException) { items = null; }
-        }
-        return Json(new { ok = true, formCode = formCode.Trim(), items, canEdit = IsAdmin() });
+        var items = layout is not null ? ParseLayoutItems(layout.LayoutJson) : null;
+        return Json(new { ok = true, formCode = formCode.Trim(), items, gridUnits = GridUnits, canEdit = IsAdmin() });
     }
 
     /// <summary>
@@ -140,12 +165,7 @@ public sealed partial class LineCardLayoutController : Controller
         // Kayitli duzenle merge — grid'in cardItems mantigiyla ayni: layout sirasi,
         // bilinmeyen key yok say, eksik kimlik kolonlari basa, digerleri sona.
         var layout = await _repository.GetActiveAsync(formCode, ct);
-        List<LayoutItemDto>? saved = null;
-        if (layout is not null)
-        {
-            try { saved = JsonSerializer.Deserialize<List<LayoutItemDto>>(layout.LayoutJson, StoreJson); }
-            catch (JsonException) { saved = null; }
-        }
+        var saved = layout is not null ? ParseLayoutItems(layout.LayoutJson) : null;
 
         var ordered = new List<object>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -156,7 +176,7 @@ public sealed partial class LineCardLayoutController : Controller
             icon = c.Icon,
             locked = c.Locked,
             isWidget = c.IsWidget,
-            span = li is not null && li.Span is >= 1 and <= 24 ? li.Span : defaultSpan,
+            span = li is not null && li.Span >= 1 && li.Span <= GridUnits ? li.Span : defaultSpan,
             visible = c.Locked || li is null || li.Visible,
             labelText = li?.Label ?? "",
             labelSize = li?.LabelSize,
@@ -170,7 +190,7 @@ public sealed partial class LineCardLayoutController : Controller
             {
                 var cat = catalog.FirstOrDefault(c => string.Equals(c.Key, li.Key, StringComparison.OrdinalIgnoreCase));
                 if (cat is null || !seen.Add(cat.Key)) continue;
-                ordered.Add(ToItem(cat, li, 6));
+                ordered.Add(ToItem(cat, li, 12));
             }
         }
         // Eksik kimlik kolonlari basa (materialCode once), digerleri sona
@@ -180,13 +200,13 @@ public sealed partial class LineCardLayoutController : Controller
         for (var i = missingIdentity.Count - 1; i >= 0; i--)
         {
             seen.Add(missingIdentity[i].Key);
-            ordered.Insert(0, ToItem(missingIdentity[i], null, 8));
+            ordered.Insert(0, ToItem(missingIdentity[i], null, 16));
         }
         foreach (var c in catalog)
             if (seen.Add(c.Key))
-                ordered.Add(ToItem(c, null, 6));
+                ordered.Add(ToItem(c, null, 12));
 
-        return Json(new { ok = true, formCode, canEdit = IsAdmin(), hasCustomLayout = saved is { Count: > 0 }, items = ordered });
+        return Json(new { ok = true, formCode, gridUnits = GridUnits, canEdit = IsAdmin(), hasCustomLayout = saved is { Count: > 0 }, items = ordered });
     }
 
     private sealed record FieldCatalogItem(string Key, string Label, string Icon, bool Locked, bool IsWidget);
@@ -204,8 +224,8 @@ public sealed partial class LineCardLayoutController : Controller
 
         var formCode = request.FormCode.Trim();
 
-        // Normalize: key trim + boş/yinelenen key at, span 1-24 clamp, order'ı sıraya
-        // bindir; başlık override'ları whitelist/clamp ile temizlenir.
+        // Normalize: key trim + boş/yinelenen key at, span 1-GridUnits clamp, order'ı
+        // sıraya bindir; başlık override'ları whitelist/clamp ile temizlenir.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var items = new List<LayoutItemDto>(request.Items.Count);
         foreach (var it in request.Items.OrderBy(i => i.Order))
@@ -224,7 +244,7 @@ public sealed partial class LineCardLayoutController : Controller
             var style = it.LabelStyle?.Trim().ToLowerInvariant();
             if (style is not ("modern" or "inline")) style = null;
 
-            items.Add(new LayoutItemDto(key, Math.Clamp(it.Span, 1, 24), items.Count, it.Visible,
+            items.Add(new LayoutItemDto(key, Math.Clamp(it.Span, 1, GridUnits), items.Count, it.Visible,
                 label, size, weight, color, style));
         }
         if (items.Count == 0)
@@ -233,7 +253,8 @@ public sealed partial class LineCardLayoutController : Controller
         try
         {
             var old = await _repository.GetActiveAsync(formCode, ct);
-            var json = JsonSerializer.Serialize(items, StoreJson);
+            // v2 zarf — okuma yolu v1 (ciplak dizi, 24 birim) ile ayrim yapabilsin.
+            var json = JsonSerializer.Serialize(new LayoutEnvelope(2, items), StoreJson);
             await _repository.UpsertAsync(new LineCardLayout
             {
                 FormCode = formCode,
