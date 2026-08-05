@@ -29,6 +29,15 @@ namespace CalibraHub.Application.Services;
 /// referansı çağıranın verdiği <c>fromUtc</c> anchor'ıdır. Preview ve Apply aynı girdiyle aynı
 /// sonucu üretir (Apply, Preview'un client'a döndürdüğü koordinatlara güvenmez — kendi yeniden
 /// hesaplar).</para>
+///
+/// <para><b>Personel sonlu-kapasite kısıtı (Vardiya Senaryoları Faz 2, 2026-08-05):</b> makineler-arası
+/// PAYLAŞILAN, sayı-tabanlı bir havuz — bir vardiya-günde aynı anda çalışabilecek üretim-operatörü
+/// sayısı sınırlıdır (<c>IMachineCalendarRepository.GetShiftOperatorPoolAsync</c>), her operasyon
+/// <c>OperationMachineTime.RequiredOperators</c> kadar tüketir. <b>fail-open ZORUNLU:</b> bir (ShiftId,
+/// gün) için personel havuzu tanımsızsa (hiç aktif üretim-operatörü atanmamışsa) VEYA pencerenin
+/// ShiftId'si yoksa (legacy fallback / has-247) kısıt hiç uygulanmaz — personel verisi girilmemiş
+/// kurulumlarda motor Faz 1 davranışıyla BİREBİR aynı çalışır (regresyon yok). Bkz. <see cref="PlaceOnMachine"/>
+/// XML doc'u (makine <c>occupied</c> blocking'in personel analoğu).</para>
 /// </summary>
 public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
 {
@@ -204,8 +213,9 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
                 continue;
             }
 
-            (int MachineId, decimal SetupMinutes, List<(DateTime StartUtc, DateTime EndUtc)> Segments)? best = null;
+            (int MachineId, decimal SetupMinutes, int RequiredOperators, List<(DateTime StartUtc, DateTime EndUtc, int? ShiftId)> Segments)? best = null;
             var anyValidDuration = false;
+            var anyPersonnelBlocked = false;
 
             foreach (var machineId in candidateMachineIds)
             {
@@ -226,35 +236,57 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
                 if (totalMinutes <= 0m) continue; // süre çözümlenemedi/negatif — bu aday makineyi atla
                 anyValidDuration = true;
 
+                var requiredOperators = await _durationResolver.ResolveRequiredOperatorsAsync(
+                    op.OperationId, machineId, op.ItemId, op.RoutingId, ct);
+
                 var occupied = occupiedByMachine.TryGetValue(machineId, out var occ)
                     ? occ : new List<(DateTime, DateTime)>();
                 var windows = windowsByMachine.TryGetValue(machineId, out var wd)
-                    ? wd : new Dictionary<byte, List<(short, short)>>();
+                    ? wd : new Dictionary<byte, List<(short, short, int?)>>();
 
-                var segs = PlaceOnMachine(earliestStart, totalMinutes, occupied, windows, holidayDates);
+                var segs = PlaceOnMachine(earliestStart, totalMinutes, occupied, windows, holidayDates,
+                    requiredOperators, personnelPool, personnelLedger, out var personnelBlockedThisAttempt);
+                if (personnelBlockedThisAttempt) anyPersonnelBlocked = true;
                 if (segs is null || segs.Count == 0) continue;
 
                 if (best is null || segs[^1].EndUtc < best.Value.Segments[^1].EndUtc)
-                    best = (machineId, setupMinutes, segs);
+                    best = (machineId, setupMinutes, requiredOperators, segs);
             }
 
             if (best is null)
             {
-                // İki farklı başarısızlığı ayır (LOW review): süre hiç çözümlenemedi mi, yoksa süre
-                // geçerli ama kapasite/pencere içinde planlama ufkuna sığmadı mı.
-                var reason = anyValidDuration
-                    ? "Kapasite/çalışma penceresi içinde yerleştirilemedi (planlama ufku aşıldı)."
-                    : "Operasyon süresi tanımsız veya geçersiz (süre/setup 0 ya da negatif).";
+                // Üç farklı başarısızlığı ayır: süre hiç çözümlenemedi mi, personel kapasitesi
+                // yetersiz mi (Faz 2), yoksa süre geçerli ama makine kapasitesi/penceresi içinde
+                // planlama ufkuna sığmadı mı.
+                var reason = !anyValidDuration
+                    ? "Operasyon süresi tanımsız veya geçersiz (süre/setup 0 ya da negatif)."
+                    : anyPersonnelBlocked
+                        ? "Personel (vardiya operatör) kapasitesi yetersiz."
+                        : "Kapasite/çalışma penceresi içinde yerleştirilemedi (planlama ufku aşıldı).";
                 unplaceable.Add(new AutoScheduleUnplaceableDto(op.WorkOrderOperationId, op.WorkOrderNo, op.OperationName, reason));
                 brokenWorkOrders.Add(op.WorkOrderId);
                 continue;
             }
 
-            var (chosenMachineId, setupMin, chosenSegs) = best.Value;
+            var (chosenMachineId, setupMin, chosenRequiredOperators, chosenSegs) = best.Value;
 
             if (!occupiedByMachine.TryGetValue(chosenMachineId, out var occList))
                 occupiedByMachine[chosenMachineId] = occList = new List<(DateTime, DateTime)>();
-            occList.AddRange(chosenSegs);
+            occList.AddRange(chosenSegs.Select(s => (s.StartUtc, s.EndUtc)));
+
+            // Personel defteri COMMIT (makineler-arası PAYLAŞILAN havuz) — yalnız ShiftId taşıyan
+            // segmentler (fail-open: legacy/ShiftId-yok segmentler hiç deftere yazılmaz, çünkü
+            // PlaceOnMachine onlarda zaten kısıt uygulamadı). LOCAL zamana çevrilir (ledger local).
+            foreach (var seg in chosenSegs)
+            {
+                if (seg.ShiftId is not int segShiftId) continue;
+                var localStart = UtcToLocal(seg.StartUtc);
+                var localEnd = UtcToLocal(seg.EndUtc);
+                var key = (segShiftId, localStart.Date);
+                if (!personnelLedger.TryGetValue(key, out var ledgerList))
+                    personnelLedger[key] = ledgerList = new List<(DateTime, DateTime, int)>();
+                ledgerList.Add((localStart, localEnd, chosenRequiredOperators));
+            }
 
             // Setup/Production ayrımı: chosenSegs kronolojik sırada — ilk setupMin dakikası Setup,
             // kalanı Production. Sınırda kesişen segment ikiye bölünür.
@@ -266,11 +298,11 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
                 var segMinutes = (decimal)(seg.EndUtc - seg.StartUtc).TotalMinutes;
                 if (remainingSetup <= 0m)
                 {
-                    prodSegs.Add(seg);
+                    prodSegs.Add((seg.StartUtc, seg.EndUtc));
                 }
                 else if (segMinutes <= remainingSetup)
                 {
-                    setupSegs.Add(seg);
+                    setupSegs.Add((seg.StartUtc, seg.EndUtc));
                     remainingSetup -= segMinutes;
                 }
                 else
@@ -306,21 +338,35 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
 
     /// <summary>Bir makinede <paramref name="earliestStartUtc"/>'den itibaren
     /// <paramref name="totalMinutes"/> süresini yerleştirir; çalışma penceresi/tatil/mevcut blok
-    /// nedeniyle kesintisiz olmayabilir (çok-parçalı sonuç). Segment listesi kronolojik sıradadır.
+    /// nedeniyle kesintisiz olmayabilir (çok-parçalı sonuç). Segment listesi kronolojik sıradadır,
+    /// her segment yerleştiği pencerenin <c>ShiftId</c>'sini taşır (legacy/has-247 → null).
     /// Yerleştirme <see cref="MaxPlacementIterations"/> iterasyonunu (yaklaşık gün-bazlı adım —
-    /// pratikte ~1-1.4 yıl ileri) aşarsa null döner (unplaceable).</summary>
-    private static List<(DateTime StartUtc, DateTime EndUtc)>? PlaceOnMachine(
+    /// pratikte ~1-1.4 yıl ileri) aşarsa null döner (unplaceable).
+    ///
+    /// <para><b>Personel kısıtı (Faz 2, 2026-08-05):</b> makine `occupied` blocking'inin (aşağıda,
+    /// tek-aralık) BİREBİR ANALOĞU — ama tek bir engelleyici aralık yerine <paramref name="personnelLedger"/>
+    /// üzerinde SÜPÜRME (sweep) ile "eşzamanlı tüketim + bu operasyonun ihtiyacı &gt; havuz" olan İLK
+    /// aşım bloğu bulunur (<see cref="PersonnelCapacityBlock"/>). Pencerenin <c>ShiftId</c>'si null ise
+    /// veya o (ShiftId,gün) için havuzda kayıt yoksa (personel verisi hiç girilmemiş) kısıt DEVREYE
+    /// GİRMEZ — fail-open, mevcut çizelgeleme davranışı birebir korunur.</para></summary>
+    private static List<(DateTime StartUtc, DateTime EndUtc, int? ShiftId)>? PlaceOnMachine(
         DateTime earliestStartUtc,
         decimal totalMinutes,
         IReadOnlyList<(DateTime StartUtc, DateTime EndUtc)> occupiedUtc,
-        IReadOnlyDictionary<byte, List<(short Start, short End)>> windowsByDay,
-        HashSet<DateTime> holidayLocalDates)
+        IReadOnlyDictionary<byte, List<(short Start, short End, int? ShiftId)>> windowsByDay,
+        HashSet<DateTime> holidayLocalDates,
+        int requiredOperators,
+        IReadOnlyDictionary<(int ShiftId, byte DayOfWeek), int> personnelPool,
+        IReadOnlyDictionary<(int ShiftId, DateTime LocalDate), List<(DateTime Start, DateTime End, int Ops)>> personnelLedger,
+        out bool personnelBlocked)
     {
+        personnelBlocked = false;
+
         if (totalMinutes <= 0m)
         {
             var pointLocal = UtcToLocal(earliestStartUtc);
             var pointUtc = LocalToUtc(pointLocal);
-            return new List<(DateTime, DateTime)> { (pointUtc, pointUtc) };
+            return new List<(DateTime, DateTime, int?)> { (pointUtc, pointUtc, null) };
         }
 
         var has247 = windowsByDay.Count == 0;
@@ -331,8 +377,9 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
 
         var cursor = UtcToLocal(earliestStartUtc);
         var remaining = totalMinutes;
-        var segments = new List<(DateTime Start, DateTime End)>();
+        var segments = new List<(DateTime Start, DateTime End, int? ShiftId)>();
         var iter = 0;
+        var emptyLedger = Array.Empty<(DateTime, DateTime, int)>();
 
         while (remaining > 0m)
         {
@@ -345,6 +392,7 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
             }
 
             DateTime availableEnd;
+            (short Start, short End, int? ShiftId)? win = null;
             if (has247)
             {
                 availableEnd = cursor.Date.AddDays(1);
@@ -354,7 +402,6 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
                 var dow = (byte)cursor.DayOfWeek; // Sunday=0..Saturday=6 — CalibraHub konvansiyonu
                 var curMinuteOfDay = cursor.TimeOfDay.TotalMinutes;
 
-                (short Start, short End)? win = null;
                 if (windowsByDay.TryGetValue(dow, out var todays))
                 {
                     foreach (var w in todays)
@@ -393,6 +440,27 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
                 if (b.Start < availableEnd) availableEnd = b.Start;
             }
 
+            // Personel sonlu-kapasite kısıtı — makine `occupied` blocking'in analoğu (üstteki blok).
+            // fail-open: ShiftId yok VEYA (ShiftId,gün) için havuz tanımsız → kısıt hiç uygulanmaz.
+            if (win?.ShiftId is int windowShiftId
+                && personnelPool.TryGetValue((windowShiftId, (byte)cursor.DayOfWeek), out var pool))
+            {
+                IReadOnlyList<(DateTime Start, DateTime End, int Ops)> ledgerEntries =
+                    personnelLedger.TryGetValue((windowShiftId, cursor.Date), out var le) ? le : emptyLedger;
+                var pBlock = PersonnelCapacityBlock(cursor, availableEnd, requiredOperators, pool, ledgerEntries);
+                if (pBlock is not null)
+                {
+                    personnelBlocked = true;
+                    var pb = pBlock.Value;
+                    if (pb.Start <= cursor)
+                    {
+                        cursor = pb.End;
+                        continue;
+                    }
+                    if (pb.Start < availableEnd) availableEnd = pb.Start;
+                }
+            }
+
             var spanMinutes = (decimal)(availableEnd - cursor).TotalMinutes;
             if (spanMinutes <= 0m)
             {
@@ -402,12 +470,63 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
 
             var take = Math.Min(spanMinutes, remaining);
             var segEnd = cursor.AddMinutes((double)take);
-            segments.Add((cursor, segEnd));
+            segments.Add((cursor, segEnd, has247 ? null : win!.Value.ShiftId));
             remaining -= take;
             cursor = segEnd;
         }
 
-        return segments.Select(s => (StartUtc: LocalToUtc(s.Start), EndUtc: LocalToUtc(s.End))).ToList();
+        return segments.Select(s => (StartUtc: LocalToUtc(s.Start), EndUtc: LocalToUtc(s.End), s.ShiftId)).ToList();
+    }
+
+    /// <summary>
+    /// Personel kapasite süpürmesi (Faz 2, 2026-08-05) — <paramref name="ledger"/>'daki aralıkların
+    /// (her biri kendi <c>Ops</c> tüketimiyle) [<paramref name="cursor"/>, <paramref name="availableEnd"/>)
+    /// içindeki eşzamanlılık profilini çıkarır ve "eşzamanlı tüketim + <paramref name="requiredOperators"/>
+    /// &gt; <paramref name="pool"/>" olan İLK (en erken başlayan) aşım bloğunu döner. Aşım yoksa null —
+    /// çağıran bunu makine `occupied` blocking'iyle AYNI şekilde yorumlar (blok cursor'ı kapsıyorsa
+    /// cursor'ı bloğun sonuna ilerlet, kapsamıyorsa availableEnd'i bloğun başına kısalt).
+    /// </summary>
+    private static (DateTime Start, DateTime End)? PersonnelCapacityBlock(
+        DateTime cursor, DateTime availableEnd, int requiredOperators, int pool,
+        IReadOnlyList<(DateTime Start, DateTime End, int Ops)> ledger)
+    {
+        if (requiredOperators <= 0) return null;
+        // Bu operasyon tek başına havuzu aşıyorsa ledger'dan bağımsız olarak [cursor, availableEnd)
+        // tamamı aşım bloğudur (ledger boş olsa dahi — Count==0 fast-path'in altına alınmadı).
+        if (requiredOperators > pool) return (cursor, availableEnd);
+        if (ledger.Count == 0) return null;
+
+        var events = new SortedDictionary<DateTime, int>();
+        void AddEvent(DateTime t, int delta)
+        {
+            if (t < cursor) t = cursor;
+            if (t > availableEnd) t = availableEnd;
+            events.TryGetValue(t, out var cur);
+            events[t] = cur + delta;
+        }
+        foreach (var e in ledger)
+        {
+            if (e.End <= cursor || e.Start >= availableEnd) continue; // aralık dışı
+            AddEvent(e.Start, e.Ops);
+            AddEvent(e.End, -e.Ops);
+        }
+        if (events.Count == 0) return null;
+
+        var times = events.Keys.ToList();
+        var concurrent = 0;
+        DateTime? blockStart = null;
+        for (var idx = 0; idx < times.Count; idx++)
+        {
+            concurrent += events[times[idx]];
+            var segStart = times[idx];
+            var segEnd = idx + 1 < times.Count ? times[idx + 1] : availableEnd;
+            if (segEnd <= segStart) continue;
+
+            var overflow = concurrent + requiredOperators > pool;
+            if (overflow && blockStart is null) blockStart = segStart;
+            else if (!overflow && blockStart is not null) return (blockStart.Value, segStart);
+        }
+        return blockStart is not null ? (blockStart.Value, availableEnd) : null;
     }
 
     private static DateTime UtcToLocal(DateTime utc)

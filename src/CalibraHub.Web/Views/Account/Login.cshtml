@@ -368,12 +368,15 @@
            sayfa sonundaki rig script'inden (tek rAF) sürülür — CSS keyframe yok. */
         .login-hero-blur {
             position: absolute; inset: 0;
-            width: 62%;
-            backdrop-filter: blur(14px) brightness(.72) saturate(1.05);
-            -webkit-backdrop-filter: blur(14px) brightness(.72) saturate(1.05);
-            background: linear-gradient(90deg, rgba(7,10,20,.42), rgba(7,10,20,.18) 70%, transparent);
-            -webkit-mask-image: linear-gradient(90deg, #000 72%, transparent);
-            mask-image: linear-gradient(90deg, #000 72%, transparent);
+            /* 2026-08-05 kullanıcı geri bildirimi: "CALIBRAHUB"un C'si flu bölgede
+               kalıyordu — blur şeridi 62%→52%'ye daraltıldı, maske daha erken söner,
+               koyulaştırma hafifletildi → marka yazısı tamamen net bölgede. */
+            width: 52%;
+            backdrop-filter: blur(14px) brightness(.78) saturate(1.05);
+            -webkit-backdrop-filter: blur(14px) brightness(.78) saturate(1.05);
+            background: linear-gradient(90deg, rgba(7,10,20,.40), rgba(7,10,20,.14) 62%, transparent);
+            -webkit-mask-image: linear-gradient(90deg, #000 48%, transparent);
+            mask-image: linear-gradient(90deg, #000 48%, transparent);
             pointer-events: none;
             z-index: 1;
         }
@@ -384,10 +387,61 @@
             transform: translateY(-50%);
             width: min(400px, 46%);
             z-index: 2;
+            /* Kap pointer-events:none kalır (login formunu asla engellemesin);
+               yalnız etkileşimli öğeler (parça hit alanı + devir barı) auto ile açılır. */
             pointer-events: none;
             filter: drop-shadow(0 22px 40px rgba(2, 6, 23, .55));
         }
         .login-rig-svg { display: block; width: 100%; height: auto; }
+
+        /* ── Etkileşim: parçayı fareyle çevirme + devir barı ── */
+        .rig-part-hit { pointer-events: auto; cursor: grab; }
+        .rig-part-hit:active { cursor: grabbing; }
+        .login-rig-controls {
+            margin-top: 10px;
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 14px; border-radius: 10px;
+            background: rgba(15, 23, 42, .62);
+            border: 1px solid rgba(148, 163, 184, .3);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            pointer-events: auto;
+        }
+        .rig-ctl-label {
+            color: #94a3b8; font-size: .72rem; font-weight: 600; letter-spacing: .4px;
+            flex-shrink: 0;
+        }
+        .rig-ctl-value {
+            color: #7dd3fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: .74rem; font-weight: 600; min-width: 66px; text-align: right;
+            flex-shrink: 0;
+        }
+        #rigSpeed {
+            flex: 1; min-width: 0;
+            -webkit-appearance: none; appearance: none;
+            height: 4px; border-radius: 2px;
+            background: linear-gradient(90deg, #6366f1, #22d3ee);
+            outline: none; cursor: pointer;
+        }
+        #rigSpeed::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #e2e8f0; border: 2px solid #6366f1;
+            box-shadow: 0 0 6px rgba(99, 102, 241, .6);
+            cursor: grab;
+        }
+        #rigSpeed::-webkit-slider-thumb:active { cursor: grabbing; }
+        #rigSpeed::-moz-range-thumb {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #e2e8f0; border: 2px solid #6366f1;
+            box-shadow: 0 0 6px rgba(99, 102, 241, .6);
+            cursor: grab;
+        }
+        .rig-ctl-hint {
+            margin-top: 6px; text-align: center;
+            color: rgba(148, 163, 184, .65);
+            font-size: .68rem; letter-spacing: .3px;
+        }
 
         .rig-badge rect {
             fill: rgba(15, 23, 42, .62); stroke: rgba(148, 163, 184, .3); stroke-width: 1;
@@ -644,7 +698,23 @@
                     <line class="rig-trace-axis" x1="252" y1="471" x2="378" y2="471" />
                     <polyline class="rig-trace" id="rigTrace" points="" />
                 </g>
+
+                @* Parça hit alanı — fareyle tutup çevirme (scrub). SVG'nin en sonunda
+                   (en üst katman); kap .login-rig pointer-events:none olduğundan
+                   yalnız bu daire etkileşim alır, login formunu asla engellemez. *@
+                <circle class="rig-part-hit" id="rigPartHit" cx="255" cy="330" r="52" fill="transparent">
+                    <title>Parçayı sürükleyerek çevirin</title>
+                </circle>
             </svg>
+
+            @* Devir barı — parça dönüş hızını (dev/dk) kullanıcı ayarlar; 0 = durdur. *@
+            <div class="login-rig-controls">
+                <span class="rig-ctl-label">Devir</span>
+                <input type="range" id="rigSpeed" min="0" max="60" step="1" value="17"
+                       aria-label="Parça devri (dev/dk)" />
+                <span class="rig-ctl-value" id="rigSpeedVal">17 dev/dk</span>
+            </div>
+            <div class="rig-ctl-hint">Parçayı fareyle sürükleyip çevirebilirsiniz</div>
         </div>
     </section>
 
@@ -1335,7 +1405,7 @@
         var ECC_PX  = 5;                        // parçanın eksantrikliği (px)
         var MM_PER_PX = 0.024 / ECC_PX;         // 5 px tepe sapma = 0,024 mm
         var REV_PER_MM = 0.1;                   // 0,001 mm'lik komparatör: 1 tur = 0,10 mm
-        var RPS = 0.28;                         // parça devri (tur/sn) ≈ 17 dev/dk
+        var RPM_DEFAULT = 17;                   // varsayılan parça devri (dev/dk) — devir barıyla 0-60 ayarlanır
         var TRACE_N = 64, TRACE_MS = 60;        // trend grafiği: örnek sayısı + örnekleme aralığı
         var TRACE_X0 = 252, TRACE_X1 = 378, TRACE_Y = 471, TRACE_AMP = 20;
 
@@ -1432,19 +1502,64 @@
             return;
         }
 
-        var t0 = null, last = null, sampleAcc = 0, revAcc = 0, raf = null;
+        // ── Etkileşim katmanı (2026-08-05 kullanıcı isteği) ──
+        // (a) Devir barı: parça dönüş hızı 0-60 dev/dk arası kullanıcı kontrolünde
+        //     (0 = durdurur; ölçüm o anki pozda donar).
+        // (b) Parçayı fareyle çevirme: hit dairesinden tutup sürükleme, dönüş açısını
+        //     imlecin parça merkezine göre açısıyla birebir sürükler (scrub) — sürükleme
+        //     boyunca otomatik dönüş askıya alınır, bırakınca kaldığı açıdan devam eder.
+        // Açı artık zamandan türetilmez, artımlı state'tir (th) — iki girdi de aynı
+        // state'i beslediği için ibre/uç/HUD senkronu bozulmaz.
+        var speedEl    = document.getElementById('rigSpeed');
+        var speedValEl = document.getElementById('rigSpeedVal');
+        var hitEl      = document.getElementById('rigPartHit');
+        var rpm = speedEl ? (parseFloat(speedEl.value) || 0) : RPM_DEFAULT;
+        if (speedEl) {
+            speedEl.addEventListener('input', function () {
+                rpm = parseFloat(speedEl.value) || 0;
+                if (speedValEl) speedValEl.textContent = Math.round(rpm) + ' dev/dk';
+            });
+        }
+
+        var th = 0, lastTh = 0, dragging = false, lastAng = null;
+        function pointerAngle(evt) {
+            var pt = svg.createSVGPoint();
+            pt.x = evt.clientX; pt.y = evt.clientY;
+            var p = pt.matrixTransform(svg.getScreenCTM().inverse());
+            return Math.atan2(p.y - 330, p.x - 255) * 180 / Math.PI;
+        }
+        if (hitEl) {
+            hitEl.addEventListener('pointerdown', function (e) {
+                dragging = true; lastAng = pointerAngle(e);
+                try { hitEl.setPointerCapture(e.pointerId); } catch (err) {}
+                e.preventDefault();
+            });
+            hitEl.addEventListener('pointermove', function (e) {
+                if (!dragging) return;
+                var a = pointerAngle(e), d = a - lastAng;
+                if (d > 180) d -= 360; else if (d < -180) d += 360;   // ±180° sarma
+                th += d; lastAng = a;
+            });
+            var endDrag = function () { dragging = false; lastAng = null; };
+            hitEl.addEventListener('pointerup', endDrag);
+            hitEl.addEventListener('pointercancel', endDrag);
+        }
+
+        var last = null, sampleAcc = 0, revAcc = 0, raf = null;
         function frame(ts) {
-            if (t0 === null) { t0 = ts; last = ts; }
+            if (last === null) last = ts;
             var dt = Math.min(0.05, (ts - last) / 1000); last = ts;
-            var th = ((ts - t0) / 1000) * RPS * 360;
+            if (!dragging) th += (rpm / 60) * 360 * dt;   // sürüklerken oto dönüş askıda
             var dPx = ECC_PX * Math.sin(th * Math.PI / 180);
             var dMm = dPx * MM_PER_PX;
 
             // TIR (toplam gösterge sapması) = 2 turda bir kilitlenip sıfırlanan tepe-tepe.
+            // Tur sayımı toplam açı değişiminden (oto + sürükleme) hesaplanır.
             if (dMm < tirMin) tirMin = dMm;
             if (dMm > tirMax) tirMax = dMm;
             tirShown = tirMax - tirMin;
-            revAcc += RPS * dt;
+            revAcc += Math.abs(th - lastTh) / 360;
+            lastTh = th;
             if (revAcc >= 2) { revAcc = 0; tirMin = dMm; tirMax = dMm; }
 
             sampleAcc += dt * 1000;
@@ -1456,7 +1571,7 @@
             render(th, dPx);
             raf = requestAnimationFrame(frame);
         }
-        function start() { if (raf === null) { last = null; t0 = null; raf = requestAnimationFrame(frame); } }
+        function start() { if (raf === null) { last = null; raf = requestAnimationFrame(frame); } }
         function stop()  { if (raf !== null) { cancelAnimationFrame(raf); raf = null; } }
         document.addEventListener('visibilitychange', function () {
             if (document.hidden) stop(); else start();

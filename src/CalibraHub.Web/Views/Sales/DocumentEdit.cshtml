@@ -2840,10 +2840,12 @@
                 <div class="sqe-hrow" data-field-key="salesRep">
                     @if ((bool)(ViewData["CanViewSalesReps"] ?? false))
                     {
-                        @* Seq 1066: yetki varsa etiket Satış Temsilcileri tanımlama ekranına link.
-                           İframe içinde workspace sekmesi olarak açar (window.top.CalibraHub); değilse yeni sekme. *@
-                        <a href="/GeneralDefinitions/SalesRepresentatives" class="sqe-hlabel sqe-hlabel--link"
-                           onclick="return sqOpenSalesRepDefs(event)" title="Satış Temsilcileri tanımlama ekranını aç">Temsilci</a>
+                        @* Seq 1066/1089: yetki varsa etiket ÇİFT TIKLAYINCA (Cari Kod ile aynı desen)
+                           Satış Temsilcileri tanımlama ekranını workspace sekmesi olarak açar — teklif
+                           sayfası açık kalır. Tek tık navigasyon yok (href kaldırıldı, ondblclick). *@
+                        <label class="sqe-hlabel sqe-hlabel--link" style="cursor:pointer;"
+                               ondblclick="sqOpenSalesRepDefs(event)"
+                               title="Çift tıklayınca Satış Temsilcileri tanımlama ekranını açar">Temsilci</label>
                     }
                     else
                     {
