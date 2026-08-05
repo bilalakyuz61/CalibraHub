@@ -432,6 +432,49 @@
         /* Mikrometre sahnesine özgü çentik stilleri */
         .rig-mik-thticks line { stroke: rgba(15, 23, 42, .45); stroke-width: 1.4; }
         .rig-mik-sltick { stroke: #1e293b; stroke-width: 1; }
+        .rig-mik-slnum {
+            fill: #1e293b; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 6px; font-weight: 600; text-anchor: middle;
+        }
+        .rig-mik-thnum {
+            fill: rgba(15, 23, 42, .62); font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 6.5px; font-weight: 600;
+        }
+
+        /* Ortak: ekipman etiketleri, LCD, HUD alt notu */
+        .rig-tag {
+            fill: rgba(148, 163, 184, .7); font-size: 8px; font-weight: 600;
+            text-anchor: middle; letter-spacing: .3px;
+        }
+        .rig-lcd {
+            fill: #7dd3fc; font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 18px; font-weight: 700; text-anchor: end; letter-spacing: .5px;
+        }
+        .rig-lcd-unit {
+            fill: rgba(125, 211, 252, .62); font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 7px; font-weight: 600;
+        }
+        .rig-hud-note { fill: rgba(148, 163, 184, .6); font-size: 8px; font-weight: 500; }
+        .rig-hud-note.ok  { fill: #34d399; }
+        .rig-hud-note.bad { fill: #fbbf24; }
+
+        /* Mikrometre: tolerans barı + geçmiş noktalar */
+        .rig-tol-track  { fill: rgba(148, 163, 184, .18); }
+        .rig-tol-zone   { fill: rgba(16, 185, 129, .28); }
+        .rig-tol-center { stroke: rgba(226, 232, 240, .45); stroke-width: 1; }
+        .rig-tol-mark   { fill: #22d3ee; }
+        .rig-tol-dot    { fill: rgba(165, 180, 252, .5); }
+
+        /* Manometre: kalibrasyon nokta işaretleri, sürüklenen (max) ibre, hata grafiği */
+        .rig-calmark { fill: rgba(99, 102, 241, .4); transition: fill .25s; }
+        .rig-calmark.is-active { fill: #e11d48; }
+        .rig-drag-needle { stroke: #334155; stroke-width: 1.5; stroke-linecap: round; opacity: .5; }
+        .rig-ref-needle  { stroke: #6366f1; stroke-width: 1.8; stroke-linecap: round; }
+        .rig-err-slot { fill: rgba(148, 163, 184, .07); }
+        .rig-err-slot.is-active { fill: rgba(99, 102, 241, .2); }
+        .rig-err-zero { stroke: rgba(148, 163, 184, .32); stroke-width: 1; stroke-dasharray: 2 2; }
+        .rig-errbar { fill: #34d399; }
+        .rig-errbar.warn { fill: #fbbf24; }
 
         /* ── Etkileşim: parçayı fareyle çevirme + devir barı ── */
         .rig-part-hit { pointer-events: auto; cursor: grab; }
@@ -518,10 +561,12 @@
         .rig-counter-needle { stroke: #6366f1; stroke-width: 1.6; stroke-linecap: round; }
         .rig-counter-tick { stroke: #94a3b8; stroke-width: 1; }
         .rig-glass { fill: rgba(255, 255, 255, .3); }
-        .rig-hud rect {
+        /* Yalnız DOĞRUDAN çocuklar: panel çerçevesi + ayraç çizgileri. İç gruplardaki
+           (tolerans barı, hata grafiği) rect/line'lar bu kurallardan etkilenmemeli. */
+        .rig-hud > rect {
             fill: rgba(10, 15, 28, .78); stroke: rgba(99, 102, 241, .3); stroke-width: 1;
         }
-        .rig-hud line { stroke: rgba(148, 163, 184, .18); stroke-width: 1; }
+        .rig-hud > line { stroke: rgba(148, 163, 184, .18); stroke-width: 1; }
         .rig-hud-label {
             fill: rgba(148, 163, 184, .8); font-size: 9.5px; font-weight: 600;
             letter-spacing: 1.1px;
@@ -684,7 +729,7 @@
                         <stop offset="1" stop-color="rgba(99,102,241,0)" />
                     </radialGradient>
                     <clipPath id="mikThimbleClip">
-                        <rect x="316" y="228" width="38" height="44" rx="6" />
+                        <rect x="312" y="220" width="46" height="60" rx="7" />
                     </clipPath>
                 </defs>
             </svg>
@@ -788,130 +833,222 @@
                 </circle>
             </svg>
 
-            @* ── Sahne 2: Mikrometre — dış çap ölçümü. C-gövde + örs + parça (mil kesiti) +
-                  hareketli mil/tambur/cırcır grubu (mikMove, JS translate) + sabit kovan.
-                  Tambur çizgileri kaydırılarak vida dönüşü hissi verilir (0,5 mm hatve). ── *@
+            @* ── Sahne 2: Mikrometre (0-25 mm, 0,001 mm) — dış çap ölçümü.
+                  Ölçek TUTARLI: 1 mm = 3,6 px; parça yarıçapı da nominal çaptan türetildi
+                  (r = 17,45·3,6/2 ≈ 31 px), böylece mil tam parça yüzeyinde temas eder.
+                  Katmanlar (çizim sırası önemli): mil → SABİT kovan (ana skala) → tambur
+                  + cırcır (mil ile birlikte öteler, kovanın ÜSTÜNDE kayar; gerçek
+                  mikrometrede tambur kovanı örter). Tambur çizgileri + rakamları 0,5 mm
+                  hatveye göre kaydırılır (1 tur = 50 bölme = 0,50 mm). ── *@
             <svg id="rigSvgMik" class="login-rig-svg rig-scene" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <g class="rig-badge">
                     <rect x="28" y="20" width="204" height="28" rx="14" />
                     <circle class="rig-badge-dot" cx="45" cy="34" r="4" />
                     <text class="rig-badge-text" x="58" y="34.5">Kalibrasyon Sürüyor</text>
                 </g>
-                <text class="rig-caption" x="29" y="64">Mikrometre · Dış Çap Ölçümü</text>
+                <text class="rig-caption" x="29" y="64">Mikrometre · Dış Çap Ölçümü (0-25 mm)</text>
 
                 <ellipse cx="205" cy="424" rx="178" ry="26" fill="url(#rigFloor)" />
                 <rect x="30" y="392" width="330" height="30" rx="5" fill="url(#rigGranite)" />
                 <rect x="30" y="392" width="330" height="2.6" rx="1.3" fill="rgba(226,232,240,.22)" />
                 <rect x="40" y="422" width="310" height="6" rx="3" fill="rgba(2,6,23,.6)" />
 
-                @* Destek ayağı — mikrometreyi masa üstünde tutan stand *@
-                <path d="M150 392 L172 332 H200 L222 392 Z" fill="#1d2940" stroke="rgba(148,163,184,.25)" stroke-width="1" />
+                @* Ayar mastarı (sıfırlama çubuğu) — tabla üzerinde bekliyor *@
+                <rect x="48" y="374" width="84" height="14" rx="2" fill="url(#rigSteelV)" />
+                <rect x="48" y="374" width="6" height="14" rx="1" fill="#eef2f7" />
+                <rect x="126" y="374" width="6" height="14" rx="1" fill="#eef2f7" />
+                <text class="rig-tag" x="90" y="368">Mastar 25 mm</text>
 
-                @* C-gövde (frame) *@
-                <path d="M132 262 A105 105 0 0 0 322 262" fill="none" stroke="url(#rigSteelV)" stroke-width="14" stroke-linecap="round" />
-                @* Örs (anvil) — sabit sol çene *@
-                <rect x="118" y="232" width="24" height="36" rx="3" fill="url(#rigSteelV)" />
-                @* Ölçülen parça — silindirik mil kesiti (örs yüzeyine dayalı) *@
-                <circle cx="177" cy="250" r="35" fill="url(#rigPartG)" stroke="rgba(15,23,42,.55)" stroke-width="1.2" />
-                <circle cx="177" cy="250" r="27" fill="none" stroke="rgba(15,23,42,.18)" stroke-width="1" />
-                <circle cx="177" cy="250" r="6" fill="#1b2637" />
+                @* Stand: kolon + kelepçe — mikrometreyi yatay tutar *@
+                <path d="M170 392 L182 336 H210 L222 392 Z" fill="#1d2940" stroke="rgba(148,163,184,.25)" stroke-width="1" />
+                <rect x="172" y="318" width="48" height="22" rx="5" fill="url(#rigSteelV)" />
+                <circle cx="196" cy="312" r="6" fill="#94a3b8" stroke="rgba(15,23,42,.4)" stroke-width="1" />
 
-                @* Hareketli grup: mil + tambur + cırcır — JS translate(gapPx 0) *@
-                <g id="mikMove">
-                    <rect x="212" y="243" width="112" height="14" rx="2" fill="url(#rigSteelV)" />
-                    <g clip-path="url(#mikThimbleClip)">
-                        <rect x="316" y="228" width="38" height="44" rx="6" fill="url(#rigSteel)" />
-                        <g id="mikThimbleTicks" class="rig-mik-thticks"></g>
-                    </g>
-                    <rect x="354" y="238" width="14" height="24" rx="4" fill="url(#rigSteelV)" />
-                    <line x1="357" y1="243" x2="357" y2="257" stroke="rgba(15,23,42,.4)" stroke-width="1" />
-                    <line x1="361" y1="243" x2="361" y2="257" stroke="rgba(15,23,42,.4)" stroke-width="1" />
-                    <line x1="365" y1="243" x2="365" y2="257" stroke="rgba(15,23,42,.4)" stroke-width="1" />
+                @* C-gövde + iç kenar parlaması + ısı yalıtım pedleri (el ısısı sapması önler) *@
+                <path d="M128 266 A106 106 0 0 0 320 266" fill="none" stroke="url(#rigSteelV)" stroke-width="17" stroke-linecap="round" />
+                <path d="M133 269 A99 99 0 0 0 315 269" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="3" stroke-linecap="round" />
+                <rect x="150" y="318" width="30" height="15" rx="4" fill="#4a3b32" transform="rotate(-22 165 325)" />
+                <rect x="268" y="318" width="30" height="15" rx="4" fill="#4a3b32" transform="rotate(22 283 325)" />
+
+                @* Örs (anvil) — sabit çene + karbür ölçüm yüzeyi *@
+                <rect x="118" y="226" width="31" height="48" rx="3" fill="url(#rigSteelV)" />
+                <rect x="144" y="230" width="5" height="40" rx="1" fill="#eef2f7" />
+
+                @* Ölçülen parça — mil kesiti (tırtıl + merkez deliği); çap ölçekle tutarlı *@
+                <text class="rig-tag" id="mikPartTag" x="180" y="211">Parça P-001</text>
+                <circle cx="180" cy="250" r="31" fill="url(#rigPartG)" stroke="rgba(15,23,42,.55)" stroke-width="1.2" />
+                <circle cx="180" cy="250" r="25" fill="none" stroke="rgba(15,23,42,.16)" stroke-width="1" />
+                <g id="mikPartKnurl"></g>
+                <circle cx="180" cy="250" r="8" fill="#1b2637" stroke="rgba(226,232,240,.3)" stroke-width="1.1" />
+
+                @* Mil (spindle) — kovanın ALTINDAN geçer; tamburla aynı ötelemeyi alır *@
+                <g id="mikSpindleG">
+                    <rect x="211" y="243" width="122" height="14" rx="2" fill="url(#rigSteelV)" />
+                    <rect x="211" y="245" width="5" height="10" rx="1" fill="#eef2f7" />
                 </g>
-                @* Kovan (sleeve) — sabit; mil altından kayar, üzerinde ana skala *@
-                <rect x="252" y="236" width="64" height="28" rx="4" fill="url(#rigSteelV)" />
-                <line x1="256" y1="250" x2="312" y2="250" stroke="rgba(15,23,42,.55)" stroke-width="1.2" />
-                <g id="mikSleeveTicks"></g>
-                <text class="rig-face-brand" x="284" y="231">CALIBRA</text>
 
-                @* Dijital okuma paneli — okuma / nominal / sapma *@
+                @* Kovan (sleeve) — SABİT; ana mm skalası (üstte tam, altta yarım mm) *@
+                <rect x="246" y="232" width="94" height="36" rx="5" fill="url(#rigSteelV)" />
+                <line x1="250" y1="250" x2="336" y2="250" stroke="rgba(15,23,42,.6)" stroke-width="1.4" />
+                <g id="mikSleeveTicks"></g>
+                <g id="mikSleeveNums"></g>
+
+                @* Kilit kolu — ölçüm tutulurken kapanır (JS rotate) *@
+                <g id="mikLock">
+                    <rect x="256" y="266" width="9" height="21" rx="4" fill="#64748b" stroke="rgba(15,23,42,.4)" stroke-width="1" />
+                </g>
+
+                @* Dijital gösterge — kovan gövdesine bağlı (sabit) *@
+                <rect x="242" y="188" width="96" height="36" rx="6" fill="#0a1120" stroke="rgba(99,102,241,.4)" stroke-width="1" />
+                <rect x="246" y="192" width="88" height="28" rx="4" fill="rgba(8,47,73,.45)" />
+                <text class="rig-lcd" id="mikLcd" x="328" y="212">17,450</text>
+                <text class="rig-lcd-unit" x="252" y="200">mm</text>
+                <text class="rig-lcd-unit" id="mikLcdMode" x="252" y="217">ABS</text>
+                <line x1="290" y1="224" x2="290" y2="232" stroke="rgba(148,163,184,.4)" stroke-width="2" />
+
+                @* Tambur (thimble) + cırcır (ratchet) — mil ile birlikte öteler *@
+                <g id="mikThimbleG">
+                    <g clip-path="url(#mikThimbleClip)">
+                        <rect x="312" y="220" width="46" height="60" rx="7" fill="url(#rigSteel)" />
+                        <g id="mikThimbleTicks" class="rig-mik-thticks"></g>
+                        <g id="mikThimbleNums"></g>
+                    </g>
+                    <line x1="312" y1="250" x2="358" y2="250" stroke="rgba(15,23,42,.22)" stroke-width="1" />
+                    <g id="mikRatchet">
+                        <rect x="358" y="234" width="16" height="32" rx="5" fill="url(#rigSteelV)" />
+                        <line x1="362" y1="239" x2="362" y2="261" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                        <line x1="366" y1="239" x2="366" y2="261" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                        <line x1="370" y1="239" x2="370" y2="261" stroke="rgba(15,23,42,.45)" stroke-width="1" />
+                    </g>
+                </g>
+
+                @* HUD — okuma / sapma+karar / tolerans barı + son ölçüm noktaları *@
                 <g class="rig-hud">
                     <rect x="28" y="436" width="362" height="70" rx="12" />
-                    <line x1="168" y1="448" x2="168" y2="494" />
-                    <line x1="268" y1="448" x2="268" y2="494" />
-                    <text class="rig-hud-label" x="46" y="459">Okuma</text>
-                    <text class="rig-hud-value" id="mikRead" x="46" y="486">22,450 mm</text>
-                    <text class="rig-hud-label" x="184" y="459">Nominal</text>
-                    <text class="rig-hud-sub" x="184" y="483">17,450</text>
-                    <text class="rig-hud-label" x="284" y="459">Sapma</text>
-                    <text class="rig-hud-sub" id="mikDevi" x="284" y="483">—</text>
+                    <line x1="158" y1="448" x2="158" y2="494" />
+                    <line x1="252" y1="448" x2="252" y2="494" />
+                    <text class="rig-hud-label" x="44" y="459">Okuma</text>
+                    <text class="rig-hud-value" id="mikRead" x="44" y="484">22,450 mm</text>
+                    <text class="rig-hud-note" x="44" y="499">nominal 17,450 mm</text>
+                    <text class="rig-hud-label" x="172" y="459">Sapma</text>
+                    <text class="rig-hud-sub" id="mikDevi" x="172" y="484">—</text>
+                    <text class="rig-hud-note" id="mikVerdict" x="172" y="499">ölçülüyor</text>
+                    <text class="rig-hud-label" x="266" y="459">Tolerans ±0,010</text>
+                    <g id="mikTolBar"></g>
                 </g>
 
-                @* Tambur hit alanı — yatay sürükleme mili açar/kapatır *@
-                <rect class="rig-part-hit" id="mikHit" x="300" y="212" width="94" height="76" fill="transparent">
-                    <title>Tamburu sürükleyerek mili hareket ettirin</title>
+                @* Tambur hit alanı — yatay sürükleme mili ilerletir/geri çeker *@
+                <rect class="rig-part-hit" id="mikHit" x="300" y="206" width="96" height="90" fill="transparent">
+                    <title>Tamburu sürükleyerek mili ilerletin</title>
                 </rect>
             </svg>
 
-            @* ── Sahne 3: Manometre — basınç kalibrasyonu. 0-100 bar kadran + iğne,
-                  bağlantı borusu, manifold + el pompası kolu. Basınç kalibrasyon
-                  noktalarında (0/25/50/75/100) gezinir; Ref/Cihaz/Hata HUD'da izlenir. ── *@
+            @* ── Sahne 3: Manometre — basınç kalibrasyon tezgâhı (karşılaştırma yöntemi).
+                  Gerçek düzenek: yağ haznesi → tahliye vanası → manifold → İKİ gösterge:
+                  solda REFERANS standart (sınıf 0,1) + sağda test edilen cihaz/DUT
+                  (sınıf 1,6) + vidalı basınç üreteci (volan + piston). Kalibrasyon
+                  noktaları (0/25/50/75/100 bar) kadranda işaretli, aktif nokta kırmızı
+                  yanar; sürüklenen (max) ibre tepe basıncı tutar; HUD'da nokta-nokta
+                  hata çubuk grafiği dolar. ── *@
             <svg id="rigSvgMan" class="login-rig-svg rig-scene" viewBox="0 0 420 520" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <g class="rig-badge">
                     <rect x="28" y="20" width="204" height="28" rx="14" />
                     <circle class="rig-badge-dot" cx="45" cy="34" r="4" />
                     <text class="rig-badge-text" x="58" y="34.5">Kalibrasyon Sürüyor</text>
                 </g>
-                <text class="rig-caption" x="29" y="64">Manometre · Basınç Kalibrasyonu</text>
+                <text class="rig-caption" x="29" y="64">Manometre · Basınç Kalibrasyonu (0-100 bar)</text>
 
                 <ellipse cx="205" cy="424" rx="178" ry="26" fill="url(#rigFloor)" />
                 <rect x="30" y="392" width="330" height="30" rx="5" fill="url(#rigGranite)" />
                 <rect x="30" y="392" width="330" height="2.6" rx="1.3" fill="rgba(226,232,240,.22)" />
                 <rect x="40" y="422" width="310" height="6" rx="3" fill="rgba(2,6,23,.6)" />
 
-                @* Bağlantı borusu + manifold + pompa pistonu *@
-                <rect x="206" y="280" width="8" height="90" fill="url(#rigSteel)" />
-                <rect x="150" y="366" width="150" height="26" rx="6" fill="url(#rigSteelV)" />
-                <rect x="262" y="346" width="18" height="24" rx="3" fill="url(#rigSteel)" />
-                <g id="manLever">
-                    <line x1="271" y1="348" x2="332" y2="324" stroke="#cbd5e1" stroke-width="5" stroke-linecap="round" />
-                    <circle cx="332" cy="324" r="6" fill="#e11d48" />
-                </g>
-                <rect x="158" y="371" width="52" height="16" rx="3" fill="rgba(2,6,23,.55)" />
-                <text x="184" y="382" text-anchor="middle" style="fill:#7dd3fc;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:9px;font-weight:600;">REF</text>
+                @* Yağ haznesi — seviye basınç arttıkça düşer (akışkan sisteme basılır) *@
+                <rect x="36" y="322" width="58" height="70" rx="6" fill="rgba(12,18,32,.85)" stroke="rgba(148,163,184,.35)" stroke-width="1" />
+                <rect id="manFluid" x="39" y="341" width="52" height="48" rx="4" fill="rgba(34,211,238,.26)" />
+                <rect x="52" y="312" width="26" height="12" rx="3" fill="url(#rigSteelV)" />
+                <text class="rig-tag" x="65" y="410">Hazne</text>
 
-                @* Gösterge (test edilen cihaz) *@
-                <circle cx="210" cy="190" r="92" fill="url(#rigBezel)" />
-                <circle cx="210" cy="190" r="86" fill="none" stroke="rgba(15,23,42,.35)" stroke-width="1.2" />
-                <circle cx="210" cy="190" r="84" fill="url(#rigFace)" />
+                @* Manifold bloğu + destek + bağlantı rakorları *@
+                <rect x="100" y="344" width="196" height="30" rx="5" fill="url(#rigSteelV)" />
+                <rect x="150" y="374" width="100" height="18" rx="3" fill="#1d2940" stroke="rgba(148,163,184,.22)" stroke-width="1" />
+                <rect x="88" y="352" width="14" height="14" rx="2" fill="url(#rigSteel)" />
+                <rect x="90" y="338" width="10" height="10" rx="2" fill="url(#rigSteel)" />
+
+                @* Tahliye vanası — basınç düşerken döner *@
+                <rect x="127" y="336" width="6" height="10" fill="url(#rigSteel)" />
+                <g id="manValve">
+                    <circle cx="130" cy="326" r="12" fill="none" stroke="#94a3b8" stroke-width="3" />
+                    <line x1="118" y1="326" x2="142" y2="326" stroke="#94a3b8" stroke-width="2.4" />
+                    <line x1="130" y1="314" x2="130" y2="338" stroke="#94a3b8" stroke-width="2.4" />
+                </g>
+                <text class="rig-tag" x="130" y="410">Tahliye</text>
+
+                @* Basınç üreteci — vidalı piston + volan (basınç değişirken döner) *@
+                <rect id="manPiston" x="294" y="352" width="42" height="14" rx="3" fill="url(#rigSteel)" />
+                <g id="manWheel">
+                    <circle cx="336" cy="359" r="26" fill="none" stroke="#8b98ab" stroke-width="6" />
+                    <line x1="313" y1="346" x2="359" y2="372" stroke="#8b98ab" stroke-width="3" />
+                    <line x1="313" y1="372" x2="359" y2="346" stroke="#8b98ab" stroke-width="3" />
+                    <line x1="336" y1="333" x2="336" y2="385" stroke="#8b98ab" stroke-width="3" />
+                </g>
+                <circle cx="336" cy="359" r="5" fill="#475569" />
+                <text class="rig-tag" x="336" y="410">Pompa</text>
+
+                @* ── Referans standart gösterge (sınıf 0,1) — sol port ── *@
+                <rect x="96" y="296" width="10" height="50" fill="url(#rigSteel)" />
+                <circle cx="101" cy="248" r="48" fill="url(#rigBezel)" />
+                <circle cx="101" cy="248" r="44" fill="none" stroke="rgba(15,23,42,.3)" stroke-width="1" />
+                <circle cx="101" cy="248" r="43" fill="url(#rigFace)" />
+                <g id="manRefTicks"></g>
+                <g id="manRefNums"></g>
+                <text class="rig-face-unit" x="101" y="272">REF · 0,1</text>
+                <g id="manRefNeedle">
+                    <line class="rig-ref-needle" x1="101" y1="254" x2="101" y2="214" />
+                </g>
+                <circle cx="101" cy="248" r="3.4" fill="#475569" />
+                <ellipse class="rig-glass" cx="88" cy="230" rx="19" ry="9" transform="rotate(-28 88 230)" />
+
+                @* ── Test edilen cihaz (DUT, sınıf 1,6) — sağ port ── *@
+                <rect x="246" y="260" width="12" height="86" fill="url(#rigSteel)" />
+                <circle cx="252" cy="172" r="88" fill="url(#rigBezel)" />
+                <circle cx="252" cy="172" r="86" fill="none" stroke="rgba(15,23,42,.35)" stroke-width="1.2" />
+                <circle cx="252" cy="172" r="84" fill="url(#rigFace)" />
                 <g id="manArcs"></g>
                 <g id="manTicks"></g>
                 <g id="manNums"></g>
-                <text class="rig-face-brand" x="210" y="153">CALIBRA</text>
-                <text class="rig-face-unit" x="210" y="166">bar</text>
-                <g id="manNeedle">
-                    <line class="rig-needle" x1="210" y1="202" x2="210" y2="118" />
-                    <circle class="rig-needle-tail" cx="210" cy="202" r="3.4" />
+                <g id="manCalMarks"></g>
+                <text class="rig-face-brand" x="252" y="138">CALIBRA</text>
+                <text class="rig-face-unit" x="252" y="150">bar · sınıf 1,6</text>
+                <text class="rig-face-unit" id="manPointTxt" x="252" y="214">Nokta 1/5</text>
+                @* Sürüklenen (max) ibre — tepe basıncı tutar, çevrim başında sıfırlanır *@
+                <g id="manDrag">
+                    <line class="rig-drag-needle" x1="252" y1="172" x2="252" y2="96" />
                 </g>
-                <circle cx="210" cy="190" r="5.6" fill="#475569" />
-                <circle cx="210" cy="190" r="2.4" fill="#cbd5e1" />
-                <ellipse class="rig-glass" cx="186" cy="160" rx="36" ry="17" transform="rotate(-28 186 160)" />
+                <g id="manNeedle">
+                    <line class="rig-needle" x1="252" y1="184" x2="252" y2="100" />
+                    <circle class="rig-needle-tail" cx="252" cy="184" r="3.4" />
+                </g>
+                <circle cx="252" cy="172" r="5.6" fill="#475569" />
+                <circle cx="252" cy="172" r="2.4" fill="#cbd5e1" />
+                <ellipse class="rig-glass" cx="228" cy="142" rx="36" ry="17" transform="rotate(-28 228 142)" />
 
-                @* Dijital okuma paneli — referans / cihaz / hata *@
+                @* HUD — referans / cihaz / hata + nokta-nokta hata çubuk grafiği *@
                 <g class="rig-hud">
                     <rect x="28" y="436" width="362" height="70" rx="12" />
-                    <line x1="148" y1="448" x2="148" y2="494" />
-                    <line x1="268" y1="448" x2="268" y2="494" />
-                    <text class="rig-hud-label" x="46" y="459">Ref</text>
-                    <text class="rig-hud-value" id="manRef" x="46" y="486">0,0 bar</text>
-                    <text class="rig-hud-label" x="164" y="459">Cihaz</text>
-                    <text class="rig-hud-value" id="manDut" x="164" y="486">0,0 bar</text>
-                    <text class="rig-hud-label" x="284" y="459">Hata</text>
-                    <text class="rig-hud-sub" id="manErr" x="284" y="483">—</text>
+                    <line x1="146" y1="448" x2="146" y2="494" />
+                    <line x1="254" y1="448" x2="254" y2="494" />
+                    <text class="rig-hud-label" x="44" y="459">Ref</text>
+                    <text class="rig-hud-value" id="manRef" x="44" y="486">0,0 bar</text>
+                    <text class="rig-hud-label" x="160" y="459">Cihaz</text>
+                    <text class="rig-hud-value" id="manDut" x="160" y="486">0,0 bar</text>
+                    <text class="rig-hud-label" x="266" y="452">Hata</text>
+                    <text class="rig-hud-sub" id="manErr" x="266" y="469">—</text>
+                    <g id="manErrBars"></g>
                 </g>
 
                 @* Kadran hit alanı — sürükleyerek basınç ayarı *@
-                <circle class="rig-part-hit" id="manHit" cx="210" cy="190" r="92" fill="transparent">
+                <circle class="rig-part-hit" id="manHit" cx="252" cy="172" r="88" fill="transparent">
                     <title>Kadran üzerinde sürükleyerek basıncı ayarlayın</title>
                 </circle>
             </svg>
