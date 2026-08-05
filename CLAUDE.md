@@ -321,6 +321,24 @@ Tüm insert/update/delete işlemleri ve oturum olayları **dosya tabanlı** işl
 **Referans:** `DocumentService.SaveQuoteAsync/DeleteQuoteAsync/ChangeStatusAsync` (tam pattern),
 `AccountController.Login/Logout` (oturum olayları), `Views/Sales/DocumentEdit.cshtml` (sekme retrofit).
 
+## Form Davranış Katmanı (standart alanlar) — ticari belge ekranlarında (2026-08-05)
+
+Standart alan davranışları (Görünür / Zorunlu / Varsayılan Değer / Başlık metni-stili /
+`visibleIf`-`requiredIf` kuralları) ve sekme görünürlük/sıra/ad yönetimi **FormFieldBehavior**
+tablosundan gelir; Alan Yönetimi → "Standart Alanlar" editöründen yönetilir. Ekran markup'ı
+SABİTTİR — bu bir render motoru DEĞİLDİR (ENGINE kararı geçerli), yalnızca davranış metadata'sıdır.
+
+- **Yeni sabit alan eklerken:** alan kataloğuna satır ekle (`DocumentHeaderFieldCatalog` üst bilgi /
+  `DocumentLineFieldCatalog` kalem — kalem kataloğu Kart Düzeni ile ortaktır ve
+  `BuildDocumentLineGridConfig` iskeletiyle elle senkron tutulur) + markup'a `data-field-key="<key>"`.
+- **Runtime:** `window.CalibraHub.applyFormBehavior({formCode, isNew, fieldElements})` (mount'ta) +
+  `window.CalibraHub.formBehaviorValidate()` (kaydet kancası). Server paritesi:
+  `FormBehaviorHeaderCheck` (SaveDocument içinde).
+- **Fail-open ZORUNLU:** davranış kaydı yoksa mevcut davranış birebir korunur; bozuk kural alanı
+  asla gizlemez/zorunlamaz; kilitli alanlar (belge no/tarih/cari/para birimi; kalemde
+  materialCode/quantity) gizlenemez. Kural ifadeleri `RuleExpr.Sanitize` süzgecinden geçmeden
+  DB'ye yazılmaz.
+
 ## Dinamik Alan (Widget / Alan Yönetimi) Host — belge/tanım ekranlarında ZORUNLU
 
 Kullanıcılar "Alan Yönetimi"nde herhangi bir form kodu (Forms.FormCode) altına özel alan (WidgetMas/EAV) tanımlar. Bu alanların düzenleme ekranında **render edilebilmesi için o ekranın dinamik widget host'unu mount etmesi gerekir.** Host eklenmezse alanlar sessizce görünmez — hata yok, boş kalır (silent failure). 2026-07-08'de Ambar Giriş/Çıkış/Transfer/Sayım ekranları bu host'u hiç mount etmediği için tanımlı alanlar görünmüyordu.
