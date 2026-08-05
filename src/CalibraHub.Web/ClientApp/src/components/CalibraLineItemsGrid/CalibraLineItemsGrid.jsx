@@ -2514,6 +2514,9 @@ export default function CalibraLineItemsGrid(props) {
                   cardWidgets.forEach(function (w) { if (w.code in src) out[w.code] = src[w.code] })
                   return out
                 })()}
+                /* 2026-08-05: gruplar sol sekme olarak (sekme adi = grup adi) —
+                   header Ek Alanlar paneliyle ayni sidetabs standardi. */
+                layout="sidetabs"
                 classPrefix="sqe"
               />
             </div>

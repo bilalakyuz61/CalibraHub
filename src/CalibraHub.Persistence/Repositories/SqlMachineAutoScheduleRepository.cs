@@ -66,9 +66,12 @@ public sealed class SqlMachineAutoScheduleRepository : IMachineAutoScheduleRepos
                   SELECT 1 FROM {T("MachineScheduleBlock")} msb
                   WHERE msb.[WorkOrderOperationId] = woo.[Id] AND msb.[IsActive] = 1
               ){filterSql}
+            -- wo.[Id] kesin tiebreaker: Priority (0/1/2) + PlannedEndDate (sık NULL) eşitliği NORM olduğundan
+            -- stabil sıra şart — yoksa Preview ile Apply farklı kapasite tahsisi üretebilir (HIGH review bulgusu).
+            -- Ayrıca aynı WO'nun satırlarını bitişik yapıp motorun "bitişik" varsayımını gerçek kılar.
             ORDER BY wo.[Priority] DESC,
                      CASE WHEN wo.[PlannedEndDate] IS NULL THEN 1 ELSE 0 END, wo.[PlannedEndDate] ASC,
-                     woo.[Sequence];
+                     wo.[Id], woo.[Sequence];
             """;
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         await using var r = await cmd.ExecuteReaderAsync(ct);

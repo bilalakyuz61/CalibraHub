@@ -6044,7 +6044,11 @@
                 window._sqDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
                     formCode: el.getAttribute('data-form-code') || '@headerFormCode',
                     recordId: el.getAttribute('data-record-id') || '',
-                    classPrefix: 'sqe'
+                    classPrefix: 'sqe',
+                    // 2026-08-05 kullanici istegi: Ek Alanlar tek yigin degil —
+                    // her grup SOL SEKME olur (sekme adi = grup adi). Grupsuz
+                    // alanlar "Genel" sekmesine duser (DWR sidetabs standardi).
+                    layout: 'sidetabs'
                 });
                 console.log('[SQ] DynamicWidgetRenderer mounted');
                 // Yuklenmis bir quote varsa recordId'yi guncelle — handleRef
@@ -6177,7 +6181,8 @@
                             window._sqDynRenderer = ch.mountDynamicWidgetRenderer(rendererRoot, {
                                 formCode: rendererRoot.getAttribute('data-form-code') || '@headerFormCode',
                                 recordId: rendererRoot.getAttribute('data-record-id') || '',
-                                classPrefix: 'sqe'
+                                classPrefix: 'sqe',
+                                layout: 'sidetabs'
                             });
                             summary += '<div style="font-size:0.66rem;color:#86efac;margin-top:2px;">Probe self-heal: mount tetiklendi — 500ms sonra tekrar yukle</div>';
                             setTimeout(function () {

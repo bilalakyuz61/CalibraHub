@@ -43,8 +43,16 @@ import { discoverFields as discoverFieldsApi, getFieldsByForm as getFieldsByForm
 // Ust bilgide ise sadece kendi alanlari gorunur (alt alanlar henuz yok).
 // Scope: parent → child tek yon (child, parent alanlarini gorebilir).
 var FORM_PARENTS = {
-  SALES_QUOTE_LINES: ['SALES_QUOTE_EDIT'],
-  // Ileride: INVOICE_LINES → INVOICE_EDIT, PO_LINES → PO_EDIT, ...
+  SALES_QUOTE_LINES:      ['SALES_QUOTE_EDIT'],
+  // 2026-08-05: tum ticari belge ciftleri (DocumentTypeFormMap ile senkron) —
+  // kalem kurali ust bilgi alanina (widget + standart) referans verebilsin.
+  SALES_ORDER_LINES:      ['SALES_ORDER_EDIT'],
+  SALES_DELIVERY_LINES:   ['SALES_DELIVERY_EDIT'],
+  PURCHASE_REQUEST_LINES: ['PURCHASE_REQUEST_EDIT'],
+  PURCHASE_QUOTE_LINES:   ['PURCHASE_QUOTE_EDIT'],
+  PURCHASE_ORDER_LINES:   ['PURCHASE_ORDER_EDIT'],
+  PURCHASE_DEMAND_LINES:  ['PURCHASE_DEMAND_EDIT'],
+  PURCHASE_DELIVERY_LINES:['PURCHASE_DELIVERY_EDIT'],
 }
 
 export default function AdminWidgetRegistryPanel(props) {

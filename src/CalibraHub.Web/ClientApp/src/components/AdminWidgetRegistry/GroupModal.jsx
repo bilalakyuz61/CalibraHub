@@ -110,7 +110,7 @@ export default function GroupModal(props) {
       isOpen={isOpen}
       onClose={onClose}
       title="Yeni Grup Tanımla"
-      subtitle="Widget'ları grupladığın katlanır başlık"
+      subtitle="Grup adı, Ek Alanlar'da sol sekme adı olarak görünür"
       icon={Layers}
       iconColor="indigo"
       maxWidth="max-w-md"

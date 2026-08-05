@@ -148,15 +148,34 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
         // Intra-WO precedence: bir WO içindeki bir sonraki operasyonun en erken başlangıcı,
         // bir önceki operasyonun bitişinden önce OLAMAZ.
         var prevEndByWorkOrder = new Dictionary<int, DateTime>();
+        // Bir WO'nun bir operasyonu yerleştirilemezse ardılları da yerleştirilmemeli (precedence
+        // zinciri kırılır; yoksa öncülü planlanmamış bir op planlanmış görünür — MEDIUM review bulgusu).
+        var brokenWorkOrders = new HashSet<int>();
 
         foreach (var op in ops)
         {
+            if (brokenWorkOrders.Contains(op.WorkOrderId))
+            {
+                unplaceable.Add(new AutoScheduleUnplaceableDto(op.WorkOrderOperationId, op.WorkOrderNo, op.OperationName,
+                    "Aynı iş emrindeki öncül operasyon yerleştirilemedi (bağımlılık zinciri kırıldı)."));
+                continue;
+            }
+
             var earliestStart = prevEndByWorkOrder.TryGetValue(op.WorkOrderId, out var prevEnd) && prevEnd > fromUtc
                 ? prevEnd : fromUtc;
 
             List<int> candidateMachineIds;
             if (op.MachineId is > 0)
             {
+                // Elle atanmış makine yalnız AKTİF ise aday olur (aday-havuzu yolu zaten IsActive filtreler;
+                // machineNames yalnız aktif makineleri içerir — MEDIUM review bulgusu).
+                if (!machineNames.ContainsKey(op.MachineId.Value))
+                {
+                    unplaceable.Add(new AutoScheduleUnplaceableDto(op.WorkOrderOperationId, op.WorkOrderNo, op.OperationName,
+                        "Operasyona atanmış makine pasif veya bulunamıyor."));
+                    brokenWorkOrders.Add(op.WorkOrderId);
+                    continue;
+                }
                 candidateMachineIds = new List<int> { op.MachineId.Value };
             }
             else
@@ -173,10 +192,12 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
             {
                 unplaceable.Add(new AutoScheduleUnplaceableDto(op.WorkOrderOperationId, op.WorkOrderNo, op.OperationName,
                     "Operasyon için makine tanımlı değil (WorkOrderOperation.MachineId boş ve OperationMachineTime'da aday makine yok)."));
+                brokenWorkOrders.Add(op.WorkOrderId);
                 continue;
             }
 
             (int MachineId, decimal SetupMinutes, List<(DateTime StartUtc, DateTime EndUtc)> Segments)? best = null;
+            var anyValidDuration = false;
 
             foreach (var machineId in candidateMachineIds)
             {
@@ -194,7 +215,8 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
                 var setupMinutes = await _durationResolver.ResolveSetupMinutesAsync(
                     op.OperationId, machineId, op.ItemId, op.RoutingId, ct) ?? 0m;
                 var totalMinutes = prodMinutes + setupMinutes;
-                if (totalMinutes <= 0m) continue; // süre çözümlenemedi — bu aday makineyi atla
+                if (totalMinutes <= 0m) continue; // süre çözümlenemedi/negatif — bu aday makineyi atla
+                anyValidDuration = true;
 
                 var occupied = occupiedByMachine.TryGetValue(machineId, out var occ)
                     ? occ : new List<(DateTime, DateTime)>();
@@ -210,8 +232,13 @@ public sealed class MachineAutoScheduleService : IMachineAutoScheduleService
 
             if (best is null)
             {
-                unplaceable.Add(new AutoScheduleUnplaceableDto(op.WorkOrderOperationId, op.WorkOrderNo, op.OperationName,
-                    "Kapasite/çalışma penceresi içinde yerleştirilemedi (guard aşıldı veya süre çözümlenemedi)."));
+                // İki farklı başarısızlığı ayır (LOW review): süre hiç çözümlenemedi mi, yoksa süre
+                // geçerli ama kapasite/pencere içinde planlama ufkuna sığmadı mı.
+                var reason = anyValidDuration
+                    ? "Kapasite/çalışma penceresi içinde yerleştirilemedi (planlama ufku aşıldı)."
+                    : "Operasyon süresi tanımsız veya geçersiz (süre/setup 0 ya da negatif).";
+                unplaceable.Add(new AutoScheduleUnplaceableDto(op.WorkOrderOperationId, op.WorkOrderNo, op.OperationName, reason));
+                brokenWorkOrders.Add(op.WorkOrderId);
                 continue;
             }
 
