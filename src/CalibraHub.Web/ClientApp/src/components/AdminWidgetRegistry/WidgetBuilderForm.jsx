@@ -283,6 +283,36 @@ export default function WidgetBuilderForm(props) {
   // "Kartta Goster" secenegi sunulur; ust-bilgi formunda anlamsiz.
   var formCode = props.formCode || ''
   var isLineForm = /_LINES$/i.test(formCode)
+  // Kalem formunda ust bilgi (parent) form kodu — standart alanlari da kural
+  // kurucusuna girsin diye (panel FORM_PARENTS'tan gecirir).
+  var parentFormCode = props.parentFormCode || null
+
+  // 2026-08-05 — Formun STANDART alanlari (Form Davranis Katmani katalogu):
+  // kural kurucusunun "Alan sec..." listesinde widget'larin yaninda sunulur.
+  // Runtime karsiligi: formBehavior.js standart degerleri global registry'ye
+  // yayinlar, DWR kural motoru dis kapsam olarak okur.
+  var [stdFields, setStdFields] = useState([])
+  var [parentStdFields, setParentStdFields] = useState([])
+  useEffect(function () {
+    var alive = true
+    function loadStd(fc, setter) {
+      if (!fc) { setter([]); return }
+      fetch('/api/form-behavior/' + encodeURIComponent(fc), { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null })
+        .then(function (data) {
+          if (!alive) return
+          if (!data || data.ok !== true || !Array.isArray(data.fields)) { setter([]); return }
+          setter(data.fields.map(function (f) {
+            var dt = f.dataType === 'numeric' ? 'numeric' : (f.dataType === 'boolean' ? 'boolean' : 'text')
+            return { widgetCode: f.key, label: f.label, dataType: dt }
+          }))
+        })
+        .catch(function () { if (alive) setter([]) })
+    }
+    loadStd(formCode, setStdFields)
+    loadStd(parentFormCode, setParentStdFields)
+    return function () { alive = false }
+  }, [formCode, parentFormCode])
 
   // Internal state isimleri UI ile uyumlu kalmaya devam ediyor, ama
   // submit payload'u ve editingField hydration'i artik Faz B API alanlarini
@@ -1748,7 +1778,23 @@ export default function WidgetBuilderForm(props) {
               _sourceFormLabel: w._sourceFormLabel || null,
             }
           })
-          return ownList.concat(parentList)
+          // 2026-08-05 — Standart alanlar da kural scope'unda: formun kendi
+          // sabit alanlari ("Standart" rozeti) + kalem formundaysa ust bilginin
+          // sabit alanlari ("Üst Bilgi" rozeti). Runtime cozumu: formBehavior
+          // std registry → DWR externalScope.
+          var stdList = stdFields.map(function(f) {
+            return {
+              widgetCode: f.widgetCode, label: f.label, dataType: f.dataType,
+              options: null, _sourceFormCode: formCode || null, _sourceFormLabel: 'Standart',
+            }
+          })
+          var parentStdList = parentStdFields.map(function(f) {
+            return {
+              widgetCode: f.widgetCode, label: f.label, dataType: f.dataType,
+              options: null, _sourceFormCode: parentFormCode, _sourceFormLabel: 'Üst Bilgi',
+            }
+          })
+          return ownList.concat(parentList, stdList, parentStdList)
             .filter(function(w) { return w.widgetCode && w.widgetCode !== fieldKey })
         })()}
       />

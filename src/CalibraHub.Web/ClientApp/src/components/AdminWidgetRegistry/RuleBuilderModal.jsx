@@ -336,15 +336,19 @@ function FieldDropdown(props) {
               <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {selected.label || selected.widgetCode}
               </span>
+              {/* 2026-08-05: teknik kod (w_xxx) gosterimi kaldirildi — etiket tam
+                  genislik kullanir. Kaynak rozeti renkli: Standart=yesil, Ust Bilgi=civit. */}
               {selected._sourceFormLabel && (
                 <span
                   style={{
                     fontSize: '9px',
                     padding: '1px 5px',
                     borderRadius: '4px',
-                    background: 'rgba(99,102,241,0.15)',
-                    border: '1px solid rgba(99,102,241,0.3)',
-                    color: isLight ? '#4f46e5' : '#a5b4fc',
+                    background: selected._sourceFormLabel === 'Standart' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)',
+                    border: '1px solid ' + (selected._sourceFormLabel === 'Standart' ? 'rgba(16,185,129,0.35)' : 'rgba(99,102,241,0.3)'),
+                    color: selected._sourceFormLabel === 'Standart'
+                      ? (isLight ? '#047857' : '#6ee7b7')
+                      : (isLight ? '#4f46e5' : '#a5b4fc'),
                     fontWeight: 600,
                     flexShrink: 0,
                   }}
@@ -352,9 +356,6 @@ function FieldDropdown(props) {
                   {selected._sourceFormLabel}
                 </span>
               )}
-              <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '10px', opacity: 0.4, flexShrink: 0 }}>
-                w_{selected.widgetCode}
-              </span>
             </>
           ) : 'Alan seç...'}
         </span>
@@ -405,16 +406,20 @@ function FieldDropdown(props) {
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
                   {w.label || w.widgetCode}
                 </span>
+                {/* Teknik kod gosterimi kaldirildi (2026-08-05) — etiket tam genislik.
+                    Kaynak rozeti renkli: Standart=yesil, Ust Bilgi=civit. */}
                 {w._sourceFormLabel && (
                   <span
-                    title={'Üst form: ' + w._sourceFormLabel}
+                    title={w._sourceFormLabel === 'Standart' ? 'Formun sabit alanı' : ('Kaynak: ' + w._sourceFormLabel)}
                     style={{
                       fontSize: '9px',
                       padding: '2px 6px',
                       borderRadius: '4px',
-                      background: 'rgba(99,102,241,0.15)',
-                      border: '1px solid rgba(99,102,241,0.3)',
-                      color: isLight ? '#4f46e5' : '#a5b4fc',
+                      background: w._sourceFormLabel === 'Standart' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)',
+                      border: '1px solid ' + (w._sourceFormLabel === 'Standart' ? 'rgba(16,185,129,0.35)' : 'rgba(99,102,241,0.3)'),
+                      color: w._sourceFormLabel === 'Standart'
+                        ? (isLight ? '#047857' : '#6ee7b7')
+                        : (isLight ? '#4f46e5' : '#a5b4fc'),
                       fontWeight: 600,
                       flexShrink: 0,
                     }}
@@ -422,9 +427,6 @@ function FieldDropdown(props) {
                     {w._sourceFormLabel}
                   </span>
                 )}
-                <span style={{ fontSize: '10px', opacity: 0.45, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', flexShrink: 0 }}>
-                  w_{w.widgetCode}
-                </span>
               </button>
             )
           })}
@@ -2031,24 +2033,24 @@ export default function RuleBuilderModal(props) {
                                   }}
                                 >
                                   <span style={{ fontWeight: 600 }}>{w.label || w.widgetCode}</span>
+                                  {/* Teknik kod gosterimi kaldirildi (2026-08-05). */}
                                   {w._sourceFormLabel && (
                                     <span
                                       style={{
                                         fontSize: '9px',
                                         padding: '1px 5px',
                                         borderRadius: '4px',
-                                        background: 'rgba(99,102,241,0.18)',
-                                        border: '1px solid rgba(99,102,241,0.32)',
-                                        color: isLight ? '#4f46e5' : '#a5b4fc',
+                                        background: w._sourceFormLabel === 'Standart' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.18)',
+                                        border: '1px solid ' + (w._sourceFormLabel === 'Standart' ? 'rgba(16,185,129,0.35)' : 'rgba(99,102,241,0.32)'),
+                                        color: w._sourceFormLabel === 'Standart'
+                                          ? (isLight ? '#047857' : '#6ee7b7')
+                                          : (isLight ? '#4f46e5' : '#a5b4fc'),
                                         fontWeight: 600,
                                       }}
                                     >
                                       {w._sourceFormLabel}
                                     </span>
                                   )}
-                                  <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: '10px', opacity: 0.55 }}>
-                                    w_{w.widgetCode}
-                                  </span>
                                 </button>
                               )
                             })}

@@ -2,6 +2,7 @@
 @{
     var isNew = !Model.Id.HasValue;
     ViewData["Title"] = isNew ? "Yeni Kart Grubu" : $"Kart Grubu: {Model.Code}";
+    ViewData["HelpKey"] = "card-group-edit";
     ViewData["BodyClass"] = "page-card-group-edit workspace-frame-body";
 }
 

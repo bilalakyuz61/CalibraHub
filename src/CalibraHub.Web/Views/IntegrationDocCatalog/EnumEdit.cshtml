@@ -2,6 +2,7 @@
 @{
     var isNew = Model.Enum == null;
     ViewData["Title"]    = isNew ? "Yeni Enum Tanımı" : $"Enum: {Model.Enum!.Code}";
+    ViewData["HelpKey"] = "integration-enums";
     ViewData["FormCode"] = "INTEGRATION_DOC_ENUM_EDIT";
     ViewData["BodyClass"] = "page-ide workspace-frame-body";
 }

@@ -1,6 +1,7 @@
 @inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @{
     ViewData["Title"] = "Rapor Panoları";
+    ViewData["HelpKey"] = "report-boards";
     var boardConfigJson = (string?)ViewData["BoardConfigJson"] ?? "{}";
 }
 

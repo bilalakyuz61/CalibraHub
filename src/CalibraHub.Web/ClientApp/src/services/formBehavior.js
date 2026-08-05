@@ -122,6 +122,24 @@ function reevaluate(root) {
     var required = f.isRequired || evalBool(f.requiredIf, scope, false)
     if (required !== f.currentlyRequired) setRequiredStar(f, required)
   })
+  publishStdScope(scope)
+}
+
+/* 2026-08-05 — Standart alan degerlerini global registry'ye yayinla + degisim
+   event'i (debounce). Widget kural motoru (DWR) bu registry'yi dis kapsam olarak
+   okur: widget kurallari standart alanlara (quoteDate, currency, vatIncluded...)
+   referans verebilir ve deger degisince kurallar canli yeniden degerlendirilir. */
+var __publishTimer = null
+function publishStdScope(scope) {
+  try {
+    if (typeof window === 'undefined' || !state || !state.opts || !state.opts.formCode) return
+    window.__CALIBRA_STD_FIELDS_BY_FORM__ = window.__CALIBRA_STD_FIELDS_BY_FORM__ || {}
+    window.__CALIBRA_STD_FIELDS_BY_FORM__[state.opts.formCode] = scope || buildScope()
+    if (__publishTimer) clearTimeout(__publishTimer)
+    __publishTimer = setTimeout(function () {
+      try { window.dispatchEvent(new CustomEvent('calibra:std-fields-changed')) } catch (_) {}
+    }, 150)
+  } catch (_) { /* sessiz */ }
 }
 
 function applyTabs(tabs, root, onTabHidden) {

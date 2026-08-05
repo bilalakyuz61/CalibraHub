@@ -3,6 +3,7 @@
 @using System.Text.Json.Serialization
 @{
     ViewData["Title"] = Model.PageTitle;
+    ViewData["HelpKey"] = "electronic-documents";
     ViewData["BodyClass"] = "page-approval-queue";
     var listState = Model.ListState;
     var pagerRouteValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);

@@ -1012,6 +1012,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 <WidgetBuilderForm
                   editingField={editingField}
                   formCode={currentFormCode}
+                  parentFormCode={(FORM_PARENTS[currentFormCode] || [])[0] || null}
                   onSubmit={handleSubmit}
                   onCancel={handleCancelEdit}
                   saving={savingGlobal}

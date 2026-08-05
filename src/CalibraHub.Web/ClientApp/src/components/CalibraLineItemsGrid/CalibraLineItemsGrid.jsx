@@ -2517,6 +2517,10 @@ export default function CalibraLineItemsGrid(props) {
                 /* 2026-08-05: gruplar sol sekme olarak (sekme adi = grup adi) —
                    header Ek Alanlar paneliyle ayni sidetabs standardi. */
                 layout="sidetabs"
+                /* Satirin standart degerleri (quantity/unitPrice/...) kural
+                   scope'una girer — kalem widget kurali satir alanina referans
+                   verebilir (orn. quantity > 100). Modal acilis ani snapshot'i. */
+                externalScope={behaviorRowScope(extrasModalRow)}
                 classPrefix="sqe"
               />
             </div>

@@ -1,6 +1,7 @@
 @model CalibraHub.Web.Models.MailSend.MailSendDetailViewModel
 @{
     ViewData["Title"] = $"Gönderim #{Model.BatchId}";
+    ViewData["HelpKey"] = "bulk-mail-detail";
     ViewData["FormCode"] = "MAIL_SEND";
     // Compose ile ayni body class — paylasilan stiller (mc-app, mc-topbar, cs-tab-pane) calisir.
     ViewData["BodyClass"] = "page-mailsend-compose";

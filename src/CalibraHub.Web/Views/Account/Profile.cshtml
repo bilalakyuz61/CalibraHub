@@ -1,6 +1,7 @@
 @model CalibraHub.Web.Models.Account.ProfileInputModel
 @{
     ViewData["Title"] = "Profil Bilgileri";
+    ViewData["HelpKey"] = "profile";
     // workspace=1 ise iframe icindeyiz → "Vazgec" iframe'i / ye yonlendirip
     // matruska kabuk yaratir. Onun yerine tab'i kapatilabilen hint goster.
     var inWorkspace = string.Equals(Context.Request.Query["workspace"], "1", StringComparison.Ordinal)

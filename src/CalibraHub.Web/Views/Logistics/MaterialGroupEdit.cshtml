@@ -2,6 +2,7 @@
 @{
     var isNew = Model.Id == null;
     ViewData["Title"] = isNew ? "Yeni Malzeme Grubu" : $"Grup: {Model.GroupCode}";
+    ViewData["HelpKey"] = "material-group-edit";
     ViewData["FormCode"] = "MATERIAL_GROUPS";
     ViewData["BodyClass"] = "page-mg-edit workspace-frame-body";
 }

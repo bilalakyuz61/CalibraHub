@@ -268,31 +268,12 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
         // 2) Cycle varsa form render etme, banner goster
         // 3) Cycle yoksa initial recomputeAll — tum formula/visibility/disabled hesapla
         //
-        // 2026-08-05 — externalScope: ayni sayfada mount olmus DIGER formlarin
-        // (orn. kalem ek alanlari modali icin ust bilgi formu) coerce edilmis
-        // degerleri. Kalem kurali ust bilgi alanina referans verebilsin diye
-        // (RuleBuilder "Ust Bilgi" secenekleri) per-form registry'den okunur.
-        // Modal acildigi anki snapshot'tir — modal kapali/acik dongusunde tazelenir.
-        var externalScope = null
-        try {
-          var __reg = (typeof window !== 'undefined' && window.__CALIBRA_WIDGETS_BY_FORM__) || null
-          if (__reg) {
-            Object.keys(__reg).forEach(function (fc) {
-              if (fc === formCode) return
-              var entry = __reg[fc]
-              if (!entry || !entry.values) return
-              var dtByCode = {}
-              ;(entry.schema || []).forEach(function (s) { if (s && s.code) dtByCode[s.code] = s.dataType })
-              Object.keys(entry.values).forEach(function (code) {
-                externalScope = externalScope || {}
-                if (externalScope[code] === undefined) {
-                  externalScope[code] = coerceForScope(entry.values[code], String(dtByCode[code] || '').toLowerCase())
-                }
-              })
-            })
-          }
-        } catch (_) { externalScope = null }
-        var graph = buildRuleGraph(ws, externalScope)
+        // 2026-08-05 — externalScope: ayni sayfadaki DIGER formlarin widget
+        // degerleri + tum formlarin STANDART alan degerleri (formBehavior.js
+        // registry'si) + cagiranin verdigi props.externalScope (orn. kalem
+        // modali icin satirin quantity/unitPrice degerleri). Kural kurucusu
+        // "Ust Bilgi" ve "Standart" alan referanslarini boyle cozer.
+        var graph = buildRuleGraph(ws, buildExternalScope())
         ruleGraphRef.current = graph
         if (graph.cycle) {
           setCycleError('Sonsuz dongu: ' + graph.cycle.join(' → '))
@@ -636,6 +617,77 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   useEffect(function () { disabledRef.current   = disabledMap  }, [disabledMap])
   useEffect(function () { requiredRef.current   = requiredMap  }, [requiredMap])
   useEffect(function () { errorsRef.current     = ruleErrors   }, [ruleErrors])
+
+  // ── Dis kapsam kurucusu (2026-08-05) ──
+  //   1) Diger formlarin widget degerleri (__CALIBRA_WIDGETS_BY_FORM__, dataType coerce)
+  //   2) Tum formlarin STANDART alan degerleri (__CALIBRA_STD_FIELDS_BY_FORM__ —
+  //      formBehavior.js yayinlar; zaten coerce edilmis)
+  //   3) props.externalScope (cagiran; orn. kalem modali satir degerleri) — en ustte
+  //   Kendi form widget'lari her durumda bunlarin UZERINE yazar (buildScope sirasi).
+  function buildExternalScope() {
+    var ext = null
+    try {
+      var reg = (typeof window !== 'undefined' && window.__CALIBRA_WIDGETS_BY_FORM__) || null
+      if (reg) {
+        Object.keys(reg).forEach(function (fc) {
+          if (fc === formCode) return
+          var entry = reg[fc]
+          if (!entry || !entry.values) return
+          var dtByCode = {}
+          ;(entry.schema || []).forEach(function (s) { if (s && s.code) dtByCode[s.code] = s.dataType })
+          Object.keys(entry.values).forEach(function (code) {
+            ext = ext || {}
+            if (ext[code] === undefined) {
+              ext[code] = coerceForScope(entry.values[code], String(dtByCode[code] || '').toLowerCase())
+            }
+          })
+        })
+      }
+      var stdReg = (typeof window !== 'undefined' && window.__CALIBRA_STD_FIELDS_BY_FORM__) || null
+      if (stdReg) {
+        Object.keys(stdReg).forEach(function (fc) {
+          var vals = stdReg[fc]
+          if (!vals) return
+          Object.keys(vals).forEach(function (k) {
+            ext = ext || {}
+            ext[k] = vals[k]
+          })
+        })
+      }
+      if (props.externalScope && typeof props.externalScope === 'object') {
+        Object.keys(props.externalScope).forEach(function (k) {
+          ext = ext || {}
+          ext[k] = props.externalScope[k]
+        })
+      }
+    } catch (_) { /* fail-open: dis kapsam yoksa kurallar kendi alanlariyla calisir */ }
+    return ext
+  }
+
+  // Standart alan degerleri degisince (formBehavior 'calibra:std-fields-changed'
+  // yayini) kurallari taze dis kapsamla yeniden degerlendir — ust bilgi inputuna
+  // bagli widget gorunurlugu sekme gecisi beklemeden guncellenir.
+  useEffect(function () {
+    function onStdChanged() {
+      var graph = ruleGraphRef.current
+      if (!graph || !graph.hasRules || graph.cycle) return
+      graph.externalScope = buildExternalScope()
+      var patch = recomputeAll(graph, valuesRef.current)
+      valuesRef.current     = patch.values
+      requiredRef.current   = patch.required || {}
+      visibilityRef.current = patch.visibility
+      disabledRef.current   = patch.disabled
+      errorsRef.current     = patch.errors
+      setRequiredMap(patch.required || {})
+      setValues(patch.values)
+      setVisibility(patch.visibility)
+      setDisabledMap(patch.disabled)
+      setRuleErrors(patch.errors)
+    }
+    window.addEventListener('calibra:std-fields-changed', onStdChanged)
+    return function () { window.removeEventListener('calibra:std-fields-changed', onStdChanged) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Value change handler ──
   // Faz G: her edit'te rule engine'in propagateChange'ini calistir, etkilenen

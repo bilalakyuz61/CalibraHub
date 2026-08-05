@@ -2,6 +2,7 @@
 @{
     var isNew = Model.Id == null;
     ViewData["Title"] = isNew ? "Yeni Form" : $"Form: {Model.FormName ?? Model.FormCode}";
+    ViewData["HelpKey"] = "form-management";
     ViewData["BodyClass"] = "page-form-edit workspace-frame-body";
 }
 

@@ -2,6 +2,7 @@
 @{
     var item = ViewBag.Item as CountryDto;
     ViewData["Title"] = item is null ? "Yeni Ülke" : "Ülke Düzenle";
+    ViewData["HelpKey"] = "general-def-edit";
     var itemId = item?.Id ?? 0;
     var itemName = item?.Name ?? "";
     var itemCode = item?.Code ?? "";

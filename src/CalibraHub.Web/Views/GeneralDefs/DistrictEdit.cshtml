@@ -2,6 +2,7 @@
 @{
     var item = ViewBag.Item as DistrictDto;
     ViewData["Title"] = item is null ? "Yeni İlçe" : "İlçe Düzenle";
+    ViewData["HelpKey"] = "general-def-edit";
     var itemId = item?.Id ?? 0;
     var itemName = item?.Name ?? "";
     var itemCityId = item?.CityId ?? 0;
