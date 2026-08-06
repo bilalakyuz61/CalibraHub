@@ -54,6 +54,57 @@ var LABEL_COLOR_SWATCH_CLS = {
 var GRID_UNITS = 48
 var MIN_SPAN = 3
 
+/* ── Sutun genisligi altyapisi (2026-08-06) ────────────────────────────────
+   Ham 48'lik birim kullaniciya "18/48" olarak degil KESIR olarak gosterilir
+   (1/4, 1/3, 1/2 …) — premium form tasarimcilarinin dili. Birim hassasiyeti
+   korunur: preset disi degerler "n/48" olarak gosterilir ve +/- ile ayarlanir. */
+var WIDTH_PRESETS = [
+  { span: 8,  label: '1/6' },
+  { span: 12, label: '1/4' },
+  { span: 16, label: '1/3' },
+  { span: 24, label: '1/2' },
+  { span: 32, label: '2/3' },
+  { span: 36, label: '3/4' },
+  { span: 48, label: 'Tam' },
+]
+function spanLabel(span) {
+  for (var i = 0; i < WIDTH_PRESETS.length; i++) {
+    if (WIDTH_PRESETS[i].span === span) return WIDTH_PRESETS[i].label
+  }
+  return span + '/' + GRID_UNITS
+}
+function clampSpan(span) {
+  return Math.min(GRID_UNITS, Math.max(MIN_SPAN, span))
+}
+/* Surukleme sirasinda yaygin kesirlere yapisma (1 birim tolerans) — serbest
+   suruklemede 23/48 gibi "neredeyse yarim" degerler olusmasin. */
+function snapSpan(span) {
+  for (var i = 0; i < WIDTH_PRESETS.length; i++) {
+    if (Math.abs(WIDTH_PRESETS[i].span - span) <= 1) return WIDTH_PRESETS[i].span
+  }
+  return span
+}
+/* CSS grid'in satir sarma davranisinin aynisi: alan mevcut satira sigmiyorsa
+   yeni satira akar (kalan bosluk bos kalir). Editordeki satir raylari ve
+   "satiri doldur / esit dagit" araclari bu paketlemeden beslenir. */
+function packRows(entries) {
+  var rows = []
+  var cur = []
+  var used = 0
+  for (var i = 0; i < entries.length; i++) {
+    var s = clampSpan(entries[i].it.span)
+    if (cur.length && used + s > GRID_UNITS) {
+      rows.push({ entries: cur, used: used })
+      cur = []
+      used = 0
+    }
+    cur.push(entries[i])
+    used += s
+  }
+  if (cur.length) rows.push({ entries: cur, used: used })
+  return rows
+}
+
 function readCsrfToken() {
   try {
     var input = document.querySelector('input[name="__RequestVerificationToken"]')
@@ -137,6 +188,48 @@ export default function LineCardLayoutEditor(props) {
     })
   }
 
+  // ── Sutun genisligi islemleri ──
+  function setSpan(key, span) {
+    patchItem(key, { span: clampSpan(span) })
+  }
+  /* Satirdaki alanlari 48 birime esit boler; artan birim (48 % n) soldan
+     dagitilir. Alan sayisi cok fazlaysa (MIN_SPAN'in altina duserdi) islem
+     yapilmaz — sessizce bozuk duzen uretmektense hicbir sey yapmak dogru. */
+  function distributeRow(rowEntries) {
+    var n = rowEntries.length
+    if (!n) return
+    var base = Math.floor(GRID_UNITS / n)
+    if (base < MIN_SPAN) return
+    var extra = GRID_UNITS - base * n
+    var byKey = {}
+    rowEntries.forEach(function (en, i) { byKey[en.it.key] = base + (i < extra ? 1 : 0) })
+    setItems(function (prev) {
+      return prev.map(function (it) {
+        return byKey[it.key] ? Object.assign({}, it, { span: byKey[it.key] }) : it
+      })
+    })
+  }
+  /* Satirdaki bos birimleri SON alana ekler — "satir sonu boslugu" kapatmanin
+     en sik ihtiyaci. Zaten doluysa no-op. */
+  function fillRow(rowEntries) {
+    if (!rowEntries.length) return
+    var used = rowEntries.reduce(function (a, en) { return a + clampSpan(en.it.span) }, 0)
+    var free = GRID_UNITS - used
+    if (free <= 0) return
+    var last = rowEntries[rowEntries.length - 1].it
+    setSpan(last.key, clampSpan(last.span + free))
+  }
+  function moveItem(idx, dir) {
+    setItems(function (prev) {
+      var to = idx + dir
+      if (to < 0 || to >= prev.length) return prev
+      var next = prev.slice()
+      var moved = next.splice(idx, 1)[0]
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
   // ── Surukle-birak siralama ──
   var dragIndexRef = useRef(null)
   var [dragOverIndex, setDragOverIndex] = useState(null)
@@ -167,17 +260,22 @@ export default function LineCardLayoutEditor(props) {
   //   Pointer Events: mouse + touch + pen tek API (WidgetBuilderForm colSpan
   //   slider'i ile ayni yaklasim). Izgara hucre genisligi konteyner/24'ten olculur.
   var gridRef = useRef(null)
-  var resizeRef = useRef(null) // { idx, startX, startSpan, cellWidth }
+  var resizeRef = useRef(null) // { key, startX, startSpan, cellWidth }
+  // Suren islem: izgara kilavuz cizgileri + canli genislik rozeti icin.
+  var [resizingKey, setResizingKey] = useState(null)
 
   function handleResizeStart(e, idx) {
     if (!gridRef.current) return
     var rect = gridRef.current.getBoundingClientRect()
     resizeRef.current = {
-      idx: idx,
+      key: items[idx].key,
       startX: e.clientX,
       startSpan: items[idx].span,
+      // Olcek satir izgarasindan degil KART genisliginden alinir: her satir
+      // ayri grid oldugu icin (satir raylari) hucre genisligi ortak olmali.
       cellWidth: rect.width / GRID_UNITS,
     }
+    setResizingKey(items[idx].key)
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
     e.preventDefault()
   }
@@ -186,11 +284,14 @@ export default function LineCardLayoutEditor(props) {
     if (!st || !e.currentTarget.hasPointerCapture || !e.currentTarget.hasPointerCapture(e.pointerId)) return
     e.preventDefault()
     var deltaSpan = Math.round((e.clientX - st.startX) / Math.max(st.cellWidth, 4))
-    var nextSpan = Math.min(GRID_UNITS, Math.max(MIN_SPAN, st.startSpan + deltaSpan))
+    // Shift = serbest (yapismasiz) hassas surukleme.
+    var raw = clampSpan(st.startSpan + deltaSpan)
+    var nextSpan = e.shiftKey ? raw : clampSpan(snapSpan(raw))
     setItems(function (prev) {
-      if (!prev[st.idx] || prev[st.idx].span === nextSpan) return prev
+      var i = prev.findIndex(function (x) { return x.key === st.key })
+      if (i < 0 || prev[i].span === nextSpan) return prev
       var next = prev.slice()
-      next[st.idx] = Object.assign({}, next[st.idx], { span: nextSpan })
+      next[i] = Object.assign({}, next[i], { span: nextSpan })
       return next
     })
   }
@@ -199,6 +300,40 @@ export default function LineCardLayoutEditor(props) {
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
     } catch (_) {}
     resizeRef.current = null
+    setResizingKey(null)
+  }
+
+  /* Klavye ile hassas ayar (secili alan): Alt+←/→ bir birim, Alt+Shift+←/→
+     onceki/sonraki hazir genislik, Ctrl+←/→ sira degistir. Fare hassasiyeti
+     yetmedigi durumlarda profesyonel tasarimcilarin bekledigi kontrol. */
+  function handleModalKeyDown(e) {
+    if (e.key === 'Escape') { if (!saving) onClose(); return }
+    if (!selectedKey) return
+    var idx = items.findIndex(function (x) { return x.key === selectedKey })
+    if (idx < 0) return
+    var it = items[idx]
+    var isLeft = e.key === 'ArrowLeft'
+    var isRight = e.key === 'ArrowRight'
+    if (!isLeft && !isRight) return
+    if (e.altKey) {
+      e.preventDefault()
+      if (e.shiftKey) {
+        // Hazir genislikler arasinda atla
+        var spans = WIDTH_PRESETS.map(function (p) { return p.span })
+        var target = null
+        if (isRight) {
+          for (var i = 0; i < spans.length; i++) { if (spans[i] > it.span) { target = spans[i]; break } }
+        } else {
+          for (var j = spans.length - 1; j >= 0; j--) { if (spans[j] < it.span) { target = spans[j]; break } }
+        }
+        if (target != null) setSpan(it.key, target)
+      } else {
+        setSpan(it.key, it.span + (isRight ? 1 : -1))
+      }
+    } else if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      moveItem(idx, isRight ? 1 : -1)
+    }
   }
 
   function toggleVisible(idx) {
@@ -323,13 +458,24 @@ export default function LineCardLayoutEditor(props) {
               Alanlar yükleniyor…
             </div>
           )}
-          {!loading && (
-          <div className="rounded-xl border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025] p-3">
-          <div
-            ref={gridRef}
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(' + GRID_UNITS + ', minmax(0, 1fr))', gap: 10, alignItems: 'end' }}
-          >
-            {items.map(function (it, idx) {
+          {!loading && (function () {
+            // Tuval yalniz KARTTA GORUNEN alanlari cizer (gizliler asagidaki
+            // tepsiye duser) — boylece satir paketleme ve doluluk olculeri
+            // gercek kartla birebir ayni olur.
+            var entries = items.map(function (it, i) { return { it: it, idx: i } })
+            var visibleEntries = entries.filter(function (en) { return en.it.visible })
+            var hiddenEntries = entries.filter(function (en) { return !en.it.visible })
+            var rows = packRows(visibleEntries)
+            var guidesOn = resizingKey != null || dragOverIndex != null
+            // Kilavuz cizgileri: 1/12'lik adimlar — yalniz surukleme/boyutlandirma
+            // sirasinda gorunur, dinlenme halinde onizlemeyi kirletmez.
+            var guideStyle = guidesOn ? {
+              backgroundImage: 'repeating-linear-gradient(to right, rgba(99,102,241,0.16) 0 1px, transparent 1px calc(100% / 12))',
+            } : null
+
+            function renderItem(en) {
+              var it = en.it
+              var idx = en.idx
               var hiddenCls = !it.visible ? ' opacity-40' : ''
               var dragCls = dragOverIndex === idx ? ' ring-2 ring-indigo-400/70' : ''
               var selectedCls = selectedKey === it.key ? ' border-indigo-400/80 bg-indigo-50/50 dark:bg-indigo-500/[0.08]' : ' border-transparent'
@@ -356,8 +502,9 @@ export default function LineCardLayoutEditor(props) {
                   onDragOver={function (e) { handleDragOver(e, idx) }}
                   onDragEnd={handleDragEnd}
                   onClick={function () { setSelectedKey(selectedKey === it.key ? null : it.key) }}
+                  tabIndex={0}
                   style={{ gridColumn: 'span ' + it.span, position: 'relative' }}
-                  className={'group select-none rounded-lg px-1.5 pt-1 pb-1.5 cursor-grab active:cursor-grabbing border hover:border-indigo-200/70 dark:hover:border-indigo-400/25' + hiddenCls + dragCls + selectedCls}
+                  className={'group select-none rounded-lg px-1.5 pt-1 pb-1.5 cursor-grab active:cursor-grabbing border outline-none hover:border-indigo-200/70 dark:hover:border-indigo-400/25' + hiddenCls + dragCls + selectedCls}
                 >
                   {/* Kontrol satiri — tut/genislik/goz. Kart gorunumunu bozmasin
                       diye kucuk; blok hover'inda belirginlesir. */}
@@ -366,8 +513,17 @@ export default function LineCardLayoutEditor(props) {
                     {it.isWidget && (
                       <span className="text-[8.5px] font-bold px-1 rounded bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300 flex-shrink-0" title="Özel alan (Alan Yönetimi)">EK</span>
                     )}
-                    <span className="ml-auto text-[9px] font-mono tabular-nums text-slate-400 dark:text-white/35 flex-shrink-0">
-                      {it.span}/{GRID_UNITS}
+                    {/* Genislik rozeti — kesir dili (1/2, 1/3…); ham birim tooltip'te.
+                        Boyutlandirma surerken belirginlesir (canli geri bildirim). */}
+                    <span
+                      title={'Genişlik: ' + it.span + '/' + GRID_UNITS + ' birim'}
+                      className={'ml-auto text-[9px] font-mono tabular-nums flex-shrink-0 px-1 rounded transition-colors ' + (
+                        resizingKey === it.key
+                          ? 'bg-indigo-500 text-white font-bold'
+                          : 'text-slate-400 dark:text-white/35'
+                      )}
+                    >
+                      {spanLabel(it.span)}
                     </span>
                     <button
                       type="button"

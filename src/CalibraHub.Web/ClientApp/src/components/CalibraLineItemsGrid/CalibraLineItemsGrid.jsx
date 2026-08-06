@@ -1750,9 +1750,9 @@ export default function CalibraLineItemsGrid(props) {
                                 <span className="truncate">{materialCodeCol.label}</span>
                                 {(materialCodeCol.required || materialCodeCol.requirePositive) && <span className="text-rose-500 dark:text-rose-400">*</span>}
                               </div>
-                              {/* Alt-cizgi (underline) standardi — ust bilgi alanlariyla ayni gorunum
-                                  (site.css .ux-edit-pane): kutu yerine yalniz border-bottom, odakta indigo. */}
-                              <div className="border-b border-slate-200 focus-within:border-indigo-500 focus-within:shadow-[0_1px_0_0_#6366f1] dark:border-white/[0.12] dark:focus-within:border-indigo-400 dark:focus-within:shadow-[0_1px_0_0_#818cf8] transition-[border-color,box-shadow]">
+                              {/* Alt-cizgi (underline) — cizgi yalniz hover/odakta gorunur
+                                  (index.css .clc-cell-underline; odak rengi ust bilgi standardiyla ayni). */}
+                              <div className="clc-cell-underline">
                                 <LineGridCell
                                   column={materialCodeCol}
                                   row={row}
@@ -1771,7 +1771,7 @@ export default function CalibraLineItemsGrid(props) {
                           )}
                         </div>
                         {materialNameCol && (
-                          <div data-cell-key={materialNameCol.key} className="min-w-0 mt-0.5 border-b border-slate-200 focus-within:border-indigo-500 focus-within:shadow-[0_1px_0_0_#6366f1] dark:border-white/[0.12] dark:focus-within:border-indigo-400 dark:focus-within:shadow-[0_1px_0_0_#818cf8] transition-[border-color,box-shadow]">
+                          <div data-cell-key={materialNameCol.key} className="min-w-0 mt-0.5 clc-cell-underline">
                             <LineGridCell
                               column={materialNameCol}
                               row={row}
@@ -1922,7 +1922,7 @@ export default function CalibraLineItemsGrid(props) {
                             )}
                             <div className={'flex items-stretch gap-1.5' + (labelMode === 'inline' ? ' flex-1 min-w-0' : '') + (labelMode === 'modern' ? ' mt-1.5' : '')}>
                               <div
-                                className="flex-1 min-w-0 border-b border-slate-200 focus-within:border-indigo-500 focus-within:shadow-[0_1px_0_0_#6366f1] dark:border-white/[0.12] dark:focus-within:border-indigo-400 dark:focus-within:shadow-[0_1px_0_0_#818cf8] transition-[border-color,box-shadow]"
+                                className="flex-1 min-w-0 clc-cell-underline"
                                 style={behInvalid ? { borderBottomColor: '#ef4444', boxShadow: '0 1px 0 0 #ef4444', backgroundColor: 'rgba(239,68,68,0.05)' } : undefined}
                                 title={behInvalid ? 'Bu alan zorunlu' : undefined}
                               >
