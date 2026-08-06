@@ -8503,6 +8503,10 @@ END;";
                 ALTER TABLE [{s}].[Document] ADD [ExchangeRate] DECIMAL(18,6) NOT NULL CONSTRAINT [DF_Document_ExchangeRate] DEFAULT(1);
             IF COL_LENGTH(N'[{s}].[Document]', N'IsVatIncluded') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [IsVatIncluded] BIT NOT NULL CONSTRAINT [DF_Document_IsVatIncluded] DEFAULT(0);
+            -- 2026-08-06: kurun alındığı tarih (ExchangeRate hangi güne ait). Belge tarihinden
+            -- farklı olabilir; NULL = eski kayıt / TRY belge. Exchange.[Date] ile aynı tip (DATE).
+            IF COL_LENGTH(N'[{s}].[Document]', N'RateDate') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [RateDate] DATE NULL;
 
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NULL
             BEGIN

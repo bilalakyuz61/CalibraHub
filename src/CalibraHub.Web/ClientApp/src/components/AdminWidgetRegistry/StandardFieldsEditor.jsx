@@ -17,7 +17,8 @@ import {
   SlidersHorizontal, X as XIcon, Eye, EyeOff, Lock, ArrowUp, ArrowDown,
   AlertTriangle,
 } from 'lucide-react'
-import { getTopBody } from '../../utils/topPortal'
+// Top govdesine portallanmaz — bkz. LineCardLayoutEditor'daki ayni not: tam ekran
+// perde ust menu seridini kilitliyordu. iframe'in kendi body'sine portallanir.
 
 function readCsrfToken() {
   try {
@@ -393,6 +394,6 @@ export default function StandardFieldsEditor(props) {
         </div>
       </div>
     </div>,
-    getTopBody()
+    document.body
   )
 }

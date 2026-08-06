@@ -26,7 +26,10 @@ public sealed record DocumentDto(
     // PageComment Seq 1067 — belge başında elle girilen kur. 1 birim belge dövizi = ExchangeRate TL.
     decimal ExchangeRate = 1m,
     // PageComment Seq 1068 — "KDV Dahil" başlık switch'i. true ise satır UnitPrice brüt (KDV dahil) kabul edilir.
-    bool IsVatIncluded = false);
+    bool IsVatIncluded = false,
+    // 2026-08-06 — kurun ALINDIĞI tarih (belge tarihinden farklı olabilir). Yalnız izlenebilirlik
+    // ve ekranda doğru gösterim için; tutar hesabı kayıtlı ExchangeRate ile yapılır.
+    DateTime? RateDate = null);
 
 /// <summary>
 /// Sipariş → İrsaliye kısmi teslimat modalı için açık (teslim edilmemiş) sipariş kalemi.
@@ -145,7 +148,10 @@ public sealed record SaveDocumentRequest(
     // PageComment Seq 1067 — belge başında elle girilen kur. 1 birim belge dövizi = ExchangeRate TL.
     decimal ExchangeRate = 1m,
     // PageComment Seq 1068 — "KDV Dahil" başlık switch'i. true ise satır UnitPrice brüt (KDV dahil) kabul edilir.
-    bool IsVatIncluded = false);
+    bool IsVatIncluded = false,
+    // 2026-08-06 — kurun ALINDIĞI tarih (belge tarihinden farklı olabilir). Yalnız izlenebilirlik
+    // ve ekranda doğru gösterim için; tutar hesabı kayıtlı ExchangeRate ile yapılır.
+    DateTime? RateDate = null);
 
 /// <summary>
 /// Client'tan gelen kayit istegi. ItemId zorunludur — malzeme kodu/adi tabloda tutulmaz,

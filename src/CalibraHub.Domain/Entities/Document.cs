@@ -76,6 +76,9 @@ public sealed class Document
     [Description("'KDV Dahil' başlık switch'i. true ise satırlarda girilen UnitPrice KDV dahil (brüt) kabul edilir; net birim fiyat = UnitPrice / (1 + TaxRate/100) ile geri hesaplanır.")]
     public bool IsVatIncluded { get; set; }
 
+    [Description("Kurun alındığı tarih — ExchangeRate hangi güne ait. Belge tarihinden farklı olabilir (kullanıcı kur tarihini ayrı seçebilir). NULL = eski kayıt / TRY belge. Tutar hesabına girmez; izlenebilirlik + ekranda doğru gösterim içindir.")]
+    public DateTime? RateDate { get; set; }
+
     public decimal SubTotal { get; set; }
     public decimal DiscountRate { get; set; }
     public decimal DiscountAmount { get; set; }

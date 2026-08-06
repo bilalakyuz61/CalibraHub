@@ -20,7 +20,11 @@ import {
   Hash, FileText, Ruler, Sigma, DollarSign, Percent, Calculator, StickyNote,
   CircleDot, Tag, Barcode, Warehouse,
 } from 'lucide-react'
-import { getTopBody } from '../../utils/topPortal'
+// NOT: Bu modal BILEREK top govdesine (getTopBody) portallanmaz. Top'a
+// portallanirsa `fixed inset-0` perdesi ust menu seridini de kaplar ve modal
+// acikken baska sayfaya gecilemez (2026-08-06 kullanici bildirimi). Kurallar/
+// Formuller modali (RuleBuilderModal) gibi iframe'in kendi body'sine portallanir:
+// perde yalnizca calisma alanini kaplar, ust serit tiklanabilir kalir.
 
 // CalibraLineItemsGrid.ICON_MAP ile ayni eslesme — onizleme kart etiketiyle
 // birebir ayni ikonu gosterir ("kalemde nasil gorunuyorsa oyle" ilkesi).
@@ -935,6 +939,6 @@ export default function LineCardLayoutEditor(props) {
         </div>
       </div>
     </div>,
-    getTopBody()
+    document.body
   )
 }

@@ -345,6 +345,7 @@ public sealed class DocumentService : IDocumentService
         d.CurrencyId,
         d.ExchangeRate,
         d.IsVatIncluded,
+        d.RateDate,
         d.DiscountRate,
         d.TaxRate,
         d.GrandTotal,
@@ -919,6 +920,8 @@ public sealed class DocumentService : IDocumentService
                 CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1,
                 ExchangeRate = request.ExchangeRate > 0 ? request.ExchangeRate : 1m,
                 IsVatIncluded = request.IsVatIncluded,
+                // TRY belgede kur 1 sabittir → kur tarihi anlamsız, NULL bırakılır.
+                RateDate = (request.CurrencyId > 0 ? request.CurrencyId : 1) == 1 ? null : request.RateDate,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = request.DiscountRate,
                 DiscountAmount = discountAmount,
@@ -964,6 +967,8 @@ public sealed class DocumentService : IDocumentService
             existing.CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1;
             existing.ExchangeRate = request.ExchangeRate > 0 ? request.ExchangeRate : 1m;
             existing.IsVatIncluded = request.IsVatIncluded;
+            // TRY belgede kur 1 sabittir → kur tarihi anlamsız, NULL bırakılır.
+            existing.RateDate = (request.CurrencyId > 0 ? request.CurrencyId : 1) == 1 ? null : request.RateDate;
             existing.SubTotal = Math.Round(subTotal, 4);
             existing.DiscountRate = request.DiscountRate;
             existing.DiscountAmount = discountAmount;
@@ -1001,6 +1006,7 @@ public sealed class DocumentService : IDocumentService
                 CurrencyId = quote.CurrencyId,
                 ExchangeRate = quote.ExchangeRate,
                 IsVatIncluded = quote.IsVatIncluded,
+                RateDate = quote.RateDate,
                 SubTotal = quote.SubTotal,
                 DiscountRate = quote.DiscountRate,
                 DiscountAmount = quote.DiscountAmount,
@@ -1382,7 +1388,7 @@ public sealed class DocumentService : IDocumentService
         q.CurrencyCode, q.CurrencySymbol,
         q.RequesterPersonnelId, q.RequesterPersonnelName,
         q.LocationId, q.LocationName,
-        q.ExchangeRate, q.IsVatIncluded);
+        q.ExchangeRate, q.IsVatIncluded, q.RateDate);
 
     /// <summary>
     /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin
@@ -1637,6 +1643,7 @@ public sealed class DocumentService : IDocumentService
                 // uygulanmaz (çift netleme sapması yaratmasın diye).
                 ExchangeRate = first.ExchangeRate,
                 IsVatIncluded = first.IsVatIncluded,
+                RateDate = first.RateDate,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = discountRate,
                 DiscountAmount = discountAmount,
@@ -1850,6 +1857,7 @@ public sealed class DocumentService : IDocumentService
                 // NetUnitPrice ile zaten netlenmişti, burada yeniden net-out uygulanmaz.
                 ExchangeRate = first.ExchangeRate,
                 IsVatIncluded = first.IsVatIncluded,
+                RateDate = first.RateDate,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = discountRate,
                 DiscountAmount = discountAmount,

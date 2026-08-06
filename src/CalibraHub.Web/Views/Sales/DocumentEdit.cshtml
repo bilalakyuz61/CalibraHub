@@ -4331,6 +4331,13 @@
             // Seq 1067/1068: kur + KDV Dahil yükle (sqSetCurrencyById sonrası — o TRY'de kuru 1'e sıfırlar).
             var _rateEl = document.getElementById('sqExchangeRate');
             if (_rateEl && q.exchangeRate != null && (q.currencyId || 1) !== 1) _rateEl.value = q.exchangeRate;
+            // 2026-08-06: kaydedilmiş kur tarihi — kurun hangi güne ait olduğu korunur. Yoksa
+            // (eski kayıt) belge tarihine düşülür ki alan boş kalmasın.
+            if ((q.currencyId || 1) !== 1) {
+                var _rdVal = q.rateDate ? String(q.rateDate).split('T')[0]
+                           : (docDate ? String(docDate).split('T')[0] : '');
+                if (_rdVal) window.sqSetDateValue('sqRateDate', _rdVal);
+            }
             var _vatIncEl = document.getElementById('sqVatIncluded');
             if (_vatIncEl) _vatIncEl.checked = !!q.isVatIncluded;
             var _drEl2 = document.getElementById('sqDiscountRate'); if (_drEl2) _drEl2.value = q.discountRate ?? 0;
@@ -4903,6 +4910,9 @@
             // Seq 1067: elle kur (TRY belgede daima 1). Seq 1068: KDV Dahil bayrağı.
             exchangeRate:    (function(){ var cur = parseInt(document.getElementById('sqCurrency').value) || 1; var el = document.getElementById('sqExchangeRate'); if (cur === 1 || !el) return 1; var v = parseFloat(el.value); return (isFinite(v) && v > 0) ? v : 1; })(),
             isVatIncluded:   (function(){ var el = document.getElementById('sqVatIncluded'); return el ? !!el.checked : false; })(),
+            // 2026-08-06: kur tarihi — kurun ALINDIĞI gün. TRY belgede anlamsız → null
+            // (backend de TRY'de NULL'a zorlar). Belgeyi tekrar açınca alan bu değerle dolar.
+            rateDate:        (function(){ var cur = parseInt(document.getElementById('sqCurrency').value) || 1; var el = document.getElementById('sqRateDate'); if (cur === 1 || !el || !el.value) return null; return el.value; })(),
             discountRate:    (function(){ var el = document.getElementById('sqDiscountRate'); return el ? parseFloat(el.value || 0) : 0; })(),
             // Satir bazli KDV hesaplandigi icin belge basligindaki TaxRate legacy —
             // ilk satirin orani, yoksa 20 gonder (sunucu hala bu alani bekliyor).
