@@ -1,11 +1,21 @@
 /**
- * LineCardLayoutEditor — belge kalem KARTI duzen editoru (2026-08-05).
+ * LineCardLayoutEditor — belge kalem KARTI duzen editoru.
+ * Yeniden tasarim: 2026-08-06 (cok-ajanli tasarim paneli → "Kademeli Derinlik").
+ *
+ * TASARIM ILKESI — tuvalde kalici editor kromu YOK:
+ *   Onceki surumde her alan kutusunun ustunde tutamak + "10/48" rozeti + goz
+ *   ikonu, her satirin ustunde ilerleme rayi vardi. Alan sayisi kadar tekrar eden
+ *   bu gostergeler hem ekrani yoruyor hem de WYSIWYG'i bozuyordu (gercek kartta
+ *   bunlarin hicbiri yok). Simdi: tuval = gercek kartin aynasi; tutamak/isaret
+ *   yalnizca hover/secim/surukleme aninda ve hucrenin GEOMETRISINE DOKUNMAYAN
+ *   negatif inset'li overlay katmaninda belirir. Tum ayarlar sagdaki 296px sabit
+ *   denetim rayinda (LineCardInspector) — ray hep mount oldugu icin alan secmek
+ *   sifir layout shift uretir.
  *
  * Form bazli ORTAK duzen (admin tasarlar, herkes ayni karti gorur):
  *   - Surukle-birak ile alan SIRALAMA (HTML5 drag — ek bagimlilik yok)
- *   - Sag kenardan cekerek GENISLIK (24 kolonlu izgara span'i, WidgetMas.ColSpan
- *     standardiyla ayni olcek)
- *   - Goz toggle ile GORUNURLUK (zorunlu/miktar alanlari kilitli — gizlenemez;
+ *   - Sag kenardan cekerek GENISLIK (48 birimlik izgara span'i)
+ *   - Rayda switch ile GORUNURLUK (zorunlu alanlar kilitli — gizlenemez;
  *     CLAUDE.md sessiz-kirik kurali 3: veri girisi sessizce kaybolmasin)
  *
  * Kalicilik: POST /api/line-card-layout/save (admin-only, CSRF). Sifirla →
@@ -16,98 +26,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  LayoutGrid, GripVertical, Eye, EyeOff, X as XIcon, RotateCcw, AlertTriangle,
-  Hash, FileText, Ruler, Sigma, DollarSign, Percent, Calculator, StickyNote,
-  CircleDot, Tag, Barcode, Warehouse,
+  LayoutGrid, GripVertical, X as XIcon, RotateCcw, AlertTriangle, Maximize2,
+  MoreHorizontal, Layers, Settings, Trash2,
 } from 'lucide-react'
+import LineCardInspector from './LineCardInspector'
+import {
+  resolveIcon, CARD_LABEL_COLOR_CLS, CARD_GRID_UNITS, MIN_SPAN,
+  CARD_COLUMN_GAP, CARD_ROW_GAP, WIDTH_PRESETS, spanLabel, clampSpan, snapSpan,
+  packRows, unitStep,
+} from './cardLayoutTokens'
 // NOT: Bu modal BILEREK top govdesine (getTopBody) portallanmaz. Top'a
 // portallanirsa `fixed inset-0` perdesi ust menu seridini de kaplar ve modal
 // acikken baska sayfaya gecilemez (2026-08-06 kullanici bildirimi). Kurallar/
 // Formuller modali (RuleBuilderModal) gibi iframe'in kendi body'sine portallanir:
 // perde yalnizca calisma alanini kaplar, ust serit tiklanabilir kalir.
-
-// CalibraLineItemsGrid.ICON_MAP ile ayni eslesme — onizleme kart etiketiyle
-// birebir ayni ikonu gosterir ("kalemde nasil gorunuyorsa oyle" ilkesi).
-var ICON_MAP = {
-  Hash: Hash, FileText: FileText, Ruler: Ruler, Sigma: Sigma,
-  DollarSign: DollarSign, Percent: Percent, Calculator: Calculator,
-  StickyNote: StickyNote, Tag: Tag, Barcode: Barcode, Warehouse: Warehouse,
-}
-function resolveIcon(name) { return ICON_MAP[name] || CircleDot }
-
-/* Kart etiketi renk token'i → Tailwind sinifi — CalibraLineItemsGrid.
-   CARD_LABEL_COLOR_CLS ile birebir ayni (onizleme = gercek kart). */
-var LABEL_COLOR_CLS = {
-  slate:   'text-slate-500 dark:text-white/45',
-  indigo:  'text-indigo-600 dark:text-indigo-300',
-  emerald: 'text-emerald-600 dark:text-emerald-300',
-  amber:   'text-amber-600 dark:text-amber-300',
-  rose:    'text-rose-600 dark:text-rose-300',
-  blue:    'text-blue-600 dark:text-blue-300',
-  violet:  'text-violet-600 dark:text-violet-300',
-}
-var LABEL_COLOR_TOKENS = ['slate', 'indigo', 'emerald', 'amber', 'rose', 'blue', 'violet']
-/* Renk secici yuvarlaklarinin dolgusu — semantik token'in gorsel karsiligi. */
-var LABEL_COLOR_SWATCH_CLS = {
-  slate: 'bg-slate-400', indigo: 'bg-indigo-500', emerald: 'bg-emerald-500',
-  amber: 'bg-amber-500', rose: 'bg-rose-500', blue: 'bg-blue-500', violet: 'bg-violet-500',
-}
-
-/* Izgara cozunurlugu — CalibraLineItemsGrid.CARD_GRID_UNITS + server GridUnits ile
-   ayni (48; v1'de 24'tu, eski kayitlari server okuma yolunda olcekler). */
-var GRID_UNITS = 48
-var MIN_SPAN = 3
-
-/* ── Sutun genisligi altyapisi (2026-08-06) ────────────────────────────────
-   Ham 48'lik birim kullaniciya "18/48" olarak degil KESIR olarak gosterilir
-   (1/4, 1/3, 1/2 …) — premium form tasarimcilarinin dili. Birim hassasiyeti
-   korunur: preset disi degerler "n/48" olarak gosterilir ve +/- ile ayarlanir. */
-var WIDTH_PRESETS = [
-  { span: 8,  label: '1/6' },
-  { span: 12, label: '1/4' },
-  { span: 16, label: '1/3' },
-  { span: 24, label: '1/2' },
-  { span: 32, label: '2/3' },
-  { span: 36, label: '3/4' },
-  { span: 48, label: 'Tam' },
-]
-function spanLabel(span) {
-  for (var i = 0; i < WIDTH_PRESETS.length; i++) {
-    if (WIDTH_PRESETS[i].span === span) return WIDTH_PRESETS[i].label
-  }
-  return span + '/' + GRID_UNITS
-}
-function clampSpan(span) {
-  return Math.min(GRID_UNITS, Math.max(MIN_SPAN, span))
-}
-/* Surukleme sirasinda yaygin kesirlere yapisma (1 birim tolerans) — serbest
-   suruklemede 23/48 gibi "neredeyse yarim" degerler olusmasin. */
-function snapSpan(span) {
-  for (var i = 0; i < WIDTH_PRESETS.length; i++) {
-    if (Math.abs(WIDTH_PRESETS[i].span - span) <= 1) return WIDTH_PRESETS[i].span
-  }
-  return span
-}
-/* CSS grid'in satir sarma davranisinin aynisi: alan mevcut satira sigmiyorsa
-   yeni satira akar (kalan bosluk bos kalir). Editordeki satir raylari ve
-   "satiri doldur / esit dagit" araclari bu paketlemeden beslenir. */
-function packRows(entries) {
-  var rows = []
-  var cur = []
-  var used = 0
-  for (var i = 0; i < entries.length; i++) {
-    var s = clampSpan(entries[i].it.span)
-    if (cur.length && used + s > GRID_UNITS) {
-      rows.push({ entries: cur, used: used })
-      cur = []
-      used = 0
-    }
-    cur.push(entries[i])
-    used += s
-  }
-  if (cur.length) rows.push({ entries: cur, used: used })
-  return rows
-}
 
 function readCsrfToken() {
   try {
@@ -127,7 +59,7 @@ function normalizeEditorItems(arr) {
       key: it.key,
       label: it.label || it.key,
       icon: it.icon || null,
-      span: (typeof it.span === 'number' && it.span >= 1 && it.span <= GRID_UNITS) ? it.span : 12,
+      span: (typeof it.span === 'number' && it.span >= 1 && it.span <= CARD_GRID_UNITS) ? it.span : 12,
       visible: it.visible !== false,
       locked: it.locked === true,
       isWidget: it.isWidget === true,
@@ -135,11 +67,70 @@ function normalizeEditorItems(arr) {
       labelText: typeof it.labelText === 'string' ? it.labelText : '',
       labelSize: it.labelSize || null,
       labelWeight: it.labelWeight || null,
-      labelColor: LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
+      labelColor: CARD_LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
       // Alan Yonetimi sozlugu: null=Standart, 'modern'=Modern, 'inline'=Sade
       labelStyle: (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : null,
     }
   })
+}
+
+/* Kaydet payload'i — dirty karsilastirmasi da bunun uzerinden yapilir ki
+   "degisti mi" sorusu SUNUCUYA GIDECEK veriyle ayni tanima sahip olsun. */
+function buildPayloadItems(items) {
+  return items.map(function (it, i) {
+    return {
+      key: it.key, span: it.span, order: i, visible: it.visible,
+      label: (it.labelText && it.labelText.trim()) ? it.labelText.trim() : null,
+      labelSize: it.labelSize || null,
+      labelWeight: it.labelWeight || null,
+      labelColor: it.labelColor || null,
+      labelStyle: it.labelStyle || null,
+    }
+  })
+}
+
+/* ── Merkez onay modali — proje standardi (CLAUDE.md "Silme onay standardi"):
+   native confirm() YASAK, ekran ortasinda custom modal. Iki kullanim (sifirlama
+   + kaydedilmemis cikis) ayni bilesenden beslenir (DRY). */
+function ConfirmDialog(props) {
+  var Icon = props.icon || AlertTriangle
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      style={{ background: 'rgba(15,23,42,0.45)' }}
+      onClick={function (e) { if (e.target === e.currentTarget) props.onCancel() }}
+      onKeyDown={function (e) {
+        if (e.key === 'Escape') { e.stopPropagation(); props.onCancel() }
+        else if (e.key === 'Enter') { e.stopPropagation(); props.onConfirm() }
+      }}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={props.title}
+        className="w-full max-w-[380px] rounded-2xl border p-5 text-center shadow-2xl border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-slate-900"
+      >
+        <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">
+          <Icon size={18} strokeWidth={2} />
+        </div>
+        <div className="mt-3 text-[14px] font-bold text-slate-800 dark:text-white/90">{props.title}</div>
+        <div className="mt-1.5 text-[12px] text-slate-500 dark:text-white/50">{props.message}</div>
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={props.onCancel}
+            className="flex-1 h-9 rounded-lg text-[12px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-white/70 dark:hover:bg-white/[0.07]"
+          >Vazgeç</button>
+          <button
+            type="button"
+            autoFocus
+            onClick={props.onConfirm}
+            className="flex-1 h-9 rounded-lg text-[12px] font-bold text-[#fff] bg-rose-600 hover:bg-rose-500"
+          >{props.dangerLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function LineCardLayoutEditor(props) {
@@ -159,10 +150,26 @@ export default function LineCardLayoutEditor(props) {
   var [loading, setLoading] = useState(autoLoad)
   var [saving, setSaving] = useState(false)
   var [error, setError] = useState(null)
-  var [confirmReset, setConfirmReset] = useState(false)
+  var [canEdit, setCanEdit] = useState(true)
+  var [unsupported, setUnsupported] = useState(false)
+  // confirm: null | 'reset' | 'close'
+  var [confirm, setConfirm] = useState(null)
+  // Secili alan — key ile izlenir ki surukle-birak sonrasi secim kaybolmasin.
+  var [selectedKey, setSelectedKey] = useState(null)
+
+  var modalRef = useRef(null)
+  var baselineRef = useRef(null)
+
+  /* Dokunmatik / dar ekran — hover'a bagli her sey icin fallback sinyali. */
+  var [coarse] = useState(function () {
+    try { return window.matchMedia('(pointer: coarse)').matches } catch (e) { return false }
+  })
 
   useEffect(function () {
-    if (!autoLoad) return undefined
+    if (!autoLoad) {
+      baselineRef.current = JSON.stringify(buildPayloadItems(normalizeEditorItems(props.items)))
+      return undefined
+    }
     var alive = true
     fetch('/api/line-card-layout/' + encodeURIComponent(formCode) + '/fields', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null })
@@ -170,19 +177,22 @@ export default function LineCardLayoutEditor(props) {
         if (!alive) return
         if (!data || data.ok !== true) {
           setError((data && data.error) || 'Alan kataloğu yüklenemedi.')
+          setUnsupported(true)
           return
         }
-        setItems(normalizeEditorItems(data.items))
+        var next = normalizeEditorItems(data.items)
+        setItems(next)
         setHasCustomLayout(data.hasCustomLayout === true)
+        if (data.canEdit === false) setCanEdit(false)
+        baselineRef.current = JSON.stringify(buildPayloadItems(next))
       })
       .catch(function (e) { if (alive) setError('Hata: ' + (e && e.message ? e.message : String(e))) })
       .then(function () { if (alive) setLoading(false) })
     return function () { alive = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLoad, formCode])
-  // Secili alan (baslik metni/stili paneli icin) — key ile izlenir ki
-  // surukle-birak sonrasi secim kaybolmasin.
-  var [selectedKey, setSelectedKey] = useState(null)
+
+  var dirty = baselineRef.current != null && JSON.stringify(buildPayloadItems(items)) !== baselineRef.current
 
   function patchItem(key, patch) {
     setItems(function (prev) {
@@ -197,14 +207,14 @@ export default function LineCardLayoutEditor(props) {
     patchItem(key, { span: clampSpan(span) })
   }
   /* Satirdaki alanlari 48 birime esit boler; artan birim (48 % n) soldan
-     dagitilir. Alan sayisi cok fazlaysa (MIN_SPAN'in altina duserdi) islem
-     yapilmaz — sessizce bozuk duzen uretmektense hicbir sey yapmak dogru. */
+     dagitilir. Alan sayisi cok fazlaysa (MIN_SPAN'in altina duserdi) buton
+     RAYDA zaten pasiftir ve gerekcesi yazilidir — sessiz no-op YOK. */
   function distributeRow(rowEntries) {
     var n = rowEntries.length
     if (!n) return
-    var base = Math.floor(GRID_UNITS / n)
+    var base = Math.floor(CARD_GRID_UNITS / n)
     if (base < MIN_SPAN) return
-    var extra = GRID_UNITS - base * n
+    var extra = CARD_GRID_UNITS - base * n
     var byKey = {}
     rowEntries.forEach(function (en, i) { byKey[en.it.key] = base + (i < extra ? 1 : 0) })
     setItems(function (prev) {
@@ -218,7 +228,7 @@ export default function LineCardLayoutEditor(props) {
   function fillRow(rowEntries) {
     if (!rowEntries.length) return
     var used = rowEntries.reduce(function (a, en) { return a + clampSpan(en.it.span) }, 0)
-    var free = GRID_UNITS - used
+    var free = CARD_GRID_UNITS - used
     if (free <= 0) return
     var last = rowEntries[rowEntries.length - 1].it
     setSpan(last.key, clampSpan(last.span + free))
@@ -233,20 +243,37 @@ export default function LineCardLayoutEditor(props) {
       return next
     })
   }
+  function toggleVisible(key) {
+    setItems(function (prev) {
+      var i = prev.findIndex(function (x) { return x.key === key })
+      if (i < 0 || prev[i].locked) return prev
+      var next = prev.slice()
+      next[i] = Object.assign({}, next[i], { visible: !next[i].visible })
+      return next
+    })
+    if (selectedKey === key) setSelectedKey(null)
+  }
+  function showHidden(key) {
+    setItems(function (prev) {
+      return prev.map(function (it) { return it.key === key ? Object.assign({}, it, { visible: true }) : it })
+    })
+  }
 
-  // ── Surukle-birak siralama ──
+  // ── Surukle-birak siralama (HTML5 DnD — mevcut mekanizma korunur) ──
   var dragIndexRef = useRef(null)
-  var [dragOverIndex, setDragOverIndex] = useState(null)
+  var [dragging, setDragging] = useState(false)
+  var [dragOverKey, setDragOverKey] = useState(null)
 
   function handleDragStart(e, idx) {
     dragIndexRef.current = idx
+    setDragging(true)
     try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(idx)) } catch (_) {}
   }
-  function handleDragOver(e, idx) {
+  function handleDragOver(e, idx, key) {
     e.preventDefault()
     var from = dragIndexRef.current
     if (from == null || from === idx) return
-    setDragOverIndex(idx)
+    setDragOverKey(key)
     setItems(function (prev) {
       var next = prev.slice()
       var moved = next.splice(from, 1)[0]
@@ -257,37 +284,38 @@ export default function LineCardLayoutEditor(props) {
   }
   function handleDragEnd() {
     dragIndexRef.current = null
-    setDragOverIndex(null)
+    setDragging(false)
+    setDragOverKey(null)
   }
 
   // ── Sag kenardan genislik (span) cekme ──
-  //   Pointer Events: mouse + touch + pen tek API (WidgetBuilderForm colSpan
-  //   slider'i ile ayni yaklasim). Izgara hucre genisligi konteyner/24'ten olculur.
+  //   Pointer Events: mouse + touch + pen tek API. Olcek `unitStep` ile alinir —
+  //   ham `width / 48` bosluklari saymadigi icin sistematik kayma uretiyordu.
   var gridRef = useRef(null)
-  var resizeRef = useRef(null) // { key, startX, startSpan, cellWidth }
-  // Suren islem: izgara kilavuz cizgileri + canli genislik rozeti icin.
+  var resizeRef = useRef(null) // { key, startX, startSpan, cellStep }
   var [resizingKey, setResizingKey] = useState(null)
 
-  function handleResizeStart(e, idx) {
+  function handleResizeStart(e, key) {
     if (!gridRef.current) return
+    var it = items.find(function (x) { return x.key === key })
+    if (!it) return
     var rect = gridRef.current.getBoundingClientRect()
     resizeRef.current = {
-      key: items[idx].key,
+      key: key,
       startX: e.clientX,
-      startSpan: items[idx].span,
-      // Olcek satir izgarasindan degil KART genisliginden alinir: her satir
-      // ayri grid oldugu icin (satir raylari) hucre genisligi ortak olmali.
-      cellWidth: rect.width / GRID_UNITS,
+      startSpan: it.span,
+      cellStep: unitStep(rect.width),
     }
-    setResizingKey(items[idx].key)
+    setResizingKey(key)
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
     e.preventDefault()
+    e.stopPropagation()
   }
   function handleResizeMove(e) {
     var st = resizeRef.current
     if (!st || !e.currentTarget.hasPointerCapture || !e.currentTarget.hasPointerCapture(e.pointerId)) return
     e.preventDefault()
-    var deltaSpan = Math.round((e.clientX - st.startX) / Math.max(st.cellWidth, 4))
+    var deltaSpan = Math.round((e.clientX - st.startX) / Math.max(st.cellStep, 4))
     // Shift = serbest (yapismasiz) hassas surukleme.
     var raw = clampSpan(st.startSpan + deltaSpan)
     var nextSpan = e.shiftKey ? raw : clampSpan(snapSpan(raw))
@@ -307,15 +335,39 @@ export default function LineCardLayoutEditor(props) {
     setResizingKey(null)
   }
 
-  /* Klavye ile hassas ayar (secili alan): Alt+←/→ bir birim, Alt+Shift+←/→
-     onceki/sonraki hazir genislik, Ctrl+←/→ sira degistir. Fare hassasiyeti
-     yetmedigi durumlarda profesyonel tasarimcilarin bekledigi kontrol. */
+  function requestClose() {
+    if (saving) return
+    if (dirty) { setConfirm('close'); return }
+    onClose()
+  }
+
+  /* Klavye haritasi — Esc kademeli (once secim, sonra modal), Alt/Ctrl ok
+     tuslariyla hassas ayar, Ctrl+S kaydet, Delete ile gizle. */
   function handleModalKeyDown(e) {
-    if (e.key === 'Escape') { if (!saving) onClose(); return }
-    if (!selectedKey) return
+    if (e.key === 'Escape') {
+      if (confirm) return           // onay modali kendi Esc'ini isler
+      if (selectedKey) { setSelectedKey(null); return }
+      requestClose()
+      return
+    }
+    var mod = e.ctrlKey || e.metaKey
+    if (mod && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault()
+      if (canEdit && !saving && !loading) handleSave()
+      return
+    }
+    if (!selectedKey || !canEdit) return
     var idx = items.findIndex(function (x) { return x.key === selectedKey })
     if (idx < 0) return
     var it = items[idx]
+    var isInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')
+
+    if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput) {
+      if (it.locked) return
+      e.preventDefault()
+      toggleVisible(it.key)
+      return
+    }
     var isLeft = e.key === 'ArrowLeft'
     var isRight = e.key === 'ArrowRight'
     if (!isLeft && !isRight) return
@@ -334,19 +386,10 @@ export default function LineCardLayoutEditor(props) {
       } else {
         setSpan(it.key, it.span + (isRight ? 1 : -1))
       }
-    } else if (e.ctrlKey || e.metaKey) {
+    } else if (mod) {
       e.preventDefault()
       moveItem(idx, isRight ? 1 : -1)
     }
-  }
-
-  function toggleVisible(idx) {
-    setItems(function (prev) {
-      var next = prev.slice()
-      if (next[idx].locked) return prev
-      next[idx] = Object.assign({}, next[idx], { visible: !next[idx].visible })
-      return next
-    })
   }
 
   async function handleSave() {
@@ -354,19 +397,7 @@ export default function LineCardLayoutEditor(props) {
     setSaving(true)
     setError(null)
     try {
-      var payload = {
-        formCode: formCode,
-        items: items.map(function (it, i) {
-          return {
-            key: it.key, span: it.span, order: i, visible: it.visible,
-            label: (it.labelText && it.labelText.trim()) ? it.labelText.trim() : null,
-            labelSize: it.labelSize || null,
-            labelWeight: it.labelWeight || null,
-            labelColor: it.labelColor || null,
-            labelStyle: it.labelStyle || null,
-          }
-        }),
-      }
+      var payload = { formCode: formCode, items: buildPayloadItems(items) }
       var resp = await fetch('/api/line-card-layout/save', {
         method: 'POST',
         credentials: 'same-origin',
@@ -383,6 +414,7 @@ export default function LineCardLayoutEditor(props) {
         setError((data && data.error) || ('Kaydedilemedi (HTTP ' + resp.status + ')'))
         return
       }
+      baselineRef.current = JSON.stringify(payload.items)
       if (typeof onSaved === 'function') onSaved(data.items || payload.items)
     } catch (e) {
       setError('Hata: ' + (e && e.message ? e.message : String(e)))
@@ -417,13 +449,206 @@ export default function LineCardLayoutEditor(props) {
       setError('Hata: ' + (e && e.message ? e.message : String(e)))
     } finally {
       setSaving(false)
-      setConfirmReset(false)
+      setConfirm(null)
     }
   }
 
+  // ── Turetilmis veri ──
+  var visibleEntries = []
+  items.forEach(function (it, idx) { if (it.visible) visibleEntries.push({ it: it, idx: idx }) })
+  var hiddenItems = items.filter(function (it) { return !it.visible })
+  var rows = packRows(visibleEntries)
+
+  var selected = selectedKey ? items.find(function (x) { return x.key === selectedKey }) : null
+  // Secili alanin hangi satirda oldugunu bul (rayin "Satir" bolumu icin)
+  var selRow = null
+  var selRowIndex = -1
+  if (selected) {
+    for (var r = 0; r < rows.length; r++) {
+      if (rows[r].entries.some(function (en) { return en.it.key === selected.key })) { selRow = rows[r]; selRowIndex = r; break }
+    }
+  }
+  var rowInfo = selRow ? {
+    index: selRowIndex,
+    used: selRow.used,
+    free: CARD_GRID_UNITS - selRow.used,
+    count: selRow.entries.length,
+    canDistribute: Math.floor(CARD_GRID_UNITS / selRow.entries.length) >= MIN_SPAN,
+  } : null
+
+  // ── Tuval hucresi ────────────────────────────────────────────────────────
+  function renderCell(en) {
+    var it = en.it
+    var idx = en.idx
+    var Icon = resolveIcon(it.icon)
+    var isSelected = selectedKey === it.key
+    var isResizing = resizingKey === it.key
+    var isDragTarget = dragOverKey === it.key
+    var labelText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
+    var mode = it.labelStyle === 'modern' ? 'modern' : (it.labelStyle === 'inline' ? 'inline' : 'standard')
+    var colorCls = it.labelColor ? CARD_LABEL_COLOR_CLS[it.labelColor] : 'text-slate-500 dark:text-white/45'
+    var labelStyleOv = {}
+    if (it.labelSize) labelStyleOv.fontSize = it.labelSize
+    if (it.labelWeight) labelStyleOv.fontWeight = it.labelWeight
+
+    // Alt cizgi — dinlenmede yari opak (gercek kartta cizgi hover/odakta belirir),
+    // hover/secimde gercek kartin hover degerine cikar.
+    var underlineCls = 'h-[34px] border-b transition-colors ' + (
+      (isSelected || isResizing)
+        ? 'border-slate-200 dark:border-white/[0.12]'
+        : 'border-slate-200/50 dark:border-white/[0.06] group-hover:border-slate-200 dark:group-hover:border-white/[0.12]'
+    )
+
+    var labelInner = (
+      <>
+        <Icon
+          size={10}
+          strokeWidth={1.8}
+          className={(it.isWidget ? 'text-sky-500 dark:text-sky-300' : 'text-slate-400 dark:text-white/35') + ' flex-shrink-0'}
+        />
+        <span className="truncate">{labelText}</span>
+        {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
+      </>
+    )
+
+    return (
+      <div
+        key={it.key}
+        data-idx={idx}
+        data-key={it.key}
+        tabIndex={0}
+        role="button"
+        aria-pressed={isSelected}
+        aria-label={labelText + ' alanı, genişlik ' + it.span + '/' + CARD_GRID_UNITS + (it.locked ? ', zorunlu' : '')}
+        draggable={canEdit && !saving}
+        onDragStart={function (e) { handleDragStart(e, idx) }}
+        onDragOver={function (e) { handleDragOver(e, idx, it.key) }}
+        onDragEnd={handleDragEnd}
+        onClick={function () { setSelectedKey(isSelected ? null : it.key) }}
+        onKeyDown={function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKey(isSelected ? null : it.key) }
+        }}
+        className={'group relative outline-none ' + (canEdit ? 'cursor-grab active:cursor-grabbing ' : '') + (mode === 'inline' ? 'flex items-center gap-2 ' : '')}
+        style={{ gridColumn: 'span ' + clampSpan(it.span), opacity: dragging && dragIndexRef.current === idx ? 0.45 : 1 }}
+      >
+        {/* Overlay — hucre geometrisine DOKUNMAZ (negatif inset + pointer-events yok) */}
+        <div
+          aria-hidden="true"
+          className={'absolute rounded-lg transition-colors ' + (
+            isSelected
+              ? 'bg-indigo-100/60 dark:bg-indigo-500/[0.12]'
+              : 'group-hover:bg-indigo-50/40 dark:group-hover:bg-indigo-500/[0.08]'
+          )}
+          style={Object.assign(
+            { top: -4, bottom: -4, left: -2, right: -2, zIndex: 1, pointerEvents: 'none' },
+            isSelected ? { outline: '1px solid rgba(99,102,241,.55)' } : null,
+            isDragTarget ? { borderLeft: '2px solid #6366f1' } : null
+          )}
+        />
+        {/* Tutamak — yalniz hover/secim */}
+        {canEdit && (
+          <GripVertical
+            size={11}
+            strokeWidth={2}
+            aria-hidden="true"
+            className={'absolute text-slate-400 dark:text-white/35 transition-opacity pointer-events-none ' + (
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            )}
+            style={{ top: -3, left: -3, zIndex: 2 }}
+          />
+        )}
+
+        {/* Etiket — gercek kartin uc modu (standard / modern / inline) */}
+        {mode === 'standard' && (
+          <div
+            className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 relative z-[2] ' + colorCls}
+            style={labelStyleOv}
+          >{labelInner}</div>
+        )}
+        {mode === 'inline' && (
+          <div
+            className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] relative z-[2] ' + colorCls}
+            style={labelStyleOv}
+          >{labelInner}</div>
+        )}
+        {mode === 'modern' ? (
+          <div className="relative mt-1.5 w-full">
+            <div
+              className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + colorCls}
+              style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
+            >{labelInner}</div>
+            <div className={underlineCls} />
+          </div>
+        ) : (
+          <div className={underlineCls + (mode === 'inline' ? ' flex-1 min-w-0' : '')} />
+        )}
+
+        {/* Canli genislik rozeti — tuvaldeki TEK sayi, yalniz boyutlandirirken */}
+        {isResizing && (
+          <div
+            className="absolute px-1.5 py-0.5 rounded text-[11px] font-mono tabular-nums font-bold bg-indigo-500 text-[#fff]"
+            style={{ top: -18, right: 0, zIndex: 3 }}
+          >{spanLabel(it.span) + ' · ' + it.span + '/' + CARD_GRID_UNITS}</div>
+        )}
+
+        {/* Resize kolu — hover/secim/dokunmatik */}
+        {canEdit && (
+          <div
+            onPointerDown={function (e) { handleResizeStart(e, it.key) }}
+            onPointerMove={handleResizeMove}
+            onPointerUp={handleResizeEnd}
+            onPointerCancel={handleResizeEnd}
+            onClick={function (e) { e.stopPropagation() }}
+            title="Genişliği ayarlamak için çekin (Shift: serbest)"
+            className={'absolute flex items-center justify-center transition-opacity ' + (
+              (isSelected || isResizing || coarse) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            )}
+            style={{ right: -3, top: 0, bottom: 0, width: coarse ? 20 : 10, cursor: 'ew-resize', touchAction: 'none', zIndex: 3 }}
+          >
+            <span className="w-[2px] h-4 rounded-full bg-indigo-400/70 dark:bg-indigo-400/50" />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  /* Satir sonu boslugu — sayi/ray yerine BOSLUGUN KENDISI gosterir. */
+  function renderGap(row, rIdx) {
+    var free = CARD_GRID_UNITS - row.used
+    if (free < MIN_SPAN || dragging || resizingKey) return null
+    return (
+      <div
+        key={'gap-' + rIdx}
+        role="button"
+        tabIndex={0}
+        aria-label={'Satır ' + (rIdx + 1) + ' boşluğunu doldur (' + free + ' birim)'}
+        onClick={function () { if (canEdit) fillRow(row.entries) }}
+        onKeyDown={function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (canEdit) fillRow(row.entries) }
+        }}
+        className="group/gap rounded-md border border-dashed flex items-center justify-center transition-colors border-slate-300/50 dark:border-white/[0.10] hover:border-indigo-300/70 dark:hover:border-indigo-400/40 cursor-pointer outline-none"
+        style={{ gridColumn: 'span ' + free, height: 34, alignSelf: 'end' }}
+      >
+        <span className="opacity-0 group-hover/gap:opacity-100 transition-opacity text-slate-400 dark:text-white/40">
+          {free >= 8
+            ? <span className="text-[11px] font-semibold">Boşluğu Doldur</span>
+            : <Maximize2 size={13} strokeWidth={2} />}
+        </span>
+      </div>
+    )
+  }
+
+  // Tuvale cizilecek duz liste: her satirin hucreleri + (varsa) hayalet bosluk
+  var canvasChildren = []
+  rows.forEach(function (row, rIdx) {
+    row.entries.forEach(function (en) { canvasChildren.push(renderCell(en)) })
+    var gap = renderGap(row, rIdx)
+    if (gap) canvasChildren.push(gap)
+  })
+
   return createPortal(
     <div
-      onClick={function (e) { if (e.target === e.currentTarget && !saving) onClose() }}
+      onClick={function (e) { if (e.target === e.currentTarget) requestClose() }}
       onKeyDown={handleModalKeyDown}
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       /* Blur YOK (2026-08-06 kullanici istegi): admin hangi ekran icin duzen
@@ -432,459 +657,179 @@ export default function LineCardLayoutEditor(props) {
       style={{ background: 'rgba(15,23,42,0.28)' }}
     >
       <div
-        className="w-full max-w-[960px] max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-slate-900"
+        ref={modalRef}
+        className="w-full max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border shadow-2xl border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-slate-900 [color-scheme:light] dark:[color-scheme:dark]"
+        style={{ maxWidth: 'min(1120px, calc(100vw - 96px))' }}
         role="dialog"
+        aria-modal="true"
         aria-label="Kart Düzeni"
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-200 dark:border-white/[0.08] flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-50 border border-indigo-200 text-indigo-600 dark:bg-indigo-500/15 dark:border-indigo-400/30 dark:text-indigo-300">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-50 border border-indigo-200 text-indigo-600 dark:bg-indigo-500/15 dark:border-indigo-400/30 dark:text-indigo-300 flex-shrink-0">
             <LayoutGrid size={17} strokeWidth={1.9} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-bold text-slate-800 dark:text-white/90 flex items-center gap-2">
               <span>Kart Düzeni</span>
-              {/* Hangi ekranin duzeni duzenleniyor — admin birden fazla belge
-                  turu arasinda gezerken karisiklik olmasin. */}
-              <span className="px-1.5 py-0.5 rounded text-[10.5px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30">
+              {/* Hangi ekranin duzeni duzenleniyor — admin belge turleri
+                  arasinda gezerken karisiklik olmasin. */}
+              <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30 truncate">
                 {props.formLabel || formCode}
               </span>
             </div>
-            <div className="text-[11px] text-slate-500 dark:text-white/45">
-              Alanları sürükleyerek sıralayın, kenardan çekerek veya hazır kesirlerle genişletin; satır araçlarıyla hizalayın. Düzen bu belge türünün tüm kullanıcıları için geçerlidir.
+            <div className="text-[11px] text-slate-500 dark:text-white/45 mt-0.5">
+              Bu düzen belge türünün tüm kullanıcıları için geçerlidir.
             </div>
           </div>
+          {dirty && (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span className="text-[11px] text-slate-400 dark:text-white/40">Kaydedilmedi</span>
+            </div>
+          )}
           <button
             type="button"
-            onClick={function () { if (!saving) onClose() }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:text-white/40 dark:hover:text-rose-300 dark:hover:bg-rose-500/10 transition-colors"
-            title="Kapat (Esc)"
+            onClick={requestClose}
+            aria-label="Kapat"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:text-white/35 dark:hover:text-rose-300 dark:hover:bg-rose-500/10 flex-shrink-0"
           >
             <XIcon size={15} strokeWidth={2} />
           </button>
         </div>
 
-        {/* Body — 24 kolonlu onizleme izgarasi. Dis kabuk gercek kalem karti
-            gorunumundedir (ayni border/arka plan) — WYSIWYG onizleme. */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-          {loading && (
-            <div className="py-10 text-center text-[12px] text-slate-400 dark:text-white/35">
-              Alanlar yükleniyor…
-            </div>
-          )}
-          {!loading && (function () {
-            // Tuval yalniz KARTTA GORUNEN alanlari cizer (gizliler asagidaki
-            // tepsiye duser) — boylece satir paketleme ve doluluk olculeri
-            // gercek kartla birebir ayni olur.
-            var entries = items.map(function (it, i) { return { it: it, idx: i } })
-            var visibleEntries = entries.filter(function (en) { return en.it.visible })
-            var hiddenEntries = entries.filter(function (en) { return !en.it.visible })
-            var rows = packRows(visibleEntries)
-            var guidesOn = resizingKey != null || dragOverIndex != null
-            // Kilavuz cizgileri: 1/12'lik adimlar — yalniz surukleme/boyutlandirma
-            // sirasinda gorunur, dinlenme halinde onizlemeyi kirletmez.
-            var guideStyle = guidesOn ? {
-              backgroundImage: 'repeating-linear-gradient(to right, rgba(99,102,241,0.16) 0 1px, transparent 1px calc(100% / 12))',
-            } : null
-
-            function renderItem(en) {
-              var it = en.it
-              var idx = en.idx
-              var hiddenCls = !it.visible ? ' opacity-40' : ''
-              var dragCls = dragOverIndex === idx ? ' ring-2 ring-indigo-400/70' : ''
-              var selectedCls = selectedKey === it.key ? ' ring-indigo-400/80 bg-indigo-50/50 dark:bg-indigo-500/[0.08]' : ' ring-transparent'
-              var Icon = resolveIcon(it.icon)
-              // Onizleme etiketinde override'lar CANLI uygulanir — kartla birebir.
-              var pvText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
-              var pvColorCls = it.labelColor ? LABEL_COLOR_CLS[it.labelColor] : 'text-slate-500 dark:text-white/45'
-              var pvMode = (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : 'standard'
-              var pvStyle = {}
-              if (it.labelSize) pvStyle.fontSize = it.labelSize
-              if (it.labelWeight) pvStyle.fontWeight = it.labelWeight
-              var pvLabelInner = (
-                <>
-                  <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
-                  <span className="truncate">{pvText}</span>
-                  {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
-                </>
-              )
-              return (
+        {/* ── Govde: tuval + denetim rayi ── */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_296px]">
+          {/* Tuval */}
+          <div className="overflow-y-auto px-5 py-4">
+            {unsupported ? (
+              <div className="py-10 text-center text-[12px] text-slate-500 dark:text-white/45">
+                {error || 'Bu form için kart düzeni desteklenmiyor.'}
+              </div>
+            ) : (
+              <div className="rounded-xl border overflow-hidden border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025]">
                 <div
-                  key={it.key}
-                  draggable
-                  onDragStart={function (e) { handleDragStart(e, idx) }}
-                  onDragOver={function (e) { handleDragOver(e, idx) }}
-                  onDragEnd={handleDragEnd}
-                  onClick={function () { setSelectedKey(selectedKey === it.key ? null : it.key) }}
-                  tabIndex={0}
-                  style={{ gridColumn: 'span ' + it.span, position: 'relative' }}
-                  /* Yatay padding/border YOK, secim cercevesi `ring` (box-shadow) —
-                     ikisi de hucre genisligini yer; onizleme gercek kart
-                     genisligiyle birebir olmali (2026-08-06). */
-                  className={'group select-none rounded-lg pt-1 pb-1.5 cursor-grab active:cursor-grabbing ring-1 outline-none hover:ring-indigo-200/70 dark:hover:ring-indigo-400/25' + hiddenCls + dragCls + selectedCls}
+                  className="p-3"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'auto 1fr',
+                    gridTemplateAreas: '"actions fields"',
+                    columnGap: CARD_COLUMN_GAP,
+                    rowGap: CARD_ROW_GAP,
+                    alignItems: 'start',
+                  }}
                 >
-                  {/* Kontrol satiri — tut/genislik/goz. Kart gorunumunu bozmasin
-                      diye kucuk; blok hover'inda belirginlesir. */}
-                  <div className="flex items-center gap-1 mb-0.5 opacity-50 group-hover:opacity-100 transition-opacity">
-                    <GripVertical size={11} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
-                    {it.isWidget && (
-                      <span className="text-[8.5px] font-bold px-1 rounded bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300 flex-shrink-0" title="Özel alan (Alan Yönetimi)">EK</span>
-                    )}
-                    {/* Genislik rozeti — kesir dili (1/2, 1/3…); ham birim tooltip'te.
-                        Boyutlandirma surerken belirginlesir (canli geri bildirim). */}
-                    <span
-                      title={'Genişlik: ' + it.span + '/' + GRID_UNITS + ' birim'}
-                      className={'ml-auto text-[9px] font-mono tabular-nums flex-shrink-0 px-1 rounded transition-colors ' + (
-                        resizingKey === it.key
-                          ? 'bg-indigo-500 text-white font-bold'
-                          : 'text-slate-400 dark:text-white/35'
-                      )}
-                    >
-                      {spanLabel(it.span)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={function (e) { e.stopPropagation(); toggleVisible(idx) }}
-                      disabled={it.locked}
-                      title={it.locked ? 'Zorunlu alan — gizlenemez' : (it.visible ? 'Kartta gizle' : 'Kartta göster')}
-                      className={'w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-colors ' + (
-                        it.locked
-                          ? 'text-slate-300 dark:text-white/20 cursor-not-allowed'
-                          : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:text-white/40 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10'
-                      )}
-                    >
-                      {it.visible ? <Eye size={11} strokeWidth={2} /> : <EyeOff size={11} strokeWidth={2} />}
-                    </button>
-                  </div>
-                  {/* Kartla birebir ayni etiket + hucre kutusu (canli onizleme) —
-                      stil moduna gore: ustte / yuzer (modern) / solda (Sade). */}
-                  {pvMode === 'standard' && (
-                    <>
-                      <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide mb-0.5 ' + pvColorCls} style={pvStyle}>
-                        {pvLabelInner}
-                      </div>
-                      {/* Underline standardi (gercek karttaki gorunumun aynisi): kutu degil alt cizgi */}
-                      <div className="h-[34px] border-b border-slate-200 dark:border-white/[0.12]" />
-                    </>
-                  )}
-                  {pvMode === 'modern' && (
-                    <div style={{ position: 'relative' }} className="mt-1.5">
-                      <div
-                        className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + pvColorCls}
-                        style={Object.assign({ top: -7, left: 8, zIndex: 2, lineHeight: '12px' }, pvStyle)}
-                      >
-                        {pvLabelInner}
-                      </div>
-                      <div className="h-[34px] border-b border-slate-200 dark:border-white/[0.12]" />
-                    </div>
-                  )}
-                  {pvMode === 'inline' && (
-                    <div className="flex items-center gap-2">
-                      <div className={'calibra-line-card-label flex items-center gap-1 text-[10px] font-bold tracking-wide flex-shrink-0 max-w-[45%] ' + pvColorCls} style={pvStyle}>
-                        {pvLabelInner}
-                      </div>
-                      <div className="flex-1 min-w-0 h-[34px] border-b border-slate-200 dark:border-white/[0.12]" />
-                    </div>
-                  )}
-                  {/* Sag kenar resize tutamaci */}
+                  {/* Gercek kartta aksiyonlar SOL kenarda dikey serittir ve alan
+                      izgarasi o kadar daralir — onizleme ayni payi birakmazsa
+                      genislikler gercekle ortusmez. */}
                   <div
-                    onPointerDown={function (e) { handleResizeStart(e, idx) }}
-                    onPointerMove={handleResizeMove}
-                    onPointerUp={handleResizeEnd}
-                    onPointerCancel={handleResizeEnd}
-                    title="Genişliği sürükleyerek ayarla"
-                    style={{ touchAction: 'none' }}
-                    className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-r-lg opacity-0 group-hover:opacity-100 bg-indigo-400/40 dark:bg-indigo-400/30 transition-opacity"
-                  />
-                </div>
-              )
-            }
+                    aria-hidden="true"
+                    title="Kart aksiyon şeridi — sabittir, düzenlenemez"
+                    className="flex flex-col items-center gap-1 flex-shrink-0 justify-self-start pointer-events-none select-none"
+                    style={{ gridArea: 'actions', alignSelf: 'start', opacity: 0.55 }}
+                  >
+                    {[MoreHorizontal, Layers, Settings, Trash2].map(function (I, i) {
+                      return (
+                        <span key={i} className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-100 text-slate-300 dark:bg-white/[0.06] dark:text-white/20">
+                          <I size={13} strokeWidth={2} />
+                        </span>
+                      )
+                    })}
+                  </div>
 
-            var rowBtnCls = 'px-1.5 py-0.5 rounded text-[9.5px] font-semibold border transition-colors ' +
-              'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 ' +
-              'dark:border-white/10 dark:text-white/45 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10'
+                  {/* Alan izgarasi — TEK 48 kolonluk grid; sarmayi tarayici yapar */}
+                  <div
+                    ref={gridRef}
+                    onClick={function (e) { if (e.target === e.currentTarget) setSelectedKey(null) }}
+                    style={{
+                      gridArea: 'fields',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
+                      columnGap: CARD_COLUMN_GAP,
+                      rowGap: CARD_ROW_GAP,
+                      alignItems: 'end',
+                      position: 'relative',
+                    }}
+                  >
+                    {/* Kilavuz — yalniz boyutlandirma sirasinda, 1/4 adim */}
+                    {resizingKey && (
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          zIndex: 0,
+                          backgroundImage: 'repeating-linear-gradient(to right, rgba(99,102,241,.14) 0 1px, transparent 1px 25%)',
+                        }}
+                      />
+                    )}
 
-            return (
-              <>
-                <div className="rounded-xl border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025] px-3 pt-2 pb-3">
-                  {/* Gercek kartta aksiyonlar (•••/kilit/⚙/sil) SOL kenarda dikey
-                      serittir ve alan izgarasi o kadar daralir. Onizleme ayni payi
-                      birakmazsa genislikler gercekle ortusmez (2026-08-06). */}
-                  <div className="relative" style={{ paddingLeft: 47 }}>
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-[35px] flex flex-col items-center gap-1.5 pt-[26px] pointer-events-none"
-                      title="Kart aksiyon şeridi — sabittir, düzenlenemez"
-                    >
-                      {[0, 1, 2, 3].map(function (i) {
-                        return <span key={i} className="w-[22px] h-[22px] rounded-md bg-slate-100 dark:bg-white/[0.06] flex-shrink-0" />
-                      })}
-                    </div>
-                  {/* Olcu referansi: hucre genisligi = bu blogun genisligi / 48.
-                      Her satir ayri grid oldugu icin tek ortak olcek gerekir. */}
-                  <div ref={gridRef} className="h-0" />
-                  {rows.map(function (row, rIdx) {
-                    var free = GRID_UNITS - row.used
-                    return (
-                      <div key={'row-' + rIdx} className="group/row">
-                        {/* Satir rayi — sira no + doluluk + satir araclari */}
-                        <div className="flex items-center gap-2 mt-2 mb-1 first:mt-0">
-                          <span className="text-[9.5px] font-semibold text-slate-400 dark:text-white/35 flex-shrink-0">
-                            Satır {rIdx + 1}
-                          </span>
-                          <div className="w-[70px] h-1 rounded-full overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-white/[0.07]">
-                            <div
-                              className={'h-full rounded-full ' + (free > 0 ? 'bg-indigo-400/70' : 'bg-emerald-400/70')}
-                              style={{ width: Math.round((row.used / GRID_UNITS) * 100) + '%' }}
-                            />
-                          </div>
-                          <span
-                            title={'Bu satırda ' + row.used + ' birim kullanıldı' + (free > 0 ? ', ' + free + ' birim boş kaldı' : ' — satırda boşluk yok')}
-                            className={'text-[9.5px] font-mono tabular-nums flex-shrink-0 ' + (
-                              free > 0 ? 'text-slate-400 dark:text-white/35' : 'text-emerald-600 dark:text-emerald-300/80'
-                            )}
-                          >
-                            {row.used}/{GRID_UNITS} birim{free > 0 ? ' · ' + free + ' boş' : ''}
-                          </span>
-                          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
-                            <button
-                              type="button"
-                              onClick={function () { distributeRow(row.entries) }}
-                              title="Satırdaki alanları 48 birime eşit böl"
-                              className={rowBtnCls}
-                            >Eşit Dağıt</button>
-                            {free > 0 && (
-                              <button
-                                type="button"
-                                onClick={function () { fillRow(row.entries) }}
-                                title="Kalan boşluğu satırın son alanına ekle"
-                                className={rowBtnCls}
-                              >Satırı Doldur</button>
-                            )}
-                          </div>
-                        </div>
-                        <div
-                          style={Object.assign({
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(' + GRID_UNITS + ', minmax(0, 1fr))',
-                            // Gercek kart: columnGap 12 / rowGap 10 — bosluklar
-                            // toplam genisligin buyuk kismini tuttugu icin ayni
-                            // degerler kullanilmazsa onizleme oranlari kayar.
-                            columnGap: 12, rowGap: 10, alignItems: 'end',
-                          }, guideStyle)}
-                        >
-                          {row.entries.map(renderItem)}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {!visibleEntries.length && (
-                    <div className="py-8 text-center text-[11.5px] text-slate-400 dark:text-white/35">
-                      Kartta gösterilecek alan kalmadı — aşağıdaki listeden geri ekleyin.
-                    </div>
-                  )}
+                    {loading
+                      ? [0, 1, 2].map(function (i) {
+                          return (
+                            <div key={'sk-' + i} style={{ gridColumn: 'span 16' }}>
+                              <div className="h-[34px] rounded-md bg-slate-100 dark:bg-white/[0.05] animate-pulse" />
+                            </div>
+                          )
+                        })
+                      : canvasChildren}
                   </div>
                 </div>
 
-                {/* Gizli alan tepsisi — kartta gorunmeyenler burada bekler
-                    (tuvalde yer kaplamaz, boylece satir olculeri gercekci kalir). */}
-                {hiddenEntries.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-dashed border-slate-200 dark:border-white/10 px-3 py-2.5">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <EyeOff size={11} className="text-slate-400 dark:text-white/35" />
-                      <span className="text-[10.5px] font-semibold text-slate-500 dark:text-white/45">Kartta Gizli</span>
-                      <span className="text-[10px] font-mono text-slate-400 dark:text-white/30">({hiddenEntries.length})</span>
-                      <span className="text-[10px] text-slate-400 dark:text-white/30">— karta geri eklemek için tıklayın</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {hiddenEntries.map(function (en) {
-                        var HIcon = resolveIcon(en.it.icon)
-                        return (
-                          <button
-                            key={en.it.key}
-                            type="button"
-                            onClick={function () { toggleVisible(en.idx) }}
-                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] border transition-colors border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 dark:border-white/10 dark:text-white/50 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
-                          >
-                            <HIcon size={11} strokeWidth={1.8} />
-                            <span>{(en.it.labelText && en.it.labelText.trim()) ? en.it.labelText.trim() : en.it.label}</span>
-                            <Eye size={10} strokeWidth={2} className="opacity-60" />
-                          </button>
-                        )
-                      })}
-                    </div>
+                {!loading && !visibleEntries.length && (
+                  <div className="py-8 text-center text-[11.5px] text-slate-400 dark:text-white/35">
+                    Kartta gösterilecek alan kalmadı — sağdaki Alan Havuzu'ndan geri ekleyin.
                   </div>
                 )}
-              </>
-            )
-          })()}
-
-          {/* Secili Alan paneli — baslik metni + stil override'lari (2026-08-05) */}
-          {(function () {
-            var sel = items.find(function (x) { return x.key === selectedKey })
-            if (!sel) return null
-            return (
-              <div className="mt-3 rounded-xl border border-indigo-200/70 bg-indigo-50/40 dark:border-indigo-400/25 dark:bg-indigo-500/[0.06] px-4 py-3">
-                <div className="flex items-center gap-2 mb-2.5">
-                  <span className="text-[11.5px] font-bold text-slate-700 dark:text-white/80">Seçili Alan:</span>
-                  <span className="text-[11.5px] font-semibold text-indigo-600 dark:text-indigo-300">{sel.label}</span>
-                  <button
-                    type="button"
-                    onClick={function () { setSelectedKey(null) }}
-                    className="ml-auto text-[10.5px] text-slate-400 hover:text-slate-600 dark:text-white/35 dark:hover:text-white/60"
-                  >Kapat</button>
-                </div>
-
-                {/* Genislik — hazir kesirler + birim ince ayari. Fare ile
-                    surukleme her zaman mumkun, ama kesin deger burada verilir. */}
-                <div className="flex flex-wrap items-center gap-1.5 mb-3 pb-3 border-b border-indigo-200/50 dark:border-indigo-400/15">
-                  <span className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mr-1">Genişlik</span>
-                  {WIDTH_PRESETS.map(function (p) {
-                    var on = sel.span === p.span
-                    return (
-                      <button
-                        key={p.span}
-                        type="button"
-                        onClick={function () { setSpan(sel.key, p.span) }}
-                        title={p.span + '/' + GRID_UNITS + ' birim'}
-                        className={'px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ' + (
-                          on
-                            ? 'bg-indigo-500 text-white border-indigo-500'
-                            : 'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-white/50 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300'
-                        )}
-                      >
-                        {p.label}
-                      </button>
-                    )
-                  })}
-                  <div className="flex items-center gap-1 ml-1">
-                    <button
-                      type="button"
-                      onClick={function () { setSpan(sel.key, sel.span - 1) }}
-                      disabled={sel.span <= MIN_SPAN}
-                      title="Bir birim daralt (Alt+←)"
-                      className="w-5 h-5 rounded flex items-center justify-center text-[13px] leading-none border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 disabled:opacity-30 dark:border-white/10 dark:text-white/50 dark:hover:text-indigo-300"
-                    >−</button>
-                    <span className="w-[46px] text-center text-[10.5px] font-mono tabular-nums text-slate-500 dark:text-white/50">
-                      {sel.span}/{GRID_UNITS}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={function () { setSpan(sel.key, sel.span + 1) }}
-                      disabled={sel.span >= GRID_UNITS}
-                      title="Bir birim genişlet (Alt+→)"
-                      className="w-5 h-5 rounded flex items-center justify-center text-[13px] leading-none border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 disabled:opacity-30 dark:border-white/10 dark:text-white/50 dark:hover:text-indigo-300"
-                    >+</button>
-                  </div>
-                  <span className="text-[10px] text-slate-400 dark:text-white/30 ml-1">
-                    Alt+←/→ ince ayar · Alt+Shift ile hazır genişlikler · Ctrl+←/→ sıra
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
-                  <div>
-                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Başlık Metni</div>
-                    <input
-                      type="text"
-                      value={sel.labelText}
-                      maxLength={60}
-                      placeholder={sel.label + ' (varsayılan)'}
-                      onChange={function (e) { patchItem(sel.key, { labelText: e.target.value }) }}
-                      className="w-full px-2.5 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85 dark:placeholder:text-white/25"
-                    />
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Başlık Stili</div>
-                    <select
-                      value={sel.labelStyle || ''}
-                      onChange={function (e) { patchItem(sel.key, { labelStyle: e.target.value || null }) }}
-                      title="Alan Yönetimi'ndeki etiket stilleriyle aynı: Standart (başlık üstte), Modern (kutunun üstünde yüzer), Sade (başlık solda)"
-                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
-                    >
-                      <option value="">Standart</option>
-                      <option value="modern">Modern</option>
-                      <option value="inline">Sade</option>
-                    </select>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Boyut</div>
-                    <select
-                      value={sel.labelSize || ''}
-                      onChange={function (e) { patchItem(sel.key, { labelSize: e.target.value ? parseInt(e.target.value, 10) : null }) }}
-                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
-                    >
-                      <option value="">Varsayılan</option>
-                      {[9, 10, 11, 12, 13, 14].map(function (s) {
-                        return <option key={s} value={s}>{s} px</option>
-                      })}
-                    </select>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Kalınlık</div>
-                    <select
-                      value={sel.labelWeight || ''}
-                      onChange={function (e) { patchItem(sel.key, { labelWeight: e.target.value ? parseInt(e.target.value, 10) : null }) }}
-                      className="px-2 py-1.5 rounded-lg text-[12px] border border-slate-200 bg-[#fff] text-slate-700 focus:outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white/85"
-                    >
-                      <option value="">Varsayılan</option>
-                      <option value="400">Normal</option>
-                      <option value="500">Orta</option>
-                      <option value="600">Yarı Kalın</option>
-                      <option value="700">Kalın</option>
-                    </select>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Renk</div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={function () { patchItem(sel.key, { labelColor: null }) }}
-                        title="Varsayılan renk"
-                        className={'w-6 h-6 rounded-full border-2 flex items-center justify-center text-[9px] font-bold text-slate-400 dark:text-white/40 ' + (
-                          !sel.labelColor ? 'border-indigo-500' : 'border-slate-200 dark:border-white/15'
-                        )}
-                      >—</button>
-                      {LABEL_COLOR_TOKENS.map(function (tok) {
-                        return (
-                          <button
-                            key={tok}
-                            type="button"
-                            onClick={function () { patchItem(sel.key, { labelColor: tok }) }}
-                            title={tok}
-                            className={'w-6 h-6 rounded-full border-2 ' + (
-                              sel.labelColor === tok ? 'border-indigo-500' : 'border-transparent'
-                            )}
-                          >
-                            <span className={'block w-full h-full rounded-full ' + LABEL_COLOR_SWATCH_CLS[tok]} />
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
               </div>
-            )
-          })()}
-
-          <div className="mt-3 text-[10.5px] text-slate-400 dark:text-white/35">
-            Her satır 48 birimdir; sığmayan alan otomatik alt satıra akar. Genişlik sürüklerken
-            yaygın kesirlere (1/4, 1/3, 1/2…) yapışır — Shift ile serbest sürükleyin.
-            Bir alana tıklayınca genişlik, başlık metni ve stili düzenlenebilir.
-            Dar ekranlarda düzen otomatik olarak varsayılan ızgaraya döner.
+            )}
           </div>
 
-          {error && (
-            <div className="mt-3 flex items-center gap-2 text-[11.5px] text-rose-600 dark:text-rose-300">
-              <AlertTriangle size={13} /> {error}
-            </div>
-          )}
+          {/* Denetim rayi — 296px sabit, HER ZAMAN mount (sifir layout shift) */}
+          <div
+            className="overflow-y-auto p-4 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-white/[0.08]"
+            style={{ scrollbarGutter: 'stable' }}
+          >
+            <LineCardInspector
+              item={selected}
+              rowInfo={rowInfo}
+              hiddenItems={hiddenItems}
+              canEdit={canEdit && !saving}
+              coarse={coarse}
+              onPatch={patchItem}
+              onSetSpan={setSpan}
+              onDistributeRow={function () { if (selRow) distributeRow(selRow.entries) }}
+              onFillRow={function () { if (selRow) fillRow(selRow.entries) }}
+              onToggleVisible={toggleVisible}
+              onShowHidden={showHidden}
+              onMove={function (dir) {
+                var i = items.findIndex(function (x) { return x.key === selectedKey })
+                if (i >= 0) moveItem(i, dir)
+              }}
+              onClearSelection={function () { setSelectedKey(null) }}
+            />
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-2 px-5 py-3.5 border-t border-slate-200 dark:border-white/[0.08] bg-slate-50/60 dark:bg-white/[0.02] flex-shrink-0">
-          {hasCustomLayout && !confirmReset && (
+        {/* ── Hata seridi ── */}
+        {error && !unsupported && (
+          <div role="alert" className="px-5 py-2 flex items-center gap-2 border-t bg-rose-50 border-rose-200/60 dark:bg-rose-500/10 dark:border-rose-400/20 flex-shrink-0">
+            <AlertTriangle size={13} strokeWidth={2} className="text-rose-600 dark:text-rose-300 flex-shrink-0" />
+            <span className="text-[12px] text-rose-600 dark:text-rose-300 flex-1">{error}</span>
             <button
               type="button"
-              onClick={function () { setConfirmReset(true) }}
+              onClick={function () { setError(null) }}
+              aria-label="Hatayı kapat"
+              className="w-5 h-5 rounded flex items-center justify-center text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 flex-shrink-0"
+            ><XIcon size={12} strokeWidth={2} /></button>
+          </div>
+        )}
+
+        {/* ── Footer ── */}
+        <div className="flex items-center gap-2 px-5 py-3 border-t border-slate-200 dark:border-white/[0.08] bg-slate-50/60 dark:bg-white/[0.02] flex-shrink-0">
+          {canEdit && hasCustomLayout && (
+            <button
+              type="button"
+              onClick={function () { setConfirm('reset') }}
               disabled={saving}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-semibold border transition-colors bg-[#fff] text-slate-500 border-slate-200 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 dark:bg-white/[0.04] dark:text-white/50 dark:border-white/10 dark:hover:text-rose-300 dark:hover:border-rose-400/30 dark:hover:bg-rose-500/10"
             >
@@ -892,52 +837,55 @@ export default function LineCardLayoutEditor(props) {
               <span>Varsayılana Dön</span>
             </button>
           )}
-          {confirmReset && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11.5px] text-rose-600 dark:text-rose-300 font-semibold">
-                Kayıtlı düzen silinsin mi?
-              </span>
-              <button
-                type="button"
-                onClick={function () { setConfirmReset(false) }}
-                disabled={saving}
-                className="px-2.5 py-1 rounded-md text-[11px] font-semibold border bg-[#fff] text-slate-500 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/60 dark:border-white/10 dark:hover:bg-white/[0.08]"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={saving}
-                className="px-2.5 py-1 rounded-md text-[11px] font-bold border bg-rose-600 text-white border-rose-600 hover:bg-rose-700 dark:bg-rose-500 dark:border-rose-500 dark:hover:bg-rose-600"
-              >
-                Sil
-              </button>
-            </div>
-          )}
           <div className="flex-1" />
-          <button
-            type="button"
-            onClick={function () { if (!saving) onClose() }}
-            disabled={saving}
-            className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-[#fff] text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
-          >
-            Vazgeç
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className={'px-4 py-1.5 rounded-lg text-[12px] font-bold border transition-colors ' + (
-              saving
-                ? 'bg-indigo-300 text-white border-indigo-300 cursor-wait dark:bg-indigo-500/40 dark:border-indigo-400/30'
-                : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:border-indigo-500 dark:hover:bg-indigo-600'
-            )}
-          >
-            {saving ? 'Kaydediliyor…' : 'Kaydet'}
-          </button>
+          {canEdit ? (
+            <>
+              <button
+                type="button"
+                onClick={requestClose}
+                disabled={saving}
+                className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-[#fff] text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
+              >Vazgeç</button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || loading}
+                title="Ctrl+S"
+                className={'px-4 py-1.5 rounded-lg text-[12px] font-bold border transition-colors text-[#fff] ' + (
+                  saving ? 'bg-indigo-300 border-indigo-300 cursor-wait' : 'bg-indigo-600 border-indigo-600 hover:bg-indigo-700'
+                )}
+              >{saving ? 'Kaydediliyor…' : 'Kaydet'}</button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors bg-[#fff] text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-white/[0.04] dark:text-white/70 dark:border-white/10 dark:hover:bg-white/[0.08]"
+            >Kapat</button>
+          )}
         </div>
       </div>
+
+      {confirm === 'reset' && (
+        <ConfirmDialog
+          icon={RotateCcw}
+          title="Varsayılan Düzene Dön"
+          message="Bu belge türü için kayıtlı kart düzeni silinecek ve kart varsayılan ızgaraya dönecek. Bu işlem geri alınamaz."
+          dangerLabel="Sıfırla"
+          onCancel={function () { setConfirm(null) }}
+          onConfirm={handleReset}
+        />
+      )}
+      {confirm === 'close' && (
+        <ConfirmDialog
+          icon={AlertTriangle}
+          title="Kaydedilmemiş Değişiklikler"
+          message="Yaptığınız düzen değişiklikleri kaydedilmedi. Çıkarsanız kaybolacak."
+          dangerLabel="Çık"
+          onCancel={function () { setConfirm(null) }}
+          onConfirm={function () { setConfirm(null); onClose() }}
+        />
+      )}
     </div>,
     document.body
   )

@@ -19,10 +19,9 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus, Trash2, Pencil, Hash, FileText, Ruler, Sigma, DollarSign,
-  Percent, Calculator, StickyNote, CircleDot, Lock, Pin, PinOff,
+  Plus, Trash2, Pencil, Calculator, StickyNote, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
-  MoreHorizontal, ExternalLink, ChevronRight, Tag, Barcode, Warehouse, Layers,
+  MoreHorizontal, ExternalLink, ChevronRight, Layers,
 } from 'lucide-react'
 import { Parser as ExprParser } from 'expr-eval'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
@@ -35,29 +34,10 @@ import { getTopBody } from '../../utils/topPortal'
 import DynamicWidgetRenderer from '../DynamicWidgetRenderer/DynamicWidgetRenderer'
 import { loadDecimalSettings, resolveColumnDecimals, roundTo, onDecimalSettingsChanged } from '../../utils/decimalSettings'
 
-/* Lucide icon haritasi — C#'taki icon string'ini React bilesenine cevirir */
-var ICON_MAP = {
-  Hash: Hash,
-  FileText: FileText,
-  Ruler: Ruler,
-  Sigma: Sigma,
-  DollarSign: DollarSign,
-  Percent: Percent,
-  Calculator: Calculator,
-  StickyNote: StickyNote,
-  Tag: Tag,
-  Barcode: Barcode,
-  Warehouse: Warehouse,
-}
-function resolveIcon(name) {
-  return ICON_MAP[name] || CircleDot
-}
-
-/* Kart etiketi renk token'i → Tailwind sinifi (light+dark). HEX saklanmaz/yazilmaz —
-   tema uyumu semantik token uzerinden saglanir (LineCardLayout.LabelColor). */
-/* Kart duzeni izgara cozunurlugu — server GridUnits ile ayni (48; v1'de 24'tu,
-   eski kayitlari server okuma yolunda x2 olcekleyip normalize eder). */
-var CARD_GRID_UNITS = 48
+/* Ikon haritasi, izgara cozunurlugu ve etiket renk token'lari cardLayoutTokens'a
+   tasindi (2026-08-06): duzen editorunun onizlemesi gercek kartla BIREBIR ayni
+   gorunmek zorunda, iki kopya ayrisirsa WYSIWYG sessizce bozuluyordu. */
+import { ICON_MAP, resolveIcon, CARD_GRID_UNITS, CARD_LABEL_COLOR_CLS } from './cardLayoutTokens'
 
 /* ── Form Davranış Katmanı — satır-scope kural değerlendirme (2026-08-05) ──
    Kural ifadeleri admin tarafından tanımlanır ve server'da RuleExpr süzgecinden
@@ -83,16 +63,6 @@ function evalRowRule(expr, row) {
   if (!expr) return null
   try { return ExprParser.parse(expr).evaluate(behaviorRowScope(row)) === true }
   catch (e) { return null }
-}
-
-var CARD_LABEL_COLOR_CLS = {
-  slate:   'text-slate-500 dark:text-white/45',
-  indigo:  'text-indigo-600 dark:text-indigo-300',
-  emerald: 'text-emerald-600 dark:text-emerald-300',
-  amber:   'text-amber-600 dark:text-amber-300',
-  rose:    'text-rose-600 dark:text-rose-300',
-  blue:    'text-blue-600 dark:text-blue-300',
-  violet:  'text-violet-600 dark:text-violet-300',
 }
 
 /* Satir icin benzersiz _uid uret (React key ve yerel takip icin) */
