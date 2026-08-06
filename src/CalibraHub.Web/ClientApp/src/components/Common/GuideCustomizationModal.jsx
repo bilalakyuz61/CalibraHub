@@ -549,16 +549,16 @@ export default function GuideCustomizationModal(props) {
         : '44px 34px 1fr 1.2fr 60px 60px')  // sira / visible / alan / etiket / DÖNÜŞ / GÖRÜNÜŞ
 
   // ── Stiller — tema-aware ──
-  const bg     = isLight ? '#ffffff'                         : 'rgba(13,17,27,0.98)'
-  const bdr    = isLight ? '1px solid #e2e8f0'              : '1px solid rgba(255,255,255,0.12)'
+  const bg     = 'var(--app-surface)'
+  const bdr    = '1px solid var(--app-border)'
   const shadow = isLight ? '0 16px 48px rgba(0,0,0,0.15)'   : '0 16px 48px rgba(0,0,0,0.55)'
-  const hdrBg  = isLight ? '#f8fafc'                         : 'rgba(255,255,255,0.04)'
-  const divBdr = isLight ? '1px solid #e2e8f0'              : '1px solid rgba(255,255,255,0.08)'
-  const iBg    = isLight ? '#f8fafc'                         : 'rgba(255,255,255,0.06)'
-  const iBdr   = isLight ? '1px solid #cbd5e1'              : '1px solid rgba(255,255,255,0.14)'
-  const iClr   = isLight ? '#1e293b'                         : 'rgba(255,255,255,0.85)'
-  const lblClr = isLight ? '#64748b'                         : 'rgba(255,255,255,0.45)'
-  const txtClr = isLight ? '#334155'                         : 'rgba(255,255,255,0.78)'
+  const hdrBg  = 'var(--app-muted-surface)'
+  const divBdr = '1px solid var(--app-border)'
+  const iBg    = 'var(--app-muted-surface)'
+  const iBdr   = '1px solid var(--app-border)'
+  const iClr   = 'var(--app-text)'
+  const lblClr = 'var(--app-text-muted)'
+  const txtClr = 'var(--app-text-muted)'
   const accent = '#6366f1'
   const errClr = '#ef4444'
 
@@ -629,9 +629,9 @@ export default function GuideCustomizationModal(props) {
                   colorScheme: isLight ? 'light' : 'dark',
                 }}
               >
-                <option value="" style={{ background: isLight ? '#fff' : '#0d1117', color: iClr }}>— Seçiniz —</option>
+                <option value="" style={{ background: 'var(--app-surface)', color: iClr }}>— Seçiniz —</option>
                 {guides.map(g => (
-                  <option key={g.viewName} value={g.viewName} style={{ background: isLight ? '#fff' : '#0d1117', color: iClr }}>
+                  <option key={g.viewName} value={g.viewName} style={{ background: 'var(--app-surface)', color: iClr }}>
                     {g.viewName}{g.isStandard ? ' ★' : ''}
                   </option>
                 ))}
@@ -863,8 +863,8 @@ export default function GuideCustomizationModal(props) {
                           // bottom: 28 → buton ustune yapisik, asagiya kesilmez.
                           position: 'absolute', bottom: 28, right: 0, zIndex: 50,
                           minWidth: 260, maxHeight: 360, overflowY: 'auto',
-                          background: isLight ? '#ffffff' : 'rgba(13,17,27,0.98)',
-                          border: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.14)',
+                          background: 'var(--app-surface)',
+                          border: '1px solid var(--app-border)',
                           borderRadius: 8,
                           boxShadow: isLight ? '0 8px 24px rgba(0,0,0,0.12)' : '0 -12px 36px rgba(0,0,0,0.55)',
                           backdropFilter: 'blur(20px)',
@@ -877,7 +877,7 @@ export default function GuideCustomizationModal(props) {
                               padding: '6px 10px', fontSize: 9, fontWeight: 700,
                               textTransform: 'uppercase', letterSpacing: '.06em',
                               color: lblClr,
-                              background: isLight ? '#f8fafc' : 'rgba(255,255,255,0.04)',
+                              background: 'var(--app-muted-surface)',
                               position: 'sticky', top: 0, zIndex: 1,
                               borderTop: gi > 0 ? divBdr : 'none',
                             }}>{g}</div>
@@ -1012,7 +1012,7 @@ export default function GuideCustomizationModal(props) {
           <button type="button" onClick={handleSave} disabled={externalSaving || !viewCode}
             style={{
               padding: '7px 18px', fontSize: 12, fontWeight: 600,
-              background: (externalSaving || !viewCode) ? (isLight ? '#e2e8f0' : 'rgba(255,255,255,0.1)') : accent,
+              background: (externalSaving || !viewCode) ? 'var(--app-muted-surface)' : accent,
               color: (externalSaving || !viewCode) ? lblClr : '#fff',
               border: 'none', borderRadius: 6,
               cursor: (externalSaving || !viewCode) ? 'not-allowed' : 'pointer',

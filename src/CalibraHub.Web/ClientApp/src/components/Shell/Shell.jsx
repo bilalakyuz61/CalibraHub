@@ -2287,7 +2287,7 @@ function Header(props) {
           {user.initials || '?'}
           <span
             className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400"
-            style={{ border: '2px solid ' + (isDark ? '#0a0d17' : '#ffffff') }}
+            style={{ border: '2px solid var(--app-surface)' }}
           />
         </motion.button>
       </div>
@@ -2665,8 +2665,8 @@ function ShortcutPickerModal(props) {
     groupsMap[g].push(o)
   })
 
-  var panelBg = isDark ? 'rgba(15, 18, 32, 0.98)' : 'rgba(255, 255, 255, 0.99)'
-  var panelBorder = isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(15,23,42,0.1)'
+  var panelBg = 'var(--app-surface)'
+  var panelBorder = '1px solid var(--app-border)'
 
   return (
     <motion.div
@@ -2822,8 +2822,8 @@ function ProfilePopover(props) {
     }
   }, [])
 
-  var glassBg = isDark ? 'rgba(12, 15, 26, 0.92)' : 'rgba(255, 255, 255, 0.96)'
-  var glassBorder = isDark ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(15, 23, 42, 0.1)'
+  var glassBg = 'var(--app-surface)'
+  var glassBorder = '1px solid var(--app-border)'
 
   return (
     <motion.div
@@ -3001,8 +3001,8 @@ function OpenTabsPopover(props) {
     }
   }, [])
 
-  var glassBg = isDark ? 'rgba(12, 15, 26, 0.92)' : 'rgba(255, 255, 255, 0.96)'
-  var glassBorder = isDark ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(15, 23, 42, 0.1)'
+  var glassBg = 'var(--app-surface)'
+  var glassBorder = '1px solid var(--app-border)'
 
   return (
     <motion.div
@@ -3079,7 +3079,7 @@ function OpenTabsPopover(props) {
           var isDirty = !!(props.dirtyTabs && props.dirtyTabs[t.key])
           var dotBg = isDirty
             ? '#22c55e'
-            : (isActive ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : (isDark ? 'rgba(255,255,255,0.25)' : '#cbd5e1'))
+            : (isActive ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'var(--app-text-muted)')
           var dotShadow = isDirty
             ? '0 0 8px rgba(34,197,94,0.95), 0 0 14px rgba(34,197,94,0.55)'
             : (isActive ? '0 0 8px rgba(99,102,241,0.8)' : 'none')
@@ -3318,7 +3318,7 @@ function TabBar(props) {
     <div className="flex flex-col flex-shrink-0">
       <div
         className={'flex items-center h-11 border-b ' + borderColor}
-        style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
+        style={{ background: 'var(--app-content-bg)' }}
       >
         {/* Scrollable tab alanı */}
         <div className="relative flex-1 overflow-hidden h-full">

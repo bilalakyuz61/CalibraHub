@@ -256,37 +256,37 @@ export default function ConvertToOrdersModal(props) {
   var palette = isDark
     ? {
         backdrop: 'rgba(2,6,23,0.78)',
-        modalBg: '#0f172a',
-        modalBorder: 'rgba(255,255,255,0.08)',
-        headerBg: 'rgba(255,255,255,0.03)',
-        textPrimary: '#f1f5f9',
-        textSecondary: '#94a3b8',
-        textMuted: '#64748b',
-        cardBg: 'rgba(255,255,255,0.04)',
-        cardBorder: 'rgba(255,255,255,0.06)',
-        cardHover: 'rgba(255,255,255,0.07)',
-        inputBg: 'rgba(255,255,255,0.04)',
-        inputBorder: 'rgba(255,255,255,0.08)',
+        modalBg: 'var(--app-surface)',
+        modalBorder: 'var(--app-border)',
+        headerBg: 'var(--app-muted-surface)',
+        textPrimary: 'var(--app-text)',
+        textSecondary: 'var(--app-text-muted)',
+        textMuted: 'var(--app-text-muted)',
+        cardBg: 'var(--app-muted-surface)',
+        cardBorder: 'var(--app-border)',
+        cardHover: 'var(--app-muted-surface)',
+        inputBg: 'var(--app-muted-surface)',
+        inputBorder: 'var(--app-border)',
         accentGreen: '#10b981',
         accentDanger: '#f43f5e',
-        rowDivider: 'rgba(255,255,255,0.04)',
+        rowDivider: 'var(--app-border)',
       }
     : {
         backdrop: 'rgba(15,23,42,0.45)',
-        modalBg: '#ffffff',
-        modalBorder: 'rgba(15,23,42,0.10)',
-        headerBg: '#f8fafc',
-        textPrimary: '#0f172a',
-        textSecondary: '#475569',
-        textMuted: '#94a3b8',
-        cardBg: '#f8fafc',
-        cardBorder: '#e2e8f0',
-        cardHover: '#f1f5f9',
-        inputBg: '#ffffff',
-        inputBorder: '#cbd5e1',
+        modalBg: 'var(--app-surface)',
+        modalBorder: 'var(--app-border)',
+        headerBg: 'var(--app-muted-surface)',
+        textPrimary: 'var(--app-text)',
+        textSecondary: 'var(--app-text-muted)',
+        textMuted: 'var(--app-text-muted)',
+        cardBg: 'var(--app-muted-surface)',
+        cardBorder: 'var(--app-border)',
+        cardHover: 'var(--app-muted-surface)',
+        inputBg: 'var(--app-surface)',
+        inputBorder: 'var(--app-border)',
         accentGreen: '#059669',
         accentDanger: '#e11d48',
-        rowDivider: '#e2e8f0',
+        rowDivider: 'var(--app-border)',
       }
 
   var allSelected = quotes.length > 0 && quotes.every(function (q) { return selectedIds[q.id] })
@@ -602,7 +602,7 @@ export default function ConvertToOrdersModal(props) {
             style={{
               padding: '9px 18px', borderRadius: '9px', fontSize: '12.5px', fontWeight: 700,
               background: summary.quoteCount === 0 || submitting
-                ? (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0')
+                ? 'var(--app-muted-surface)'
                 : palette.accentGreen,
               color: summary.quoteCount === 0 || submitting
                 ? palette.textMuted

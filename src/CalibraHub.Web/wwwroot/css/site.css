@@ -5263,6 +5263,21 @@ body.app-theme-graphite .dashboard-pipeline__track span {
   --nav-accent-soft: rgba(99, 102, 241, 0.12);
   --nav-accent-glow: rgba(99, 102, 241, 0.25);
   --nav-quick: #22d3ee;
+  --dashboard-accent: #2563eb;
+  --dashboard-accent-strong: #1d4ed8;
+  --dashboard-accent-soft: rgba(37, 99, 235, 0.08);
+  --dashboard-accent-ring: rgba(37, 99, 235, 0.1);
+  --dashboard-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+}
+
+/* --dashboard-* nötrleri merkezî --app-* token'larindan turetilir.
+   DIKKAT — bu blok BODY'ye baglidir, :root'a DEGIL: tema override'lari
+   (body.app-theme-dark) --app-* degiskenlerini BODY uzerinde tanimlar.
+   Bu turetme :root'ta (html) yapilirsa var() html'in kendi (light) degerini
+   cozer ve pano ekranlari koyu temada acik renkte kalir — bu tam olarak
+   yasandi (2026-08-05). body'de tanimlaninca body'nin tema-ozel degerleri
+   kullanilir. Sonraki body.app-theme-graphite blogu bunlari yine ezebilir. */
+body {
   --dashboard-body-bg: var(--app-content-bg);
   --dashboard-sidebar-bg: var(--app-sidebar-bg);
   --dashboard-sidebar-border: var(--app-border);
@@ -5272,11 +5287,6 @@ body.app-theme-graphite .dashboard-pipeline__track span {
   --dashboard-text-strong: var(--app-text);
   --dashboard-text: var(--app-text);
   --dashboard-text-muted: var(--app-text-muted);
-  --dashboard-accent: #2563eb;
-  --dashboard-accent-strong: #1d4ed8;
-  --dashboard-accent-soft: rgba(37, 99, 235, 0.08);
-  --dashboard-accent-ring: rgba(37, 99, 235, 0.1);
-  --dashboard-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
 }
 
 body.app-theme-graphite {

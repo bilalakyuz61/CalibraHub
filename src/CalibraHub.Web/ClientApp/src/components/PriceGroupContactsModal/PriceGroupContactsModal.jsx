@@ -204,15 +204,15 @@ export default function PriceGroupContactsModal(props) {
 
   // ── Stiller (theme aware, inline) ──
   var bgBackdrop = 'rgba(0,0,0,0.55)'
-  var cardBg = isDark ? '#0f172a' : '#ffffff'
-  var cardBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'
-  var textPrimary = isDark ? '#f1f5f9' : '#0f172a'
-  var textMuted = isDark ? 'rgba(255,255,255,0.55)' : '#64748b'
-  var textSubtle = isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'
-  var rowBg = isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc'
-  var rowBorder = isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'
-  var inputBg = isDark ? 'rgba(255,255,255,0.04)' : '#ffffff'
-  var inputBorder = isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'
+  var cardBg = 'var(--app-surface)'
+  var cardBorder = 'var(--app-border)'
+  var textPrimary = 'var(--app-text)'
+  var textMuted = 'var(--app-text-muted)'
+  var textSubtle = 'var(--app-text-muted)'
+  var rowBg = 'var(--app-muted-surface)'
+  var rowBorder = 'var(--app-border)'
+  var inputBg = 'var(--app-muted-surface)'
+  var inputBorder = 'var(--app-border)'
 
   return (
     <div
@@ -438,8 +438,8 @@ export default function PriceGroupContactsModal(props) {
             onClick={onClose}
             style={{
               padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-              background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
-              border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'),
+              background: 'var(--app-muted-surface)',
+              border: '1px solid ' + ('var(--app-border)'),
               color: textPrimary, cursor: 'pointer',
             }}
           >
@@ -501,9 +501,9 @@ export default function PriceGroupContactsModal(props) {
                 disabled={busy}
                 style={{
                   padding: '8px 16px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
-                  background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+                  background: 'var(--app-muted-surface)',
                   color: textPrimary,
-                  border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'),
+                  border: '1px solid ' + ('var(--app-border)'),
                   cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
                 }}
               >
@@ -575,9 +575,9 @@ export default function PriceGroupContactsModal(props) {
                 disabled={busy}
                 style={{
                   padding: '8px 16px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
-                  background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+                  background: 'var(--app-muted-surface)',
                   color: textPrimary,
-                  border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'),
+                  border: '1px solid ' + ('var(--app-border)'),
                   cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1,
                 }}
               >

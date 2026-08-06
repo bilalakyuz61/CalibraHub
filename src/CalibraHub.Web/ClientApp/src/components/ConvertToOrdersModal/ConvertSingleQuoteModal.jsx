@@ -115,17 +115,17 @@ export default function ConvertSingleQuoteModal(props) {
 
   var palette = isDark
     ? {
-        backdrop: 'rgba(2,6,23,0.78)', modalBg: '#0f172a',
-        modalBorder: 'rgba(255,255,255,0.08)', headerBg: 'rgba(255,255,255,0.03)',
-        textPrimary: '#f1f5f9', textSecondary: '#94a3b8', textMuted: '#64748b',
-        cardBg: 'rgba(255,255,255,0.04)', cardBorder: 'rgba(255,255,255,0.06)',
+        backdrop: 'rgba(2,6,23,0.78)', modalBg: 'var(--app-surface)',
+        modalBorder: 'var(--app-border)', headerBg: 'var(--app-muted-surface)',
+        textPrimary: 'var(--app-text)', textSecondary: 'var(--app-text-muted)', textMuted: 'var(--app-text-muted)',
+        cardBg: 'var(--app-muted-surface)', cardBorder: 'var(--app-border)',
         accentGreen: '#10b981', accentDanger: '#f43f5e', accentAmber: '#f59e0b',
       }
     : {
-        backdrop: 'rgba(15,23,42,0.45)', modalBg: '#ffffff',
-        modalBorder: 'rgba(15,23,42,0.10)', headerBg: '#f8fafc',
-        textPrimary: '#0f172a', textSecondary: '#475569', textMuted: '#94a3b8',
-        cardBg: '#f8fafc', cardBorder: '#e2e8f0',
+        backdrop: 'rgba(15,23,42,0.45)', modalBg: 'var(--app-surface)',
+        modalBorder: 'var(--app-border)', headerBg: 'var(--app-muted-surface)',
+        textPrimary: 'var(--app-text)', textSecondary: 'var(--app-text-muted)', textMuted: 'var(--app-text-muted)',
+        cardBg: 'var(--app-muted-surface)', cardBorder: 'var(--app-border)',
         accentGreen: '#059669', accentDanger: '#e11d48', accentAmber: '#d97706',
       }
 
