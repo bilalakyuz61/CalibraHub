@@ -127,20 +127,16 @@
         .tabulator .tabulator-row.tabulator-row-even { background: var(--rpt-surface-alt) !important; }
         .tabulator .tabulator-row:hover { background: var(--rpt-accent-soft) !important; }
 
-        /* Dark mode support */
-        @@media (prefers-color-scheme: dark) {
-            .rpt-wrap { background: #0f1115; }
-            :root {
-                --rpt-surface: #1a1d23;
-                --rpt-surface-alt: #14161b;
-                --rpt-border: #2a2f38;
-                --rpt-border-strong: #3a4150;
-                --rpt-text: #e5e7eb;
-                --rpt-text-muted: #9ca3af;
-                --rpt-text-soft: #6b7280;
-            }
-            .rpt-col-tag.data { background: #2a2f38; color: #9ca3af; }
+        /* Dark tema — nötrler merkezi --app-* token'larından otomatik gelir
+           (bkz. :root tanımı yukarıda). Önceden @@media (prefers-color-scheme:
+           dark) kullanılıyordu — bu, uygulamanın tema anahtarından bağımsız
+           OS ayarına göre karardığı için tek dark selector kuralına aykırıydı;
+           body.app-theme-dark olarak düzeltildi (yalnız token'a bağlı olmayan
+           dim-metin + rozet tonu kaldı). */
+        body.app-theme-dark {
+            --rpt-text-soft: #6b7280;
         }
+        body.app-theme-dark .rpt-col-tag.data { background: #2a2f38; color: #9ca3af; }
     </style>
 }
 

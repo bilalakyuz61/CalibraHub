@@ -10,15 +10,12 @@
 @section Styles {
 <style>
 .cge-root {
-    --cge-bg:      #f1f5f9; --cge-surface: #ffffff; --cge-border: #e2e8f0;
-    --cge-text:    #0f172a; --cge-muted:   #64748b; --cge-accent: #6366f1;
+    --cge-bg:      var(--app-content-bg); --cge-surface: var(--app-surface); --cge-border: var(--app-border);
+    --cge-text:    var(--app-text); --cge-muted:   var(--app-text-muted); --cge-accent: #6366f1;
     display: flex; align-items: flex-start; justify-content: center;
     flex: 1 1 auto; overflow-y: auto; padding: 32px 16px; background: var(--cge-bg);
 }
-body.app-theme-dark .cge-root {
-    --cge-bg: #080c17; --cge-surface: #0d1323;
-    --cge-border: rgba(255,255,255,.09); --cge-text: #e2e8f0; --cge-muted: #94a3b8;
-}
+/* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
 .cge-card {
     width: 100%; max-width: 560px; background: var(--cge-surface);
     border: 1px solid var(--cge-border); border-radius: 14px;

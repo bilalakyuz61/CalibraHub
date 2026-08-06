@@ -136,11 +136,11 @@ export default function ModuleSelector(props) {
   }
 
   // Styling helpers
-  var dropBg      = isLight ? '#ffffff' : 'rgba(8,11,20,0.96)'
-  var dropBorder  = isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.10)'
+  var dropBg      = 'var(--app-surface)'
+  var dropBorder  = '1px solid var(--app-border)'
   var dropShadow  = isLight ? '0 12px 40px rgba(15,23,42,0.12)' : '0 12px 40px rgba(0,0,0,0.4)'
-  var headerColor = isLight ? '#94a3b8' : 'rgba(255,255,255,0.28)'
-  var headerBorder = isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.07)'
+  var headerColor = 'var(--app-text-muted)'
+  var headerBorder = '1px solid var(--app-border)'
 
   return (
     <div className="px-5 py-2.5 border-b border-slate-200/50 dark:border-white/[0.06] flex-shrink-0 grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4 items-center">
@@ -220,14 +220,14 @@ export default function ModuleSelector(props) {
                       var rowBg = isSel
                         ? (isLight ? '#eef2ff' : 'rgba(255,255,255,0.08)')
                         : 'transparent'
-                      var hoverBg = isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)'
+                      var hoverBg = 'var(--app-muted-surface)'
                       return (
                         <button
                           key={entity.key}
                           type="button"
                           onClick={function() { handlePickEntity(entity) }}
                           className="w-full flex items-center gap-3 px-4 py-2 transition-colors text-left"
-                          style={{ background: rowBg, color: isLight ? '#1e293b' : 'rgba(255,255,255,0.90)' }}
+                          style={{ background: rowBg, color: 'var(--app-text)' }}
                           onMouseEnter={function(e) { if (!isSel) e.currentTarget.style.background = hoverBg }}
                           onMouseLeave={function(e) { if (!isSel) e.currentTarget.style.background = 'transparent' }}
                         >

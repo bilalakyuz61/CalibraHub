@@ -1574,7 +1574,7 @@ export default function WidgetBuilderForm(props) {
       <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
           Yetkilendirilebilir
-          <span className="ml-2 normal-case font-normal" style={{ color: '#94a3b8', fontSize: '9px' }}>
+          <span className="ml-2 normal-case font-normal" style={{ color: 'var(--app-text-muted)', fontSize: '9px' }}>
             · Yetki Yönetimi'nde görme izni
           </span>
         </span>
@@ -1600,7 +1600,7 @@ export default function WidgetBuilderForm(props) {
         <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
             Kartta Göster
-            <span className="ml-2 normal-case font-normal" style={{ color: '#94a3b8', fontSize: '9px' }}>
+            <span className="ml-2 normal-case font-normal" style={{ color: 'var(--app-text-muted)', fontSize: '9px' }}>
               · kalem kartında inline alan
             </span>
           </span>

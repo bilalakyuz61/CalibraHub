@@ -37,13 +37,13 @@ body.page-sre .integrator-dashboard__content {
 
 /* ── Tema degiskenleri (acik) ── */
 .sre-root {
-    --sre-bg:           #f8fafc;
-    --sre-surface:      #ffffff;
-    --sre-surface2:     #f1f5f9;
-    --sre-border:       #e2e8f0;
-    --sre-border-light: #f1f5f9;
-    --sre-text:         #1e293b;
-    --sre-text-muted:   #64748b;
+    --sre-bg:           var(--app-content-bg);
+    --sre-surface:      var(--app-surface);
+    --sre-surface2:     var(--app-muted-surface);
+    --sre-border:       var(--app-border);
+    --sre-border-light: var(--app-border-light, #f1f5f9);
+    --sre-text:         var(--app-text);
+    --sre-text-muted:   var(--app-text-muted);
     --sre-input-bg:     #f8fafc;
     --sre-accent:       var(--theme-accent, #2563eb);
     --sre-accent-soft:  var(--theme-accent-soft, rgba(37,99,235,.12));
@@ -53,15 +53,8 @@ body.page-sre .integrator-dashboard__content {
     --sre-toast-er-bg:  #fee2e2;
     --sre-toast-er-tx:  #991b1b;
 }
-/* ── Tema degiskenleri (koyu) ── */
+/* ── Tema degiskenleri (koyu) — yalnız token'a bağlı olmayan (input/accent/toast) kalır ── */
 body.app-theme-dark .sre-root {
-    --sre-bg:           #080c17;
-    --sre-surface:      #0d1323;
-    --sre-surface2:     #111827;
-    --sre-border:       rgba(255,255,255,.09);
-    --sre-border-light: rgba(255,255,255,.04);
-    --sre-text:         #e2e8f0;
-    --sre-text-muted:   #94a3b8;
     --sre-input-bg:     rgba(255,255,255,.07);
     --sre-accent:       var(--theme-accent, #6366f1);
     --sre-accent-soft:  var(--theme-accent-soft, rgba(99,102,241,.18));

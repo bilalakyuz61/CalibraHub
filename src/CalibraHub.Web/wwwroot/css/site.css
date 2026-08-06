@@ -6264,6 +6264,10 @@ body.app-theme-dusk {
   --app-surface: #ffffff;
   --app-muted-surface: #e9edf3;
   --app-border: #dbe1ea;
+  /* --app-border-light: daha silik ayirici (ic cizgi, satir arasi). Eskiden
+     yalnizca body.app-theme-dark'ta tanimliydi; light tarafta karsiligi yoktu
+     ve var(--app-border-light) kullanan kurallar acik temada renksiz kaliyordu. */
+  --app-border-light: #e9edf3;
   --app-text: #333333;
   --app-text-muted: #4f4f4f;
   --theme-accent: #2563eb;

@@ -115,10 +115,10 @@ export default function GroupSelector(props) {
             transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
             className="absolute left-0 top-full mt-1 z-50 rounded-xl overflow-hidden"
             style={{
-              background: isDark ? 'rgba(8, 11, 20, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+              background: 'var(--app-surface)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
-              border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(15, 23, 42, 0.1)',
+              border: '1px solid var(--app-border)',
               boxShadow: isDark ? '0 12px 40px rgba(0, 0, 0, 0.4)' : '0 12px 40px rgba(15, 23, 42, 0.15)',
               maxHeight: 320,
               overflowY: 'auto',

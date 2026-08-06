@@ -135,10 +135,10 @@ export default function DataTypeDropdown(props) {
               // temada da koyu goruyordu. isDark'a gore dallandirildi (bkz. GroupSelector
               // ayni pattern). Padding/maxHeight: SmartTableRow "Islemler" menusuyle
               // ayni yogunlukta compact liste (bkz. asagidaki item spacing).
-              background: isDark ? 'rgba(8, 11, 20, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+              background: 'var(--app-surface)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
-              border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(15, 23, 42, 0.1)',
+              border: '1px solid var(--app-border)',
               boxShadow: isDark ? '0 12px 40px rgba(0, 0, 0, 0.4)' : '0 12px 40px rgba(15, 23, 42, 0.15)',
               padding: 4,
               maxHeight: 320,

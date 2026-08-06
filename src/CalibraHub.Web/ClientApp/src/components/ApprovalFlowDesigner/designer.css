@@ -29,11 +29,9 @@
 
 body.app-theme-dark .afd-root {
     color-scheme: dark;
-    --afd-bg:      #080c17;
-    --afd-surface: #0d1323;
-    --afd-border:  rgba(255,255,255,.09);
-    --afd-text:    #e2e8f0;
-    --afd-muted:   #94a3b8;
+    /* --afd-bg/surface/border/text/muted: kaydırılmadı — bunlar zaten
+       var(--afe-*) üzerinden Edit.cshtml'in --app-* zincirine bağlı (2026-08-06
+       token migrasyonu); burada sabit hex ile ezmek zinciri kırardı. */
     --afd-accent:  #818cf8;
     --afd-accent-s:rgba(129,140,248,.15);
 }

@@ -5,11 +5,11 @@
   color: var(--lt-text, #0f172a);
   font-family: inherit; overflow: hidden;
   color-scheme: light;
-  --lt-bg:           #f1f5f9;
-  --lt-surface:      #ffffff;
-  --lt-border:       #e2e8f0;
-  --lt-text:         #0f172a;
-  --lt-muted:        #64748b;
+  --lt-bg:           var(--app-content-bg, #f1f5f9);
+  --lt-surface:      var(--app-surface, #ffffff);
+  --lt-border:       var(--app-border, #e2e8f0);
+  --lt-text:         var(--app-text, #0f172a);
+  --lt-muted:        var(--app-text-muted, #64748b);
   --lt-line:         #cbd5e1;
   --lt-hover:        #f8fafc;
   --lt-indigo-bg:    rgba(99,102,241,.10);
@@ -28,11 +28,11 @@
 }
 body.app-theme-dark .lt-root {
   color-scheme: dark;
-  --lt-bg:           #080c17;
-  --lt-surface:      #0d1323;
-  --lt-border:       rgba(255,255,255,.08);
-  --lt-text:         #e2e8f0;
-  --lt-muted:        #94a3b8;
+  --lt-bg:           var(--app-content-bg, #080c17);
+  --lt-surface:      var(--app-surface, #0d1323);
+  --lt-border:       var(--app-border, rgba(255,255,255,.08));
+  --lt-text:         var(--app-text, #e2e8f0);
+  --lt-muted:        var(--app-text-muted, #94a3b8);
   --lt-line:         rgba(255,255,255,.12);
   --lt-hover:        #111827;
   --lt-indigo-bg:    rgba(99,102,241,.18);

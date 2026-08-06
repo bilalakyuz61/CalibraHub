@@ -9,11 +9,11 @@
 
 /* ── CSS değişkenleri ── */
 .cgt-root {
-  --cgt-bg:           #f1f5f9;
-  --cgt-surface:      #ffffff;
-  --cgt-border:       #e2e8f0;
-  --cgt-text:         #0f172a;
-  --cgt-muted:        #64748b;
+  --cgt-bg:           var(--app-content-bg, #f1f5f9);
+  --cgt-surface:      var(--app-surface, #ffffff);
+  --cgt-border:       var(--app-border, #e2e8f0);
+  --cgt-text:         var(--app-text, #0f172a);
+  --cgt-muted:        var(--app-text-muted, #64748b);
   --cgt-line:         #cbd5e1;
   --cgt-hover:        #f8fafc;
   --cgt-del-bg:       rgba(239,68,68,.08);
@@ -31,11 +31,11 @@
 }
 body.app-theme-dark .cgt-root {
   color-scheme: dark;
-  --cgt-bg:           #080c17;
-  --cgt-surface:      #0d1323;
-  --cgt-border:       rgba(255,255,255,.08);
-  --cgt-text:         #e2e8f0;
-  --cgt-muted:        #94a3b8;
+  --cgt-bg:           var(--app-content-bg, #080c17);
+  --cgt-surface:      var(--app-surface, #0d1323);
+  --cgt-border:       var(--app-border, rgba(255,255,255,.08));
+  --cgt-text:         var(--app-text, #e2e8f0);
+  --cgt-muted:        var(--app-text-muted, #94a3b8);
   --cgt-line:         rgba(255,255,255,.12);
   --cgt-hover:        #111827;
   --cgt-del-bg:       rgba(239,68,68,.12);

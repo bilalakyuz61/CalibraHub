@@ -362,11 +362,11 @@ body.app-theme-dark .vb-root {
 }
 body.app-theme-dark .vb-tsel-menu {
   color-scheme: dark;
-  --vb-surface: #101a2b;
-  --vb-surface-2: #16213a;
-  --vb-border: #232f47;
-  --vb-text: #e2e8f0;
-  --vb-muted: #94a3b8;
+  --vb-surface: var(--app-surface, #101a2b);
+  --vb-surface-2: var(--app-muted-surface, #16213a);
+  --vb-border: var(--app-border, #232f47);
+  --vb-text: var(--app-text, #e2e8f0);
+  --vb-muted: var(--app-text-muted, #94a3b8);
   --vb-indigo: #818cf8;
   --vb-indigo-soft: rgba(99, 102, 241, 0.14);
   --vb-blue: #60a5fa;

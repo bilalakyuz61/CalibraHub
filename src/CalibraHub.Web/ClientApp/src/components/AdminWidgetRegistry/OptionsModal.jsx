@@ -121,17 +121,17 @@ function GlassSelect(props) {
 
   // Tema-duyarli renkler — bir kez hesapla, asagidaki tum inline'larda kullan
   var t = {
-    bg:        isLight ? '#ffffff' : 'rgba(8, 11, 20, 0.97)',
-    border:    isLight ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.12)',
+    bg:        'var(--app-surface)',
+    border:    '1px solid var(--app-border)',
     shadow:    isLight ? '0 12px 40px rgba(15,23,42,0.18)' : '0 12px 40px rgba(0, 0, 0, 0.5)',
     blur:      isLight ? undefined : 'blur(24px)',
-    emptyText: isLight ? '#94a3b8' : 'rgba(255,255,255,0.4)',
-    clearText: isLight ? '#94a3b8' : 'rgba(255,255,255,0.4)',
+    emptyText: 'var(--app-text-muted)',
+    clearText: 'var(--app-text-muted)',
     selBg:     isLight ? '#eef2ff' : 'rgba(255,255,255,0.08)',
-    hoverBg:   isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
-    selText:   isLight ? '#1e293b' : '#fff',
-    text:      isLight ? '#334155' : 'rgba(255,255,255,0.85)',
-    hint:      isLight ? '#94a3b8' : 'rgba(255,255,255,0.35)',
+    hoverBg:   'var(--app-muted-surface)',
+    selText:   'var(--app-text)',
+    text:      'var(--app-text)',
+    hint:      'var(--app-text-muted)',
     check:     isLight ? '#4f46e5' : '#818cf8',
   }
 

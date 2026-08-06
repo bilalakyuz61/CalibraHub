@@ -112,8 +112,8 @@ export default function AdminMiniModal(props) {
                 'rounded-2xl overflow-hidden pointer-events-auto'
               }
               style={{
-                background: isDark ? 'rgba(8, 11, 20, 0.94)' : 'rgba(255, 255, 255, 0.98)',
-                border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(15, 23, 42, 0.08)',
+                background: 'var(--app-surface)',
+                border: '1px solid var(--app-border)',
                 backdropFilter: 'blur(32px)',
                 WebkitBackdropFilter: 'blur(32px)',
                 boxShadow: isDark

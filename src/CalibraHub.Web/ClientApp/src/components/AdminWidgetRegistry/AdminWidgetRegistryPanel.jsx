@@ -787,7 +787,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 fontWeight: 600,
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
-                color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.28)',
+                color: 'var(--app-text-muted)',
                 borderTop: si > 0 ? ('1px solid var(--app-border)') : 'none',
               }}>
                 {section.moduleName}
@@ -814,7 +814,7 @@ export default function AdminWidgetRegistryPanel(props) {
                       paddingLeft: 0,
                       textAlign: 'left',
                       background: isSel ? (isLight ? '#e0e7ff' : 'rgba(99,102,241,0.14)') : 'transparent',
-                      color: isSel ? (isLight ? '#3730a3' : '#a5b4fc') : (isLight ? '#475569' : 'rgba(255,255,255,0.65)'),
+                      color: isSel ? (isLight ? '#3730a3' : '#a5b4fc') : 'var(--app-text-muted)',
                       borderLeft: isSel ? '2px solid #6366f1' : '2px solid transparent',
                       borderRight: 'none',
                       borderTop: 'none',
@@ -823,7 +823,7 @@ export default function AdminWidgetRegistryPanel(props) {
                       transition: 'background 0.12s, color 0.12s',
                     }}
                     onMouseEnter={function(e) {
-                      if (!isSel) e.currentTarget.style.background = isLight ? '#e8edf4' : 'rgba(255,255,255,0.04)'
+                      if (!isSel) e.currentTarget.style.background = 'var(--app-muted-surface)'
                     }}
                     onMouseLeave={function(e) {
                       if (!isSel) e.currentTarget.style.background = 'transparent'
@@ -867,7 +867,7 @@ export default function AdminWidgetRegistryPanel(props) {
         {/* ── Sağ panel header: entity adı + variant toggle + arama + yeni grup ── */}
         <div
           className="px-4 py-2 flex-shrink-0 flex flex-wrap items-center gap-2"
-          style={{ borderBottom: isLight ? '1px solid rgba(226,232,240,0.7)' : '1px solid rgba(255,255,255,0.06)' }}
+          style={{ borderBottom: '1px solid var(--app-border)' }}
         >
           {/* Entity ikon + adı */}
           {currentEntity && (function() {
@@ -1248,12 +1248,12 @@ function EntityVariantToggle(props) {
 
   if (variants.length === 0) return null
 
-  var trackBg = isLight ? '#f1f5f9' : 'rgba(255,255,255,0.05)'
-  var trackBorder = isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.08)'
+  var trackBg = 'var(--app-muted-surface)'
+  var trackBorder = '1px solid var(--app-border)'
   var activeBg = isLight ? '#ffffff' : 'rgba(99,102,241,0.18)'
   var activeBorder = isLight ? '1px solid #c7d2fe' : '1px solid rgba(99,102,241,0.45)'
   var activeColor = isLight ? '#4f46e5' : '#c7d2fe'
-  var inactiveColor = isLight ? '#64748b' : 'rgba(255,255,255,0.55)'
+  var inactiveColor = 'var(--app-text-muted)'
   var activeShadow = isLight ? '0 1px 2px rgba(15,23,42,0.06)' : '0 0 0 1px rgba(99,102,241,0.20)'
 
   return (
