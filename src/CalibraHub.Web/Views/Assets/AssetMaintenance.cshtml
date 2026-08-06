@@ -11,12 +11,13 @@
 @section Styles {
 <style>
     .am-root {
-        --am-bg:#f1f5f9; --am-surface:#ffffff; --am-border:#e2e8f0;
-        --am-text:#0f172a; --am-muted:#64748b; --am-accent:#6366f1;
+        --am-bg:var(--app-content-bg); --am-surface:var(--app-surface); --am-border:var(--app-border);
+        --am-text:var(--app-text); --am-muted:var(--app-text-muted); --am-accent:#6366f1;
         display:flex; flex-direction:column; height:100dvh; overflow:hidden; background:var(--am-surface); color:var(--am-text);
     }
     body.page-asset-maint, html { overflow:hidden; height:100%; }
-    body.app-theme-dark .am-root { --am-bg:#080c17; --am-surface:#0d1323; --am-border:rgba(255,255,255,.09); --am-text:#e2e8f0; --am-muted:#94a3b8; --am-accent:#818cf8; }
+    /* Nötrler token'dan otomatik gelir; yalnız aksan tonu burada kalır. */
+    body.app-theme-dark .am-root { --am-accent:#818cf8; }
 
     .am-header { display:flex; align-items:center; gap:10px; flex-shrink:0; padding:12px 22px; border-bottom:1px solid var(--am-border); background:var(--am-surface); }
     .am-header h1 { font-size:16px; font-weight:700; margin:0; }

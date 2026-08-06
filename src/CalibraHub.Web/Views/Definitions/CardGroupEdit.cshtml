@@ -9,23 +9,19 @@
 @section Styles {
 <style>
 .cge-page {
-    --cge-bg:           #f8fafc;
-    --cge-surface:      #ffffff;
-    --cge-surface2:     #f1f5f9;
-    --cge-border:       #e2e8f0;
-    --cge-text:         #0f172a;
-    --cge-text-muted:   #64748b;
+    --cge-bg:           var(--app-content-bg);
+    --cge-surface:      var(--app-surface);
+    --cge-surface2:     var(--app-muted-surface);
+    --cge-border:       var(--app-border);
+    --cge-text:         var(--app-text);
+    --cge-text-muted:   var(--app-text-muted);
     --cge-input-bg:     #ffffff;
     --cge-input-dis:    #f8fafc;
     --cge-accent:       #7c3aed;
 }
+/* Dark tonları merkezi --app-* token'larından otomatik gelir; yalnız
+   token'a bağlı olmayan (input/accent) satırlar burada kalır. */
 body.app-theme-dark .cge-page {
-    --cge-bg:           #080c17;
-    --cge-surface:      #0d1323;
-    --cge-surface2:     #111827;
-    --cge-border:       rgba(255,255,255,.09);
-    --cge-text:         #e2e8f0;
-    --cge-text-muted:   #94a3b8;
     --cge-input-bg:     rgba(255,255,255,.06);
     --cge-input-dis:    rgba(255,255,255,.03);
     --cge-accent:       #a78bfa;

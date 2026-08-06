@@ -12,19 +12,19 @@
 
   /* ── Tema token'ları (light = varsayılan) ── */
   --rd-overlay-rgb: 15, 23, 42;
-  --rd-bg: #eef2f7;
+  --rd-bg: var(--app-content-bg, #eef2f7);
   --rd-canvas-bg: #f1f5f9;
-  --rd-chrome-bg: #ffffff;
-  --rd-surface-bg: #ffffff;
-  --rd-surface-2-bg: #f8fafc;
+  --rd-chrome-bg: var(--app-muted-surface, #ffffff);
+  --rd-surface-bg: var(--app-surface, #ffffff);
+  --rd-surface-2-bg: var(--app-muted-surface, #f8fafc);
   --rd-input-bg: #ffffff;
   --rd-dropdown-bg: #ffffff;
   --rd-hover-bg: #f1f5f9;
   --rd-toast-bg: #ffffff;
   --rd-modal-bg-1: #ffffff;
   --rd-modal-bg-2: #ffffff;
-  --rd-text: #0f172a;
-  --rd-text-strong: #0f172a;
+  --rd-text: var(--app-text, #0f172a);
+  --rd-text-strong: var(--app-text, #0f172a);
   --rd-text-soft: #1e293b;
   --rd-muted: #475569;
   --rd-muted-2: #64748b;
@@ -57,19 +57,19 @@
 body.app-theme-dark .rd-root {
   color-scheme: dark;
   --rd-overlay-rgb: 255, 255, 255;
-  --rd-bg: #070d18;
+  --rd-bg: var(--app-content-bg, #070d18);
   --rd-canvas-bg: #0a1020;
-  --rd-chrome-bg: #0c1525;
-  --rd-surface-bg: #111827;
-  --rd-surface-2-bg: #131d30;
+  --rd-chrome-bg: var(--app-muted-surface, #0c1525);
+  --rd-surface-bg: var(--app-surface, #111827);
+  --rd-surface-2-bg: var(--app-muted-surface, #131d30);
   --rd-input-bg: #162032;
   --rd-dropdown-bg: #0f1830;
   --rd-hover-bg: #1a2438;
   --rd-toast-bg: #0f1f35;
   --rd-modal-bg-1: #0e1828;
   --rd-modal-bg-2: #0b1322;
-  --rd-text: #e2e8f0;
-  --rd-text-strong: #f1f5f9;
+  --rd-text: var(--app-text, #e2e8f0);
+  --rd-text-strong: var(--app-text, #f1f5f9);
   --rd-text-soft: #cbd5e1;
   --rd-muted: #94a3b8;
   --rd-muted-2: #64748b;

@@ -2,11 +2,11 @@
  * Light = default değişkenler; body.app-theme-dark override eder (CLAUDE.md CSS/Tema kuralı). */
 .capa-dash {
   color-scheme: light;
-  --capa-bg:        #f1f5f9;
-  --capa-surface:   #ffffff;
-  --capa-border:    #e2e8f0;
-  --capa-text:      #0f172a;
-  --capa-muted:     #64748b;
+  --capa-bg:        var(--app-content-bg, #f1f5f9);
+  --capa-surface:   var(--app-surface, #ffffff);
+  --capa-border:    var(--app-border, #e2e8f0);
+  --capa-text:      var(--app-text, #0f172a);
+  --capa-muted:     var(--app-text-muted, #64748b);
   --capa-shadow:    0 1px 2px rgba(15, 23, 42, .06);
 
   --capa-indigo-bg:  rgba(79, 70, 229, .10);
@@ -35,11 +35,11 @@
 
 body.app-theme-dark .capa-dash {
   color-scheme: dark;
-  --capa-bg:        #080c17;
-  --capa-surface:   #0d1323;
-  --capa-border:    rgba(255, 255, 255, .08);
-  --capa-text:      #e2e8f0;
-  --capa-muted:     #94a3b8;
+  --capa-bg:        var(--app-content-bg, #080c17);
+  --capa-surface:   var(--app-surface, #0d1323);
+  --capa-border:    var(--app-border, rgba(255, 255, 255, .08));
+  --capa-text:      var(--app-text, #e2e8f0);
+  --capa-muted:     var(--app-text-muted, #94a3b8);
   --capa-shadow:    0 1px 2px rgba(0, 0, 0, .35);
 
   --capa-indigo-bg:  rgba(165, 180, 252, .16);

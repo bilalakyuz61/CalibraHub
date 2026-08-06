@@ -55,11 +55,11 @@
 <style>
 /* ── wrapper ───────────────────────────────────────────────── */
 .afe-wrapper {
-    --afe-bg:        #f8fafc;
-    --afe-surface:   #ffffff;
-    --afe-border:    #e2e8f0;
-    --afe-text:      #1e293b;
-    --afe-muted:     #64748b;
+    --afe-bg:        var(--app-content-bg);
+    --afe-surface:   var(--app-surface);
+    --afe-border:    var(--app-border);
+    --afe-text:      var(--app-text);
+    --afe-muted:     var(--app-text-muted);
     --afe-accent:    #6366f1;
     --afe-accent-s:  rgba(99,102,241,.12);
     --afe-danger:    #ef4444;
@@ -68,12 +68,8 @@
     flex: 1 1 auto; min-height: 0;
     background: var(--afe-bg); color: var(--afe-text);
 }
+/* Nötrler token'dan otomatik gelir; yalnız aksan tonu burada kalır. */
 body.app-theme-dark .afe-wrapper {
-    --afe-bg:        #080c17;
-    --afe-surface:   #0d1323;
-    --afe-border:    rgba(255,255,255,.09);
-    --afe-text:      #e2e8f0;
-    --afe-muted:     #94a3b8;
     --afe-accent:    #818cf8;
     --afe-accent-s:  rgba(129,140,248,.15);
 }

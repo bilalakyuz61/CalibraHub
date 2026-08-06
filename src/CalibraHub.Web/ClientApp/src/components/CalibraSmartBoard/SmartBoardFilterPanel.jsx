@@ -432,16 +432,16 @@ export default function SmartBoardFilterPanel(props) {
   }
 
   // ── Stiller (theme aware) ──
-  var bgPanel = isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.95)'
+  var bgPanel = 'var(--app-surface)'
   var bgBackdrop = isDark ? 'rgba(7, 11, 22, 0.18)' : 'rgba(15, 23, 42, 0.10)'  // ← HAYALET: cok dusuk opacity
-  var border = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'
-  var textPrimary = isDark ? '#f1f5f9' : '#0f172a'
-  var textMuted = isDark ? 'rgba(255,255,255,0.55)' : '#64748b'
-  var textSubtle = isDark ? 'rgba(255,255,255,0.4)' : '#94a3b8'
-  var rowBg = isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc'
-  var rowBorder = isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'
-  var inputBg = isDark ? 'rgba(255,255,255,0.04)' : '#ffffff'
-  var inputBorder = isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'
+  var border = 'var(--app-border)'
+  var textPrimary = 'var(--app-text)'
+  var textMuted = 'var(--app-text-muted)'
+  var textSubtle = 'var(--app-text-muted)'
+  var rowBg = 'var(--app-muted-surface)'
+  var rowBorder = 'var(--app-border)'
+  var inputBg = 'var(--app-muted-surface)'
+  var inputBorder = 'var(--app-border)'
 
   // Panel her zaman DOM'da — animasyon transform/opacity ile
   return (
@@ -672,7 +672,7 @@ export default function SmartBoardFilterPanel(props) {
                           <div style={{
                             position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
                             marginTop: 4, maxHeight: 240, overflowY: 'auto',
-                            background: isDark ? '#0f172a' : '#fff',
+                            background: 'var(--app-surface)',
                             border: '1px solid ' + inputBorder, borderRadius: 7,
                             boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
                             padding: 4,
@@ -1073,7 +1073,7 @@ export default function SmartBoardFilterPanel(props) {
         <div style={{
           display: 'flex', gap: 8, padding: '12px 18px',
           borderTop: '1px solid ' + border, flexShrink: 0,
-          background: isDark ? 'rgba(0,0,0,0.18)' : 'rgba(248,250,252,0.7)',
+          background: 'var(--app-muted-surface)',
         }}>
           <button
             type="button"
@@ -1081,8 +1081,8 @@ export default function SmartBoardFilterPanel(props) {
             disabled={!filters.some(isActiveFilter)}
             style={{
               padding: '8px 14px', borderRadius: 9, fontSize: 12, fontWeight: 600,
-              background: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
-              border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.08)' : '#cbd5e1'),
+              background: 'var(--app-muted-surface)',
+              border: '1px solid var(--app-border)',
               color: !filters.some(isActiveFilter) ? textSubtle : textPrimary,
               cursor: !filters.some(isActiveFilter) ? 'not-allowed' : 'pointer',
               opacity: !filters.some(isActiveFilter) ? 0.6 : 1,
@@ -1100,7 +1100,7 @@ export default function SmartBoardFilterPanel(props) {
             style={{
               padding: '8px 14px', borderRadius: 9, fontSize: 12, fontWeight: 600,
               background: 'transparent',
-              border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.1)' : '#cbd5e1'),
+              border: '1px solid var(--app-border)',
               color: textPrimary, cursor: 'pointer',
             }}
           >

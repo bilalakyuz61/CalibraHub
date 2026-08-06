@@ -3,12 +3,12 @@
 
 .di-root {
   color-scheme: light;
-  --di-bg:        #f8fafc;
-  --di-surface:   #ffffff;
-  --di-surface-2: #f1f5f9;
-  --di-border:    #e2e8f0;
-  --di-text:      #0f172a;
-  --di-muted:     #64748b;
+  --di-bg:        var(--app-content-bg, #f8fafc);
+  --di-surface:   var(--app-surface, #ffffff);
+  --di-surface-2: var(--app-muted-surface, #f1f5f9);
+  --di-border:    var(--app-border, #e2e8f0);
+  --di-text:      var(--app-text, #0f172a);
+  --di-muted:     var(--app-text-muted, #64748b);
   --di-primary:   #4f46e5;
   --di-primary-fg:#ffffff;
   --di-danger:    #dc2626;
@@ -29,12 +29,12 @@
 
 body.app-theme-dark .di-root {
   color-scheme: dark;
-  --di-bg:        #0b1220;
-  --di-surface:   #111827;
-  --di-surface-2: #182234;
-  --di-border:    #243044;
-  --di-text:      #e2e8f0;
-  --di-muted:     #94a3b8;
+  --di-bg:        var(--app-content-bg, #0b1220);
+  --di-surface:   var(--app-surface, #111827);
+  --di-surface-2: var(--app-muted-surface, #182234);
+  --di-border:    var(--app-border, #243044);
+  --di-text:      var(--app-text, #e2e8f0);
+  --di-muted:     var(--app-text-muted, #94a3b8);
   --di-primary:   #6366f1;
   --di-primary-fg:#ffffff;
   --di-danger:    #f87171;

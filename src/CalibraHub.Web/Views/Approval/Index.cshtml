@@ -109,39 +109,31 @@
         border-color: rgba(255,255,255,0.07);
     }
 
-    /* InvoiceDataGrid CSS değişkenleri — light */
+    /* InvoiceDataGrid CSS değişkenleri — light (nötrler merkezi --app-* token'larından) */
     .igd-root {
-        --igd-bg:           #ffffff;
-        --igd-toolbar-bg:   #f8fafc;
-        --igd-thead-bg:     #f1f5f9;
-        --igd-border:       #e2e8f0;
-        --igd-row-border:   #f1f5f9;
-        --igd-text:         #1e293b;
-        --igd-text-muted:   #64748b;
+        --igd-bg:           var(--app-surface);
+        --igd-toolbar-bg:   var(--app-muted-surface);
+        --igd-thead-bg:     var(--app-muted-surface);
+        --igd-border:       var(--app-border);
+        --igd-row-border:   var(--app-border-light, #f1f5f9);
+        --igd-text:         var(--app-text);
+        --igd-text-muted:   var(--app-text-muted);
         --igd-text-dim:     #94a3b8;
         --igd-th-text:      #94a3b8;
         --igd-accent:       #6366f1;
         --igd-ok:           #10b981;
         --igd-badge-ok-bg:  #d1fae5;
-        --igd-modal-bg:     #ffffff;
-        --igd-modal-border: #e2e8f0;
+        --igd-modal-bg:     var(--app-surface);
+        --igd-modal-border: var(--app-border);
     }
-    /* InvoiceDataGrid CSS değişkenleri — dark */
+    /* InvoiceDataGrid CSS değişkenleri — dark: yalnız token'a bağlı olmayan
+       (dim metin tonu + aksan/durum) kalır, nötrler token'dan otomatik gelir */
     body.app-theme-dark .igd-root {
-        --igd-bg:           #080c17;
-        --igd-toolbar-bg:   rgba(255,255,255,.03);
-        --igd-thead-bg:     rgba(255,255,255,.04);
-        --igd-border:       rgba(255,255,255,.08);
-        --igd-row-border:   rgba(255,255,255,.05);
-        --igd-text:         #e2e8f0;
-        --igd-text-muted:   #8b98aa;
         --igd-text-dim:     #64748b;
         --igd-th-text:      #64748b;
         --igd-accent:       #818cf8;
         --igd-ok:           #34d399;
         --igd-badge-ok-bg:  rgba(52,211,153,.12);
-        --igd-modal-bg:     #0d1323;
-        --igd-modal-border: rgba(255,255,255,.09);
     }
     /* Arama kutusu placeholder rengi */
     .igd-root input::placeholder { color: var(--igd-text-muted); opacity: 1; }

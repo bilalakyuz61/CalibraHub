@@ -9,23 +9,17 @@
 @section Styles {
 <style>
     .fe-root {
-        --fe-bg:      #f1f5f9;
-        --fe-surface: #ffffff;
-        --fe-border:  #e2e8f0;
-        --fe-text:    #0f172a;
-        --fe-muted:   #64748b;
+        --fe-bg:      var(--app-content-bg);
+        --fe-surface: var(--app-surface);
+        --fe-border:  var(--app-border);
+        --fe-text:    var(--app-text);
+        --fe-muted:   var(--app-text-muted);
         --fe-accent:  #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
         flex: 1 1 auto; overflow-y: auto; padding: 32px 16px;
         background: var(--fe-bg);
     }
-    body.app-theme-dark .fe-root {
-        --fe-bg:      #080c17;
-        --fe-surface: #0d1323;
-        --fe-border:  rgba(255,255,255,.09);
-        --fe-text:    #e2e8f0;
-        --fe-muted:   #94a3b8;
-    }
+    /* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
 
     .fe-card {
         width: 100%; max-width: 600px;

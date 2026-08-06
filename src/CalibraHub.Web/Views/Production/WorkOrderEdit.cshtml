@@ -27,15 +27,15 @@
 
 @section Styles {
 <style>
-/* ── Tema değişkenleri (light default) ── */
+/* ── Tema değişkenleri (light default) — nötrler merkezi --app-* token'larından ── */
 .woe-page {
-    --woe-bg:           #f8fafc;
-    --woe-surface:      #ffffff;
-    --woe-surface2:     #f1f5f9;
-    --woe-border:       #e2e8f0;
-    --woe-border-light: #f1f5f9;
-    --woe-text:         #0f172a;
-    --woe-text-muted:   #64748b;
+    --woe-bg:           var(--app-content-bg);
+    --woe-surface:      var(--app-surface);
+    --woe-surface2:     var(--app-muted-surface);
+    --woe-border:       var(--app-border);
+    --woe-border-light: var(--app-border-light, #f1f5f9);
+    --woe-text:         var(--app-text);
+    --woe-text-muted:   var(--app-text-muted);
     --woe-input-bg:     #ffffff;
     --woe-input-disabled:#f8fafc;
     --woe-accent:       var(--theme-accent, #2563eb);
@@ -44,15 +44,8 @@
     --woe-toast-er-bg:  #fee2e2;
     --woe-toast-er-tx:  #991b1b;
 }
-/* ── Tema değişkenleri (dark override) ── */
+/* ── Tema değişkenleri (dark override) — yalnız token'a bağlı olmayan (input/toast) kalır ── */
 body.app-theme-dark .woe-page {
-    --woe-bg:           #080c17;
-    --woe-surface:      #0d1323;
-    --woe-surface2:     #111827;
-    --woe-border:       rgba(255,255,255,.09);
-    --woe-border-light: rgba(255,255,255,.04);
-    --woe-text:         #e2e8f0;
-    --woe-text-muted:   #94a3b8;
     --woe-input-bg:     rgba(255,255,255,.06);
     --woe-input-disabled:rgba(255,255,255,.03);
     --woe-accent:       var(--theme-accent, #6366f1);
@@ -637,18 +630,17 @@ input[id$="Display"][readonly] { cursor: default; opacity: .92; }
 
 /* ── Generic picker modal ─────────────────────────────────────────── */
 /* CSS degiskenleri .woe-page'de tanimli; modal document.body'ye mount edilince
-   parent context'i bulamayip light defaultlara dusuyordu. Backdrop'a kendi
-   tema-aware fallbacklarini koyuyoruz (light + dark) — boylece modal nereye
-   mount edilirse edilsin tema sayfa ile tutarli kalir. */
+   parent context'i bulamayip light defaultlara dusuyordu. Merkezi --app-*
+   token'lari :root / body.app-theme-dark seviyesinde tanimli oldugu icin
+   backdrop bunlara dogrudan erisir — ayri light/dark blok gerekmiyor. */
 .wpicker-backdrop {
-    /* Light theme defaultlari (.woe-page ile birebir) */
-    --woe-bg:           #f8fafc;
-    --woe-surface:      #ffffff;
-    --woe-surface2:     #f1f5f9;
-    --woe-border:       #e2e8f0;
-    --woe-border-light: #f1f5f9;
-    --woe-text:         #0f172a;
-    --woe-text-muted:   #64748b;
+    --woe-bg:           var(--app-content-bg);
+    --woe-surface:      var(--app-surface);
+    --woe-surface2:     var(--app-muted-surface);
+    --woe-border:       var(--app-border);
+    --woe-border-light: var(--app-border-light, #f1f5f9);
+    --woe-text:         var(--app-text);
+    --woe-text-muted:   var(--app-text-muted);
     --woe-input-bg:     #ffffff;
     --woe-accent:       var(--theme-accent, #2563eb);
 
@@ -656,15 +648,8 @@ input[id$="Display"][readonly] { cursor: default; opacity: .92; }
     background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
     display: flex; align-items: center; justify-content: center;
 }
-/* Dark theme override — body.app-theme-dark sayfa ile ayni anda gecer. */
+/* Dark theme override — yalnız token'a bağlı olmayan (input) kalır. */
 body.app-theme-dark .wpicker-backdrop {
-    --woe-bg:           #080c17;
-    --woe-surface:      #0d1323;
-    --woe-surface2:     #111827;
-    --woe-border:       rgba(255,255,255,.09);
-    --woe-border-light: rgba(255,255,255,.04);
-    --woe-text:         #e2e8f0;
-    --woe-text-muted:   #94a3b8;
     --woe-input-bg:     rgba(255,255,255,.06);
     --woe-accent:       var(--theme-accent, #6366f1);
 }

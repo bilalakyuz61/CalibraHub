@@ -12,12 +12,12 @@
     /* Kit editor — 'ke-' prefix. Light default → dark override (CLAUDE.md). */
     .ke-root {
         color-scheme: light;
-        --ke-bg:        var(--app-bg, #f1f5f9);
-        --ke-surface:   var(--app-surface, #ffffff);
-        --ke-surface-2: var(--app-surface-2, #f8fafc);
-        --ke-border:    var(--app-border, #e2e8f0);
-        --ke-text:      var(--bs-body-color, #0f172a);
-        --ke-muted:     #64748b;
+        --ke-bg:        var(--app-content-bg);
+        --ke-surface:   var(--app-surface);
+        --ke-surface-2: var(--app-muted-surface);
+        --ke-border:    var(--app-border);
+        --ke-text:      var(--app-text);
+        --ke-muted:     var(--app-text-muted);
         --ke-primary:   #6366f1;
         --ke-primary-weak: rgba(99,102,241,.10);
         --ke-danger:    #e11d48;
@@ -26,14 +26,10 @@
         background: var(--ke-bg); color: var(--ke-text);
         font-size: 14px;
     }
+    /* Dark tonları merkezi --app-* token'larından otomatik gelir; yalnız
+       color-scheme + accent-tint (--ke-primary-weak) burada kalır. */
     body.app-theme-dark .ke-root {
         color-scheme: dark;
-        --ke-bg:        #0b1220;
-        --ke-surface:   #131c2e;
-        --ke-surface-2: #0e1626;
-        --ke-border:    #223047;
-        --ke-text:      #e2e8f0;
-        --ke-muted:     #94a3b8;
         --ke-primary-weak: rgba(99,102,241,.16);
     }
 

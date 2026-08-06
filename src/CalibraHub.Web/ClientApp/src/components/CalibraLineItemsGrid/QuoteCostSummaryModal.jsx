@@ -145,19 +145,19 @@ export default function QuoteCostSummaryModal() {
 
   // Stil
   var overlayBg = isLight ? 'rgba(15,23,42,.45)' : 'rgba(0,0,0,.55)'
-  var panelBg   = isLight ? '#ffffff'           : 'rgba(23,26,43,.96)'
-  var panelBdr  = isLight ? '#e2e8f0'           : 'rgba(255,255,255,.08)'
-  var textColor = isLight ? '#1e293b'           : 'rgba(255,255,255,.88)'
-  var mutedText = isLight ? '#64748b'           : 'rgba(255,255,255,.55)'
-  var subSurface= isLight ? '#f8fafc'           : 'rgba(255,255,255,.03)'
+  var panelBg   = 'var(--app-surface)'
+  var panelBdr  = 'var(--app-border)'
+  var textColor = 'var(--app-text)'
+  var mutedText = 'var(--app-text-muted)'
+  var subSurface= 'var(--app-muted-surface)'
   // Native option panelinin koyu temada koyu render edilmesi icin explicit
   // background/color (CombinationPickerModal ile ayni pattern).
-  var selectBg = isLight ? '#ffffff' : '#1e293b'
-  var selectFg = isLight ? '#1e293b' : '#e2e8f0'
+  var selectBg = 'var(--app-surface)'
+  var selectFg = 'var(--app-text)'
   var inputStyle = {
     padding: '5px 9px', borderRadius: 7,
     background: selectBg,
-    border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.12)'),
+    border: '1px solid var(--app-border)',
     color: selectFg, fontSize: '.78rem', outline: 'none',
     colorScheme: isLight ? 'light' : 'dark',
   }

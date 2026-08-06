@@ -595,19 +595,15 @@ body.app-theme-dark .wa-msg-composer__attach.is-open { background: rgba(129,140,
     color: var(--app-text, #1e293b);
 }
 body.app-theme-dark .wa-attach-popup {
-    background: #1e293b;
-    border-color: rgba(255,255,255,.10);
     box-shadow: 0 12px 40px rgba(0,0,0,.50), 0 0 0 1px rgba(255,255,255,.04);
 }
 body.app-theme-dark .wa-attach-popup__item:hover { background: rgba(255,255,255,.06); }
-body.app-theme-dark .wa-attach-popup__label { color: #e2e8f0; }
 
 .wa-attach-popup__divider {
     height: 1px;
     background: var(--app-border, #e2e8f0);
     margin: 6px 4px;
 }
-body.app-theme-dark .wa-attach-popup__divider { background: rgba(255,255,255,.10); }
 
 .wa-attach-popup__section-title {
     font-size: 0.72rem;
@@ -1063,7 +1059,6 @@ body.app-theme-dark .wa-filter-chip:hover { background: rgba(99,102,241,.12); bo
 body.app-theme-dark .wa-filter-chip.is-active { background: #25d366; border-color: #25d366; color: #fff; }
 body.app-theme-dark .wa-thread-search-btn { color: #94a3b8; }
 body.app-theme-dark .wa-thread-search-btn:hover { background: rgba(129,140,248,.12); color: #818cf8; }
-body.app-theme-dark .wa-delete-card { background: #1e293b; }
 body.app-theme-dark .wa-delete-card__title { color: #e2e8f0; }
 body.app-theme-dark .wa-delete-card__msg { color: #94a3b8; }
 body.app-theme-dark .wa-delete-card__btn--cancel { background: rgba(255,255,255,.08); color: #e2e8f0; }
@@ -1133,11 +1128,6 @@ body.app-theme-dark .wa-msg-sender-name { color: #818cf8; }
     border-top: 1px solid var(--app-border, #e2e8f0);
     margin: 4px 0;
 }
-body.app-theme-dark .wa-conv-menu {
-    background: #1e293b;
-    border-color: rgba(255,255,255,.1);
-}
-body.app-theme-dark .wa-conv-menu__item { color: #e2e8f0; }
 body.app-theme-dark .wa-conv-menu__item:hover { background: rgba(255,255,255,.06); }
 
 /* ── Thread head action butonu ──────────────────────────────────────── */
@@ -1247,10 +1237,6 @@ body.app-theme-dark .wa-conv-menu__item:hover { background: rgba(255,255,255,.06
     transition: background .12s;
 }
 .wa-group-panel__sync-btn:hover { background: rgba(99,102,241,.06); }
-body.app-theme-dark .wa-group-panel {
-    background: #1e293b;
-    border-color: rgba(255,255,255,.1);
-}
 body.app-theme-dark .wa-group-panel__head,
 body.app-theme-dark .wa-group-panel__member { border-color: rgba(255,255,255,.08); }
 
@@ -1567,10 +1553,6 @@ body.app-theme-dark .wa-select-bar__count { color: #a5b4fc; }
     font-size: 0.88rem;
 }
 .wa-forward-panel__item:hover { background: var(--app-hover-bg, rgba(0,0,0,.04)); }
-body.app-theme-dark .wa-forward-panel {
-    background: #1e293b;
-    border-color: rgba(255,255,255,.1);
-}
 body.app-theme-dark .wa-forward-panel__item { border-color: rgba(255,255,255,.08); }
 body.app-theme-dark .wa-forward-panel__item:hover { background: rgba(255,255,255,.05); }
 
@@ -1637,9 +1619,7 @@ body.app-theme-dark .wa-forward-panel__item:hover { background: rgba(255,255,255
     padding: 2px 4px;
 }
 .wa-starred-item__remove:hover { opacity: 1; color: #dc2626; }
-body.app-theme-dark .wa-starred-overlay { background: #1e293b; border-color: rgba(255,255,255,.1); }
 body.app-theme-dark .wa-starred-item { background: #0f172a; border-left-color: rgba(255,255,255,.1); }
-body.app-theme-dark .wa-starred-item__body { color: #e2e8f0; }
 
 /* ── Kişiler bölümü (arama sırasında sohbet altında) ────────────── */
 .wa-contact-section {

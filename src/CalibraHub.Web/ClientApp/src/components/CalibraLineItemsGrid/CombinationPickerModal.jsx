@@ -234,11 +234,11 @@ export default function CombinationPickerModal(props) {
 
   // Stil sınıfları — glassmorphism
   var overlayBg = isLight ? 'rgba(15,23,42,.45)' : 'rgba(0,0,0,.55)'
-  var panelBg = isLight ? '#ffffff' : 'rgba(23,26,43,.96)'
-  var panelBorder = isLight ? '#e2e8f0' : 'rgba(255,255,255,.08)'
-  var textColor = isLight ? '#1e293b' : 'rgba(255,255,255,.88)'
-  var mutedText = isLight ? '#64748b' : 'rgba(255,255,255,.55)'
-  var subSurface = isLight ? '#f8fafc' : 'rgba(255,255,255,.03)'
+  var panelBg = 'var(--app-surface)'
+  var panelBorder = 'var(--app-border)'
+  var textColor = 'var(--app-text)'
+  var mutedText = 'var(--app-text-muted)'
+  var subSurface = 'var(--app-muted-surface)'
 
   var modalContent = (
     <div
@@ -430,8 +430,8 @@ export default function CombinationPickerModal(props) {
                     padding: '8px 16px', minHeight: 34,
                     borderRadius: 10, cursor: 'pointer',
                     fontSize: '.78rem', fontWeight: 600,
-                    background: isLight ? '#fff' : 'rgba(255,255,255,.04)',
-                    border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.1)'),
+                    background: 'var(--app-muted-surface)',
+                    border: '1px solid var(--app-border)',
                     color: mutedText,
                   }}
                 >Iptal</button>
@@ -467,8 +467,8 @@ export default function CombinationPickerModal(props) {
                     padding: '8px 16px', minHeight: 34,
                     borderRadius: 10, cursor: resolving ? 'not-allowed' : 'pointer',
                     fontSize: '.78rem', fontWeight: 600,
-                    background: isLight ? '#fff' : 'rgba(255,255,255,.04)',
-                    border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.1)'),
+                    background: 'var(--app-muted-surface)',
+                    border: '1px solid var(--app-border)',
                     color: mutedText,
                     opacity: resolving ? .5 : 1,
                   }}
@@ -520,7 +520,7 @@ function SideTabButton(props) {
         background: active
           ? (isLight ? 'rgba(99,102,241,.08)' : 'rgba(99,102,241,.14)')
           : 'transparent',
-        color: active ? (isLight ? '#4f46e5' : '#a5b4fc') : (isLight ? '#64748b' : 'rgba(255,255,255,.65)'),
+        color: active ? (isLight ? '#4f46e5' : '#a5b4fc') : 'var(--app-text-muted)',
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center',
         justifyContent: 'flex-start',
@@ -583,8 +583,8 @@ function ExistingTab(props) {
               placeholder="Kod veya değer ara..."
               style={{
                 width: '100%', padding: '5px 10px', borderRadius: 8,
-                background: isLight ? '#fff' : 'rgba(255,255,255,.05)',
-                border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.1)'),
+                background: 'var(--app-muted-surface)',
+                border: '1px solid var(--app-border)',
                 color: textColor, fontSize: '.78rem', outline: 'none',
                 colorScheme: isLight ? 'light' : 'dark',
               }}
@@ -749,12 +749,12 @@ function NewTab(props) {
   // Dark modda <select>'in kendisi ve acilan option paneli icin
   // solid koyu arka plan veriyoruz — transparan rgba'da Windows/Chrome
   // bazen light default render ediyor.
-  var selectBg = isLight ? '#ffffff' : '#1e293b'
-  var selectFg = isLight ? '#1e293b' : '#e2e8f0'
+  var selectBg = 'var(--app-surface)'
+  var selectFg = 'var(--app-text)'
   var inputStyle = {
     padding: '7px 10px', borderRadius: 8,
     background: selectBg,
-    border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.14)'),
+    border: '1px solid var(--app-border)',
     color: selectFg,
     fontSize: '.82rem',
     outline: 'none',

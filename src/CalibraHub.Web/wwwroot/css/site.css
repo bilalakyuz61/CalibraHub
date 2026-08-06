@@ -1263,9 +1263,9 @@ body.app-theme-dark .workspace-frame-body {
 }
 
 .module-card {
-  border: 1px solid #dbe2ef;
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: #f8fbff;
+  background: var(--app-surface);
   padding: 10px;
 }
 
@@ -1276,7 +1276,7 @@ body.app-theme-dark .workspace-frame-body {
 
 .module-card p {
   margin: 0 0 8px 0;
-  color: #475569;
+  color: var(--app-text-muted);
   font-size: 0.84rem;
 }
 
@@ -5263,15 +5263,15 @@ body.app-theme-graphite .dashboard-pipeline__track span {
   --nav-accent-soft: rgba(99, 102, 241, 0.12);
   --nav-accent-glow: rgba(99, 102, 241, 0.25);
   --nav-quick: #22d3ee;
-  --dashboard-body-bg: #f8f9fa;
-  --dashboard-sidebar-bg: #ffffff;
-  --dashboard-sidebar-border: #e0e0e0;
-  --dashboard-surface: #ffffff;
-  --dashboard-surface-muted: #ffffff;
-  --dashboard-border: #e0e0e0;
-  --dashboard-text-strong: #333333;
-  --dashboard-text: #333333;
-  --dashboard-text-muted: #4f4f4f;
+  --dashboard-body-bg: var(--app-content-bg);
+  --dashboard-sidebar-bg: var(--app-sidebar-bg);
+  --dashboard-sidebar-border: var(--app-border);
+  --dashboard-surface: var(--app-surface);
+  --dashboard-surface-muted: var(--app-muted-surface);
+  --dashboard-border: var(--app-border);
+  --dashboard-text-strong: var(--app-text);
+  --dashboard-text: var(--app-text);
+  --dashboard-text-muted: var(--app-text-muted);
   --dashboard-accent: #2563eb;
   --dashboard-accent-strong: #1d4ed8;
   --dashboard-accent-soft: rgba(37, 99, 235, 0.08);
@@ -11000,11 +11000,8 @@ body.app-theme-dark .hero {
   color: var(--app-text, #e2e8f0);
 }
 body.app-theme-dark .module-card {
-  background: var(--app-surface, #0d1323);
-  border-color: var(--app-border, rgba(255,255,255,.08));
   color: var(--app-text, #e2e8f0);
 }
-body.app-theme-dark .module-card p { color: var(--app-text-muted, #94a3b8); }
 body.app-theme-dark .module-link {
   background: rgba(99,102,241,.12);
   border-color: rgba(99,102,241,.2);

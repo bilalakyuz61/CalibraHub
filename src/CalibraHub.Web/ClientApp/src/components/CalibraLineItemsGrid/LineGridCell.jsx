@@ -362,8 +362,8 @@ function TextLookupCell(props) {
   }
 
   var dropdownBaseStyle = isLight
-    ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }
-    : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }
+    ? { background: 'var(--app-surface)', border: '1px solid var(--app-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }
+    : { background: 'var(--app-surface)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid var(--app-border)', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }
 
   var portalStyle = Object.assign({}, dropdownBaseStyle, {
     position: 'fixed',
@@ -448,8 +448,8 @@ function SelectCell(props) {
   var valueKey = column.optionsValueKey || 'code'
   var labelKey = column.optionsLabelKey || 'name'
   var isLight = useIsLight()
-  var optionBg = isLight ? '#ffffff' : '#0c0f1a'
-  var optionColor = isLight ? '#0f172a' : '#fff'
+  var optionBg = 'var(--app-surface)'
+  var optionColor = 'var(--app-text)'
 
   // autoSelectFirst=true olan kolonlar (ornegin Birim): options yuklendiginde
   // ve hucre bos ise, ilk secenek (master birim) varsayilan olarak atanir.
@@ -798,10 +798,10 @@ function GuideLookupCell(props) {
   }
 
   // ── Stiller (sadece input shell + butonlar; modal kendi gl-* CSS'ini kullanir) ──
-  var inputBg    = isLight ? '#fff'                : 'transparent'
-  var inputBdr   = isLight ? '1px solid #e2e8f0'  : '1px solid rgba(255,255,255,0.12)'
-  var inputColor = isLight ? '#1e293b'             : 'rgba(255,255,255,0.85)'
-  var btnBg      = isLight ? '#f1f5f9'             : 'rgba(255,255,255,0.07)'
+  var inputBg    = isLight ? 'var(--app-surface)'  : 'transparent'
+  var inputBdr   = '1px solid var(--app-border)'
+  var inputColor = 'var(--app-text)'
+  var btnBg      = 'var(--app-muted-surface)'
   var btnColor   = isLight ? '#6366f1'             : '#818cf8'
 
   // GuideLookupModal'a header'a sigdirilan ek buton — Alan Ayarlari
@@ -852,7 +852,7 @@ function GuideLookupCell(props) {
           title="Temizle"
           style={{
             flexShrink: 0, width: 20, height: 20, border: 'none',
-            background: 'transparent', color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.3)',
+            background: 'transparent', color: 'var(--app-text-muted)',
             cursor: 'pointer', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 14, lineHeight: 1,
           }}
@@ -1243,8 +1243,8 @@ function SerialEntryModal(props) {
   }
 
   var panelStyle = isLight
-    ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
-    : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
+    ? { background: 'var(--app-surface)', border: '1px solid var(--app-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
+    : { background: 'var(--app-surface)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid var(--app-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
 
   return createPortal(
     <div
@@ -1423,8 +1423,8 @@ function LotBreakdownModal(props) {
   var dupLot = (function() { var seen = {}, d = false; valid.forEach(function(r) { var k = String(r.lotNo).trim().toLowerCase(); if (seen[k]) d = true; seen[k] = 1 }); return d })()
 
   var panelStyle = isLight
-    ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
-    : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
+    ? { background: 'var(--app-surface)', border: '1px solid var(--app-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
+    : { background: 'var(--app-surface)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid var(--app-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
   var inCls = 'rounded-lg px-2.5 py-1.5 text-[12px] outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85'
 
   return createPortal(
@@ -1550,8 +1550,8 @@ function SerialBreakdownModal(props) {
   }
 
   var panelStyle = isLight
-    ? { background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
-    : { background: 'rgba(15,20,35,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
+    ? { background: 'var(--app-surface)', border: '1px solid var(--app-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.22)' }
+    : { background: 'var(--app-surface)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid var(--app-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }
   var inCls = 'rounded-lg px-2.5 py-1.5 text-[12px] outline-none border border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-400/60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white/85'
 
   return createPortal(

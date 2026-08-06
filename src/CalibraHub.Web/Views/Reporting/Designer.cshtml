@@ -11,12 +11,12 @@
             --rpt-accent: #6366f1;
             --rpt-accent-2: #818cf8;
             --rpt-accent-soft: rgba(99,102,241,.1);
-            --rpt-surface: #ffffff;
-            --rpt-surface-alt: #fafbfc;
-            --rpt-border: #eceef3;
-            --rpt-border-strong: #d9dce4;
-            --rpt-text: #111827;
-            --rpt-text-muted: #6b7280;
+            --rpt-surface: var(--app-surface);
+            --rpt-surface-alt: var(--app-muted-surface);
+            --rpt-border: var(--app-border);
+            --rpt-border-strong: var(--app-border);
+            --rpt-text: var(--app-text);
+            --rpt-text-muted: var(--app-text-muted);
             --rpt-text-soft: #9ca3af;
             --rpt-success: #10b981;
             --rpt-warning: #f59e0b;
@@ -28,7 +28,7 @@
             --rpt-radius-lg: 14px;
         }
 
-        .rpt-wrap { display: grid; grid-template-columns: 360px 1fr; gap: 18px; padding: 20px; height: calc(100vh - 90px); box-sizing: border-box; background: #f7f8fa; }
+        .rpt-wrap { display: grid; grid-template-columns: 360px 1fr; gap: 18px; padding: 20px; height: calc(100vh - 90px); box-sizing: border-box; background: var(--app-content-bg); }
         .rpt-panel { background: var(--rpt-surface); border: 1px solid var(--rpt-border); border-radius: var(--rpt-radius-lg); overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--rpt-shadow); }
         .rpt-panel-header { padding: 16px 18px; border-bottom: 1px solid var(--rpt-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
         .rpt-panel-header h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--rpt-text); letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }

@@ -47,11 +47,11 @@
         width: min(400px, 100vw);
         display: flex; flex-direction: column; overflow: hidden;
         color-scheme: light;
-        --wfd-bg: #ffffff;
-        --wfd-surface-2: #f8fafc;
-        --wfd-border: #e2e8f0;
-        --wfd-text: #0f172a;
-        --wfd-text-muted: #64748b;
+        --wfd-bg: var(--app-surface);
+        --wfd-surface-2: var(--app-muted-surface);
+        --wfd-border: var(--app-border);
+        --wfd-text: var(--app-text);
+        --wfd-text-muted: var(--app-text-muted);
         --wfd-text-dim: #94a3b8;
         background: var(--wfd-bg);
         border-left: 1px solid var(--wfd-border);
@@ -59,13 +59,12 @@
         transition: transform 280ms cubic-bezier(.23,1,.32,1), box-shadow 280ms;
     }
     .wfd-drawer.open { transform: translateX(0); box-shadow: -24px 0 64px rgba(15,23,42,.18); }
+    /* --wfd-bg dark modda BİLİNÇLİ olarak token'a bağlanmadı: frosted-glass
+       efekti (backdrop-filter blur) yarı-şeffaf zemin gerektiriyor, opak
+       --app-surface bu efekti kırar. Diğer nötrler token'dan gelir. */
     body.app-theme-dark .wfd-drawer {
         color-scheme: dark;
         --wfd-bg: rgba(13,18,34,.97);
-        --wfd-surface-2: rgba(255,255,255,.03);
-        --wfd-border: rgba(255,255,255,.08);
-        --wfd-text: #e2e8f0;
-        --wfd-text-muted: #94a3b8;
         --wfd-text-dim: #475569;
         backdrop-filter: blur(24px) saturate(140%);
         -webkit-backdrop-filter: blur(24px) saturate(140%);

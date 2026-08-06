@@ -710,17 +710,17 @@ export default function AdminWidgetRegistryPanel(props) {
         style={{
           width: '210px',
           flexShrink: 0,
-          borderRight: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.06)',
+          borderRight: '1px solid var(--app-border)',
           overflowY: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          background: isLight ? 'rgba(241,245,249,0.85)' : 'rgba(255,255,255,0.015)',
+          background: 'var(--app-muted-surface)',
         }}
       >
         {/* Sidebar arama kutusu — sabit, scroll dışı */}
         <div style={{
           padding: '8px 10px',
-          borderBottom: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid var(--app-border)',
           flexShrink: 0,
         }}>
           <div style={{
@@ -729,10 +729,10 @@ export default function AdminWidgetRegistryPanel(props) {
             gap: '6px',
             padding: '4px 8px',
             borderRadius: '7px',
-            background: isLight ? '#ffffff' : 'rgba(255,255,255,0.06)',
-            border: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.10)',
+            background: 'var(--app-surface)',
+            border: '1px solid var(--app-border)',
           }}>
-            <Search size={11} strokeWidth={2} style={{ color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+            <Search size={11} strokeWidth={2} style={{ color: 'var(--app-text-muted)', flexShrink: 0 }} />
             <input
               type="text"
               value={sidebarSearch}
@@ -744,7 +744,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 border: 'none',
                 outline: 'none',
                 fontSize: '11.5px',
-                color: isLight ? '#334155' : 'rgba(255,255,255,0.85)',
+                color: 'var(--app-text)',
                 minWidth: 0,
               }}
             />
@@ -755,7 +755,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 style={{
                   display: 'flex', alignItems: 'center',
                   background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
-                  color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.3)', flexShrink: 0,
+                  color: 'var(--app-text-muted)', flexShrink: 0,
                 }}
               >
                 <X size={11} />
@@ -770,7 +770,7 @@ export default function AdminWidgetRegistryPanel(props) {
           <div style={{
             padding: '20px 12px',
             fontSize: '11px',
-            color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.3)',
+            color: 'var(--app-text-muted)',
             textAlign: 'center',
           }}>
             Sonuç yok
@@ -788,7 +788,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
                 color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.28)',
-                borderTop: si > 0 ? (isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.06)') : 'none',
+                borderTop: si > 0 ? ('1px solid var(--app-border)') : 'none',
               }}>
                 {section.moduleName}
               </div>

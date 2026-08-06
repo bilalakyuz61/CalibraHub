@@ -3,17 +3,17 @@
 
 .ms-root {
   color-scheme: light;
-  --ms-bg: #f4f6fa;
-  --ms-surface: #ffffff;
-  --ms-surface-2: #f8fafc;
-  --ms-border: #e2e8f0;
-  --ms-text: #0f172a;
-  --ms-text-muted: #64748b;
+  --ms-bg: var(--app-content-bg, #f4f6fa);
+  --ms-surface: var(--app-surface, #ffffff);
+  --ms-surface-2: var(--app-muted-surface, #f8fafc);
+  --ms-border: var(--app-border, #e2e8f0);
+  --ms-text: var(--app-text, #0f172a);
+  --ms-text-muted: var(--app-text-muted, #64748b);
   --ms-accent: #6366f1;
   --ms-accent-soft: rgba(99, 102, 241, 0.12);
   --ms-danger: #ef4444;
-  --ms-row-alt: #f8fafc;
-  --ms-header-bg: #eef1f8;
+  --ms-row-alt: var(--app-muted-surface, #f8fafc);
+  --ms-header-bg: var(--app-muted-surface, #eef1f8);
   --ms-grid-line: #e5e9f0;
 
   /* Blok tipleri (BlockType 1..4) */
@@ -46,17 +46,17 @@
 
 body.app-theme-dark .ms-root {
   color-scheme: dark;
-  --ms-bg: #0b1220;
-  --ms-surface: #111a2c;
-  --ms-surface-2: #0f1830;
-  --ms-border: #223050;
-  --ms-text: #e2e8f0;
-  --ms-text-muted: #8b9bbd;
+  --ms-bg: var(--app-content-bg, #0b1220);
+  --ms-surface: var(--app-surface, #111a2c);
+  --ms-surface-2: var(--app-muted-surface, #0f1830);
+  --ms-border: var(--app-border, #223050);
+  --ms-text: var(--app-text, #e2e8f0);
+  --ms-text-muted: var(--app-text-muted, #8b9bbd);
   --ms-accent: #818cf8;
   --ms-accent-soft: rgba(129, 140, 248, 0.18);
   --ms-danger: #f87171;
-  --ms-row-alt: #101a30;
-  --ms-header-bg: #0f1a34;
+  --ms-row-alt: var(--app-muted-surface, #101a30);
+  --ms-header-bg: var(--app-muted-surface, #0f1a34);
   --ms-grid-line: #1c2947;
 
   --ms-block-production: #6366f1;

@@ -13,10 +13,10 @@
 .dash-root {
   /* ── Yerel token'lar (LIGHT varsayilan) ── */
   --dash-card-bg:        rgba(255, 255, 255, 0.60);
-  --dash-card-border:    rgba(226, 232, 240, 1);      /* slate-200 */
+  --dash-card-border:    var(--app-border, rgba(226, 232, 240, 1));      /* slate-200 */
   --dash-card-hover-bg:  rgba(255, 255, 255, 0.80);
-  --dash-text-primary:   #1e293b;                     /* slate-800 */
-  --dash-text-secondary: #64748b;                     /* slate-500 */
+  --dash-text-primary:   var(--app-text, #1e293b);    /* slate-800 */
+  --dash-text-secondary: var(--app-text-muted, #64748b); /* slate-500 */
   --dash-text-muted:     #94a3b8;                     /* slate-400 */
   --dash-skeleton-base:  rgba(148, 163, 184, 0.18);
   --dash-skeleton-shine: rgba(148, 163, 184, 0.32);
@@ -34,10 +34,10 @@
 
 body.app-theme-dark .dash-root {
   --dash-card-bg:        rgba(255, 255, 255, 0.04);
-  --dash-card-border:    rgba(255, 255, 255, 0.06);
+  --dash-card-border:    var(--app-border, rgba(255, 255, 255, 0.06));
   --dash-card-hover-bg:  rgba(255, 255, 255, 0.08);
-  --dash-text-primary:   rgba(255, 255, 255, 0.90);
-  --dash-text-secondary: rgba(255, 255, 255, 0.45);
+  --dash-text-primary:   var(--app-text, rgba(255, 255, 255, 0.90));
+  --dash-text-secondary: var(--app-text-muted, rgba(255, 255, 255, 0.45));
   --dash-text-muted:     rgba(255, 255, 255, 0.35);
   --dash-skeleton-base:  rgba(255, 255, 255, 0.06);
   --dash-skeleton-shine: rgba(255, 255, 255, 0.12);

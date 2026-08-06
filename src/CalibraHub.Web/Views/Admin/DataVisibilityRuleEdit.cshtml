@@ -14,14 +14,11 @@
 @section Styles {
 <style>
 .dv-root {
-    --dv-bg:      #f1f5f9; --dv-surface: #ffffff; --dv-border: #e2e8f0;
-    --dv-text:    #0f172a; --dv-muted:   #64748b; --dv-accent: #6366f1;
+    --dv-bg:      var(--app-content-bg); --dv-surface: var(--app-surface); --dv-border: var(--app-border);
+    --dv-text:    var(--app-text); --dv-muted:   var(--app-text-muted); --dv-accent: #6366f1;
     display: flex; flex-direction: column; flex: 1 1 auto; background: var(--dv-bg);
 }
-body.app-theme-dark .dv-root {
-    --dv-bg: #080c17; --dv-surface: #0d1323;
-    --dv-border: rgba(255,255,255,.09); --dv-text: #e2e8f0; --dv-muted: #94a3b8;
-}
+/* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
 .workspace-frame-body.page-dv-edit .app-content-area--workspace-frame {
     height: 100dvh; overflow: auto; padding: 0;
 }

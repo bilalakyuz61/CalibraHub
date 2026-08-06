@@ -13,15 +13,15 @@
 @section Styles {
 <style>
     .ae-root {
-        --ae-bg:#f1f5f9; --ae-surface:#ffffff; --ae-border:#e2e8f0;
-        --ae-text:#0f172a; --ae-muted:#64748b; --ae-accent:#6366f1;
+        --ae-bg:var(--app-content-bg); --ae-surface:var(--app-surface); --ae-border:var(--app-border);
+        --ae-text:var(--app-text); --ae-muted:var(--app-text-muted); --ae-accent:#6366f1;
         display:flex; flex-direction:column; height:100dvh; background:var(--ae-surface); color:var(--ae-text);
         overflow:hidden;
     }
     body.page-asset-edit, html { overflow:hidden; height:100%; }
+    /* Nötrler token'dan otomatik gelir; yalnız aksan tonu burada kalır. */
     body.app-theme-dark .ae-root {
-        --ae-bg:#080c17; --ae-surface:#0d1323; --ae-border:rgba(255,255,255,.09);
-        --ae-text:#e2e8f0; --ae-muted:#94a3b8; --ae-accent:#818cf8;
+        --ae-accent:#818cf8;
     }
 
     /* ── Header (sabit üst bar) ── */

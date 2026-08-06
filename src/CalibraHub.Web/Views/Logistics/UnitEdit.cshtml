@@ -10,23 +10,17 @@
 @section Styles {
 <style>
     .ue-root {
-        --ue-bg:      #f1f5f9;
-        --ue-surface: #ffffff;
-        --ue-border:  #e2e8f0;
-        --ue-text:    #0f172a;
-        --ue-muted:   #64748b;
+        --ue-bg:      var(--app-content-bg);
+        --ue-surface: var(--app-surface);
+        --ue-border:  var(--app-border);
+        --ue-text:    var(--app-text);
+        --ue-muted:   var(--app-text-muted);
         --ue-accent:  #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
         flex: 1 1 auto; overflow-y: auto; padding: 32px 16px;
         background: var(--ue-bg);
     }
-    body.app-theme-dark .ue-root {
-        --ue-bg:      #080c17;
-        --ue-surface: #0d1323;
-        --ue-border:  rgba(255,255,255,.09);
-        --ue-text:    #e2e8f0;
-        --ue-muted:   #94a3b8;
-    }
+    /* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
     .ue-card {
         width: 100%; max-width: 480px;
         background: var(--ue-surface); border: 1px solid var(--ue-border);

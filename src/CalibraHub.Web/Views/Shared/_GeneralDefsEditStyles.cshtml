@@ -1,17 +1,12 @@
 @* Genel Tanımlamalar edit sayfaları ortak stil — tema token'lı kompakt form kartı. *@
 <style>
     html body {
-        --gde-surface: #ffffff;
-        --gde-border: #e2e8f0;
-        --gde-text: #0f172a;
-        --gde-muted: #64748b;
+        --gde-surface: var(--app-surface);
+        --gde-border: var(--app-border);
+        --gde-text: var(--app-text);
+        --gde-muted: var(--app-text-muted);
     }
-    body.app-theme-dark {
-        --gde-surface: #0f172a;
-        --gde-border: rgba(255,255,255,.08);
-        --gde-text: #e2e8f0;
-        --gde-muted: #94a3b8;
-    }
+    /* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
     .gde-wrap { padding: 26px 16px; display: flex; justify-content: center; }
     .gde-card {
         width: min(480px, 94vw); border-radius: 14px; padding: 22px;

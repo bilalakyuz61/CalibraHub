@@ -18,23 +18,20 @@
     .dsx-header, .dsx-toolbar { flex-shrink: 0; }
 
     html body {
-        --dsx-surface: #ffffff;
-        --dsx-border: #e2e8f0;
-        --dsx-text: #0f172a;
-        --dsx-muted: #64748b;
-        --dsx-head-bg: #f8fafc;
+        --dsx-surface: var(--app-surface);
+        --dsx-border: var(--app-border);
+        --dsx-text: var(--app-text);
+        --dsx-muted: var(--app-text-muted);
+        --dsx-head-bg: var(--app-muted-surface);
         --dsx-default-bg: rgba(99,102,241,.05);
         --dsx-badge-custom-bg: #eef2ff;
         --dsx-badge-custom-tx: #4338ca;
         --dsx-badge-def-bg: #f1f5f9;
         --dsx-badge-def-tx: #64748b;
     }
+    /* Dark tonları merkezi --app-* token'larından otomatik gelir; yalnız
+       aksan/durum rozetleri (badge/default-bg) burada kalır. */
     body.app-theme-dark {
-        --dsx-surface: #0f172a;
-        --dsx-border: rgba(255,255,255,.08);
-        --dsx-text: #e2e8f0;
-        --dsx-muted: #94a3b8;
-        --dsx-head-bg: rgba(255,255,255,.03);
         --dsx-default-bg: rgba(99,102,241,.10);
         --dsx-badge-custom-bg: rgba(99,102,241,.18);
         --dsx-badge-custom-tx: #a5b4fc;

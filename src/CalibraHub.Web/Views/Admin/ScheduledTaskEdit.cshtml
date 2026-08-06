@@ -10,15 +10,12 @@
 @section Styles {
 <style>
 .ste-root {
-    --ste-bg:      #f1f5f9; --ste-surface: #ffffff; --ste-border: #e2e8f0;
-    --ste-text:    #0f172a; --ste-muted:   #64748b; --ste-accent: #6366f1;
+    --ste-bg:      var(--app-content-bg); --ste-surface: var(--app-surface); --ste-border: var(--app-border);
+    --ste-text:    var(--app-text); --ste-muted:   var(--app-text-muted); --ste-accent: #6366f1;
     display: flex; align-items: flex-start; justify-content: center;
     flex: 1 1 auto; overflow-y: auto; padding: 32px 16px; background: var(--ste-bg);
 }
-body.app-theme-dark .ste-root {
-    --ste-bg: #080c17; --ste-surface: #0d1323;
-    --ste-border: rgba(255,255,255,.09); --ste-text: #e2e8f0; --ste-muted: #94a3b8;
-}
+/* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
 .ste-card {
     width: 100%; max-width: 760px; background: var(--ste-surface);
     border: 1px solid var(--ste-border); border-radius: 14px;

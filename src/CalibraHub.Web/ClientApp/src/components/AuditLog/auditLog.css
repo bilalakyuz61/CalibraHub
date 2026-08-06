@@ -5,13 +5,13 @@
 
 .al-root {
   color-scheme: light;
-  --al-bg: #f8fafc;
-  --al-surface: #ffffff;
-  --al-surface-2: #f1f5f9;
-  --al-border: #e2e8f0;
+  --al-bg: var(--app-content-bg, #f8fafc);
+  --al-surface: var(--app-surface, #ffffff);
+  --al-surface-2: var(--app-muted-surface, #f1f5f9);
+  --al-border: var(--app-border, #e2e8f0);
   --al-border-soft: #eef2f7;
-  --al-text: #0f172a;
-  --al-muted: #64748b;
+  --al-text: var(--app-text, #0f172a);
+  --al-muted: var(--app-text-muted, #64748b);
   --al-muted-2: #94a3b8;
   --al-indigo: #4f46e5;
   --al-indigo-soft: #eef2ff;
@@ -47,13 +47,13 @@
 
 body.app-theme-dark .al-root {
   color-scheme: dark;
-  --al-bg: #0b1220;
-  --al-surface: #101a2b;
-  --al-surface-2: #16213a;
-  --al-border: #232f47;
+  --al-bg: var(--app-content-bg, #0b1220);
+  --al-surface: var(--app-surface, #101a2b);
+  --al-surface-2: var(--app-muted-surface, #16213a);
+  --al-border: var(--app-border, #232f47);
   --al-border-soft: #1c2740;
-  --al-text: #e2e8f0;
-  --al-muted: #94a3b8;
+  --al-text: var(--app-text, #e2e8f0);
+  --al-muted: var(--app-text-muted, #94a3b8);
   --al-muted-2: #64748b;
   --al-indigo: #818cf8;
   --al-indigo-soft: rgba(99, 102, 241, 0.14);

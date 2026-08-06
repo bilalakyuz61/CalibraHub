@@ -11,23 +11,17 @@
 @section Styles {
 <style>
     .de-root {
-        --de-bg:      #f1f5f9;
-        --de-surface: #ffffff;
-        --de-border:  #e2e8f0;
-        --de-text:    #0f172a;
-        --de-muted:   #64748b;
+        --de-bg:      var(--app-content-bg);
+        --de-surface: var(--app-surface);
+        --de-border:  var(--app-border);
+        --de-text:    var(--app-text);
+        --de-muted:   var(--app-text-muted);
         --de-accent:  #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
         flex: 1 1 auto; overflow-y: auto; padding: 32px 16px;
         background: var(--de-bg);
     }
-    body.app-theme-dark .de-root {
-        --de-bg:      #080c17;
-        --de-surface: #0d1323;
-        --de-border:  rgba(255,255,255,.09);
-        --de-text:    #e2e8f0;
-        --de-muted:   #94a3b8;
-    }
+    /* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
     .de-card {
         width: 100%; max-width: 520px;
         background: var(--de-surface); border: 1px solid var(--de-border);

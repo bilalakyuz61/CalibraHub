@@ -10,23 +10,17 @@
 @section Styles {
 <style>
     .mge-root {
-        --mge-bg:      #f1f5f9;
-        --mge-surface: #ffffff;
-        --mge-border:  #e2e8f0;
-        --mge-text:    #0f172a;
-        --mge-muted:   #64748b;
+        --mge-bg:      var(--app-content-bg);
+        --mge-surface: var(--app-surface);
+        --mge-border:  var(--app-border);
+        --mge-text:    var(--app-text);
+        --mge-muted:   var(--app-text-muted);
         --mge-accent:  #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
         flex: 1 1 auto; overflow-y: auto; padding: 32px 16px;
         background: var(--mge-bg);
     }
-    body.app-theme-dark .mge-root {
-        --mge-bg:      #080c17;
-        --mge-surface: #0d1323;
-        --mge-border:  rgba(255,255,255,.09);
-        --mge-text:    #e2e8f0;
-        --mge-muted:   #94a3b8;
-    }
+    /* Dark tonları merkezi --app-* token'larından otomatik gelir — ayrı override gerekmiyor. */
     .mge-card {
         width: 100%; max-width: 480px;
         background: var(--mge-surface); border: 1px solid var(--mge-border);

@@ -41,15 +41,15 @@
     height: 100% !important;
 }
 
-/* ── Tema değişkenleri (açık) ── */
+/* ── Tema değişkenleri (açık) — nötrler merkezi --app-* token'larından ── */
 .ap-wrapper {
-    --ap-bg:           #f8fafc;
-    --ap-surface:      #ffffff;
-    --ap-surface2:     #f1f5f9;
-    --ap-border:       #e2e8f0;
-    --ap-border-light: #f1f5f9;
-    --ap-text:         #1e293b;
-    --ap-text-muted:   #64748b;
+    --ap-bg:           var(--app-content-bg);
+    --ap-surface:      var(--app-surface);
+    --ap-surface2:     var(--app-muted-surface);
+    --ap-border:       var(--app-border);
+    --ap-border-light: var(--app-border-light, #f1f5f9);
+    --ap-text:         var(--app-text);
+    --ap-text-muted:   var(--app-text-muted);
     --ap-input-bg:     #f8fafc;
     --ap-accent:       var(--theme-accent, #2563eb);
     --ap-accent-soft:  var(--theme-accent-soft, rgba(37,99,235,.12));
@@ -62,15 +62,8 @@
     --ap-toast-warn-tx: #92400e;
 }
 
-/* ── Tema değişkenleri (koyu) ── */
+/* ── Tema değişkenleri (koyu) — yalnız token'a bağlı olmayan (input/accent/toast) kalır ── */
 body.app-theme-dark .ap-wrapper {
-    --ap-bg:           #080c17;
-    --ap-surface:      #0d1323;
-    --ap-surface2:     #111827;
-    --ap-border:       rgba(255,255,255,.09);
-    --ap-border-light: rgba(255,255,255,.04);
-    --ap-text:         #e2e8f0;
-    --ap-text-muted:   #94a3b8;
     --ap-input-bg:     rgba(255,255,255,.07);
     --ap-accent:       var(--theme-accent, #6366f1);
     --ap-accent-soft:  var(--theme-accent-soft, rgba(99,102,241,.18));

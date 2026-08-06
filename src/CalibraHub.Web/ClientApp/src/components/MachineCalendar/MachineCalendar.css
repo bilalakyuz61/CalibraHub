@@ -3,12 +3,12 @@
 
 .mcal-root {
   color-scheme: light;
-  --mcal-bg: #f4f6fa;
-  --mcal-surface: #ffffff;
-  --mcal-surface-2: #f8fafc;
-  --mcal-border: #e2e8f0;
-  --mcal-text: #0f172a;
-  --mcal-text-muted: #64748b;
+  --mcal-bg: var(--app-content-bg, #f4f6fa);
+  --mcal-surface: var(--app-surface, #ffffff);
+  --mcal-surface-2: var(--app-muted-surface, #f8fafc);
+  --mcal-border: var(--app-border, #e2e8f0);
+  --mcal-text: var(--app-text, #0f172a);
+  --mcal-text-muted: var(--app-text-muted, #64748b);
   --mcal-accent: #6366f1;
   --mcal-accent-soft: rgba(99, 102, 241, 0.12);
   --mcal-danger: #ef4444;
@@ -27,12 +27,12 @@
 
 body.app-theme-dark .mcal-root {
   color-scheme: dark;
-  --mcal-bg: #0b1220;
-  --mcal-surface: #111a2c;
-  --mcal-surface-2: #0f1830;
-  --mcal-border: #223050;
-  --mcal-text: #e2e8f0;
-  --mcal-text-muted: #8b9bbd;
+  --mcal-bg: var(--app-content-bg, #0b1220);
+  --mcal-surface: var(--app-surface, #111a2c);
+  --mcal-surface-2: var(--app-muted-surface, #0f1830);
+  --mcal-border: var(--app-border, #223050);
+  --mcal-text: var(--app-text, #e2e8f0);
+  --mcal-text-muted: var(--app-text-muted, #8b9bbd);
   --mcal-accent: #818cf8;
   --mcal-accent-soft: rgba(129, 140, 248, 0.18);
   --mcal-danger: #f87171;
