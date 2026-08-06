@@ -65,6 +65,12 @@ export var MIN_SPAN = 3
    editor onizlemesi ayni degerleri kullanmak zorunda, yoksa oranlar kayar. */
 export var CARD_COLUMN_GAP = 12
 export var CARD_ROW_GAP = 10
+/* Gercek karttaki giris alaninin yuksekligi — LineGridCell input'u
+   (`px-2.5 py-2 text-[13px]`) canli olcumde 29-30px veriyor. Editor onizlemesi
+   bu degeri kullanmak ZORUNDA: 34px kullanildiginda satir basina ~4px fazla
+   yukseklik olusuyordu ve "ayar ekranindaki satirlar gercekten daha yuksek"
+   sikayeti dogdu (2026-08-06 kullanici bildirimi). */
+export var CARD_FIELD_HEIGHT = 30
 
 /* ── Sutun genisligi altyapisi ─────────────────────────────────────────────
    Ham 48'lik birim kullaniciya "18/48" olarak degil KESIR olarak gosterilir

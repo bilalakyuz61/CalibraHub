@@ -32,8 +32,8 @@ import {
 import LineCardInspector from './LineCardInspector'
 import {
   resolveIcon, CARD_LABEL_COLOR_CLS, CARD_GRID_UNITS, MIN_SPAN,
-  CARD_COLUMN_GAP, CARD_ROW_GAP, WIDTH_PRESETS, spanLabel, clampSpan, snapSpan,
-  packRows, unitStep,
+  CARD_COLUMN_GAP, CARD_ROW_GAP, CARD_FIELD_HEIGHT, WIDTH_PRESETS, spanLabel,
+  clampSpan, snapSpan, packRows, unitStep,
 } from './cardLayoutTokens'
 // NOT: Bu modal BILEREK top govdesine (getTopBody) portallanmaz. Top'a
 // portallanirsa `fixed inset-0` perdesi ust menu seridini de kaplar ve modal
@@ -498,7 +498,9 @@ export default function LineCardLayoutEditor(props) {
 
     // Alt cizgi — dinlenmede yari opak (gercek kartta cizgi hover/odakta belirir),
     // hover/secimde gercek kartin hover degerine cikar.
-    var underlineCls = 'h-[34px] border-b transition-colors ' + (
+    // Yukseklik gercek karttaki giris alaniyla ayni (CARD_FIELD_HEIGHT) — sabit
+    // sinif yerine token, cunku 34px kullanildiginda satirlar gercekten yuksek cikiyordu.
+    var underlineCls = 'border-b transition-colors ' + (
       (isSelected || isResizing)
         ? 'border-slate-200 dark:border-white/[0.12]'
         : 'border-slate-200/50 dark:border-white/[0.06] group-hover:border-slate-200 dark:group-hover:border-white/[0.12]'
@@ -582,10 +584,13 @@ export default function LineCardLayoutEditor(props) {
               className={'calibra-line-card-label absolute flex items-center gap-1 text-[9.5px] font-bold tracking-wide ' + colorCls}
               style={Object.assign({ top: -1, left: 10, zIndex: 2, lineHeight: '12px' }, labelStyleOv)}
             >{labelInner}</div>
-            <div className={underlineCls} />
+            <div className={underlineCls} style={{ height: CARD_FIELD_HEIGHT }} />
           </div>
         ) : (
-          <div className={underlineCls + (mode === 'inline' ? ' flex-1 min-w-0' : '')} />
+          <div
+            className={underlineCls + (mode === 'inline' ? ' flex-1 min-w-0' : '')}
+            style={{ height: CARD_FIELD_HEIGHT }}
+          />
         )}
 
         {/* Canli genislik rozeti — tuvaldeki TEK sayi, yalniz boyutlandirirken */}
@@ -634,7 +639,7 @@ export default function LineCardLayoutEditor(props) {
         /* Dinlenmede neredeyse gorunmez — bos alan bir "alanmis" gibi
            algilanmasin (kullanici geri bildirimi); hover'da belirginlesir. */
         className="group/gap rounded-md border border-dashed flex items-center justify-center transition-colors border-slate-200/40 dark:border-white/[0.05] hover:border-indigo-300/70 dark:hover:border-indigo-400/40 cursor-pointer outline-none"
-        style={{ gridColumn: 'span ' + free, height: 34, alignSelf: 'end' }}
+        style={{ gridColumn: 'span ' + free, height: CARD_FIELD_HEIGHT, alignSelf: 'end' }}
       >
         <span className="opacity-0 group-hover/gap:opacity-100 transition-opacity text-slate-400 dark:text-white/40">
           {free >= 8
@@ -782,7 +787,7 @@ export default function LineCardLayoutEditor(props) {
                       ? [0, 1, 2].map(function (i) {
                           return (
                             <div key={'sk-' + i} style={{ gridColumn: 'span 16' }}>
-                              <div className="h-[34px] rounded-md bg-slate-100 dark:bg-white/[0.05] animate-pulse" />
+                              <div className="rounded-md bg-slate-100 dark:bg-white/[0.05] animate-pulse" style={{ height: CARD_FIELD_HEIGHT }} />
                             </div>
                           )
                         })
