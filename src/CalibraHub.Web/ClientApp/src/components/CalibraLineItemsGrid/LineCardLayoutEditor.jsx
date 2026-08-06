@@ -422,7 +422,10 @@ export default function LineCardLayoutEditor(props) {
       onClick={function (e) { if (e.target === e.currentTarget && !saving) onClose() }}
       onKeyDown={handleModalKeyDown}
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}
+      /* Blur YOK (2026-08-06 kullanici istegi): admin hangi ekran icin duzen
+         yaptigini arka planda gorebilmeli. Perde yalnizca odagi modala cekecek
+         kadar koyu. */
+      style={{ background: 'rgba(15,23,42,0.28)' }}
     >
       <div
         className="w-full max-w-[960px] max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-slate-900"
@@ -435,7 +438,14 @@ export default function LineCardLayoutEditor(props) {
             <LayoutGrid size={17} strokeWidth={1.9} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-bold text-slate-800 dark:text-white/90">Kart Düzeni</div>
+            <div className="text-[14px] font-bold text-slate-800 dark:text-white/90 flex items-center gap-2">
+              <span>Kart Düzeni</span>
+              {/* Hangi ekranin duzeni duzenleniyor — admin birden fazla belge
+                  turu arasinda gezerken karisiklik olmasin. */}
+              <span className="px-1.5 py-0.5 rounded text-[10.5px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30">
+                {props.formLabel || formCode}
+              </span>
+            </div>
             <div className="text-[11px] text-slate-500 dark:text-white/45">
               Alanları sürükleyerek sıralayın, kenardan çekerek veya hazır kesirlerle genişletin; satır araçlarıyla hizalayın. Düzen bu belge türünün tüm kullanıcıları için geçerlidir.
             </div>
@@ -478,7 +488,7 @@ export default function LineCardLayoutEditor(props) {
               var idx = en.idx
               var hiddenCls = !it.visible ? ' opacity-40' : ''
               var dragCls = dragOverIndex === idx ? ' ring-2 ring-indigo-400/70' : ''
-              var selectedCls = selectedKey === it.key ? ' border-indigo-400/80 bg-indigo-50/50 dark:bg-indigo-500/[0.08]' : ' border-transparent'
+              var selectedCls = selectedKey === it.key ? ' ring-indigo-400/80 bg-indigo-50/50 dark:bg-indigo-500/[0.08]' : ' ring-transparent'
               var Icon = resolveIcon(it.icon)
               // Onizleme etiketinde override'lar CANLI uygulanir — kartla birebir.
               var pvText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
@@ -504,7 +514,10 @@ export default function LineCardLayoutEditor(props) {
                   onClick={function () { setSelectedKey(selectedKey === it.key ? null : it.key) }}
                   tabIndex={0}
                   style={{ gridColumn: 'span ' + it.span, position: 'relative' }}
-                  className={'group select-none rounded-lg px-1.5 pt-1 pb-1.5 cursor-grab active:cursor-grabbing border outline-none hover:border-indigo-200/70 dark:hover:border-indigo-400/25' + hiddenCls + dragCls + selectedCls}
+                  /* Yatay padding/border YOK, secim cercevesi `ring` (box-shadow) —
+                     ikisi de hucre genisligini yer; onizleme gercek kart
+                     genisligiyle birebir olmali (2026-08-06). */
+                  className={'group select-none rounded-lg pt-1 pb-1.5 cursor-grab active:cursor-grabbing ring-1 outline-none hover:ring-indigo-200/70 dark:hover:ring-indigo-400/25' + hiddenCls + dragCls + selectedCls}
                 >
                   {/* Kontrol satiri — tut/genislik/goz. Kart gorunumunu bozmasin
                       diye kucuk; blok hover'inda belirginlesir. */}
@@ -590,6 +603,18 @@ export default function LineCardLayoutEditor(props) {
             return (
               <>
                 <div className="rounded-xl border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025] px-3 pt-2 pb-3">
+                  {/* Gercek kartta aksiyonlar (•••/kilit/⚙/sil) SOL kenarda dikey
+                      serittir ve alan izgarasi o kadar daralir. Onizleme ayni payi
+                      birakmazsa genislikler gercekle ortusmez (2026-08-06). */}
+                  <div className="relative" style={{ paddingLeft: 47 }}>
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-[35px] flex flex-col items-center gap-1.5 pt-[26px] pointer-events-none"
+                      title="Kart aksiyon şeridi — sabittir, düzenlenemez"
+                    >
+                      {[0, 1, 2, 3].map(function (i) {
+                        return <span key={i} className="w-[22px] h-[22px] rounded-md bg-slate-100 dark:bg-white/[0.06] flex-shrink-0" />
+                      })}
+                    </div>
                   {/* Olcu referansi: hucre genisligi = bu blogun genisligi / 48.
                       Her satir ayri grid oldugu icin tek ortak olcek gerekir. */}
                   <div ref={gridRef} className="h-0" />
@@ -608,10 +633,13 @@ export default function LineCardLayoutEditor(props) {
                               style={{ width: Math.round((row.used / GRID_UNITS) * 100) + '%' }}
                             />
                           </div>
-                          <span className={'text-[9.5px] font-mono tabular-nums flex-shrink-0 ' + (
-                            free > 0 ? 'text-slate-400 dark:text-white/35' : 'text-emerald-600 dark:text-emerald-300/80'
-                          )}>
-                            {free > 0 ? free + ' birim boş' : 'Tam dolu'}
+                          <span
+                            title={'Bu satırda ' + row.used + ' birim kullanıldı' + (free > 0 ? ', ' + free + ' birim boş kaldı' : ' — satırda boşluk yok')}
+                            className={'text-[9.5px] font-mono tabular-nums flex-shrink-0 ' + (
+                              free > 0 ? 'text-slate-400 dark:text-white/35' : 'text-emerald-600 dark:text-emerald-300/80'
+                            )}
+                          >
+                            {row.used}/{GRID_UNITS} birim{free > 0 ? ' · ' + free + ' boş' : ''}
                           </span>
                           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
                             <button
@@ -634,7 +662,10 @@ export default function LineCardLayoutEditor(props) {
                           style={Object.assign({
                             display: 'grid',
                             gridTemplateColumns: 'repeat(' + GRID_UNITS + ', minmax(0, 1fr))',
-                            gap: 10, alignItems: 'end',
+                            // Gercek kart: columnGap 12 / rowGap 10 — bosluklar
+                            // toplam genisligin buyuk kismini tuttugu icin ayni
+                            // degerler kullanilmazsa onizleme oranlari kayar.
+                            columnGap: 12, rowGap: 10, alignItems: 'end',
                           }, guideStyle)}
                         >
                           {row.entries.map(renderItem)}
@@ -647,6 +678,7 @@ export default function LineCardLayoutEditor(props) {
                       Kartta gösterilecek alan kalmadı — aşağıdaki listeden geri ekleyin.
                     </div>
                   )}
+                  </div>
                 </div>
 
                 {/* Gizli alan tepsisi — kartta gorunmeyenler burada bekler

@@ -347,8 +347,8 @@ function GuideListWidgetButton(props) {
             onClick={function(e) { e.stopPropagation() }}
             style={{
               width: '100%', maxWidth: 1080, maxHeight: '85vh',
-              background: isDark ? 'rgba(13,17,27,0.98)' : 'rgba(255,255,255,0.99)',
-              border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(15,23,42,0.1)',
+              background: 'var(--app-surface)',
+              border: '1px solid var(--app-border)',
               borderRadius: 14,
               boxShadow: '0 16px 48px rgba(0,0,0,0.55)',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -356,7 +356,7 @@ function GuideListWidgetButton(props) {
           >
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              padding: '14px 18px', borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.08)',
+              padding: '14px 18px', borderBottom: '1px solid var(--app-border)',
             }}>
               <div
                 style={{
@@ -368,9 +368,9 @@ function GuideListWidgetButton(props) {
                 <Icon size={15} style={{ color: palette.icon }} strokeWidth={1.8} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: isDark ? 'rgba(255,255,255,0.92)' : 'rgba(15,23,42,0.92)' }}>{label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--app-text)' }}>{label}</div>
                 {meta.guideCode && (
-                  <div style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.5)', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: 'var(--app-text-muted)', marginTop: 2 }}>
                     {meta.guideCode}
                   </div>
                 )}
@@ -381,8 +381,8 @@ function GuideListWidgetButton(props) {
                 aria-label="Kapat"
                 style={{
                   width: 30, height: 30, borderRadius: 8, cursor: 'pointer',
-                  background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)', border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(15,23,42,0.08)',
-                  color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(15,23,42,0.55)',
+                  background: 'var(--app-muted-surface)', border: '1px solid var(--app-border)',
+                  color: 'var(--app-text-muted)',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >

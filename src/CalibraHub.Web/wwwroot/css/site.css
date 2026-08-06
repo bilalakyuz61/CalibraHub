@@ -6000,8 +6000,8 @@ body.app-theme-light {
   --theme-accent-soft: rgba(37, 99, 235, 0.08);
   --theme-brand: #2e55d4;
   --app-surface: #ffffff;
-  --app-content-bg: #f8fafc;
-  --app-muted-surface: #f1f5f9;
+  --app-content-bg: #eef1f6;
+  --app-muted-surface: #e9edf3;
   color-scheme: light;
 }
 
@@ -6252,14 +6252,18 @@ body.app-theme-dusk {
   border-color: var(--theme-accent-strong);
 }
 
+/* Açık tema taban tonları (2026-08-05 kademe ayarı): büyük yüzeyler saf beyazdı
+   ve toplamda göz yorucu bir parlaklık veriyordu. Sayfa zemini / sol menü / üst
+   şerit bir basamak yumuşatıldı; KART yüzeyi (--app-surface) bilinçli olarak
+   beyaz bırakıldı — kartların zeminden ayrışması bu kontrasta bağlı. */
 :root {
   --layout-header-height: 74px;
-  --app-topbar-bg: #ffffff;
-  --app-sidebar-bg: #ffffff;
-  --app-content-bg: #f8f9fa;
+  --app-topbar-bg: #fbfcfe;
+  --app-sidebar-bg: #f7f9fc;
+  --app-content-bg: #eef1f6;
   --app-surface: #ffffff;
-  --app-muted-surface: #f3f5f7;
-  --app-border: #e0e0e0;
+  --app-muted-surface: #e9edf3;
+  --app-border: #dbe1ea;
   --app-text: #333333;
   --app-text-muted: #4f4f4f;
   --theme-accent: #2563eb;
@@ -6273,8 +6277,8 @@ body.app-theme-light {
   --theme-accent-soft: rgba(37, 99, 235, 0.08);
   --theme-brand: #2e55d4;
   --app-surface: #ffffff;
-  --app-content-bg: #f8fafc;
-  --app-muted-surface: #f1f5f9;
+  --app-content-bg: #eef1f6;
+  --app-muted-surface: #e9edf3;
   color-scheme: light;
 }
 
@@ -6287,14 +6291,20 @@ body.app-theme-graphite {
 
 /* Dark tema CSS değişkenleri — var(--app-surface, #fff) gibi fallback'li view'ların
    dark modda doğru renk alması için. :root'un #ffffff default'unu override eder. */
+/* Koyu tema taban tonları (2026-08-05 kademe ayarı): eski değerler neredeyse
+   siyaha yakındı (#0a0d17 / #080b14) ve uzun kullanımda yorucuydu. Taban bir
+   basamak yukarı alındı — hue korundu, yalnız aydınlık seviyesi yükseldi.
+   Referans: bu dosyadaki app-theme-midnight paleti (yumuşak slate koyu).
+   Tüm ekranların bu değişimden etkilenmesi bu token'ları KULLANMASINA bağlıdır;
+   kendi hex'ini yazan bileşen buradan etkilenmez (bkz. token migrasyonu). */
 body.app-theme-dark {
-  --app-topbar-bg: #0d1323;
-  --app-sidebar-bg: #080b14;
-  --app-content-bg: #0a0d17;
-  --app-surface: #0d1323;
-  --app-muted-surface: #111827;
-  --app-border: rgba(255, 255, 255, 0.08);
-  --app-border-light: rgba(255, 255, 255, 0.05);
+  --app-topbar-bg: #151c2c;
+  --app-sidebar-bg: #0e1421;
+  --app-content-bg: #121826;
+  --app-surface: #151c2c;
+  --app-muted-surface: #1b2334;
+  --app-border: rgba(255, 255, 255, 0.10);
+  --app-border-light: rgba(255, 255, 255, 0.06);
   --app-text: #e2e8f0;
   --app-text-muted: #94a3b8;
   --theme-accent: #6366f1;
@@ -6302,11 +6312,11 @@ body.app-theme-dark {
   --theme-accent-soft: rgba(99, 102, 241, 0.16);
   --theme-brand: #6366f1;
   /* Bootstrap 5 dark variables — BS bileşenleri (dropdown, tab, modal vb.) için */
-  --bs-body-bg:         #0a0d17;
+  --bs-body-bg:         #121826;
   --bs-body-color:      #e2e8f0;
-  --bs-border-color:    rgba(255, 255, 255, 0.10);
-  --bs-secondary-bg:    #0d1323;
-  --bs-tertiary-bg:     #111827;
+  --bs-border-color:    rgba(255, 255, 255, 0.12);
+  --bs-secondary-bg:    #151c2c;
+  --bs-tertiary-bg:     #1b2334;
   --bs-secondary-color: #94a3b8;
   --bs-emphasis-color:  #f1f5f9;
   --bs-link-color:      #818cf8;

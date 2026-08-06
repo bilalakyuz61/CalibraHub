@@ -1084,6 +1084,15 @@ export default function AdminWidgetRegistryPanel(props) {
       {cardLayoutOpen && (
         <LineCardLayoutEditor
           formCode={currentFormCode}
+          /* Rozet metni: "Satış Teklifi · Kalem Bilgisi" — formName tek basina
+             ("Kalem Bilgisi") hangi belge turu oldugunu soylemiyor. */
+          formLabel={(function () {
+            var f = forms.find(function (x) { return x.formCode === currentFormCode }) || {}
+            var parts = []
+            if (f.subModule) parts.push(f.subModule)
+            if (f.formName && f.formName !== f.subModule) parts.push(f.formName)
+            return parts.length ? parts.join(' · ') : null
+          })()}
           autoLoad
           onClose={function() { setCardLayoutOpen(false) }}
           onSaved={function() {
