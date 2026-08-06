@@ -420,12 +420,12 @@ export default function LineCardLayoutEditor(props) {
   return createPortal(
     <div
       onClick={function (e) { if (e.target === e.currentTarget && !saving) onClose() }}
-      onKeyDown={function (e) { if (e.key === 'Escape' && !saving) onClose() }}
+      onKeyDown={handleModalKeyDown}
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       style={{ background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}
     >
       <div
-        className="w-full max-w-[860px] max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-slate-900"
+        className="w-full max-w-[960px] max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#fff] shadow-2xl dark:border-white/10 dark:bg-slate-900"
         role="dialog"
         aria-label="Kart Düzeni"
       >
@@ -437,7 +437,7 @@ export default function LineCardLayoutEditor(props) {
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-bold text-slate-800 dark:text-white/90">Kart Düzeni</div>
             <div className="text-[11px] text-slate-500 dark:text-white/45">
-              Alanları sürükleyerek sıralayın, sağ kenardan çekerek genişletin. Düzen bu belge türünün tüm kullanıcıları için geçerlidir.
+              Alanları sürükleyerek sıralayın, kenardan çekerek veya hazır kesirlerle genişletin; satır araçlarıyla hizalayın. Düzen bu belge türünün tüm kullanıcıları için geçerlidir.
             </div>
           </div>
           <button
@@ -581,10 +581,106 @@ export default function LineCardLayoutEditor(props) {
                   />
                 </div>
               )
-            })}
-          </div>
-          </div>
-          )}
+            }
+
+            var rowBtnCls = 'px-1.5 py-0.5 rounded text-[9.5px] font-semibold border transition-colors ' +
+              'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 ' +
+              'dark:border-white/10 dark:text-white/45 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10'
+
+            return (
+              <>
+                <div className="rounded-xl border border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-white/[0.025] px-3 pt-2 pb-3">
+                  {/* Olcu referansi: hucre genisligi = bu blogun genisligi / 48.
+                      Her satir ayri grid oldugu icin tek ortak olcek gerekir. */}
+                  <div ref={gridRef} className="h-0" />
+                  {rows.map(function (row, rIdx) {
+                    var free = GRID_UNITS - row.used
+                    return (
+                      <div key={'row-' + rIdx} className="group/row">
+                        {/* Satir rayi — sira no + doluluk + satir araclari */}
+                        <div className="flex items-center gap-2 mt-2 mb-1 first:mt-0">
+                          <span className="text-[9.5px] font-semibold text-slate-400 dark:text-white/35 flex-shrink-0">
+                            Satır {rIdx + 1}
+                          </span>
+                          <div className="w-[70px] h-1 rounded-full overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-white/[0.07]">
+                            <div
+                              className={'h-full rounded-full ' + (free > 0 ? 'bg-indigo-400/70' : 'bg-emerald-400/70')}
+                              style={{ width: Math.round((row.used / GRID_UNITS) * 100) + '%' }}
+                            />
+                          </div>
+                          <span className={'text-[9.5px] font-mono tabular-nums flex-shrink-0 ' + (
+                            free > 0 ? 'text-slate-400 dark:text-white/35' : 'text-emerald-600 dark:text-emerald-300/80'
+                          )}>
+                            {free > 0 ? free + ' birim boş' : 'Tam dolu'}
+                          </span>
+                          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={function () { distributeRow(row.entries) }}
+                              title="Satırdaki alanları 48 birime eşit böl"
+                              className={rowBtnCls}
+                            >Eşit Dağıt</button>
+                            {free > 0 && (
+                              <button
+                                type="button"
+                                onClick={function () { fillRow(row.entries) }}
+                                title="Kalan boşluğu satırın son alanına ekle"
+                                className={rowBtnCls}
+                              >Satırı Doldur</button>
+                            )}
+                          </div>
+                        </div>
+                        <div
+                          style={Object.assign({
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(' + GRID_UNITS + ', minmax(0, 1fr))',
+                            gap: 10, alignItems: 'end',
+                          }, guideStyle)}
+                        >
+                          {row.entries.map(renderItem)}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {!visibleEntries.length && (
+                    <div className="py-8 text-center text-[11.5px] text-slate-400 dark:text-white/35">
+                      Kartta gösterilecek alan kalmadı — aşağıdaki listeden geri ekleyin.
+                    </div>
+                  )}
+                </div>
+
+                {/* Gizli alan tepsisi — kartta gorunmeyenler burada bekler
+                    (tuvalde yer kaplamaz, boylece satir olculeri gercekci kalir). */}
+                {hiddenEntries.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-dashed border-slate-200 dark:border-white/10 px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <EyeOff size={11} className="text-slate-400 dark:text-white/35" />
+                      <span className="text-[10.5px] font-semibold text-slate-500 dark:text-white/45">Kartta Gizli</span>
+                      <span className="text-[10px] font-mono text-slate-400 dark:text-white/30">({hiddenEntries.length})</span>
+                      <span className="text-[10px] text-slate-400 dark:text-white/30">— karta geri eklemek için tıklayın</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {hiddenEntries.map(function (en) {
+                        var HIcon = resolveIcon(en.it.icon)
+                        return (
+                          <button
+                            key={en.it.key}
+                            type="button"
+                            onClick={function () { toggleVisible(en.idx) }}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] border transition-colors border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 dark:border-white/10 dark:text-white/50 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
+                          >
+                            <HIcon size={11} strokeWidth={1.8} />
+                            <span>{(en.it.labelText && en.it.labelText.trim()) ? en.it.labelText.trim() : en.it.label}</span>
+                            <Eye size={10} strokeWidth={2} className="opacity-60" />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
 
           {/* Secili Alan paneli — baslik metni + stil override'lari (2026-08-05) */}
           {(function () {
@@ -601,6 +697,53 @@ export default function LineCardLayoutEditor(props) {
                     className="ml-auto text-[10.5px] text-slate-400 hover:text-slate-600 dark:text-white/35 dark:hover:text-white/60"
                   >Kapat</button>
                 </div>
+
+                {/* Genislik — hazir kesirler + birim ince ayari. Fare ile
+                    surukleme her zaman mumkun, ama kesin deger burada verilir. */}
+                <div className="flex flex-wrap items-center gap-1.5 mb-3 pb-3 border-b border-indigo-200/50 dark:border-indigo-400/15">
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mr-1">Genişlik</span>
+                  {WIDTH_PRESETS.map(function (p) {
+                    var on = sel.span === p.span
+                    return (
+                      <button
+                        key={p.span}
+                        type="button"
+                        onClick={function () { setSpan(sel.key, p.span) }}
+                        title={p.span + '/' + GRID_UNITS + ' birim'}
+                        className={'px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors ' + (
+                          on
+                            ? 'bg-indigo-500 text-white border-indigo-500'
+                            : 'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-white/50 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300'
+                        )}
+                      >
+                        {p.label}
+                      </button>
+                    )
+                  })}
+                  <div className="flex items-center gap-1 ml-1">
+                    <button
+                      type="button"
+                      onClick={function () { setSpan(sel.key, sel.span - 1) }}
+                      disabled={sel.span <= MIN_SPAN}
+                      title="Bir birim daralt (Alt+←)"
+                      className="w-5 h-5 rounded flex items-center justify-center text-[13px] leading-none border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 disabled:opacity-30 dark:border-white/10 dark:text-white/50 dark:hover:text-indigo-300"
+                    >−</button>
+                    <span className="w-[46px] text-center text-[10.5px] font-mono tabular-nums text-slate-500 dark:text-white/50">
+                      {sel.span}/{GRID_UNITS}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={function () { setSpan(sel.key, sel.span + 1) }}
+                      disabled={sel.span >= GRID_UNITS}
+                      title="Bir birim genişlet (Alt+→)"
+                      className="w-5 h-5 rounded flex items-center justify-center text-[13px] leading-none border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300 disabled:opacity-30 dark:border-white/10 dark:text-white/50 dark:hover:text-indigo-300"
+                    >+</button>
+                  </div>
+                  <span className="text-[10px] text-slate-400 dark:text-white/30 ml-1">
+                    Alt+←/→ ince ayar · Alt+Shift ile hazır genişlikler · Ctrl+←/→ sıra
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
                   <div>
                     <div className="text-[10px] font-semibold text-slate-500 dark:text-white/45 mb-1">Başlık Metni</div>
@@ -687,8 +830,9 @@ export default function LineCardLayoutEditor(props) {
           })()}
 
           <div className="mt-3 text-[10.5px] text-slate-400 dark:text-white/35">
-            Toplam genişlik 48 birimdir; bir satıra sığmayan alanlar otomatik alt satıra akar.
-            Bir alana tıklayarak başlık metnini ve stilini düzenleyebilirsiniz.
+            Her satır 48 birimdir; sığmayan alan otomatik alt satıra akar. Genişlik sürüklerken
+            yaygın kesirlere (1/4, 1/3, 1/2…) yapışır — Shift ile serbest sürükleyin.
+            Bir alana tıklayınca genişlik, başlık metni ve stili düzenlenebilir.
             Dar ekranlarda düzen otomatik olarak varsayılan ızgaraya döner.
           </div>
 
