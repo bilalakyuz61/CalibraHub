@@ -486,7 +486,12 @@ export default function LineCardLayoutEditor(props) {
     var isDragTarget = dragOverKey === it.key
     var labelText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
     var mode = it.labelStyle === 'modern' ? 'modern' : (it.labelStyle === 'inline' ? 'inline' : 'standard')
-    var colorCls = it.labelColor ? CARD_LABEL_COLOR_CLS[it.labelColor] : 'text-slate-500 dark:text-white/45'
+    // Ek alan (widget) sinyali: eskiden her hucrede tekrar eden "EK" rozetiydi —
+    // kalabalik yapiyordu. Simdi ozel renk secilmemisse etiket METNI + ikonu sky
+    // tonunda; acik "Ek Alan" rozeti yalniz alan seciliyken sag rayda gorunur.
+    var colorCls = it.labelColor
+      ? CARD_LABEL_COLOR_CLS[it.labelColor]
+      : (it.isWidget ? 'text-sky-600 dark:text-sky-300' : 'text-slate-500 dark:text-white/45')
     var labelStyleOv = {}
     if (it.labelSize) labelStyleOv.fontSize = it.labelSize
     if (it.labelWeight) labelStyleOv.fontWeight = it.labelWeight
@@ -626,7 +631,9 @@ export default function LineCardLayoutEditor(props) {
         onKeyDown={function (e) {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (canEdit) fillRow(row.entries) }
         }}
-        className="group/gap rounded-md border border-dashed flex items-center justify-center transition-colors border-slate-300/50 dark:border-white/[0.10] hover:border-indigo-300/70 dark:hover:border-indigo-400/40 cursor-pointer outline-none"
+        /* Dinlenmede neredeyse gorunmez — bos alan bir "alanmis" gibi
+           algilanmasin (kullanici geri bildirimi); hover'da belirginlesir. */
+        className="group/gap rounded-md border border-dashed flex items-center justify-center transition-colors border-slate-200/40 dark:border-white/[0.05] hover:border-indigo-300/70 dark:hover:border-indigo-400/40 cursor-pointer outline-none"
         style={{ gridColumn: 'span ' + free, height: 34, alignSelf: 'end' }}
       >
         <span className="opacity-0 group-hover/gap:opacity-100 transition-opacity text-slate-400 dark:text-white/40">
@@ -658,8 +665,16 @@ export default function LineCardLayoutEditor(props) {
     >
       <div
         ref={modalRef}
-        className="w-full max-h-[88vh] flex flex-col overflow-hidden rounded-2xl border shadow-2xl border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-slate-900 [color-scheme:light] dark:[color-scheme:dark]"
-        style={{ maxWidth: 'min(1120px, calc(100vw - 96px))' }}
+        className="w-full flex flex-col overflow-hidden rounded-2xl border shadow-2xl border-slate-200 bg-[#fff] dark:border-white/10 dark:bg-slate-900 [color-scheme:light] dark:[color-scheme:dark]"
+        /* SABIT olcu (2026-08-06 kullanici istegi): genislik VE yukseklik icerige
+           gore degismez — alan secildikce sag rayin icerigi degisiyor ve modal
+           buyuyup kuculuyordu. Tuval genisligi de bilerek genis: gercek kart
+           ~1000px, ray 296px → tuval ~1050px ile onizleme gercek kartla ayni
+           OLCEKTE gorunur (WYSIWYG; dar tuvalde alanlar orantisiz genis duruyordu). */
+        style={{
+          maxWidth: 'min(1400px, calc(100vw - 96px))',
+          height: 'min(760px, calc(100vh - 64px))',
+        }}
         role="dialog"
         aria-modal="true"
         aria-label="Kart Düzeni"
