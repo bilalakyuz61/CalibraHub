@@ -10,21 +10,19 @@
 @section Styles {
 <style>
     .ide-wrap {
-        --ide-bg: var(--app-bg, #f1f5f9);
-        --ide-surface: var(--app-surface, #ffffff);
-        --ide-surface-2: var(--app-surface-alt, #fafbfc);
-        --ide-border: var(--app-border, #e2e8f0);
-        --ide-text: var(--app-text, #0f172a);
-        --ide-muted: var(--app-text-muted, #64748b);
+        --ide-bg: var(--app-content-bg);
+        --ide-surface: var(--app-surface);
+        --ide-surface-2: var(--app-muted-surface);
+        --ide-border: var(--app-border);
+        --ide-text: var(--app-text);
+        --ide-muted: var(--app-text-muted);
         --ide-accent: #6366f1;
         display: flex; align-items: flex-start; justify-content: center;
         padding: 24px 16px; background: var(--ide-bg);
         color: var(--ide-text);
     }
-    body.app-theme-dark .ide-wrap, body.app-theme-midnight .ide-wrap {
-        --ide-bg: #080c17; --ide-surface: #0d1323; --ide-surface-2: #0a1020;
-        --ide-border: rgba(255,255,255,.09); --ide-text: #e2e8f0; --ide-muted: #94a3b8;
-    }
+    /* Dark/midnight tonları merkezi --app-* token'larından otomatik gelir —
+       ayrı override bloğu gerekmiyor (site.css body.app-theme-dark / -midnight). */
     /* 2026-05-21: Tam ekran flex layout — header sabit, body scroll'lu, değerler listesi
        kalan alanı dolduran iç-scroll. Sayfa hiç dış scroll açmaz, Kaydet hep görünür. */
     .ide-wrap {

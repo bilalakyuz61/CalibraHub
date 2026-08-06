@@ -33,9 +33,9 @@ html body {
   --wf-px: 12px;
 
   /* Renk — light (varsayilan) */
-  --wf-bg:           #ffffff;
-  --wf-bg-focus:     #ffffff;
-  --wf-border:       #e2e8f0;
+  --wf-bg:           var(--app-surface, #ffffff);
+  --wf-bg-focus:     var(--app-surface, #ffffff);
+  --wf-border:       var(--app-border, #e2e8f0);
   --wf-border-hover: #c7d2fe;
   --wf-border-focus: #6366f1;
   --wf-text:         #0f172a;
@@ -69,9 +69,9 @@ html body {
 
 body.app-theme-dark {
   /* Renk — dark override */
-  --wf-bg:           rgba(255,255,255,0.04);
-  --wf-bg-focus:     rgba(255,255,255,0.06);
-  --wf-border:       rgba(255,255,255,0.08);
+  --wf-bg:           var(--app-surface, rgba(255,255,255,0.04));
+  --wf-bg-focus:     var(--app-muted-surface, rgba(255,255,255,0.06));
+  --wf-border:       var(--app-border, rgba(255,255,255,0.08));
   --wf-border-hover: rgba(165,180,252,0.35);
   --wf-border-focus: #a5b4fc;
   --wf-text:         #f1f5f9;
@@ -88,9 +88,9 @@ body.app-theme-dark {
 
 body.app-theme-light {
   /* Renk — light (html body varsayilani ile ayni; explicit selector) */
-  --wf-bg:           #ffffff;
-  --wf-bg-focus:     #ffffff;
-  --wf-border:       #e2e8f0;
+  --wf-bg:           var(--app-surface, #ffffff);
+  --wf-bg-focus:     var(--app-surface, #ffffff);
+  --wf-border:       var(--app-border, #e2e8f0);
   --wf-border-hover: #c7d2fe;
   --wf-border-focus: #6366f1;
   --wf-text:         #0f172a;

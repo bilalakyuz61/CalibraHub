@@ -765,7 +765,7 @@ export default function SmartBoard(props) {
 
   var meshStyle = isDark
     ? {
-        backgroundColor: '#0a0d17',
+        backgroundColor: 'var(--app-content-bg)',
         backgroundImage:
           'radial-gradient(at 20% 30%, rgba(99,102,241,0.12) 0px, transparent 50%), ' +
           'radial-gradient(at 80% 20%, rgba(14,165,233,0.08) 0px, transparent 50%), ' +
@@ -773,7 +773,7 @@ export default function SmartBoard(props) {
           'radial-gradient(at 90% 70%, rgba(20,184,166,0.06) 0px, transparent 50%)',
       }
     : {
-        backgroundColor: '#f8fafc',
+        backgroundColor: 'var(--app-content-bg)',
         backgroundImage:
           'radial-gradient(at 20% 30%, rgba(99,102,241,0.05) 0px, transparent 50%), ' +
           'radial-gradient(at 80% 20%, rgba(14,165,233,0.04) 0px, transparent 50%), ' +
@@ -1153,8 +1153,8 @@ export default function SmartBoard(props) {
         >
           <div style={{
             position: 'relative',
-            background: isDark ? '#1e293b' : '#ffffff',
-            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e2e8f0',
+            background: 'var(--app-surface)',
+            border: '1px solid var(--app-border)',
             borderRadius: '16px',
             padding: '28px 32px',
             maxWidth: '400px',
@@ -1177,7 +1177,7 @@ export default function SmartBoard(props) {
             {/* Başlık */}
             <h3 style={{
               fontSize: '16px', fontWeight: 700, marginBottom: '8px',
-              color: isDark ? '#f1f5f9' : '#0f172a',
+              color: 'var(--app-text)',
             }}>
               Excel'e Aktar
             </h3>
@@ -1185,9 +1185,9 @@ export default function SmartBoard(props) {
             {/* Açıklama */}
             <p style={{
               fontSize: '13px', lineHeight: 1.65, marginBottom: '24px',
-              color: isDark ? '#94a3b8' : '#64748b',
+              color: 'var(--app-text-muted)',
             }}>
-              <strong style={{ color: isDark ? '#cbd5e1' : '#334155' }}>{title}</strong> listesi
+              <strong style={{ color: 'var(--app-text)' }}>{title}</strong> listesi
               Excel dosyası olarak dışa aktarılacak.
             </p>
 
@@ -1199,9 +1199,9 @@ export default function SmartBoard(props) {
                 style={{
                   padding: '9px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: 600,
                   cursor: 'pointer', transition: 'background 0.15s',
-                  background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
-                  color: isDark ? '#94a3b8' : '#475569',
-                  border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
+                  background: 'var(--app-muted-surface)',
+                  color: 'var(--app-text-muted)',
+                  border: '1px solid var(--app-border)',
                 }}
               >
                 Vazgeç

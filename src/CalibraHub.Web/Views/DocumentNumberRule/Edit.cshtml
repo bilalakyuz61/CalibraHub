@@ -13,12 +13,12 @@
 <style>
     /* ── Tema değişkenleri (DocLayoutRule pattern'i ile uyumlu) ───────────── */
     .dnr-wrap {
-        --dnr-bg:        var(--app-bg, #f1f5f9);
-        --dnr-surface:   var(--app-surface, #ffffff);
-        --dnr-surface-2: var(--app-surface-alt, #fafbfc);
-        --dnr-border:    var(--app-border, #e5e7eb);
-        --dnr-text:      var(--app-text, #0f172a);
-        --dnr-muted:     var(--app-text-muted, #64748b);
+        --dnr-bg:        var(--app-content-bg);
+        --dnr-surface:   var(--app-surface);
+        --dnr-surface-2: var(--app-muted-surface);
+        --dnr-border:    var(--app-border);
+        --dnr-text:      var(--app-text);
+        --dnr-muted:     var(--app-text-muted);
         --dnr-accent:    #6366f1;
         --dnr-accent-soft: rgba(99,102,241,0.12);
         --dnr-success:   #10b981;
@@ -28,16 +28,9 @@
         background: var(--dnr-bg);
         color: var(--dnr-text);
     }
-    /* Dark theme tonlari */
-    body.app-theme-dark .dnr-wrap,
-    body.app-theme-midnight .dnr-wrap {
-        --dnr-bg:        #0b1020;
-        --dnr-surface:   #111a2e;
-        --dnr-surface-2: #0d1424;
-        --dnr-border:    rgba(255,255,255,0.10);
-        --dnr-text:      #e2e8f0;
-        --dnr-muted:     #94a3b8;
-    }
+    /* Dark/midnight tonları artık merkezi --app-* token'larından otomatik gelir
+       (body.app-theme-dark / body.app-theme-midnight site.css'te tanımlı) —
+       ayrı override bloğu gerekmiyor. */
 
     /* Shell — yatay 3 kolon: tabs | form | preview */
     .dnr-shell {
