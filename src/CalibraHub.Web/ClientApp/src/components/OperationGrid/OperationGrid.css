@@ -1,13 +1,16 @@
 /* OperationGrid — Operasyon Tanımlamaları — SmartBoard visual standard */
 .og-root {
-  color-scheme: dark;
+  color-scheme: light;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: linear-gradient(160deg, #0d1117 0%, #0c0f1a 60%, #0d1020 100%);
-  color: #e2e8f0;
+  background: var(--app-content-bg);
+  color: var(--app-text);
   font-size: 13px;
+}
+body.app-theme-dark .og-root {
+  color-scheme: dark;
 }
 
 /* ── Header ── */
@@ -16,7 +19,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
 }
 .og-header__id {
@@ -37,12 +40,12 @@
 .og-header__title {
   font-size: 14px;
   font-weight: 700;
-  color: rgba(255,255,255,0.92);
+  color: var(--app-text);
   line-height: 1.2;
 }
 .og-header__sub {
   font-size: 11px;
-  color: #475569;
+  color: var(--app-text-muted);
   margin-top: 1px;
 }
 .og-header__search {
@@ -50,25 +53,25 @@
   align-items: center;
   gap: 8px;
   flex: 1;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: var(--app-muted-surface);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   padding: 7px 10px;
   transition: border-color 0.15s;
 }
 .og-header__search:focus-within { border-color: rgba(99,102,241,0.4); }
-.og-header__search svg { color: #475569; flex-shrink: 0; }
+.og-header__search svg { color: var(--app-text-muted); flex-shrink: 0; }
 .og-header__search input {
   flex: 1; background: transparent; border: none; outline: none;
-  font-size: 13px; color: #e2e8f0;
+  font-size: 13px; color: var(--app-text);
 }
-.og-header__search input::placeholder { color: #374151; }
+.og-header__search input::placeholder { color: var(--app-text-muted); }
 .og-header__clear {
   background: none; border: none; cursor: pointer;
-  color: #475569; padding: 2px; border-radius: 4px;
+  color: var(--app-text-muted); padding: 2px; border-radius: 4px;
   display: flex; align-items: center;
 }
-.og-header__clear:hover { color: #94a3b8; }
+.og-header__clear:hover { color: var(--app-text); }
 
 /* ── Buttons ── */
 .og-btn {
@@ -85,11 +88,11 @@
 .og-btn--primary:hover { background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); }
 .og-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .og-btn--ghost {
-  background: rgba(255,255,255,0.05);
-  color: #94a3b8;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--app-muted-surface);
+  color: var(--app-text-muted);
+  border: 1px solid var(--app-border);
 }
-.og-btn--ghost:hover { background: rgba(255,255,255,0.09); }
+.og-btn--ghost:hover { background: var(--app-border-light); }
 .og-btn--danger { background: #ef4444; color: #fff; }
 .og-btn--danger:hover { background: #dc2626; }
 
@@ -110,7 +113,7 @@
   justify-content: center;
   gap: 12px;
   padding: 80px 20px;
-  color: #374151;
+  color: var(--app-text-muted);
   text-align: center;
 }
 
@@ -118,7 +121,7 @@
 .og-form-row {
   padding: 8px 16px;
   background: rgba(99,102,241,0.04);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--app-border-light);
 }
 .og-inline-form {
   display: flex;
@@ -129,18 +132,18 @@
 
 /* ── Form inputs ── */
 .og-fi {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--app-muted-surface);
+  border: 1px solid var(--app-border);
   border-radius: 6px;
   padding: 6px 9px;
   font-size: 12px;
-  color: #e2e8f0;
+  color: var(--app-text);
   outline: none;
   transition: border-color 0.15s;
   min-width: 0;
 }
 .og-fi:focus { border-color: rgba(99,102,241,0.5); }
-.og-fi option { background: #1e293b; }
+.og-fi option { background: var(--app-surface); color: var(--app-text); }
 .og-fi--code  { width: 80px;  flex-shrink: 0; }
 .og-fi--name  { flex: 2; min-width: 120px; }
 .og-fi--desc  { flex: 3; min-width: 100px; }
@@ -149,7 +152,7 @@
 .og-fi--sort  { width: 52px; flex-shrink: 0; text-align: right; }
 .og-fi--check {
   display: flex; align-items: center; gap: 4px;
-  font-size: 12px; color: #94a3b8;
+  font-size: 12px; color: var(--app-text-muted);
   white-space: nowrap; flex-shrink: 0; cursor: pointer;
 }
 .og-fi--actions {
@@ -164,13 +167,13 @@
   padding: 10px 14px;
   margin: 4px 12px;
   border-radius: 8px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-left: 3px solid rgba(99,102,241,0.45);
   transition: background 0.12s, border-left-color 0.15s;
 }
 .og-row:hover {
-  background: rgba(255,255,255,0.05);
+  background: var(--app-muted-surface);
   border-left-color: rgba(99,102,241,0.75);
 }
 .og-row--passive {
@@ -196,14 +199,14 @@
 .og-row__name {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255,255,255,0.9);
+  color: var(--app-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .og-row__desc {
   font-size: 12px;
-  color: #475569;
+  color: var(--app-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -221,27 +224,27 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: var(--app-muted-surface);
+  border: 1px solid var(--app-border-light);
   border-radius: 6px;
   padding: 3px 8px;
 }
 .og-tile__label {
   font-size: 10px;
-  color: #475569;
+  color: var(--app-text-muted);
   letter-spacing: 0.04em;
 }
 .og-tile__value {
   font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--app-text-muted);
 }
 .og-tile__unit {
   font-size: 10px;
-  color: #475569;
+  color: var(--app-text-muted);
   margin-left: 2px;
 }
-.og-tile__muted { color: #2d3748; font-size: 11px; }
+.og-tile__muted { color: var(--app-text-muted); font-size: 11px; }
 
 /* ── Badges ── */
 .og-badge {
@@ -267,7 +270,7 @@
   background: none; border: none; cursor: pointer;
   padding: 5px; border-radius: 5px;
   display: inline-flex; align-items: center; justify-content: center;
-  color: #374151; transition: background 0.12s, color 0.12s;
+  color: var(--app-text-muted); transition: background 0.12s, color 0.12s;
 }
 .og-act--edit:hover   { background: rgba(245,158,11,0.12);  color: #f59e0b; }
 .og-act--del:hover    { background: rgba(239,68,68,0.12);   color: #ef4444; }
@@ -282,11 +285,11 @@
   display: flex; align-items: center; justify-content: center;
 }
 .og-del-modal {
-  background: #111827;
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
   border-radius: 12px;
   padding: 24px; max-width: 400px; width: 90%;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
 }
 .og-del-modal__head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .og-del-modal__icon {
@@ -294,67 +297,16 @@
   border-radius: 8px; padding: 9px;
   display: flex; align-items: center;
 }
-.og-del-modal__title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
-.og-del-modal__label { font-size: 12px; color: #64748b; margin-top: 2px; }
-.og-del-modal__body  { font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.5; }
+.og-del-modal__title { font-size: 15px; font-weight: 600; color: var(--app-text); }
+.og-del-modal__label { font-size: 12px; color: var(--app-text-muted); margin-top: 2px; }
+.og-del-modal__body  { font-size: 13px; color: var(--app-text-muted); margin-bottom: 20px; line-height: 1.5; }
 .og-del-modal__foot  { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* ══════════════════════════════════════════════════════════
-   Light mode overrides — tum renk degerleri burada ezilir,
-   usteki tum bloklar koyu tema (dark default) olarak kalir.
+   Light/Dark ince ayarlar — nötr yüzey/metin/kenarlık artık
+   merkezi token'lardan geliyor; bu blok yalnızca dark-özel
+   backdrop/shadow tonu ve dark-only durumlar için kalır.
    ══════════════════════════════════════════════════════════ */
-body.app-theme-light .og-root {
-  color-scheme: light;
-  background: #f8fafc;
-  color: #0f172a;
+body.app-theme-dark .og-del-modal {
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
 }
-body.app-theme-light .og-header {
-  border-bottom-color: #e2e8f0;
-}
-body.app-theme-light .og-header__title  { color: #0f172a; }
-body.app-theme-light .og-header__sub    { color: #64748b; }
-body.app-theme-light .og-header__search {
-  background: #ffffff;
-  border-color: #e2e8f0;
-}
-body.app-theme-light .og-header__search input { color: #0f172a; }
-body.app-theme-light .og-header__search input::placeholder { color: #94a3b8; }
-body.app-theme-light .og-header__search svg { color: #94a3b8; }
-body.app-theme-light .og-btn--ghost {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #e2e8f0;
-}
-body.app-theme-light .og-btn--ghost:hover { background: #e2e8f0; }
-body.app-theme-light .og-form-row         { border-bottom-color: #f1f5f9; }
-body.app-theme-light .og-fi {
-  background: #ffffff;
-  border-color: #e2e8f0;
-  color: #0f172a;
-}
-body.app-theme-light .og-fi option   { background: #ffffff; }
-body.app-theme-light .og-fi--check   { color: #475569; }
-body.app-theme-light .og-row {
-  background: #ffffff;
-  border-color: #e2e8f0;
-}
-body.app-theme-light .og-row:hover     { background: #f8fafc; }
-body.app-theme-light .og-row__name    { color: #0f172a; }
-body.app-theme-light .og-row__desc    { color: #64748b; }
-body.app-theme-light .og-tile {
-  background: #f8fafc;
-  border-color: #e2e8f0;
-}
-body.app-theme-light .og-tile__label  { color: #94a3b8; }
-body.app-theme-light .og-tile__value  { color: #475569; }
-body.app-theme-light .og-tile__unit   { color: #94a3b8; }
-body.app-theme-light .og-act          { color: #94a3b8; }
-body.app-theme-light .og-empty        { color: #94a3b8; }
-body.app-theme-light .og-del-modal {
-  background: #ffffff;
-  border-color: #e2e8f0;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-}
-body.app-theme-light .og-del-modal__title { color: #0f172a; }
-body.app-theme-light .og-del-modal__label { color: #64748b; }
-body.app-theme-light .og-del-modal__body  { color: #475569; }
