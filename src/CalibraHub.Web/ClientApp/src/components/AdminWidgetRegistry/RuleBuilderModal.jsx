@@ -42,28 +42,28 @@ function useThemeIsLight() {
 // slate paleti + beyaz arka plan kullanir.
 function themePalette(isLight) {
   return {
-    // Ana metin
-    text:           isLight ? '#1e293b'             : 'rgba(255,255,255,0.85)',
-    textStrong:     isLight ? '#0f172a'             : 'rgba(255,255,255,0.92)',
-    textMute:       isLight ? '#475569'             : 'rgba(255,255,255,0.65)',
-    textMuted:      isLight ? '#64748b'             : 'rgba(255,255,255,0.55)',
-    textFaint:      isLight ? '#94a3b8'             : 'rgba(255,255,255,0.4)',
-    textPlaceholder:isLight ? '#94a3b8'             : 'rgba(255,255,255,0.3)',
-    textGhost:      isLight ? '#cbd5e1'             : 'rgba(255,255,255,0.25)',
+    // Ana metin — merkezi --app-* token'lari (CLAUDE.md "CSS ve Tema Kurallari")
+    text:           'var(--app-text)',
+    textStrong:     'var(--app-text)',
+    textMute:       'var(--app-text-muted)',
+    textMuted:      'var(--app-text-muted)',
+    textFaint:      'var(--app-text-muted)',
+    textPlaceholder:'var(--app-text-muted)',
+    textGhost:      'var(--app-text-muted)',
     // Yuzeyler
-    panel:          isLight ? '#ffffff'             : 'rgba(7,10,20,0.96)',
-    surface:        isLight ? '#f8fafc'             : 'rgba(255,255,255,0.05)',
-    surfaceSoft:    isLight ? '#f1f5f9'             : 'rgba(255,255,255,0.03)',
-    surfaceFaint:   isLight ? '#fafbfc'             : 'rgba(255,255,255,0.015)',
-    sidebar:        isLight ? '#f8fafc'             : 'rgba(255,255,255,0.015)',
-    inputBg:        isLight ? '#ffffff'             : 'rgba(255,255,255,0.05)',
-    dropdownBg:     isLight ? '#ffffff'             : 'rgba(10,14,26,0.97)',
-    previewBg:      isLight ? '#f1f5f9'             : 'rgba(0,0,0,0.2)',
+    panel:          'var(--app-surface)',
+    surface:        'var(--app-muted-surface)',
+    surfaceSoft:    'var(--app-muted-surface)',
+    surfaceFaint:   'var(--app-muted-surface)',
+    sidebar:        'var(--app-muted-surface)',
+    inputBg:        'var(--app-surface)',
+    dropdownBg:     'var(--app-surface)',
+    previewBg:      'var(--app-muted-surface)',
     // Kenarlar
-    border:         isLight ? '#e2e8f0'             : 'rgba(255,255,255,0.1)',
-    borderSoft:     isLight ? '#e2e8f0'             : 'rgba(255,255,255,0.07)',
-    borderFaint:    isLight ? '#f1f5f9'             : 'rgba(255,255,255,0.04)',
-    divider:        isLight ? '#e2e8f0'             : 'rgba(255,255,255,0.06)',
+    border:         'var(--app-border)',
+    borderSoft:     'var(--app-border-light)',
+    borderFaint:    'var(--app-border-light)',
+    divider:        'var(--app-border)',
     // Backdrop
     backdrop:       isLight ? 'rgba(15,23,42,0.45)' : 'rgba(0,0,0,0.72)',
     shadow:         isLight ? '0 24px 80px rgba(15,23,42,0.18)' : '0 24px 80px rgba(0,0,0,0.65)',
@@ -620,8 +620,8 @@ function ArithmeticOperatorDropdown(props) {
 function renderValueInput(cond, updateCondition, availableWidgets, isLight) {
   var t = themePalette(!!isLight)
   var dt = String(cond.dataType || '').toLowerCase()
-  var optionBg = isLight ? '#ffffff' : '#0a0e1a'
-  var optionFg = isLight ? '#1e293b' : '#fff'
+  var optionBg = 'var(--app-surface)'
+  var optionFg = 'var(--app-text)'
   var commonStyle = {
     flex: 1,
     height: '34px',

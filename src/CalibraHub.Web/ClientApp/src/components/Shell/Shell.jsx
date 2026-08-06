@@ -1119,7 +1119,7 @@ export default function Shell(props) {
         {/* Body: tab iframe'leri (aktif olan visible, digerleri display:none) */}
         <div
           className="flex-1 min-h-0 relative"
-          style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
+          style={{ background: 'var(--app-content-bg)' }}
         >
           {/* Dashboard: tabs yoksa veya home aktifse göster (z-index üste çıkar) */}
           {(tabs.length === 0 || showDashboard) && (
@@ -1142,7 +1142,7 @@ export default function Shell(props) {
                 allowFullScreen
                 style={{
                   display: (!showDashboard && t.key === activeTabKey) ? 'block' : 'none',
-                  background: isDark ? '#0a0d17' : '#f8fafc',
+                  background: 'var(--app-content-bg)',
                   zIndex: 1,
                 }}
               />
@@ -3360,7 +3360,7 @@ function TabBar(props) {
       {childTabs.length > 0 && (
         <div
           className={'flex items-center h-9 border-b overflow-x-auto smartcard-widgets-scroll ' + borderColor}
-          style={{ background: isDark ? '#070910' : '#eef2f7', paddingLeft: 18, paddingRight: 16 }}
+          style={{ background: 'var(--app-muted-surface)', paddingLeft: 18, paddingRight: 16 }}
         >
           <div className="flex items-center gap-1">
             {/* Liste sekmesi (grup parent'i) her zaman en solda SABİT anchor olarak
