@@ -101,7 +101,9 @@ export function SwitchToggle(props) {
       onKeyDown={function (e) { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle() } }}
       className={'relative w-[34px] h-[18px] rounded-full transition-colors flex-shrink-0 ' + (
         disabled ? 'opacity-45 cursor-not-allowed ' : 'cursor-pointer '
-      ) + (checked ? 'bg-indigo-500' : 'bg-slate-200 dark:bg-white/15')}
+      ) + (checked
+        ? (props.onClass || 'bg-indigo-500')
+        : (props.offClass || 'bg-slate-200 dark:bg-white/15'))}
     >
       <span
         className="absolute top-[2px] w-[14px] h-[14px] rounded-full bg-[#fff] shadow transition-transform"
@@ -357,7 +359,7 @@ export default function LineCardInspector(props) {
 
         <div className="border-t border-slate-200 dark:border-white/[0.08] pt-3 flex flex-col gap-1">
           <div className="text-[11px] text-slate-400 dark:text-white/35">Her satır {CARD_GRID_UNITS} birimdir; alanı boş bir yere bırakabilirsiniz.</div>
-          <div className="text-[11px] text-slate-400 dark:text-white/35">Dar ekranlarda kart varsayılan ızgaraya döner.</div>
+          <div className="text-[11px] text-slate-400 dark:text-white/35">Bu düzen dar ekranlarda da korunur.</div>
         </div>
       </div>
     )
@@ -452,15 +454,23 @@ export default function LineCardInspector(props) {
       ) : (
         <div>
           <SectionLabel>Görünürlük</SectionLabel>
+          {/* "Göster" — acikken YESIL (alan kartta), kapaliyken kirmizi
+              (kullanici istegi 2026-08-06): durum bir bakista okunsun. */}
           <div className="flex items-center gap-2">
             <SwitchToggle
-              checked={!item.visible}
+              checked={item.visible}
               disabled={!canEdit || item.locked}
-              ariaLabel="Alanı gizle"
+              ariaLabel="Alanı kartta göster"
               describedBy={item.locked ? lockedNoteId : null}
               onChange={function () { props.onToggleVisible(item.key) }}
+              onClass="bg-emerald-500"
+              offClass="bg-rose-400 dark:bg-rose-500/60"
             />
-            <span className="text-[12px] text-slate-600 dark:text-white/70">Gizle</span>
+            <span className={'text-[12px] ' + (item.visible
+              ? 'text-slate-600 dark:text-white/70'
+              : 'text-rose-600 dark:text-rose-300')}>
+              {item.visible ? 'Göster' : 'Gizli'}
+            </span>
           </div>
           {item.locked && (
             <div id={lockedNoteId} className="text-[11px] text-rose-500/80 dark:text-rose-300/70 mt-1.5">

@@ -190,6 +190,21 @@ export function resolvePlacements(items) {
   })
   return out
 }
+/**
+ * Bir yuvadan saga dogru KESINTISIZ bos birim sayisi — genisletmenin ust siniri.
+ * Serbest yerlesimde bir alani genisletirken komsusunu ITMEK yerine sinira
+ * dayanmasi beklenir (2026-08-06 kullanici bildirimi: "yatayda da otomatik
+ * yerlestirme olmayacakti"). `map` genisleyen ogeyi ICERMEMELIDIR.
+ */
+export function maxSpanAt(map, row, col) {
+  var span = 0
+  for (var c = col; c <= CARD_GRID_UNITS; c++) {
+    if (map[row + ':' + c]) break
+    span++
+  }
+  return span > 0 ? span : MIN_SPAN
+}
+
 /* Yerlesim listesinden isgal haritasi — bir ogeyi disarida birakabilir
    (surukledigimiz ogeyi kendi eski yerine carptirmamak icin). */
 export function buildOccupancy(placements, exceptKey) {

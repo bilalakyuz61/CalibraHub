@@ -34,7 +34,7 @@ import {
   resolveIcon, CARD_LABEL_COLOR_CLS, CARD_GRID_UNITS, MIN_SPAN,
   CARD_COLUMN_GAP, CARD_ROW_GAP, CARD_FIELD_HEIGHT, CARD_ROW_HEIGHT,
   WIDTH_PRESETS, spanLabel, clampSpan, snapSpan, unitStep,
-  resolvePlacements, findFreeSlot, buildOccupancy,
+  resolvePlacements, findFreeSlot, buildOccupancy, maxSpanAt,
 } from './cardLayoutTokens'
 // NOT: Bu modal BILEREK top govdesine (getTopBody) portallanmaz. Top'a
 // portallanirsa `fixed inset-0` perdesi ust menu seridini de kaplar ve modal
@@ -75,6 +75,28 @@ function normalizeEditorItems(arr) {
       row: (typeof it.row === 'number' && it.row >= 1) ? it.row : null,
       col: (typeof it.col === 'number' && it.col >= 1) ? it.col : null,
     }
+  })
+}
+
+/**
+ * Yuklemede TUM gorunur alanlarin (row, col) koordinatini sabitler.
+ *
+ * Neden zorunlu (2026-08-06 kullanici bildirimi): koordinati olmayan ogeler her
+ * render'da AKISTAN turetilir. Kullanici tek bir alani asagi tasidiginda o alan
+ * koordinat kazaniyor, digerleri hala akista oldugu icin bosalan yeri dolduruyor
+ * ve "dikeyde otomatik yerlesme" olusuyordu. Koordinatlar bastan sabitlenince
+ * bir alani tasimak diger alanlari ASLA oynatmaz.
+ */
+function freezePlacements(list) {
+  var visible = list.filter(function (it) { return it.visible })
+  var pl = resolvePlacements(visible.map(function (it) {
+    return { key: it.key, span: it.span, row: it.row, col: it.col }
+  }))
+  var byKey = {}
+  pl.forEach(function (p) { byKey[p.key] = p })
+  return list.map(function (it) {
+    var p = byKey[it.key]
+    return p ? Object.assign({}, it, { row: p.row, col: p.col }) : it
   })
 }
 
@@ -150,7 +172,7 @@ export default function LineCardLayoutEditor(props) {
 
   // Calisma kopyasi — Kaydet'e basilana kadar grid'e dokunulmaz.
   var [items, setItems] = useState(function () {
-    return autoLoad ? [] : normalizeEditorItems(props.items)
+    return autoLoad ? [] : freezePlacements(normalizeEditorItems(props.items))
   })
   var [hasCustomLayout, setHasCustomLayout] = useState(props.hasCustomLayout === true)
   var [loading, setLoading] = useState(autoLoad)
@@ -173,7 +195,7 @@ export default function LineCardLayoutEditor(props) {
 
   useEffect(function () {
     if (!autoLoad) {
-      baselineRef.current = JSON.stringify(buildPayloadItems(normalizeEditorItems(props.items)))
+      baselineRef.current = JSON.stringify(buildPayloadItems(freezePlacements(normalizeEditorItems(props.items))))
       return undefined
     }
     var alive = true
@@ -186,7 +208,9 @@ export default function LineCardLayoutEditor(props) {
           setUnsupported(true)
           return
         }
-        var next = normalizeEditorItems(data.items)
+        // Koordinatlari HEMEN sabitle: aksi halde akistaki (row/col'suz) alanlar
+        // baska bir alan tasinip yer acildiginda oraya kayiyordu.
+        var next = freezePlacements(normalizeEditorItems(data.items))
         setItems(next)
         setHasCustomLayout(data.hasCustomLayout === true)
         if (data.canEdit === false) setCanEdit(false)
@@ -209,8 +233,15 @@ export default function LineCardLayoutEditor(props) {
   }
 
   // ── Sutun genisligi islemleri ──
+  /* Genisletme komsuya kadar SINIRLIDIR — serbest yerlesimde bir alanin
+     buyumesi baska bir alani itmemeli (2026-08-06 kullanici bildirimi). */
+  function spanCeiling(key) {
+    var p = placeByKey[key]
+    if (!p) return CARD_GRID_UNITS
+    return maxSpanAt(buildOccupancy(placements, key), p.row, p.col)
+  }
   function setSpan(key, span) {
-    patchItem(key, { span: clampSpan(span) })
+    patchItem(key, { span: Math.min(clampSpan(span), spanCeiling(key)) })
   }
   /* Satirdaki alanlari 48 birime esit boler; artan birim (48 % n) soldan
      dagitilir. Alan sayisi cok fazlaysa (MIN_SPAN'in altina duserdi) buton
@@ -265,7 +296,8 @@ export default function LineCardLayoutEditor(props) {
       next[i] = Object.assign({}, next[i], { visible: !next[i].visible })
       return next
     })
-    if (selectedKey === key) setSelectedKey(null)
+    // Secim KORUNUR: gizlenen alanin switch'i kirmizi olarak gorunur kalsin ki
+    // yanlislikla gizlendiginde tek tikla geri acilabilsin (2026-08-06).
   }
   function showHidden(key) {
     setItems(function (prev) {
@@ -286,12 +318,14 @@ export default function LineCardLayoutEditor(props) {
   /* Fare noktasindan izgara yuvasi. Satir yuksekligi sabit varsayilir
      (CARD_ROW_HEIGHT + CARD_ROW_GAP) — tuvalde tum satirlar `gridAutoRows` ile
      bu tabana oturdugu icin hesap tutarlidir. */
-  function slotFromPoint(clientX, clientY, span) {
+  function slotFromPoint(clientX, clientY, span, offCols) {
     if (!gridRef.current) return null
     var rect = gridRef.current.getBoundingClientRect()
     if (rect.width <= 0) return null
     var step = unitStep(rect.width)
-    var col = Math.floor((clientX - rect.left) / step) + 1
+    // offCols: alani ORTASINDAN tuttuysan hedef, tuttugun noktadan degil alanin
+    // SOL kenarindan hesaplanmali — aksi halde hayalet saga kayik durur.
+    var col = Math.floor((clientX - rect.left) / step) + 1 - (offCols || 0)
     var rowH = CARD_ROW_HEIGHT + CARD_ROW_GAP
     var row = Math.floor((clientY - rect.top) / rowH) + 1
     col = Math.min(Math.max(col, 1), CARD_GRID_UNITS - span + 1)
@@ -299,8 +333,19 @@ export default function LineCardLayoutEditor(props) {
     return { row: row, col: col, span: span }
   }
 
-  function handleDragStart(e, key, span) {
-    dragKeyRef.current = { key: key, span: span }
+  function handleDragStart(e, key, span, cellEl) {
+    var offCols = 0
+    try {
+      var r = cellEl.getBoundingClientRect()
+      if (gridRef.current) {
+        var step = unitStep(gridRef.current.getBoundingClientRect().width)
+        offCols = Math.max(0, Math.min(span - 1, Math.floor((e.clientX - r.left) / step)))
+      }
+      // Tarayicinin varsayilan surukleme kopyasi hucreye TAM hizalanir; boylece
+      // "ucuncu hayalet" izlenimi ve kayik gorunum kalkar.
+      e.dataTransfer.setDragImage(cellEl, e.clientX - r.left, e.clientY - r.top)
+    } catch (_) {}
+    dragKeyRef.current = { key: key, span: span, offCols: offCols }
     setDraggingKey(key)
     try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', key) } catch (_) {}
   }
@@ -309,7 +354,7 @@ export default function LineCardLayoutEditor(props) {
     if (!st) return
     e.preventDefault()
     try { e.dataTransfer.dropEffect = 'move' } catch (_) {}
-    var slot = slotFromPoint(e.clientX, e.clientY, st.span)
+    var slot = slotFromPoint(e.clientX, e.clientY, st.span, st.offCols)
     if (!slot) return
     if (!dropSlot || dropSlot.row !== slot.row || dropSlot.col !== slot.col) setDropSlot(slot)
   }
@@ -317,7 +362,7 @@ export default function LineCardLayoutEditor(props) {
     var st = dragKeyRef.current
     if (!st) return
     e.preventDefault()
-    var slot = slotFromPoint(e.clientX, e.clientY, st.span)
+    var slot = slotFromPoint(e.clientX, e.clientY, st.span, st.offCols)
     if (slot) {
       // Hedef doluysa en yakin bos yuvaya kaydir (ust uste binme YOK).
       var occ = buildOccupancy(placements, st.key)
@@ -349,6 +394,9 @@ export default function LineCardLayoutEditor(props) {
       startX: e.clientX,
       startSpan: it.span,
       cellStep: unitStep(rect.width),
+      // Komsuya kadar olan tavan surukleme BASINDA olculur — her karede yeniden
+      // hesaplansa kendi yeni genisligi tavani da buyutup kayma uretirdi.
+      ceiling: spanCeiling(key),
     }
     setResizingKey(key)
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
@@ -363,6 +411,7 @@ export default function LineCardLayoutEditor(props) {
     // Shift = serbest (yapismasiz) hassas surukleme.
     var raw = clampSpan(st.startSpan + deltaSpan)
     var nextSpan = e.shiftKey ? raw : clampSpan(snapSpan(raw))
+    if (st.ceiling) nextSpan = Math.min(nextSpan, st.ceiling)
     setItems(function (prev) {
       var i = prev.findIndex(function (x) { return x.key === st.key })
       if (i < 0 || prev[i].span === nextSpan) return prev
@@ -589,7 +638,7 @@ export default function LineCardLayoutEditor(props) {
         aria-pressed={isSelected}
         aria-label={labelText + ' alanı, satır ' + place.row + ', sütun ' + place.col + ', genişlik ' + it.span + '/' + CARD_GRID_UNITS + (it.locked ? ', zorunlu' : '')}
         draggable={canEdit && !saving}
-        onDragStart={function (e) { handleDragStart(e, it.key, clampSpan(it.span)) }}
+        onDragStart={function (e) { handleDragStart(e, it.key, clampSpan(it.span), e.currentTarget) }}
         onDragEnd={handleDragEnd}
         onClick={function () { setSelectedKey(isSelected ? null : it.key) }}
         onKeyDown={function (e) {

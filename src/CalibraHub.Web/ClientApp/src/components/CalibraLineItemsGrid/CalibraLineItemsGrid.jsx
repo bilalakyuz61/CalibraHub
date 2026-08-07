@@ -454,7 +454,10 @@ export default function CalibraLineItemsGrid(props) {
   if (materialNameCol) identityColumns.push(materialNameCol)
   var allCardFieldColumns = identityColumns.concat(cardBodyColumns, widgetCardColumns)
   var hasCustomLayout = !!(cardLayout && cardLayout.length > 0)
-  var useCustomLayout = hasCustomLayout && !gridNarrow
+  // Dar ekranda da OZEL DUZEN korunur (2026-08-06 kullanici karari): serbest
+  // yerlesim (satir/sutun) admin'in bilincli tasarimidir; ekran daraldi diye
+  // varsayilan izgaraya donmek duzeni "kayboldu" hissi veriyordu.
+  var useCustomLayout = hasCustomLayout
   var cardItems = (function () {
     if (!hasCustomLayout) {
       // Varsayilan gorunum: kimlik kolonlari sabit bolgede cizilir, alan
