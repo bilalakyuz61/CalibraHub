@@ -23,12 +23,25 @@
        AÇMAZ — kullanıcı elle de gösterim formatında (gg.aa.yyyy) tarih
        yazabilir; yazım blur veya Enter ile "commit" edilir.
      • Elle girilen metin flatpickr'ın kendi allowInput parse'ı ile
-       (altFormat = d.m.Y) çözümlenir. Parse başarısız olursa flatpickr
-       alanı kendiliğinden boşaltır — bu dosya son geçerli değere GERİ
-       DÖNER (alan sessizce boşa düşmez) ve kısa kırmızı halka animasyonu
-       (.cdp-invalid-flash) ile kullanıcıyı uyarır. Alanı BİLEREK
-       boşaltmak (tüm metni silip çıkmak) geçerli bir durumdur, geri
-       alınmaz.
+       (altFormat = d.m.Y) çözümlenir; ANCAK blur/Enter'da bu dosya AYRICA
+       kendi katı takvim doğrulamasını (parseStrictDMY) yapar — flatpickr'ın
+       JS Date aritmetiği taşan gün/ay değerlerini (32.13.2026 gibi) SESSİZCE
+       başka bir geçerli tarihe yuvarlayabildiği için flatpickr'ın "parse
+       başarılı" sonucuna tek başına güvenilmez. Katı doğrulama başarısız
+       olursa (regex uymuyor VEYA ay/gün takvim dışı) bu dosya son geçerli
+       değere GERİ DÖNER (alan sessizce yanlış/boş değerde kalmaz) ve kısa
+       kırmızı halka animasyonu (.cdp-invalid-flash) ile kullanıcıyı uyarır.
+       Alanı BİLEREK boşaltmak (tüm metni silip çıkmak) geçerli bir durumdur,
+       geri alınmaz.
+     • GİRİŞ MASKESİ (PageComment Seq 1095): altInput'a yazarken yalnızca
+       rakam ve nokta kabul edilir (keydown'da harf/sembol preventDefault);
+       her 'input' event'inde ham değer basamaklara indirgenip (getDigits,
+       max 8 hane) dd.aa.yyyy kalıbına yeniden dizilir (formatDigits) — 2. ve
+       4. haneden sonra nokta OTOMATİK eklenir, imleç basamak konumuna göre
+       yeniden konumlanır. Backspace/Delete bir noktanın üzerine denk
+       gelirse noktayla birlikte bitişik haneyi de siler (yoksa nokta anında
+       geri gelip silme işlemini görünmez kılar). Yapıştırma (paste) da aynı
+       'input' event'inden geçtiği için otomatik ayıklanıp maskelenir.
      • F4 / Alt+ArrowDown odaklıyken takvimi açar (fare olmadan da
        erişilebilir olsun diye — ikonun kendisi ayrı bir DOM elemanı
        olmadığı için tab ile hedeflenemiyor).
@@ -83,6 +96,67 @@
         var zone = Math.max(pr, 28);
         var fromRight = rect.right - clientX;
         return fromRight >= 0 && fromRight <= zone;
+    }
+
+    /* ── Giriş maskesi yardımcıları (PageComment Seq 1095) ──────────────
+       Tamamen basamak-güdümlü: nokta karakterleri asla "veri" sayılmaz,
+       her yeniden biçimlendirmede ham metinden basamaklar çıkarılır ve
+       dd.aa.yyyy kalıbına göre yeniden diziliyor. Bu yüzden yapıştırma,
+       IME girişi ve elle yazılan nokta/ayraç farkı gözetmeksizin aynı
+       yoldan geçer — tek kaynak basamak dizisidir. ────────────────────── */
+    function getDigits(str) {
+        return (str || '').replace(/\D/g, '').slice(0, 8);
+    }
+    function formatDigits(digits) {
+        var out = digits.slice(0, 2);
+        if (digits.length > 2) out += '.' + digits.slice(2, 4);
+        if (digits.length > 4) out += '.' + digits.slice(4, 8);
+        return out;
+    }
+    /* Ham metni (yapıştırma dahil) dd.aa.yyyy maskesine göre yeniden
+       biçimlendirir; imleci, biçimlendirme sonrası aynı basamak konumunda
+       tutar (ör. imleç 2 basamaktan sonraysa, otomatik nokta eklense de
+       imleç noktadan sonra kalır). */
+    function maskReformat(altInput) {
+        var raw = altInput.value;
+        var caret = altInput.selectionStart;
+        if (caret == null) caret = raw.length;
+        var digitsBeforeCaret = 0;
+        for (var i = 0; i < caret && i < raw.length; i++) {
+            if (/\d/.test(raw.charAt(i))) digitsBeforeCaret++;
+        }
+        var formatted = formatDigits(getDigits(raw));
+        altInput.value = formatted;
+        var newCaret = formatted.length;
+        if (digitsBeforeCaret === 0) {
+            newCaret = 0;
+        } else {
+            var count = 0;
+            for (var j = 0; j < formatted.length; j++) {
+                if (/\d/.test(formatted.charAt(j))) {
+                    count++;
+                    if (count === digitsBeforeCaret) { newCaret = j + 1; break; }
+                }
+            }
+        }
+        try { altInput.setSelectionRange(newCaret, newCaret); } catch (e) { /* yoksay */ }
+        return formatted;
+    }
+    /* Katı takvim doğrulaması — flatpickr'ın kendi parse'ına GÜVENMEDEN
+       çalışır (JS Date aritmetiği taşan gün/ay değerlerini sessizce başka
+       bir geçerli tarihe yuvarlayabilir, ör. 32.01.2026 → 01.02.2026).
+       gg/aa/yyyy tam olarak takvimde var olan bir tarihi ifade etmiyorsa
+       null döner. Geçerliyse 'yyyy-mm-dd' (ISO) döner. */
+    function parseStrictDMY(raw) {
+        var m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((raw || '').trim());
+        if (!m) return null;
+        var dd = parseInt(m[1], 10), mm = parseInt(m[2], 10), yyyy = parseInt(m[3], 10);
+        if (mm < 1 || mm > 12) return null;
+        var daysInMonth = new Date(yyyy, mm, 0).getDate(); /* mm 1-indexed + day 0 = ayın son günü */
+        if (dd < 1 || dd > daysInMonth) return null;
+        var mmStr = mm < 10 ? '0' + mm : '' + mm;
+        var ddStr = dd < 10 ? '0' + dd : '' + dd;
+        return yyyy + '-' + mmStr + '-' + ddStr;
     }
 
     function enhance(input) {
@@ -158,22 +232,75 @@
             }
         });
 
+        /* ── Giriş maskesi (PageComment Seq 1095) ────────────────────────
+           1) keydown: rakam/nokta dışındaki tek karakterli tuşları
+              preventDefault ile engeller (harf/sembol hiç yazılmaz).
+              Ctrl/Meta kombinasyonları (kopyala/yapıştır/tümünü seç)
+              serbest bırakılır. Backspace/Delete bir noktanın üstüne denk
+              geldiğinde noktayla birlikte bitişik haneyi de siler — aksi
+              halde 'input' handler'ı sildiği noktayı aynı basamak sayısından
+              anında geri koyar ve kullanıcı hiçbir şey silememiş gibi
+              görünür.
+           2) input: her değişiklikte (yazma/silme/yapıştırma fark etmeksizin)
+              maskReformat basamakları çıkarıp dd.aa.yyyy kalıbında yeniden
+              dizer — 2./4. haneden sonra nokta otomatik gelir, max 8 hane. */
+        fp.altInput.addEventListener('keydown', function (e) {
+            var key = e.key || '';
+            if (e.ctrlKey || e.metaKey) return; /* kopyala/yapıştır/tümünü seç kısayolları serbest */
+            if (key === 'Backspace') {
+                var pos = fp.altInput.selectionStart, posEnd = fp.altInput.selectionEnd;
+                if (pos === posEnd && pos > 0 && fp.altInput.value.charAt(pos - 1) === '.') {
+                    e.preventDefault();
+                    var v = fp.altInput.value;
+                    fp.altInput.value = v.slice(0, pos - 2) + v.slice(pos);
+                    fp.altInput.setSelectionRange(pos - 2, pos - 2);
+                    dispatchNative(fp.altInput, 'input');
+                }
+                return;
+            }
+            if (key === 'Delete') {
+                var dp = fp.altInput.selectionStart, dpEnd = fp.altInput.selectionEnd;
+                if (dp === dpEnd && fp.altInput.value.charAt(dp) === '.') {
+                    e.preventDefault();
+                    var v2 = fp.altInput.value;
+                    fp.altInput.value = v2.slice(0, dp) + v2.slice(dp + 2);
+                    fp.altInput.setSelectionRange(dp, dp);
+                    dispatchNative(fp.altInput, 'input');
+                }
+                return;
+            }
+            var navKeys = ['Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End',
+                'Enter', 'Escape', 'F4', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock'];
+            if (navKeys.indexOf(key) !== -1) return;
+            if (key.length === 1 && !/[0-9.]/.test(key)) {
+                e.preventDefault(); /* rakam/nokta dışı karakter kabul edilmez */
+            }
+        });
+
         /* ── Elle yazım güvenliği ────────────────────────────────────────
            flatpickr'ın kendi blur/Enter işleyicisi (allowInput) parse
            başarısız olduğunda alanı SESSİZCE boşaltır (hem görünen hem
            gizli input, doğrulandı: flatpickr.min.js setDate → 0 seçili
            tarih → clear()). Bu, kullanıcının önceki geçerli tarihini
-           kaybettirir. Aşağıdaki 'blur' dinleyicisi flatpickr'ın KENDİ
-           blur dinleyicisinden SONRA çalışır (aynı elemana sonradan
-           eklenen dinleyiciler DOM ekleme sırasına göre tetiklenir) ve üç
-           durumu ayırt eder:
+           kaybettirir. Ayrıca flatpickr'ın parse'ı taşan gün/ay değerlerini
+           (32.13.2026 gibi) JS Date aritmetiğiyle SESSİZCE başka bir geçerli
+           tarihe yuvarlayabilir — bu yüzden flatpickr'ın "başarılı" sonucuna
+           tek başına güvenilmez, aşağıdaki 'blur' dinleyicisi kendi katı
+           takvim doğrulamasını (parseStrictDMY) yapar. flatpickr'ın KENDİ
+           blur dinleyicisinden SONRA çalışır (aynı elemana sonradan eklenen
+           dinleyiciler DOM ekleme sırasına göre tetiklenir) ve üç durumu
+           ayırt eder:
              1) Kullanıcı hiçbir şey yazmadı (odaklanıp çıktı)      → no-op
-             2) Kullanıcı alanı BİLEREK boşalttı VEYA geçerli bir
-                tarih yazdı                                        → kabul et + event yay
-             3) Kullanıcı geçersiz/eksik bir şey yazdı              → son
-                geçerli değere geri dön + kısa görsel uyarı (alan boşa
-                düşmez). Enter tuşu da flatpickr içinde senkron blur()
-                çağırdığı için aynı yoldan geçer, ayrı işleyici gerekmez. */
+             2) Kullanıcı alanı BİLEREK boşalttı                    → kabul et + event yay
+             3) Kullanıcı tam olarak gg.aa.yyyy kalıbında VE takvimde
+                var olan bir tarih yazdı                            → kabul et
+                (flatpickr durumu bu ISO ile kesinleştirilir, kendi
+                parse'ına güvenilmez)
+             4) Kullanıcı geçersiz/eksik/taşan bir şey yazdı         → son
+                geçerli değere geri dön + kısa görsel uyarı (alan yanlış
+                değerde sessizce kalmaz). Enter tuşu da flatpickr içinde
+                senkron blur() çağırdığı için aynı yoldan geçer, ayrı
+                işleyici gerekmez. */
         var lastValidIso = input.value || '';
         var typedSinceFocus = false;
         var lastTypedRaw = '';
@@ -185,25 +312,44 @@
             /* Gerçek klavye/paste girişinde tetiklenir; programatik
                setDate/value ataması native 'input' event'i doğurmaz. */
             typedSinceFocus = true;
+            maskReformat(fp.altInput);
             lastTypedRaw = fp.altInput.value;
         });
         fp.altInput.addEventListener('blur', function () {
             if (!typedSinceFocus) return;
             typedSinceFocus = false;
-            var wasEmptied = lastTypedRaw.trim() === '';
-            var newIso = input.value || '';
-            if (wasEmptied || newIso) {
-                /* Bilinçli boşaltma ya da başarılı parse — yeni durumu kabul et. */
-                if (newIso !== lastValidIso) {
+            var raw = lastTypedRaw.trim();
+            if (raw === '') {
+                /* Bilinçli boşaltma — yeni durumu kabul et. */
+                var clearedIso = input.value || '';
+                if (clearedIso !== lastValidIso) {
                     dispatchNative(input, 'input');
                     dispatchNative(input, 'change');
                 }
-                lastValidIso = newIso;
+                lastValidIso = clearedIso;
                 return;
             }
-            /* raw doluydu ama parse edilemedi (flatpickr alanı boşalttı) — geri al. */
+            var strictIso = parseStrictDMY(raw);
+            if (strictIso) {
+                /* Takvimde gerçekten var olan bir tarih — flatpickr durumunu
+                   bu ISO ile kesinleştir (kendi parse'ının rolled-over
+                   sonucuna güvenme). */
+                try { fp.setDate(strictIso, false); } catch (e) { /* yoksay */ }
+                var confirmedIso = input.value || strictIso;
+                if (confirmedIso !== lastValidIso) {
+                    dispatchNative(input, 'input');
+                    dispatchNative(input, 'change');
+                }
+                lastValidIso = confirmedIso;
+                return;
+            }
+            /* raw doluydu ama gg.aa.yyyy kalıbında/takvimde geçerli bir
+               tarih değildi (eksik hane, taşan gün/ay) — geri al. */
             if (lastValidIso) {
                 try { fp.setDate(lastValidIso, false); } catch (e) { /* yoksay */ }
+            } else {
+                try { fp.clear(false); } catch (e) { /* yoksay */ }
+                fp.altInput.value = '';
             }
             fp.altInput.classList.add('cdp-invalid-flash');
             setTimeout(function () { fp.altInput.classList.remove('cdp-invalid-flash'); }, 550);

@@ -121,6 +121,8 @@ public sealed class KitController : Controller
             quantity              = l.Quantity,
             note                  = l.Note,
             unitPrice             = l.UnitPrice,   // yalniz PriceMode=FixedComponent iken dolu
+            unitId                = l.UnitId,      // secili olcu birimi (Unit.Id) — NULL = bilesenin varsayilan birimi
+            unit                  = l.UnitCode,    // goruntuleme icin birim kodu (KitEdit.cshtml l.unit okur)
         }),
     };
 }

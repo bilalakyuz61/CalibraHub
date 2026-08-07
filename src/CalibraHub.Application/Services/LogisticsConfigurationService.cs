@@ -3547,7 +3547,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         try
         {
             foreach (var l in resolvedLines)
-                entity.AddLine(ItemKitLine.Create(l.ItemId, l.ConfigId, l.Qty, userId, l.Note, l.UnitPrice));
+                entity.AddLine(ItemKitLine.Create(l.ItemId, l.ConfigId, l.Qty, userId, l.Note, l.UnitPrice, l.UnitId));
             entity.EnsureValid();
         }
         catch (CalibraHub.Domain.Common.DomainException dex)
@@ -3590,11 +3590,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     /// Kit bilesen satirlarinin ESKI (ItemKitLineDto) ile YENI (resolvedLines) halini
     /// (ItemId, ConfigId) icerik anahtariyla karsilastirir — UpdateKitAsync DELETE+INSERT
     /// yaptigindan satir Id'leri kalici degildir (ItemKitLine sinif dokumani). Yalniz
-    /// Quantity/UnitPrice degisimi veya ekleme/silme raporlanir (CLAUDE.md audit kurali #3).
+    /// Quantity/UnitPrice/UnitId degisimi veya ekleme/silme raporlanir (CLAUDE.md audit kurali #3).
     /// </summary>
     private static List<AuditFieldChange> BuildKitLineChanges(
         IReadOnlyCollection<ItemKitLineDto>? oldLines,
-        IReadOnlyList<(int ItemId, int? ConfigId, decimal Qty, string? Note, decimal? UnitPrice)> newLines,
+        IReadOnlyList<(int ItemId, int? ConfigId, decimal Qty, string? Note, decimal? UnitPrice, int? UnitId)> newLines,
         IReadOnlyDictionary<int, Item> itemsById)
     {
         var changes = new List<AuditFieldChange>();
@@ -3604,30 +3604,29 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
         string CompLabel(int itemId) =>
             itemsById.TryGetValue(itemId, out var it) ? (it.Name ?? it.Code ?? ("#" + itemId)) : ("#" + itemId);
-        static string Summary(decimal qty, decimal? unitPrice) =>
-            unitPrice.HasValue
-                ? $"{AuditDiff.Normalize(qty)} adet × {AuditDiff.Normalize(unitPrice.Value)}"
-                : $"{AuditDiff.Normalize(qty)} adet";
+        static string Summary(decimal qty, decimal? unitPrice, int? unitId) =>
+            (unitPrice.HasValue ? $"{AuditDiff.Normalize(qty)} adet × {AuditDiff.Normalize(unitPrice.Value)}" : $"{AuditDiff.Normalize(qty)} adet")
+                + (unitId.HasValue ? $" (Birim #{unitId.Value})" : string.Empty);
 
         foreach (var (key, nl) in newByKey)
         {
             if (!oldByKey.TryGetValue(key, out var ol))
             {
                 changes.Add(new AuditFieldChange("Lines", $"Bileşen Eklendi — {CompLabel(key.ItemId)}",
-                    null, Summary(nl.Qty, nl.UnitPrice)));
+                    null, Summary(nl.Qty, nl.UnitPrice, nl.UnitId)));
                 continue;
             }
-            if (ol.Quantity != nl.Qty || (ol.UnitPrice ?? 0) != (nl.UnitPrice ?? 0))
+            if (ol.Quantity != nl.Qty || (ol.UnitPrice ?? 0) != (nl.UnitPrice ?? 0) || (ol.UnitId ?? 0) != (nl.UnitId ?? 0))
             {
                 changes.Add(new AuditFieldChange("Lines", $"Bileşen Değişti — {CompLabel(key.ItemId)}",
-                    Summary(ol.Quantity, ol.UnitPrice), Summary(nl.Qty, nl.UnitPrice)));
+                    Summary(ol.Quantity, ol.UnitPrice, ol.UnitId), Summary(nl.Qty, nl.UnitPrice, nl.UnitId)));
             }
         }
         foreach (var (key, ol) in oldByKey)
         {
             if (!newByKey.ContainsKey(key))
                 changes.Add(new AuditFieldChange("Lines", $"Bileşen Silindi — {CompLabel(key.ItemId)}",
-                    Summary(ol.Quantity, ol.UnitPrice), null));
+                    Summary(ol.Quantity, ol.UnitPrice, ol.UnitId), null));
         }
         return changes;
     }
