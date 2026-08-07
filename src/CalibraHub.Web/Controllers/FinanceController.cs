@@ -200,6 +200,8 @@ public sealed class FinanceController : Controller
                     icon = "Plus",
                     variant = "primary",
                     url = "/Finance/ContactEdit",
+                    // Seq 1096: yeni cari de liste sekmesinin altinda alt-sekmede acilir
+                    openInTab = new { title = "Yeni Cari", asChild = true },
                 },
             },
             masterWidgets,
@@ -239,6 +241,8 @@ public sealed class FinanceController : Controller
                     icon = "Plus",
                     variant = "primary",
                     url = "/Finance/ContactEdit",
+                    // Seq 1096: yeni cari de liste sekmesinin altinda alt-sekmede acilir
+                    openInTab = new { title = "Yeni Cari", asChild = true },
                 },
             },
             masterWidgets,
@@ -313,6 +317,8 @@ public sealed class FinanceController : Controller
                     icon = "Plus",
                     variant = "primary",
                     url = "/Finance/ContactEdit",
+                    // Seq 1096: yeni cari de liste sekmesinin altinda alt-sekmede acilir
+                    openInTab = new { title = "Yeni Cari", asChild = true },
                 },
             },
             masterWidgets,
@@ -399,6 +405,11 @@ public sealed class FinanceController : Controller
                     label = "Duzenle",
                     icon = "Edit",
                     url = $"/Finance/ContactEdit?id={account.Id}",
+                    // Seq 1096: secilen cari, liste sekmesinin ALTINDA yeni bir alt-sekmede acilir
+                    // (Malzeme Kartlari, Seq 1063 ile ayni desen). matchPath VERILMEZ — asChild
+                    // yolunda JS matchPath'i null'a kelepceler, boylece her cari kendi sekmesinde
+                    // acilir; ayni cariye ikinci tiklama exact-URL ile mevcut sekmeye odaklanir.
+                    openInTab = new { title = account.AccountTitle ?? account.AccountCode ?? "Cari", asChild = true },
                 },
                 secondaryAction = new
                 {
