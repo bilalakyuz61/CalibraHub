@@ -26,7 +26,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  LayoutGrid, GripVertical, X as XIcon, RotateCcw, AlertTriangle, Maximize2,
+  LayoutGrid, GripVertical, X as XIcon, RotateCcw, AlertTriangle,
   MoreHorizontal, Layers, Settings, Trash2,
 } from 'lucide-react'
 import LineCardInspector from './LineCardInspector'
@@ -622,40 +622,13 @@ export default function LineCardLayoutEditor(props) {
     )
   }
 
-  /* Satir sonu boslugu — sayi/ray yerine BOSLUGUN KENDISI gosterir. */
-  function renderGap(row, rIdx) {
-    var free = CARD_GRID_UNITS - row.used
-    if (free < MIN_SPAN || dragging || resizingKey) return null
-    return (
-      <div
-        key={'gap-' + rIdx}
-        role="button"
-        tabIndex={0}
-        aria-label={'Satır ' + (rIdx + 1) + ' boşluğunu doldur (' + free + ' birim)'}
-        onClick={function () { if (canEdit) fillRow(row.entries) }}
-        onKeyDown={function (e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (canEdit) fillRow(row.entries) }
-        }}
-        /* Dinlenmede neredeyse gorunmez — bos alan bir "alanmis" gibi
-           algilanmasin (kullanici geri bildirimi); hover'da belirginlesir. */
-        className="group/gap rounded-md border border-dashed flex items-center justify-center transition-colors border-slate-200/40 dark:border-white/[0.05] hover:border-indigo-300/70 dark:hover:border-indigo-400/40 cursor-pointer outline-none"
-        style={{ gridColumn: 'span ' + free, height: CARD_FIELD_HEIGHT, alignSelf: 'end' }}
-      >
-        <span className="opacity-0 group-hover/gap:opacity-100 transition-opacity text-slate-400 dark:text-white/40">
-          {free >= 8
-            ? <span className="text-[11px] font-semibold">Boşluğu Doldur</span>
-            : <Maximize2 size={13} strokeWidth={2} />}
-        </span>
-      </div>
-    )
-  }
-
-  // Tuvale cizilecek duz liste: her satirin hucreleri + (varsa) hayalet bosluk
+  /* Satir sonu boslugu icin tuvalde GOSTERGE YOK (2026-08-06 kullanici
+     bildirimi): kesikli cerceveli "hayalet blok" denendi, ama kullanicilar onu
+     Miktar/Parti No gibi alanlarin yanindaki fazladan bir KUTU sandi. Bosluk
+     bilgisi ve "Boşluğu Doldur" eylemi yalniz sag rayin "Satır" bolumunde. */
   var canvasChildren = []
-  rows.forEach(function (row, rIdx) {
+  rows.forEach(function (row) {
     row.entries.forEach(function (en) { canvasChildren.push(renderCell(en)) })
-    var gap = renderGap(row, rIdx)
-    if (gap) canvasChildren.push(gap)
   })
 
   return createPortal(
