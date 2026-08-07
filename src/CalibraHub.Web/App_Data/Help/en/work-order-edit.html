@@ -1,0 +1,68 @@
+<div class="calibra-help-doc">
+
+  <p class="help-lead">
+    The Work Order Edit screen lets you manage a finished product's production order in full
+    detail. Section links are on the left, the selected section's fields on the right,
+    and a fixed toolbar (Back / Save) at the top.
+  </p>
+
+  <h3>General Information</h3>
+  <ul>
+    <li><b>Number</b> and <b>date</b> are assigned automatically (cannot be changed).</li>
+    <li><b>Product Code</b> (required) — the finished product to be produced. For variant
+        products, the <b>Configuration Code</b> is also selected.</li>
+    <li><b>Planned Quantity</b> (required) and unit.</li>
+    <li>On new records, the <b>"Plan for Production"</b> switch: when on, the order moves
+        directly to <b>Released</b> status after saving (the routing is exploded).</li>
+    <li>In edit mode, Produced / Scrap / Actual Start-End details are also shown.</li>
+  </ul>
+
+  <h3>Planning Information</h3>
+  <p>Priority, planned start/end dates, responsible personnel, machine, <b>routing</b>
+     (if blank, found automatically based on the product), <b>production location</b>
+     (warehouse/location), and the related R&amp;D / product development project.</p>
+
+  <h3>Routing / Operations</h3>
+  <p>The operation steps of production (sequence, operation, machine, duration, produced/scrap,
+     status). <b>"Explode from Routing"</b> creates the steps from the product's routing;
+     an <b>operation</b> can also be added manually. After the order is released, progress
+     is recorded from the Shop Floor Terminal using <b>Start / Partial Finish / Finish</b>.</p>
+
+  <h3>BOM (Components)</h3>
+  <p>The components required for production: net requirement, issued quantity, scrap %, unit,
+     <b>consumption location</b>, and notes.</p>
+  <ul>
+    <li><b>Explode BOM:</b> Builds the component list from the product's bill of materials.</li>
+    <li><b>Enter Consumption:</b> Deducts the components from stock (stock issue). The source
+        warehouse is the work order's warehouse; the consumption location can be changed per component.</li>
+  </ul>
+
+  <h3>Source Orders</h3>
+  <p>The sales order line(s) that triggered this work order. As orders are linked,
+     the planned quantity is updated accordingly.</p>
+
+  <h3>Additional Fields</h3>
+  <p>Custom fields defined for the work order form in "Field Management" are added as a separate section.</p>
+
+  <h3>Production Flow and Stock Effect</h3>
+  <ul>
+    <li><b>Flow:</b> Planned → Released → In Progress → Completed → Closed.
+        A routing is required for release (exploded automatically).</li>
+    <li><b>Component consumption</b> creates a stock <b>issue</b> (BOM → Enter Consumption).</li>
+    <li><b>Product receipt</b> is automatic: when the last operation is completed on the
+        Shop Floor Terminal, the product is received into stock. For lot-tracked products the
+        lot = the work order number; for serial-tracked products serials are generated
+        automatically (the foundation of the traceability genealogy).</li>
+  </ul>
+
+  <h3>Toolbar</h3>
+  <ul>
+    <li><b>Save</b> (on new records or in Planned status), <b>Back</b>, <b>New</b>.</li>
+    <li><b>Revise:</b> Opens a new revision (history is preserved).</li>
+    <li><b>Create Inspection:</b> Starts a quality inspection for this work order.</li>
+  </ul>
+
+  <p class="help-note">Note: The change history can be tracked from the "Change History"
+     section on the related record.</p>
+
+</div>
