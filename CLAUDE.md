@@ -276,6 +276,19 @@ Yeni ekran geliştirirken veya mevcut ekranı denetlerken kontrol listesi:
 4. **`color-scheme` kontrolü** — standalone React bileşeni ise root'ta var mı?
 5. **Bundle rebuild** — CSS değişikliği yaptıktan sonra `npm run build` zorunlu; eski bundle bellekteki eski CSS'i döndürür
 
+## Modal boyut sabitliği (2026-08-06)
+
+**Bir modalın ölçüsü, içeriği değiştikçe değişmez.** Sekme değiştirme, liste seçimi, katlanır
+bölüm açma, yükleniyor→yüklendi geçişi gibi durumlarda modal büyüyüp küçülürse kullanıcı
+odağını kaybeder ve altındaki içerik zıplar. Aynı hata iki kez üretildi (kural/formül modalı
+sekme başına boyut değiştiriyordu; Kart Düzeni modalı alan seçildikçe uzayıp kısalıyordu).
+
+**Uygulama:** modal kabuğuna **sabit** genişlik + yükseklik ver (`max-width: min(<px>, calc(100vw - 96px))`
+ve `height: min(<px>, calc(100vh - 64px))`), gövdeyi `flex-1 min-h-0 overflow-y-auto` yap —
+taşan içerik modalı büyütmek yerine kendi içinde kaydırılır. `max-h-[…vh]` **tek başına yetmez**:
+içerik kısaldığında modal küçülür. Seçime göre içeriği değişen yan panel/rayı **her zaman mount**
+ve sabit genişlikte tut (koşullu mount = layout shift).
+
 ## Silme onay standardı
 
 Tüm silme/destruktif işlemler **ekranın ortasında** custom modal ile onay alır — browser native `confirm()` / `alert()` **kullanma** (sayfanın üst kenarında çıkar, tema uyumsuz).
