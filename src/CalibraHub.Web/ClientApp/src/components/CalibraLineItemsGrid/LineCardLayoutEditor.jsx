@@ -363,7 +363,9 @@ export default function LineCardLayoutEditor(props) {
     var isInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')
 
     if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput) {
-      if (it.locked) return
+      // Ek alanlar burada gizlenemez — gorunurlukleri Alan Yonetimi'ndeki
+      // "Kartta Göster" ile yonetilir (rayda da switch gosterilmez).
+      if (it.locked || it.isWidget) return
       e.preventDefault()
       toggleVisible(it.key)
       return

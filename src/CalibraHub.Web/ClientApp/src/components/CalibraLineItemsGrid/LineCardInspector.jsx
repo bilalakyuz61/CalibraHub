@@ -438,25 +438,37 @@ export default function LineCardInspector(props) {
         </div>
       )}
 
-      {/* B3 — Gorunurluk */}
-      <div>
-        <SectionLabel>Görünürlük</SectionLabel>
-        <div className="flex items-center gap-2">
-          <SwitchToggle
-            checked={item.visible}
-            disabled={!canEdit || item.locked}
-            ariaLabel="Kartta Görünür"
-            describedBy={item.locked ? lockedNoteId : null}
-            onChange={function () { props.onToggleVisible(item.key) }}
-          />
-          <span className="text-[12px] text-slate-600 dark:text-white/70">Kartta Görünür</span>
-        </div>
-        {item.locked && (
-          <div id={lockedNoteId} className="text-[11px] text-rose-500/80 dark:text-rose-300/70 mt-1.5">
-            Zorunlu alan — gizlenemez.
+      {/* B3 — Gizle. Yalniz STANDART alanlar icin (2026-08-06 kullanici karari):
+          ek alanlarin kartta gorunurlugu Alan Yonetimi'ndeki "Kartta Göster"
+          switch'i (WidgetMas.ShowOnCard) ile yonetilir — ayni ayarin iki yerde
+          durmasi cift yonetim ve celiskili durum uretir. */}
+      {item.isWidget ? (
+        <div>
+          <SectionLabel>Görünürlük</SectionLabel>
+          <div className="text-[11px] text-slate-500 dark:text-white/45">
+            Ek alanların kartta görünürlüğü Alan Yönetimi → “Kartta Göster” ile yönetilir.
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div>
+          <SectionLabel>Görünürlük</SectionLabel>
+          <div className="flex items-center gap-2">
+            <SwitchToggle
+              checked={!item.visible}
+              disabled={!canEdit || item.locked}
+              ariaLabel="Alanı gizle"
+              describedBy={item.locked ? lockedNoteId : null}
+              onChange={function () { props.onToggleVisible(item.key) }}
+            />
+            <span className="text-[12px] text-slate-600 dark:text-white/70">Gizle</span>
+          </div>
+          {item.locked && (
+            <div id={lockedNoteId} className="text-[11px] text-rose-500/80 dark:text-rose-300/70 mt-1.5">
+              Zorunlu alan — gizlenemez.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* B4 — Baslik (katlanir, varsayilan KAPALI) */}
       <div className="border-t border-slate-200 dark:border-white/[0.08] pt-3">
