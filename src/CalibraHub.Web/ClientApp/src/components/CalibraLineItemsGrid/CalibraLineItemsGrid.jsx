@@ -37,7 +37,10 @@ import { loadDecimalSettings, resolveColumnDecimals, roundTo, onDecimalSettingsC
 /* Ikon haritasi, izgara cozunurlugu ve etiket renk token'lari cardLayoutTokens'a
    tasindi (2026-08-06): duzen editorunun onizlemesi gercek kartla BIREBIR ayni
    gorunmek zorunda, iki kopya ayrisirsa WYSIWYG sessizce bozuluyordu. */
-import { ICON_MAP, resolveIcon, CARD_GRID_UNITS, CARD_LABEL_COLOR_CLS } from './cardLayoutTokens'
+import {
+  ICON_MAP, resolveIcon, CARD_GRID_UNITS, CARD_LABEL_COLOR_CLS,
+  CARD_ROW_HEIGHT, resolvePlacements,
+} from './cardLayoutTokens'
 
 /* ── Form Davranış Katmanı — satır-scope kural değerlendirme (2026-08-05) ──
    Kural ifadeleri admin tarafından tanımlanır ve server'da RuleExpr süzgecinden
@@ -481,6 +484,9 @@ export default function CalibraLineItemsGrid(props) {
         labelWeight: (it.labelWeight === 400 || it.labelWeight === 500 || it.labelWeight === 600 || it.labelWeight === 700) ? it.labelWeight : null,
         labelColor: CARD_LABEL_COLOR_CLS[it.labelColor] ? it.labelColor : null,
         labelStyle: (it.labelStyle === 'modern' || it.labelStyle === 'inline') ? it.labelStyle : null,
+        // Serbest yerlesim (v3): satir/sutun. null → akis (eski davranis).
+        row: (typeof it.row === 'number' && it.row >= 1) ? it.row : null,
+        col2: (typeof it.col === 'number' && it.col >= 1) ? it.col : null,
       })
     })
     // Duzende olmayan kimlik kolonlari basa (materialCode once) —
@@ -494,6 +500,20 @@ export default function CalibraLineItemsGrid(props) {
     }
     allCardFieldColumns.forEach(function (c) {
       if (!seen[c.key]) ordered.push({ col: c, span: 12, visible: true })
+    })
+    // ── Serbest yerlesim (v3, 2026-08-06) ────────────────────────────────
+    //   Gorunur ogelere kesin (row, col) atanir. Koordinati olmayan kayitlar
+    //   (v1/v2 duzenleri + duzene sonradan eklenen kolonlar) ESKI akis
+    //   semantigiyle yerlesir → mevcut kartlarin gorunumu birebir korunur.
+    var placements = resolvePlacements(
+      ordered.filter(function (o) { return o.visible })
+        .map(function (o) { return { key: o.col.key, span: o.span, row: o.row, col: o.col2 } })
+    )
+    var placeByKey = {}
+    placements.forEach(function (p) { placeByKey[p.key] = p })
+    ordered.forEach(function (o) {
+      var p = placeByKey[o.col.key]
+      if (p) { o.placeRow = p.row; o.placeCol = p.col }
     })
     return ordered
   })()
@@ -1773,6 +1793,9 @@ export default function CalibraLineItemsGrid(props) {
                             // taban hizasi giris kutularini ayni satirda ayni cizgiye oturtur.
                             gridArea: 'fields', display: 'grid',
                             gridTemplateColumns: 'repeat(' + CARD_GRID_UNITS + ', minmax(0, 1fr))',
+                            // gridAutoRows: serbest yerlesimde BOS birakilan satirlar
+                            // yukseklik almazsa bosluk gorunmez (duzen coker).
+                            gridAutoRows: 'minmax(' + CARD_ROW_HEIGHT + 'px, auto)',
                             columnGap: 12, rowGap: 10, alignItems: 'end',
                           }
                         : {
@@ -1812,7 +1835,11 @@ export default function CalibraLineItemsGrid(props) {
                         var showMirror = mirror && showTlColumns
                         var cellStyle = Object.assign({}, lockedStyle)
                         if (useCustomLayout) {
-                          cellStyle.gridColumn = 'span ' + Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
+                          var __span = Math.min(Math.max(item.span || 12, 1), CARD_GRID_UNITS)
+                          // Serbest yerlesim: duzende satir/sutun varsa hucre TAM O
+                          // konuma oturur (aradaki bosluklar korunur). Yoksa akis.
+                          cellStyle.gridColumn = item.placeCol ? (item.placeCol + ' / span ' + __span) : ('span ' + __span)
+                          if (item.placeRow) cellStyle.gridRow = String(item.placeRow)
                         } else if (showMirror) {
                           cellStyle.gridColumn = 'span 2'
                         } else if (col.type === 'percent') {

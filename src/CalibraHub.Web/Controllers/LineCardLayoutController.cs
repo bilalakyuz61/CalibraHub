@@ -88,10 +88,17 @@ public sealed partial class LineCardLayoutController : Controller
     ///                 "standard" (etiket üstte — varsayılan), "modern" (kutunun
     ///                 üst kenarında yüzer), "inline" (Sade — etiket solda, giriş sağda).
     /// </summary>
+    /// <remarks>
+    /// Row/Col (v3, 2026-08-06): SERBEST yerleşim. Alanlar artık yalnız sıraya göre
+    /// sola/üste yığılmaz; admin bir alanı istediği satıra ve sütuna koyabilir
+    /// (aradaki boşluk korunur). Row 1-tabanlı satır, Col 1-tabanlı sütun (1..48).
+    /// null = eski davranış (akış/flow) — v1/v2 kayıtları okunurken istemci sıradan
+    /// türetir, böylece mevcut düzenlerin görünümü birebir korunur.
+    /// </remarks>
     public sealed record LayoutItemDto(
         string Key, int Span, int Order, bool Visible = true,
         string? Label = null, int? LabelSize = null, int? LabelWeight = null, string? LabelColor = null,
-        string? LabelStyle = null);
+        string? LabelStyle = null, int? Row = null, int? Col = null);
 
     private static readonly HashSet<string> AllowedLabelColors =
         new(StringComparer.OrdinalIgnoreCase) { "slate", "indigo", "emerald", "amber", "rose", "blue", "violet" };
@@ -229,8 +236,16 @@ public sealed partial class LineCardLayoutController : Controller
             var style = it.LabelStyle?.Trim().ToLowerInvariant();
             if (style is not ("modern" or "inline")) style = null;
 
-            items.Add(new LayoutItemDto(key, Math.Clamp(it.Span, 1, GridUnits), items.Count, it.Visible,
-                label, size, weight, color, style));
+            // Serbest yerlesim (v3): Row 1..500, Col 1..GridUnits ve col+span izgarayi
+            // tasmamali. Gecersiz/eksik degerler null → istemci akis (flow) moduna duser
+            // (fail-open; eski kayitlarin gorunumu birebir korunur).
+            var span = Math.Clamp(it.Span, 1, GridUnits);
+            int? row = it.Row is >= 1 and <= 500 ? it.Row : null;
+            int? col = it.Col is >= 1 && it.Col <= GridUnits && (it.Col + span - 1) <= GridUnits ? it.Col : null;
+            if (row is null || col is null) { row = null; col = null; }
+
+            items.Add(new LayoutItemDto(key, span, items.Count, it.Visible,
+                label, size, weight, color, style, row, col));
         }
         if (items.Count == 0)
             return Json(new { ok = false, error = "Geçerli düzen öğesi yok." });
@@ -238,8 +253,9 @@ public sealed partial class LineCardLayoutController : Controller
         try
         {
             var old = await _repository.GetActiveAsync(formCode, ct);
-            // v2 zarf — okuma yolu v1 (ciplak dizi, 24 birim) ile ayrim yapabilsin.
-            var json = JsonSerializer.Serialize(new LayoutEnvelope(2, items), StoreJson);
+            // v3 zarf — Row/Col (serbest yerlesim) tasiyan surum. Okuma yolu v1 (ciplak
+            // dizi, 24 birim) ve v2 (48 birim, akis) ile ayrim yapabilsin.
+            var json = JsonSerializer.Serialize(new LayoutEnvelope(3, items), StoreJson);
             await _repository.UpsertAsync(new LineCardLayout
             {
                 FormCode = formCode,

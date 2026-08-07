@@ -16,7 +16,7 @@
 import { useState, useRef } from 'react'
 import {
   Plus, Search, GripVertical, MoveHorizontal, MousePointerClick,
-  ChevronDown, ChevronUp, ArrowLeft, ArrowRight, X as XIcon,
+  ChevronDown, ChevronUp, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, X as XIcon,
 } from 'lucide-react'
 import {
   resolveIcon, CARD_GRID_UNITS, MIN_SPAN, spanLabel,
@@ -340,9 +340,9 @@ export default function LineCardInspector(props) {
           <SectionLabel>Nasıl Çalışır?</SectionLabel>
           <div className="flex flex-col">
             {[
-              { Icon: GripVertical, text: 'Sürükleyip bırakın — sıra' },
+              { Icon: GripVertical, text: 'Sürükleyip bırakın — konum' },
               { Icon: MoveHorizontal, text: 'Sağ kenardan çekin — genişlik' },
-              { Icon: MousePointerClick, text: 'Bir alana tıklayın — başlık' },
+              { Icon: MousePointerClick, text: 'Bir alana tıklayın — ayarlar' },
             ].map(function (r, i) {
               var I = r.Icon
               return (
@@ -356,7 +356,7 @@ export default function LineCardInspector(props) {
         </div>
 
         <div className="border-t border-slate-200 dark:border-white/[0.08] pt-3 flex flex-col gap-1">
-          <div className="text-[11px] text-slate-400 dark:text-white/35">Her satır {CARD_GRID_UNITS} birimdir; sığmayan alan alta akar.</div>
+          <div className="text-[11px] text-slate-400 dark:text-white/35">Her satır {CARD_GRID_UNITS} birimdir; alanı boş bir yere bırakabilirsiniz.</div>
           <div className="text-[11px] text-slate-400 dark:text-white/35">Dar ekranlarda kart varsayılan ızgaraya döner.</div>
         </div>
       </div>
@@ -400,7 +400,7 @@ export default function LineCardInspector(props) {
           disabled={!canEdit}
           onChange={function (v) { props.onSetSpan(item.key, v) }}
         />
-        <div className="text-[11px] text-slate-400 dark:text-white/35 mt-1.5">Alt+←/→ ince ayar · Ctrl+←/→ sıra</div>
+        <div className="text-[11px] text-slate-400 dark:text-white/35 mt-1.5">Alt+←/→ ince ayar</div>
       </div>
 
       {/* B2 — Satir */}
@@ -583,24 +583,37 @@ export default function LineCardInspector(props) {
         )}
       </div>
 
-      {/* B5 — dokunmatik: suruklemeye erisilebilir alternatif */}
-      {coarse && canEdit && (
+      {/* B5 — Konum: serbest yerlesimde alani satir/sutun olarak kaydirir.
+          Suruklemeye erisilebilir alternatif (dokunmatik + klavye kullanicilari). */}
+      {canEdit && (
         <div className="border-t border-slate-200 dark:border-white/[0.08] pt-3">
-          <SectionLabel>Sıra</SectionLabel>
+          <SectionLabel>Konum</SectionLabel>
+          {props.place && (
+            <div className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-white/45 mb-1.5">
+              Satır {props.place.row} · Sütun {props.place.col}
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={function () { props.onMove(-1) }}
-              aria-label="Önceki sıraya al"
-              className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 flex items-center justify-center hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-white/55"
-            ><ArrowLeft size={14} strokeWidth={2} /></button>
-            <button
-              type="button"
-              onClick={function () { props.onMove(1) }}
-              aria-label="Sonraki sıraya al"
-              className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 flex items-center justify-center hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-white/55"
-            ><ArrowRight size={14} strokeWidth={2} /></button>
+            {[
+              { d: [0, -1], Icon: ArrowLeft, label: 'Bir sütun sola' },
+              { d: [0, 1], Icon: ArrowRight, label: 'Bir sütun sağa' },
+              { d: [-1, 0], Icon: ArrowUp, label: 'Bir satır yukarı' },
+              { d: [1, 0], Icon: ArrowDown, label: 'Bir satır aşağı' },
+            ].map(function (b, i) {
+              var I = b.Icon
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={function () { props.onNudge(b.d[0], b.d[1]) }}
+                  aria-label={b.label}
+                  title={b.label}
+                  className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 flex items-center justify-center hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-white/55 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300"
+                ><I size={14} strokeWidth={2} /></button>
+              )
+            })}
           </div>
+          <div className="text-[11px] text-slate-400 dark:text-white/35 mt-1.5">Ctrl+ok tuşlarıyla da taşınır.</div>
         </div>
       )}
 
