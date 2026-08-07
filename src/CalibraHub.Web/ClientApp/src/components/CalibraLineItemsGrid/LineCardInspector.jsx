@@ -105,8 +105,10 @@ export function SwitchToggle(props) {
         ? (props.onClass || 'bg-indigo-500')
         : (props.offClass || 'bg-slate-200 dark:bg-white/15'))}
     >
+      {/* left:0 acikca verilir — absolute ogenin "static position" belirsizligi
+          bazi tarayicilarda thumb'i track disina tasiriyordu. */}
       <span
-        className="absolute top-[2px] w-[14px] h-[14px] rounded-full bg-[#fff] shadow transition-transform"
+        className="absolute top-[2px] left-0 w-[14px] h-[14px] rounded-full bg-[#fff] shadow transition-transform"
         style={{ transform: 'translateX(' + (checked ? 18 : 2) + 'px)' }}
       />
     </button>
@@ -456,7 +458,9 @@ export default function LineCardInspector(props) {
           <SectionLabel>Görünürlük</SectionLabel>
           {/* "Göster" — acikken YESIL (alan kartta), kapaliyken kirmizi
               (kullanici istegi 2026-08-06): durum bir bakista okunsun. */}
-          <div className="flex items-center gap-2">
+          {/* gap-[10px]: rem tabanli gap bu projede 6.25px'e dusuyor ve switch
+              metne yapisik goruyordu (2026-08-06 kullanici bildirimi) — sabit px. */}
+          <div className="flex items-center gap-[10px]">
             <SwitchToggle
               checked={item.visible}
               disabled={!canEdit || item.locked}
@@ -466,7 +470,7 @@ export default function LineCardInspector(props) {
               onClass="bg-emerald-500"
               offClass="bg-rose-400 dark:bg-rose-500/60"
             />
-            <span className={'text-[12px] ' + (item.visible
+            <span className={'text-[12px] whitespace-nowrap ' + (item.visible
               ? 'text-slate-600 dark:text-white/70'
               : 'text-rose-600 dark:text-rose-300')}>
               {item.visible ? 'Göster' : 'Gizli'}
