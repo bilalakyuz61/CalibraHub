@@ -12,7 +12,7 @@ namespace CalibraHub.Web.Controllers;
 /// tipinde bir malzeme kartidir; icerigi ItemKit + ItemKitLine tablolarinda tutulur.
 /// BomController'in yalin analoğu — rota/fire/multi-level yok, versiyon + fiyat modu var.
 ///
-///   - GET  /Logistics/KitEdit        → sade kit editor view
+///   - GET  /Logistics/KitEdit        → (eski editor sayfasi) malzeme kartina 302 redirect
 ///   - GET  /Logistics/GetKit         → itemId (veya materialCode) ile aktif kit icerigi (JSON)
 ///   - POST /Logistics/SaveKit        → JSON upsert (yeni=VersionNo 1, mevcut=VersionNo++)
 ///   - POST /Logistics/DeleteKitJson  → JSON soft delete
@@ -31,16 +31,18 @@ public sealed class KitController : Controller
         _logistics = logistics;
     }
 
+    /// <summary>
+    /// 2026-08-06 (kullanici karari): kit icerigi icin AYRI SAYFA YOK — editor artik
+    /// Malzeme Karti "Kit Icerigi" sekmesine gomulu (Views/Logistics/_KitEditorPane.cshtml).
+    /// Bu action yalnizca eski baglantilar/yer imleri kirilmasin diye malzeme kartina
+    /// yonlendirir (kalici degil: icerik tasindi, adres degisti).
+    /// </summary>
     [HttpGet]
-    public IActionResult KitEdit(int? itemId, string? code, string? name)
+    public IActionResult KitEdit(int? itemId)
     {
-        // code/name MaterialCardEdit "Kit Icerigi" sekmesinden query ile gelir
-        // (yeni kit henuz kaydedilmediginde GetKit itemCode/itemName dondurmez).
-        ViewBag.Title = "Kit İçeriği Düzenle";
-        ViewData["KitItemId"] = itemId ?? 0;
-        ViewData["KitItemCode"] = code ?? string.Empty;
-        ViewData["KitItemName"] = name ?? string.Empty;
-        return View("~/Views/Logistics/KitEdit.cshtml");
+        return (itemId is > 0)
+            ? RedirectToAction("MaterialCardEdit", "Logistics", new { id = itemId.Value })
+            : RedirectToAction("MaterialCards", "Logistics");
     }
 
     [HttpGet]

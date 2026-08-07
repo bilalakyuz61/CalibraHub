@@ -2453,19 +2453,10 @@
                         Önce malzeme kartını kaydedin, ardından kit içeriği düzenlenebilir hale gelir.
                     </div>
                     <div id="mceKitSingle" style="display:none;">
-                        <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);">
-                            <div style="flex:1;min-width:0;">
-                                <div style="font-size:.85rem;font-weight:600;color:var(--mce-t85, rgba(255,255,255,.85));">Paket İçeriği</div>
-                                <div style="font-size:.72rem;color:var(--mce-t50, rgba(255,255,255,.5));margin-top:3px;">
-                                    Bu kit tek kod altında farklı stokları toplar; sipariş/teklifte tek kalem olarak kullanılır.
-                                    <span id="mceKitStatus" style="margin-left:6px;"></span>
-                                </div>
-                            </div>
-                            <button type="button" class="mce-btn mce-btn--secondary" onclick="mceOpenKit()" style="font-size:.78rem;padding:7px 14px;flex-shrink:0;">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                Kit İçeriğini Düzenle
-                            </button>
-                        </div>
+                        @* 2026-08-06 (kullanıcı isteği): kit içeriği için AYRI SAYFA YOK —
+                           editör doğrudan bu sekmede gömülü. Kayıt, malzeme kartının tek
+                           Kaydet butonuna bağlıdır (bkz. mceSave içindeki kit bloğu). *@
+                        @await Html.PartialAsync("_KitEditorPane")
                     </div>
                 </div>
             </div>
@@ -3315,6 +3306,27 @@
             // sonrasi ozet metnini guncel Id ile tazelemek icin sadece reload cagirilir.
             if (currentId > 0 && typeof window.mceDocLockLoad === 'function') {
                 try { window.mceDocLockLoad(); } catch (e) { console.warn('[MCE] doc-lock ozet yenileme hatasi:', e); }
+            }
+
+            // ── Kit içeriğini de ayni save akisinda kaydet (2026-08-06) ──
+            // Editör bu sekmede gömülü olduğu için ayrı Kaydet butonu YOK.
+            // YALNIZ kullanıcı kit sekmesinde bir değişiklik yaptıysa gönderilir:
+            // repository her UpdateKit'te VersionNo'yu artırıyor, dokunulmamış kitin
+            // versiyonu her kart kaydında boşuna şişmemeli.
+            if (currentId > 0 && mceKitIsApplicable()
+                && typeof window.mceKitEditorSave === 'function'
+                && typeof window.mceKitEditorIsDirty === 'function'
+                && window.mceKitEditorIsDirty()) {
+                window.mceKitEditorSave().then(function (res) {
+                    if (res && res.ok) {
+                        if (typeof window.mceKitEditorLineCount === 'function') {
+                            mceKitUpdateCount(window.mceKitEditorLineCount());
+                        }
+                    } else if (res && res.message) {
+                        // Kit kaydi basarisiz — kart kaydi zaten gecti, kullaniciyi sessiz birakma.
+                        showMsg('Kit içeriği kaydedilemedi: ' + res.message, false);
+                    }
+                }).catch(function (err) { console.warn('[MCE] kit save hatasi:', err); });
             }
 
             // ── Ozellik eslestirmelerini de ayni save akisinda kaydet ──
@@ -5703,10 +5715,12 @@
         }
     };
 
+    // 2026-08-06: kit editörü artık bu sekmede GÖMÜLÜ (_KitEditorPane partial'ı).
+    // Sekme açılınca editörü bu malzeme için yükler; rozet sayısı editörün satır
+    // sayısından gelir (ayrı bir GetKit isteği atılmaz — editör zaten çekiyor).
     window.mceKitRender = function () {
         var emptyEl = document.getElementById('mceKitEmpty');
         var singleEl = document.getElementById('mceKitSingle');
-        var statusEl = document.getElementById('mceKitStatus');
         if (!emptyEl || !singleEl) return;
         if (!currentId || currentId <= 0) {
             emptyEl.style.display = '';
@@ -5716,27 +5730,15 @@
         }
         emptyEl.style.display = 'none';
         singleEl.style.display = '';
-        mceKitFetchStatus(statusEl);
+        if (typeof window.mceKitEditorInit !== 'function') return;
+        var code = ($('mceMaterialCode') && $('mceMaterialCode').value || '').trim();
+        var name = ($('mceMaterialName') && $('mceMaterialName').value || '').trim();
+        Promise.resolve(window.mceKitEditorInit(currentId, code, name)).then(function () {
+            if (typeof window.mceKitEditorLineCount === 'function') {
+                mceKitUpdateCount(window.mceKitEditorLineCount());
+            }
+        });
     };
-
-    function mceKitFetchStatus(targetEl) {
-        if (!currentId || currentId <= 0) return;
-        fetch('/Logistics/GetKit?itemId=' + currentId, { credentials: 'same-origin' })
-            .then(function (r) { return r.ok ? r.json() : { found: false }; })
-            .then(function (data) {
-                var n = (data && data.found && data.lines) ? data.lines.length : 0;
-                mceKitUpdateCount(n);
-                if (!targetEl) return;
-                if (data && data.found) {
-                    targetEl.textContent = n + ' bileşen · v' + (data.versionNo || 1);
-                    targetEl.style.color = '#34d399';
-                } else {
-                    targetEl.textContent = 'Tanımsız';
-                    targetEl.style.color = 'rgba(255,255,255,.45)';
-                }
-            })
-            .catch(function () { if (targetEl) targetEl.textContent = ''; });
-    }
 
     function mceKitUpdateCount(n) {
         var badge = document.getElementById('mceKitCount');
@@ -5747,24 +5749,8 @@
         badge.classList.toggle('is-empty', newEmpty);
     }
 
-    window.mceOpenKit = function () {
-        var code = ($('mceMaterialCode') && $('mceMaterialCode').value || '').trim();
-        var name = ($('mceMaterialName') && $('mceMaterialName').value || '').trim();
-        if (!currentId || currentId <= 0) {
-            if (typeof showMsg === 'function') showMsg('Önce malzeme kartını kaydedin.', false);
-            return;
-        }
-        var url = '/Logistics/KitEdit?itemId=' + currentId
-                + '&code=' + encodeURIComponent(code)
-                + '&name=' + encodeURIComponent(name);
-        try {
-            if (window.parent && window.parent !== window && typeof window.parent.location !== 'undefined') {
-                window.parent.location.href = url;
-                return;
-            }
-        } catch (e) { /* cross-origin — fallback */ }
-        window.location.href = url;
-    };
+    // (mceOpenKit kaldırıldı — 2026-08-06: kit içeriği ayrı sayfaya gitmiyor, bu sekmede
+    //  gömülü editörle düzenleniyor. /Logistics/KitEdit artık malzeme kartına yönlendirir.)
 
     // TypeId degisince Kit nav gorunurlugunu sync et
     (function initKitTypeSync() {
