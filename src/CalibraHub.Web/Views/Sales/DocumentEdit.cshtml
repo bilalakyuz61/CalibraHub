@@ -5991,7 +5991,37 @@
         } catch {}
     };
 
-    function formatMoney(val) { return (val || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    // 2026-08-06: Alt toplamlar (Ara Toplam / İskonto / KDV / Genel Toplam) da Ondalık
+    // Ayarları'ndaki "Tutar" hanesini kullanır — daha önce 2 hane SABİT kodluydu, kalem
+    // grid'i ayarı uygularken özet 2 hanede kalıyordu (aynı ekranda tutarsız gösterim).
+    // Form kodu grid ile AYNI (config.lineFormCode) → ikisi asla ayrışmaz.
+    var __sqAmountDecimals = 2;
+    function formatMoney(val) {
+        var d = (typeof __sqAmountDecimals === 'number' && __sqAmountDecimals >= 0) ? __sqAmountDecimals : 2;
+        return (val || 0).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+    function sqApplyDecimalSettings() {
+        try {
+            if (!(window.CalibraHub && window.CalibraHub.decimals && window.CalibraHub.decimals.load)) return;
+            window.CalibraHub.decimals.load('@Model.LineFormCode').then(function (dec) {
+                if (!dec || dec.amount == null) return;
+                __sqAmountDecimals = dec.amount;
+                if (typeof sqRecalc === 'function') sqRecalc();   // özeti yeni hane ile yeniden bas
+            });
+        } catch (_) { /* sessiz — 2 hane varsayılanı korunur */ }
+    }
+    // React bundle (window.CalibraHub.decimals) async yüklenir — hazır olana kadar bekle.
+    (function sqWaitDecimals(tries) {
+        if (window.CalibraHub && window.CalibraHub.decimals) { sqApplyDecimalSettings(); return; }
+        if (tries > 100) return;                                  // ~10 sn → 2 hane ile devam
+        setTimeout(function () { sqWaitDecimals(tries + 1); }, 100);
+    })(0);
+    // Ondalık Ayarları ekranında kaydedilince açık ekran da tazelensin (grid ile aynı davranış).
+    // setTimeout(0): decimalSettings modülünün kendi cache-temizleme dinleyicisi önce koşsun.
+    try {
+        var __sqDecBc = new BroadcastChannel('calibra-decimals-refresh');
+        __sqDecBc.onmessage = function () { setTimeout(sqApplyDecimalSettings, 0); };
+    } catch (_) { /* BroadcastChannel yok — yeniden yüklemede güncel gelir */ }
     function statusLabel(s) { return { Draft:'Taslak', Sent:'Gonderildi', Approved:'Onaylandi', Rejected:'Reddedildi', Revised:'Revize', Cancelled:'Iptal' }[s] || s; }
     function sqEsc(s)     { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
     function sqEscAttr(s) { return (s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }

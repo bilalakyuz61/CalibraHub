@@ -797,11 +797,15 @@ function GuideLookupCell(props) {
     }
   }
 
-  // ── Stiller (sadece input shell + butonlar; modal kendi gl-* CSS'ini kullanir) ──
-  var inputBg    = isLight ? 'var(--app-surface)'  : 'transparent'
-  var inputBdr   = '1px solid var(--app-border)'
+  /* ── Stiller (sadece input shell + butonlar; modal kendi gl-* CSS'ini kullanir) ──
+     Kart hucrelerinde alanlar ALT-CIZGI standardinda (site.css .ux-edit-pane ile
+     ayni dil); rehber hucresi kendi kutusunu cizince tek basina "kutulu" duruyordu
+     (2026-08-06 kullanici bildirimi). Cerceve/zemin kaldirildi — sinir cizgisini
+     hucrenin sarmalayicisi (.clc-cell-underline) veriyor. */
+  var inputBg    = 'transparent'
+  var inputBdr   = 'none'
   var inputColor = 'var(--app-text)'
-  var btnBg      = 'var(--app-muted-surface)'
+  var btnBg      = 'transparent'
   var btnColor   = isLight ? '#6366f1'             : '#818cf8'
 
   // GuideLookupModal'a header'a sigdirilan ek buton — Alan Ayarlari
@@ -834,12 +838,14 @@ function GuideLookupCell(props) {
         className={isShaking ? 'lgc-invalid-shake' : ''}
         style={{
           flex: 1, height: '100%', background: inputBg,
-          border: isShaking
-            ? '1px solid #ef4444'
+          border: 'none',
+          // Zorunlu-bos ve hatali giris uyarisi da ALT CIZGI ile verilir (kutu degil).
+          borderBottom: isShaking
+            ? '1.5px solid #ef4444'
             : (column.required && !value && !displayVal)
-              ? '1px solid rgba(239,68,68,0.7)'
-              : inputBdr,
-          borderRadius: 5, padding: '0 8px', fontSize: 12, color: inputColor,
+              ? '1.5px solid rgba(239,68,68,0.7)'
+              : 'none',
+          borderRadius: 0, padding: '0 8px', fontSize: 12, color: inputColor,
           cursor: 'text', outline: 'none', minWidth: 0,
           fontFamily: 'Consolas, monospace',
         }}
@@ -864,7 +870,7 @@ function GuideLookupCell(props) {
         onClick={openModal}
         title={'Rehber: ' + column.guideCode}
         style={{
-          flexShrink: 0, width: 26, height: 26, border: inputBdr,
+          flexShrink: 0, width: 26, height: 26, border: 'none',
           background: btnBg, color: btnColor,
           cursor: 'pointer', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 14,

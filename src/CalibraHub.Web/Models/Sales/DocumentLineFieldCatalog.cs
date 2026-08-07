@@ -23,8 +23,9 @@ public static class DocumentLineFieldCatalog
     private static readonly IReadOnlyList<LineField> Pricing =
     [
         new("unitPrice",    "Birim Fiyat",   "DollarSign", false, "numeric"),
-        new("discountRate", "Iskonto %",     "Percent",    false, "numeric"),
-        new("taxRate",      "KDV %",         "Percent",    false, "numeric"),
+        // Ikon YOK ("") — baslikta zaten "%" var (2026-08-06 kullanici istegi).
+        new("discountRate", "İskonto %",     "",           false, "numeric"),
+        new("taxRate",      "KDV %",         "",           false, "numeric"),
         new("lineTotal",    "Satir Toplami", "Calculator", false, "numeric"),
     ];
 

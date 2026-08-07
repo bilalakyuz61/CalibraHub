@@ -617,11 +617,14 @@ export default function LineCardLayoutEditor(props) {
 
     var labelInner = (
       <>
-        <Icon
-          size={10}
-          strokeWidth={1.8}
-          className={(it.isWidget ? 'text-sky-500 dark:text-sky-300' : 'text-slate-400 dark:text-white/35') + ' flex-shrink-0'}
-        />
+        {/* Icon null olabilir — ikonu bilerek bos birakilan alanlar (Iskonto %/KDV %) */}
+        {Icon && (
+          <Icon
+            size={10}
+            strokeWidth={1.8}
+            className={(it.isWidget ? 'text-sky-500 dark:text-sky-300' : 'text-slate-400 dark:text-white/35') + ' flex-shrink-0'}
+          />
+        )}
         <span className="truncate">{labelText}</span>
         {it.locked && <span className="text-rose-500 dark:text-rose-400">*</span>}
       </>

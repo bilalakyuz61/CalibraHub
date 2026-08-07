@@ -322,7 +322,7 @@ export default function LineCardInspector(props) {
                     onClick={function () { props.onShowHidden(h.key) }}
                     className="w-full h-7 flex items-center gap-2 px-2 rounded-lg text-[11.5px] border border-transparent transition-colors text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 dark:text-white/70 dark:hover:border-indigo-400/40 dark:hover:bg-indigo-500/10 disabled:opacity-45"
                   >
-                    <Icon size={12} strokeWidth={1.8} className={h.isWidget ? 'text-sky-500 dark:text-sky-300 flex-shrink-0' : 'text-slate-400 dark:text-white/35 flex-shrink-0'} />
+                    {Icon && <Icon size={12} strokeWidth={1.8} className={h.isWidget ? 'text-sky-500 dark:text-sky-300 flex-shrink-0' : 'text-slate-400 dark:text-white/35 flex-shrink-0'} />}
                     <span className="truncate flex-1 text-left">{h.label}</span>
                     <Plus size={14} strokeWidth={2} className="flex-shrink-0 opacity-60" />
                   </button>
@@ -379,7 +379,7 @@ export default function LineCardInspector(props) {
 
       {/* B0 — baslik seridi */}
       <div className="h-10 flex items-center gap-2 border-b border-slate-200 dark:border-white/[0.08]">
-        <Icon size={14} strokeWidth={1.8} className={item.isWidget ? 'text-sky-500 dark:text-sky-300 flex-shrink-0' : 'text-slate-400 dark:text-white/35 flex-shrink-0'} />
+        {Icon && <Icon size={14} strokeWidth={1.8} className={item.isWidget ? 'text-sky-500 dark:text-sky-300 flex-shrink-0' : 'text-slate-400 dark:text-white/35 flex-shrink-0'} />}
         <span className="text-[12px] font-semibold text-slate-700 dark:text-white/85 truncate flex-1">{item.label}</span>
         {item.isWidget && (
           <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-50 text-sky-600 border border-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-400/30 flex-shrink-0">Ek Alan</span>

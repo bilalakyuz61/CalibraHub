@@ -1880,7 +1880,8 @@ export default function CalibraLineItemsGrid(props) {
                             {isMaterialCodeCell && isKitComponent && (
                               <span className="text-[12px] leading-none text-indigo-400 dark:text-indigo-300/70 select-none flex-shrink-0" title="Kit bileseni">↳</span>
                             )}
-                            <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />
+                            {/* Icon null olabilir — ikonu bilerek bos birakilan alanlar (Iskonto %/KDV %) */}
+                            {Icon && <Icon size={10} strokeWidth={1.8} className="text-slate-400 dark:text-white/35 flex-shrink-0" />}
                             <span className="truncate">{labelText}</span>
                             {(col.required || col.requirePositive || behReqNow) && <span className="text-rose-500 dark:text-rose-400">*</span>}
                             {isMaterialCodeCell && isKitHeader && (
@@ -2124,7 +2125,7 @@ export default function CalibraLineItemsGrid(props) {
                                 : <PinOff size={12} strokeWidth={1.8} />}
                             </button>
                             <div className="flex items-center gap-1.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50 flex-shrink-0">
-                              <Icon size={11} strokeWidth={1.8} className="text-slate-400 dark:text-white/40 flex-shrink-0" />
+                              {Icon && <Icon size={11} strokeWidth={1.8} className="text-slate-400 dark:text-white/40 flex-shrink-0" />}
                               <span>{col.label}</span>
                             </div>
                             <div className="flex-1 min-w-0">

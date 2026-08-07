@@ -29,7 +29,13 @@ export var ICON_MAP = {
   Barcode: Barcode,
   Warehouse: Warehouse,
 }
+/**
+ * Ikon adi → bilesen. Bos/null ad = "bu alanda ikon ISTENMIYOR" → null doner
+ * (2026-08-06: Iskonto/KDV basliklarinda zaten "%" var, bir de yuzde ikonu
+ * tekrar oluyordu). Cagiranlar null'a karsi guard etmelidir.
+ */
 export function resolveIcon(name) {
+  if (name == null || name === '') return null
   return ICON_MAP[name] || CircleDot
 }
 
