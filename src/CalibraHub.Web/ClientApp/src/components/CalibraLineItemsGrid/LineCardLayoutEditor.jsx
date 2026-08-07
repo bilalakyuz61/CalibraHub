@@ -259,32 +259,47 @@ export default function LineCardLayoutEditor(props) {
     })
   }
 
-  // ── Surukle-birak siralama (HTML5 DnD — mevcut mekanizma korunur) ──
+  /* ── Surukle-birak siralama (HTML5 DnD) ────────────────────────────────
+     Siralama YALNIZ birakma aninda uygulanir. Onceki surumde her `dragover`
+     olayinda liste aninda yeniden siralaniyordu; farkli genislikteki iki alan
+     arasinda bu salinima giriyordu (swap → imlec artik obur alanin uzerinde →
+     ters swap → …) ve ekran yanip soniyordu (2026-08-06 kullanici bildirimi).
+     Simdi surukleme boyunca tuval SABIT kalir, hedef yalnizca indigo kenar
+     cizgisiyle isaretlenir. */
   var dragIndexRef = useRef(null)
-  var [dragging, setDragging] = useState(false)
+  var [draggingKey, setDraggingKey] = useState(null)
   var [dragOverKey, setDragOverKey] = useState(null)
 
-  function handleDragStart(e, idx) {
+  function handleDragStart(e, idx, key) {
     dragIndexRef.current = idx
-    setDragging(true)
+    setDraggingKey(key)
     try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(idx)) } catch (_) {}
   }
-  function handleDragOver(e, idx, key) {
+  function handleDragOver(e, key) {
+    if (dragIndexRef.current == null) return
+    e.preventDefault()
+    try { e.dataTransfer.dropEffect = 'move' } catch (_) {}
+    if (key !== dragOverKey) setDragOverKey(key)
+  }
+  function handleDrop(e, idx) {
     e.preventDefault()
     var from = dragIndexRef.current
-    if (from == null || from === idx) return
-    setDragOverKey(key)
-    setItems(function (prev) {
-      var next = prev.slice()
-      var moved = next.splice(from, 1)[0]
-      next.splice(idx, 0, moved)
-      return next
-    })
-    dragIndexRef.current = idx
+    if (from != null && from !== idx) {
+      setItems(function (prev) {
+        if (from < 0 || from >= prev.length) return prev
+        var next = prev.slice()
+        var moved = next.splice(from, 1)[0]
+        // `from` cikarildiktan sonra sagdaki hedeflerin indeksi bir sola kayar.
+        var target = from < idx ? idx - 1 : idx
+        next.splice(Math.min(Math.max(target, 0), next.length), 0, moved)
+        return next
+      })
+    }
+    handleDragEnd()
   }
   function handleDragEnd() {
     dragIndexRef.current = null
-    setDragging(false)
+    setDraggingKey(null)
     setDragOverKey(null)
   }
 
@@ -485,7 +500,9 @@ export default function LineCardLayoutEditor(props) {
     var Icon = resolveIcon(it.icon)
     var isSelected = selectedKey === it.key
     var isResizing = resizingKey === it.key
-    var isDragTarget = dragOverKey === it.key
+    var isBeingDragged = draggingKey === it.key
+    // Surukleneni kendi uzerinde hedef gostermek anlamsiz — titresim izlenimi verir.
+    var isDragTarget = dragOverKey === it.key && draggingKey != null && !isBeingDragged
     var labelText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
     /* Onizlemede etiket HER ZAMAN standart modda cizilir (2026-08-06 kullanici
        istegi): Modern (yuzer) ve Sade (yan yana) stilleri hucre yuksekligini/
@@ -535,15 +552,20 @@ export default function LineCardLayoutEditor(props) {
         aria-pressed={isSelected}
         aria-label={labelText + ' alanı, genişlik ' + it.span + '/' + CARD_GRID_UNITS + (it.locked ? ', zorunlu' : '')}
         draggable={canEdit && !saving}
-        onDragStart={function (e) { handleDragStart(e, idx) }}
-        onDragOver={function (e) { handleDragOver(e, idx, it.key) }}
+        onDragStart={function (e) { handleDragStart(e, idx, it.key) }}
+        onDragOver={function (e) { handleDragOver(e, it.key) }}
+        onDrop={function (e) { handleDrop(e, idx) }}
         onDragEnd={handleDragEnd}
         onClick={function () { setSelectedKey(isSelected ? null : it.key) }}
         onKeyDown={function (e) {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKey(isSelected ? null : it.key) }
         }}
         className={'group relative outline-none ' + (canEdit ? 'cursor-grab active:cursor-grabbing ' : '') + (mode === 'inline' ? 'flex items-center gap-2 ' : '')}
-        style={{ gridColumn: 'span ' + clampSpan(it.span), opacity: dragging && dragIndexRef.current === idx ? 0.45 : 1 }}
+        style={{
+          gridColumn: 'span ' + clampSpan(it.span),
+          opacity: isBeingDragged ? 0.4 : 1,
+          transition: 'opacity .12s ease',
+        }}
       >
         {/* Alan kutucugu + secim/hover katmani. Kesik cizgili cerceve alanin
             sinirlarini gorsel olarak belli eder (2026-08-06 kullanici istegi);
@@ -562,7 +584,14 @@ export default function LineCardLayoutEditor(props) {
           style={Object.assign(
             { top: -4, bottom: -4, left: -2, right: -2, zIndex: 1, pointerEvents: 'none' },
             isSelected ? { outline: '1px solid rgba(99,102,241,.55)' } : null,
-            isDragTarget ? { borderLeft: '2px solid #6366f1' } : null
+            /* Birakma hedefi: tuval artik surukleme boyunca yeniden siralanmadigi
+               icin "nereye dusecek" bilgisini YALNIZ bu isaret verir — net olmali. */
+            isDragTarget ? {
+              borderLeftWidth: 3,
+              borderLeftStyle: 'solid',
+              borderLeftColor: '#6366f1',
+              backgroundColor: 'rgba(99,102,241,0.10)',
+            } : null
           )}
         />
         {/* Tutamak — yalniz hover/secim */}
