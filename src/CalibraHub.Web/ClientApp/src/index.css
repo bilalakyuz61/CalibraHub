@@ -3263,15 +3263,19 @@ body.app-theme-dark .nw-col-editor .tiptap blockquote.nw-callout {
    focus-within !important: zorunlu-boş inline kırmızı çizgiyi odak sırasında ezer
    (kullanıcı alanı doldururken indigo görür, blur'da kırmızı geri gelir). */
 .clc-cell-underline {
-  border-bottom: 1px solid transparent;
+  /* Seq 1092: alt çizgi HER ZAMAN görünür (dinlenmede subtle) — önceden transparent'ti,
+     alanlar çizgisiz "yüzen sayı" gibi görünüp karmaşık duruyordu. Hover'da biraz belirgin,
+     odakta indigo (üst bilgi standardıyla aynı). */
+  border-bottom: 1px solid #e2e8f0;
   transition: border-color .15s, box-shadow .15s, background-color .15s;
 }
-.clc-cell-underline:hover { border-bottom-color: #e2e8f0; }
+.clc-cell-underline:hover { border-bottom-color: #cbd5e1; }
 .clc-cell-underline:focus-within {
   border-bottom-color: #6366f1 !important;
   box-shadow: 0 1px 0 0 #6366f1 !important;
 }
-body.app-theme-dark .clc-cell-underline:hover { border-bottom-color: rgba(255,255,255,0.12); }
+body.app-theme-dark .clc-cell-underline { border-bottom-color: rgba(255,255,255,0.13); }
+body.app-theme-dark .clc-cell-underline:hover { border-bottom-color: rgba(255,255,255,0.24); }
 body.app-theme-dark .clc-cell-underline:focus-within {
   border-bottom-color: #818cf8 !important;
   box-shadow: 0 1px 0 0 #818cf8 !important;
