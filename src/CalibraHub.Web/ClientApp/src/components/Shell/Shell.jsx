@@ -933,7 +933,7 @@ export default function Shell(props) {
   var openActiveHelp = useCallback(function () {
     var key = null, title = ''
     if (showDashboard) {
-      key = 'home'; title = 'Ana Sayfa'    // pano iframe değil → sabit key
+      key = 'home'; title = lang === 'EN' ? 'Home' : 'Ana Sayfa'    // pano iframe değil → sabit key
     } else {
       try {
         if (activeTabKey) {
@@ -944,8 +944,8 @@ export default function Shell(props) {
         }
       } catch (ex) { /* same-origin değilse veya yüklenmediyse yardım yok */ }
     }
-    if (window.calibraOpenHelpFor) window.calibraOpenHelpFor(key, title)
-  }, [activeTabKey, showDashboard])
+    if (window.calibraOpenHelpFor) window.calibraOpenHelpFor(key, title, lang === 'EN' ? 'en' : 'tr')
+  }, [activeTabKey, showDashboard, lang])
 
   /* F1 — odak Shell chrome'undayken aktif sayfanın yardımını aç.
      (Odak iframe içindeyken F1'i sayfanın kendi site.js'i yakalar.) */

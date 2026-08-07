@@ -2666,6 +2666,29 @@
     };
 
     /* ── Sayfa Yardimi Modal ─────────────────────────────────────── */
+    // Kullanici dili: explicit parametre yoksa <html lang> (uiRuntime.LanguageCode) → 'en' | 'tr'.
+    var calibraHelpLang = function (explicit) {
+        var l = explicit;
+        if (!l) { try { l = document.documentElement.getAttribute("lang") || ""; } catch (e) { l = ""; } }
+        return String(l).toLowerCase().indexOf("en") === 0 ? "en" : "tr";
+    };
+    var calibraHelpT = function (lang) {
+        return lang === "en" ? {
+            help: "Help", page: "Page", loading: "Loading…", close: "Close",
+            searchPh: "Search help…", results: " result(s)", noResults: "no results",
+            calibo: "Ask Calibo",
+            noKey: "No help is available for this page.",
+            notFound: "No help content was found for this page.",
+            qWith: " screen — ", qHow: " screen — how is it used?", thisScreen: "This screen"
+        } : {
+            help: "Yardım", page: "Sayfa", loading: "Yükleniyor…", close: "Kapat",
+            searchPh: "Yardımda ara…", results: " sonuç", noResults: "sonuç yok",
+            calibo: "Calibo’ya Sor",
+            noKey: "Bu sayfa için yardım bulunmuyor.",
+            notFound: "Bu sayfa için yardım içeriği bulunamadı.",
+            qWith: " ekranı — ", qHow: " ekranı nasıl kullanılır?", thisScreen: "Bu ekran"
+        };
+    };
     // Govde icindeki metinlerde eslesmeleri <mark> ile isaretler, adet doner.
     var calibraHelpHighlight = function (root, rx) {
         var count = 0;
@@ -2700,8 +2723,9 @@
     };
 
     // title: modal basligi; bodyHtml: null -> "Yukleniyor"; pageTitle: Calibo sorusu icin
-    // ham ekran adi. Doldurulacak govde elemanini dondurur.
-    window.calibraShowHelpModal = function (title, bodyHtml, pageTitle) {
+    // ham ekran adi; lang: 'tr'|'en' (bos -> html lang'dan algila). Govde elemanini dondurur.
+    window.calibraShowHelpModal = function (title, bodyHtml, pageTitle, lang) {
+        var L = calibraHelpT(calibraHelpLang(lang));
         var existing = document.getElementById("calibra-help-modal");
         if (existing) existing.remove();
 
@@ -2717,7 +2741,7 @@
         var ico = document.createElement("span"); ico.className = "h-ico"; ico.textContent = "?";
         var ttl = document.createElement("span"); ttl.className = "h-title"; ttl.textContent = title;
         var close = document.createElement("button");
-        close.type = "button"; close.className = "h-close"; close.innerHTML = "×"; close.title = "Kapat";
+        close.type = "button"; close.className = "h-close"; close.innerHTML = "×"; close.title = L.close;
         close.addEventListener("click", function () { overlay.remove(); });
         head.appendChild(ico); head.appendChild(ttl); head.appendChild(close);
 
@@ -2731,18 +2755,19 @@
         searchIcon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
         var search = document.createElement("input");
         search.type = "search"; search.className = "calibra-help-search-input";
-        search.placeholder = "Yardımda ara…";
+        search.placeholder = L.searchPh;
         var searchCount = document.createElement("span");
         searchCount.className = "calibra-help-search-count";
         searchWrap.appendChild(searchIcon); searchWrap.appendChild(search); searchWrap.appendChild(searchCount);
         var caliboBtn = document.createElement("button");
         caliboBtn.type = "button"; caliboBtn.className = "calibra-help-calibo";
-        caliboBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg><span>Calibo’ya Sor</span>';
+        caliboBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg><span></span>';
+        caliboBtn.querySelector("span").textContent = L.calibo;
         tools.appendChild(searchWrap); tools.appendChild(caliboBtn);
 
         var body = document.createElement("div");
         body.className = "calibra-help-body";
-        body.innerHTML = bodyHtml || '<div class="calibra-help-doc"><p>Yükleniyor…</p></div>';
+        body.innerHTML = bodyHtml || ('<div class="calibra-help-doc"><p>' + L.loading + '</p></div>');
 
         box.appendChild(head); box.appendChild(tools); box.appendChild(body);
         overlay.appendChild(box);
@@ -2764,7 +2789,7 @@
             var rx;
             try { rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"); } catch (e) { return; }
             var n = calibraHelpHighlight(body, rx);
-            searchCount.textContent = n > 0 ? (n + " sonuç") : "sonuç yok";
+            searchCount.textContent = n > 0 ? (n + L.results) : L.noResults;
             var first = body.querySelector("mark.calibra-help-hl");
             if (first) first.scrollIntoView({ block: "center" });
         }
@@ -2773,8 +2798,8 @@
         // Calibo'ya sor: aktif ekran + arama metnini bağlam olarak geçir, paneli aç
         caliboBtn.addEventListener("click", function () {
             var q = search.value.trim();
-            var base = pageTitle || "Bu ekran";
-            var question = q ? (base + " ekranı — " + q) : (base + " ekranı nasıl kullanılır?");
+            var base = pageTitle || L.thisScreen;
+            var question = q ? (base + L.qWith + q) : (base + L.qHow);
             try {
                 var w = window.top || window;
                 w.dispatchEvent(new w.CustomEvent("calibra:open-ai", { detail: { question: question } }));
@@ -2794,17 +2819,19 @@
 
     // Belirtilen anahtarın yardım dokümanını modalda aç. Üst Shell host
     // dokümanında da tanımlıdır → "İşlemler → Yardım" aktif sekmenin key'i ile çağırır.
-    window.calibraOpenHelpFor = function (key, pageTitle) {
+    window.calibraOpenHelpFor = function (key, pageTitle, lang) {
+        var lng = calibraHelpLang(lang);
+        var L = calibraHelpT(lng);
         if (!key) {
-            window.calibraShowHelpModal("Yardım", '<div class="calibra-help-doc"><p>Bu sayfa için yardım bulunmuyor.</p></div>');
+            window.calibraShowHelpModal(L.help, '<div class="calibra-help-doc"><p>' + L.noKey + '</p></div>', null, lng);
             return;
         }
-        var body = window.calibraShowHelpModal((pageTitle || "Sayfa") + " — Yardım", null, pageTitle);
-        fetch("/Help/Content?key=" + encodeURIComponent(key), { credentials: "same-origin" })
+        var body = window.calibraShowHelpModal((pageTitle || L.page) + " — " + L.help, null, pageTitle, lng);
+        fetch("/Help/Content?key=" + encodeURIComponent(key) + "&lang=" + lng, { credentials: "same-origin" })
             .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
             .then(function (html) { if (body) body.innerHTML = html; })
             .catch(function () {
-                if (body) body.innerHTML = '<div class="calibra-help-doc"><p>Bu sayfa için yardım içeriği bulunamadı.</p></div>';
+                if (body) body.innerHTML = '<div class="calibra-help-doc"><p>' + L.notFound + '</p></div>';
             });
     };
 

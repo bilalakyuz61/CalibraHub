@@ -571,6 +571,13 @@ public sealed class LogisticsController : Controller
         // Yeni EAV widget renderer icin integer Id - ViewBag'e aktar.
         ViewBag.ItemId = id.HasValue && id.Value > 0 ? id.Value.ToString() : string.Empty;
 
+        // 2026-08-06: "Ek Sahalar" skeleton'u YALNIZ gercekten yuklenecek alan varsa cizilir.
+        // Tanimli widget yoksa React hic grup render etmez; istemci tarafi grup arayan tarayici
+        // 80x50ms = ~4 sn bosuna dondugu icin kullanici o sure boyunca "yukleniyor" shimmer'i
+        // goruyordu (kullanici raporu). Ayni bayrak JS tarafinda tarayiciyi da hic baslatmaz.
+        var widgetSchema = await _widgetService.GetFormSchemaByCodeAsync("MATERIAL_CARD_EDIT", cancellationToken);
+        ViewData["HasExtraFields"] = (widgetSchema?.Widgets?.Count ?? 0) > 0;
+
         return View();
     }
 

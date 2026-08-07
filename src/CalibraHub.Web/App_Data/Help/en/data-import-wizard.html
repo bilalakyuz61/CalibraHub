@@ -1,0 +1,30 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    The Import Wizard creates/edits an import template and, using that template, uploads
+    your file and converts it into records. The screen behaves differently depending on
+    the mode it was opened in.
+  </p>
+  <h3>Modes</h3>
+  <ul>
+    <li><b>New Template:</b> You define a template from scratch.</li>
+    <li><b>Edit:</b> You change the mapping of an existing template.</li>
+    <li><b>Import (Run):</b> You upload a file with the selected template and perform the import.</li>
+  </ul>
+  <h3>Template Definition (Mapping)</h3>
+  <ul>
+    <li><b>Target record:</b> You select the record type to import (e.g. Account, Material).</li>
+    <li><b>Column mapping:</b> You map your file's column headers to the fields of the target record
+        (e.g. "Title" → Account Title).</li>
+    <li><b>Matching key:</b> You specify which field is treated as the unique key for updating
+        an existing record (if no match is found, a new record is created).</li>
+  </ul>
+  <h3>Running</h3>
+  <ul>
+    <li><b>Upload file</b> → the wizard reads the column headers.</li>
+    <li><b>Preview:</b> You see the rows and potential errors before importing.</li>
+    <li><b>Process:</b> Once you confirm, records are created/updated; the result
+        (successful/failed) is reported.</li>
+  </ul>
+  <p class="help-note">Note: For large files, it is recommended to preview with a small sample
+     first and verify the mapping.</p>
+</div>

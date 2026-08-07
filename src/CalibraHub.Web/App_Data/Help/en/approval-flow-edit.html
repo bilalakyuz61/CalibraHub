@@ -1,0 +1,58 @@
+<div class="calibra-help-doc">
+
+  <p class="help-lead">
+    The Approval Flow Designer is a visual canvas where you draw an approval process with
+    drag-and-drop nodes. The node palette is on the left, the flow canvas in the middle,
+    the property panel of the selected node on the right, and the General Info / Variables /
+    Revision History tools at the top.
+  </p>
+
+  <h3>General Info</h3>
+  <ul>
+    <li><b>Flow Name</b> and <b>Document / Record Type</b> (which document it applies to).</li>
+    <li><b>Active</b> switch — inactive flows are not triggered.</li>
+  </ul>
+
+  <h3>Nodes (Palette)</h3>
+  <p>You drag nodes from the palette onto the canvas and connect them with arrows (edges):</p>
+  <ul>
+    <li><b>Start / End:</b> The entry and exit points of the flow.</li>
+    <li><b>Step:</b> An approval step that requires an approver decision (the actual approval point).</li>
+    <li><b>Decision:</b> Evaluates a condition and branches <i>yes/no</i>.</li>
+    <li><b>Parallel:</b> Splits into / joins multiple branches at the same time.</li>
+    <li><b>Notification:</b> Mail / WhatsApp notification (can send quick approval links).</li>
+    <li><b>Voting:</b> Votes from multiple people (majority / unanimous).</li>
+    <li><b>Wait:</b> Waits for a set duration (minutes/hours/days/business days).</li>
+    <li><b>Set Variable / Integration / Sub-Process / Webhook:</b> advanced steps.</li>
+  </ul>
+
+  <h3>Step Approvers</h3>
+  <p>When a <b>Step</b> is selected, the approver type is set from the right panel:</p>
+  <ul>
+    <li><b>Any user</b>, <b>Specific user</b>, <b>Department</b>
+        (one or more department members) or <b>Requester's manager</b>
+        (resolved at runtime from the organization chart).</li>
+    <li>Each step has <b>Approve</b>, <b>Reject</b> and <b>Timeout (SLA)</b> output
+        connectors; by wiring these to different nodes you define the reject/delay behavior.</li>
+    <li>If an <b>SLA/delay</b> is defined, a reminder notification is sent when the time expires.</li>
+  </ul>
+
+  <h3>Trigger Conditions</h3>
+  <p>Rules determine whether the flow kicks in: <b>Always</b>,
+     <b>Minimum/Maximum amount</b>, <b>Amount range</b>, <b>Sender Tax ID</b> or
+     <b>Department</b>.</p>
+
+  <h3>Tools</h3>
+  <ul>
+    <li><b>Variables:</b> Defines values carried throughout the process.</li>
+    <li><b>Mini Map:</b> Navigation in large flows.</li>
+    <li><b>Revision History:</b> Each save keeps a revision snapshot;
+        running (pending) documents continue with the revision they started with — so
+        changing the flow does not break in-progress approvals.</li>
+    <li><b>Save:</b> Saves the flow (creates a new revision).</li>
+  </ul>
+
+  <p class="help-note">Note: If you add {approveLink} / {rejectLink} to the template in a
+     Notification node, recipients can approve or reject with a single click via mail/WhatsApp.</p>
+
+</div>

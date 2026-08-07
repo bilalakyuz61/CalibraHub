@@ -1700,13 +1700,18 @@
                 <span class="mce-nav-count is-empty" id="mceKitCount">0</span>
             </button>
 
-            <!-- Skeleton: dinamik widget gruplari yuklenene kadar layout shift'i onler -->
-            <div id="mceSideNavSkeleton" data-skeleton="1">
-                <span class="mce-sidenav-label">Ek Sahalar</span>
-                <div class="mce-nav-skeleton-row"></div>
-                <div class="mce-nav-skeleton-row"></div>
-                <div class="mce-nav-skeleton-row" style="width:75%;"></div>
-            </div>
+            @* Skeleton: dinamik widget gruplari yuklenene kadar layout shift'i onler.
+               2026-08-06: YALNIZ bu formda tanimli ek alan varsa cizilir — tanim yokken
+               React hicbir grup uretmedigi icin skeleton ~4 sn bosuna shimmer ediyordu. *@
+            @if (ViewData["HasExtraFields"] as bool? == true)
+            {
+                <div id="mceSideNavSkeleton" data-skeleton="1">
+                    <span class="mce-sidenav-label">Ek Sahalar</span>
+                    <div class="mce-nav-skeleton-row"></div>
+                    <div class="mce-nav-skeleton-row"></div>
+                    <div class="mce-nav-skeleton-row" style="width:75%;"></div>
+                </div>
+            }
             <!-- Widget grup butonlari JS tarafindan dinamik olarak eklenir -->
         </nav>
 
@@ -3789,8 +3794,12 @@
             if (activeBtn) setActive(activeBtn);
         }
 
-        // DynamicWidgetsCard icinde data-dyn-group-id elementleri belirince nav'i yenile
-        if (dynCard) {
+        // DynamicWidgetsCard icinde data-dyn-group-id elementleri belirince nav'i yenile.
+        // 2026-08-06: Bu formda hic ek alan tanimli degilse tarayiciyi HIC baslatma —
+        // aksi halde 80x50ms (~4 sn) bosuna donuyordu (skeleton da artik cizilmiyor).
+        @{ var _mceHasExtra = ViewData["HasExtraFields"] as bool? == true; }
+        var MCE_HAS_EXTRA_FIELDS = @(_mceHasExtra ? "true" : "false");
+        if (dynCard && MCE_HAS_EXTRA_FIELDS) {
             var _t = null;
             function scheduleScan() {
                 clearTimeout(_t);
