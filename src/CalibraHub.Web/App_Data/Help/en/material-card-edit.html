@@ -1,0 +1,65 @@
+<div class="calibra-help-doc">
+
+  <p class="help-lead">
+    The Material Card Edit screen lets you manage all the details of a material in one
+    place. Section links are on the left, the fields of the selected section on the right,
+    and the fixed <b>Back / Save</b> (and, for an existing card, <b>Delete</b>) bar at the top.
+    Sections appear/hide depending on the material type and settings.
+  </p>
+
+  <h3>General Information</h3>
+  <ul>
+    <li><b>Material Code</b> and <b>Material Name</b> (required), <b>Barcode</b>.</li>
+    <li><b>Material Type:</b> Raw Material, Semi-Finished, Finished Good, Trade Good, Consumable
+        or Kit. The selected type determines the visibility of sections below such as BOM / Kit.</li>
+    <li><b>Base Unit</b> (required) and <b>VAT Rate %</b>.</li>
+    <li><b>Combination Tracking:</b> When enabled, the Attributes and Combinations sections appear
+        (variant management such as color/size).</li>
+    <li><b>Traceability:</b> Lot and/or Serial tracking; with Serial tracking, the "Auto Receipt Serial"
+        option.</li>
+    <li>The <b>Overall Minimum Stock</b> and the <b>Document Locks</b> summary are also in this section.</li>
+  </ul>
+
+  <h3>Units of Measure</h3>
+  <p>Alternative units besides the base unit and their conversion factors
+     (such as "1 box = 12 pieces"). Stock is always kept normalized to the base unit.</p>
+
+  <h3>Groups</h3>
+  <p>5-level hierarchical grouping (Group 1 → Group 5). Used to classify materials
+     in reporting and filtering.</p>
+
+  <h3>Planning</h3>
+  <p>Location-based planning details — which warehouses/locations the material will be
+     kept in and the related planning parameters.</p>
+
+  <h3>Stock Movements</h3>
+  <p>The material's receipt/issue movement statement: running balance, period summary,
+     date / movement type / location filters and <b>Excel</b> export.
+     Movements are fed from document lines (read-only view).</p>
+
+  <h3>Prices</h3>
+  <p>Purchase/sales price entry by price list, currency and validity date, plus
+     the price history. In document entry, the line price comes automatically from these definitions.</p>
+
+  <h3>Sections Depending on Type / Settings</h3>
+  <ul>
+    <li><b>Attributes &amp; Combinations:</b> Visible when combination tracking is enabled
+        (variant attribute mapping and combination generation).</li>
+    <li><b>BOM:</b> Bill of materials definition for Finished / Semi-Finished types.</li>
+    <li><b>Kit Contents:</b> For the Kit type, the components that make up the bundle.</li>
+    <li><b>Custom Fields:</b> Custom fields defined for this form in "Field Management"
+        are added automatically as separate section(s).</li>
+  </ul>
+
+  <h3>Saving</h3>
+  <ul>
+    <li>The <b>Save</b> button at the top saves all sections together.</li>
+    <li><b>Back</b> returns to the list without saving.</li>
+    <li>On an existing card, <b>Delete</b> is visible; a centered confirmation dialog appears before deleting.</li>
+    <li>If required fields (Name, Base Unit) are empty, saving is blocked and the field is highlighted.</li>
+  </ul>
+
+  <p class="help-note">Note: The change history can be viewed in the "Change History"
+     section of the related record.</p>
+
+</div>

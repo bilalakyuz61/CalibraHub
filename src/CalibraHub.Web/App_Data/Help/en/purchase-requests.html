@@ -1,0 +1,50 @@
+<div class="calibra-help-doc">
+
+  <p class="help-lead">
+    The Purchase Requests screen lists the request records created before purchasing.
+    The material and quantity an employee needs are recorded here; these requests are
+    then fulfilled from the warehouse, by transfer, or by purchasing.
+  </p>
+
+  <h3>What Is a Purchase Request?</h3>
+  <p>It is the first step of the purchasing chain: <b>Purchase Request → Fulfillment →
+     Purchase Demand/Quote/Order</b>. The request itself is <i>not</i> a stock or
+     purchasing transaction; it only holds the "what is needed and how much"
+     information. As it is fulfilled, it turns into a warehouse issue, a warehouse
+     transfer, or a purchasing document.</p>
+
+  <h3>Top Toolbar</h3>
+  <ul>
+    <li><b>Search:</b> Search by request number.</li>
+    <li><b>Fulfillment Center:</b> Opens the Fulfillment Center to fulfill
+        multiple requests in bulk.</li>
+    <li><b>New Request:</b> Opens a new purchase request edit screen
+        (material, quantity, and date are entered there).</li>
+  </ul>
+
+  <h3>Cards</h3>
+  <ul>
+    <li>The header shows the <b>requesting employee</b>, with the <b>document number</b> below.</li>
+    <li>Info badges: <b>Total Amount</b>, <b>Status</b>, <b>Line Count</b>,
+        <b>Date</b>, and <b>Fulfillment</b> status
+        (Waiting → Partial → Completed).</li>
+    <li>Card actions: <b>Edit</b>, <b>Delete</b>, <b>Copy</b>,
+        <b>Send for Approval</b> (on draft records, if the approval flow is enabled), and <b>Audit</b> (audit log).</li>
+  </ul>
+
+  <h3>Fulfillment</h3>
+  <p>Requests are fulfilled from the <b>Fulfillment Center</b>. The main options:</p>
+  <ul>
+    <li><b>Fulfill from Warehouse:</b> Fulfills from existing stock (no purchasing needed).</li>
+    <li><b>Warehouse Transfer:</b> Fulfills by transfer from another warehouse.</li>
+    <li><b>Purchasing:</b> Creates a purchase demand or order draft.</li>
+  </ul>
+  <p>As fulfillment progresses, the record's "Fulfillment" badge is updated automatically;
+     the derived documents (issue/transfer/purchase) are tracked as linked to the record.</p>
+
+  <h3>Approval Flow</h3>
+  <p>If the approval parameter is enabled, the request first goes to approval via
+     <b>Send for Approval</b>; only <b>approved</b> requests can be fulfilled in the
+     Fulfillment Center. If approval is disabled, all requests can be fulfilled directly.</p>
+
+</div>

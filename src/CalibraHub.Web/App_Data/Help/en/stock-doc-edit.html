@@ -1,0 +1,24 @@
+<div class="calibra-help-doc">
+  <p class="help-lead">
+    The Stock Document Edit screen is the shared screen where you create and edit warehouse
+    receipt, warehouse issue, and transfer documents. Header details are at the top, line items below.
+  </p>
+  <h3>Header</h3>
+  <ul>
+    <li><b>Location:</b> The target or source warehouse for receipts/issues; for transfers,
+        both the <b>source</b> and the <b>target</b> location.</li>
+    <li>Document date, description, and additional header fields depending on the document type.</li>
+  </ul>
+  <h3>Line Items</h3>
+  <ul>
+    <li>Each line has a <b>material</b>, <b>quantity</b>, and unit; for lot/serial-tracked
+        materials, the lot/serial details.</li>
+    <li>Quick line entry with Enter and pasting from Excel are supported.</li>
+    <li><b>Additional Fields:</b> Custom fields defined for this form appear in a separate section.</li>
+  </ul>
+  <h3>Stock Effect and Saving</h3>
+  <ul>
+    <li><b>Receipt</b> adds stock, <b>Issue</b> deducts it, <b>Transfer</b> deducts from the source and adds to the target.</li>
+    <li><b>Save</b> posts the document; if negative-balance control is enabled, insufficient stock may block the operation.</li>
+  </ul>
+</div>
