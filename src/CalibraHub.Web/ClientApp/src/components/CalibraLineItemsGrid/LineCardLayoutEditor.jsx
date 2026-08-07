@@ -485,7 +485,12 @@ export default function LineCardLayoutEditor(props) {
     var isResizing = resizingKey === it.key
     var isDragTarget = dragOverKey === it.key
     var labelText = (it.labelText && it.labelText.trim()) ? it.labelText.trim() : it.label
-    var mode = it.labelStyle === 'modern' ? 'modern' : (it.labelStyle === 'inline' ? 'inline' : 'standard')
+    /* Onizlemede etiket HER ZAMAN standart modda cizilir (2026-08-06 kullanici
+       istegi): Modern (yuzer) ve Sade (yan yana) stilleri hucre yuksekligini/
+       hizasini degistirip duzen ayarlarken tuvali karistiriyordu. Secilen stil
+       kaydedilir ve GERCEK kartta uygulanir; editorde yalniz rayda ozet olarak
+       gorunur. */
+    var mode = 'standard'
     // Ek alan (widget) sinyali: eskiden her hucrede tekrar eden "EK" rozetiydi —
     // kalabalik yapiyordu. Simdi ozel renk secilmemisse etiket METNI + ikonu sky
     // tonunda; acik "Ek Alan" rozeti yalniz alan seciliyken sag rayda gorunur.
@@ -538,13 +543,19 @@ export default function LineCardLayoutEditor(props) {
         className={'group relative outline-none ' + (canEdit ? 'cursor-grab active:cursor-grabbing ' : '') + (mode === 'inline' ? 'flex items-center gap-2 ' : '')}
         style={{ gridColumn: 'span ' + clampSpan(it.span), opacity: dragging && dragIndexRef.current === idx ? 0.45 : 1 }}
       >
-        {/* Overlay — hucre geometrisine DOKUNMAZ (negatif inset + pointer-events yok) */}
+        {/* Alan kutucugu + secim/hover katmani. Kesik cizgili cerceve alanin
+            sinirlarini gorsel olarak belli eder (2026-08-06 kullanici istegi);
+            `absolute` + negatif inset oldugu icin hucre GENISLIGINE DOKUNMAZ —
+            border/ring hucreye verilseydi izgara oranlari kayardi. */}
         <div
           aria-hidden="true"
-          className={'absolute rounded-lg transition-colors ' + (
+          /* border-[1px]: Bootstrap'in `.border{border:1px solid ...!important}`
+             utility'si Tailwind'in `border` sinifini eziyor (kesikli cerceve
+             solid'e donuyordu) — cakismayan arbitrary deger kullanilir. */
+          className={'absolute rounded-lg transition-colors border-[1px] border-dashed ' + (
             isSelected
-              ? 'bg-indigo-100/60 dark:bg-indigo-500/[0.12]'
-              : 'group-hover:bg-indigo-50/40 dark:group-hover:bg-indigo-500/[0.08]'
+              ? 'border-indigo-400/80 bg-indigo-100/60 dark:border-indigo-400/60 dark:bg-indigo-500/[0.12]'
+              : 'border-slate-300/60 dark:border-white/[0.12] group-hover:border-indigo-300 group-hover:bg-indigo-50/40 dark:group-hover:border-indigo-400/40 dark:group-hover:bg-indigo-500/[0.08]'
           )}
           style={Object.assign(
             { top: -4, bottom: -4, left: -2, right: -2, zIndex: 1, pointerEvents: 'none' },

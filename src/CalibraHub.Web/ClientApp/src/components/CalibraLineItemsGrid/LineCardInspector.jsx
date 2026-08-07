@@ -19,7 +19,7 @@ import {
   ChevronDown, ChevronUp, ArrowLeft, ArrowRight, X as XIcon,
 } from 'lucide-react'
 import {
-  resolveIcon, CARD_GRID_UNITS, MIN_SPAN, WIDTH_PRESETS, spanLabel,
+  resolveIcon, CARD_GRID_UNITS, MIN_SPAN, spanLabel,
   LABEL_COLOR_TOKENS, LABEL_COLOR_SWATCH_CLS, LABEL_COLOR_NAMES,
 } from './cardLayoutTokens'
 
@@ -111,32 +111,132 @@ export function SwitchToggle(props) {
   )
 }
 
-/* Kucuk artir/azalt adimi — genislik ve baslik boyutu icin ortak. */
-function Stepper(props) {
+/* Genislik cubugu — Alan Tanimlama'daki (WidgetBuilderForm) 24 kolonluk
+   colSpan slider'inin kart duzenine uyarlanmisi (2026-08-06 kullanici istegi:
+   "1/6, 1/4 gibi cipler yerine widget ayarindaki gibi bir bar"). 48 segment;
+   tikla, surukle veya ok tuslariyla ayarlanir. */
+function SpanBar(props) {
+  var barRef = useRef(null)
   var disabled = props.disabled === true
-  function btn(dir, icon) {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={function () { props.onStep(dir) }}
-        aria-label={dir > 0 ? 'Artır' : 'Azalt'}
-        className={'w-6 h-6 rounded-md border text-[13px] leading-none flex items-center justify-center transition-colors ' + (
-          disabled
-            ? 'opacity-40 cursor-not-allowed border-slate-200 text-slate-400 dark:border-white/10 dark:text-white/30'
-            : 'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-white/55 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300'
-        )}
-      >{icon}</button>
-    )
+
+  function valueFromX(clientX) {
+    var el = barRef.current
+    if (!el) return props.value
+    var rect = el.getBoundingClientRect()
+    if (rect.width <= 0) return props.value
+    var x = Math.min(Math.max(clientX - rect.left, 0), rect.width)
+    var v = Math.ceil((x / rect.width) * CARD_GRID_UNITS)
+    return Math.min(CARD_GRID_UNITS, Math.max(MIN_SPAN, v))
   }
+  function onPointerDown(e) {
+    if (disabled || (e.button != null && e.button !== 0)) return
+    e.preventDefault()
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+    props.onChange(valueFromX(e.clientX))
+  }
+  function onPointerMove(e) {
+    if (disabled || !e.currentTarget.hasPointerCapture || !e.currentTarget.hasPointerCapture(e.pointerId)) return
+    e.preventDefault()
+    props.onChange(valueFromX(e.clientX))
+  }
+  function onPointerEnd(e) {
+    try { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId) } catch (_) {}
+  }
+  function onKeyDown(e) {
+    if (disabled) return
+    var v = null
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') v = Math.min(CARD_GRID_UNITS, props.value + 1)
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') v = Math.max(MIN_SPAN, props.value - 1)
+    else if (e.key === 'Home') v = MIN_SPAN
+    else if (e.key === 'End') v = CARD_GRID_UNITS
+    if (v == null) return
+    e.preventDefault()
+    e.stopPropagation()
+    props.onChange(v)
+  }
+
   return (
-    <div className="flex items-center gap-1.5">
-      {btn(-1, '−')}
+    <div className="flex flex-col gap-1.5">
       <div
-        aria-live="polite"
-        className="min-w-[56px] text-center text-[11px] font-mono tabular-nums text-slate-600 dark:text-white/70"
-      >{props.display}</div>
-      {btn(1, '+')}
+        ref={barRef}
+        role="slider"
+        tabIndex={disabled ? -1 : 0}
+        aria-valuemin={MIN_SPAN}
+        aria-valuemax={CARD_GRID_UNITS}
+        aria-valuenow={props.value}
+        aria-valuetext={props.value + '/' + CARD_GRID_UNITS + ' · ' + spanLabel(props.value)}
+        aria-label="Alan genişliği"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onKeyDown={onKeyDown}
+        style={{ touchAction: 'none' }}
+        className={'flex gap-[1px] h-5 rounded-md overflow-hidden select-none focus:outline-none focus:ring-2 focus:ring-indigo-400/40 ' + (
+          disabled ? 'opacity-45' : 'cursor-ew-resize'
+        )}
+      >
+        {Array.from({ length: CARD_GRID_UNITS }).map(function (_, i) {
+          var filled = (i + 1) <= props.value
+          return (
+            <div
+              key={i}
+              className={'flex-1 transition-colors pointer-events-none ' + (
+                filled ? 'bg-indigo-500' : 'bg-slate-200 dark:bg-white/[0.06]'
+              )}
+            />
+          )
+        })}
+      </div>
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="font-mono tabular-nums text-slate-600 dark:text-white/60" aria-live="polite">
+          {props.value}/{CARD_GRID_UNITS}
+        </span>
+        <span className="font-semibold text-indigo-600 dark:text-indigo-300">{spanLabel(props.value)}</span>
+      </div>
+    </div>
+  )
+}
+
+/* CSS spec yalniz 100'un katlarini tanir — ara deger (560/620) yasak. */
+var WEIGHT_NAMES = { 400: 'Normal', 500: 'Orta', 600: 'Yarı Kalın', 700: 'Kalın' }
+
+/* Kademeli ayar cubugu (2026-08-06 kullanici istegi) — boyut/kalinlik gibi
+   sirali degerler icin segment/stepper yerine slider. Native `range`:
+   `accent-color` ile tema uyumlu, `color-scheme` modal kokunde ayarli. */
+function SliderRow(props) {
+  var disabled = props.disabled === true
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] font-semibold text-slate-500 dark:text-white/45">{props.label}</span>
+        <span className="flex-1" />
+        <span className="text-[11px] font-mono tabular-nums text-slate-600 dark:text-white/70">
+          {props.isDefault ? 'Varsayılan' : props.display}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={props.min}
+          max={props.max}
+          step={props.step}
+          value={props.value}
+          disabled={disabled}
+          aria-label={props.ariaLabel}
+          aria-valuetext={props.isDefault ? 'Varsayılan' : props.display}
+          onChange={function (e) { props.onChange(parseInt(e.target.value, 10)) }}
+          className="flex-1 h-1.5 accent-indigo-500 cursor-pointer disabled:opacity-45"
+        />
+        {!props.isDefault && (
+          <button
+            type="button"
+            onClick={props.onReset}
+            title="Varsayılana dön"
+            className="text-[10px] font-semibold text-slate-400 hover:text-indigo-500 dark:text-white/35 dark:hover:text-indigo-300 transition-colors flex-shrink-0"
+          >Sıfırla</button>
+        )}
+      </div>
     </div>
   )
 }
@@ -292,32 +392,13 @@ export default function LineCardInspector(props) {
         </button>
       </div>
 
-      {/* B1 — Genislik */}
+      {/* B1 — Genislik (segment bar; hazir kesir cipleri kaldirildi) */}
       <div>
         <SectionLabel>Genişlik</SectionLabel>
-        <div className={'flex flex-wrap gap-1 mb-2 ' + (canEdit ? '' : 'opacity-45 pointer-events-none')} role="radiogroup" aria-label="Genişlik">
-          {WIDTH_PRESETS.map(function (p) {
-            var on = item.span === p.span
-            return (
-              <button
-                key={p.span}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={function () { props.onSetSpan(item.key, p.span) }}
-                className={'h-[26px] px-2 rounded-md text-[11px] font-semibold border transition-colors ' + (
-                  on
-                    ? 'bg-indigo-500 text-[#fff] border-indigo-500'
-                    : 'border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/10 dark:text-white/55 dark:hover:border-indigo-400/40 dark:hover:text-indigo-300'
-                )}
-              >{p.label}</button>
-            )
-          })}
-        </div>
-        <Stepper
+        <SpanBar
+          value={item.span}
           disabled={!canEdit}
-          display={item.span + '/' + CARD_GRID_UNITS}
-          onStep={function (d) { props.onSetSpan(item.key, item.span + d) }}
+          onChange={function (v) { props.onSetSpan(item.key, v) }}
         />
         <div className="text-[11px] text-slate-400 dark:text-white/35 mt-1.5">Alt+←/→ ince ayar · Ctrl+←/→ sıra</div>
       </div>
@@ -421,54 +502,31 @@ export default function LineCardInspector(props) {
               />
             </div>
 
-            <div>
-              <SectionLabel>Boyut</SectionLabel>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={function () { props.onPatch(item.key, { labelSize: null }) }}
-                  className={'h-[26px] px-2 rounded-md text-[11px] font-semibold border transition-colors ' + (
-                    !item.labelSize
-                      ? 'bg-indigo-500 text-[#fff] border-indigo-500'
-                      : 'border-slate-200 text-slate-500 hover:border-indigo-300 dark:border-white/10 dark:text-white/55'
-                  )}
-                >Varsayılan</button>
-                <Stepper
-                  display={(item.labelSize || 10) + ' px'}
-                  onStep={function (d) {
-                    var cur = item.labelSize || 10
-                    var next = Math.min(14, Math.max(9, cur + d))
-                    props.onPatch(item.key, { labelSize: next })
-                  }}
-                />
-              </div>
-            </div>
+            <SliderRow
+              label="Boyut"
+              min={9}
+              max={14}
+              step={1}
+              value={item.labelSize || 10}
+              isDefault={!item.labelSize}
+              display={(item.labelSize || 10) + ' px'}
+              ariaLabel="Başlık boyutu"
+              onChange={function (v) { props.onPatch(item.key, { labelSize: v }) }}
+              onReset={function () { props.onPatch(item.key, { labelSize: null }) }}
+            />
 
-            <div>
-              <SectionLabel>Kalınlık</SectionLabel>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={function () { props.onPatch(item.key, { labelWeight: null }) }}
-                  className={'h-[26px] px-2 rounded-md text-[11px] font-semibold border transition-colors flex-shrink-0 ' + (
-                    !item.labelWeight
-                      ? 'bg-indigo-500 text-[#fff] border-indigo-500'
-                      : 'border-slate-200 text-slate-500 hover:border-indigo-300 dark:border-white/10 dark:text-white/55'
-                  )}
-                >Varsayılan</button>
-                <SegmentedControl
-                  ariaLabel="Başlık kalınlığı"
-                  value={item.labelWeight || 0}
-                  onChange={function (v) { props.onPatch(item.key, { labelWeight: v || null }) }}
-                  options={[
-                    { value: 400, label: 'Normal' },
-                    { value: 500, label: 'Orta' },
-                    { value: 600, label: 'Yarı Kalın' },
-                    { value: 700, label: 'Kalın' },
-                  ]}
-                />
-              </div>
-            </div>
+            <SliderRow
+              label="Kalınlık"
+              min={400}
+              max={700}
+              step={100}
+              value={item.labelWeight || 700}
+              isDefault={!item.labelWeight}
+              display={WEIGHT_NAMES[item.labelWeight || 700]}
+              ariaLabel="Başlık kalınlığı"
+              onChange={function (v) { props.onPatch(item.key, { labelWeight: v }) }}
+              onReset={function () { props.onPatch(item.key, { labelWeight: null }) }}
+            />
 
             <div>
               <SectionLabel>Renk</SectionLabel>
