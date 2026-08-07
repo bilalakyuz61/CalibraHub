@@ -100,6 +100,9 @@
     .ke-field--name  { flex: 1.4 1 260px; }
     .ke-field--combo { flex: 0 0 176px; }
     .ke-field--qty   { flex: 0 0 130px; }
+    /* Ölçü Birimi — malzemenin kendi biriminden farklı bir birim seçilebilsin diye (Seq 1091).
+       Malzeme seçilmeden pasif; kod çözülünce malzemenin ana + tanımlı çevrim birimleriyle dolar. */
+    .ke-field--unit  { flex: 0 0 150px; }
     .ke-field--price { flex: 0 0 150px; display: none; }
     .ke-addrow.ke-mode-fixedcomponent .ke-field--price { display: flex; }
     .ke-field--note  { flex: 1.4 1 260px; }
@@ -110,8 +113,15 @@
     .ke-combo-btn.is-set { border-color: var(--ke-ok); color: var(--ke-ok); }
     .ke-combo-btn:disabled { opacity: .45; }
 
-    /* Stok kodu rehberi (autocomplete dropdown) */
+    /* Stok kodu rehberi (autocomplete dropdown + standart Tip-1 rehber butonu — Seq 1091) */
     .ke-lookup { position: relative; }
+    .ke-lookup input#keCompCode { padding-right: 32px; }
+    .ke-guide-btn {
+        position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+        width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center;
+        border: none; background: transparent; color: var(--ke-muted); cursor: pointer; border-radius: 6px;
+    }
+    .ke-guide-btn:hover { background: var(--ke-primary-weak); color: var(--ke-primary); }
     .ke-dd {
         position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
         background: var(--ke-surface); border: 1px solid var(--ke-border);
@@ -236,6 +246,9 @@
                         <div class="ke-lookup">
                             <input type="text" id="keCompCode" class="ke-input" placeholder="Kod veya ad ile ara..." autocomplete="off"
                                    role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="keCompDD" />
+                            <button type="button" id="keCompGuideBtn" class="ke-guide-btn" title="Stok Rehberinden Seç">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+                            </button>
                             <div class="ke-dd" id="keCompDD" role="listbox" style="display:none;"></div>
                         </div>
                     </div>
@@ -250,6 +263,10 @@
                     <div class="ke-field ke-field--qty">
                         <span>Miktar *</span>
                         <input type="number" id="keCompQty" class="ke-input" value="1" min="0" step="any" />
+                    </div>
+                    <div class="ke-field ke-field--unit">
+                        <span title="Malzemenin kendi biriminden farklı bir birim seçilebilir. Not: bu seçim şu an yalnız ekleme anında kullanılır, kayıt sonrası kalıcı saklanmaz (backend desteği bekleniyor).">Ölçü Birimi</span>
+                        <select id="keCompUnit" class="ke-input" disabled></select>
                     </div>
                     <div class="ke-field ke-field--price" id="keCompPriceField">
                         <span>Birim Fiyat *</span>
@@ -284,6 +301,7 @@
                                 <th style="width:150px;">Kod</th>
                                 <th>Ad</th>
                                 <th style="width:120px;">Miktar</th>
+                                <th style="width:100px;" title="Backend desteği bekliyor — kayıt sonrası kalıcı saklanmaz.">Birim</th>
                                 <th class="ke-col-price" style="width:130px;">Birim Fiyat</th>
                                 <th>Açıklama</th>
                                 <th style="width:48px;"></th>
@@ -429,6 +447,13 @@
             });
             tdQty.appendChild(qtyInput); tr.appendChild(tdQty);
 
+            // Seq 1091: seçilen ölçü birimi — yalnız görüntü, backend henüz saklamıyor
+            // (ItemKitLine tablosunda unit kolonu yok, bkz. addComponent yorumu).
+            var tdUnit = document.createElement('td');
+            tdUnit.style.color = 'var(--ke-muted)'; tdUnit.style.fontSize = '.8rem';
+            tdUnit.textContent = l.unitCode || '—';
+            tr.appendChild(tdUnit);
+
             // Seq 1078: yalnız FixedComponent modda görünür (CSS .ke-col-price), her satırda
             // elle girilen bileşen birim fiyatı.
             var tdPrice = document.createElement('td'); tdPrice.className = 'ke-col-price ke-qty-cell';
@@ -472,6 +497,35 @@
                 cb(m || null);
             })
             .catch(function () { cb(null); });
+    }
+
+    // ── Ölçü birimi seçimi (Seq 1091) ───────────────────────────────────────
+    // Malzemenin kendi biriminden farklı bir birim seçilebilsin diye — malzemenin
+    // ana birimi + tanımlı çevrim birimleri /Warehouse/GetMaterialUnitsJson'dan gelir
+    // (belge kalem grid'indeki "farklı birimden giriş" ile aynı endpoint/veri kaynağı).
+    // NOT: ItemKitLine tablosunda unit/UnitId kolonu YOK (backend kontratı taşımıyor) —
+    // seçim yalnız ekleme anında kullanılır ve tabloda gösterilir, kayıt kalıcı DEĞİLDİR
+    // (bkz. addComponent + save() yorumları — backend eklenene kadar bilinçli sınırlama).
+    var keCompUnitOptions = [];   // [{ id, code, name }]
+    function keLoadUnitsForCode(code) {
+        var sel = $('keCompUnit');
+        keCompUnitOptions = [];
+        sel.innerHTML = ''; sel.disabled = true;
+        if (!code) return;
+        fetch('/Warehouse/GetMaterialUnitsJson?materialCode=' + encodeURIComponent(code), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                keCompUnitOptions = Array.isArray(list) ? list : [];
+                if (!keCompUnitOptions.length) return;
+                keCompUnitOptions.forEach(function (u) {
+                    var opt = document.createElement('option');
+                    opt.value = String(u.id);
+                    opt.textContent = u.name && u.name !== u.code ? (u.code + ' — ' + u.name) : u.code;
+                    sel.appendChild(opt);
+                });
+                sel.disabled = false;   // ilk seçenek (malzemenin ana birimi) varsayılan seçili gelir
+            })
+            .catch(function () { keCompUnitOptions = []; });
     }
 
     // ── Kombinasyon seçimi (Seq 1076) ──────────────────────────────────────
@@ -518,6 +572,7 @@
         keCompSelectedMaterial = m || null;
         keCompCombo = null;
         updateComboButton();
+        keLoadUnitsForCode(m ? m.code : null);
         if (autoOpen && m && m.hasConfig) {
             keOpenComboPicker(m.code, {
                 materialName: m.name || '',
@@ -596,6 +651,46 @@
             var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
         }
     }
+
+    // ── Standart stok rehberi (Tip 1) — Seq 1091 ──────────────────────────
+    // Yukarıdaki ke-dd hızlı yazım/autocomplete akışına EK olarak, malzeme/stok
+    // kartı için proje genelindeki standart rehber (window.CalibraHub.openGuideLookup,
+    // guideCode='ITEMS' → cbv_Guide_Items, ValueColumn=MaterialCode/DisplayColumn=
+    // MaterialName) burada da açılabilir — belge kalemi malzeme seçimiyle aynı rehber
+    // kaynağı, sekmesiz/kolonlu arama+gözat deneyimi verir. Seçim sonrası AYNI
+    // resolveComp+setSelectedMaterial hattından geçer (kombinasyon otomatik açma,
+    // Enter zinciri, fiyat modu — hiçbiri kopyalanmaz/bozulmaz).
+    function keApplyPickedCode(code, display) {
+        code = (code || '').trim();
+        if (!code) return;
+        $('keCompCode').value = code;
+        $('keCompName').value = display || '';
+        closeDD();
+        resolveComp(code, function (m) {
+            if (!m) { setSelectedMaterial(null); showMsg('"' + code + '" kodlu stok bulunamadı.', true); return; }
+            $('keCompName').value = m.name || display || '';
+            setSelectedMaterial(m, true);
+            if (!m.hasConfig) {
+                var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
+            }
+        });
+    }
+
+    function keOpenGuideLookup(retriesLeft) {
+        if (retriesLeft === undefined) retriesLeft = 15;
+        if (!window.CalibraHub || typeof window.CalibraHub.openGuideLookup !== 'function') {
+            if (retriesLeft > 0) { setTimeout(function () { keOpenGuideLookup(retriesLeft - 1); }, 200); return; }
+            showMsg('Stok rehberi yüklenemedi, sayfayı yenileyin.', true);
+            return;
+        }
+        window.CalibraHub.openGuideLookup('ITEMS', {
+            guideLabel: 'Stok Kartı',
+            onPick: function (row) {
+                keApplyPickedCode(row && row.value, row && row.display);
+            }
+        });
+    }
+    $('keCompGuideBtn').addEventListener('click', function () { keOpenGuideLookup(); });
 
     function searchDD(q) {
         q = (q || '').trim();
@@ -682,11 +777,21 @@
             var combo = (keCompCombo && keCompSelectedMaterial &&
                          (keCompSelectedMaterial.code || '').toLowerCase() === (m.code || '').toLowerCase())
                 ? keCompCombo : null;
+            // Seq 1091: seçili ölçü birimi — keCompUnitOptions listesi hâlâ AYNI malzemeye
+            // aitse (combo taşıma korumasıyla aynı savunma) uygulanır; değilse malzemenin
+            // kendi birimi kabul edilir (unitId/unitCode boş bırakılır).
+            var unitSel = $('keCompUnit');
+            var unitOpt = (!unitSel.disabled && keCompSelectedMaterial &&
+                           (keCompSelectedMaterial.code || '').toLowerCase() === (m.code || '').toLowerCase())
+                ? keCompUnitOptions.find(function (u) { return String(u.id) === unitSel.value; })
+                : null;
             lines.push({
                 code: m.code || code, name: m.name || $('keCompName').value || '', quantity: qty, note: note,
                 configId: combo ? combo.configId : null,
                 configCode: combo ? combo.code : null,
-                unitPrice: unitPrice
+                unitPrice: unitPrice,
+                unitId: unitOpt ? unitOpt.id : null,
+                unitCode: unitOpt ? unitOpt.code : null
             });
             renderLines();
             $('keCompCode').value = ''; $('keCompName').value = ''; $('keCompQty').value = '1';
@@ -741,7 +846,14 @@
                     componentConfigCode: l.configCode || null,
                     quantity: l.quantity,
                     note: l.note || null,
-                    unitPrice: (priceMode === 'FixedComponent' && l.unitPrice != null) ? l.unitPrice : null
+                    unitPrice: (priceMode === 'FixedComponent' && l.unitPrice != null) ? l.unitPrice : null,
+                    // Seq 1091: ItemKitLine tablosunda unit/UnitId kolonu henüz YOK — backend
+                    // bu alanları görmezden gelir (System.Text.Json bilinmeyen alanı yoksayar).
+                    // İleri-uyumluluk için yine de gönderiliyor; backend kolon eklenince ek
+                    // frontend değişikliği gerekmeyecek. Kalıcı saklanmadığı GetKit dönüşünde
+                    // unit alanı gelmediği için loadKit() satırında görülür (bkz. o yorum).
+                    unitId: l.unitId || null,
+                    unit: l.unitCode || null
                 };
             })
         };
@@ -798,7 +910,12 @@
                         return {
                             code: l.componentMaterialCode, name: l.componentMaterialName, quantity: l.quantity, note: l.note || '',
                             configId: l.configId || null, configCode: l.componentConfigCode || null,
-                            unitPrice: (l.unitPrice != null) ? l.unitPrice : null
+                            unitPrice: (l.unitPrice != null) ? l.unitPrice : null,
+                            // Seq 1091: backend (ItemKitLine) unit/UnitId'yi henüz saklamıyor —
+                            // GetKit yanıtı bu alanı hiç döndürmez, bu yüzden sayfa yeniden
+                            // yüklenince "Birim" hep boş (—) görünür. FLAG: backend kolonu
+                            // eklenince l.unitId / l.unit burada okunacak (kod hazır).
+                            unitId: l.unitId || null, unitCode: l.unit || null
                         };
                     });
                     var ver = $('keHeaderVer');

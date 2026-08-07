@@ -24,6 +24,12 @@ public sealed class ItemKitLine
     /// bu deger kitUnitPrice = Sum(UnitPrice * Quantity) formulunde kullanilir.</summary>
     public decimal? UnitPrice { get; init; }
 
+    /// <summary>Bilesenin kit tanimindaki secili olcu birimi (Unit.Id) — NULL ise bilesen
+    /// malzemesinin kendi varsayilan birimi kabul edilir. Miktar/baz-birim cevrimi bu
+    /// asamada YAPILMAZ (yalniz secim persist edilir; DocumentService kit patlatmasi
+    /// henuz bu alani kullanmiyor).</summary>
+    public int? UnitId { get; init; }
+
     public Guid LineGuid { get; init; }
 
     /// <summary>Satir aciklamasi (opsiyonel, max 1000) — kullanicinin bilesene not dusmesi icin.</summary>
@@ -58,7 +64,7 @@ public sealed class ItemKitLine
     /// <paramref name="unitPrice"/> yalniz kit PriceMode=FixedComponent iken doldurulur
     /// (SaveKitAsync diger modlarda null gecirir).</summary>
     public static ItemKitLine Create(int itemId, int? configId, decimal quantity, int? createdById = null,
-        string? note = null, decimal? unitPrice = null)
+        string? note = null, decimal? unitPrice = null, int? unitId = null)
     {
         var line = new ItemKitLine
         {
@@ -66,6 +72,7 @@ public sealed class ItemKitLine
             ConfigId    = configId,
             Quantity    = quantity,
             UnitPrice   = unitPrice,
+            UnitId      = unitId,
             LineGuid    = Guid.NewGuid(),
             CreatedById = createdById,
             Note        = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),

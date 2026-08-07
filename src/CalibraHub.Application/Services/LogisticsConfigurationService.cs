@@ -3468,7 +3468,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         if (lines.Count == 0)
             throw new ArgumentException("Kit icerisinde en az bir bilesen olmalidir.");
 
-        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, string? Note, decimal? UnitPrice)>(lines.Count);
+        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, string? Note, decimal? UnitPrice, int? UnitId)>(lines.Count);
         foreach (var line in lines)
         {
             int lineItemId = line.ItemId;
@@ -3522,8 +3522,13 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 lineUnitPrice = line.UnitPrice.Value;
             }
 
+            // Secili olcu birimi — dogrudan persist edilir (FK constraint gecersiz UnitId'yi
+            // INSERT/UPDATE aninda reddeder; sessizce yanlis deger yazilmaz). NULL = bilesenin
+            // kendi varsayilan birimi kabul edilir (miktar cevrimi bu asamada kapsam disi).
+            int? lineUnitId = line.UnitId is > 0 ? line.UnitId : null;
+
             resolvedLines.Add((lineItemId, lineConfigId, line.Quantity,
-                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim(), lineUnitPrice));
+                string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim(), lineUnitPrice, lineUnitId));
         }
 
         // UPSERT hedefi — kit kartinin mevcut aktif icerigi (varsa VersionNo++).

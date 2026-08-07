@@ -5777,6 +5777,30 @@ END;";
             IF COL_LENGTH(N'[{s}].[ItemKitLine]', N'UnitPrice') IS NULL
                 ALTER TABLE [{s}].[ItemKitLine] ADD [UnitPrice] DECIMAL(18,4) NULL;
 
+            -- 2026-08-07 (Seq 1091): bilesenin kit tanimindaki secili olcu birimi (NULL =
+            -- bilesen malzemesinin kendi varsayilan birimi kabul edilir). KitEdit.cshtml
+            -- payload'da unitId/unit gonderiyordu ama kolon yoktu — secim sessizce
+            -- kayboluyordu (CLAUDE.md sessiz-kirik kural 1).
+            IF COL_LENGTH(N'[{s}].[ItemKitLine]', N'UnitId') IS NULL
+                ALTER TABLE [{s}].[ItemKitLine] ADD [UnitId] INT NULL;
+
+            -- FK ItemKitLine.UnitId -> Unit.Id (idempotent — sadece Unit tablosu varsa kurar).
+            IF OBJECT_ID(N'[{s}].[ItemKitLine]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[Unit]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[ItemKitLine]', N'UnitId') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_ItemKitLine_Unit'
+                     AND [parent_object_id] = OBJECT_ID(N'[{s}].[ItemKitLine]'))
+            BEGIN
+                EXEC(N'
+                    ALTER TABLE [{s}].[ItemKitLine]
+                    WITH NOCHECK
+                    ADD CONSTRAINT [FK_ItemKitLine_Unit]
+                        FOREIGN KEY ([UnitId]) REFERENCES [{s}].[Unit]([Id]);
+                ');
+            END;
+
             IF NOT EXISTS (SELECT 1 FROM sys.indexes
                            WHERE object_id = OBJECT_ID(N'[{s}].[ItemKitLine]') AND name = N'IX_ItemKitLine_ItemKitId')
                 CREATE INDEX [IX_ItemKitLine_ItemKitId] ON [{s}].[ItemKitLine]([ItemKitId]);

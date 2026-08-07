@@ -474,7 +474,9 @@ public sealed record ItemKitLineDto(
     decimal Quantity,
     Guid LineGuid,
     string? Note = null,
-    decimal? UnitPrice = null);   // yalniz kit PriceMode=FixedComponent iken dolu (elle bilesen fiyati)
+    decimal? UnitPrice = null,   // yalniz kit PriceMode=FixedComponent iken dolu (elle bilesen fiyati)
+    int? UnitId = null,          // secili olcu birimi (Unit.Id) — NULL = bilesenin kendi varsayilan birimi
+    string? UnitCode = null);    // goruntuleme icin birim kodu (JOIN ile doldurulur)
 
 // Frontend submit — backend ItemId/ConfigId ile calisir. ItemId 0 gelirse service
 // materialCode uzerinden lookup eder (legacy UI); yeni UI dogrudan ItemId gonderir.
@@ -494,7 +496,8 @@ public sealed record SaveItemKitLineRequest(
     string? ComponentConfigCode,    // legacy: ConfigId null ise lookup icin
     decimal Quantity,
     string? Note = null,
-    decimal? UnitPrice = null);     // yalniz kit PriceMode=FixedComponent iken anlamli (elle bilesen fiyati)
+    decimal? UnitPrice = null,      // yalniz kit PriceMode=FixedComponent iken anlamli (elle bilesen fiyati)
+    int? UnitId = null);            // secili olcu birimi (Unit.Id) — NULL = bilesenin kendi varsayilan birimi
 
 // ── Kit snapshot kaynagi (Faz 2) — belge kaydinda aktif ItemKit icerigi ────
 // Bir kit belge kalemine eklendiginde bu icerik DocumentLineKitComponent'e dondurulur.

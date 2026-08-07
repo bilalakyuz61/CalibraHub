@@ -2808,7 +2808,8 @@
                     @* Seq 1084: kur, para biriminin HEMEN YANINDA (ayrı satır değil); "1 GBP = ? TL"
                        ipucu kaldırıldı. TRY seçiliyken gizli — sq:currency event'i show/hide eder. *@
                     <input id="sqExchangeRate" type="number" class="form-control form-control-sm sqe-hinput sq-no-spinner sq-no-negative"
-                           style="max-width:110px; margin-left:10px; display:none;" value="1" min="0" step="0.000001"
+                           @* Seq 1094: alan daraltildi + deger saga yasli (sayisal alan okunurlugu) *@
+                           style="max-width:88px; margin-left:10px; display:none; text-align:right;" value="1" min="0" step="0.000001"
                            title="Kur — 1 birim belge dövizinin TL karşılığı"
                            oninput="sqRecalc()" onchange="(function(el){var v=parseFloat(el.value);if(!isFinite(v)||v<=0)el.value=1;sqRecalc();})(this)" />
                     @* 2026-08-06: Kur tarihi — seçilen günün kurunu (SALES_QUOTE "Kur Tipi" parametresine

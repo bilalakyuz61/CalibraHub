@@ -1292,8 +1292,10 @@ public sealed class SalesController : Controller
             // (bkz. CalibraLineItemsGrid.jsx tlCellValue). Yalniz belge dovizi TRY disiyken
             // gorunur (client-side, showTlColumns) — TRY belgede kolon hic eklenmemis gibi gizlenir.
             cols.Add(new { key = "unitPriceTL",  label = "Birim Fiyat (TL)", type = "currency", tlMirror = true, sourceKey = "unitPrice", width = 130, precision = 2, computed = true, @readonly = true, align = "right", icon = "DollarSign" });
-            cols.Add(new { key = "discountRate", label = "Iskonto %",     type = "percent",  width = 100, precision = 2, min = 0, max = 100, align = "right", icon = "Percent" });
-            cols.Add(new { key = "taxRate",      label = "KDV %",         type = "percent",  width = 90,  precision = 2, min = 0, max = 100, @readonly = true, align = "right", icon = "Percent" });
+            // Seq 1093: etikette "%" YOK — kolon ikonu (Percent) zaten yuzde oldugunu gosteriyor,
+            // "% Iskonto %" seklinde cift gorunuyordu.
+            cols.Add(new { key = "discountRate", label = "Iskonto",       type = "percent",  width = 100, precision = 2, min = 0, max = 100, align = "right", icon = "Percent" });
+            cols.Add(new { key = "taxRate",      label = "KDV",           type = "percent",  width = 90,  precision = 2, min = 0, max = 100, @readonly = true, align = "right", icon = "Percent" });
             cols.Add(new { key = "lineTotal",    label = "Satir Toplami", type = "currency", width = 140, computed = true, formula = "quantity * unitPrice * (1 - (discountRate / 100))", align = "right", icon = "Calculator" });
             cols.Add(new { key = "lineTotalTL",  label = "Satir Toplami (TL)", type = "currency", tlMirror = true, sourceKey = "lineTotal", width = 140, precision = 2, computed = true, @readonly = true, align = "right", icon = "Calculator" });
         }
