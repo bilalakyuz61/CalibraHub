@@ -29,7 +29,7 @@
         --ke-primary-weak: rgba(99,102,241,.10);
         --ke-danger:    #e11d48;
         --ke-ok:        #059669;
-        display: flex; flex-direction: column; gap: 16px;
+        display: flex; flex-direction: column; gap: 12px;
         color: var(--ke-text); font-size: 14px;
     }
     body.app-theme-dark .ke-embed {
@@ -51,15 +51,15 @@
 
     .ke-embed .ke-card {
         background: var(--ke-surface); border: 1px solid var(--ke-border);
-        border-radius: 13px; padding: 18px;
+        border-radius: 13px; padding: 14px 16px;
     }
-    .ke-embed .ke-card__title { margin: 0 0 14px; font-size: .92rem; font-weight: 700; }
+    .ke-embed .ke-card__title { margin: 0 0 10px; font-size: .92rem; font-weight: 700; }
 
-    .ke-embed .ke-grid { display: grid; grid-template-columns: 160px 1fr; gap: 12px 16px; align-items: center; max-width: 1040px; }
+    .ke-embed .ke-grid { display: grid; grid-template-columns: 160px 1fr; gap: 10px 14px; align-items: center; max-width: 1040px; }
     .ke-embed .ke-label { font-size: .8rem; font-weight: 600; color: var(--ke-muted); }
     .ke-embed .ke-input {
         width: 100%; box-sizing: border-box; background: var(--ke-surface-2);
-        border: 1px solid var(--ke-border); border-radius: 8px; padding: 8px 11px;
+        border: 1px solid var(--ke-border); border-radius: 8px; padding: 7px 10px;
         color: var(--ke-text); font-size: .84rem; font-family: inherit;
     }
     .ke-embed .ke-input:focus { outline: none; border-color: var(--ke-primary); box-shadow: 0 0 0 3px var(--ke-primary-weak); }
@@ -74,19 +74,28 @@
     }
     .ke-embed .ke-seg button.is-active { background: var(--ke-primary); color: #fff; }
 
-    /* Bileşen ekleme satırı — fiyat alanı yalnız FixedComponent modda görünür. */
-    .ke-embed .ke-addrow { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
-    .ke-embed .ke-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-    .ke-embed .ke-field > span { font-size: .74rem; font-weight: 600; color: var(--ke-muted); }
-    .ke-embed .ke-field--code  { flex: 1 1 230px; }
-    .ke-embed .ke-field--name  { flex: 1.4 1 260px; }
-    .ke-embed .ke-field--combo { flex: 0 0 176px; }
-    .ke-embed .ke-field--qty   { flex: 0 0 130px; }
-    .ke-embed .ke-field--unit  { flex: 0 0 150px; }
-    .ke-embed .ke-field--price { flex: 0 0 150px; display: none; }
-    .ke-embed .ke-addrow.ke-mode-fixedcomponent .ke-field--price { display: flex; }
-    .ke-embed .ke-field--note  { flex: 1.4 1 260px; }
-    .ke-embed .ke-field--add   { flex: 0 0 auto; }
+    /* Bileşen ekleme çubuğu — listenin ALTINA sarkan tek satır, "+ Yeni Bileşen" ile açılır/kapanır.
+       Ayrı bir kart/başlık DEĞİL: tabloya bitişik, aynı kartın içinde. Fiyat alanı yalnız
+       FixedComponent modda görünür. */
+    .ke-embed .ke-addbar {
+        display: none; flex-wrap: wrap; gap: 8px; align-items: end;
+        margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--ke-border);
+    }
+    .ke-embed .ke-addbar.is-open { display: flex; }
+    .ke-embed .ke-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .ke-embed .ke-field > span { font-size: .72rem; font-weight: 600; color: var(--ke-muted); }
+    .ke-embed .ke-field--code  { flex: 1 1 220px; }
+    .ke-embed .ke-field--name  { flex: 1.3 1 240px; }
+    .ke-embed .ke-field--combo { flex: 0 0 160px; }
+    .ke-embed .ke-field--qty   { flex: 0 0 110px; }
+    .ke-embed .ke-field--unit  { flex: 0 0 140px; }
+    .ke-embed .ke-field--price { flex: 0 0 130px; display: none; }
+    .ke-embed .ke-addbar.ke-mode-fixedcomponent .ke-field--price { display: flex; }
+    .ke-embed .ke-field--note  { flex: 1.3 1 220px; }
+    .ke-embed .ke-field--actions { flex: 0 0 auto; display: flex; gap: 6px; }
+
+    .ke-embed .ke-addnew-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .ke-embed .ke-addnew-row .ke-hint { margin: 0; }
 
     .ke-embed .ke-combo-btn { width: 100%; justify-content: center; }
     .ke-embed .ke-combo-btn.is-set { border-color: var(--ke-ok); color: var(--ke-ok); }
@@ -120,11 +129,11 @@
     .ke-embed .ke-table-wrap { overflow-x: auto; border: 1px solid var(--ke-border); border-radius: 11px; }
     .ke-embed table.ke-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
     .ke-embed .ke-table th {
-        text-align: left; font-size: .72rem; font-weight: 700; text-transform: none;
-        color: var(--ke-muted); padding: 10px 12px; background: var(--ke-surface-2);
+        text-align: left; font-size: .71rem; font-weight: 700; text-transform: none;
+        color: var(--ke-muted); padding: 7px 10px; background: var(--ke-surface-2);
         border-bottom: 1px solid var(--ke-border); white-space: nowrap;
     }
-    .ke-embed .ke-table td { padding: 9px 12px; border-bottom: 1px solid var(--ke-border); vertical-align: middle; }
+    .ke-embed .ke-table td { padding: 5px 10px; border-bottom: 1px solid var(--ke-border); vertical-align: middle; }
     .ke-embed .ke-table tr:last-child td { border-bottom: 0; }
     .ke-embed .ke-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--ke-primary); }
     .ke-embed .ke-qty-cell { width: 110px; }
@@ -141,7 +150,7 @@
     }
     .ke-embed .ke-x:hover { background: var(--ke-danger); color: #fff; border-color: var(--ke-danger); }
 
-    .ke-embed .ke-empty { padding: 30px; text-align: center; color: var(--ke-muted); font-size: .84rem; font-style: italic; }
+    .ke-embed .ke-empty { padding: 20px; text-align: center; color: var(--ke-muted); font-size: .84rem; font-style: italic; }
     .ke-embed .ke-badge {
         display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
         font-size: .72rem; font-weight: 700; background: var(--ke-primary-weak); color: var(--ke-primary);
@@ -160,7 +169,7 @@
 
     @@media (max-width: 720px) {
         .ke-embed .ke-grid { grid-template-columns: 1fr; max-width: none; }
-        .ke-embed .ke-addrow .ke-field { flex-basis: 100%; }
+        .ke-embed .ke-addbar .ke-field { flex-basis: 100%; }
     }
 </style>
 
@@ -191,10 +200,35 @@
         </div>
     </div>
 
-    <!-- Bileşen ekleme -->
+    <!-- Bileşen listesi + ekleme — TEK yer: kalemler burada eklenir, burada düzenlenir. -->
     <div class="ke-card">
-        <p class="ke-card__title">Bileşen Ekle</p>
-        <div class="ke-addrow" id="keAddrow">
+        <p class="ke-card__title">
+            Paket İçeriği
+            <span class="ke-badge" id="keCount" style="margin-left:8px;">0 bileşen</span>
+            <span class="ke-badge" id="keHeaderVer" style="margin-left:6px;display:none;"></span>
+        </p>
+        <div class="ke-table-wrap">
+            <table class="ke-table" id="keTable">
+                <thead>
+                    <tr>
+                        <th style="width:32px;">#</th>
+                        <th style="width:140px;">Kod</th>
+                        <th>Ad</th>
+                        <th style="width:110px;">Miktar</th>
+                        <th style="width:100px;">Birim</th>
+                        <th class="ke-col-price" style="width:120px;">Birim Fiyat</th>
+                        <th>Açıklama</th>
+                        <th style="width:40px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="keLinesBody"></tbody>
+            </table>
+        </div>
+        <div class="ke-empty" id="keEmpty">Henüz bileşen eklenmedi. Aşağıdaki <strong>+ Yeni Bileşen</strong> ile başlayın.</div>
+
+        <!-- Ekleme çubuğu — listenin hemen altında, "+ Yeni Bileşen" ile açılır. Eklenen satır
+             miktar/fiyat/not açısından zaten listede düzenlenebildiği için ayrı bir bölüm gerekmez. -->
+        <div class="ke-addbar" id="keAddrow">
             <div class="ke-field ke-field--code">
                 <span>Stok Kodu *</span>
                 <div class="ke-lookup">
@@ -230,42 +264,25 @@
                 <span>Açıklama</span>
                 <input type="text" id="keCompNote" class="ke-input" placeholder="Opsiyonel..." />
             </div>
-            <div class="ke-field ke-field--add">
+            <div class="ke-field ke-field--actions">
                 <span>&nbsp;</span>
-                <button type="button" class="ke-btn ke-btn--primary ke-btn--sm" id="keCompAdd">
+                <button type="button" class="ke-btn ke-btn--primary ke-btn--sm" id="keCompAdd" title="Bileşeni listeye ekle">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                     Ekle
                 </button>
+                <button type="button" class="ke-btn ke-btn--sm" id="keAddCloseBtn" title="Ekleme çubuğunu kapat">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
             </div>
         </div>
-        <div class="ke-hint"><strong>Enter</strong> ile alanlar arasında ilerleyip hızlıca ekleyin (kod → miktar → açıklama → ekle). Seri/lot veya kombinasyon takipli bileşenler de eklenebilir; stok/seri/lot etkisi irsaliyede bileşen üzerinden gerçekleşir.</div>
-    </div>
 
-    <!-- Bileşen listesi -->
-    <div class="ke-card">
-        <p class="ke-card__title">
-            Paket İçeriği
-            <span class="ke-badge" id="keCount" style="margin-left:8px;">0 bileşen</span>
-            <span class="ke-badge" id="keHeaderVer" style="margin-left:6px;display:none;"></span>
-        </p>
-        <div class="ke-table-wrap">
-            <table class="ke-table" id="keTable">
-                <thead>
-                    <tr>
-                        <th style="width:36px;">#</th>
-                        <th style="width:150px;">Kod</th>
-                        <th>Ad</th>
-                        <th style="width:120px;">Miktar</th>
-                        <th style="width:100px;">Birim</th>
-                        <th class="ke-col-price" style="width:130px;">Birim Fiyat</th>
-                        <th>Açıklama</th>
-                        <th style="width:48px;"></th>
-                    </tr>
-                </thead>
-                <tbody id="keLinesBody"></tbody>
-            </table>
+        <div class="ke-addnew-row" id="keAddNewRow">
+            <button type="button" class="ke-btn ke-btn--primary ke-btn--sm" id="keAddNewBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                Yeni Bileşen
+            </button>
+            <span class="ke-hint">Kod alanında <strong>Enter</strong> ile alanlar arasında ilerleyip hızlıca ekleyin; miktar/birim/not eklendikten sonra da listeden düzenlenebilir.</span>
         </div>
-        <div class="ke-empty" id="keEmpty">Henüz bileşen eklenmedi. Yukarıdan stok kodu girip <strong>Ekle</strong> ile başlayın.</div>
     </div>
 
     <div class="ke-msg" id="keMsg"></div>
@@ -680,56 +697,76 @@
         }
     });
 
+    // addComponent() bir Promise<{ok, message}> döner — hem Enter/Ekle akışında (sonuç yoksayılır,
+    // hata zaten showMsg ile gösterilir) hem save() öncesi "çubukta yarım kalan giriş var mı"
+    // kontrolünde (bkz. save()) kullanılır — kullanıcının yazdığı ama eklemediği satır sessizce kaybolmasın.
     function addComponent() {
-        var code = ($('keCompCode').value || '').trim();
-        if (!code) { showMsg('Bileşen kodu girin.', true); $('keCompCode').focus(); return; }
-        if (lines.some(function (l) { return l.code.toLowerCase() === code.toLowerCase(); })) {
-            showMsg('Bu bileşen zaten eklenmiş.', true); return;
-        }
-        var qty = parseFloat(($('keCompQty').value || '1').replace(',', '.'));
-        if (!isFinite(qty) || qty <= 0) qty = 1;
-        var note = ($('keCompNote').value || '').trim();
-
-        var unitPrice = null;
-        if (priceMode === 'FixedComponent') {
-            var pv = parseFloat(($('keCompPrice').value || '').replace(',', '.'));
-            if (!isFinite(pv) || pv < 0) {
-                showMsg('Sabit Bileşen Fiyatı modunda birim fiyat girin.', true);
-                $('keCompPrice').focus(); try { $('keCompPrice').select(); } catch (e) {}
-                return;
+        return new Promise(function (resolve) {
+            var code = ($('keCompCode').value || '').trim();
+            if (!code) { showMsg('Bileşen kodu girin.', true); $('keCompCode').focus(); resolve({ ok: false, message: 'Bileşen kodu girin.' }); return; }
+            if (lines.some(function (l) { return l.code.toLowerCase() === code.toLowerCase(); })) {
+                showMsg('Bu bileşen zaten eklenmiş.', true); resolve({ ok: false, message: 'Bu bileşen zaten eklenmiş.' }); return;
             }
-            unitPrice = pv;
-        }
+            var qty = parseFloat(($('keCompQty').value || '1').replace(',', '.'));
+            if (!isFinite(qty) || qty <= 0) qty = 1;
+            var note = ($('keCompNote').value || '').trim();
 
-        resolveComp(code, function (m) {
-            if (!m) { showMsg('"' + code + '" kodlu stok bulunamadı.', true); return; }
-            // Seçili kombinasyon yalnız hâlâ AYNI malzemeye aitse taşınır — kod elle
-            // değiştirilip Enter'a doğrudan basılırsa eski kombinasyon yeni satıra sızmaz.
-            var combo = (keCompCombo && keCompSelectedMaterial &&
-                         (keCompSelectedMaterial.code || '').toLowerCase() === (m.code || '').toLowerCase())
-                ? keCompCombo : null;
-            var unitSel = $('keCompUnit');
-            var unitOpt = (!unitSel.disabled && keCompSelectedMaterial &&
-                           (keCompSelectedMaterial.code || '').toLowerCase() === (m.code || '').toLowerCase())
-                ? keCompUnitOptions.find(function (u) { return String(u.id) === unitSel.value; })
-                : null;
-            lines.push({
-                code: m.code || code, name: m.name || $('keCompName').value || '', quantity: qty, note: note,
-                configId: combo ? combo.configId : null,
-                configCode: combo ? combo.code : null,
-                unitPrice: unitPrice,
-                unitId: unitOpt ? unitOpt.id : null,
-                unitCode: unitOpt ? unitOpt.code : null
+            var unitPrice = null;
+            if (priceMode === 'FixedComponent') {
+                var pv = parseFloat(($('keCompPrice').value || '').replace(',', '.'));
+                if (!isFinite(pv) || pv < 0) {
+                    showMsg('Sabit Bileşen Fiyatı modunda birim fiyat girin.', true);
+                    $('keCompPrice').focus(); try { $('keCompPrice').select(); } catch (e) {}
+                    resolve({ ok: false, message: 'Sabit Bileşen Fiyatı modunda birim fiyat girin.' });
+                    return;
+                }
+                unitPrice = pv;
+            }
+
+            resolveComp(code, function (m) {
+                if (!m) { showMsg('"' + code + '" kodlu stok bulunamadı.', true); resolve({ ok: false, message: '"' + code + '" kodlu stok bulunamadı.' }); return; }
+                // Seçili kombinasyon yalnız hâlâ AYNI malzemeye aitse taşınır — kod elle
+                // değiştirilip Enter'a doğrudan basılırsa eski kombinasyon yeni satıra sızmaz.
+                var combo = (keCompCombo && keCompSelectedMaterial &&
+                             (keCompSelectedMaterial.code || '').toLowerCase() === (m.code || '').toLowerCase())
+                    ? keCompCombo : null;
+                var unitSel = $('keCompUnit');
+                var unitOpt = (!unitSel.disabled && keCompSelectedMaterial &&
+                               (keCompSelectedMaterial.code || '').toLowerCase() === (m.code || '').toLowerCase())
+                    ? keCompUnitOptions.find(function (u) { return String(u.id) === unitSel.value; })
+                    : null;
+                lines.push({
+                    code: m.code || code, name: m.name || $('keCompName').value || '', quantity: qty, note: note,
+                    configId: combo ? combo.configId : null,
+                    configCode: combo ? combo.code : null,
+                    unitPrice: unitPrice,
+                    unitId: unitOpt ? unitOpt.id : null,
+                    unitCode: unitOpt ? unitOpt.code : null
+                });
+                markDirty();
+                renderLines();
+                $('keCompCode').value = ''; $('keCompName').value = ''; $('keCompQty').value = '1';
+                $('keCompPrice').value = ''; $('keCompNote').value = '';
+                setSelectedMaterial(null);
+                $('keCompCode').focus();
+                resolve({ ok: true });
             });
-            markDirty();
-            renderLines();
-            $('keCompCode').value = ''; $('keCompName').value = ''; $('keCompQty').value = '1';
-            $('keCompPrice').value = ''; $('keCompNote').value = '';
-            setSelectedMaterial(null);
-            $('keCompCode').focus();
         });
     }
     $('keCompAdd').addEventListener('click', addComponent);
+
+    // ── Ekleme çubuğu aç/kapa — "+ Yeni Bileşen" listenin altında tek giriş noktasıdır ──
+    function openAddBar() {
+        $('keAddrow').classList.add('is-open');
+        $('keAddNewRow').style.display = 'none';
+        focusAndSelect('keCompCode');
+    }
+    function closeAddBar() {
+        $('keAddrow').classList.remove('is-open');
+        $('keAddNewRow').style.display = '';
+    }
+    $('keAddNewBtn').addEventListener('click', openAddBar);
+    $('keAddCloseBtn').addEventListener('click', closeAddBar);
 
     // ── Enter zinciri (belge kalem girişindeki akışa benzer) ──
     function focusAndSelect(id) {
@@ -786,7 +823,20 @@
     }
 
     // ── Kaydet — malzeme kartının Kaydet'i tarafından çağrılır ──
+    // Ekleme çubuğu açıkken kullanıcı bir kod yazıp Ekle'ye basmadan Kaydet'e geçebilir;
+    // yarım kalan girişi sessizce kaybetmemek için önce onu eklemeyi dene (bkz. addComponent).
     function save() {
+        var pendingCode = ($('keCompCode').value || '').trim();
+        if (pendingCode) {
+            return addComponent().then(function (res) {
+                if (!res.ok) return { ok: false, message: 'Ekleme çubuğunda tamamlanmamış bir bileşen var: ' + (res.message || '') };
+                return doSave();
+            });
+        }
+        return doSave();
+    }
+
+    function doSave() {
         if (!KIT_ITEM_ID || KIT_ITEM_ID <= 0) {
             return Promise.resolve({ ok: false, message: 'Önce malzeme kartını kaydedin.' });
         }
