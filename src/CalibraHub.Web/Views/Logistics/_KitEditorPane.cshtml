@@ -110,29 +110,9 @@
     .ke-embed .ke-combo-btn.is-set { border-color: var(--ke-ok); color: var(--ke-ok); }
     .ke-embed .ke-combo-btn:disabled { opacity: .45; }
 
-    /* Stok kodu rehberi (autocomplete + standart Tip-1 rehber butonu) */
+    /* Stok kodu — Tip-1 standart rehber (mountLookupForInput/LookupCard) */
     .ke-embed .ke-lookup { position: relative; }
-    .ke-embed .ke-lookup input#keCompCode { padding-right: 32px; }
-    .ke-embed .ke-guide-btn {
-        position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-        width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center;
-        border: none; background: transparent; color: var(--ke-muted); cursor: pointer; border-radius: 6px;
-    }
-    .ke-embed .ke-guide-btn:hover { background: var(--ke-primary-weak); color: var(--ke-primary); }
-    .ke-embed .ke-dd {
-        position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
-        background: var(--ke-surface); border: 1px solid var(--ke-border);
-        border-radius: 10px; box-shadow: 0 14px 36px rgba(0,0,0,.20);
-        max-height: 288px; overflow-y: auto; padding: 4px;
-    }
-    .ke-embed .ke-dd-item {
-        display: flex; flex-direction: column; gap: 1px; padding: 7px 10px;
-        border-radius: 7px; cursor: pointer;
-    }
-    .ke-embed .ke-dd-item.is-active, .ke-embed .ke-dd-item:hover { background: var(--ke-primary-weak); }
-    .ke-embed .ke-dd-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--ke-primary); font-size: .8rem; }
-    .ke-embed .ke-dd-name { font-size: .77rem; color: var(--ke-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .ke-embed .ke-dd-msg  { padding: 12px; text-align: center; color: var(--ke-muted); font-size: .8rem; }
+    .ke-embed .ke-lookup .gl-wrapper { width: 100%; }
 
     /* Bileşen listesi */
     .ke-embed .ke-table-wrap { overflow-x: auto; border: 1px solid var(--ke-border); border-radius: 11px; }
@@ -220,12 +200,10 @@
             <div class="ke-field ke-field--code">
                 <span>Stok Kodu *</span>
                 <div class="ke-lookup">
-                    <input type="text" id="keCompCode" class="ke-input" placeholder="Kod veya ad ile ara..." autocomplete="off"
-                           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="keCompDD" />
-                    <button type="button" id="keCompGuideBtn" class="ke-guide-btn" title="Stok Rehberinden Seç">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
-                    </button>
-                    <div class="ke-dd" id="keCompDD" role="listbox" style="display:none;"></div>
+                    <!-- Tip-1 standart rehber: mountLookupForInput bu input'u LookupCard'a çevirir.
+                         formCode+fieldKey bağlanır → rehber modalındaki dişli (Alan Ayarları) ile
+                         admin view/filtre/kolon/DÖNÜŞ ayarlarını yönetebilir (FldSet). -->
+                    <input type="text" id="keCompCode" class="ke-input" placeholder="Kod veya ad ile ara..." autocomplete="off" />
                 </div>
             </div>
             <div class="ke-field ke-field--name">
@@ -552,141 +530,39 @@
         });
     });
 
+    // LookupCard seçimi hidden input'a value yazıp 'change' dispatch eder → burada malzeme
+    // metadata'sı (ad, birimler, kombinasyon takibi) StockLookup'tan çözülür.
     $('keCompCode').addEventListener('change', function () {
-        resolveComp($('keCompCode').value, function (m) {
+        var code = ($('keCompCode').value || '').trim();
+        if (!code) { $('keCompName').value = ''; setSelectedMaterial(null); return; }
+        resolveComp(code, function (m) {
             $('keCompName').value = m ? (m.name || '') : '';
-            setSelectedMaterial(m, false);
+            setSelectedMaterial(m, true);   // kombinasyon takipliyse seçici otomatik açılır
+            if (m && !m.hasConfig) { var q = $('keCompQty'); q.focus(); try { q.select(); } catch (e) {} }
         });
     });
 
-    // ── Stok kodu rehberi (autocomplete dropdown) ──
-    var ddItems  = [];
-    var ddActive = -1;
-    var ddTimer  = null;
-    var ddSeq    = 0;    // yarış koşulu koruması — yalnız son isteği kabul et
-
-    function ddIsOpen() { return $('keCompDD').style.display !== 'none'; }
-
-    function closeDD() {
-        ddItems = []; ddActive = -1;
-        var dd = $('keCompDD'); dd.style.display = 'none'; dd.innerHTML = '';
-        $('keCompCode').setAttribute('aria-expanded', 'false');
-    }
-
-    function renderDD() {
-        var dd = $('keCompDD'); dd.innerHTML = '';
-        if (ddItems.length === 0) {
-            dd.innerHTML = '<div class="ke-dd-msg">Eşleşen stok bulunamadı</div>';
-        } else {
-            ddItems.forEach(function (m, i) {
-                var it = document.createElement('div');
-                it.className = 'ke-dd-item' + (i === ddActive ? ' is-active' : '');
-                it.setAttribute('role', 'option');
-                var c = document.createElement('div'); c.className = 'ke-dd-code'; c.textContent = m.code || '';
-                var n = document.createElement('div'); n.className = 'ke-dd-name'; n.textContent = m.name || '';
-                it.appendChild(c); it.appendChild(n);
-                // mousedown: input blur'undan ÖNCE seç (blur dropdown'ı kapatır)
-                it.addEventListener('mousedown', function (e) { e.preventDefault(); selectDD(m); });
-                dd.appendChild(it);
-            });
-        }
-        dd.style.display = ''; $('keCompCode').setAttribute('aria-expanded', 'true');
-    }
-
-    function selectDD(m) {
-        $('keCompCode').value = m.code || '';
-        $('keCompName').value = m.name || '';
-        closeDD();
-        setSelectedMaterial(m, true);
-        if (!m.hasConfig) {
-            var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
-        }
-    }
-
-    // ── Standart stok rehberi (Tip 1) ──
-    function keApplyPickedCode(code, display) {
-        code = (code || '').trim();
-        if (!code) return;
-        $('keCompCode').value = code;
-        $('keCompName').value = display || '';
-        closeDD();
-        resolveComp(code, function (m) {
-            if (!m) { setSelectedMaterial(null); showMsg('"' + code + '" kodlu stok bulunamadı.', true); return; }
-            $('keCompName').value = m.name || display || '';
-            setSelectedMaterial(m, true);
-            if (!m.hasConfig) {
-                var qtyEl = $('keCompQty'); qtyEl.focus(); try { qtyEl.select(); } catch (e) {}
-            }
-        });
-    }
-
-    function keOpenGuideLookup(retriesLeft) {
-        if (retriesLeft === undefined) retriesLeft = 15;
-        if (!window.CalibraHub || typeof window.CalibraHub.openGuideLookup !== 'function') {
-            if (retriesLeft > 0) { setTimeout(function () { keOpenGuideLookup(retriesLeft - 1); }, 200); return; }
-            showMsg('Stok rehberi yüklenemedi, sayfayı yenileyin.', true);
+    // ── Tip-1 standart rehber bağlama ──
+    // formCode+fieldKey ile FldSet binding'i: admin rehber modalındaki dişliden (Alan Ayarları)
+    // view/filtre/kolon görünürlüğü/DÖNÜŞ kolonunu yönetebilir; ayar ilk kaydetmede FldSet'e doğar.
+    var keLookupMounted = false;
+    function keMountCompLookup(retriesLeft) {
+        if (keLookupMounted) return;
+        if (retriesLeft === undefined) retriesLeft = 25;
+        if (!window.CalibraHub || typeof window.CalibraHub.mountLookupForInput !== 'function') {
+            if (retriesLeft > 0) setTimeout(function () { keMountCompLookup(retriesLeft - 1); }, 200);
             return;
         }
-        window.CalibraHub.openGuideLookup('ITEMS', {
-            guideLabel: 'Stok Kartı',
-            onPick: function (row) {
-                keApplyPickedCode(row && row.value, row && row.display);
-            }
+        keLookupMounted = true;
+        window.CalibraHub.mountLookupForInput({
+            inputElement: $('keCompCode'),
+            formCode: 'MATERIAL_CARD_EDIT',
+            fieldKey: 'itemKitLine.itemCode',
+            guideCode: 'ITEMS',            // varsayılan; admin Alan Ayarları'ndan değiştirebilir
+            isRequired: true
         });
     }
-    $('keCompGuideBtn').addEventListener('click', function () { keOpenGuideLookup(); });
-
-    function searchDD(q) {
-        q = (q || '').trim();
-        if (!q) { closeDD(); return; }
-        var seq = ++ddSeq;
-        fetch('/Logistics/StockLookup?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
-            .then(function (r) { return r.ok ? r.json() : []; })
-            .then(function (list) {
-                if (seq !== ddSeq) return;   // eski (yarışan) istek — yoksay
-                var kitLc = (KIT_CODE || '').toLowerCase();  // kit kendi bileşeni olamaz
-                ddItems = (list || []).filter(function (s) { return (s.code || '').toLowerCase() !== kitLc; });
-                ddActive = ddItems.length ? 0 : -1;
-                renderDD();
-            })
-            .catch(function () { if (seq === ddSeq) closeDD(); });
-    }
-
-    function ddMove(delta) {
-        if (ddItems.length === 0) return;
-        ddActive = (ddActive + delta + ddItems.length) % ddItems.length;
-        var dd = $('keCompDD');
-        Array.prototype.forEach.call(dd.children, function (c, i) { c.classList.toggle('is-active', i === ddActive); });
-        var el = dd.children[ddActive];
-        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
-    }
-
-    $('keCompCode').addEventListener('input', function () {
-        $('keCompName').value = '';   // kod değişti → eski ad artık geçersiz
-        setSelectedMaterial(null);    // kombinasyon seçimi de geçersiz — yeniden çöz
-        var v = $('keCompCode').value;
-        clearTimeout(ddTimer);
-        ddTimer = setTimeout(function () { searchDD(v); }, 160);
-    });
-    $('keCompCode').addEventListener('focus', function () {
-        var v = ($('keCompCode').value || '').trim();
-        if (v) searchDD(v);
-    });
-    $('keCompCode').addEventListener('blur', function () { setTimeout(closeDD, 150); });
-    $('keCompCode').addEventListener('keydown', function (e) {
-        if (e.key === 'ArrowDown') {
-            if (ddIsOpen()) ddMove(1); else searchDD($('keCompCode').value);
-            e.preventDefault();
-        } else if (e.key === 'ArrowUp') {
-            if (ddIsOpen()) { ddMove(-1); e.preventDefault(); }
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (ddIsOpen() && ddActive >= 0 && ddItems[ddActive]) selectDD(ddItems[ddActive]);
-            else addComponent();
-        } else if (e.key === 'Escape') {
-            if (ddIsOpen()) { closeDD(); e.preventDefault(); }
-        }
-    });
+    keMountCompLookup();
 
     // addComponent() bir Promise<{ok, message}> döner — hem Enter/Ekle akışında (sonuç yoksayılır,
     // hata zaten showMsg ile gösterilir) hem save() öncesi "çubukta yarım kalan giriş var mı"
@@ -694,7 +570,10 @@
     function addComponent() {
         return new Promise(function (resolve) {
             var code = ($('keCompCode').value || '').trim();
-            if (!code) { showMsg('Bileşen kodu girin.', true); $('keCompCode').focus(); resolve({ ok: false, message: 'Bileşen kodu girin.' }); return; }
+            if (!code) { showMsg('Bileşen kodu girin.', true); resolve({ ok: false, message: 'Bileşen kodu girin.' }); return; }
+            if (KIT_CODE && code.toLowerCase() === KIT_CODE.toLowerCase()) {
+                showMsg('Kit kendi bileşeni olamaz.', true); resolve({ ok: false, message: 'Kit kendi bileşeni olamaz.' }); return;
+            }
             if (lines.some(function (l) { return l.code.toLowerCase() === code.toLowerCase(); })) {
                 showMsg('Bu bileşen zaten eklenmiş.', true); resolve({ ok: false, message: 'Bu bileşen zaten eklenmiş.' }); return;
             }
@@ -736,10 +615,15 @@
                 });
                 markDirty();
                 renderLines();
-                $('keCompCode').value = ''; $('keCompName').value = ''; $('keCompQty').value = '1';
+                // LookupCard'ı ffl-clear ile sıfırla (hidden input value/display/recordId temizlenir)
+                try { $('keCompCode').dispatchEvent(new CustomEvent('ffl-clear')); } catch (e) { $('keCompCode').value = ''; }
+                $('keCompName').value = ''; $('keCompQty').value = '1';
                 $('keCompPrice').value = ''; $('keCompNote').value = '';
                 setSelectedMaterial(null);
-                $('keCompCode').focus();
+                // Hızlı zincir: odak yeniden görünür rehber input'una (gl-wrapper LookupCard'ı)
+                var glw = $('keCompCode').previousElementSibling;
+                var vi = glw && glw.querySelector ? glw.querySelector('input') : null;
+                if (vi) vi.focus();
                 resolve({ ok: true });
             });
         });
