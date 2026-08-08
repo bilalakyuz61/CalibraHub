@@ -74,14 +74,12 @@
     }
     .ke-embed .ke-seg button.is-active { background: var(--ke-primary); color: #fff; }
 
-    /* Bileşen ekleme çubuğu — listenin ALTINA sarkan tek satır, "+ Yeni Bileşen" ile açılır/kapanır.
-       Ayrı bir kart/başlık DEĞİL: tabloya bitişik, aynı kartın içinde. Fiyat alanı yalnız
-       FixedComponent modda görünür. */
+    /* Bileşen giriş satırı — HEP görünür, kartın en üstünde. Eklenen bileşenler bu satırın
+       ALTINA aynı kolon düzeninde (ke-field genişlikleri ortak) satır satır dizilir; ayrı
+       tablo/başlık yok. Fiyat alanı yalnız FixedComponent modda görünür. */
     .ke-embed .ke-addbar {
-        display: none; flex-wrap: wrap; gap: 8px; align-items: end;
-        margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--ke-border);
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: end;
     }
-    .ke-embed .ke-addbar.is-open { display: flex; }
     .ke-embed .ke-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .ke-embed .ke-field > span { font-size: .72rem; font-weight: 600; color: var(--ke-muted); }
     .ke-embed .ke-field--code  { flex: 1 1 220px; }
@@ -94,8 +92,19 @@
     .ke-embed .ke-field--note  { flex: 1.3 1 220px; }
     .ke-embed .ke-field--actions { flex: 0 0 auto; display: flex; gap: 6px; }
 
-    .ke-embed .ke-addnew-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-    .ke-embed .ke-addnew-row .ke-hint { margin: 0; }
+    /* Eklenen bileşen satırları — giriş satırıyla AYNI ke-field kolon genişlikleri. */
+    .ke-embed .ke-lines { display: flex; flex-direction: column; margin-top: 6px; }
+    .ke-embed .ke-line {
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        padding: 6px 0; border-top: 1px dashed var(--ke-border);
+    }
+    .ke-embed .ke-lines .ke-field--price { display: none; }
+    .ke-embed .ke-lines.ke-mode-fixedcomponent .ke-field--price { display: flex; }
+    .ke-embed .ke-line .ke-ro {
+        font-size: .84rem; padding: 6px 2px; min-width: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ke-embed .ke-line .ke-ro--muted { color: var(--ke-muted); }
 
     .ke-embed .ke-combo-btn { width: 100%; justify-content: center; }
     .ke-embed .ke-combo-btn.is-set { border-color: var(--ke-ok); color: var(--ke-ok); }
@@ -150,9 +159,6 @@
     }
     .ke-embed .ke-x:hover { background: var(--ke-danger); color: #fff; border-color: var(--ke-danger); }
 
-    .ke-embed .ke-empty { padding: 8px 12px; text-align: center; color: var(--ke-muted); font-size: .84rem; font-style: italic; }
-    /* Ekleme çubuğu açıkken boş-durum metni gereksiz (çubuk hemen altında) — yer tutmasın. */
-    .ke-embed .ke-card:has(.ke-addbar.is-open) .ke-empty { display: none; }
     .ke-embed .ke-badge {
         display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
         font-size: .72rem; font-weight: 700; background: var(--ke-primary-weak); color: var(--ke-primary);
@@ -209,27 +215,7 @@
             <span class="ke-badge" id="keCount" style="margin-left:8px;">0 bileşen</span>
             <span class="ke-badge" id="keHeaderVer" style="margin-left:6px;display:none;"></span>
         </p>
-        <div class="ke-table-wrap">
-            <table class="ke-table" id="keTable">
-                <thead>
-                    <tr>
-                        <th style="width:32px;">#</th>
-                        <th style="width:140px;">Kod</th>
-                        <th>Ad</th>
-                        <th style="width:110px;">Miktar</th>
-                        <th style="width:100px;">Birim</th>
-                        <th class="ke-col-price" style="width:120px;">Birim Fiyat</th>
-                        <th>Açıklama</th>
-                        <th style="width:40px;"></th>
-                    </tr>
-                </thead>
-                <tbody id="keLinesBody"></tbody>
-            </table>
-        </div>
-        <div class="ke-empty" id="keEmpty">Henüz bileşen eklenmedi. Aşağıdaki <strong>+ Yeni Bileşen</strong> ile başlayın.</div>
-
-        <!-- Ekleme çubuğu — listenin hemen altında, "+ Yeni Bileşen" ile açılır. Eklenen satır
-             miktar/fiyat/not açısından zaten listede düzenlenebildiği için ayrı bir bölüm gerekmez. -->
+        <!-- Giriş satırı — hep görünür; eklenen bileşenler altına (keLinesBody) dizilir. -->
         <div class="ke-addbar" id="keAddrow">
             <div class="ke-field ke-field--code">
                 <span>Stok Kodu *</span>
@@ -272,19 +258,12 @@
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                     Ekle
                 </button>
-                <button type="button" class="ke-btn ke-btn--sm" id="keAddCloseBtn" title="Ekleme çubuğunu kapat">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-                </button>
             </div>
         </div>
 
-        <div class="ke-addnew-row" id="keAddNewRow">
-            <button type="button" class="ke-btn ke-btn--primary ke-btn--sm" id="keAddNewBtn">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                Yeni Bileşen
-            </button>
-            <span class="ke-hint">Kod alanında <strong>Enter</strong> ile alanlar arasında ilerleyip hızlıca ekleyin; miktar/birim/not eklendikten sonra da listeden düzenlenebilir.</span>
-        </div>
+        <!-- Eklenen bileşenler — giriş satırının altına, aynı kolon düzeninde -->
+        <div class="ke-lines" id="keLinesBody"></div>
+        <div class="ke-hint">Kod alanında <strong>Enter</strong> ile alanlar arasında ilerleyip hızlıca ekleyin; eklenen satırın miktar/fiyat/açıklaması aşağıda yerinde düzenlenir.</div>
     </div>
 
     <div class="ke-msg" id="keMsg"></div>
@@ -340,7 +319,7 @@
         $('keFixedPriceLabel').style.display = isFixedPackage ? '' : 'none';
         $('keFixedPriceWrap').style.display = isFixedPackage ? '' : 'none';
         $('kePriceModeHint').textContent = KIT_PRICE_MODE_HINTS[priceMode];
-        $('keTable').classList.toggle('ke-mode-fixedcomponent', priceMode === 'FixedComponent');
+        $('keLinesBody').classList.toggle('ke-mode-fixedcomponent', priceMode === 'FixedComponent');
         $('keAddrow').classList.toggle('ke-mode-fixedcomponent', priceMode === 'FixedComponent');
     }
     $('kePriceModeSeg').addEventListener('click', function (e) {
@@ -377,26 +356,34 @@
         .catch(function () { /* liste yoksa/erisilemezse sessiz — elle giris serbest */ });
     }
 
-    // ── Bileşen listesi render ──
+    // ── Bileşen listesi render — giriş satırıyla AYNI kolon düzeni (ke-field--*),
+    //    her satır yerinde düzenlenir (miktar/fiyat/açıklama), kombinasyon rozetten değişir. ──
     function renderLines() {
         var body = $('keLinesBody');
         body.innerHTML = '';
-        $('keEmpty').style.display = lines.length ? 'none' : '';
         lines.forEach(function (l, i) {
-            var tr = document.createElement('tr');
+            var row = document.createElement('div');
+            row.className = 'ke-line';
 
-            var tdNo = document.createElement('td'); tdNo.textContent = (i + 1); tr.appendChild(tdNo);
-            var tdCode = document.createElement('td'); tdCode.innerHTML = '<span class="ke-code"></span>';
-            tdCode.querySelector('.ke-code').textContent = l.code; tr.appendChild(tdCode);
+            function cell(cls) { var d = document.createElement('div'); d.className = 'ke-field ' + cls; row.appendChild(d); return d; }
 
-            var tdName = document.createElement('td');
-            tdName.textContent = l.name || '';
+            var cCode = cell('ke-field--code');
+            var codeEl = document.createElement('div'); codeEl.className = 'ke-ro';
+            codeEl.innerHTML = '<span class="ke-code"></span>';
+            codeEl.querySelector('.ke-code').textContent = l.code;
+            cCode.appendChild(codeEl);
+
+            var cName = cell('ke-field--name');
+            var nameEl = document.createElement('div'); nameEl.className = 'ke-ro';
+            nameEl.textContent = l.name || ''; nameEl.title = l.name || '';
+            cName.appendChild(nameEl);
+
+            var cCombo = cell('ke-field--combo');
             if (l.configCode) {
-                tdName.appendChild(document.createElement('br'));
                 var badge = document.createElement('span');
                 badge.className = 'ke-comb-badge';
-                badge.textContent = 'Kombinasyon: ' + l.configCode;
-                badge.title = 'Değiştirmek için tıklayın';
+                badge.textContent = l.configCode;
+                badge.title = 'Kombinasyon: ' + l.configCode + ' — değiştirmek için tıklayın';
                 badge.style.cursor = 'pointer';
                 badge.addEventListener('click', function () {
                     keOpenComboPicker(l.code, {
@@ -408,32 +395,34 @@
                         }
                     });
                 });
-                tdName.appendChild(badge);
+                cCombo.appendChild(badge);
+            } else {
+                var dash = document.createElement('div'); dash.className = 'ke-ro ke-ro--muted'; dash.textContent = '—';
+                cCombo.appendChild(dash);
             }
-            tr.appendChild(tdName);
 
-            var tdQty = document.createElement('td'); tdQty.className = 'ke-qty-cell';
+            var cQty = cell('ke-field--qty');
             var qtyInput = document.createElement('input');
             qtyInput.type = 'number'; qtyInput.className = 'ke-input'; qtyInput.value = l.quantity;
-            qtyInput.min = '0'; qtyInput.step = 'any'; qtyInput.style.padding = '5px 8px';
+            qtyInput.min = '0'; qtyInput.step = 'any';
             qtyInput.addEventListener('change', function () {
                 var v = parseFloat(qtyInput.value.replace(',', '.'));
                 l.quantity = (isFinite(v) && v > 0) ? v : 1;
                 qtyInput.value = l.quantity;
                 markDirty();
             });
-            tdQty.appendChild(qtyInput); tr.appendChild(tdQty);
+            cQty.appendChild(qtyInput);
 
-            var tdUnit = document.createElement('td');
-            tdUnit.style.color = 'var(--ke-muted)'; tdUnit.style.fontSize = '.8rem';
-            tdUnit.textContent = l.unitCode || '—';
-            tr.appendChild(tdUnit);
+            var cUnit = cell('ke-field--unit');
+            var unitEl = document.createElement('div'); unitEl.className = 'ke-ro ke-ro--muted';
+            unitEl.textContent = l.unitCode || '—';
+            cUnit.appendChild(unitEl);
 
-            // Yalnız FixedComponent modda görünür (CSS .ke-col-price)
-            var tdPrice = document.createElement('td'); tdPrice.className = 'ke-col-price ke-qty-cell';
+            // Yalnız FixedComponent modda görünür (.ke-lines.ke-mode-fixedcomponent)
+            var cPrice = cell('ke-field--price');
             var priceInput = document.createElement('input');
             priceInput.type = 'number'; priceInput.className = 'ke-input'; priceInput.step = 'any'; priceInput.min = '0';
-            priceInput.placeholder = '0,00'; priceInput.style.padding = '5px 8px';
+            priceInput.placeholder = '0,00';
             priceInput.value = (l.unitPrice != null) ? l.unitPrice : '';
             priceInput.addEventListener('change', function () {
                 var v = parseFloat(priceInput.value.replace(',', '.'));
@@ -441,22 +430,22 @@
                 priceInput.value = (l.unitPrice != null) ? l.unitPrice : '';
                 markDirty();
             });
-            tdPrice.appendChild(priceInput); tr.appendChild(tdPrice);
+            cPrice.appendChild(priceInput);
 
-            var tdNote = document.createElement('td');
+            var cNote = cell('ke-field--note');
             var noteInput = document.createElement('input');
             noteInput.type = 'text'; noteInput.className = 'ke-input'; noteInput.value = l.note || '';
-            noteInput.placeholder = '—'; noteInput.style.padding = '5px 8px';
+            noteInput.placeholder = '—';
             noteInput.addEventListener('change', function () { l.note = noteInput.value; markDirty(); });
-            tdNote.appendChild(noteInput); tr.appendChild(tdNote);
+            cNote.appendChild(noteInput);
 
-            var tdX = document.createElement('td');
+            var cX = cell('ke-field--actions');
             var x = document.createElement('button'); x.type = 'button'; x.className = 'ke-x'; x.title = 'Çıkar';
             x.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
             x.addEventListener('click', function () { lines.splice(i, 1); markDirty(); renderLines(); });
-            tdX.appendChild(x); tr.appendChild(tdX);
+            cX.appendChild(x);
 
-            body.appendChild(tr);
+            body.appendChild(row);
         });
         $('keCount').textContent = lines.length + ' bileşen';
     }
@@ -756,19 +745,6 @@
         });
     }
     $('keCompAdd').addEventListener('click', addComponent);
-
-    // ── Ekleme çubuğu aç/kapa — "+ Yeni Bileşen" listenin altında tek giriş noktasıdır ──
-    function openAddBar() {
-        $('keAddrow').classList.add('is-open');
-        $('keAddNewRow').style.display = 'none';
-        focusAndSelect('keCompCode');
-    }
-    function closeAddBar() {
-        $('keAddrow').classList.remove('is-open');
-        $('keAddNewRow').style.display = '';
-    }
-    $('keAddNewBtn').addEventListener('click', openAddBar);
-    $('keAddCloseBtn').addEventListener('click', closeAddBar);
 
     // ── Enter zinciri (belge kalem girişindeki akışa benzer) ──
     function focusAndSelect(id) {
