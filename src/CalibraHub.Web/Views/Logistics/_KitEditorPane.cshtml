@@ -79,7 +79,7 @@
        FixedComponent modda görünür. */
     .ke-embed .ke-addbar {
         display: none; flex-wrap: wrap; gap: 8px; align-items: end;
-        margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--ke-border);
+        margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--ke-border);
     }
     .ke-embed .ke-addbar.is-open { display: flex; }
     .ke-embed .ke-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -150,7 +150,9 @@
     }
     .ke-embed .ke-x:hover { background: var(--ke-danger); color: #fff; border-color: var(--ke-danger); }
 
-    .ke-embed .ke-empty { padding: 20px; text-align: center; color: var(--ke-muted); font-size: .84rem; font-style: italic; }
+    .ke-embed .ke-empty { padding: 8px 12px; text-align: center; color: var(--ke-muted); font-size: .84rem; font-style: italic; }
+    /* Ekleme çubuğu açıkken boş-durum metni gereksiz (çubuk hemen altında) — yer tutmasın. */
+    .ke-embed .ke-card:has(.ke-addbar.is-open) .ke-empty { display: none; }
     .ke-embed .ke-badge {
         display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
         font-size: .72rem; font-weight: 700; background: var(--ke-primary-weak); color: var(--ke-primary);
