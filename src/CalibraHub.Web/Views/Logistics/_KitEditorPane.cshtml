@@ -77,27 +77,50 @@
     /* Bileşen giriş satırı — HEP görünür, kartın en üstünde. Eklenen bileşenler bu satırın
        ALTINA aynı kolon düzeninde (ke-field genişlikleri ortak) satır satır dizilir; ayrı
        tablo/başlık yok. Fiyat alanı yalnız FixedComponent modda görünür. */
-    .ke-embed .ke-addbar {
-        display: flex; flex-wrap: wrap; gap: 8px; align-items: end;
+    /* TEK kolon şablonu: giriş satırı ve eklenen satırlar aynı grid'i paylaşır → kolonlar
+       birebir hizalı kalır ve fiyat kolonu açılınca satır ALT SATIRA TAŞMAZ (flex-wrap yerine
+       grid; gizli .ke-field--price grid akışından çıkar, şablon moda göre değişir). */
+    /* Kolonlar ESNEK (minmax(0,fr)) — sabit px kullanılmaz; böylece dar kapsayıcıda da
+       satır TAŞMAZ/kaymaz, fiyat kolonu açılınca diğerleri orantılı daralır. */
+    .ke-embed .ke-addbar,
+    .ke-embed .ke-line {
+        display: grid;
+        grid-template-columns:
+            minmax(0, 1.25fr)   /* Stok Kodu */
+            minmax(0, 1.2fr)    /* Stok Adı */
+            minmax(0, 0.95fr)   /* Kombinasyon */
+            minmax(0, 0.7fr)    /* Miktar */
+            minmax(0, 0.8fr)    /* Ölçü Birimi */
+            minmax(0, 1.25fr)   /* Açıklama */
+            84px;               /* Aksiyon */
+        gap: 8px;
+    }
+    .ke-embed .ke-addbar { align-items: end; }
+    .ke-embed .ke-addbar.ke-mode-fixedcomponent,
+    .ke-embed .ke-lines.ke-mode-fixedcomponent .ke-line {
+        grid-template-columns:
+            minmax(0, 1.15fr)   /* Stok Kodu */
+            minmax(0, 1.1fr)    /* Stok Adı */
+            minmax(0, 0.9fr)    /* Kombinasyon */
+            minmax(0, 0.65fr)   /* Miktar */
+            minmax(0, 0.72fr)   /* Ölçü Birimi */
+            minmax(0, 0.8fr)    /* Birim Fiyat */
+            minmax(0, 1.15fr)   /* Açıklama */
+            84px;               /* Aksiyon */
     }
     .ke-embed .ke-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-    .ke-embed .ke-field > span { font-size: .72rem; font-weight: 600; color: var(--ke-muted); }
-    .ke-embed .ke-field--code  { flex: 1 1 220px; }
-    .ke-embed .ke-field--name  { flex: 1.3 1 240px; }
-    .ke-embed .ke-field--combo { flex: 0 0 160px; }
-    .ke-embed .ke-field--qty   { flex: 0 0 110px; }
-    .ke-embed .ke-field--unit  { flex: 0 0 140px; }
-    .ke-embed .ke-field--price { flex: 0 0 130px; display: none; }
-    .ke-embed .ke-addbar.ke-mode-fixedcomponent .ke-field--price { display: flex; }
-    .ke-embed .ke-field--note  { flex: 1.3 1 220px; }
-    .ke-embed .ke-field--actions { flex: 0 0 auto; display: flex; gap: 6px; }
-
-    /* Eklenen bileşen satırları — giriş satırıyla AYNI ke-field kolon genişlikleri. */
-    .ke-embed .ke-lines { display: flex; flex-direction: column; margin-top: 6px; }
-    .ke-embed .ke-line {
-        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-        padding: 6px 0; border-top: 1px dashed var(--ke-border);
+    .ke-embed .ke-field > span {
+        font-size: .72rem; font-weight: 600; color: var(--ke-muted);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .ke-embed .ke-field--price { display: none; }
+    .ke-embed .ke-addbar.ke-mode-fixedcomponent .ke-field--price { display: flex; }
+    .ke-embed .ke-field--actions { flex-direction: row; align-items: end; justify-content: flex-end; gap: 6px; }
+    .ke-embed .ke-line .ke-field--actions { align-items: center; }
+
+    /* Eklenen bileşen satırları */
+    .ke-embed .ke-lines { display: flex; flex-direction: column; margin-top: 6px; }
+    .ke-embed .ke-line { align-items: center; padding: 6px 0; border-top: 1px dashed var(--ke-border); }
     .ke-embed .ke-lines .ke-field--price { display: none; }
     .ke-embed .ke-lines.ke-mode-fixedcomponent .ke-field--price { display: flex; }
     .ke-embed .ke-line .ke-ro {
@@ -114,20 +137,7 @@
     .ke-embed .ke-lookup { position: relative; }
     .ke-embed .ke-lookup .gl-wrapper { width: 100%; }
 
-    /* Bileşen listesi */
-    .ke-embed .ke-table-wrap { overflow-x: auto; border: 1px solid var(--ke-border); border-radius: 11px; }
-    .ke-embed table.ke-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
-    .ke-embed .ke-table th {
-        text-align: left; font-size: .71rem; font-weight: 700; text-transform: none;
-        color: var(--ke-muted); padding: 7px 10px; background: var(--ke-surface-2);
-        border-bottom: 1px solid var(--ke-border); white-space: nowrap;
-    }
-    .ke-embed .ke-table td { padding: 5px 10px; border-bottom: 1px solid var(--ke-border); vertical-align: middle; }
-    .ke-embed .ke-table tr:last-child td { border-bottom: 0; }
     .ke-embed .ke-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--ke-primary); }
-    .ke-embed .ke-qty-cell { width: 110px; }
-    .ke-embed .ke-col-price { display: none; }
-    .ke-embed table.ke-table.ke-mode-fixedcomponent .ke-col-price { display: table-cell; }
     .ke-embed .ke-comb-badge {
         display: inline-block; margin-top: 3px; padding: 2px 8px; border-radius: 999px;
         font-size: .68rem; font-weight: 700; background: var(--ke-primary-weak); color: var(--ke-primary);
@@ -155,9 +165,14 @@
     .ke-msg.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .ke-msg.is-err { background: #e11d48; }
 
+    /* Dar ekran — kolonlar 2'li bloklara iner (giriş ve satırlar yine hizalı kalır). */
     @@media (max-width: 720px) {
         .ke-embed .ke-grid { grid-template-columns: 1fr; max-width: none; }
-        .ke-embed .ke-addbar .ke-field { flex-basis: 100%; }
+        .ke-embed .ke-addbar, .ke-embed .ke-line,
+        .ke-embed .ke-addbar.ke-mode-fixedcomponent,
+        .ke-embed .ke-lines.ke-mode-fixedcomponent .ke-line {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 </style>
 

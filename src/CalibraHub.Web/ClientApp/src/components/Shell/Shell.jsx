@@ -690,7 +690,27 @@ export default function Shell(props) {
     //    yapmadan; "ayni malzeme ikinci kez tiklanirsa mevcut child'a odaklan"
     //    davranisi bu satirla saglanir)
     var exactExisting = tabs.find(function (t) { return t.url === url })
-    if (exactExisting) { setActiveTabKey(exactExisting.key); return }
+    if (exactExisting) {
+      setActiveTabKey(exactExisting.key)
+      // 2026-08-08 fix: iframe ICERIDEN baska bir sayfaya kaymis olabilir — ornegin kit/malzeme
+      // edit ekranindan "Geri" ile listeye donulunce sekmenin url'i hala edit, ama ekranda liste
+      // duruyor. O halde ayni kaydi listeden tekrar secmek HICBIR SEY yapmiyordu (sekme zaten
+      // aktif). Gercek konum farkli bir PATH'e kaymissa iframe'i sekmenin url'ine geri yukle.
+      // Yalniz PATH karsilastirilir; ayni ekranda query farki (kaydedilmemis form) bosuna
+      // reload edilmesin diye dokunulmaz.
+      try {
+        var exEl = iframeRefs.current[exactExisting.key]
+        if (exEl) {
+          var curPath = ''
+          try { curPath = exEl.contentWindow.location.pathname } catch (_) { curPath = '' }
+          var wantPath = String(url).split('?')[0]
+          if (curPath && curPath.toLowerCase() !== wantPath.toLowerCase()) {
+            try { exEl.contentWindow.location.replace(url) } catch (_) { exEl.src = url }
+          }
+        }
+      } catch (_) { /* cross-origin / henuz mount degil — yoksay */ }
+      return
+    }
 
     // 2) matchPath verilmisse ayni kategoriye ait mevcut tab'i yeni URL ile guncelle
     //    (iframe re-render, kullaniciya yeni belge/id ile ayni tab icinde acilir).
