@@ -497,7 +497,9 @@
             codeInput.autocomplete = 'off';
             codeWrap.appendChild(codeInput);
             cCode.appendChild(codeWrap);
-            keMountLookupOn(codeInput);
+            // NOT: rehber mount'u satir DOM'a EKLENDIKTEN sonra yapilir (asagida,
+            // body.appendChild'dan hemen sonra) — bagli olmayan input'ta LookupCard
+            // kurulamaz ve stok rehberi butonu hic cizilmez.
 
             var cName = cell('ke-field--name');
             var nameEl = document.createElement('input');
@@ -656,6 +658,7 @@
             });
 
             body.appendChild(row);
+            keMountLookupOn(codeInput);   // satır DOM'da → LookupCard kurulabilir
         });
         $('keCount').textContent = lines.length + ' bileşen';
         var emptyEl = $('keEmpty');
