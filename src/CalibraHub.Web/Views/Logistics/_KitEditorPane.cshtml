@@ -82,7 +82,7 @@
        grid; gizli .ke-field--price grid akışından çıkar, şablon moda göre değişir). */
     /* Kolonlar ESNEK (minmax(0,fr)) — sabit px kullanılmaz; böylece dar kapsayıcıda da
        satır TAŞMAZ/kaymaz, fiyat kolonu açılınca diğerleri orantılı daralır. */
-    .ke-embed .ke-addbar,
+    .ke-embed .ke-head,
     .ke-embed .ke-line {
         display: grid;
         grid-template-columns:
@@ -95,8 +95,8 @@
             84px;               /* Aksiyon */
         gap: 8px;
     }
-    .ke-embed .ke-addbar { align-items: end; }
-    .ke-embed .ke-addbar.ke-mode-fixedcomponent,
+    .ke-embed .ke-head { align-items: end; padding-bottom: 4px; }
+    .ke-embed .ke-head.ke-mode-fixedcomponent,
     .ke-embed .ke-lines.ke-mode-fixedcomponent .ke-line {
         grid-template-columns:
             minmax(0, 1.15fr)   /* Stok Kodu */
@@ -114,7 +114,14 @@
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .ke-embed .ke-field--price { display: none; }
-    .ke-embed .ke-addbar.ke-mode-fixedcomponent .ke-field--price { display: flex; }
+    .ke-embed .ke-head.ke-mode-fixedcomponent .ke-field--price { display: flex; }
+    /* Satirlarda alan etiketleri YOK (basliklar ustte) — dikey bosluk yemesin. */
+    .ke-embed .ke-line .ke-field { justify-content: center; }
+    .ke-embed .ke-addline { margin-top: 10px; }
+    .ke-embed .ke-empty {
+        padding: 14px 2px; font-size: .82rem; color: var(--ke-muted);
+        border-top: 1px dashed var(--ke-border);
+    }
     .ke-embed .ke-field--actions { flex-direction: row; align-items: end; justify-content: flex-end; gap: 6px; }
     .ke-embed .ke-line .ke-field--actions { align-items: center; }
 
@@ -230,8 +237,8 @@
     /* Dar ekran — kolonlar 2'li bloklara iner (giriş ve satırlar yine hizalı kalır). */
     @@media (max-width: 720px) {
         .ke-embed .ke-grid { grid-template-columns: 1fr; max-width: none; }
-        .ke-embed .ke-addbar, .ke-embed .ke-line,
-        .ke-embed .ke-addbar.ke-mode-fixedcomponent,
+        .ke-embed .ke-head, .ke-embed .ke-line,
+        .ke-embed .ke-head.ke-mode-fixedcomponent,
         .ke-embed .ke-lines.ke-mode-fixedcomponent .ke-line {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
@@ -273,53 +280,31 @@
             <span class="ke-badge ke-ver-badge" id="keHeaderVer" style="margin-left:6px;display:none;"
                   role="button" tabindex="0" title="Revizyon geçmişini görüntüle"></span>
         </p>
-        <!-- Giriş satırı — hep görünür; eklenen bileşenler altına (keLinesBody) dizilir. -->
-        <div class="ke-addbar" id="keAddrow">
-            <div class="ke-field ke-field--code">
-                <span>Stok Kodu *</span>
-                <div class="ke-lookup">
-                    <!-- Tip-1 standart rehber: mountLookupForInput bu input'u LookupCard'a çevirir.
-                         formCode+fieldKey bağlanır → rehber modalındaki dişli (Alan Ayarları) ile
-                         admin view/filtre/kolon/DÖNÜŞ ayarlarını yönetebilir (FldSet). -->
-                    <input type="text" id="keCompCode" class="ke-input" placeholder="Kod veya ad ile ara..." autocomplete="off" />
-                </div>
-            </div>
-            <div class="ke-field ke-field--name">
-                <span>Stok Adı</span>
-                <input type="text" id="keCompName" class="ke-input" readonly placeholder="Otomatik gelir..." />
-            </div>
-            <div class="ke-field ke-field--combo">
-                <span>Kombinasyon</span>
-                <button type="button" id="keCompCombo" class="ke-btn ke-btn--sm ke-combo-btn" disabled title="Önce stok kodu seçin">Seç...</button>
-            </div>
-            <div class="ke-field ke-field--qty">
-                <span>Miktar *</span>
-                <input type="number" id="keCompQty" class="ke-input" value="1" min="0" step="any" />
-            </div>
-            <div class="ke-field ke-field--unit">
-                <span title="Malzemenin kendi biriminden farklı bir birim seçilebilir; seçim kayıtla birlikte saklanır.">Ölçü Birimi</span>
-                <select id="keCompUnit" class="ke-input" disabled></select>
-            </div>
-            <div class="ke-field ke-field--price" id="keCompPriceField">
-                <span>Birim Fiyat *</span>
-                <input type="number" id="keCompPrice" class="ke-input" placeholder="0,00" min="0" step="any" />
-            </div>
-            <div class="ke-field ke-field--note">
-                <span>Açıklama</span>
-                <input type="text" id="keCompNote" class="ke-input" placeholder="Opsiyonel..." />
-            </div>
-            <div class="ke-field ke-field--actions">
-                <span>&nbsp;</span>
-                <button type="button" class="ke-btn ke-btn--primary ke-btn--sm" id="keCompAdd" title="Bileşeni listeye ekle">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                    Ekle
-                </button>
-            </div>
+        <!-- Kolon başlıkları — satırlarla AYNI grid şablonu (hizalı kalsın).
+             Ayrı bir "giriş çubuğu" YOK: kalemler "Kalem Ekle" ile açılan boş satırda
+             girilir ve her satır sonradan da yerinde düzenlenir (2026-08-06 kullanıcı isteği). -->
+        <div class="ke-head" id="keHeadRow">
+            <div class="ke-field ke-field--code"><span>Stok Kodu *</span></div>
+            <div class="ke-field ke-field--name"><span>Stok Adı</span></div>
+            <div class="ke-field ke-field--combo"><span>Kombinasyon</span></div>
+            <div class="ke-field ke-field--qty"><span>Miktar *</span></div>
+            <div class="ke-field ke-field--unit"><span title="Malzemenin kendi biriminden farklı bir birim seçilebilir; seçim kayıtla birlikte saklanır.">Ölçü Birimi</span></div>
+            <div class="ke-field ke-field--price"><span>Birim Fiyat *</span></div>
+            <div class="ke-field ke-field--note"><span>Açıklama</span></div>
+            <div class="ke-field ke-field--actions"><span>&nbsp;</span></div>
         </div>
 
-        <!-- Eklenen bileşenler — giriş satırının altına, aynı kolon düzeninde -->
+        <!-- Bileşen satırları — hepsi düzenlenebilir -->
         <div class="ke-lines" id="keLinesBody"></div>
-        <div class="ke-hint">Kod alanında <strong>Enter</strong> ile alanlar arasında ilerleyip hızlıca ekleyin; eklenen satırın miktar/fiyat/açıklaması aşağıda yerinde düzenlenir.</div>
+        <div class="ke-empty" id="keEmpty" style="display:none;">Henüz bileşen yok — “Kalem Ekle” ile başlayın.</div>
+
+        <div class="ke-addline">
+            <button type="button" class="ke-btn ke-btn--primary ke-btn--sm" id="keAddLine" title="Yeni bileşen satırı aç">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                Kalem Ekle
+            </button>
+        </div>
+        <div class="ke-hint">Satırdaki <strong>Enter</strong> ile alanlar arasında ilerleyin; son alanda Enter yeni satır açar. Eklenmiş satırların kodu dahil tüm alanları yerinde düzenlenebilir.</div>
     </div>
 
     <!-- Revizyon geçmişi — SALT OKUNUR (geri yükleme yok). Kit her kaydedildiğinde
@@ -396,7 +381,7 @@
         $('keFixedPriceWrap').style.display = isFixedPackage ? '' : 'none';
         $('kePriceModeHint').textContent = KIT_PRICE_MODE_HINTS[priceMode];
         $('keLinesBody').classList.toggle('ke-mode-fixedcomponent', priceMode === 'FixedComponent');
-        $('keAddrow').classList.toggle('ke-mode-fixedcomponent', priceMode === 'FixedComponent');
+        $('keHeadRow').classList.toggle('ke-mode-fixedcomponent', priceMode === 'FixedComponent');
     }
     $('kePriceModeSeg').addEventListener('click', function (e) {
         var b = e.target.closest('button[data-mode]');
